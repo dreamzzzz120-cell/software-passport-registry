@@ -8,14 +8,6 @@ import { z } from 'zod';
 
 if (process.env.SKIP_DOTENV !== 'true') dotenv.config();
 
-const trimmedString = z.preprocess((value) => {
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    return trimmed.length === 0 ? undefined : trimmed;
-  }
-  return value;
-}, z.string());
-
 const optionalTrimmedString = z.preprocess((value) => {
   if (typeof value === 'string') {
     const trimmed = value.trim();
@@ -63,6 +55,7 @@ const envSchema = z.object({
   STRIPE_SECRET_KEY: optionalTrimmedString,
   STRIPE_WEBHOOK_SECRET: optionalTrimmedString,
   GEMINI_API_KEY: optionalTrimmedString,
+  GOOGLE_GENAI_API_KEY: optionalTrimmedString,
   FIREBASE_SERVICE_ACCOUNT_KEY: optionalTrimmedString,
   GOOGLE_APPLICATION_CREDENTIALS: optionalTrimmedString,
   SPR_INITIAL_OWNER_EMAIL: z.preprocess((value) => typeof value === 'string' ? (value.trim().toLowerCase() || undefined) : value, z.string().email().optional()),
@@ -107,14 +100,13 @@ export const config = {
     isConfigured: Boolean(parsedEnv.DATABASE_URL || (parsedEnv.SQL_HOST && parsedEnv.SQL_USER && parsedEnv.SQL_PASSWORD && parsedEnv.SQL_DB_NAME)),
   },
   stripe: { secretKey: parsedEnv.STRIPE_SECRET_KEY, webhookSecret: parsedEnv.STRIPE_WEBHOOK_SECRET },
-  gemini: { apiKey: parsedEnv.GEMINI_API_KEY },
+  gemini: { apiKey: parsedEnv.GEMINI_API_KEY ?? parsedEnv.GOOGLE_GENAI_API_KEY },
   firebase: { serviceAccountKey: parsedEnv.FIREBASE_SERVICE_ACCOUNT_KEY, googleApplicationCredentials: parsedEnv.GOOGLE_APPLICATION_CREDENTIALS },
   ownerBootstrap: { initialOwnerEmail: parsedEnv.SPR_INITIAL_OWNER_EMAIL, secret: parsedEnv.SPR_OWNER_BOOTSTRAP_SECRET, secretSha256: parsedEnv.SPR_OWNER_BOOTSTRAP_SECRET_SHA256 },
   sentry: { dsn: parsedEnv.SENTRY_DSN },
   redis: {
     url: parsedEnv.REDIS_URL,
-    // Production is always fail-closed. This flag is retained for compatibility but cannot weaken production security.
-    failOpen: !((parsedEnv.NODE_ENV === 'production')) && parseBoolean(parsedEnv.RATE_LIMIT_FAIL_OPEN, false),
+    failOpen: parsedEnv.NODE_ENV !== 'production' && parseBoolean(parsedEnv.RATE_LIMIT_FAIL_OPEN, false),
   },
   monitoring: { enabledTenantIds: parseCsv(parsedEnv.MONITORING_ENABLED_TENANT_IDS) },
 };
