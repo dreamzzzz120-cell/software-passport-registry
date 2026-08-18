@@ -106,7 +106,7 @@ export const rateLimiter = async (req: Request, res: Response, next: NextFunctio
     res.setHeader('X-RateLimit-Remaining', String(Math.max(0, maxRequestsPerWindow - counter.count)));
     res.setHeader('X-RateLimit-Reset', String(Math.ceil(counter.resetAt / 1000)));
     if (counter.count > maxRequestsPerWindow) {
-      res.setHeader('Retry-After', String(Math.max(1, Math.ceil((counter.resetAt - Date.now()) / 1000))));
+      res.setHeader('Retry-After', String(Math.max(1, Math.ceil((counter.resetAt - Date.now()) / 1000)));
       return res.status(429).json({ error: { code: 'RATE_LIMITED', message: 'Too many requests.' } });
     }
     return next();
@@ -141,8 +141,8 @@ export const requireAuth = async (req: AuthenticatedRequest, res: Response, next
   }
 };
 
-export function requireRole(...roles: Array<string | string[]>) {
-  const allowedRoles = roles.flat();
+export function requireRole(roles: string | string[]) {
+  const allowedRoles = Array.isArray(roles) ? roles : [roles];
   return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
     if (allowedRoles.length > 0 && !allowedRoles.includes(req.user.role)) return res.status(403).json({ error: 'Forbidden' });
