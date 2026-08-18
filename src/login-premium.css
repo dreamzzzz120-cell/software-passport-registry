@@ -1,0 +1,85 @@
+/* Premium public-entry treatment for SPR authentication. Kept separate so auth logic remains untouched. */
+
+/* The LoginView root is the full-height two-column surface. */
+main.min-h-screen.bg-\[\#f6f8fb\] {
+  background:
+    radial-gradient(circle at 12% 12%, rgba(79,70,229,.08), transparent 28rem),
+    radial-gradient(circle at 90% 80%, rgba(14,165,233,.06), transparent 26rem),
+    #f7f9fc !important;
+}
+
+main.min-h-screen.bg-\[\#f6f8fb\] > section:first-child {
+  background:
+    radial-gradient(circle at 78% 22%, rgba(79,70,229,.18), transparent 20rem),
+    radial-gradient(circle at 18% 82%, rgba(14,165,233,.10), transparent 22rem),
+    linear-gradient(145deg, #030712 0%, #081225 48%, #0b1326 100%) !important;
+  border-right: 1px solid rgba(148,163,184,.12);
+}
+
+main.min-h-screen.bg-\[\#f6f8fb\] > section:first-child::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: .24;
+  background-image: linear-gradient(rgba(148,163,184,.07) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,.07) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: linear-gradient(to bottom, black, transparent 82%);
+}
+
+main.min-h-screen.bg-\[\#f6f8fb\] > section:first-child h1 {
+  text-shadow: 0 12px 40px rgba(0,0,0,.35);
+}
+
+main.min-h-screen.bg-\[\#f6f8fb\] > section:first-child .rounded-2xl {
+  backdrop-filter: blur(14px);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 18px 45px rgba(0,0,0,.18);
+}
+
+main.min-h-screen.bg-\[\#f6f8fb\] > section:last-child {
+  background: rgba(255,255,255,.72);
+  backdrop-filter: blur(18px);
+}
+
+main.min-h-screen.bg-\[\#f6f8fb\] > section:last-child > div {
+  padding: 2rem;
+  border: 1px solid rgba(15,23,42,.07);
+  border-radius: 1.5rem;
+  background: rgba(255,255,255,.88);
+  box-shadow: 0 24px 70px rgba(15,23,42,.08), 0 4px 18px rgba(37,99,235,.04);
+}
+
+main.min-h-screen.bg-\[\#f6f8fb\] input {
+  border-color: rgba(15,23,42,.12) !important;
+  background: #fbfcfe !important;
+  box-shadow: inset 0 1px 2px rgba(15,23,42,.025);
+}
+
+main.min-h-screen.bg-\[\#f6f8fb\] input:focus {
+  border-color: rgba(79,70,229,.65) !important;
+  box-shadow: 0 0 0 4px rgba(79,70,229,.10), 0 5px 18px rgba(37,99,235,.05) !important;
+}
+
+main.min-h-screen.bg-\[\#f6f8fb\] form > button[type='submit'] {
+  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%) !important;
+  box-shadow: 0 10px 25px rgba(37,99,235,.22);
+}
+
+main.min-h-screen.bg-\[\#f6f8fb\] form > button[type='submit']:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 32px rgba(37,99,235,.28);
+}
+
+@media (max-width: 1023px) {
+  main.min-h-screen.bg-\[\#f6f8fb\] > section:last-child > div {
+    padding: 1.25rem;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  main.min-h-screen.bg-\[\#f6f8fb\] form > button[type='submit'] { transform: none !important; }
+}

@@ -1,0 +1,12 @@
+const fs = require('fs');
+const crypto = require('crypto');
+const path = require('path');
+const outdir = path.join(__dirname, '..', 'tmp');
+if (!fs.existsSync(outdir)) fs.mkdirSync(outdir, { recursive: true });
+const email = 'stackdigitz@gmail.com';
+const secret = crypto.randomBytes(48).toString('base64url');
+const hash = crypto.createHash('sha256').update(secret).digest('hex');
+fs.writeFileSync(path.join(outdir, 'initial-owner-email.txt'), email, { encoding: 'utf8' });
+fs.writeFileSync(path.join(outdir, 'bootstrap-secret.txt'), secret, { encoding: 'utf8' });
+fs.writeFileSync(path.join(outdir, 'bootstrap-secret-sha256.txt'), hash, { encoding: 'utf8' });
+console.log('CREATED_CJS');

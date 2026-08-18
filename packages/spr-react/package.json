@@ -1,0 +1,8 @@
+{
+  "name": "@sprtrust/react",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "peerDependencies": { "react": ">=18" },
+  "dependencies": { "@sprtrust/sdk": "0.1.0" }
+}

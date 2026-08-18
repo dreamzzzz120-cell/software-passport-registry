@@ -1,0 +1,122 @@
+/* SPR Public Passport — premium trust-record presentation layer */
+.public-passport,
+.public-passport-shell,
+.passport-public,
+.passport-public-shell {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 92% 0%, rgba(59,130,246,.16), transparent 28rem),
+    radial-gradient(circle at 0% 100%, rgba(99,102,241,.10), transparent 24rem),
+    var(--bg-primary, #f6f8fc);
+}
+
+.public-passport::before,
+.public-passport-shell::before,
+.passport-public::before,
+.passport-public-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: .45;
+  background-image:
+    linear-gradient(rgba(59,130,246,.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(59,130,246,.035) 1px, transparent 1px);
+  background-size: 36px 36px;
+  mask-image: linear-gradient(to bottom, black, transparent 85%);
+}
+
+.dark .public-passport,
+.dark .public-passport-shell,
+.dark .passport-public,
+.dark .passport-public-shell {
+  background:
+    radial-gradient(circle at 92% 0%, rgba(59,130,246,.18), transparent 28rem),
+    radial-gradient(circle at 0% 100%, rgba(99,102,241,.12), transparent 24rem),
+    #050812;
+}
+
+.public-passport .trust-score,
+.public-passport-shell .trust-score,
+.passport-public .trust-score,
+.passport-public-shell .trust-score {
+  position: relative;
+  border: 1px solid rgba(59,130,246,.22);
+  border-radius: 1.35rem;
+  background: linear-gradient(145deg, rgba(255,255,255,.96), rgba(239,246,255,.72));
+  box-shadow: 0 20px 55px rgba(37,99,235,.10), inset 0 1px 0 rgba(255,255,255,.9);
+}
+
+.dark .public-passport .trust-score,
+.dark .public-passport-shell .trust-score,
+.dark .passport-public .trust-score,
+.dark .passport-public-shell .trust-score {
+  background: linear-gradient(145deg, rgba(15,23,42,.96), rgba(10,18,34,.92));
+  box-shadow: 0 25px 70px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.035);
+}
+
+.public-passport .verification-status,
+.public-passport-shell .verification-status,
+.passport-public .verification-status,
+.passport-public-shell .verification-status {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .42rem .7rem;
+  border-radius: 999px;
+  border: 1px solid rgba(16,185,129,.25);
+  background: rgba(16,185,129,.09);
+  color: #059669;
+  font-family: var(--font-mono, monospace);
+  font-size: .68rem;
+  font-weight: 800;
+  letter-spacing: .045em;
+  text-transform: uppercase;
+}
+
+.dark .public-passport .verification-status,
+.dark .public-passport-shell .verification-status,
+.dark .passport-public .verification-status,
+.dark .passport-public-shell .verification-status { color: #34d399; }
+
+.public-passport .evidence-card,
+.public-passport-shell .evidence-card,
+.passport-public .evidence-card,
+.passport-public-shell .evidence-card {
+  border: 1px solid var(--border-color, rgba(15,23,42,.08));
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--card-bg, #fff) 96%, transparent);
+  transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+
+.public-passport .evidence-card:hover,
+.public-passport-shell .evidence-card:hover,
+.passport-public .evidence-card:hover,
+.passport-public-shell .evidence-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(59,130,246,.28);
+  box-shadow: 0 12px 32px rgba(15,23,42,.08);
+}
+
+.public-passport .trust-dimension,
+.public-passport-shell .trust-dimension,
+.passport-public .trust-dimension,
+.passport-public-shell .trust-dimension {
+  border: 1px solid var(--border-color, rgba(15,23,42,.08));
+  border-radius: .9rem;
+  background: var(--card-bg, #fff);
+}
+
+@media (max-width: 640px) {
+  .public-passport .trust-score,
+  .public-passport-shell .trust-score,
+  .passport-public .trust-score,
+  .passport-public-shell .trust-score { border-radius: 1rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .public-passport *, .public-passport-shell *, .passport-public *, .passport-public-shell * { transition-duration: .01ms !important; }
+}
