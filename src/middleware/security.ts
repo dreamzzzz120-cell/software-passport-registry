@@ -122,9 +122,6 @@ export const requireAuth = async (req: AuthenticatedRequest, res: Response, next
     const emailVerified = decodedToken.email_verified === true;
     if (!emailVerified && !isVerificationExemptPath) return res.status(403).json({ error: 'Email verification required', code: 'EMAIL_NOT_VERIFIED' });
 
-    // Authorization is anchored to the immutable Firebase UID. Never fall back
-    // to an email lookup: a different Firebase account must never inherit an
-    // existing user's tenant or RBAC record because the email happens to match.
     const dbUser = await db.select().from(users).where(eq(users.uid, uid)).then(rows => rows[0]);
     if (!dbUser) return res.status(403).json({ error: 'User account is not provisioned' });
     if (!dbUser.tenantId || dbUser.tenantId.length > 256) return res.status(403).json({ error: 'User account has invalid tenant configuration' });
