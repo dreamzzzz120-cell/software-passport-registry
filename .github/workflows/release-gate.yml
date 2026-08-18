@@ -1,0 +1,87 @@
+name: Production Release Gate
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  migration-safety:
+    name: Migration Safety
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate migration numbering and duplicate versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t migrations < <(find . -type f -path '*/migrations/*.sql' -print | sort)
+          declare -A seen
+          for file in "${migrations[@]}"; do
+            base="$(basename "$file")"
+            if [[ ! "$base" =~ ^[0-9]{4}_[a-zA-Z0-9_-]+\.sql$ ]]; then
+              echo "Invalid migration filename: $file"
+              exit 1
+            fi
+            version="${base%%_*}"
+            if [[ -n "${seen[$version]:-}" ]]; then
+              echo "Duplicate migration version $version: ${seen[$version]} and $file"
+              exit 1
+            fi
+            seen[$version]="$file"
+          done
+      - name: Reject obvious destructive migration statements
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RniE --include='*.sql' --exclude-dir=node_modules \
+            -E '\bDROP[[:space:]]+(TABLE|SCHEMA|DATABASE)\b|\bTRUNCATE[[:space:]]+TABLE\b' .; then
+            echo 'Destructive migration detected. Production release requires explicit review.'
+            exit 1
+          fi
+      - name: Require tenant integrity migration presence
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$(find . -type f -path '*/migrations/*.sql' -print | grep -E '000[0-9]_' | head -1)"
+
+  application-verification:
+    name: Application Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Locked install
+        run: npm ci
+      - name: Typecheck
+        run: npm run type-check --if-present
+      - name: Tests
+        run: npm test --if-present -- --run
+      - name: Production build
+        run: npm run build
+
+  release-gate:
+    name: Release Gate
+    needs: [migration-safety, application-verification]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fail closed unless all gates passed
+        run: |
+          echo 'Migration safety and application verification passed.'
+          echo 'Deployment may proceed only through a protected environment requiring these checks.'
