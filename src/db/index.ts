@@ -16,7 +16,7 @@ const getNumericEnv = (value: string | undefined, fallback: number) => {
 
 export const isDatabaseConfigured = config.database.isConfigured;
 export const databaseConfigurationSummary = {
-  connectionString: config.database.connectionString ?? 'UNCONFIGURED',
+  connectionString: config.database.connectionString ? '[configured]' : 'UNCONFIGURED',
   host: config.database.connectionString ? 'DATABASE_URL' : config.database.host || 'UNCONFIGURED',
   database: config.database.name || 'UNCONFIGURED',
   ssl: config.database.ssl,
@@ -26,13 +26,12 @@ export const databaseConfigurationSummary = {
   queryTimeoutMillis: getNumericEnv(config.database.queryTimeoutMs?.toString(), 5000),
 };
 
-// Function to create a new connection pool with Object configuration
 export const createPool = () => {
   if (!isDatabaseConfigured) {
     console.warn('[Database] SQL configuration is incomplete. DB readiness will report DB_MISCONFIGURED until DATABASE_URL or SQL_HOST, SQL_USER, SQL_PASSWORD and SQL_DB_NAME are configured.');
   }
 
-  const poolConfig: Record<string, unknown> = {
+  const poolConfig = {
     connectionTimeoutMillis: databaseConfigurationSummary.connectionTimeoutMillis,
     max: databaseConfigurationSummary.poolMax,
     idleTimeoutMillis: databaseConfigurationSummary.idleTimeoutMillis,
@@ -40,10 +39,7 @@ export const createPool = () => {
   };
 
   if (config.database.connectionString) {
-    return new Pool({
-      connectionString: config.database.connectionString,
-      ...poolConfig,
-    });
+    return new Pool({ connectionString: config.database.connectionString, ...poolConfig });
   }
 
   return new Pool({
@@ -56,25 +52,29 @@ export const createPool = () => {
   });
 };
 
-// Create a pool instance
-const pool = createPool();
+export const pool = createPool();
 
-// Prevent unhandled pool-level errors from crashing the application
 pool.on('error', (err) => {
   console.error('[Database] Unexpected error on idle SQL pool client:', err?.message || err);
 });
 
-pool.on('connect', () => {
-  console.info('[Database] PostgreSQL pool client connected');
-});
+export async function checkDatabaseHealth(): Promise<{ ok: true; latencyMs: number } | { ok: false; latencyMs: number; error: string }> {
+  const started = Date.now();
+  if (!isDatabaseConfigured) return { ok: false, latencyMs: 0, error: 'DB_MISCONFIGURED' };
+  try {
+    await pool.query('SELECT 1');
+    return { ok: true, latencyMs: Date.now() - started };
+  } catch (error) {
+    return {
+      ok: false,
+      latencyMs: Date.now() - started,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
 
-pool.on('acquire', () => {
-  console.info('[Database] PostgreSQL pool client acquired');
-});
+export async function closeDatabase(): Promise<void> {
+  await pool.end();
+}
 
-pool.on('remove', () => {
-  console.info('[Database] PostgreSQL pool client removed');
-});
-
-// Initialize Drizzle with the pool and schema
 export const db = drizzle(pool, { schema });
