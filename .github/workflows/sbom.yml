@@ -1,0 +1,37 @@
+name: SBOM Security Gate
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  sbom:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Verify lockfile install
+        run: npm ci
+      - name: Generate dependency SBOM
+        run: npm sbom --sbom-format=cyclonedx --sbom-type=application > sbom.json
+      - name: Validate SBOM is non-empty
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s sbom.json
+          node -e "const s=require('./sbom.json'); if(!s.components || !Array.isArray(s.components)) process.exit(1); console.log('SBOM components:', s.components.length)"
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: spr-sbom-${{ github.sha }}
+          path: sbom.json
+          retention-days: 14
