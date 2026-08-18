@@ -18,13 +18,21 @@ if (!databaseUrl && (!sqlHost || !sqlDbName || !user || !password)) {
   throw new Error('Database configuration is required: set DATABASE_URL or SQL_HOST, SQL_DB_NAME, SQL_USER and SQL_PASSWORD.');
 }
 
-export default defineConfig(({
+const dbCredentials: any = databaseUrl
+  ? { url: databaseUrl }
+  : {
+      host: sqlHost!,
+      user: user!,
+      password: password!,
+      database: sqlDbName!,
+      ssl: process.env.SQL_SSL === 'require' || process.env.SQL_SSL === 'true',
+    };
+
+export default defineConfig({
   schema: './src/db/schema.ts',
   out: './drizzle',
   dialect: 'postgresql',
   schemaFilter: ['public'],
-  dbCredentials: databaseUrl
-    ? { url: databaseUrl }
-    : { host: sqlHost!, user: user!, password: password!, database: sqlDbName!, ssl: process.env.SQL_SSL === 'require' || process.env.SQL_SSL === 'true' },
+  dbCredentials,
   verbose: true,
-} as any));
+});
