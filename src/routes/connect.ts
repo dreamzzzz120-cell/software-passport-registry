@@ -5,43 +5,20 @@ import { z } from 'zod';
 import { db } from '../db/index.ts';
 import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/security.ts';
 import { validateWebhookUrl } from '../security/webhook-url.ts';
+import { encryptCredential } from '../security/credential-vault.ts';
 
 const API_VERSION = '2026-08-01';
 const PUBLIC_SCOPES = ['read', 'write', 'webhooks'] as const;
 const DEFAULT_EVENTS = ['passport.updated', 'trust.changed', 'risk.created', 'risk.resolved', 'evidence.updated', 'verification.completed', 'verification.expired'] as const;
-const createKeySchema = z.object({
-  name: z.string().trim().min(1).max(120),
-  scopes: z.array(z.enum(PUBLIC_SCOPES)).min(1).max(3).default(['read']).refine(scopes => new Set(scopes).size === scopes.length, 'Scopes must be unique'),
-  expiresAt: z.string().datetime().nullable().optional(),
-}).strict().refine(body => !body.expiresAt || new Date(body.expiresAt).getTime() > Date.now(), { message: 'expiresAt must be in the future', path: ['expiresAt'] });
+const createKeySchema = z.object({ name: z.string().trim().min(1).max(120), scopes: z.array(z.enum(PUBLIC_SCOPES)).min(1).max(3).default(['read']).refine(scopes => new Set(scopes).size === scopes.length, 'Scopes must be unique'), expiresAt: z.string().datetime().nullable().optional(), }).strict().refine(body => !body.expiresAt || new Date(body.expiresAt).getTime() > Date.now(), { message: 'expiresAt must be in the future', path: ['expiresAt'] });
 const registerSoftwareSchema = z.object({ name: z.string().min(1).max(200), version: z.string().max(100).default('unknown'), publisher: z.string().max(200).default('unknown'), category: z.string().max(120).default('software'), sourceType: z.enum(['repository', 'application', 'package', 'container', 'api', 'saas', 'other']).default('application'), sourceUrl: z.string().url().max(2048).nullable().optional(), externalId: z.string().max(255).nullable().optional(), licenseType: z.string().max(120).default('unobserved'), releaseDate: z.string().max(40).default('unobserved'), metadata: z.record(z.unknown()).default({}) }).strict();
 const webhookSchema = z.object({ url: z.string().url().max(2048), events: z.array(z.string().min(1).max(100)).min(1).max(50).default([...DEFAULT_EVENTS]) }).strict();
 function id(prefix: string) { return `${prefix}_${crypto.randomUUID().replace(/-/g, '')}`; }
 function hash(value: string) { return crypto.createHash('sha256').update(value).digest('hex'); }
 function createSecret(prefix: string) { return `${prefix}_${crypto.randomBytes(32).toString('base64url')}`; }
 function parseJson<T = unknown>(value: unknown, fallback: T): T { if (typeof value !== 'string') return fallback; try { return JSON.parse(value) as T; } catch { return fallback; } }
-function bearer(req: any) {
-  const header = req.headers.authorization;
-  if (typeof header === 'string' && /^Bearer\s+/i.test(header)) return header.replace(/^Bearer\s+/i, '').trim() || null;
-  const apiKey = req.headers['x-api-key'];
-  return typeof apiKey === 'string' && apiKey.trim() ? apiKey.trim() : null;
-}
-
-async function authenticateApiKey(req: any, res: any, next: any) {
-  try {
-    const raw = bearer(req);
-    if (!raw || raw.length > 512) return res.status(401).json({ error: 'Invalid API key' });
-    const keyHash = hash(raw);
-    const result = await db.execute(sql`SELECT id, tenant_id, name, scopes, expires_at, revoked_at FROM spr_api_keys WHERE key_hash = ${keyHash} LIMIT 1`);
-    const row: any = (result as any).rows?.[0];
-    if (!row || row.revoked_at || (row.expires_at && (!Number.isFinite(new Date(row.expires_at).getTime()) || new Date(row.expires_at).getTime() <= Date.now()))) return res.status(401).json({ error: 'Invalid or expired API key' });
-    const scopes = parseJson<string[]>(row.scopes, []);
-    if (!Array.isArray(scopes) || scopes.length < 1 || scopes.length > 3 || new Set(scopes).size !== scopes.length || scopes.some(scope => !(PUBLIC_SCOPES as readonly string[]).includes(scope))) return res.status(401).json({ error: 'API key has invalid scopes' });
-    req.sprApi = { id: row.id, tenantId: row.tenant_id, name: row.name, scopes };
-    await db.execute(sql`UPDATE spr_api_keys SET last_used_at = ${new Date().toISOString()} WHERE id = ${row.id} AND tenant_id = ${row.tenant_id} AND revoked_at IS NULL`);
-    return next();
-  } catch (error) { return next(error); }
-}
+function bearer(req: any) { const header = req.headers.authorization; if (typeof header === 'string' && /^Bearer\s+/i.test(header)) return header.replace(/^Bearer\s+/i, '').trim() || null; const apiKey = req.headers['x-api-key']; return typeof apiKey === 'string' && apiKey.trim() ? apiKey.trim() : null; }
+async function authenticateApiKey(req: any, res: any, next: any) { try { const raw = bearer(req); if (!raw || raw.length > 512) return res.status(401).json({ error: 'Invalid API key' }); const keyHash = hash(raw); const result = await db.execute(sql`SELECT id, tenant_id, name, scopes, expires_at, revoked_at FROM spr_api_keys WHERE key_hash = ${keyHash} LIMIT 1`); const row: any = (result as any).rows?.[0]; if (!row || row.revoked_at || (row.expires_at && (!Number.isFinite(new Date(row.expires_at).getTime()) || new Date(row.expires_at).getTime() <= Date.now()))) return res.status(401).json({ error: 'Invalid or expired API key' }); const scopes = parseJson<string[]>(row.scopes, []); if (!Array.isArray(scopes) || scopes.length < 1 || scopes.length > 3 || new Set(scopes).size !== scopes.length || scopes.some(scope => !(PUBLIC_SCOPES as readonly string[]).includes(scope))) return res.status(401).json({ error: 'API key has invalid scopes' }); req.sprApi = { id: row.id, tenantId: row.tenant_id, name: row.name, scopes }; await db.execute(sql`UPDATE spr_api_keys SET last_used_at = ${new Date().toISOString()} WHERE id = ${row.id} AND tenant_id = ${row.tenant_id} AND revoked_at IS NULL`); return next(); } catch (error) { return next(error); } }
 function requireScope(scope: string) { return (req: any, res: any, next: any) => { if (!req.sprApi?.scopes?.includes(scope)) return res.status(403).json({ error: `Scope required: ${scope}` }); return next(); }; }
 async function tenantPassport(tenantId: string, passportId: string) { const result = await db.execute(sql`SELECT id, tenant_id, client_id, name, version, publisher, category, overall_score, security_score, compliance_score, vendor_reputation_score, release_date, file_hash, license_type, ai_summary, sbom, evidence, vulnerabilities, timeline FROM passports WHERE id = ${passportId} AND tenant_id = ${tenantId} LIMIT 1`); return (result as any).rows?.[0] || null; }
 function publicPassport(row: any) { return { id: row.id, name: row.name, version: row.version, publisher: row.publisher, category: row.category, scores: { overall: row.overall_score, security: row.security_score, compliance: row.compliance_score, reputation: row.vendor_reputation_score }, releaseDate: row.release_date, licenseType: row.license_type, summary: row.ai_summary, evidenceCount: parseJson<any[]>(row.evidence, []).length, vulnerabilityCount: parseJson<any[]>(row.vulnerabilities, []).length, sbomComponentCount: parseJson<any[]>(row.sbom, []).length }; }
@@ -56,20 +33,7 @@ export function createConnectRouter() {
   router.post('/v1/software', requireScope('write'), async (req, res, next) => { try { const parsed = registerSoftwareSchema.safeParse(req.body); if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() }); const softwareId = id('sw'); await db.execute(sql`INSERT INTO software_registry (id, tenant_id, name, version, publisher, category, source_type, source_url, external_id, license_type, release_date, metadata) VALUES (${softwareId}, ${req.sprApi.tenantId}, ${parsed.data.name}, ${parsed.data.version}, ${parsed.data.publisher}, ${parsed.data.category}, ${parsed.data.sourceType}, ${parsed.data.sourceUrl ?? null}, ${parsed.data.externalId ?? null}, ${parsed.data.licenseType}, ${parsed.data.releaseDate}, ${JSON.stringify(parsed.data.metadata)})`); return res.status(201).json({ id: softwareId, name: parsed.data.name, version: parsed.data.version }); } catch (error) { return next(error); } });
   router.get('/v1/software/:id', async (req, res, next) => { try { const result = await db.execute(sql`SELECT id, name, version, publisher, category, source_type, source_url, license_type, release_date, metadata FROM software_registry WHERE id = ${req.params.id} AND tenant_id = ${req.sprApi.tenantId} LIMIT 1`); const row: any = (result as any).rows?.[0]; if (!row) return res.status(404).json({ error: 'Software not found' }); return res.json(row); } catch (error) { return next(error); } });
   router.get('/v1/passports/:id', async (req, res, next) => { try { const row = await tenantPassport(req.sprApi.tenantId, req.params.id); if (!row) return res.status(404).json({ error: 'Passport not found' }); return res.json(publicPassport(row)); } catch (error) { return next(error); } });
-  router.get('/v1/webhooks', requireScope('webhooks'), async (req, res, next) => { try { const result = await db.execute(sql`SELECT id, url, events, active, created_at FROM spr_webhooks WHERE tenant_id = ${req.sprApi.tenantId} ORDER BY created_at DESC`); return res.json((result as any).rows ?? []); } catch (error) { return next(error); } });
-  router.post('/v1/webhooks', requireScope('webhooks'), async (req, res, next) => {
-    try {
-      const parsed = webhookSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
-      const webhookUrl = await validateWebhookUrl(parsed.data.url);
-      const webhookId = id('wh');
-      const secret = createSecret('whsec');
-      await db.execute(sql`INSERT INTO spr_webhooks (id, tenant_id, url, events, secret_hash, active) VALUES (${webhookId}, ${req.sprApi.tenantId}, ${webhookUrl.toString()}, ${JSON.stringify(parsed.data.events)}, ${hash(secret)}, true)`);
-      return res.status(201).json({ id: webhookId, url: webhookUrl.toString(), events: parsed.data.events, secret, warning: 'Store this secret now. SPR will not return it again.' });
-    } catch (error) {
-      if (error instanceof Error && /Webhook URL|Webhook destination/.test(error.message)) return res.status(400).json({ error: error.message });
-      return next(error);
-    }
-  });
+  router.get('/v1/webhooks', requireScope('webhooks'), async (req, res, next) => { try { const result = await db.execute(sql`SELECT id, url, events, active, consecutive_failure_count, disabled_at, created_at FROM spr_webhooks WHERE tenant_id = ${req.sprApi.tenantId} ORDER BY created_at DESC`); return res.json((result as any).rows ?? []); } catch (error) { return next(error); } });
+  router.post('/v1/webhooks', requireScope('webhooks'), async (req, res, next) => { try { const parsed = webhookSchema.safeParse(req.body); if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() }); const webhookUrl = await validateWebhookUrl(parsed.data.url); const webhookId = id('wh'); const secret = createSecret('whsec'); const encrypted = encryptCredential(secret, req.sprApi.tenantId, 'webhook'); await db.execute(sql`INSERT INTO spr_webhooks (id, tenant_id, url, events, secret_hash, secret_ciphertext, secret_key_version, active) VALUES (${webhookId}, ${req.sprApi.tenantId}, ${webhookUrl.toString()}, ${JSON.stringify(parsed.data.events)}, ${hash(secret)}, ${encrypted.ciphertext}, ${encrypted.keyVersion}, true)`); return res.status(201).json({ id: webhookId, url: webhookUrl.toString(), events: parsed.data.events, secret, warning: 'Store this secret now. SPR will not return it again.' }); } catch (error) { if (error instanceof Error && /Webhook URL|Webhook destination/.test(error.message)) return res.status(400).json({ error: error.message }); return next(error); } });
   return router;
 }
