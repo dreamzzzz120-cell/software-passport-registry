@@ -15,14 +15,6 @@ export interface AuthenticatedRequest extends Request {
   user?: { id: number; uid: string; email: string; tenantId: string; role: string; emailVerified: boolean };
 }
 
-declare global {
-  namespace Express {
-    interface Request {
-      sprApi?: { id: string; tenantId: string; name: string; scopes: string[] };
-    }
-  }
-}
-
 let rateLimitWindowMs = 60_000;
 let maxRequestsPerWindow = 100;
 const isTestMode = () => process.env.NODE_ENV !== 'production';
@@ -106,7 +98,7 @@ export const rateLimiter = async (req: Request, res: Response, next: NextFunctio
     res.setHeader('X-RateLimit-Remaining', String(Math.max(0, maxRequestsPerWindow - counter.count)));
     res.setHeader('X-RateLimit-Reset', String(Math.ceil(counter.resetAt / 1000)));
     if (counter.count > maxRequestsPerWindow) {
-      res.setHeader('Retry-After', String(Math.max(1, Math.ceil((counter.resetAt - Date.now()) / 1000)));
+      res.setHeader('Retry-After', String(Math.max(1, Math.ceil((counter.resetAt - Date.now()) / 1000))));
       return res.status(429).json({ error: { code: 'RATE_LIMITED', message: 'Too many requests.' } });
     }
     return next();
