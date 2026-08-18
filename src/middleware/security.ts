@@ -54,9 +54,7 @@ class InMemoryStore implements RateLimitStore {
 interface AtomicRateLimitClient { increment(script: string, key: string, windowMs: number, limit: number): Promise<unknown>; }
 export class IORedisAtomicClient implements AtomicRateLimitClient {
   constructor(private readonly client: { eval(script: string, numKeys: number, ...args: Array<string | number>): Promise<unknown> }) {}
-  increment(script: string, key: string, windowMs: number, limit: number) {
-    return this.client.eval(script, 1, key, String(windowMs), String(limit));
-  }
+  increment(script: string, key: string, windowMs: number, limit: number) { return this.client.eval(script, 1, key, String(windowMs), String(limit)); }
 }
 
 export function createAtomicRateLimitClient(provider: 'ioredis', client: any): AtomicRateLimitClient {
@@ -96,10 +94,7 @@ export function createSharedRateLimitStoreFromEnv(): RateLimitStore {
   return new RedisStore(createAtomicRateLimitClient('ioredis', client));
 }
 if (config.isProduction) sharedStore = createSharedRateLimitStoreFromEnv();
-export function setRateLimiterStore(s: RateLimitStore) {
-  if (!isTestMode()) throw new Error('setRateLimiterStore is only available in test mode');
-  sharedStore = s;
-}
+export function setRateLimiterStore(s: RateLimitStore) { if (!isTestMode()) throw new Error('setRateLimiterStore is only available in test mode'); sharedStore = s; }
 
 export const rateLimiter = async (req: Request, res: Response, next: NextFunction) => {
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
