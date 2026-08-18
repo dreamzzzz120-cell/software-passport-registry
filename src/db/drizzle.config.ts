@@ -19,7 +19,7 @@ if (!databaseUrl && (!sqlHost || !sqlDbName || !user || !password)) {
 }
 
 const dbCredentials: any = databaseUrl
-  ? { url: databaseUrl }
+  ? { connectionString: databaseUrl }
   : {
       host: sqlHost!,
       user: user!,
@@ -31,8 +31,7 @@ const dbCredentials: any = databaseUrl
 export default defineConfig({
   schema: './src/db/schema.ts',
   out: './drizzle',
-  dialect: 'postgresql',
-  schemaFilter: ['public'],
+  driver: 'pg',
   dbCredentials,
   verbose: true,
 });
