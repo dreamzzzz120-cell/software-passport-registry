@@ -5,8 +5,8 @@ ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 
 COPY package.json ./
 RUN npm install --ignore-scripts --no-audit --no-fund
-# Railway source-cache invalidation marker: 2026-08-18T05:42Z
-ARG SOURCE_REV=f486acd743034e41768b99c2c66912d11f0dd4f0
+# Railway source-cache invalidation marker: 2026-08-18T05:55Z
+ARG SOURCE_REV=1542a4a67c802ea5320b924b690fd3fc0c33eaf9
 RUN test -n "$SOURCE_REV"
 COPY . ./
 RUN npm run typecheck && npm run build
