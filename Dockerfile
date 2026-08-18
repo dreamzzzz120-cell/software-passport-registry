@@ -1,13 +1,14 @@
 FROM node:22-slim AS builder
 WORKDIR /app
 ENV NODE_ENV=development
+ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 
-COPY package.json package-lock.json ./
-RUN npm ci --ignore-scripts
+COPY package.json ./
+RUN npm install --ignore-scripts --no-audit --no-fund
 COPY . ./
 RUN npm run typecheck && npm run build
-RUN npx esbuild scripts/migrate.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/migrate.cjs
-RUN npm prune --production
+RUN npm run build:owner-bootstrap
+RUN npm prune --omit=dev --no-audit --no-fund
 
 FROM node:22-slim AS runtime
 WORKDIR /app
