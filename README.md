@@ -43,3 +43,5 @@ docker-compose up
 - **Railway**: `railway.toml` configured for production
 - **Vercel**: `vercel.json` configured for frontend
 - **Docker**: Multi-stage builds for optimized images
+
+<!-- Railway source-sync trigger: 2026-08-18T06:00:00Z -->
