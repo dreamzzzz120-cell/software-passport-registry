@@ -15,6 +15,19 @@ export interface AuthenticatedRequest extends Request {
   user?: { id: number; uid: string; email: string; tenantId: string; role: string; emailVerified: boolean };
 }
 
+declare global {
+  namespace Express {
+    interface Request {
+      sprApi?: {
+        id: string;
+        tenantId: string;
+        name: string;
+        scopes: string[];
+      };
+    }
+  }
+}
+
 let rateLimitWindowMs = 60_000;
 let maxRequestsPerWindow = 100;
 const isTestMode = () => process.env.NODE_ENV !== 'production';
