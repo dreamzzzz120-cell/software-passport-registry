@@ -23,6 +23,7 @@
       "motion": ["src/motion-compat.ts"]
     }
   },
+  "files": ["src/types/express.d.ts"],
   "include": ["src", "tests", "server.ts", "worker.ts"],
   "exclude": ["node_modules", "dist"]
 }
