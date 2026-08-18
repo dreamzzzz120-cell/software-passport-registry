@@ -1,9 +1,10 @@
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import { resolve } from 'node:path';
 
 function lazyAppViews(): Plugin {
-  const componentImport = /^import\s+([A-Za-z_$][\w$]*)\s+from\s+['\"](\./components/[^'\"]+)['\"];?$/gm;
+  const componentImport = /^import\s+([A-Za-z_$][\w$]*)\s+from\s+['\"](\./components\/[^'\"]+)['\"];?$/gm;
 
   return {
     name: 'spr-lazy-app-views',
@@ -21,6 +22,12 @@ function lazyAppViews(): Plugin {
 }
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      'lucide-react': resolve(__dirname, 'src/lucide-compat.ts'),
+      motion: resolve(__dirname, 'src/motion-compat.ts'),
+    },
+  },
   plugins: [lazyAppViews(), react(), tailwindcss()],
   build: {
     chunkSizeWarningLimit: 500,
