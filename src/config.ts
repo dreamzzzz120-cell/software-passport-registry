@@ -52,9 +52,14 @@ const parseNumber = (input: string | undefined, fallback: number) => { const par
 const parseCsv = (input: string | undefined) => input ? input.split(',').map((item) => item.trim()).filter(Boolean) : [];
 const parsedEnv = envSchema.parse(process.env);
 
+const railwayPublicUrl = process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN.trim()}` : undefined;
+const effectiveAppUrl = parsedEnv.APP_URL ?? railwayPublicUrl;
+const effectiveAllowedOrigins = parseCsv(parsedEnv.APP_ALLOWED_ORIGINS);
+if (railwayPublicUrl && !effectiveAllowedOrigins.includes(railwayPublicUrl)) effectiveAllowedOrigins.push(railwayPublicUrl);
+
 export const config = {
   nodeEnv: parsedEnv.NODE_ENV ?? 'development', port: parsedEnv.PORT ? Number(parsedEnv.PORT) : 3000, isProduction: parsedEnv.NODE_ENV === 'production',
-  appUrl: parsedEnv.APP_URL, allowedOrigins: parseCsv(parsedEnv.APP_ALLOWED_ORIGINS), enforceHttps: parseBoolean(parsedEnv.ENFORCE_HTTPS, false), trustProxy: parseBoolean(parsedEnv.TRUST_PROXY, false), allowIframe: parseBoolean(parsedEnv.ALLOW_IFRAME, false),
+  appUrl: effectiveAppUrl, allowedOrigins: effectiveAllowedOrigins, enforceHttps: parseBoolean(parsedEnv.ENFORCE_HTTPS, false), trustProxy: parseBoolean(parsedEnv.TRUST_PROXY, false), allowIframe: parseBoolean(parsedEnv.ALLOW_IFRAME, false),
   database: {
     connectionString: parsedEnv.DATABASE_URL, host: parsedEnv.SQL_HOST, user: parsedEnv.SQL_USER, password: parsedEnv.SQL_PASSWORD, name: parsedEnv.SQL_DB_NAME,
     ssl: parsedEnv.SQL_SSL ? ['true', 'require'].includes(parsedEnv.SQL_SSL.toLowerCase()) : false,
@@ -71,8 +76,8 @@ export const config = {
 export function validateConfiguration() {
   if (!config.isProduction) return;
   const missing: string[] = [];
-  if (!config.appUrl) missing.push('APP_URL');
-  if (!config.allowedOrigins.length) missing.push('APP_ALLOWED_ORIGINS');
+  if (!config.appUrl) missing.push('APP_URL or RAILWAY_PUBLIC_DOMAIN');
+  if (!config.allowedOrigins.length) missing.push('APP_ALLOWED_ORIGINS or RAILWAY_PUBLIC_DOMAIN');
   if (!config.enforceHttps) missing.push('ENFORCE_HTTPS=true');
   if (!config.trustProxy) missing.push('TRUST_PROXY=true');
   if (config.allowIframe) missing.push('ALLOW_IFRAME=false');
@@ -85,7 +90,7 @@ export function validateConfiguration() {
   if (config.ownerBootstrap.secret && config.ownerBootstrap.secret.length < 32) throw new Error('SPR_OWNER_BOOTSTRAP_SECRET must contain at least 32 characters.');
   if (missing.length) throw new Error(`Production security configuration incomplete: ${missing.join(', ')}.`);
   const appUrl = config.appUrl;
-  if (!appUrl) throw new Error('APP_URL is required in production.');
+  if (!appUrl) throw new Error('APP_URL or RAILWAY_PUBLIC_DOMAIN is required in production.');
   const appOrigin = new URL(appUrl).origin;
   const normalizedOrigins = config.allowedOrigins.map((origin) => new URL(origin).origin);
   if (!normalizedOrigins.includes(appOrigin)) throw new Error('APP_ALLOWED_ORIGINS must explicitly include APP_URL origin.');
