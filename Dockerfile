@@ -5,8 +5,8 @@ ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 
 COPY package.json ./
 RUN npm install --ignore-scripts --no-audit --no-fund
-# Railway source-cache invalidation marker: 2026-08-18T06:00Z
-ARG SOURCE_REV=railway-refresh-20260818T0600Z
+# Force Railway to rebuild the source layer after SPR TypeScript fix.
+ARG SOURCE_REV=railway-refresh-20260818T0745Z
 RUN test -n "$SOURCE_REV"
 COPY . ./
 RUN npm run typecheck && npm run build
