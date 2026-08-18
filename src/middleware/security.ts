@@ -98,7 +98,7 @@ export const rateLimiter = async (req: Request, res: Response, next: NextFunctio
     res.setHeader('X-RateLimit-Remaining', String(Math.max(0, maxRequestsPerWindow - counter.count)));
     res.setHeader('X-RateLimit-Reset', String(Math.ceil(counter.resetAt / 1000)));
     if (counter.count > maxRequestsPerWindow) {
-      res.setHeader('Retry-After', String(Math.max(1, Math.ceil((counter.resetAt - Date.now()) / 1000))));
+      res.setHeader('Retry-After', String(Math.max(1, Math.ceil((counter.resetAt - Date.now()) / 1000)));
       return res.status(429).json({ error: { code: 'RATE_LIMITED', message: 'Too many requests.' } });
     }
     return next();
@@ -116,17 +116,25 @@ export const requireAuth = async (req: AuthenticatedRequest, res: Response, next
   try {
     const decodedToken = await adminAuth.verifyIdToken(token, true);
     const uid = decodedToken.uid;
-    const email = decodedToken.email || `${uid}@user.local`;
-    const emailVerified = !!decodedToken.email_verified;
+    if (!uid || typeof uid !== 'string' || uid.length > 256) return res.status(401).json({ error: 'Unauthorized: Invalid security token' });
+
     const isVerificationExemptPath = ['/api/user/me', '/api/auth/resend-verification', '/api/auth/verify-status'].includes(req.path);
+    const emailVerified = decodedToken.email_verified === true;
     if (!emailVerified && !isVerificationExemptPath) return res.status(403).json({ error: 'Email verification required', code: 'EMAIL_NOT_VERIFIED' });
-    const domain = email.split('@')[1] || 'generic';
-    const publicDomains = new Set(['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com', 'icloud.com']);
-    const defaultTenantId = publicDomains.has(domain.toLowerCase()) ? `tenant-${uid}` : `tenant-${domain.toLowerCase()}`;
-    let dbUser = await db.select().from(users).where(eq(users.uid, uid)).then(rows => rows[0]);
-    if (!dbUser) dbUser = await db.select().from(users).where(eq(users.email, email)).then(rows => rows[0]);
+
+    // Authorization is anchored to the immutable Firebase UID. Never fall back
+    // to an email lookup: a different Firebase account must never inherit an
+    // existing user's tenant or RBAC record because the email happens to match.
+    const dbUser = await db.select().from(users).where(eq(users.uid, uid)).then(rows => rows[0]);
     if (!dbUser) return res.status(403).json({ error: 'User account is not provisioned' });
-    req.user = { id: dbUser.id, uid, email, tenantId: dbUser.tenantId || defaultTenantId, role: dbUser.role || 'user', emailVerified };
+    if (!dbUser.tenantId || dbUser.tenantId.length > 256) return res.status(403).json({ error: 'User account has invalid tenant configuration' });
+    if (!dbUser.role || dbUser.role.length > 64) return res.status(403).json({ error: 'User account has invalid role configuration' });
+
+    const dbEmail = dbUser.email.trim().toLowerCase();
+    const tokenEmail = typeof decodedToken.email === 'string' ? decodedToken.email.trim().toLowerCase() : '';
+    if (tokenEmail && dbEmail && tokenEmail !== dbEmail) return res.status(403).json({ error: 'User identity does not match the provisioned account' });
+
+    req.user = { id: dbUser.id, uid, email: dbUser.email, tenantId: dbUser.tenantId, role: dbUser.role, emailVerified };
     return next();
   } catch {
     return res.status(401).json({ error: 'Unauthorized: Invalid or expired security token' });
