@@ -19,18 +19,16 @@ function loadAdminCredential() {
       }
       return cert(payload);
     } catch (error) {
-      if (config.isProduction) {
-        throw new Error(`Invalid FIREBASE_SERVICE_ACCOUNT_KEY: ${error instanceof Error ? error.message : 'invalid credential'}`);
-      }
-      console.warn('[Firebase Admin] Invalid service account; development startup will use application default credentials when available.');
+      console.error('[Firebase Admin] Invalid FIREBASE_SERVICE_ACCOUNT_KEY:', error instanceof Error ? error.message : 'invalid credential');
+      return undefined;
     }
   }
 
-  if (config.firebase.googleApplicationCredentials) {
-    return applicationDefault();
-  }
+  if (config.firebase.googleApplicationCredentials) return applicationDefault();
 
-  if (config.isProduction) throw new Error('Firebase Admin credentials are required in production.');
+  if (config.isProduction) {
+    console.error('[Firebase Admin] Firebase Admin credentials are not configured; auth requests will fail until credentials are supplied.');
+  }
   return undefined;
 }
 
