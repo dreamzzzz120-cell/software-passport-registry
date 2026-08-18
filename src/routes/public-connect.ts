@@ -25,8 +25,8 @@ export function createPublicConnectRouter() {
       security: row.security_score,
       compliance: row.compliance_score,
       reputation: row.vendor_reputation_score,
-      evidenceCount: parseJson<any[]>(row.evidence, []).length,
-      vulnerabilityCount: parseJson<any[]>(row.vulnerabilities, []).length,
+      evidenceCount: parseJson(row.evidence, []).length,
+      vulnerabilityCount: parseJson(row.vulnerabilities, []).length,
     });
   });
   return router;
