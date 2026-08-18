@@ -25,15 +25,10 @@ interface MigrationFile {
   sql: string;
 }
 
-/**
- * Some legacy SPR migrations contain their own BEGIN/COMMIT wrappers.
- * The runner owns the transaction, so remove only those outer wrappers.
- * BEGIN/END inside PL/pgSQL functions are intentionally untouched.
- */
 function normalizeMigrationSql(sql: string): string {
-  return sql
-    .replace(/^\s*(?:(?:--[^\r\n]*\r?\n)\s*)*BEGIN\s*;\s*/i, '')
-    .replace(/;\s*COMMIT\s*;\s*(?:--[\s\S]*)?\s*$/i, ';');
+  // Legacy migrations may contain an outer BEGIN/COMMIT. The runner owns the transaction.
+  const withoutBegin = sql.replace(/^\s*(?:(?:--[^\r\n]*\r?\n)\s*)*BEGIN\s*;\s*/i, '');
+  return withoutBegin.replace(/\r?\n\s*COMMIT\s*;\s*(?:\r?\n|--[\s\S]*)?$/i, '\n');
 }
 
 export class MigrationRunner {
@@ -70,11 +65,12 @@ export class MigrationRunner {
         this.log(`Skipping invalid migration filename: ${file}`, 'warn');
         return [];
       }
+      const filePath = path.join(this.migrationsDir, file);
       return [{
         version: match[1],
         description: match[2].replace(/_/g, ' '),
-        filePath: path.join(this.migrationsDir, file),
-        sql: fs.readFileSync(path.join(this.migrationsDir, file), 'utf8'),
+        filePath,
+        sql: fs.readFileSync(filePath, 'utf8'),
       }];
     });
   }
@@ -107,12 +103,7 @@ export class MigrationRunner {
     return duration;
   }
 
-  async runPendingMigrations(): Promise<{
-    success: boolean;
-    executed: number;
-    skipped: number;
-    errors: string[];
-  }> {
+  async runPendingMigrations(): Promise<{ success: boolean; executed: number; skipped: number; errors: string[] }> {
     const statusClient = await this.pool.connect();
     const errors: string[] = [];
     let executed = 0;
@@ -141,12 +132,7 @@ export class MigrationRunner {
         }
       }
 
-      return {
-        success: errors.length === 0,
-        executed,
-        skipped: completed.size,
-        errors,
-      };
+      return { success: errors.length === 0, executed, skipped: completed.size, errors };
     } finally {
       statusClient.release();
     }
@@ -194,7 +180,11 @@ function buildPool(): Pool {
 export async function main() {
   const pool = buildPool();
   try {
-    const runner = new MigrationRunner(pool, process.env.MIGRATIONS_DIR || './migrations', process.env.VERBOSE === 'true');
+    const runner = new MigrationRunner(
+      pool,
+      process.env.MIGRATIONS_DIR || './migrations',
+      process.env.VERBOSE === 'true',
+    );
     const result = await runner.runPendingMigrations();
     console.log(JSON.stringify(result, null, 2));
     if (!result.success) process.exitCode = 1;
