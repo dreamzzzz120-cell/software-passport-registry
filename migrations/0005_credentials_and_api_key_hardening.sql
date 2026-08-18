@@ -146,6 +146,12 @@ BEGIN
        OR key_hash IS NULL
        OR key_hash !~ '^[0-9a-f]{64}$'
        OR jsonb_typeof(scopes::jsonb) <> 'array'
+       OR jsonb_array_length(scopes::jsonb) NOT BETWEEN 1 AND 3
+       OR EXISTS (
+         SELECT 1
+         FROM jsonb_array_elements_text(scopes::jsonb) AS scope(value)
+         WHERE scope.value NOT IN ('read', 'write', 'webhooks')
+       )
   ) THEN
     RAISE EXCEPTION 'API key integrity violation';
   END IF;
@@ -168,8 +174,15 @@ BEGIN
     RAISE EXCEPTION 'API key must store a SHA-256 hash only';
   END IF;
 
-  IF NEW.scopes IS NULL OR jsonb_typeof(NEW.scopes::jsonb) <> 'array' THEN
-    RAISE EXCEPTION 'API key scopes must be a JSON array';
+  IF NEW.scopes IS NULL
+     OR jsonb_typeof(NEW.scopes::jsonb) <> 'array'
+     OR jsonb_array_length(NEW.scopes::jsonb) NOT BETWEEN 1 AND 3
+     OR EXISTS (
+       SELECT 1
+       FROM jsonb_array_elements_text(NEW.scopes::jsonb) AS scope(value)
+       WHERE scope.value NOT IN ('read', 'write', 'webhooks')
+     ) THEN
+    RAISE EXCEPTION 'API key scopes are invalid';
   END IF;
 
   IF TG_OP = 'UPDATE' THEN
