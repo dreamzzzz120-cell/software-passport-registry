@@ -18,7 +18,7 @@ export default function TrustBrainView(_props: { userRole?: string }) {
   const compareWithPrevious = async () => { const response = await apiFetch(`/api/passports/${encodeURIComponent(passportId)}/trust-observation-comparison`); if (!response.ok) return setError('Observation comparison could not be loaded.'); setComparison(await response.json()); };
   const verifySnapshot = async (id: string) => { const response = await apiFetch(`/api/trust-observations/${encodeURIComponent(id)}/verify`, { method: 'POST' }); const body = await response.json(); setVerification(current => ({ ...current, [id]: response.ok && body.matchesStoredHash === true })); };
   useEffect(() => { if (passportId) loadObservation(passportId); }, [passportId]);
-  const vectors: VectorEntry[] = observation ? Object.values(observation.vector) : [];
+  const vectors: VectorEntry[] = observation ? (Object.values(observation.vector) as VectorEntry[]) : [];
 
   return (
     <div className="space-y-6">
