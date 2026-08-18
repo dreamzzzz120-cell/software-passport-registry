@@ -18,7 +18,7 @@ export interface AuthenticatedRequest extends Request {
 declare global {
   namespace Express {
     interface Request {
-      sprApi: { id: string; tenantId: string; name: string; scopes: string[] };
+      sprApi?: { id: string; tenantId: string; name: string; scopes: string[] };
     }
   }
 }
@@ -141,10 +141,11 @@ export const requireAuth = async (req: AuthenticatedRequest, res: Response, next
   }
 };
 
-export function requireRole(...roles: string[]) {
+export function requireRole(...roles: Array<string | string[]>) {
+  const allowedRoles = roles.flat();
   return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
-    if (roles.length > 0 && !roles.includes(req.user.role)) return res.status(403).json({ error: 'Forbidden' });
+    if (allowedRoles.length > 0 && !allowedRoles.includes(req.user.role)) return res.status(403).json({ error: 'Forbidden' });
     return next();
   };
 }
