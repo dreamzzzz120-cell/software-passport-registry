@@ -8,30 +8,47 @@ import { getAuth } from 'firebase-admin/auth';
 import { config } from '../config.ts';
 
 function parseServiceAccount(raw: string): ServiceAccount {
-  const trimmed = raw.trim();
-  let candidate = trimmed;
+  let candidate = raw.trim().replace(/^\uFEFF/, '');
 
-  // Railway and other env injectors can wrap structured secrets with metadata.
-  // Extract only the JSON object and never execute/eval the value.
-  if (!candidate.startsWith('{')) {
-    const start = candidate.indexOf('{');
-    const end = candidate.lastIndexOf('}');
-    if (start < 0 || end <= start) throw new Error('Service account value does not contain a JSON object');
-    candidate = candidate.slice(start, end + 1);
+  // Accept a raw JSON object, a JSON-encoded string containing that object,
+  // or an env value with harmless wrapper text around the JSON object.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const parsed = JSON.parse(candidate) as unknown;
+      if (typeof parsed === 'string') {
+        candidate = parsed.trim().replace(/^\uFEFF/, '');
+        continue;
+      }
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('Service account value is not a JSON object');
+      }
+
+      const value = parsed as Record<string, unknown>;
+      const projectId = value.projectId ?? value.project_id;
+      const clientEmail = value.clientEmail ?? value.client_email;
+      const privateKey = value.privateKey ?? value.private_key;
+
+      const normalized: ServiceAccount = {
+        projectId: typeof projectId === 'string' ? projectId.trim() : '',
+        clientEmail: typeof clientEmail === 'string' ? clientEmail.trim() : '',
+        privateKey: typeof privateKey === 'string' ? privateKey.replace(/\\n/g, '\n') : '',
+      };
+
+      return normalized;
+    } catch (error) {
+      // If the value contains wrapper text, isolate the outermost JSON object.
+      const start = candidate.indexOf('{');
+      const end = candidate.lastIndexOf('}');
+      if (start >= 0 && end > start && (start !== 0 || end !== candidate.length - 1)) {
+        candidate = candidate.slice(start, end + 1).trim();
+        continue;
+      }
+      if (error instanceof Error && error.message !== 'Unexpected end of JSON input') throw error;
+      throw new Error('Service account value is not valid JSON');
+    }
   }
 
-  const parsed = JSON.parse(candidate) as Record<string, unknown>;
-
-  // Firebase downloads use snake_case keys; firebase-admin's ServiceAccount
-  // interface uses camelCase. Normalize both forms so the raw downloaded JSON
-  // can be stored directly in Railway without manual transformation.
-  const normalized: ServiceAccount = {
-    projectId: String(parsed.projectId ?? parsed.project_id ?? ''),
-    clientEmail: String(parsed.clientEmail ?? parsed.client_email ?? ''),
-    privateKey: String(parsed.privateKey ?? parsed.private_key ?? '').replace(/\\n/g, '\n'),
-  };
-
-  return normalized;
+  throw new Error('Service account value could not be normalized');
 }
 
 function parseBase64ServiceAccount(raw: string): ServiceAccount {
