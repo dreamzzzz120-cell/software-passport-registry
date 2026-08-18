@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+// Production security boundary: Redis rate limiting fails closed when the shared store is unavailable.
+
 import { Request, Response, NextFunction } from 'express';
 import { randomUUID } from 'node:crypto';
 import { adminAuth } from '../lib/firebase-admin.ts';
@@ -26,7 +28,7 @@ class InMemoryStore implements RateLimitStore { private map = new Map<string, Ra
 interface AtomicRateLimitClient { increment(script: string, key: string, windowMs: number, limit: number): Promise<unknown>; }
 export class IORedisAtomicClient implements AtomicRateLimitClient { constructor(private readonly client: { eval(script: string, numKeys: number, ...args: Array<string | number>): Promise<unknown> }) {} increment(script: string, key: string, windowMs: number, limit: number) { return this.client.eval(script, 1, key, String(windowMs), String(limit)); } }
 export function createAtomicRateLimitClient(provider: 'ioredis', client: any): AtomicRateLimitClient { if (provider === 'ioredis' && client && typeof client.eval === 'function') return new IORedisAtomicClient(client); throw new Error('Invalid or unsupported rate limit provider'); }
-export class RedisStore implements RateLimitStore { private readonly lua = `local count = redis.call("INCR", KEYS[1])\nlocal ttl = redis.call("PTTL", KEYS[1])\nif count == 1 or ttl < 0 then redis.call("PEXPIRE", KEYS[1], ARGV[1]) ttl = tonumber(ARGV[1]) end\nreturn {count, ttl}`; constructor(private readonly atomicClient: AtomicRateLimitClient) {} async incr(key: string, windowMs: number, limit: number) { const res = await this.atomicClient.increment(this.lua, key, windowMs, limit); if (!Array.isArray(res) || res.length < 2) throw new Error('Unexpected Redis rate-limit response'); const count = Number(res[0]); const ttl = Number(res[1]); if (!Number.isFinite(count) || count < 0 || !Number.isFinite(ttl) || ttl <= 0) throw new Error('Invalid Redis rate-limit response'); return { count, resetAt: Date.now() + ttl }; } }
+export class RedisStore implements RateLimitStore { private readonly lua = `local count = redis.call(\"INCR\", KEYS[1])\\nlocal ttl = redis.call(\"PTTL\", KEYS[1])\\nif count == 1 or ttl < 0 then redis.call(\"PEXPIRE\", KEYS[1], ARGV[1]) ttl = tonumber(ARGV[1]) end\\nreturn {count, ttl}`; constructor(private readonly atomicClient: AtomicRateLimitClient) {} async incr(key: string, windowMs: number, limit: number) { const res = await this.atomicClient.increment(this.lua, key, windowMs, limit); if (!Array.isArray(res) || res.length < 2) throw new Error('Unexpected Redis rate-limit response'); const count = Number(res[0]); const ttl = Number(res[1]); if (!Number.isFinite(count) || count < 0 || !Number.isFinite(ttl) || ttl <= 0) throw new Error('Invalid Redis rate-limit response'); return { count, resetAt: Date.now() + ttl }; } }
 let sharedStore: RateLimitStore = new InMemoryStore();
 let IORedis: any;
 function loadIoredis() { try { return require('ioredis'); } catch { return undefined; } }
