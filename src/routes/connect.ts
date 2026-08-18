@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '../db/index.ts';
 import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/security.ts';
+import { validateWebhookUrl } from '../security/webhook-url.ts';
 
 const API_VERSION = '2026-08-01';
 const PUBLIC_SCOPES = ['read', 'write', 'webhooks'] as const;
@@ -35,9 +36,7 @@ async function authenticateApiKey(req: any, res: any, next: any) {
     const row: any = (result as any).rows?.[0];
     if (!row || row.revoked_at || (row.expires_at && (!Number.isFinite(new Date(row.expires_at).getTime()) || new Date(row.expires_at).getTime() <= Date.now()))) return res.status(401).json({ error: 'Invalid or expired API key' });
     const scopes = parseJson<string[]>(row.scopes, []);
-    if (!Array.isArray(scopes) || scopes.length < 1 || scopes.length > 3 || new Set(scopes).size !== scopes.length || scopes.some(scope => !(PUBLIC_SCOPES as readonly string[]).includes(scope))) {
-      return res.status(401).json({ error: 'API key has invalid scopes' });
-    }
+    if (!Array.isArray(scopes) || scopes.length < 1 || scopes.length > 3 || new Set(scopes).size !== scopes.length || scopes.some(scope => !(PUBLIC_SCOPES as readonly string[]).includes(scope))) return res.status(401).json({ error: 'API key has invalid scopes' });
     req.sprApi = { id: row.id, tenantId: row.tenant_id, name: row.name, scopes };
     await db.execute(sql`UPDATE spr_api_keys SET last_used_at = ${new Date().toISOString()} WHERE id = ${row.id} AND tenant_id = ${row.tenant_id} AND revoked_at IS NULL`);
     return next();
@@ -58,6 +57,19 @@ export function createConnectRouter() {
   router.get('/v1/software/:id', async (req, res, next) => { try { const result = await db.execute(sql`SELECT id, name, version, publisher, category, source_type, source_url, license_type, release_date, metadata FROM software_registry WHERE id = ${req.params.id} AND tenant_id = ${req.sprApi.tenantId} LIMIT 1`); const row: any = (result as any).rows?.[0]; if (!row) return res.status(404).json({ error: 'Software not found' }); return res.json(row); } catch (error) { return next(error); } });
   router.get('/v1/passports/:id', async (req, res, next) => { try { const row = await tenantPassport(req.sprApi.tenantId, req.params.id); if (!row) return res.status(404).json({ error: 'Passport not found' }); return res.json(publicPassport(row)); } catch (error) { return next(error); } });
   router.get('/v1/webhooks', requireScope('webhooks'), async (req, res, next) => { try { const result = await db.execute(sql`SELECT id, url, events, active, created_at FROM spr_webhooks WHERE tenant_id = ${req.sprApi.tenantId} ORDER BY created_at DESC`); return res.json((result as any).rows ?? []); } catch (error) { return next(error); } });
-  router.post('/v1/webhooks', requireScope('webhooks'), async (req, res, next) => { try { const parsed = webhookSchema.safeParse(req.body); if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() }); const webhookId = id('wh'); const secret = createSecret('whsec'); await db.execute(sql`INSERT INTO spr_webhooks (id, tenant_id, url, events, secret_hash, active) VALUES (${webhookId}, ${req.sprApi.tenantId}, ${parsed.data.url}, ${JSON.stringify(parsed.data.events)}, ${hash(secret)}, true)`); return res.status(201).json({ id: webhookId, url: parsed.data.url, events: parsed.data.events, secret, warning: 'Store this secret now. SPR will not return it again.' }); } catch (error) { return next(error); } });
+  router.post('/v1/webhooks', requireScope('webhooks'), async (req, res, next) => {
+    try {
+      const parsed = webhookSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+      const webhookUrl = await validateWebhookUrl(parsed.data.url);
+      const webhookId = id('wh');
+      const secret = createSecret('whsec');
+      await db.execute(sql`INSERT INTO spr_webhooks (id, tenant_id, url, events, secret_hash, active) VALUES (${webhookId}, ${req.sprApi.tenantId}, ${webhookUrl.toString()}, ${JSON.stringify(parsed.data.events)}, ${hash(secret)}, true)`);
+      return res.status(201).json({ id: webhookId, url: webhookUrl.toString(), events: parsed.data.events, secret, warning: 'Store this secret now. SPR will not return it again.' });
+    } catch (error) {
+      if (error instanceof Error && /Webhook URL|Webhook destination/.test(error.message)) return res.status(400).json({ error: error.message });
+      return next(error);
+    }
+  });
   return router;
 }
