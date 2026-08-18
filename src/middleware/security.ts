@@ -18,7 +18,7 @@ export interface AuthenticatedRequest extends Request {
 declare global {
   namespace Express {
     interface Request {
-      sprApi?: { id: string; tenantId: string; name: string; scopes: string[] };
+      sprApi: { id: string; tenantId: string; name: string; scopes: string[] };
     }
   }
 }
@@ -140,3 +140,11 @@ export const requireAuth = async (req: AuthenticatedRequest, res: Response, next
     return res.status(401).json({ error: 'Unauthorized: Invalid or expired security token' });
   }
 };
+
+export function requireRole(...roles: string[]) {
+  return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+    if (roles.length > 0 && !roles.includes(req.user.role)) return res.status(403).json({ error: 'Forbidden' });
+    return next();
+  };
+}
