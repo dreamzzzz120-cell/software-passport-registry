@@ -5,8 +5,8 @@ ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 
 COPY package.json ./
 RUN npm install --ignore-scripts --no-audit --no-fund
-# Force the source layer to follow the current Git revision being deployed.
-ARG SOURCE_REV=a59582298ee4d4db70f2d7388dfcc4739b033cd7
+# Railway source-cache invalidation marker: 2026-08-18T05:42Z
+ARG SOURCE_REV=f486acd743034e41768b99c2c66912d11f0dd4f0
 RUN test -n "$SOURCE_REV"
 COPY . ./
 RUN npm run typecheck && npm run build
