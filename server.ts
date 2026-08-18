@@ -27,8 +27,8 @@ const corsOrigin = (origin: string | undefined, callback: (error: Error | null, 
   if (allowedOrigins.has(origin)) return callback(null, true);
   try {
     const requestOrigin = new URL(origin).origin;
-    const publicOrigin = new URL(config.publicUrl || origin).origin;
-    if (requestOrigin === publicOrigin) return callback(null, true);
+    const appOrigin = new URL(config.appUrl || origin).origin;
+    if (requestOrigin === appOrigin) return callback(null, true);
   } catch (_) {}
   return callback(new Error('CORS origin denied'));
 };
