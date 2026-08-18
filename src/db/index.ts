@@ -38,8 +38,11 @@ export const createPool = () => {
     query_timeout: databaseConfigurationSummary.queryTimeoutMillis,
   };
 
+  const sslConfig = databaseConfigurationSummary.ssl ? { rejectUnauthorized: true } : undefined;
+
   if (config.database.connectionString) {
-    return new Pool({ connectionString: config.database.connectionString, ...poolConfig });
+    // Enforce the production SSL policy even when DATABASE_URL omits sslmode.
+    return new Pool({ connectionString: config.database.connectionString, ssl: sslConfig, ...poolConfig });
   }
 
   return new Pool({
@@ -47,7 +50,7 @@ export const createPool = () => {
     user: config.database.user,
     password: config.database.password,
     database: config.database.name,
-    ssl: databaseConfigurationSummary.ssl ? { rejectUnauthorized: true } : undefined,
+    ssl: sslConfig,
     ...poolConfig,
   });
 };
