@@ -1,5 +1,3 @@
-import type { AuthenticatedRequest } from '../middleware/security';
-
 declare global {
   namespace Express {
     interface Request {
