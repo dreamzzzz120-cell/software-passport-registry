@@ -23,7 +23,29 @@ function parseServiceAccount(raw: string): ServiceAccount {
   return JSON.parse(candidate) as ServiceAccount;
 }
 
+function parseBase64ServiceAccount(raw: string): ServiceAccount {
+  const decoded = Buffer.from(raw.trim(), 'base64').toString('utf8');
+  return parseServiceAccount(decoded);
+}
+
 function loadAdminCredential() {
+  if (config.firebase.serviceAccountKeyB64) {
+    try {
+      const payload = parseBase64ServiceAccount(config.firebase.serviceAccountKeyB64);
+      if (!payload.projectId || !payload.clientEmail || !payload.privateKey) {
+        throw new Error('Service account is missing required fields');
+      }
+      if (config.firebase.projectId && payload.projectId !== config.firebase.projectId) {
+        throw new Error('Service account project does not match FIREBASE_PROJECT_ID');
+      }
+      console.info('[Firebase Admin] Using FIREBASE_SERVICE_ACCOUNT_KEY_B64');
+      return cert(payload);
+    } catch (error) {
+      console.error('[Firebase Admin] Invalid FIREBASE_SERVICE_ACCOUNT_KEY_B64:', error instanceof Error ? error.message : 'invalid credential');
+      return undefined;
+    }
+  }
+
   if (config.firebase.serviceAccountKey) {
     try {
       const payload = parseServiceAccount(config.firebase.serviceAccountKey);
