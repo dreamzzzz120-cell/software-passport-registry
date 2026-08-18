@@ -38,7 +38,7 @@ const envSchema = z.object({
   SQL_HOST: optionalTrimmedString, SQL_USER: optionalTrimmedString, SQL_PASSWORD: optionalTrimmedString, SQL_DB_NAME: optionalTrimmedString,
   DATABASE_URL: optionalTrimmedUrl, SQL_SSL: z.preprocess((value) => typeof value === 'string' ? (value.trim() || undefined) : value, z.enum(['true', 'require', 'false', '1', '0']).optional()),
   SQL_POOL_MAX: optionalPositiveIntegerString, SQL_CONNECTION_TIMEOUT_MS: optionalPositiveIntegerString, SQL_IDLE_TIMEOUT_MS: optionalPositiveIntegerString, SQL_QUERY_TIMEOUT_MS: optionalPositiveIntegerString,
-  FIREBASE_PROJECT_ID: optionalTrimmedString, FIREBASE_SERVICE_ACCOUNT_KEY: optionalTrimmedString, GOOGLE_APPLICATION_CREDENTIALS: optionalTrimmedString,
+  FIREBASE_PROJECT_ID: optionalTrimmedString, FIREBASE_SERVICE_ACCOUNT_KEY: optionalTrimmedString, FIREBASE_SERVICE_ACCOUNT_KEY_B64: optionalTrimmedString, GOOGLE_APPLICATION_CREDENTIALS: optionalTrimmedString,
   STRIPE_SECRET_KEY: optionalTrimmedString, STRIPE_WEBHOOK_SECRET: optionalTrimmedString,
   GEMINI_API_KEY: optionalTrimmedString, GOOGLE_GENAI_API_KEY: optionalTrimmedString, AI_GATEWAY_API_KEY: optionalTrimmedString,
   SPR_INITIAL_OWNER_EMAIL: z.preprocess((value) => typeof value === 'string' ? (value.trim().toLowerCase() || undefined) : value, z.string().email().optional()),
@@ -61,7 +61,7 @@ export const config = {
     poolMax: parseNumber(parsedEnv.SQL_POOL_MAX, 20), connectionTimeoutMs: parseNumber(parsedEnv.SQL_CONNECTION_TIMEOUT_MS, 10000), idleTimeoutMs: parseNumber(parsedEnv.SQL_IDLE_TIMEOUT_MS, 30000), queryTimeoutMs: parseNumber(parsedEnv.SQL_QUERY_TIMEOUT_MS, 5000),
     isConfigured: Boolean(parsedEnv.DATABASE_URL || (parsedEnv.SQL_HOST && parsedEnv.SQL_USER && parsedEnv.SQL_PASSWORD && parsedEnv.SQL_DB_NAME)),
   },
-  firebase: { projectId: parsedEnv.FIREBASE_PROJECT_ID, serviceAccountKey: parsedEnv.FIREBASE_SERVICE_ACCOUNT_KEY, googleApplicationCredentials: parsedEnv.GOOGLE_APPLICATION_CREDENTIALS },
+  firebase: { projectId: parsedEnv.FIREBASE_PROJECT_ID, serviceAccountKey: parsedEnv.FIREBASE_SERVICE_ACCOUNT_KEY, serviceAccountKeyB64: parsedEnv.FIREBASE_SERVICE_ACCOUNT_KEY_B64, googleApplicationCredentials: parsedEnv.GOOGLE_APPLICATION_CREDENTIALS },
   stripe: { secretKey: parsedEnv.STRIPE_SECRET_KEY, webhookSecret: parsedEnv.STRIPE_WEBHOOK_SECRET },
   gemini: { apiKey: parsedEnv.GEMINI_API_KEY ?? parsedEnv.GOOGLE_GENAI_API_KEY }, aiGateway: { apiKey: parsedEnv.AI_GATEWAY_API_KEY },
   ownerBootstrap: { initialOwnerEmail: parsedEnv.SPR_INITIAL_OWNER_EMAIL, secret: parsedEnv.SPR_OWNER_BOOTSTRAP_SECRET, secretSha256: parsedEnv.SPR_OWNER_BOOTSTRAP_SECRET_SHA256 },
@@ -79,7 +79,7 @@ export function validateConfiguration() {
   if (!config.database.isConfigured) missing.push('DATABASE_URL or SQL_HOST/SQL_USER/SQL_PASSWORD/SQL_DB_NAME');
   if (!config.database.ssl) missing.push('SQL_SSL=true/require');
   if (!config.redis.url) missing.push('REDIS_URL');
-  if (!config.firebase.serviceAccountKey && !config.firebase.googleApplicationCredentials) missing.push('FIREBASE_SERVICE_ACCOUNT_KEY or GOOGLE_APPLICATION_CREDENTIALS');
+  if (!config.firebase.serviceAccountKey && !config.firebase.serviceAccountKeyB64 && !config.firebase.googleApplicationCredentials) missing.push('FIREBASE_SERVICE_ACCOUNT_KEY, FIREBASE_SERVICE_ACCOUNT_KEY_B64, or GOOGLE_APPLICATION_CREDENTIALS');
   const bootstrapValues = [config.ownerBootstrap.initialOwnerEmail, config.ownerBootstrap.secret, config.ownerBootstrap.secretSha256];
   if (bootstrapValues.some(Boolean) && !bootstrapValues.every(Boolean)) throw new Error('Incomplete initial-owner bootstrap configuration: all three bootstrap values are required together.');
   if (config.ownerBootstrap.secret && config.ownerBootstrap.secret.length < 32) throw new Error('SPR_OWNER_BOOTSTRAP_SECRET must contain at least 32 characters.');
@@ -96,7 +96,7 @@ export const configurationCatalog = [
   { name: 'APP_URL', category: 'requiredProduction', requiredInProduction: true }, { name: 'APP_ALLOWED_ORIGINS', category: 'requiredProduction', requiredInProduction: true },
   { name: 'ENFORCE_HTTPS', category: 'requiredProduction', requiredInProduction: true }, { name: 'TRUST_PROXY', category: 'requiredProduction', requiredInProduction: true },
   { name: 'ALLOW_IFRAME', category: 'requiredProduction', requiredInProduction: true }, { name: 'SQL_SSL', category: 'requiredProduction', requiredInProduction: true },
-  { name: 'REDIS_URL', category: 'requiredProduction', requiredInProduction: true }, { name: 'FIREBASE_SERVICE_ACCOUNT_KEY', category: 'requiredProduction', requiredInProduction: true },
+  { name: 'REDIS_URL', category: 'requiredProduction', requiredInProduction: true }, { name: 'FIREBASE_SERVICE_ACCOUNT_KEY or FIREBASE_SERVICE_ACCOUNT_KEY_B64', category: 'requiredProduction', requiredInProduction: true },
   { name: 'AI_GATEWAY_API_KEY', category: 'featureSpecific', requiredInProduction: false }, { name: 'SPR_OWNER_BOOTSTRAP_SECRET_SHA256', category: 'bootstrap-only', requiredInProduction: false },
   { name: 'STRIPE_SECRET_KEY', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_WEBHOOK_SECRET', category: 'featureSpecific', requiredInProduction: false },
   { name: 'GEMINI_API_KEY', category: 'featureSpecific', requiredInProduction: false }, { name: 'SENTRY_DSN', category: 'optional', requiredInProduction: false },
