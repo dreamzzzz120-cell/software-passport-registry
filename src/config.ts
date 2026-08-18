@@ -6,7 +6,10 @@
 import dotenv from 'dotenv';
 import { z } from 'zod';
 
-if (process.env.SKIP_DOTENV !== 'true') dotenv.config();
+// Never load repository/container .env files in production. Railway/Vercel/etc.
+// must be the sole source of production secrets; local .env files can contain
+// dotenvx metadata/comments that corrupt structured secrets such as Firebase JSON.
+if (process.env.NODE_ENV !== 'production' && process.env.SKIP_DOTENV !== 'true') dotenv.config();
 
 const optionalTrimmedString = z.preprocess((value) => {
   if (typeof value === 'string') {
