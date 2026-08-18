@@ -88,3 +88,5 @@ export default function App() {
     </main>
   );
 }
+
+// Deployment synchronization marker: current main source is the intended production entrypoint.
