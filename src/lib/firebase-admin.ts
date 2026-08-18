@@ -7,10 +7,26 @@ import { initializeApp, getApps, getApp, cert, applicationDefault, ServiceAccoun
 import { getAuth } from 'firebase-admin/auth';
 import { config } from '../config.ts';
 
+function parseServiceAccount(raw: string): ServiceAccount {
+  const trimmed = raw.trim();
+  let candidate = trimmed;
+
+  // Some env injectors prepend metadata/comments to multiline structured
+  // secrets. Accept only the JSON object portion and never execute or eval it.
+  if (!candidate.startsWith('{')) {
+    const start = candidate.indexOf('{');
+    const end = candidate.lastIndexOf('}');
+    if (start < 0 || end <= start) throw new Error('Service account value does not contain a JSON object');
+    candidate = candidate.slice(start, end + 1);
+  }
+
+  return JSON.parse(candidate) as ServiceAccount;
+}
+
 function loadAdminCredential() {
   if (config.firebase.serviceAccountKey) {
     try {
-      const payload = JSON.parse(config.firebase.serviceAccountKey) as ServiceAccount;
+      const payload = parseServiceAccount(config.firebase.serviceAccountKey);
       if (!payload.projectId || !payload.clientEmail || !payload.privateKey) {
         throw new Error('Service account is missing required fields');
       }
