@@ -5,6 +5,9 @@ ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 
 COPY package.json ./
 RUN npm install --ignore-scripts --no-audit --no-fund
+# Force the source layer to follow the exact Git revision being deployed.
+ARG SOURCE_REV=0d858e2f131f4171d204b775c385def957c4ea3e
+RUN test -n "$SOURCE_REV"
 COPY . ./
 RUN npm run typecheck && npm run build
 RUN npm run build:owner-bootstrap
