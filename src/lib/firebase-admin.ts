@@ -11,10 +11,17 @@ function loadAdminCredential() {
   if (config.firebase.serviceAccountKey) {
     try {
       const payload = JSON.parse(config.firebase.serviceAccountKey) as ServiceAccount;
-      if (!payload.projectId || !payload.clientEmail || !payload.privateKey) throw new Error('Service account is missing required fields');
+      if (!payload.projectId || !payload.clientEmail || !payload.privateKey) {
+        throw new Error('Service account is missing required fields');
+      }
+      if (config.firebase.projectId && payload.projectId !== config.firebase.projectId) {
+        throw new Error('Service account project does not match FIREBASE_PROJECT_ID');
+      }
       return cert(payload);
     } catch (error) {
-      if (config.isProduction) throw new Error(`Invalid FIREBASE_SERVICE_ACCOUNT_KEY: ${error instanceof Error ? error.message : String(error)}`);
+      if (config.isProduction) {
+        throw new Error(`Invalid FIREBASE_SERVICE_ACCOUNT_KEY: ${error instanceof Error ? error.message : 'invalid credential'}`);
+      }
       console.warn('[Firebase Admin] Invalid service account; development startup will use application default credentials when available.');
     }
   }
