@@ -5,7 +5,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { randomUUID } from 'node:crypto';
-import { adminAuth, setUserCustomClaims } from '../lib/firebase-admin.ts';
+import { adminAuth } from '../lib/firebase-admin.ts';
 import { config } from '../config.ts';
 import { db } from '../db/index.ts';
 import { users } from '../db/schema.ts';
@@ -15,7 +15,7 @@ export interface AuthenticatedRequest extends Request {
   user?: { id: number; uid: string; email: string; tenantId: string; role: string; emailVerified: boolean };
 }
 
-let rateLimitWindowMs = 60 * 1000;
+let rateLimitWindowMs = 60_000;
 let maxRequestsPerWindow = 100;
 const isTestMode = () => process.env.NODE_ENV !== 'production';
 
@@ -26,7 +26,7 @@ export function setRateLimiterConfig(opts: { windowMs?: number; maxRequests?: nu
 }
 
 interface RateLimitRecord { count: number; resetAt: number; }
-interface RateLimitStore { incr(key: string, windowMs: number, limit: number): Promise<RateLimitRecord>; get?(key: string): Promise<RateLimitRecord | undefined | null>; }
+interface RateLimitStore { incr(key: string, windowMs: number, limit: number): Promise<RateLimitRecord>; }
 
 class InMemoryStore implements RateLimitStore {
   private map = new Map<string, RateLimitRecord>();
@@ -41,7 +41,6 @@ class InMemoryStore implements RateLimitStore {
     rec.count += 1;
     return rec;
   }
-  async get(key: string) { return this.map.get(key); }
 }
 
 interface AtomicRateLimitClient { increment(script: string, key: string, windowMs: number, limit: number): Promise<unknown>; }
@@ -57,38 +56,21 @@ export function createAtomicRateLimitClient(provider: 'ioredis', client: any): A
 
 export class RedisStore implements RateLimitStore {
   private readonly lua = `local count = redis.call("INCR", KEYS[1])\nlocal ttl = redis.call("PTTL", KEYS[1])\nif count == 1 or ttl < 0 then redis.call("PEXPIRE", KEYS[1], ARGV[1]) ttl = tonumber(ARGV[1]) end\nreturn {count, ttl}`;
-
-  constructor(private readonly atomicClient: AtomicRateLimitClient, private readonly rawClient?: { get?: (key: string) => Promise<unknown>; pttl?: (key: string) => Promise<unknown> }) {}
-
-  async incr(key: string, windowMs: number) {
-    const res = await this.atomicClient.increment(this.lua, key, windowMs, maxRequestsPerWindow);
+  constructor(private readonly atomicClient: AtomicRateLimitClient) {}
+  async incr(key: string, windowMs: number, limit: number) {
+    const res = await this.atomicClient.increment(this.lua, key, windowMs, limit);
     if (!Array.isArray(res) || res.length < 2) throw new Error('Unexpected Redis rate-limit response');
     const count = Number(res[0]);
     const ttl = Number(res[1]);
     if (!Number.isFinite(count) || count < 0 || !Number.isFinite(ttl) || ttl <= 0) throw new Error('Invalid Redis rate-limit response');
     return { count, resetAt: Date.now() + ttl };
   }
-
-  async get(key: string) {
-    if (!this.rawClient?.get) return undefined;
-    const val = await this.rawClient.get(key);
-    if (val == null) return undefined;
-    const count = Number(val);
-    const ttl = this.rawClient.pttl ? Number(await this.rawClient.pttl(key)) : 0;
-    return Number.isFinite(count) ? { count, resetAt: Date.now() + Math.max(0, ttl) } : undefined;
-  }
 }
 
 let sharedStore: RateLimitStore = new InMemoryStore();
 let IORedis: any;
-
 function loadIoredis() {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return require('ioredis');
-  } catch {
-    return undefined;
-  }
+  try { return require('ioredis'); } catch { return undefined; }
 }
 
 export function createSharedRateLimitStoreFromEnv(): RateLimitStore {
@@ -96,21 +78,15 @@ export function createSharedRateLimitStoreFromEnv(): RateLimitStore {
   if (!config.redis.url) throw new Error('REDIS_URL is required for production rate limiting');
   IORedis ??= loadIoredis();
   if (!IORedis) throw new Error('ioredis is required for production rate limiting');
-
   const client = new IORedis(config.redis.url, { lazyConnect: true, enableReadyCheck: true, maxRetriesPerRequest: 2, connectTimeout: 5000, commandTimeout: 5000, retryStrategy: (times: number) => Math.min(times * 250, 2000) });
   client.on('error', (err: Error) => console.error('[RateLimiter] Redis error:', err.message));
   client.on('ready', () => console.info('[RateLimiter] Redis ready'));
   client.on('end', () => console.error('[RateLimiter] Redis connection ended; requests will fail closed'));
   void client.connect().catch((err: Error) => console.error('[RateLimiter] Redis initial connection failed:', err.message));
-  return new RedisStore(createAtomicRateLimitClient('ioredis', client), client);
+  return new RedisStore(createAtomicRateLimitClient('ioredis', client));
 }
-
 if (config.isProduction) sharedStore = createSharedRateLimitStoreFromEnv();
-
-export function setRateLimiterStore(s: RateLimitStore) {
-  if (!isTestMode()) throw new Error('setRateLimiterStore is only available in test mode');
-  sharedStore = s;
-}
+export function setRateLimiterStore(s: RateLimitStore) { if (!isTestMode()) throw new Error('setRateLimiterStore is only available in test mode'); sharedStore = s; }
 
 export const rateLimiter = async (req: Request, res: Response, next: NextFunction) => {
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
@@ -118,12 +94,11 @@ export const rateLimiter = async (req: Request, res: Response, next: NextFunctio
   const key = tenantId ? `rl:tenant:${tenantId}:ip:${ip}` : `rl:ip:${ip}`;
   try {
     const counter = await sharedStore.incr(key, rateLimitWindowMs, maxRequestsPerWindow);
-    const remaining = Math.max(0, maxRequestsPerWindow - counter.count);
     res.setHeader('X-RateLimit-Limit', String(maxRequestsPerWindow));
-    res.setHeader('X-RateLimit-Remaining', String(remaining));
+    res.setHeader('X-RateLimit-Remaining', String(Math.max(0, maxRequestsPerWindow - counter.count)));
     res.setHeader('X-RateLimit-Reset', String(Math.ceil(counter.resetAt / 1000)));
     if (counter.count > maxRequestsPerWindow) {
-      res.setHeader('Retry-After', String(Math.max(1, Math.ceil((counter.resetAt - Date.now()) / 1000))));
+      res.setHeader('Retry-After', String(Math.max(1, Math.ceil((counter.resetAt - Date.now()) / 1000)));
       return res.status(429).json({ error: { code: 'RATE_LIMITED', message: 'Too many requests.' } });
     }
     return next();
@@ -145,7 +120,6 @@ export const requireAuth = async (req: AuthenticatedRequest, res: Response, next
     const emailVerified = !!decodedToken.email_verified;
     const isVerificationExemptPath = ['/api/user/me', '/api/auth/resend-verification', '/api/auth/verify-status'].includes(req.path);
     if (!emailVerified && !isVerificationExemptPath) return res.status(403).json({ error: 'Email verification required', code: 'EMAIL_NOT_VERIFIED' });
-
     const domain = email.split('@')[1] || 'generic';
     const publicDomains = new Set(['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com', 'icloud.com']);
     const defaultTenantId = publicDomains.has(domain.toLowerCase()) ? `tenant-${uid}` : `tenant-${domain.toLowerCase()}`;
@@ -154,8 +128,7 @@ export const requireAuth = async (req: AuthenticatedRequest, res: Response, next
     if (!dbUser) return res.status(403).json({ error: 'User account is not provisioned' });
     req.user = { id: dbUser.id, uid, email, tenantId: dbUser.tenantId || defaultTenantId, role: dbUser.role || 'user', emailVerified };
     return next();
-  } catch (err) {
-    console.warn('[Security Auth Middleware] Token verification failed');
+  } catch {
     return res.status(401).json({ error: 'Unauthorized: Invalid or expired security token' });
   }
 };
