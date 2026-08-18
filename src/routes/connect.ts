@@ -3,31 +3,39 @@ import { Router } from 'express';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '../db/index.ts';
-import { requireAuth, AuthenticatedRequest } from '../middleware/security.ts';
+import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/security.ts';
 
 const API_VERSION = '2026-08-01';
 const PUBLIC_SCOPES = ['read', 'write', 'webhooks'] as const;
 const DEFAULT_EVENTS = ['passport.updated', 'trust.changed', 'risk.created', 'risk.resolved', 'evidence.updated', 'verification.completed', 'verification.expired'] as const;
-const createKeySchema = z.object({ name: z.string().min(1).max(120), scopes: z.array(z.enum(PUBLIC_SCOPES)).min(1).max(3).default(['read']), expiresAt: z.string().datetime().nullable().optional() }).strict();
+const createKeySchema = z.object({ name: z.string().trim().min(1).max(120), scopes: z.array(z.enum(PUBLIC_SCOPES)).min(1).max(3).default(['read']), expiresAt: z.string().datetime().nullable().optional() }).strict();
 const registerSoftwareSchema = z.object({ name: z.string().min(1).max(200), version: z.string().max(100).default('unknown'), publisher: z.string().max(200).default('unknown'), category: z.string().max(120).default('software'), sourceType: z.enum(['repository', 'application', 'package', 'container', 'api', 'saas', 'other']).default('application'), sourceUrl: z.string().url().max(2048).nullable().optional(), externalId: z.string().max(255).nullable().optional(), licenseType: z.string().max(120).default('unobserved'), releaseDate: z.string().max(40).default('unobserved'), metadata: z.record(z.unknown()).default({}) }).strict();
 const webhookSchema = z.object({ url: z.string().url().max(2048), events: z.array(z.string().min(1).max(100)).min(1).max(50).default([...DEFAULT_EVENTS]) }).strict();
 function id(prefix: string) { return `${prefix}_${crypto.randomUUID().replace(/-/g, '')}`; }
 function hash(value: string) { return crypto.createHash('sha256').update(value).digest('hex'); }
 function createSecret(prefix: string) { return `${prefix}_${crypto.randomBytes(32).toString('base64url')}`; }
 function parseJson<T = unknown>(value: unknown, fallback: T): T { if (typeof value !== 'string') return fallback; try { return JSON.parse(value) as T; } catch { return fallback; } }
-function bearer(req: any) { const value = req.headers.authorization; if (typeof value !== 'string' || !/^Bearer\s+/i.test(value)) return null; const token = value.replace(/^Bearer\s+/i, '').trim(); return token || null; }
+function bearer(req: any) {
+  const header = req.headers.authorization;
+  if (typeof header === 'string' && /^Bearer\s+/i.test(header)) return header.replace(/^Bearer\s+/i, '').trim() || null;
+  const apiKey = req.headers['x-api-key'];
+  return typeof apiKey === 'string' && apiKey.trim() ? apiKey.trim() : null;
+}
 
 async function authenticateApiKey(req: any, res: any, next: any) {
   try {
     const raw = bearer(req);
-    if (!raw || raw.length > 512) return res.status(401).json({ error: 'Invalid Bearer API key' });
+    if (!raw || raw.length > 512) return res.status(401).json({ error: 'Invalid API key' });
     const keyHash = hash(raw);
     const result = await db.execute(sql`SELECT id, tenant_id, name, scopes, expires_at, revoked_at FROM spr_api_keys WHERE key_hash = ${keyHash} LIMIT 1`);
     const row: any = (result as any).rows?.[0];
     if (!row || row.revoked_at || (row.expires_at && new Date(row.expires_at).getTime() <= Date.now())) return res.status(401).json({ error: 'Invalid or expired API key' });
-    const scopes = parseJson<string[]>(row.scopes, ['read']);
+    const scopes = parseJson<string[]>(row.scopes, []);
+    if (!Array.isArray(scopes) || scopes.length < 1 || scopes.some(scope => !(PUBLIC_SCOPES as readonly string[]).includes(scope))) {
+      return res.status(401).json({ error: 'API key has invalid scopes' });
+    }
     req.sprApi = { id: row.id, tenantId: row.tenant_id, name: row.name, scopes };
-    await db.execute(sql`UPDATE spr_api_keys SET last_used_at = ${new Date().toISOString()} WHERE id = ${row.id}`);
+    await db.execute(sql`UPDATE spr_api_keys SET last_used_at = ${new Date().toISOString()} WHERE id = ${row.id} AND tenant_id = ${row.tenant_id} AND revoked_at IS NULL`);
     return next();
   } catch (error) { return next(error); }
 }
@@ -37,10 +45,27 @@ function publicPassport(row: any) { return { id: row.id, name: row.name, version
 
 export function createConnectRouter() {
   const router = Router();
-  router.get('/v1', (_req, res) => res.json({ name: 'SPR Connect API', version: API_VERSION, status: 'operational', capabilities: ['software', 'passports', 'trust', 'evidence', 'risk', 'history', 'webhooks'], authentication: 'Bearer API key' }));
-  router.post('/v1/api-keys', requireAuth, async (req: AuthenticatedRequest, res) => { const parsed = createKeySchema.safeParse(req.body); if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() }); const raw = createSecret('spr_live'); const keyId = id('key'); await db.execute(sql`INSERT INTO spr_api_keys (id, tenant_id, name, key_prefix, key_hash, scopes, expires_at, created_by) VALUES (${keyId}, ${req.user!.tenantId}, ${parsed.data.name}, ${raw.slice(0, 16)}, ${hash(raw)}, ${JSON.stringify(parsed.data.scopes)}, ${parsed.data.expiresAt ?? null}, ${req.user!.uid})`); return res.status(201).json({ id: keyId, name: parsed.data.name, key: raw, scopes: parsed.data.scopes, expiresAt: parsed.data.expiresAt ?? null, warning: 'Store this key now. SPR will not return the full secret again.' }); });
-  router.get('/v1/api-keys', requireAuth, async (req: AuthenticatedRequest, res) => { const result = await db.execute(sql`SELECT id, name, key_prefix, scopes, last_used_at, expires_at, revoked_at, created_at FROM spr_api_keys WHERE tenant_id = ${req.user!.tenantId} ORDER BY created_at DESC`); return res.json((result as any).rows?.map((r: any) => ({ id: r.id, name: r.name, keyPrefix: r.key_prefix, scopes: parseJson(r.scopes, ['read']), lastUsedAt: r.last_used_at, expiresAt: r.expires_at, revokedAt: r.revoked_at, createdAt: r.created_at })) ?? []); });
-  router.delete('/v1/api-keys/:id', requireAuth, async (req: AuthenticatedRequest, res) => { const result = await db.execute(sql`UPDATE spr_api_keys SET revoked_at = ${new Date().toISOString()} WHERE id = ${req.params.id} AND tenant_id = ${req.user!.tenantId} AND revoked_at IS NULL RETURNING id`); if (!((result as any).rows?.length)) return res.status(404).json({ error: 'API key not found' }); return res.status(204).send(); });
+  router.get('/v1', (_req, res) => res.json({ name: 'SPR Connect API', version: API_VERSION, status: 'operational', capabilities: ['software', 'passports', 'trust', 'evidence', 'risk', 'history', 'webhooks'], authentication: 'Bearer API key or X-API-Key' }));
+
+  // API-key lifecycle is an administrative capability, never a normal user capability.
+  router.post('/v1/api-keys', requireAuth, requireRole(['Owner', 'Admin']), async (req: AuthenticatedRequest, res) => {
+    const parsed = createKeySchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+    const raw = createSecret('spr_live');
+    const keyId = id('key');
+    await db.execute(sql`INSERT INTO spr_api_keys (id, tenant_id, name, key_prefix, key_hash, scopes, expires_at, created_by) VALUES (${keyId}, ${req.user!.tenantId}, ${parsed.data.name}, ${raw.slice(0, 16)}, ${hash(raw)}, ${JSON.stringify(parsed.data.scopes)}, ${parsed.data.expiresAt ?? null}, ${req.user!.uid})`);
+    return res.status(201).json({ id: keyId, name: parsed.data.name, key: raw, scopes: parsed.data.scopes, expiresAt: parsed.data.expiresAt ?? null, warning: 'Store this key now. SPR will not return the full secret again.' });
+  });
+  router.get('/v1/api-keys', requireAuth, requireRole(['Owner', 'Admin']), async (req: AuthenticatedRequest, res) => {
+    const result = await db.execute(sql`SELECT id, name, key_prefix, scopes, last_used_at, expires_at, revoked_at, created_at FROM spr_api_keys WHERE tenant_id = ${req.user!.tenantId} ORDER BY created_at DESC`);
+    return res.json((result as any).rows?.map((r: any) => ({ id: r.id, name: r.name, keyPrefix: r.key_prefix, scopes: parseJson(r.scopes, []), lastUsedAt: r.last_used_at, expiresAt: r.expires_at, revokedAt: r.revoked_at, createdAt: r.created_at })) ?? []);
+  });
+  router.delete('/v1/api-keys/:id', requireAuth, requireRole(['Owner', 'Admin']), async (req: AuthenticatedRequest, res) => {
+    const result = await db.execute(sql`UPDATE spr_api_keys SET revoked_at = ${new Date().toISOString()} WHERE id = ${req.params.id} AND tenant_id = ${req.user!.tenantId} AND revoked_at IS NULL RETURNING id`);
+    if (!((result as any).rows?.length)) return res.status(404).json({ error: 'API key not found' });
+    return res.status(204).send();
+  });
+
   router.use('/v1/software', authenticateApiKey);
   router.use('/v1/passports', authenticateApiKey);
   router.use('/v1/trust', authenticateApiKey);
