@@ -7,6 +7,19 @@ import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/se
 import { validateWebhookUrl } from '../security/webhook-url.ts';
 import { encryptCredential } from '../security/credential-vault.ts';
 
+declare global {
+  namespace Express {
+    interface Request {
+      sprApi?: {
+        id: string;
+        tenantId: string;
+        name: string;
+        scopes: readonly string[];
+      };
+    }
+  }
+}
+
 const API_VERSION = '2026-08-01';
 const PUBLIC_SCOPES = ['read', 'write', 'webhooks'] as const;
 const DEFAULT_EVENTS = ['passport.updated', 'trust.changed', 'risk.created', 'risk.resolved', 'evidence.updated', 'verification.completed', 'verification.expired'] as const;
