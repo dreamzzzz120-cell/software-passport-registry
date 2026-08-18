@@ -193,7 +193,12 @@ export async function main() {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Bundled to CJS (dist/migrate.cjs) and invoked directly as the Railway
+// preDeployCommand — require.main === module is the correct "ran directly"
+// check here; the import.meta.url comparison this replaced always evaluates
+// false once bundled (import.meta.url is empty in cjs output), so main()
+// was silently never running and migrations were never actually applied.
+if (require.main === module) {
   main().catch((error) => {
     console.error('[FATAL]', error);
     process.exit(1);

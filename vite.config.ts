@@ -4,7 +4,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'node:path';
 
 function lazyAppViews(): Plugin {
-  const componentImport = /^import\s+([A-Za-z_$][\w$]*)\s+from\s+['\"](\./components\/[^'\"]+)['\"];?$/gm;
+  const componentImport = /^import\s+([A-Za-z_$][\w$]*)\s+from\s+['"](\.\/components\/[^'"]+)['"];?$/gm;
 
   return {
     name: 'spr-lazy-app-views',

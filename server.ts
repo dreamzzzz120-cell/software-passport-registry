@@ -4,7 +4,6 @@ import cors from 'cors';
 import helmet from 'helmet';
 import * as Sentry from '@sentry/node';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { config, validateConfiguration } from './src/config.ts';
 import { checkDatabaseHealth, closeDatabase } from './src/db/index.ts';
@@ -15,7 +14,6 @@ import { createPublicConnectRouter } from './src/routes/public-connect.ts';
 
 const app = express();
 const startedAt = Date.now();
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const requestBodyLimit = process.env.REQUEST_BODY_LIMIT || '2mb';
 
 if (config.trustProxy) app.set('trust proxy', true);
@@ -70,7 +68,10 @@ app.use('/api/v1', rateLimiter, createConnectRouter());
 app.use('/api/connect', rateLimiter, createConnectRouter());
 app.use('/api/monitoring', rateLimiter, createMonitoringRouter());
 
-const publicDir = path.join(__dirname, 'dist');
+// __dirname is natively available in the bundled CJS output (dist/server.cjs).
+// The Vite build places index.html/assets directly alongside it in dist/, so
+// no extra 'dist' join is needed — that would have pointed at dist/dist.
+const publicDir = __dirname;
 app.use(express.static(publicDir, { index: false, maxAge: config.isProduction ? '1y' : 0 }));
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api/')) return next();
