@@ -53,8 +53,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if grep -RniE --include='*.sql' --exclude-dir=node_modules \
-            -E '\bDROP[[:space:]]+(TABLE|SCHEMA|DATABASE)\b|\bTRUNCATE[[:space:]]+TABLE\b' .; then
+          matches=$(grep -RniE --include='*.sql' --exclude-dir=node_modules \
+            -E '\bDROP[[:space:]]+(TABLE|SCHEMA|DATABASE)\b|\bTRUNCATE[[:space:]]+TABLE\b' . \
+            | grep -vE ':[0-9]+:[[:space:]]*--' || true)
+          if [[ -n "$matches" ]]; then
+            printf '%s\n' "$matches"
             echo 'Destructive migration detected. Production release requires explicit review.'
             exit 1
           fi
