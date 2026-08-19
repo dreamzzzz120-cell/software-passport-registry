@@ -1,8 +1,5 @@
 BEGIN;
 
--- Webhook secret rotation is explicit and versioned. The existing trigger keeps
--- identity/ownership immutable while permitting an intentional monotonic secret
--- version change.
 ALTER TABLE spr_webhooks
   ADD COLUMN IF NOT EXISTS secret_version integer NOT NULL DEFAULT 1;
 
@@ -53,14 +50,10 @@ CREATE TRIGGER spr_webhook_secret_storage
 BEFORE INSERT OR UPDATE ON spr_webhooks
 FOR EACH ROW EXECUTE FUNCTION spr_enforce_webhook_secret_storage();
 
--- Prevent an authoritative trust observation from being represented as a
--- numeric score when it explicitly says the scoring policy is unconfigured.
--- This is defense-in-depth; the application already emits nullable scores for
--- unknown/stale/unavailable dimensions.
 CREATE OR REPLACE FUNCTION spr_enforce_observation_completeness()
 RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  IF NEW.completeness < 0 OR NEW.completeness > 10000 THEN
+  IF NEW.completeness_basis_points < 0 OR NEW.completeness_basis_points > 10000 THEN
     RAISE EXCEPTION 'Observation completeness must be between 0 and 10000 basis points';
   END IF;
   IF NEW.known_dimension_count < 0 OR NEW.unknown_dimension_count < 0
@@ -77,7 +70,6 @@ CREATE TRIGGER spr_observation_completeness
 BEFORE INSERT ON trust_observations
 FOR EACH ROW EXECUTE FUNCTION spr_enforce_observation_completeness();
 
--- Ensure migration history itself is deterministic and unique.
 CREATE UNIQUE INDEX IF NOT EXISTS schema_migrations_version_unique
   ON schema_migrations (version);
 
