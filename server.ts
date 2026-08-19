@@ -22,7 +22,6 @@ if (config.sentry.dsn) Sentry.init({ dsn: config.sentry.dsn, environment: config
 
 const allowedOrigins = new Set(config.allowedOrigins);
 const corsOrigin = (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) => {
-  // Requests without Origin are same-origin/server-to-server or non-browser requests.
   if (!origin) return callback(null, true);
   if (allowedOrigins.has(origin)) return callback(null, true);
   try {
@@ -33,7 +32,30 @@ const corsOrigin = (origin: string | undefined, callback: (error: Error | null, 
   return callback(new Error('CORS origin denied'));
 };
 
-app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false, frameguard: { action: 'deny' }, referrerPolicy: { policy: 'no-referrer' } }));
+app.use(helmet({
+  contentSecurityPolicy: {
+    useDefaults: false,
+    directives: {
+      defaultSrc: ["'self'"],
+      baseUri: ["'self'"],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+      formAction: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+      fontSrc: ["'self'", 'data:', 'https:'],
+      connectSrc: ["'self'", 'https:'],
+      frameSrc: ["'self'", 'https:'],
+      workerSrc: ["'self'", 'blob:'],
+      manifestSrc: ["'self'"],
+      upgradeInsecureRequests: [],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
+  frameguard: { action: 'deny' },
+  referrerPolicy: { policy: 'no-referrer' },
+}));
 app.use(cors({ origin: corsOrigin, credentials: true, methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], allowedHeaders: ['Authorization', 'Content-Type', 'X-Request-ID', 'X-API-Key'] }));
 app.use(express.json({ limit: requestBodyLimit, strict: true }));
 app.use(express.urlencoded({ extended: false, limit: requestBodyLimit }));
