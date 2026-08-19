@@ -51,11 +51,8 @@ function orderTenantTables(tables: string[], edges: TenantEdge[]) {
 
 /**
  * Atomically purges all tenant-owned data.
- *
- * The table list is discovered from PostgreSQL itself rather than maintained as
- * a hand-written allowlist. Foreign-key relationships between tenant tables are
- * topologically ordered so children are deleted before parents. This prevents
- * newly-added tenant tables from silently surviving an offboarding operation.
+ * PostgreSQL metadata discovers every public table carrying tenant_id; FK
+ * relationships are topologically ordered so children are removed first.
  */
 export async function offboardTenantData(tenantId: string) {
   if (!tenantId || tenantId.length > 256) throw new Error('Invalid tenant ID');
@@ -63,44 +60,14 @@ export async function offboardTenantData(tenantId: string) {
   return db.transaction(async (tx) => {
     console.log(`[Tenant Lifecycle Manager] Purging all database records for tenant: ${tenantId}...`);
 
-    const tablesResult = await tx.execute(sql`
-      SELECT DISTINCT c.table_name
-      FROM information_schema.columns c
-      JOIN information_schema.tables t
-        ON t.table_schema = c.table_schema AND t.table_name = c.table_name
-      WHERE c.table_schema = 'public'
-        AND c.column_name = 'tenant_id'
-        AND t.table_type = 'BASE TABLE'
-      ORDER BY c.table_name
-    `);
+    const tablesResult = await tx.execute(sql.raw(
+      "SELECT DISTINCT c.table_name FROM information_schema.columns c JOIN information_schema.tables t ON t.table_schema = c.table_schema AND t.table_name = c.table_name WHERE c.table_schema = 'public' AND c.column_name = 'tenant_id' AND t.table_type = 'BASE TABLE' ORDER BY c.table_name",
+    ));
     const tables = ((tablesResult as any).rows || []).map((row: TenantTable) => row.table_name);
 
-    const edgesResult = await tx.execute(sql`
-      SELECT DISTINCT child_kcu.table_name AS child_table,
-                      parent_kcu.table_name AS parent_table
-      FROM information_schema.table_constraints tc
-      JOIN information_schema.key_column_usage child_kcu
-        ON child_kcu.constraint_schema = tc.constraint_schema
-       AND child_kcu.constraint_name = tc.constraint_name
-       AND child_kcu.table_name = tc.table_name
-      JOIN information_schema.constraint_column_usage parent_kcu
-        ON parent_kcu.constraint_schema = tc.constraint_schema
-       AND parent_kcu.constraint_name = tc.constraint_name
-      WHERE tc.constraint_schema = 'public'
-        AND tc.constraint_type = 'FOREIGN KEY'
-        AND EXISTS (
-          SELECT 1 FROM information_schema.columns c
-          WHERE c.table_schema = 'public'
-            AND c.table_name = child_kcu.table_name
-            AND c.column_name = 'tenant_id'
-        )
-        AND EXISTS (
-          SELECT 1 FROM information_schema.columns c
-          WHERE c.table_schema = 'public'
-            AND c.table_name = parent_kcu.table_name
-            AND c.column_name = 'tenant_id'
-        )
-    `;
+    const edgesResult = await tx.execute(sql.raw(
+      "SELECT DISTINCT child_kcu.table_name AS child_table, parent_kcu.table_name AS parent_table FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage child_kcu ON child_kcu.constraint_schema = tc.constraint_schema AND child_kcu.constraint_name = tc.constraint_name AND child_kcu.table_name = tc.table_name JOIN information_schema.constraint_column_usage parent_kcu ON parent_kcu.constraint_schema = tc.constraint_schema AND parent_kcu.constraint_name = tc.constraint_name WHERE tc.constraint_schema = 'public' AND tc.constraint_type = 'FOREIGN KEY' AND EXISTS (SELECT 1 FROM information_schema.columns c WHERE c.table_schema = 'public' AND c.table_name = child_kcu.table_name AND c.column_name = 'tenant_id') AND EXISTS (SELECT 1 FROM information_schema.columns c WHERE c.table_schema = 'public' AND c.table_name = parent_kcu.table_name AND c.column_name = 'tenant_id')",
+    ));
     const edges = ((edgesResult as any).rows || []) as TenantEdge[];
     const orderedTables = orderTenantTables(tables, edges);
     const escapedTenantId = tenantId.replaceAll("'", "''");
