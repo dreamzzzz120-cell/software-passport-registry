@@ -50,12 +50,15 @@ const envSchema = z.object({
 const parseBoolean = (input: string | undefined, fallback: boolean) => input ? ['true', '1'].includes(input.trim().toLowerCase()) : fallback;
 const parseNumber = (input: string | undefined, fallback: number) => { const parsed = input ? Number(input.trim()) : NaN; return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback; };
 const parseCsv = (input: string | undefined) => input ? input.split(',').map((item) => item.trim()).filter(Boolean) : [];
+const normalizeOrigin = (origin: string) => new URL(origin).origin;
+const parseOriginList = (input: string | undefined) => parseCsv(input).map(normalizeOrigin);
 const parsedEnv = envSchema.parse(process.env);
 
 const railwayPublicUrl = process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN.trim()}` : undefined;
 const effectiveAppUrl = parsedEnv.APP_URL ?? railwayPublicUrl;
-const effectiveAllowedOrigins = parseCsv(parsedEnv.APP_ALLOWED_ORIGINS);
-if (railwayPublicUrl && !effectiveAllowedOrigins.includes(railwayPublicUrl)) effectiveAllowedOrigins.push(railwayPublicUrl);
+// CORS is an explicit allowlist. A deployment platform hostname is never
+// implicitly trusted merely because it is where the service happens to run.
+const effectiveAllowedOrigins = parseOriginList(parsedEnv.APP_ALLOWED_ORIGINS);
 
 export const config = {
   nodeEnv: parsedEnv.NODE_ENV ?? 'development', port: parsedEnv.PORT ? Number(parsedEnv.PORT) : 3000, isProduction: parsedEnv.NODE_ENV === 'production',
@@ -77,7 +80,7 @@ export function validateConfiguration() {
   if (!config.isProduction) return;
   const missing: string[] = [];
   if (!config.appUrl) missing.push('APP_URL or RAILWAY_PUBLIC_DOMAIN');
-  if (!config.allowedOrigins.length) missing.push('APP_ALLOWED_ORIGINS or RAILWAY_PUBLIC_DOMAIN');
+  if (!config.allowedOrigins.length) missing.push('APP_ALLOWED_ORIGINS');
   if (!config.enforceHttps) missing.push('ENFORCE_HTTPS=true');
   if (!config.trustProxy) missing.push('TRUST_PROXY=true');
   if (config.allowIframe) missing.push('ALLOW_IFRAME=false');
@@ -91,8 +94,8 @@ export function validateConfiguration() {
   if (missing.length) throw new Error(`Production security configuration incomplete: ${missing.join(', ')}.`);
   const appUrl = config.appUrl;
   if (!appUrl) throw new Error('APP_URL or RAILWAY_PUBLIC_DOMAIN is required in production.');
-  const appOrigin = new URL(appUrl).origin;
-  const normalizedOrigins = config.allowedOrigins.map((origin) => new URL(origin).origin);
+  const appOrigin = normalizeOrigin(appUrl);
+  const normalizedOrigins = config.allowedOrigins;
   if (!normalizedOrigins.includes(appOrigin)) throw new Error('APP_ALLOWED_ORIGINS must explicitly include APP_URL origin.');
   if (normalizedOrigins.some((origin) => origin === 'null' || origin.includes('*'))) throw new Error('Wildcard/null CORS origins are forbidden in production.');
 }
