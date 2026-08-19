@@ -4,7 +4,7 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { adminAuth } from '../lib/firebase-admin.ts';
 import { config } from '../config.ts';
 import { db } from '../db/index.ts';
@@ -88,17 +88,50 @@ export function createSharedRateLimitStoreFromEnv(): RateLimitStore {
 if (config.isProduction) sharedStore = createSharedRateLimitStoreFromEnv();
 export function setRateLimiterStore(s: RateLimitStore) { if (!isTestMode()) throw new Error('setRateLimiterStore is only available in test mode'); sharedStore = s; }
 
-export const rateLimiter = async (req: Request, res: Response, next: NextFunction) => {
+function budgetFor(req: Request) {
+  const path = req.path.toLowerCase();
+  if (path.includes('/scan') || path.includes('/monitoring') || path.includes('/reports') || path.includes('/passport')) {
+    return { windowMs: 60_000, max: 20, className: 'expensive' };
+  }
+  if (path.includes('/webhook') || path.includes('/integration') || path.includes('/v1')) {
+    return { windowMs: 60_000, max: 60, className: 'api' };
+  }
+  if (req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'OPTIONS') {
+    return { windowMs: 60_000, max: 40, className: 'mutation' };
+  }
+  return { windowMs: rateLimitWindowMs, max: maxRequestsPerWindow, className: 'default' };
+}
+
+function limiterIdentity(req: Request) {
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  const apiKey = typeof req.headers['x-api-key'] === 'string' ? req.headers['x-api-key'].trim() : '';
+  const bearer = typeof req.headers.authorization === 'string' ? req.headers.authorization.trim() : '';
+  const credential = apiKey || bearer;
+  const credentialFingerprint = credential
+    ? createHash('sha256').update(credential, 'utf8').digest('hex').slice(0, 32)
+    : 'anonymous';
+  return { ip, credentialFingerprint };
+}
+
+export const rateLimiter = async (req: Request, res: Response, next: NextFunction) => {
+  const budget = budgetFor(req);
+  const { ip, credentialFingerprint } = limiterIdentity(req);
   const tenantId = (req as AuthenticatedRequest).user?.tenantId;
-  const key = tenantId ? `rl:tenant:${tenantId}:ip:${ip}` : `rl:ip:${ip}`;
+  // The middleware runs before authentication, so the authenticated tenant is
+  // intentionally not trusted here. Credential fingerprints prevent one API
+  // key/token from evading limits by rotating source IPs; IP remains a second
+  // independent abuse boundary for anonymous traffic.
+  const key = tenantId
+    ? `rl:v2:tenant:${tenantId}:${budget.className}:ip:${ip}`
+    : `rl:v2:${budget.className}:ip:${ip}:cred:${credentialFingerprint}`;
   try {
-    const counter = await sharedStore.incr(key, rateLimitWindowMs, maxRequestsPerWindow);
-    res.setHeader('X-RateLimit-Limit', String(maxRequestsPerWindow));
-    res.setHeader('X-RateLimit-Remaining', String(Math.max(0, maxRequestsPerWindow - counter.count)));
+    const counter = await sharedStore.incr(key, budget.windowMs, budget.max);
+    res.setHeader('X-RateLimit-Limit', String(budget.max));
+    res.setHeader('X-RateLimit-Remaining', String(Math.max(0, budget.max - counter.count)));
     res.setHeader('X-RateLimit-Reset', String(Math.ceil(counter.resetAt / 1000)));
-    if (counter.count > maxRequestsPerWindow) {
-      res.setHeader('Retry-After', String(Math.max(1, Math.ceil((counter.resetAt - Date.now()) / 1000))));
+    res.setHeader('X-RateLimit-Policy', `${budget.max};w=${Math.ceil(budget.windowMs / 1000)};class=${budget.className}`);
+    if (counter.count > budget.max) {
+      res.setHeader('Retry-After', String(Math.max(1, Math.ceil((counter.resetAt - Date.now()) / 1000)));
       return res.status(429).json({ error: { code: 'RATE_LIMITED', message: 'Too many requests.' } });
     }
     return next();
@@ -122,9 +155,6 @@ export const requireAuth = async (req: AuthenticatedRequest, res: Response, next
     const emailVerified = decodedToken.email_verified === true;
     if (!emailVerified && !isVerificationExemptPath) return res.status(403).json({ error: 'Email verification required', code: 'EMAIL_NOT_VERIFIED' });
 
-    // Authorization is anchored to the immutable Firebase UID. Never fall back
-    // to an email lookup: a different Firebase account must never inherit an
-    // existing user's tenant or RBAC record because the email happens to match.
     const dbUser = await db.select().from(users).where(eq(users.uid, uid)).then(rows => rows[0]);
     if (!dbUser) return res.status(403).json({ error: 'User account is not provisioned' });
     if (!dbUser.tenantId || dbUser.tenantId.length > 256) return res.status(403).json({ error: 'User account has invalid tenant configuration' });
