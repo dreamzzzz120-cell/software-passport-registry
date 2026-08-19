@@ -5,11 +5,11 @@ ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 
 COPY package.json ./
 RUN npm install --ignore-scripts --no-audit --no-fund
-# Force Railway to rebuild the source layer after SPR TypeScript fix.
-ARG SOURCE_REV=railway-refresh-20260818T0745Z
+# Force Railway to rebuild the source layer after SPR security hardening.
+ARG SOURCE_REV=railway-security-hardening-20260819
 RUN test -n "$SOURCE_REV"
 COPY . ./
-RUN npm run typecheck && npm run build
+RUN npm run typecheck && npm test -- --run && npm run build
 RUN npm run build:owner-bootstrap
 RUN npm prune --omit=dev --no-audit --no-fund
 
