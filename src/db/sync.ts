@@ -103,11 +103,10 @@ export async function offboardTenantData(tenantId: string) {
     `;
     const edges = ((edgesResult as any).rows || []) as TenantEdge[];
     const orderedTables = orderTenantTables(tables, edges);
+    const escapedTenantId = tenantId.replaceAll("'", "''");
 
     for (const table of orderedTables) {
-      await tx.execute(sql.raw(
-        `DELETE FROM ${quoteIdentifier(table)} WHERE tenant_id = '${tenantId.replaceAll("'", "''")}'`,
-      ));
+      await tx.execute(sql.raw(`DELETE FROM ${quoteIdentifier(table)} WHERE tenant_id = '${escapedTenantId}'`));
     }
 
     console.log(`[Tenant Lifecycle Manager] Offboarding completed atomically for ${tenantId}. Tables purged: ${orderedTables.length}.`);
