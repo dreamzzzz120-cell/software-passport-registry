@@ -25,8 +25,9 @@ interface MigrationFile {
   sql: string;
 }
 
+const MIGRATION_ADVISORY_LOCK = 0x5350524d; // "SPRM"
+
 function normalizeMigrationSql(sql: string): string {
-  // Legacy migrations may contain an outer BEGIN/COMMIT. The runner owns the transaction.
   const withoutBegin = sql.replace(/^\s*(?:(?:--[^\r\n]*\r?\n)\s*)*BEGIN\s*;\s*/i, '');
   return withoutBegin.replace(/\r?\n\s*COMMIT\s*;\s*(?:\r?\n|--[\s\S]*)?$/i, '\n');
 }
@@ -104,37 +105,44 @@ export class MigrationRunner {
   }
 
   async runPendingMigrations(): Promise<{ success: boolean; executed: number; skipped: number; errors: string[] }> {
-    const statusClient = await this.pool.connect();
+    const client = await this.pool.connect();
     const errors: string[] = [];
     let executed = 0;
+    let completed = new Set<string>();
+    let lockHeld = false;
 
     try {
-      await this.initializeMigrationTable(statusClient);
+      // Advisory locks are connection-scoped. Holding this same client for the
+      // complete migration sequence prevents two Railway/Cloud Run instances
+      // from racing on schema_migrations or applying the same DDL concurrently.
+      await client.query('SELECT pg_advisory_lock($1)', [MIGRATION_ADVISORY_LOCK]);
+      lockHeld = true;
+      await this.initializeMigrationTable(client);
       const migrations = await this.loadMigrations();
-      const completed = await this.getExecutedMigrations(statusClient);
+      completed = await this.getExecutedMigrations(client);
       const pending = migrations.filter((migration) => !completed.has(migration.version));
 
       for (const migration of pending) {
-        const client = await this.pool.connect();
         try {
           await client.query('BEGIN');
           const duration = await this.executeMigration(client, migration);
           await this.recordMigration(client, migration, duration);
           await client.query('COMMIT');
+          completed.add(migration.version);
           executed += 1;
         } catch (error) {
           await client.query('ROLLBACK').catch(() => undefined);
           const message = `${migration.version}: ${error instanceof Error ? error.message : String(error)}`;
           errors.push(message);
           this.log(message, 'error');
-        } finally {
-          client.release();
+          break;
         }
       }
 
-      return { success: errors.length === 0, executed, skipped: completed.size, errors };
+      return { success: errors.length === 0, executed, skipped: Math.max(0, completed.size - executed), errors };
     } finally {
-      statusClient.release();
+      if (lockHeld) await client.query('SELECT pg_advisory_unlock($1)', [MIGRATION_ADVISORY_LOCK]).catch(() => undefined);
+      client.release();
     }
   }
 
@@ -193,11 +201,6 @@ export async function main() {
   }
 }
 
-// Bundled to CJS (dist/migrate.cjs) and invoked directly as the Railway
-// preDeployCommand — require.main === module is the correct "ran directly"
-// check here; the import.meta.url comparison this replaced always evaluates
-// false once bundled (import.meta.url is empty in cjs output), so main()
-// was silently never running and migrations were never actually applied.
 if (require.main === module) {
   main().catch((error) => {
     console.error('[FATAL]', error);
