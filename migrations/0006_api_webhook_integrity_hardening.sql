@@ -71,12 +71,28 @@ FOR EACH ROW EXECUTE FUNCTION spr_enforce_api_key_scope_integrity();
 -- Webhook tenant ownership and secret storage integrity
 -- ============================================================================
 
-DO $$
-BEGIN
-  IF to_regclass('public.spr_webhooks') IS NULL THEN
-    RAISE EXCEPTION 'spr_webhooks table is required before webhook hardening';
-  END IF;
-END $$;
+-- The webhook table is part of the authoritative schema consumed by the
+-- Connect API. Older database snapshots can reach this migration without it,
+-- so create the table here before applying webhook hardening. This keeps the
+-- migration chain executable on a fresh database and on databases that have
+-- already recorded 0000-0005.
+CREATE TABLE IF NOT EXISTS spr_webhooks (
+  id text PRIMARY KEY,
+  tenant_id text NOT NULL,
+  url text NOT NULL,
+  events text NOT NULL DEFAULT '[]',
+  secret_hash text NOT NULL,
+  secret_ciphertext text,
+  secret_key_version text,
+  secret_version integer NOT NULL DEFAULT 1 CHECK (secret_version > 0),
+  active boolean NOT NULL DEFAULT true,
+  consecutive_failure_count integer NOT NULL DEFAULT 0 CHECK (consecutive_failure_count >= 0),
+  disabled_at text,
+  created_at text NOT NULL DEFAULT CURRENT_TIMESTAMP::text
+);
+
+CREATE INDEX IF NOT EXISTS spr_webhooks_tenant_active
+  ON spr_webhooks (tenant_id, active, created_at DESC);
 
 DO $$
 BEGIN
@@ -93,9 +109,6 @@ BEGIN
     RAISE EXCEPTION 'Webhook integrity violation';
   END IF;
 END $$;
-
-CREATE INDEX IF NOT EXISTS spr_webhooks_tenant_active
-  ON spr_webhooks (tenant_id, active, created_at DESC);
 
 CREATE OR REPLACE FUNCTION spr_enforce_webhook_integrity()
 RETURNS trigger
