@@ -10,6 +10,7 @@ function ipv4ToNumber(ip: string): number {
 function isPrivateIpv4(ip: string): boolean {
   const n = ipv4ToNumber(ip);
   const ranges: Array<[number, number]> = [
+    [ipv4ToNumber('0.0.0.0'), ipv4ToNumber('0.255.255.255')],
     [ipv4ToNumber('10.0.0.0'), ipv4ToNumber('10.255.255.255')],
     [ipv4ToNumber('100.64.0.0'), ipv4ToNumber('100.127.255.255')],
     [ipv4ToNumber('127.0.0.0'), ipv4ToNumber('127.255.255.255')],
@@ -26,27 +27,39 @@ function isPrivateIpv4(ip: string): boolean {
   return ranges.some(([start, end]) => n >= start && n <= end);
 }
 
-function isPrivateIpv6(ip: string): boolean {
+function isBlockedIpv6(ip: string): boolean {
   const normalized = ip.toLowerCase().split('%')[0];
+  // Unspecified, loopback, ULA, link-local, multicast and IPv4-mapped space.
   if (normalized === '::1' || normalized === '::') return true;
-  if (normalized.startsWith('fc') || normalized.startsWith('fd') || normalized.startsWith('fe8') || normalized.startsWith('fe9') || normalized.startsWith('fea') || normalized.startsWith('feb')) return true;
+  if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true;
+  if (/^fe[89ab]/.test(normalized)) return true;
+  if (normalized.startsWith('ff')) return true;
   if (normalized.startsWith('::ffff:')) {
     const mapped = normalized.slice(7);
     return net.isIP(mapped) === 4 && isPrivateIpv4(mapped);
   }
+  // Documentation, benchmarking, ORCHID, 6to4 and NAT64 prefixes are blocked
+  // because they are not valid public webhook destinations and some encode an
+  // IPv4 destination in the IPv6 address.
+  if (/^2001:db8(?::|$)/.test(normalized)) return true;
+  if (/^2001:2(?::|$)/.test(normalized)) return true;
+  if (/^2001:10(?::|$)/.test(normalized)) return true;
+  if (/^2002:(?:[0-9a-f]{1,4}:){0,1}/.test(normalized)) return true;
+  if (/^64:ff9b:(?::|$)/.test(normalized)) return true;
   return false;
 }
 
 function isBlockedAddress(address: string): boolean {
   const family = net.isIP(address);
-  return family === 4 ? isPrivateIpv4(address) : family === 6 ? isPrivateIpv6(address) : true;
+  return family === 4 ? isPrivateIpv4(address) : family === 6 ? isBlockedIpv6(address) : true;
 }
 
 /**
  * SSRF guard for outbound webhook destinations.
- * DNS is resolved before persistence so a hostname resolving to loopback,
- * link-local, RFC1918, metadata, documentation, multicast, or ULA space is rejected.
- * Delivery code must still disable redirects and re-check resolved destinations.
+ * DNS is resolved before persistence so hostnames resolving to non-public,
+ * special-purpose, multicast, metadata, loopback, link-local, RFC1918,
+ * documentation or ULA space are rejected. Delivery code must still disable
+ * redirects and re-check/pin the resolved destination immediately before send.
  */
 export async function validateWebhookUrl(raw: string): Promise<URL> {
   let url: URL;
