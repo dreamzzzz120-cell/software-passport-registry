@@ -22,12 +22,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Validate migration numbering and duplicate versions
+      - name: Validate migration numbering, ordering, and duplicates
         shell: bash
         run: |
           set -euo pipefail
           mapfile -t migrations < <(find . -type f -path '*/migrations/*.sql' -print | sort)
           declare -A seen
+          expected=0
           for file in "${migrations[@]}"; do
             base="$(basename "$file")"
             if [[ ! "$base" =~ ^[0-9]{4}_[a-zA-Z0-9_-]+\.sql$ ]]; then
@@ -40,8 +41,15 @@ jobs:
               exit 1
             fi
             seen[$version]="$file"
+            numeric=$((10#$version))
+            if (( numeric != expected )); then
+              echo "Migration sequence gap/out-of-order: expected $(printf '%04d' "$expected"), found $version"
+              exit 1
+            fi
+            expected=$((expected + 1))
           done
-      - name: Reject obvious destructive migration statements
+          (( expected > 0 ))
+      - name: Reject destructive migration statements
         shell: bash
         run: |
           set -euo pipefail
@@ -50,11 +58,17 @@ jobs:
             echo 'Destructive migration detected. Production release requires explicit review.'
             exit 1
           fi
-      - name: Require tenant integrity migration presence
+      - name: Require authoritative integrity controls
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$(find . -type f -path '*/migrations/*.sql' -print | grep -E '000[0-9]_' | head -1)"
+          test -f migrations/0001_immutable_trust_observations.sql
+          test -f migrations/0004_tenant_resource_integrity.sql
+          test -f migrations/0007_webhook_delivery_hardening.sql
+          test -f migrations/0009_authoritative_integrity_and_event_guards.sql
+          test -f migrations/0010_foreign_key_integrity.sql
+          grep -q 'pg_advisory_lock' scripts/migrate.ts
+          grep -q 'ON CONFLICT (version) DO NOTHING' scripts/migrate.ts
 
   application-verification:
     name: Application Verification
@@ -69,9 +83,9 @@ jobs:
       - name: Locked install
         run: npm ci
       - name: Typecheck
-        run: npm run type-check --if-present
+        run: npm run typecheck
       - name: Tests
-        run: npm test --if-present -- --run
+        run: npm test -- --run
       - name: Production build
         run: npm run build
 
