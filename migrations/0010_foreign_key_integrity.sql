@@ -2,9 +2,13 @@ BEGIN;
 
 -- Foreign keys are intentionally restrictive: tenant offboarding deletes dependents
 -- first, while direct accidental deletion of authoritative parents is rejected.
+ALTER TABLE passports
+  ADD CONSTRAINT passports_client_fk FOREIGN KEY (client_id) REFERENCES clients(id);
+
 ALTER TABLE monitoring_configurations
   ADD CONSTRAINT monitoring_configurations_client_fk FOREIGN KEY (client_id) REFERENCES clients(id),
-  ADD CONSTRAINT monitoring_configurations_passport_fk FOREIGN KEY (passport_id) REFERENCES passports(id);
+  ADD CONSTRAINT monitoring_configurations_passport_fk FOREIGN KEY (passport_id) REFERENCES passports(id),
+  ADD CONSTRAINT monitoring_configurations_credential_fk FOREIGN KEY (credential_reference_id) REFERENCES credential_references(id);
 
 ALTER TABLE collector_jobs
   ADD CONSTRAINT collector_jobs_client_fk FOREIGN KEY (client_id) REFERENCES clients(id),
@@ -38,12 +42,22 @@ ALTER TABLE remediation_verifications
   ADD CONSTRAINT remediation_verifications_job_fk FOREIGN KEY (collector_job_id) REFERENCES collector_jobs(id),
   ADD CONSTRAINT remediation_verifications_observation_fk FOREIGN KEY (observation_id) REFERENCES trust_observations(id);
 
+ALTER TABLE alert_subscriptions
+  ADD CONSTRAINT alert_subscriptions_client_fk FOREIGN KEY (client_id) REFERENCES clients(id),
+  ADD CONSTRAINT alert_subscriptions_passport_fk FOREIGN KEY (passport_id) REFERENCES passports(id);
+
+ALTER TABLE in_app_notifications
+  ADD CONSTRAINT in_app_notifications_subscription_fk FOREIGN KEY (subscription_id) REFERENCES alert_subscriptions(id),
+  ADD CONSTRAINT in_app_notifications_alert_fk FOREIGN KEY (alert_id) REFERENCES alerts(id);
+
 ALTER TABLE spr_webhook_deliveries
   ADD CONSTRAINT spr_webhook_deliveries_webhook_fk FOREIGN KEY (webhook_id) REFERENCES spr_webhooks(id);
 
 ALTER TABLE alerts
   ADD CONSTRAINT alerts_passport_fk FOREIGN KEY (passport_id) REFERENCES passports(id),
   ADD CONSTRAINT alerts_observation_fk FOREIGN KEY (observation_id) REFERENCES trust_observations(id),
-  ADD CONSTRAINT alerts_client_fk FOREIGN KEY (client_id) REFERENCES clients(id);
+  ADD CONSTRAINT alerts_client_fk FOREIGN KEY (client_id) REFERENCES clients(id),
+  ADD CONSTRAINT alerts_first_observation_fk FOREIGN KEY (first_observation_id) REFERENCES trust_observations(id),
+  ADD CONSTRAINT alerts_source_change_fk FOREIGN KEY (source_change_event_id) REFERENCES trust_observation_changes(id);
 
 COMMIT;
