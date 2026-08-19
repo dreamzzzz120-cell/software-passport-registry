@@ -1,0 +1,1 @@
+SPR security verification branch. This file intentionally contains no runtime logic; it exists only to force the full GitHub Actions PR gate to execute against the exact main-branch security-hardening tree.
