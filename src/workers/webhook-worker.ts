@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import dns from 'node:dns/promises';
+import net from 'node:net';
 import https from 'node:https';
 import { Pool } from 'pg';
 import { decryptCredential } from '../security/credential-vault.ts';
@@ -19,13 +20,49 @@ function backoffSeconds(attempt: number) {
   return Math.min(3600, 30 * (2 ** Math.max(0, attempt - 1)));
 }
 
+function ipv4ToNumber(ip: string): number {
+  return ip.split('.').reduce((n, octet) => (n * 256) + Number(octet), 0) >>> 0;
+}
+
+function blockedIpv4(ip: string) {
+  const n = ipv4ToNumber(ip);
+  return [
+    ['10.0.0.0', '10.255.255.255'], ['100.64.0.0', '100.127.255.255'],
+    ['127.0.0.0', '127.255.255.255'], ['169.254.0.0', '169.254.255.255'],
+    ['172.16.0.0', '172.31.255.255'], ['192.0.0.0', '192.0.0.255'],
+    ['192.0.2.0', '192.0.2.255'], ['192.168.0.0', '192.168.255.255'],
+    ['198.18.0.0', '198.19.255.255'], ['198.51.100.0', '198.51.100.255'],
+    ['203.0.113.0', '203.0.113.255'], ['224.0.0.0', '255.255.255.255'],
+  ].some(([start, end]) => n >= ipv4ToNumber(start) && n <= ipv4ToNumber(end));
+}
+
+function blockedIpv6(ip: string) {
+  const normalized = ip.toLowerCase().split('%')[0];
+  if (normalized === '::1' || normalized === '::') return true;
+  if (/^(fc|fd|fe8|fe9|fea|feb)/.test(normalized)) return true;
+  if (normalized.startsWith('::ffff:')) {
+    const mapped = normalized.slice(7);
+    return net.isIP(mapped) === 4 && blockedIpv4(mapped);
+  }
+  return false;
+}
+
+function blockedAddress(address: string) {
+  const family = net.isIP(address);
+  return family === 4 ? blockedIpv4(address) : family === 6 ? blockedIpv6(address) : true;
+}
+
 async function resolvePublicHost(hostname: string) {
   const records = await dns.lookup(hostname, { all: true, verbatim: true });
-  if (!records.length) throw new Error('WEBHOOK_DNS_EMPTY');
+  if (!records.length || records.some(record => blockedAddress(record.address))) throw new Error('WEBHOOK_DNS_BLOCKED');
+  // The selected address is pinned into the HTTPS connection below. This closes
+  // the validation-to-connect DNS rebinding window: even if DNS changes after
+  // this point, the socket cannot be redirected to the new address.
   return records[0];
 }
 
 function requestPinned(url: URL, ip: string, payload: string, headers: Record<string, string>): Promise<{ status: number; ms: number }> {
+  if (blockedAddress(ip)) return Promise.reject(new Error('WEBHOOK_DNS_BLOCKED'));
   return new Promise((resolve, reject) => {
     const started = Date.now();
     const req = https.request({
@@ -70,6 +107,9 @@ export async function deliverWebhookOnce(pool: Pool, deliveryId: string) {
 
   try {
     const url = await validateWebhookUrl(row.url);
+    // Re-resolve immediately before connecting and validate every answer. The
+    // resulting address is then pinned, so DNS cannot change the destination
+    // between validation and the actual socket connection.
     const resolved = await resolvePublicHost(url.hostname);
     const secret = decryptCredential<string>(row.secret_ciphertext, row.tenant_id, 'webhook');
     const payload = JSON.stringify({
@@ -94,7 +134,8 @@ export async function deliverWebhookOnce(pool: Pool, deliveryId: string) {
       return true;
     }
 
-    throw Object.assign(new Error(`HTTP_${result.status}`), { retryable: result.status === 408 || result.status === 429 || result.status >= 500 });
+    const retryable = result.status === 408 || result.status === 409 || result.status === 425 || result.status === 429 || result.status >= 500;
+    throw Object.assign(new Error(`HTTP_${result.status}`), { retryable });
   } catch (error) {
     const code = error instanceof Error ? error.message.split(':')[0] : 'WEBHOOK_DELIVERY_FAILED';
     const retryable = error instanceof Error && 'retryable' in error ? Boolean((error as any).retryable) : true;
@@ -106,7 +147,7 @@ export async function deliverWebhookOnce(pool: Pool, deliveryId: string) {
       UPDATE spr_webhook_deliveries
       SET status=$2, attempt_number=$3, safe_error_code=$4, safe_error_message=$5,
           next_attempt_at=$6, completed_at=CASE WHEN $2='dead_lettered' THEN $7 ELSE completed_at END
-      WHERE id=$1 AND tenant_id=$8
+      WHERE id=$1 AND tenant_id=$8 AND status='running'
     `, [deliveryId, dead ? 'dead_lettered' : 'queued', nextAttempt, safe.code, safe.message, next, new Date().toISOString(), row.tenant_id]);
     const failure = await pool.query(`
       UPDATE spr_webhooks SET consecutive_failure_count=consecutive_failure_count+1,
@@ -124,10 +165,10 @@ export async function deliverWebhookOnce(pool: Pool, deliveryId: string) {
 export async function enqueueWebhookDelivery(pool: Pool, input: { tenantId: string; webhookId: string; eventId: string; eventType: string; payload: unknown }) {
   const idempotencyKey = crypto.createHash('sha256').update(`${input.tenantId}:${input.webhookId}:${input.eventId}`).digest('hex');
   await pool.query(`
-    INSERT INTO spr_webhook_deliveries (id, tenant_id, webhook_id, event_id, event_type, idempotency_key, attempt_number, status, next_attempt_at, created_at)
-    VALUES ($1,$2,$3,$4,$5,$6,1,'queued',$7,$7)
+    INSERT INTO spr_webhook_deliveries (id, tenant_id, webhook_id, event_id, event_type, payload, idempotency_key, attempt_number, status, next_attempt_at, created_at)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,1,'queued',$8,$8)
     ON CONFLICT (tenant_id, webhook_id, idempotency_key) DO NOTHING
-  `, [`wh-delivery-${crypto.randomUUID()}`, input.tenantId, input.webhookId, input.eventId, input.eventType, idempotencyKey, new Date().toISOString()]);
+  `, [`wh-delivery-${crypto.randomUUID()}`, input.tenantId, input.webhookId, input.eventId, input.eventType, JSON.stringify(input.payload ?? {}), idempotencyKey, new Date().toISOString()]);
 }
 
 export async function runWebhookWorkerLoop() {
