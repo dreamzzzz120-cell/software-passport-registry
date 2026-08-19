@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: dependency-remediation-main
+  group: dependency-remediation-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: false
 
 jobs:
