@@ -71,8 +71,13 @@ app.use((req, res, next) => {
 app.get('/health', (_req, res) => res.status(200).json({ status: 'ok', service: 'spr-app', uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000) }));
 app.get('/ready', async (_req, res) => { const database = await checkDatabaseHealth(); const ready = database.ok; res.status(ready ? 200 : 503).json({ status: ready ? 'ready' : 'not_ready', checks: { database }, uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000) }); });
 app.get('/api/health', async (_req, res) => { const database = await checkDatabaseHealth(); res.status(database.ok ? 200 : 503).json({ status: database.ok ? 'ok' : 'degraded', database }); });
+
+// Route prefixes are intentionally normalized here. createConnectRouter owns the
+// /v1 namespace internally, so mounting it at /api produces /api/v1/... rather
+// than the previous accidental /api/v1/v1/... paths. /api/connect is retained as
+// a compatibility alias for clients that use the older connect mount.
 app.use('/api', rateLimiter, createPublicConnectRouter());
-app.use('/api/v1', rateLimiter, createConnectRouter());
+app.use('/api', rateLimiter, createConnectRouter());
 app.use('/api/connect', rateLimiter, createConnectRouter());
 app.use('/api/monitoring', rateLimiter, createMonitoringRouter());
 
