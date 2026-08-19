@@ -10,7 +10,7 @@ type TenantTable = { table_name: string };
 type TenantEdge = { child_table: string; parent_table: string };
 
 function quoteIdentifier(identifier: string) {
-  return `"${identifier.replaceAll('"', '""')}"`;
+  return '"' + identifier.replaceAll('"', '""') + '"';
 }
 
 function orderTenantTables(tables: string[], edges: TenantEdge[]) {
@@ -106,7 +106,8 @@ export async function offboardTenantData(tenantId: string) {
     const escapedTenantId = tenantId.replaceAll("'", "''");
 
     for (const table of orderedTables) {
-      await tx.execute(sql.raw(`DELETE FROM ${quoteIdentifier(table)} WHERE tenant_id = '${escapedTenantId}'`));
+      const statement = 'DELETE FROM ' + quoteIdentifier(table) + " WHERE tenant_id = '" + escapedTenantId + "'";
+      await tx.execute(sql.raw(statement));
     }
 
     console.log(`[Tenant Lifecycle Manager] Offboarding completed atomically for ${tenantId}. Tables purged: ${orderedTables.length}.`);
