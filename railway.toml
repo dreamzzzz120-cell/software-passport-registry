@@ -1,10 +1,9 @@
 [build]
-builder = "NIXPACKS"
-buildCommand = "npm ci && npm run typecheck && npm run build"
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "npm start"
+startCommand = "node dist/server.cjs"
 healthcheckPath = "/health"
 healthcheckTimeout = 120
-restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 5
+restartPolicyType = "ALWAYS"
