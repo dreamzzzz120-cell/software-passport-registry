@@ -28,7 +28,7 @@ jobs:
           cache: npm
       - name: Regenerate dependencies from npm audit remediation
         run: |
-          npm ci
+          npm install --no-audit --no-fund
           npm audit fix --force
       - name: Verify dependency remediation
         run: |
