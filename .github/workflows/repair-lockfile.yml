@@ -1,0 +1,33 @@
+name: Repair npm lockfile
+
+on:
+  push:
+    branches: [security/punch-list-2026-08-19]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Regenerate lockfile from package.json
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Commit regenerated lockfile and remove repair workflow
+        run: |
+          if git diff --quiet -- package-lock.json; then
+            echo 'Lockfile already synchronized.'
+            exit 0
+          fi
+          rm .github/workflows/repair-lockfile.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package-lock.json .github/workflows/repair-lockfile.yml
+          git commit -m 'chore: synchronize npm lockfile with package manifest'
+          git push origin HEAD:security/punch-list-2026-08-19
