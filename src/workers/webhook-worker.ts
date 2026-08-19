@@ -11,6 +11,10 @@ const DELIVERY_TIMEOUT_MS = 10_000;
 const MAX_ATTEMPTS = 6;
 const MAX_BODY_BYTES = 64 * 1024;
 const DISABLE_AFTER_FAILURES = 10;
+const ALLOWED_WEBHOOK_EVENTS = new Set([
+  'passport.updated', 'trust.changed', 'risk.created', 'risk.resolved',
+  'evidence.updated', 'verification.completed', 'verification.expired',
+]);
 
 function safeError(code: string, message: string) {
   return { code, message: message.slice(0, 500).replace(/https?:\/\/[^\s]+/gi, '[url]') };
@@ -55,9 +59,6 @@ function blockedAddress(address: string) {
 async function resolvePublicHost(hostname: string) {
   const records = await dns.lookup(hostname, { all: true, verbatim: true });
   if (!records.length || records.some(record => blockedAddress(record.address))) throw new Error('WEBHOOK_DNS_BLOCKED');
-  // The selected address is pinned into the HTTPS connection below. This closes
-  // the validation-to-connect DNS rebinding window: even if DNS changes after
-  // this point, the socket cannot be redirected to the new address.
   return records[0];
 }
 
@@ -106,10 +107,8 @@ export async function deliverWebhookOnce(pool: Pool, deliveryId: string) {
   if (!row) return false;
 
   try {
+    if (!ALLOWED_WEBHOOK_EVENTS.has(String(row.event_type))) throw new Error('WEBHOOK_EVENT_NOT_ALLOWED');
     const url = await validateWebhookUrl(row.url);
-    // Re-resolve immediately before connecting and validate every answer. The
-    // resulting address is then pinned, so DNS cannot change the destination
-    // between validation and the actual socket connection.
     const resolved = await resolvePublicHost(url.hostname);
     const secret = decryptCredential<string>(row.secret_ciphertext, row.tenant_id, 'webhook');
     const payload = JSON.stringify({
@@ -163,6 +162,7 @@ export async function deliverWebhookOnce(pool: Pool, deliveryId: string) {
 }
 
 export async function enqueueWebhookDelivery(pool: Pool, input: { tenantId: string; webhookId: string; eventId: string; eventType: string; payload: unknown }) {
+  if (!ALLOWED_WEBHOOK_EVENTS.has(input.eventType)) throw new Error('Webhook event type is not allowed');
   const idempotencyKey = crypto.createHash('sha256').update(`${input.tenantId}:${input.webhookId}:${input.eventId}`).digest('hex');
   await pool.query(`
     INSERT INTO spr_webhook_deliveries (id, tenant_id, webhook_id, event_id, event_type, payload, idempotency_key, attempt_number, status, next_attempt_at, created_at)
