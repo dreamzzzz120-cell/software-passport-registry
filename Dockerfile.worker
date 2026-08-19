@@ -5,8 +5,8 @@ ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 
 COPY package.json ./
 RUN npm install --ignore-scripts --no-audit --no-fund
-ARG SOURCE_REV=railway-worker-hardening-20260819-v1
-RUN test -n "$SOURCE_REV"
+ARG SOURCE_REV=railway-worker-hardening-20260819-v2
+RUN test "$SOURCE_REV" = "railway-worker-hardening-20260819-v2"
 COPY . ./
 RUN npm run typecheck && npm run build
 RUN npm prune --omit=dev --no-audit --no-fund
