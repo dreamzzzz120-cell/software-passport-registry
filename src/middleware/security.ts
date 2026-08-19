@@ -129,7 +129,8 @@ export const rateLimiter = async (req: Request, res: Response, next: NextFunctio
     res.setHeader('X-RateLimit-Reset', String(Math.ceil(counter.resetAt / 1000)));
     res.setHeader('X-RateLimit-Policy', `${budget.max};w=${Math.ceil(budget.windowMs / 1000)};class=${budget.className}`);
     if (counter.count > budget.max) {
-      res.setHeader('Retry-After', String(Math.max(1, Math.ceil((counter.resetAt - Date.now()) / 1000)));
+      const retryAfter = Math.max(1, Math.ceil((counter.resetAt - Date.now()) / 1000));
+      res.setHeader('Retry-After', String(retryAfter));
       return res.status(429).json({ error: { code: 'RATE_LIMITED', message: 'Too many requests.' } });
     }
     return next();
