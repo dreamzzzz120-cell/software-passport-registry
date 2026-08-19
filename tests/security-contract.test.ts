@@ -24,6 +24,17 @@ describe('SPR security release contracts', () => {
     expect(server).toContain("upgradeInsecureRequests: []");
   });
 
+  it('uses an explicit normalized CORS allowlist and never implicitly trusts a Railway/Cloud Run hostname', () => {
+    const config = read('src/config.ts');
+    const server = read('server.ts');
+    expect(config).toContain('const parseOriginList = (input: string | undefined) => parseCsv(input).map(normalizeOrigin);');
+    expect(config).toContain('const effectiveAllowedOrigins = parseOriginList(parsedEnv.APP_ALLOWED_ORIGINS);');
+    expect(config).not.toContain('effectiveAllowedOrigins.push(railwayPublicUrl)');
+    expect(config).toContain('APP_ALLOWED_ORIGINS must explicitly include APP_URL origin.');
+    expect(server).not.toContain('run.app');
+    expect(server).not.toContain('*.');
+  });
+
   it('mounts the versioned Connect API exactly once at /api/v1 and retains the compatibility alias', () => {
     const server = read('server.ts');
     expect(server).toContain("app.use('/api', rateLimiter, createConnectRouter());");
@@ -115,5 +126,16 @@ describe('SPR security release contracts', () => {
     expect(sync).toContain("'trust_observations'");
     expect(deliveryMigration).toContain('Webhook delivery does not belong to webhook tenant');
     expect(deliveryMigration).toContain('spr_enforce_remediation_integrity');
+  });
+
+  it('keeps high-severity dependency auditing in the security gate', () => {
+    const workflow = read('.github/workflows/security-gate.yml');
+    expect(workflow).toContain('npm audit --audit-level=high');
+  });
+
+  it('keeps the dependency fixes at or above the patched versions', () => {
+    const manifest = read('package.json');
+    expect(manifest).toContain('"dompurify": "^3.4.13"');
+    expect(manifest).toContain('"brace-expansion": "5.0.9"');
   });
 });
