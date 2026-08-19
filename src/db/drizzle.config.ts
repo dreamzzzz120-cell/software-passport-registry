@@ -31,7 +31,7 @@ const dbCredentials: any = databaseUrl
 export default defineConfig({
   schema: './src/db/schema.ts',
   out: './drizzle',
-  driver: 'pg',
+  dialect: 'postgresql',
   dbCredentials,
   verbose: true,
 });

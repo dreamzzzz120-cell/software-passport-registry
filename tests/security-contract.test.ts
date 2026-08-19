@@ -17,10 +17,10 @@ describe('SPR security release contracts', () => {
   it('has an enabled restrictive CSP and browser security headers', () => {
     const server = read('server.ts');
     expect(server).not.toContain('contentSecurityPolicy: false');
-    expect(server).toContain('defaultSrc: ["\'self\"]');
-    expect(server).toContain('objectSrc: ["\'none\"]');
-    expect(server).toContain('frameAncestors: ["\'none\"]');
-    expect(server).toContain('formAction: ["\'self\"]');
+    expect(server).toContain('defaultSrc: ["\'self\'"]');
+    expect(server).toContain('objectSrc: ["\'none\'"]');
+    expect(server).toContain('frameAncestors: ["\'none\'"]');
+    expect(server).toContain('formAction: ["\'self\'"]');
     expect(server).toContain("upgradeInsecureRequests: []");
   });
 
@@ -122,8 +122,11 @@ describe('SPR security release contracts', () => {
     const sync = read('src/db/sync.ts');
     const deliveryMigration = read('migrations/0009_authoritative_integrity_and_event_guards.sql');
     expect(sync).toContain('db.transaction');
-    expect(sync).toContain("'spr_webhook_deliveries'");
-    expect(sync).toContain("'trust_observations'");
+    expect(sync).toContain('information_schema.columns');
+    expect(sync).toContain('information_schema.key_column_usage');
+    expect(sync).toContain("c.column_name = 'tenant_id'");
+    expect(sync).toContain('orderTenantTables');
+    expect(sync).toContain('quoteIdentifier');
     expect(deliveryMigration).toContain('Webhook delivery does not belong to webhook tenant');
     expect(deliveryMigration).toContain('spr_enforce_remediation_integrity');
   });
