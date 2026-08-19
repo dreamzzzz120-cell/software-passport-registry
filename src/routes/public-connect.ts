@@ -16,7 +16,7 @@ export function createPublicConnectRouter() {
   const router = Router();
   router.get('/public/v1/passports/:id/trust', async (req, res) => {
     const result = await db.execute(sql`
-      SELECT id, name, version, overall_score, security_score, compliance_score, vendor_reputation_score, evidence, vulnerabilities
+      SELECT id, name, version, evidence, vulnerabilities
       FROM passports WHERE id = ${req.params.id} LIMIT 1
     `);
     const row = (result as any).rows?.[0] as Record<string, any> | undefined;
@@ -26,12 +26,13 @@ export function createPublicConnectRouter() {
       passportId: row.id,
       name: row.name,
       version: row.version,
-      score: row.overall_score,
-      security: row.security_score,
-      compliance: row.compliance_score,
-      reputation: row.vendor_reputation_score,
+      scores: null,
+      scoreStatus: 'not_authoritatively_scored',
       evidenceCount: parseJson(row.evidence).length,
       vulnerabilityCount: parseJson(row.vulnerabilities).length,
+      // Public trust data is deliberately derived only from the evidence-first
+      // observation pipeline. Legacy passport score columns are not authoritative
+      // and must never be exposed as current trust claims.
     });
   });
   return router;
