@@ -92,13 +92,62 @@ jobs:
       - name: Production build
         run: npm run build
 
+  database-verification:
+    name: Database Integrity and Concurrency Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: spr_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d spr_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Run migrations concurrently twice
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/spr_test
+          SQL_SSL: 'false'
+        run: |
+          set -euo pipefail
+          node dist/migrate.cjs > /tmp/migrate-a.log 2>&1 & p1=$!
+          node dist/migrate.cjs > /tmp/migrate-b.log 2>&1 & p2=$!
+          wait "$p1"
+          wait "$p2"
+          cat /tmp/migrate-a.log
+          cat /tmp/migrate-b.log
+      - name: Verify schema, triggers, foreign keys and indexes
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/spr_test
+          SQL_SSL: 'false'
+        run: npx tsx scripts/verify-db-hardening.ts
+      - name: Prove migration idempotency with a third run
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/spr_test
+          SQL_SSL: 'false'
+        run: node dist/migrate.cjs
+
   release-gate:
     name: Release Gate
-    needs: [migration-safety, application-verification]
+    needs: [migration-safety, application-verification, database-verification]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Fail closed unless all gates passed
         run: |
-          echo 'Migration safety and application verification passed.'
+          echo 'Migration safety, application verification, and live Postgres verification passed.'
           echo 'Deployment may proceed only through a protected environment requiring these checks.'
