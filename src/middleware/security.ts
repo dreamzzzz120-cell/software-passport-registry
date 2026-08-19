@@ -109,21 +109,19 @@ function limiterIdentity(req: Request) {
   const credential = apiKey || bearer;
   const credentialFingerprint = credential
     ? createHash('sha256').update(credential, 'utf8').digest('hex').slice(0, 32)
-    : 'anonymous';
+    : '';
   return { ip, credentialFingerprint };
 }
 
 export const rateLimiter = async (req: Request, res: Response, next: NextFunction) => {
   const budget = budgetFor(req);
   const { ip, credentialFingerprint } = limiterIdentity(req);
-  const tenantId = (req as AuthenticatedRequest).user?.tenantId;
-  // The middleware runs before authentication, so the authenticated tenant is
-  // intentionally not trusted here. Credential fingerprints prevent one API
-  // key/token from evading limits by rotating source IPs; IP remains a second
-  // independent abuse boundary for anonymous traffic.
-  const key = tenantId
-    ? `rl:v2:tenant:${tenantId}:${budget.className}:ip:${ip}`
-    : `rl:v2:${budget.className}:ip:${ip}:cred:${credentialFingerprint}`;
+  // Authentication may run after this middleware, so do not depend on req.user
+  // here. Authenticated credentials get a stable credential-scoped budget;
+  // anonymous traffic is independently bounded by source IP.
+  const key = credentialFingerprint
+    ? `rl:v2:${budget.className}:credential:${credentialFingerprint}`
+    : `rl:v2:${budget.className}:ip:${ip}`;
   try {
     const counter = await sharedStore.incr(key, budget.windowMs, budget.max);
     res.setHeader('X-RateLimit-Limit', String(budget.max));
