@@ -25,6 +25,15 @@ describe('SPR authentication/RBAC/database release contracts', () => {
     expect(migration).toContain('users_tenant_email_unique_idx');
   });
 
+  it('enforces tenant-scoped composite foreign keys for the trust graph', () => {
+    const migration = read('migrations/0012_tenant_composite_integrity.sql');
+    expect(migration).toContain('FOREIGN KEY (tenant_id, client_id) REFERENCES clients(tenant_id, id)');
+    expect(migration).toContain('FOREIGN KEY (tenant_id, passport_id) REFERENCES passports(tenant_id, id)');
+    expect(migration).toContain('FOREIGN KEY (tenant_id, webhook_id) REFERENCES spr_webhooks(tenant_id, id)');
+    expect(migration).toContain('clients_tenant_id_unique');
+    expect(migration).toContain('trust_observations_tenant_id_unique');
+  });
+
   it('keeps migration execution serialized and transactional', () => {
     const runner = read('scripts/migrate.ts');
     expect(runner).toContain('pg_advisory_lock');
