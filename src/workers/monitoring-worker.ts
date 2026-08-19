@@ -98,7 +98,8 @@ export async function claimCollectorJob(pool: Pool, workerId = MONITORING_WORKER
       UPDATE collector_jobs AS job
       SET state = 'claimed', lease_owner = $2,
           lease_expires_at = ($1::timestamptz + make_interval(secs => $3))::text,
-          heartbeat_at = $1, started_at = COALESCE(started_at, $1),
+          heartbeat_at = $1,
+          started_at = COALESCE(started_at, $1::text),
           attempt_number = attempt_number + 1
       FROM candidate
       WHERE job.id = candidate.id
