@@ -24,6 +24,14 @@ describe('SPR security release contracts', () => {
     expect(server).toContain("upgradeInsecureRequests: []");
   });
 
+  it('mounts the versioned Connect API exactly once at /api/v1 and retains the compatibility alias', () => {
+    const server = read('server.ts');
+    expect(server).toContain("app.use('/api', rateLimiter, createConnectRouter());");
+    expect(server).toContain("app.use('/api/connect', rateLimiter, createConnectRouter());");
+    expect(server).not.toContain("app.use('/api/v1', rateLimiter, createConnectRouter());");
+    expect(server).not.toContain("app.use('/api/v1/v1'");
+  });
+
   it('does not expose legacy passport scores as authoritative public trust', () => {
     const route = read('src/routes/public-connect.ts');
     expect(route).not.toContain('SELECT id, name, version, overall_score');
@@ -48,7 +56,7 @@ describe('SPR security release contracts', () => {
     expect(migration).toContain('Unsupported webhook event type');
   });
 
-  it('contains connection-time SSRF defenses and no redirect-following path', () => {
+  it('contains connection-time SSRF defenses, special-address blocking and no redirect-following path', () => {
     const worker = read('src/workers/webhook-worker.ts');
     const validator = read('src/security/webhook-url.ts');
     expect(worker).toContain('dns.lookup(hostname, { all: true, verbatim: true })');
@@ -56,6 +64,9 @@ describe('SPR security release contracts', () => {
     expect(worker).toContain('maxRedirects: 0');
     expect(validator).toContain('records.some(record => isBlockedAddress(record.address))');
     expect(validator).toContain("url.protocol !== 'https:'");
+    expect(validator).toContain("normalized.startsWith('ff')");
+    expect(validator).toContain('2001:db8');
+    expect(validator).toContain('64:ff9b');
   });
 
   it('contains webhook signing, replay-window, retry and dead-letter controls', () => {
