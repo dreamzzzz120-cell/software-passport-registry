@@ -45,13 +45,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Typecheck
-        run: npm run type-check --if-present
+        run: npm run typecheck
 
       - name: Tests
-        run: npm test --if-present -- --run
+        run: npm test
 
       - name: Production build
-        run: npm run build --if-present
+        run: npm run build
 
       - name: Security test suite
         run: npx vitest run src/security
