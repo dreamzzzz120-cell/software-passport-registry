@@ -1,5 +1,51 @@
 BEGIN;
 
+-- The application/Drizzle schema defines remediation as operational state, but
+-- the original base SQL schema did not create these tables. 0009 must therefore
+-- establish the tables before installing database-enforced integrity triggers.
+-- This is idempotent so it is safe for fresh installs and for databases where
+-- the tables were already created out-of-band.
+CREATE TABLE IF NOT EXISTS remediation_tasks (
+  id text PRIMARY KEY,
+  tenant_id text NOT NULL,
+  client_id text NOT NULL,
+  alert_id text NOT NULL,
+  title text NOT NULL,
+  description text NOT NULL DEFAULT '',
+  priority text NOT NULL,
+  status text NOT NULL DEFAULT 'OPEN',
+  assignee_id text,
+  created_by text NOT NULL,
+  created_at text NOT NULL,
+  updated_at text NOT NULL,
+  completed_at text,
+  ready_for_verification_at text,
+  verified_at text,
+  verification_job_id text
+);
+
+CREATE TABLE IF NOT EXISTS remediation_verifications (
+  id text PRIMARY KEY,
+  tenant_id text NOT NULL,
+  task_id text NOT NULL,
+  client_id text NOT NULL,
+  alert_id text NOT NULL,
+  monitoring_configuration_id text NOT NULL,
+  collector_job_id text NOT NULL,
+  status text NOT NULL DEFAULT 'QUEUED',
+  observation_id text,
+  evidence_ids text NOT NULL DEFAULT '[]',
+  evaluator_version text,
+  failure_reason text,
+  created_at text NOT NULL,
+  completed_at text
+);
+
+CREATE INDEX IF NOT EXISTS remediation_tasks_tenant_alert
+  ON remediation_tasks (tenant_id, alert_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS remediation_verifications_tenant_task
+  ON remediation_verifications (tenant_id, task_id, created_at DESC);
+
 -- Authoritative trust observations must be tenant-consistent, version-linked,
 -- and append-only. Application checks remain defense in depth; these triggers
 -- make the invariants database-enforced.
@@ -131,12 +177,5 @@ DROP TRIGGER IF EXISTS spr_webhook_delivery_ownership ON spr_webhook_deliveries;
 CREATE TRIGGER spr_webhook_delivery_ownership
 BEFORE INSERT OR UPDATE ON spr_webhook_deliveries
 FOR EACH ROW EXECUTE FUNCTION spr_enforce_webhook_delivery_ownership();
-
-CREATE INDEX IF NOT EXISTS trust_observation_changes_tenant_observation
-  ON trust_observation_changes (tenant_id, observation_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS remediation_tasks_tenant_alert
-  ON remediation_tasks (tenant_id, alert_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS remediation_verifications_tenant_task
-  ON remediation_verifications (tenant_id, task_id, created_at DESC);
 
 COMMIT;
