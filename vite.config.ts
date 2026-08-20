@@ -44,7 +44,8 @@ export default defineConfig({
           if (id.includes('/html2canvas/')) return 'html2canvas';
           if (id.includes('/firebase/')) return 'firebase';
           if (id.includes('/recharts/') || id.includes('/d3/')) return 'charts';
-          if (id.includes('/motion/')) return 'motion';
+          // Keep motion with the general vendor graph. Splitting it into its own
+          // manual chunk creates a motion -> vendor -> motion cycle in Rollup.
           if (id.includes('/lucide-react/')) return 'icons';
           if (id.includes('/dompurify/')) return 'sanitization';
           if (id.includes('/@supabase/')) return 'supabase';
