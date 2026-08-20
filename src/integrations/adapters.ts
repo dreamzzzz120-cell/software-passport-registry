@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { validatePublicIntegrationUrl } from '../security/webhook-url.ts';
 
 export type Provider =
   | 'gitlab' | 'bitbucket' | 'azure-devops' | 'jira' | 'confluence' | 'slack'
@@ -30,10 +31,14 @@ function canonicalJson(value: unknown): string {
 }
 
 async function requestJson(url: string, init: RequestInit = {}) {
+  // Every generic integration request is validated at the point of use.
+  // This blocks private/link-local/metadata destinations and prevents a public
+  // endpoint from redirecting the server into an internal network.
+  await validatePublicIntegrationUrl(url);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const response = await fetch(url, { ...init, signal: controller.signal, headers: { accept: 'application/json', ...(init.headers || {}) } });
+    const response = await fetch(url, { ...init, redirect: 'error', signal: controller.signal, headers: { accept: 'application/json', ...(init.headers || {}) } });
     const contentLength = Number(response.headers.get('content-length') || 0);
     if (contentLength > MAX_RESPONSE_BYTES) throw new Error('PROVIDER_RESPONSE_TOO_LARGE');
     const text = await response.text();
