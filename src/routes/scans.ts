@@ -25,17 +25,25 @@ const passportSchema = z.object({ passportId: z.string().min(1).max(200) }).stri
 function id(prefix: string) { return `${prefix}_${crypto.randomUUID().replace(/-/g, '')}`; }
 
 function parseGitHubTarget(target: string): { owner: string; repository: string; ref: string } | null {
-  const normalized = target.trim().replace(/\\/+$/, '');
-  const direct = normalized.match(/^([A-Za-z0-9_.-]{1,100})\\/([A-Za-z0-9_.-]{1,100})(?:\\/tree\\/([^/]+))?$/);
-  if (direct) return { owner: direct[1], repository: direct[2], ref: direct[3] ? decodeURIComponent(direct[3]) : 'main' };
+  const normalized = target.trim().replace(/\/+$/, '');
+  const directParts = normalized.split('/').filter(Boolean);
+  if (directParts.length >= 2 && directParts.length <= 4 && !normalized.includes('://')) {
+    const owner = directParts[0];
+    const repository = directParts[1].replace(/\.git$/, '');
+    if (!/^[A-Za-z0-9_.-]{1,100}$/.test(owner) || !/^[A-Za-z0-9_.-]{1,100}$/.test(repository)) return null;
+    const ref = directParts[2] === 'tree' && directParts[3] ? decodeURIComponent(directParts[3]) : 'main';
+    return { owner, repository, ref };
+  }
   try {
-    const url = new URL(normalized.match(/^https?:\\/\\//) ? normalized : `https://${normalized}`);
+    const url = new URL(normalized.startsWith('http://') || normalized.startsWith('https://') ? normalized : `https://${normalized}`);
     if (url.hostname.toLowerCase() !== 'github.com') return null;
     const parts = url.pathname.split('/').filter(Boolean);
     if (parts.length < 2) return null;
-    if (!/^[A-Za-z0-9_.-]{1,100}$/.test(parts[0]) || !/^[A-Za-z0-9_.-]{1,100}$/.test(parts[1])) return null;
+    const owner = parts[0];
+    const repository = parts[1].replace(/\.git$/, '');
+    if (!/^[A-Za-z0-9_.-]{1,100}$/.test(owner) || !/^[A-Za-z0-9_.-]{1,100}$/.test(repository)) return null;
     const ref = parts[2] === 'tree' && parts[3] ? decodeURIComponent(parts.slice(3).join('/')) : 'main';
-    return { owner: parts[0], repository: parts[1].replace(/\\.git$/, ''), ref };
+    return { owner, repository, ref };
   } catch {
     return null;
   }
@@ -73,19 +81,16 @@ export function createScansRouter() {
   });
 
   // Backward-compatible quick-scan endpoint used by the Speed Dial UI.
-  // It now queues the same real repository acquisition/Syft/OSV/security pipeline
-  // as the canonical /api/scans/repository endpoint instead of writing to a
-  // non-existent legacy `scans` table.
+  // It queues the same real repository acquisition/Syft/OSV/security pipeline
+  // as the canonical /api/scans/repository endpoint instead of a non-existent
+  // legacy `scans` table.
   router.post('/scans', requireRole(['Owner','Admin','Operator']), async (req: AuthenticatedRequest, res, next) => {
     try {
       const parsed = quickScanSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
       const target = parseGitHubTarget(parsed.data.targetName);
       if (!target) {
-        return res.status(400).json({
-          error: 'Unsupported scan target',
-          message: 'Quick Scan currently accepts a GitHub repository as owner/repository or a GitHub repository URL.',
-        });
+        return res.status(400).json({ error: 'Unsupported scan target', message: 'Quick Scan currently accepts a GitHub repository as owner/repository or a GitHub repository URL.' });
       }
 
       const passport = parsed.data.passportId
@@ -106,17 +111,7 @@ export function createScansRouter() {
       await db.execute(sql`INSERT INTO repository_scan_sources (id,job_id,tenant_id,connection_id,provider,repository_owner,repository_name,requested_ref,repository_subdirectory,created_at) VALUES (${id('source')},${securityJobId},${req.user!.tenantId},${connectionId},'github',${target.owner},${target.repository},${target.ref},'',NOW())`);
       await db.execute(sql`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES (${repositoryJobId},'repository-scanner',${`Quick Scan (${parsed.data.scanType}) queued real GitHub acquisition + pinned Syft SBOM + OSV dependency scan.`},'Info'),(${securityJobId},'security-scanner','Queued real secret, IaC/configuration, license, Syft and OSV scan.','Info')`);
 
-      return res.status(202).json({
-        id: repositoryJobId,
-        repositoryJobId,
-        securityJobId,
-        status: 'Pending',
-        scanType: parsed.data.scanType,
-        targetName: `${target.owner}/${target.repository}`,
-        clientName: parsed.data.clientName || null,
-        findingsCount: 0,
-        engines: ['Syft', 'OSV', 'Secret', 'IaC/Config', 'License'],
-      });
+      return res.status(202).json({ id: repositoryJobId, repositoryJobId, securityJobId, status: 'Pending', scanType: parsed.data.scanType, targetName: `${target.owner}/${target.repository}`, clientName: parsed.data.clientName || null, findingsCount: 0, engines: ['Syft', 'OSV', 'Secret', 'IaC/Config', 'License'] });
     } catch (error) { return next(error); }
   });
 
