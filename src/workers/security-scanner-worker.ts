@@ -3,27 +3,40 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, mkdir, readdir, rm } from 'node:fs/promises';
 import { Pool } from 'pg';
-import { downloadArchive, generateRepositorySbom, runBounded, validateArchiveEntries } from './osv-worker.ts';
+import { downloadArchive, generateRepositorySbom, runBounded, validateArchiveEntries, inspectTree } from './osv-worker.ts';
 import { createWorkerPool, assertWorkerDatabase } from './worker-db.ts';
 import { runRealRepositoryScanners } from '../scanners/real-repository-scanners.ts';
 
 const WORKER_ID = `${os.hostname()}:${process.pid}:security`;
 const MAX_ARCHIVE_BYTES = 50 * 1024 * 1024;
+const JOB_HEARTBEAT_MS = 60 * 1000;
 
 async function claimJob(pool: Pool) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const result = await client.query(`SELECT id, tenant_id, passport_id, attempt_count, max_attempts FROM agent_jobs WHERE status='Pending' AND job_type='repository_security_scan' AND (next_attempt_at IS NULL OR next_attempt_at <= NOW()) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1`);
+    const result = await client.query(`SELECT id, tenant_id, passport_id, attempt_count, max_attempts FROM agent_jobs WHERE job_type='repository_security_scan' AND (((status='Pending') AND (next_attempt_at IS NULL OR next_attempt_at <= NOW())) OR (status='Running' AND locked_at IS NOT NULL AND locked_at < NOW() - INTERVAL '10 minutes')) AND attempt_count < max_attempts ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1`);
     const job = result.rows[0];
     if (!job) { await client.query('COMMIT'); return null; }
-    await client.query(`UPDATE agent_jobs SET status='Running', progress=5, attempt_count=attempt_count+1, locked_at=NOW(), locked_by=$2, updated_at=NOW() WHERE id=$1 AND tenant_id=$3`, [job.id, WORKER_ID, job.tenant_id]);
+    const updated = await client.query(`UPDATE agent_jobs SET status='Running', progress=5, attempt_count=attempt_count+1, locked_at=NOW(), locked_by=$2, updated_at=NOW() WHERE id=$1 AND tenant_id=$3 RETURNING id, tenant_id, passport_id, attempt_count, max_attempts`, [job.id, WORKER_ID, job.tenant_id]);
     await client.query('COMMIT');
-    return { ...job, attempt_count: Number(job.attempt_count) + 1 };
+    return updated.rows[0] || null;
   } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
 }
 
 function sha256(value: string | Buffer) { return crypto.createHash('sha256').update(value).digest('hex'); }
+
+function startLeaseHeartbeat(pool: Pool, job: any) {
+  const timer = setInterval(() => {
+    void pool.query(`UPDATE agent_jobs SET locked_at=NOW(),updated_at=NOW() WHERE id=$1 AND tenant_id=$2 AND status='Running' AND locked_by=$3`, [job.id, job.tenant_id, WORKER_ID]).catch(error => console.error('[SecurityWorker] lease heartbeat failed:', error instanceof Error ? error.message : String(error)));
+  }, JOB_HEARTBEAT_MS);
+  timer.unref?.();
+  return () => clearInterval(timer);
+}
+
+async function updateProgress(pool: Pool, job: any, progress: number) {
+  await pool.query(`UPDATE agent_jobs SET progress=$1,updated_at=NOW() WHERE id=$2 AND tenant_id=$3 AND status='Running' AND locked_by=$4 AND locked_at > NOW() - INTERVAL '10 minutes'`, [progress, job.id, job.tenant_id, WORKER_ID]);
+}
 
 async function processSecurityJob(pool: Pool, job: any) {
   const source = (await pool.query('SELECT * FROM repository_scan_sources WHERE job_id=$1 AND tenant_id=$2', [job.id, job.tenant_id])).rows[0];
@@ -31,6 +44,7 @@ async function processSecurityJob(pool: Pool, job: any) {
   const connection = (await pool.query(`SELECT id FROM repository_connections WHERE id=$1 AND tenant_id=$2 AND provider='github' AND access_mode='public' AND status='Active'`, [source.connection_id, job.tenant_id])).rows[0];
   if (!connection) throw new Error('REPOSITORY_CONNECTION_NOT_FOUND');
 
+  const stopHeartbeat = startLeaseHeartbeat(pool, job);
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), `spr-sec-${job.id}-`));
   try {
     const requestedRef = source.requested_ref || 'main';
@@ -60,12 +74,13 @@ async function processSecurityJob(pool: Pool, job: any) {
     const repositoryRoot = path.join(extractPath, archiveRoot.name);
     const scanRoot = source.repository_subdirectory ? path.resolve(repositoryRoot, source.repository_subdirectory) : repositoryRoot;
     if (!scanRoot.startsWith(path.resolve(repositoryRoot) + path.sep) && scanRoot !== path.resolve(repositoryRoot)) throw new Error('REPOSITORY_PATH_INVALID');
+    await inspectTree(scanRoot);
 
     await pool.query(`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES ($1,$2,$3,'Info')`, [job.id, 'security-scanner', `Acquired GitHub commit ${commit.sha}`]);
-    await pool.query(`UPDATE agent_jobs SET progress=25,updated_at=NOW() WHERE id=$1 AND tenant_id=$2`, [job.id, job.tenant_id]);
+    await updateProgress(pool, job, 25);
 
     const generated = await generateRepositorySbom(scanRoot, process.env.SYFT_PATH || 'syft');
-    await pool.query(`UPDATE agent_jobs SET progress=55,updated_at=NOW() WHERE id=$1 AND tenant_id=$2`, [job.id, job.tenant_id]);
+    await updateProgress(pool, job, 55);
     const scanned = await runRealRepositoryScanners(scanRoot, generated.document);
     const findings = scanned.findings;
 
@@ -78,8 +93,9 @@ async function processSecurityJob(pool: Pool, job: any) {
     const evidenceHash = sha256(evidencePayload);
     await pool.query(`INSERT INTO evidence_items (id,tenant_id,asset_id,name,type,verified,status,signer,timestamp,hash,raw_content,engine_id) VALUES ($1,$2,$3,'Multi-engine repository security scan','Security Scan',0,'OBSERVED','SPR scanner',NOW(),$4,$5,'spr-security-orchestrator-v1') ON CONFLICT DO NOTHING`, [`ev-security-${job.id}-${evidenceHash.slice(0,24)}`, job.tenant_id, job.passport_id, `sha256:${evidenceHash}`, evidencePayload]);
     await pool.query(`INSERT INTO scans (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name) VALUES ($1,$2,$3,'Multi-engine repository security scan',$4,'Completed',0,$5,NOW(),$6) ON CONFLICT DO NOTHING`, [`scan-security-${job.id}-${commit.sha.slice(0,16)}`, job.tenant_id, `${source.repository_owner}/${source.repository_name}@${commit.sha.slice(0,12)}`, WORKER_ID, findings.length, source.repository_owner]);
-    await pool.query(`UPDATE agent_jobs SET status='Completed',progress=100,result=$2,error=NULL,completed_at=NOW(),locked_at=NULL,locked_by=NULL,updated_at=NOW() WHERE id=$1 AND tenant_id=$3 AND status='Running' AND locked_by=$4`, [job.id, JSON.stringify({ engines: ['Syft','OSV','Secret','IaC/Config','License'], findings: findings.length, commitSha: commit.sha, evidenceHash: `sha256:${evidenceHash}` }), job.tenant_id, WORKER_ID]);
+    await pool.query(`UPDATE agent_jobs SET status='Completed',progress=100,result=$2,error=NULL,completed_at=NOW(),locked_at=NULL,locked_by=NULL,updated_at=NOW() WHERE id=$1 AND tenant_id=$3 AND status='Running' AND locked_by=$4 AND locked_at > NOW() - INTERVAL '10 minutes'`, [job.id, JSON.stringify({ engines: ['Syft','OSV','Secret','IaC/Config','License'], findings: findings.length, commitSha: commit.sha, evidenceHash: `sha256:${evidenceHash}` }), job.tenant_id, WORKER_ID]);
   } finally {
+    stopHeartbeat();
     await rm(tempRoot, { recursive: true, force: true });
   }
 }
