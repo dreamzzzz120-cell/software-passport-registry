@@ -9,7 +9,7 @@ RUN npm install --ignore-scripts --no-audit --no-fund
 ARG SOURCE_REV=railway-security-hardening-20260819-v3
 RUN test -n "$SOURCE_REV"
 COPY . ./
-RUN npm run typecheck && npm run build
+RUN npm run typecheck && npm test && npm run build
 RUN npm run build:owner-bootstrap
 RUN npm prune --omit=dev --no-audit --no-fund
 
