@@ -1,6 +1,11 @@
+import crypto from 'node:crypto';
 import { Router } from 'express';
 import { sql } from 'drizzle-orm';
 import { db } from '../db/index.ts';
+import { config } from '../config.ts';
+import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/security.ts';
+
+const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30;
 
 function parseJson(value: unknown, fallback: unknown[] = []) {
   if (typeof value !== 'string') return fallback;
@@ -12,28 +17,115 @@ function parseJson(value: unknown, fallback: unknown[] = []) {
   }
 }
 
+function base64url(input: string | Buffer) {
+  return Buffer.from(input).toString('base64url');
+}
+
+function signPublicPassportToken(passportId: string, tenantId: string, expiresAt: number) {
+  if (!config.publicPassport.secret) throw new Error('Public Passport signing is not configured');
+  const payload = base64url(JSON.stringify({ v: 1, passportId, tenantId, exp: expiresAt }));
+  const signature = crypto.createHmac('sha256', config.publicPassport.secret).update(payload).digest('base64url');
+  return `${payload}.${signature}`;
+}
+
+function verifyPublicPassportToken(token: string, passportId: string) {
+  if (!config.publicPassport.secret) return null;
+  const parts = token.split('.');
+  if (parts.length !== 2 || !parts[0] || !parts[1]) return null;
+  const expected = crypto.createHmac('sha256', config.publicPassport.secret).update(parts[0]).digest();
+  let supplied: Buffer;
+  try { supplied = Buffer.from(parts[1], 'base64url'); } catch { return null; }
+  if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8')) as { v?: number; passportId?: string; tenantId?: string; exp?: number };
+    if (payload.v !== 1 || payload.passportId !== passportId || !payload.tenantId || !payload.exp || payload.exp <= Math.floor(Date.now() / 1000)) return null;
+    return payload;
+  } catch { return null; }
+}
+
+async function publicTrustResponse(passport: any) {
+  const findings = (await db.execute(sql`
+    SELECT id,control_id,title,severity,status,description,remediation,updated_at,resolved_at
+    FROM trust_findings WHERE tenant_id=${passport.tenant_id} AND passport_id=${passport.id}
+    ORDER BY CASE severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 WHEN 'low' THEN 4 ELSE 5 END, updated_at DESC
+    LIMIT 50
+  `) as any).rows || [];
+  const evidence = (await db.execute(sql`
+    SELECT id,provider,control_id,subject,source_url,observed_at,verification_method,status,severity,evidence_hash,limitation
+    FROM evidence_ledger WHERE tenant_id=${passport.tenant_id} AND passport_id=${passport.id}
+    ORDER BY observed_at DESC LIMIT 100
+  `) as any).rows || [];
+  const observations = (await db.execute(sql`
+    SELECT id,observation_version,generated_at,canonical_payload_hash,completeness_basis_points,open_finding_count,unknown_dimension_count
+    FROM trust_observations WHERE tenant_id=${passport.tenant_id} AND passport_id=${passport.id}
+    ORDER BY observation_version DESC LIMIT 1
+  `) as any).rows || [];
+  const latest = observations[0];
+  const openFindings = findings.filter((f: any) => !['resolved', 'closed', 'verified'].includes(String(f.status).toLowerCase()));
+  const criticalOrHigh = openFindings.filter((f: any) => ['critical', 'high'].includes(String(f.severity).toLowerCase()));
+  const completeness = latest?.completeness_basis_points == null ? null : Number(latest.completeness_basis_points) / 10000;
+  const status = latest && evidence.length > 0 ? (criticalOrHigh.length > 0 ? 'AVOID' : openFindings.length > 0 ? 'INVESTIGATE' : 'VERIFIED') : 'UNKNOWN';
+  return {
+    schemaVersion: 'spr-public-passport-v1',
+    status,
+    passport: { id: passport.id, name: passport.name, version: passport.version, publisher: passport.publisher, category: passport.category },
+    scores: { overall: latest ? passport.overall_score : null, security: latest ? passport.security_score : null, compliance: latest ? passport.compliance_score : null },
+    evidence: { count: evidence.length, completeness, latestObservationAt: latest?.generated_at ?? null, latestHash: latest?.canonical_payload_hash ?? null },
+    findings: { open: openFindings.length, criticalOrHigh: criticalOrHigh.length, items: findings },
+    verification: { observed: Boolean(latest), evidenceBacked: evidence.length > 0, generatedAt: latest?.generated_at ?? null },
+    sources: evidence.slice(0, 50).map((e: any) => ({ provider: e.provider, sourceUrl: e.source_url, observedAt: e.observed_at, verificationMethod: e.verification_method, evidenceHash: e.evidence_hash, limitation: e.limitation })),
+    policy: { rule: 'SPR reports observed evidence only; UNKNOWN means insufficient evidence and is not a trust approval.' },
+  };
+}
+
 export function createPublicConnectRouter() {
   const router = Router();
-  router.get('/public/v1/passports/:id/trust', async (req, res) => {
-    const result = await db.execute(sql`
-      SELECT id, name, version, evidence, vulnerabilities
-      FROM passports WHERE id = ${req.params.id} LIMIT 1
-    `);
-    const row = (result as any).rows?.[0] as Record<string, any> | undefined;
-    if (!row) return res.status(404).json({ error: 'Passport not found' });
-    res.setHeader('cache-control', 'public, max-age=60, stale-while-revalidate=300');
-    return res.json({
-      passportId: row.id,
-      name: row.name,
-      version: row.version,
-      scores: null,
-      scoreStatus: 'not_authoritatively_scored',
-      evidenceCount: parseJson(row.evidence).length,
-      vulnerabilityCount: parseJson(row.vulnerabilities).length,
-      // Public trust data is deliberately derived only from the evidence-first
-      // observation pipeline. Legacy passport score columns are not authoritative
-      // and must never be exposed as current trust claims.
-    });
+
+  // Owner/Admin/Operator can mint a short-lived signed public Passport link.
+  // The signed token carries tenant + Passport scope, so the public endpoint
+  // never needs to expose or accept a tenant identifier from an untrusted caller.
+  router.post('/public/v1/passports/:id/token', requireAuth, requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const passportId = req.params.id;
+      const passport = (await db.execute(sql`
+        SELECT id,tenant_id FROM passports WHERE id=${passportId} AND tenant_id=${req.user!.tenantId} LIMIT 1
+      `) as any).rows?.[0];
+      if (!passport) return res.status(404).json({ error: 'Passport not found' });
+      const expiresAt = Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS;
+      const token = signPublicPassportToken(passport.id, passport.tenant_id, expiresAt);
+      const baseUrl = config.appUrl || '';
+      return res.status(201).json({
+        passportId: passport.id,
+        token,
+        expiresAt: new Date(expiresAt * 1000).toISOString(),
+        verificationUrl: `${baseUrl}/api/public/v1/passports/${encodeURIComponent(passport.id)}/trust/${encodeURIComponent(token)}`,
+      });
+    } catch (error) { return next(error); }
   });
+
+  // Public, read-only Passport verification. No tenant data is discoverable
+  // without a valid signed token minted by an authorized SPR user.
+  router.get('/public/v1/passports/:id/trust/:token', async (req, res, next) => {
+    try {
+      const payload = verifyPublicPassportToken(req.params.token, req.params.id);
+      if (!payload) return res.status(401).json({ error: 'Invalid or expired Passport verification token' });
+      const passport = (await db.execute(sql`
+        SELECT id,tenant_id,name,version,publisher,category,overall_score,security_score,compliance_score
+        FROM passports WHERE id=${req.params.id} AND tenant_id=${payload.tenantId} LIMIT 1
+      `) as any).rows?.[0];
+      if (!passport) return res.status(404).json({ error: 'Passport not found' });
+      res.setHeader('cache-control', 'public, max-age=60, stale-while-revalidate=300');
+      res.setHeader('x-content-type-options', 'nosniff');
+      return res.json(await publicTrustResponse(passport));
+    } catch (error) { return next(error); }
+  });
+
+  // Legacy endpoint deliberately returns a non-authoritative response unless
+  // a signed token is supplied. This prevents the old unauthenticated Passport
+  // ID route from becoming a cross-tenant data oracle.
+  router.get('/public/v1/passports/:id/trust', async (req, res) => {
+    return res.status(410).json({ error: 'Signed Passport verification link required', code: 'SIGNED_PASSPORT_LINK_REQUIRED' });
+  });
+
   return router;
 }
