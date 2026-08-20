@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { apiFetch } from '../utils/apiClient';
 
 export default function GitHubEvidencePanel() {
@@ -8,7 +8,7 @@ export default function GitHubEvidencePanel() {
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const submit = async (event: React.FormEvent) => {
+  const submit = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
     setMessage('');
