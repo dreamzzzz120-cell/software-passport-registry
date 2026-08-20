@@ -45,6 +45,7 @@ const routes = [
 const PUBLIC_PATHS = new Set(['/', '/login', '/free-review', '/pricing']);
 function navigate(path: string) { window.history.pushState({}, '', path); window.dispatchEvent(new PopStateEvent('popstate')); }
 function usePath() { const [path, setPath] = useState(() => window.location.pathname || '/'); useEffect(() => { const update = () => setPath(window.location.pathname || '/'); window.addEventListener('popstate', update); return () => window.removeEventListener('popstate', update); }, []); return path; }
+function LoginRedirect() { useEffect(() => navigate('/dashboard'), []); return <AuthLoading />; }
 
 function AppShell({ children, user }: { children: ReactNode; user: User }) {
   const path = usePath();
@@ -89,7 +90,7 @@ export default function App() {
 
   if (!authReady) return <AuthLoading />;
   if (path === '/') return <PublicHome />;
-  if (path === '/login') return user ? <>{navigate('/dashboard')}</> : <LoginView onLoginSuccess={onLoginSuccess} />;
+  if (path === '/login') return user ? <LoginRedirect /> : <LoginView onLoginSuccess={onLoginSuccess} />;
   if (!user) return <AuthLoading />;
   const view = (() => { switch (path) {
     case '/dashboard': return <DashboardView selectedClientId={selectedClientId} clients={clients} alerts={alerts} scans={scans} passports={passports} onSelectClient={setSelectedClientId} onNavigateTab={onNavigateTab} onOpenQuickAction={quickAction} />;
