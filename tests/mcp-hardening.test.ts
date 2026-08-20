@@ -13,23 +13,17 @@ describe('SPR MCP hardening', () => {
       'check_freshness',
       'verify_claim',
     ]);
-    for (const tool of MCP_TOOLS) {
-      expect(tool.inputSchema.additionalProperties).toBe(false);
-    }
+    for (const tool of MCP_TOOLS) expect(tool.inputSchema.additionalProperties).toBe(false);
   });
 
   it('redacts nested credentials and session material', () => {
-    const result = redactForAgent({
-      safe: 'ok',
-      apiKey: 'secret',
-      nested: { authorization: 'Bearer secret', cookie: 'session', value: 1 },
-      list: [{ password: 'pw', value: 2 }],
-    });
+    const result = redactForAgent({ safe: 'ok', apiKey: 'secret', nested: { authorization: 'Bearer secret', cookie: 'session', value: 1 }, list: [{ password: 'pw', value: 2 }] });
     expect(result).toEqual({ safe: 'ok', nested: { value: 1 }, list: [{ value: 2 }] });
   });
 
-  it('hashes normalized claims deterministically', () => {
-    expect(hashAgentClaim('  TRUST   THIS  ')).toBe(hashAgentClaim('TRUST THIS'));
+  it('normalizes Unicode claims before hashing without changing ordinary whitespace', () => {
+    expect(hashAgentClaim('Café')).toBe(hashAgentClaim('Cafe\u0301'));
+    expect(hashAgentClaim('  TRUST   THIS  ')).not.toBe(hashAgentClaim('TRUST THIS'));
     expect(hashAgentClaim('x')).toMatch(/^sha256:[0-9a-f]{64}$/);
   });
 
