@@ -13,7 +13,14 @@ const repositorySchema = z.object({
   subdirectory: z.string().max(500).default(''),
 }).strict();
 
-const passportSchema = z.object({ passportId: z.string().min(1).max(200) }).strict();
+// The public scanner UI may send these optional fields, but the server owns the
+// actual worker selection. "automated_compliance_check" is retained only as a
+// compatibility alias and is normalized to the real osv_manifest_scan job.
+const passportSchema = z.object({
+  passportId: z.string().min(1).max(200),
+  agentId: z.literal('comprehensive_scanner').optional(),
+  jobType: z.enum(['osv_manifest_scan', 'automated_compliance_check']).optional(),
+}).strict();
 const scanSchema = z.object({
   targetName: z.string().min(1).max(300),
   scanType: z.enum(['SBOM Verify', 'Binary Attestation', 'Source Code Codeql', 'Container Image', 'Unclassified Attestation']).default('SBOM Verify'),
@@ -44,8 +51,6 @@ export function createScansRouter() {
   const router = Router();
   router.use(requireAuth);
 
-  // Persisted scan history used by the scanner UI. This is tenant-scoped and never
-  // returns another workspace's records.
   router.get('/scans', async (req: AuthenticatedRequest, res, next) => {
     try {
       const result = await db.execute(sql`SELECT id, target_name AS "targetName", scan_type AS "scanType", triggered_by AS "triggeredBy", status, duration_ms AS "durationMs", findings_count AS "findingsCount", timestamp, client_name AS "clientName" FROM scans WHERE tenant_id=${req.user!.tenantId} ORDER BY timestamp DESC LIMIT 100`);
@@ -60,13 +65,11 @@ export function createScansRouter() {
       const { targetName, scanType, clientName } = parsed.data;
       const timestamp = new Date().toISOString();
       const scanId = id('scan');
-
       const passport = (await db.execute(sql`SELECT id FROM passports WHERE tenant_id=${req.user!.tenantId} AND (LOWER(name)=LOWER(${targetName}) OR id=${targetName}) LIMIT 1`)).rows?.[0] as any;
       if (!passport) {
         await db.execute(sql`INSERT INTO scans (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name) VALUES (${scanId},${req.user!.tenantId},${targetName},${scanType},${req.user!.uid},'Failed',0,NULL,${timestamp},${clientName})`);
         return res.status(202).json({ id: scanId, targetName, scanType, triggeredBy: req.user!.uid, status: 'Failed', durationMs: 0, findingsCount: null, timestamp, clientName, error: 'No matching Software Passport exists for this scan target.' });
       }
-
       const jobId = id('job');
       await db.execute(sql`INSERT INTO scans (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name) VALUES (${scanId},${req.user!.tenantId},${targetName},${scanType},${req.user!.uid},'Scanning',0,NULL,${timestamp},${clientName})`);
       await db.execute(sql`INSERT INTO agent_jobs (id,tenant_id,agent_id,passport_id,job_type,status,progress,next_attempt_at,created_at,updated_at) VALUES (${jobId},${req.user!.tenantId},'comprehensive_scanner',${passport.id},'osv_manifest_scan','Pending',0,NOW(),NOW(),NOW())`);
@@ -89,17 +92,10 @@ export function createScansRouter() {
       const data = parsed.data;
       const now = new Date();
       const schedule = {
-        id: id('schedule'),
-        assetId: data.assetId,
-        assetHostName: data.assetHostName,
-        assetType: data.assetType,
-        clientName: data.clientName,
-        frequency: data.frequency,
-        scanType: data.scanType,
-        status: 'Active',
-        lastRunAt: null,
-        nextRunAt: nextRunAt(data.frequency, now),
-        createdAt: now.toISOString(),
+        id: id('schedule'), assetId: data.assetId, assetHostName: data.assetHostName,
+        assetType: data.assetType, clientName: data.clientName, frequency: data.frequency,
+        scanType: data.scanType, status: 'Active', lastRunAt: null,
+        nextRunAt: nextRunAt(data.frequency, now), createdAt: now.toISOString(),
       };
       await db.execute(sql`INSERT INTO scan_schedules (id,tenant_id,asset_id,asset_host_name,asset_type,client_name,frequency,scan_type,status,last_run_at,next_run_at,created_at) VALUES (${schedule.id},${req.user!.tenantId},${schedule.assetId},${schedule.assetHostName},${schedule.assetType},${schedule.clientName},${schedule.frequency},${schedule.scanType},${schedule.status},NULL,${schedule.nextRunAt},${schedule.createdAt})`);
       return res.status(201).json(schedule);
@@ -130,12 +126,8 @@ export function createScansRouter() {
       const schedule = (await db.execute(sql`SELECT id, asset_id AS "assetId", asset_host_name AS "assetHostName", asset_type AS "assetType", client_name AS "clientName", frequency, scan_type AS "scanType", status, last_run_at AS "lastRunAt", next_run_at AS "nextRunAt", created_at AS "createdAt" FROM scan_schedules WHERE id=${req.params.id} AND tenant_id=${req.user!.tenantId} LIMIT 1`)).rows?.[0] as any;
       if (!schedule) return res.status(404).json({ error: 'Scan schedule not found' });
       if (schedule.status !== 'Active') return res.status(409).json({ error: 'Scan schedule is paused' });
-
-      // Resolve the passport before creating a scan record. A scheduled run must
-      // never create a fake "Scanning" record when no real worker job can be queued.
       const passport = (await db.execute(sql`SELECT id FROM passports WHERE tenant_id=${req.user!.tenantId} AND (id=${schedule.assetId} OR LOWER(name)=LOWER(${schedule.assetHostName})) LIMIT 1`)).rows?.[0] as any;
       if (!passport) return res.status(422).json({ error: 'No matching Software Passport exists for this scheduled target.', queued: false });
-
       const now = new Date();
       const next = nextRunAt(schedule.frequency, now);
       const scanId = id('scan');
@@ -150,7 +142,9 @@ export function createScansRouter() {
 
   router.get('/agent-jobs', async (req: AuthenticatedRequest, res, next) => {
     try {
-      const result = await db.execute(sql`SELECT id, agent_id, passport_id, job_type, status, progress, result, error, attempt_count, max_attempts, completed_at, created_at, updated_at FROM agent_jobs WHERE tenant_id=${req.user!.tenantId} ORDER BY created_at DESC LIMIT 100`);
+      // Preserve the historical UI contract (Success) while exposing the canonical
+      // database state separately. Workers continue to persist Completed.
+      const result = await db.execute(sql`SELECT id, agent_id, passport_id, job_type, CASE WHEN status='Completed' THEN 'Success' ELSE status END AS status, status AS db_status, progress, result, error, attempt_count, max_attempts, completed_at, created_at, updated_at FROM agent_jobs WHERE tenant_id=${req.user!.tenantId} ORDER BY created_at DESC LIMIT 100`);
       return res.json((result as any).rows || []);
     } catch (error) { return next(error); }
   });
@@ -184,9 +178,7 @@ export function createScansRouter() {
       if (!passport) return res.status(404).json({ error: 'Passport not found' });
       const existingConnection = (await db.execute(sql`SELECT id FROM repository_connections WHERE tenant_id=${req.user!.tenantId} AND provider='github' AND access_mode='public' AND status='Active' ORDER BY created_at ASC LIMIT 1`)).rows?.[0] as any;
       const connectionId = existingConnection?.id || id('repo');
-      if (!existingConnection) {
-        await db.execute(sql`INSERT INTO repository_connections (id,tenant_id,provider,installation_id,label,access_mode,status) VALUES (${connectionId},${req.user!.tenantId},'github','public-github','Public GitHub acquisition','public','Active')`);
-      }
+      if (!existingConnection) await db.execute(sql`INSERT INTO repository_connections (id,tenant_id,provider,installation_id,label,access_mode,status) VALUES (${connectionId},${req.user!.tenantId},'github','public-github','Public GitHub acquisition','public','Active')`);
       const repositoryJobId = id('job');
       const securityJobId = id('job');
       await db.execute(sql`INSERT INTO agent_jobs (id,tenant_id,agent_id,passport_id,job_type,status,progress,next_attempt_at,created_at,updated_at) VALUES (${repositoryJobId},${req.user!.tenantId},'repository-scanner',${passportId},'repository_scan','Pending',0,NOW(),NOW(),NOW()),(${securityJobId},${req.user!.tenantId},'security-scanner',${passportId},'repository_security_scan','Pending',0,NOW(),NOW(),NOW())`);
