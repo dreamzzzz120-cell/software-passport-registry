@@ -11,6 +11,7 @@ import { rateLimiter } from './src/middleware/security.ts';
 import { createConnectRouter } from './src/routes/connect.ts';
 import { createMonitoringRouter } from './src/routes/monitoring.ts';
 import { createPublicConnectRouter } from './src/routes/public-connect.ts';
+import { createScansRouter } from './src/routes/scans.ts';
 
 const app = express();
 const startedAt = Date.now();
@@ -36,20 +37,7 @@ app.use(helmet({
   contentSecurityPolicy: {
     useDefaults: false,
     directives: {
-      defaultSrc: ["'self'"],
-      baseUri: ["'self'"],
-      objectSrc: ["'none'"],
-      frameAncestors: ["'none'"],
-      formAction: ["'self'"],
-      scriptSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
-      fontSrc: ["'self'", 'data:', 'https:'],
-      connectSrc: ["'self'", 'https:'],
-      frameSrc: ["'self'", 'https:'],
-      workerSrc: ["'self'", 'blob:'],
-      manifestSrc: ["'self'"],
-      upgradeInsecureRequests: [],
+      defaultSrc: ["'self'"], baseUri: ["'self'"], objectSrc: ["'none'"], frameAncestors: ["'none'"], formAction: ["'self'"], scriptSrc: ["'self'"], styleSrc: ["'self'", "'unsafe-inline'"], imgSrc: ["'self'", 'data:', 'blob:', 'https:'], fontSrc: ["'self'", 'data:', 'https:'], connectSrc: ["'self'", 'https:'], frameSrc: ["'self'", 'https:'], workerSrc: ["'self'", 'blob:'], manifestSrc: ["'self'"], upgradeInsecureRequests: [],
     },
   },
   crossOriginEmbedderPolicy: false,
@@ -72,14 +60,11 @@ app.get('/health', (_req, res) => res.status(200).json({ status: 'ok', service: 
 app.get('/ready', async (_req, res) => { const database = await checkDatabaseHealth(); const ready = database.ok; res.status(ready ? 200 : 503).json({ status: ready ? 'ready' : 'not_ready', checks: { database }, uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000) }); });
 app.get('/api/health', async (_req, res) => { const database = await checkDatabaseHealth(); res.status(database.ok ? 200 : 503).json({ status: database.ok ? 'ok' : 'degraded', database }); });
 
-// Route prefixes are intentionally normalized here. createConnectRouter owns the
-// /v1 namespace internally, so mounting it at /api produces /api/v1/... rather
-// than the previous accidental /api/v1/v1/... paths. /api/connect is retained as
-// a compatibility alias for clients that use the older connect mount.
 app.use('/api', rateLimiter, createPublicConnectRouter());
 app.use('/api', rateLimiter, createConnectRouter());
 app.use('/api/connect', rateLimiter, createConnectRouter());
 app.use('/api/monitoring', rateLimiter, createMonitoringRouter());
+app.use('/api', rateLimiter, createScansRouter());
 
 const publicDir = __dirname;
 app.use(express.static(publicDir, { index: false, maxAge: config.isProduction ? '1y' : 0 }));
