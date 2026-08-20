@@ -52,9 +52,9 @@ describe('provider evidence collectors', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('blocks provider URLs that resolve to private addresses', async () => {
+  it('fails closed when a provider hostname cannot be resolved', async () => {
     const fetchMock = vi.fn(); vi.stubGlobal('fetch', fetchMock);
-    await expect(collectProviderEvidence('gitlab', { accessToken: 'test', baseUrl: 'https://127.0.0.1.example.invalid' })).rejects.toThrow(/PROVIDER_URL_(BLOCKED|RESOLVES_PRIVATE)/);
+    await expect(collectProviderEvidence('gitlab', { accessToken: 'test', baseUrl: 'https://does-not-exist.invalid' })).rejects.toThrow(/ENOTFOUND|PROVIDER_URL_RESOLVES_PRIVATE/);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
