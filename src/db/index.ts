@@ -20,6 +20,7 @@ export const databaseConfigurationSummary = {
   host: config.database.connectionString ? 'DATABASE_URL' : config.database.host || 'UNCONFIGURED',
   database: config.database.name || 'UNCONFIGURED',
   ssl: config.database.ssl,
+  sslVerification: config.database.sslVerify,
   poolMax: getNumericEnv(config.database.poolMax?.toString(), 20),
   connectionTimeoutMillis: getNumericEnv(config.database.connectionTimeoutMs?.toString(), 10000),
   idleTimeoutMillis: getNumericEnv(config.database.idleTimeoutMs?.toString(), 30000),
@@ -38,10 +39,19 @@ export const createPool = () => {
     query_timeout: databaseConfigurationSummary.queryTimeoutMillis,
   };
 
-  const sslConfig = databaseConfigurationSummary.ssl ? { rejectUnauthorized: true } : undefined;
+  // SQL_SSL=require means encrypted transport without certificate verification.
+  // SQL_SSL=verify/verify-full requires a trusted CA. Never silently downgrade
+  // an explicitly requested verification mode.
+  const sslConfig = config.database.ssl
+    ? {
+        rejectUnauthorized: config.database.sslVerify,
+        ...(config.database.sslCa ? { ca: config.database.sslCa } : {}),
+      }
+    : undefined;
 
   if (config.database.connectionString) {
-    // Enforce the production SSL policy even when DATABASE_URL omits sslmode.
+    // Pass an explicit SSL object so pg cannot inherit a weaker/ambiguous URL
+    // setting. Certificate verification is controlled only by SQL_SSL/SQL_SSL_CA.
     return new Pool({ connectionString: config.database.connectionString, ssl: sslConfig, ...poolConfig });
   }
 
