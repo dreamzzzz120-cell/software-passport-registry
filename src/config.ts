@@ -96,7 +96,9 @@ export function validateConfiguration() {
   if (bootstrapValues.some(Boolean) && !bootstrapValues.every(Boolean)) throw new Error('Incomplete initial-owner bootstrap configuration: all three bootstrap values are required together.');
   if (config.ownerBootstrap.secret && config.ownerBootstrap.secret.length < 32) throw new Error('SPR_OWNER_BOOTSTRAP_SECRET must contain at least 32 characters.');
   if (missing.length) throw new Error(`Production security configuration incomplete: ${missing.join(', ')}.`);
-  const appOrigin = normalizeOrigin(config.appUrl);
+  const appUrl = config.appUrl;
+  if (!appUrl) throw new Error('APP_URL or RAILWAY_PUBLIC_DOMAIN is required in production.');
+  const appOrigin = normalizeOrigin(appUrl);
   if (!config.allowedOrigins.includes(appOrigin)) throw new Error('APP_ALLOWED_ORIGINS must explicitly include APP_URL origin.');
   if (config.allowedOrigins.some((origin) => origin === 'null' || origin.includes('*'))) throw new Error('Wildcard/null CORS origins are forbidden in production.');
 }
