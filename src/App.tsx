@@ -1,6 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
 import type { Alert, Client, Integration, Scan, SoftwarePassport, Vendor } from './types';
 import { apiFetch } from './utils/apiClient';
+import { auth } from './lib/firebase';
 import AlertsView from './components/AlertsView';
 import AssetsView from './components/AssetsView';
 import BillingView from './components/BillingView';
@@ -39,17 +41,23 @@ const routes = [
   ['/settings', 'Settings'], ['/login', 'Login'], ['/free-review', 'Free Review'], ['/pricing', 'Pricing'],
 ] as const;
 
+const PUBLIC_PATHS = new Set(['/', '/login', '/free-review', '/pricing']);
 function navigate(path: string) { window.history.pushState({}, '', path); window.dispatchEvent(new PopStateEvent('popstate')); }
 function usePath() { const [path, setPath] = useState(() => window.location.pathname || '/'); useEffect(() => { const update = () => setPath(window.location.pathname || '/'); window.addEventListener('popstate', update); return () => window.removeEventListener('popstate', update); }, []); return path; }
 
-function AppShell({ children }: { children: ReactNode }) {
+function AppShell({ children, user }: { children: ReactNode; user: User }) {
   const path = usePath();
-  return <div className="min-h-screen bg-slate-950 text-white"><header className="sticky top-0 z-30 border-b border-white/10 bg-slate-950/95 backdrop-blur"><div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4"><button onClick={() => navigate('/dashboard')} className="text-left"><div className="text-xs font-bold uppercase tracking-[.25em] text-cyan-300">SPR</div><div className="text-lg font-bold">Software Passport Registry</div></button><div className="flex items-center gap-2"><button onClick={() => navigate('/dashboard')} className="rounded-lg px-3 py-2 text-sm text-slate-300 hover:bg-white/5">Workspace</button><button onClick={() => navigate('/login')} className="rounded-lg bg-cyan-300 px-3 py-2 text-sm font-semibold text-slate-950">Sign in</button></div></div></header><div className="mx-auto grid max-w-7xl grid-cols-1 md:grid-cols-[220px_1fr]"><aside className="border-r border-white/10 p-3 md:min-h-[calc(100vh-73px)]"><nav className="space-y-1">{routes.filter(([route]) => route !== '/login').map(([route, label]) => <button key={route} onClick={() => navigate(route)} className={`w-full rounded-lg px-3 py-2 text-left text-sm ${path === route ? 'bg-cyan-300/10 text-cyan-200' : 'text-slate-300 hover:bg-white/5 hover:text-white'}`}>{label}</button>)}</nav></aside><main className="min-w-0 p-4 md:p-7">{children}</main></div></div>;
+  const [signingOut, setSigningOut] = useState(false);
+  const logout = async () => { setSigningOut(true); try { await signOut(auth); navigate('/login'); } finally { setSigningOut(false); } };
+  return <div className="min-h-screen bg-slate-950 text-white"><header className="sticky top-0 z-30 border-b border-white/10 bg-slate-950/95 backdrop-blur"><div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4"><button onClick={() => navigate('/dashboard')} className="text-left"><div className="text-xs font-bold uppercase tracking-[.25em] text-cyan-300">SPR</div><div className="text-lg font-bold">Software Passport Registry</div></button><div className="flex items-center gap-2"><span className="hidden max-w-56 truncate text-xs text-slate-400 sm:block">{user.email}</span><button onClick={() => navigate('/settings')} className="rounded-lg px-3 py-2 text-sm text-slate-300 hover:bg-white/5">Settings</button><button onClick={logout} disabled={signingOut} className="rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-200 hover:bg-white/5">{signingOut ? 'Signing out…' : 'Sign out'}</button></div></div></header><div className="mx-auto grid max-w-7xl grid-cols-1 md:grid-cols-[220px_1fr]"><aside className="border-r border-white/10 p-3 md:min-h-[calc(100vh-73px)]"><nav className="space-y-1">{routes.filter(([route]) => route !== '/login' && !PUBLIC_PATHS.has(route)).map(([route, label]) => <button key={route} onClick={() => navigate(route)} className={`w-full rounded-lg px-3 py-2 text-left text-sm ${path === route ? 'bg-cyan-300/10 text-cyan-200' : 'text-slate-300 hover:bg-white/5 hover:text-white'}`}>{label}</button>)}</nav></aside><main className="min-w-0 p-4 md:p-7">{children}</main></div></div>;
 }
-function PublicHome() { return <div className="min-h-screen bg-slate-950 px-6 py-12 text-white"><div className="mx-auto max-w-6xl"><p className="text-xs font-bold uppercase tracking-[.25em] text-cyan-300">SPR</p><h1 className="mt-3 text-4xl font-bold">Software Passport Registry</h1><p className="mt-4 max-w-2xl text-slate-300">Evidence-first software trust, verification, monitoring, and supply-chain visibility.</p><div className="mt-8 flex flex-wrap gap-3"><button onClick={() => navigate('/dashboard')} className="rounded-lg bg-cyan-300 px-5 py-3 font-semibold text-slate-950">Open workspace</button><button onClick={() => navigate('/free-review')} className="rounded-lg border border-white/15 px-5 py-3 font-semibold">Free review</button><button onClick={() => navigate('/pricing')} className="rounded-lg border border-white/15 px-5 py-3 font-semibold">Pricing</button></div></div></div>; }
+function PublicHome() { return <div className="min-h-screen bg-slate-950 px-6 py-12 text-white"><div className="mx-auto max-w-6xl"><p className="text-xs font-bold uppercase tracking-[.25em] text-cyan-300">SPR</p><h1 className="mt-3 text-4xl font-bold">Software Passport Registry</h1><p className="mt-4 max-w-2xl text-slate-300">Evidence-first software trust, verification, monitoring, and supply-chain visibility.</p><div className="mt-8 flex flex-wrap gap-3"><button onClick={() => navigate('/login')} className="rounded-lg bg-cyan-300 px-5 py-3 font-semibold text-slate-950">Owner sign in</button><button onClick={() => navigate('/free-review')} className="rounded-lg border border-white/15 px-5 py-3 font-semibold">Free review</button><button onClick={() => navigate('/pricing')} className="rounded-lg border border-white/15 px-5 py-3 font-semibold">Pricing</button></div></div></div>; }
+function AuthLoading() { return <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white"><div className="text-center"><div className="text-xs font-bold uppercase tracking-[.25em] text-cyan-300">SPR</div><div className="mt-3 text-slate-300">Checking secure session…</div></div></div>; }
 
 export default function App() {
   const path = usePath();
+  const [authReady, setAuthReady] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
   const [searchQuery] = useState('');
   const [selectedClientId, setSelectedClientId] = useState('');
   const [selectedPassportId, setSelectedPassportId] = useState<string | null>(null);
@@ -63,30 +71,25 @@ export default function App() {
   const [passports, setPassports] = useState<SoftwarePassport[]>(EMPTY_PASSPORTS);
   const [integrations, setIntegrations] = useState<Integration[]>(EMPTY_INTEGRATIONS);
 
-  useEffect(() => {
-    if (path !== '/integrations') return;
-    let cancelled = false;
-    void apiFetch('/api/integrations').then(async response => {
-      if (!response.ok) throw new Error(`Integration catalog request failed (${response.status})`);
-      const data = await response.json();
-      if (!cancelled && Array.isArray(data)) {
-        setIntegrations(data.map((item: Integration) => ({ ...item, lastSyncDate: item.lastSyncDate || 'Never' })));
-      }
-    }).catch(error => console.warn('[SPR integrations]', error));
-    return () => { cancelled = true; };
-  }, [path]);
+  useEffect(() => onAuthStateChanged(auth, currentUser => { setUser(currentUser); setAuthReady(true); }), []);
+  useEffect(() => { const expired = () => { void signOut(auth); navigate('/login'); }; window.addEventListener('auth-expired', expired); return () => window.removeEventListener('auth-expired', expired); }, []);
+  useEffect(() => { if (authReady && !user && !PUBLIC_PATHS.has(path)) navigate('/login'); }, [authReady, user, path]);
+  useEffect(() => { if (path !== '/integrations' || !user) return; let cancelled = false; void apiFetch('/api/integrations').then(async response => { if (!response.ok) throw new Error(`Integration catalog request failed (${response.status})`); const data = await response.json(); if (!cancelled && Array.isArray(data)) setIntegrations(data.map((item: Integration) => ({ ...item, lastSyncDate: item.lastSyncDate || 'Never' }))); }).catch(error => console.warn('[SPR integrations]', error)); return () => { cancelled = true; }; }, [path, user]);
 
   const onNavigateTab = (tab: string, itemId?: string) => { const normalized = tab.startsWith('/') ? tab : `/${tab}`; navigate(itemId ? `${normalized}/${encodeURIComponent(itemId)}` : normalized); };
   const quickAction = (actionType: 'add-client' | 'register-passport' | 'scan-sbom') => navigate(actionType === 'add-client' ? '/clients' : actionType === 'register-passport' ? '/passports' : '/scans');
-  const onLoginSuccess = (_user: { uid: string; email: string | null; displayName: string; token: string; emailVerified: boolean; onboarded: 0 }) => { setUserRole('Owner'); navigate('/dashboard'); };
+  const onLoginSuccess = (_signedInUser: { uid: string; email: string | null; displayName: string; token: string; emailVerified: boolean; onboarded: 0 }) => { setUserRole('Owner'); navigate('/dashboard'); };
   const updateAlertStatus = (id: string, status: Alert['status']) => setAlerts(current => current.map(item => item.id === id ? { ...item, status } : item));
   const triggerScan = (scan: Scan) => setScans(current => [scan, ...current]);
   const toggleIntegration = (id: string) => setIntegrations(current => current.map(item => item.id === id ? { ...item, connected: !item.connected } : item));
   const syncIntegration = (id: string) => { void id; };
   const installExtension = (id: string) => setInstalledExtensions(current => current.includes(id) ? current : [...current, id]);
   const uninstallExtension = (id: string) => setInstalledExtensions(current => current.filter(item => item !== id));
+
+  if (!authReady) return <AuthLoading />;
   if (path === '/') return <PublicHome />;
-  if (path === '/login') return <LoginView onLoginSuccess={onLoginSuccess} />;
+  if (path === '/login') return user ? <>{navigate('/dashboard')}</> : <LoginView onLoginSuccess={onLoginSuccess} />;
+  if (!user) return <AuthLoading />;
   const view = (() => { switch (path) {
     case '/dashboard': return <DashboardView selectedClientId={selectedClientId} clients={clients} alerts={alerts} scans={scans} passports={passports} onSelectClient={setSelectedClientId} onNavigateTab={onNavigateTab} onOpenQuickAction={quickAction} />;
     case '/overview': return <OverviewView selectedClientId={selectedClientId} clients={clients} alerts={alerts} scans={scans} passports={passports} onOpenQuickAction={quickAction} />;
@@ -111,5 +114,5 @@ export default function App() {
     case '/pricing': return <div className="mx-auto max-w-5xl py-12"><h1 className="text-3xl font-bold">Pricing</h1><p className="mt-3 text-slate-400">Choose a verification workflow after authentication and tenant setup.</p></div>;
     default: return <div className="py-12"><h1 className="text-3xl font-bold">Page not found</h1><button onClick={() => navigate('/dashboard')} className="mt-5 rounded-lg bg-cyan-300 px-4 py-2 font-semibold text-slate-950">Dashboard</button></div>;
   }})();
-  return <AppShell>{view}</AppShell>;
+  return <AppShell user={user}>{view}</AppShell>;
 }
