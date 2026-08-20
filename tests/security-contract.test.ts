@@ -35,19 +35,25 @@ describe('SPR security release contracts', () => {
     expect(server).not.toContain('*.');
   });
 
-  it('mounts the versioned Connect API exactly once at /api/v1 and retains the compatibility alias', () => {
+  it('mounts the Connect API once under the shared /api rate-limit boundary and keeps its compatibility alias', () => {
     const server = read('server.ts');
-    expect(server).toContain("app.use('/api', rateLimiter, createConnectRouter());");
-    expect(server).toContain("app.use('/api/connect', rateLimiter, createConnectRouter());");
+    expect(server).toContain("app.use('/api', rateLimiter);");
+    expect(server).toContain("app.use('/api', createConnectRouter());");
+    expect(server).toContain("app.use('/api/connect', createConnectRouter());");
     expect(server).not.toContain("app.use('/api/v1', rateLimiter, createConnectRouter());");
     expect(server).not.toContain("app.use('/api/v1/v1'");
   });
 
-  it('does not expose legacy passport scores as authoritative public trust', () => {
+  it('does not expose unsigned legacy Passport trust data and uses signed public verification', () => {
     const route = read('src/routes/public-connect.ts');
     expect(route).not.toContain('SELECT id, name, version, overall_score');
     expect(route).not.toContain('score: row.overall_score');
-    expect(route).toContain("scoreStatus: 'not_authoritatively_scored'");
+    expect(route).toContain("router.post('/public/v1/passports/:id/token'");
+    expect(route).toContain('signPublicPassportToken');
+    expect(route).toContain('verifyPublicPassportToken');
+    expect(route).toContain("SIGNED_PASSPORT_LINK_REQUIRED");
+    expect(route).toContain("schemaVersion: 'spr-public-passport-v1'");
+    expect(route).toContain("policy: { rule: 'SPR reports observed evidence only;");
   });
 
   it('keeps AI summaries explicitly derivative and non-evidence', () => {
