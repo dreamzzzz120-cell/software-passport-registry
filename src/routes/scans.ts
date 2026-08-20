@@ -14,12 +14,138 @@ const repositorySchema = z.object({
 }).strict();
 
 const passportSchema = z.object({ passportId: z.string().min(1).max(200) }).strict();
+const scanSchema = z.object({
+  targetName: z.string().min(1).max(300),
+  scanType: z.enum(['SBOM Verify', 'Binary Attestation', 'Source Code Codeql', 'Container Image', 'Unclassified Attestation']).default('SBOM Verify'),
+  clientName: z.string().min(1).max(200),
+}).strict();
+const scheduleSchema = z.object({
+  assetId: z.string().min(1).max(200),
+  assetHostName: z.string().min(1).max(300),
+  assetType: z.string().min(1).max(200),
+  clientName: z.string().min(1).max(200),
+  frequency: z.enum(['Hourly', 'Daily', 'Weekly', 'Monthly']),
+  scanType: z.string().min(1).max(200),
+}).strict();
+const scheduleUpdateSchema = z.object({ status: z.enum(['Active', 'Paused']) }).strict();
 
 function id(prefix: string) { return `${prefix}_${crypto.randomUUID().replace(/-/g, '')}`; }
+
+function nextRunAt(frequency: string, from = new Date()) {
+  const next = new Date(from);
+  if (frequency === 'Hourly') next.setHours(next.getHours() + 1);
+  else if (frequency === 'Weekly') next.setDate(next.getDate() + 7);
+  else if (frequency === 'Monthly') next.setMonth(next.getMonth() + 1);
+  else next.setDate(next.getDate() + 1);
+  return next.toISOString();
+}
 
 export function createScansRouter() {
   const router = Router();
   router.use(requireAuth);
+
+  // Persisted scan history used by the scanner UI. This is tenant-scoped and never
+  // returns another workspace's records.
+  router.get('/scans', async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const result = await db.execute(sql`SELECT id, target_name AS "targetName", scan_type AS "scanType", triggered_by AS "triggeredBy", status, duration_ms AS "durationMs", findings_count AS "findingsCount", timestamp, client_name AS "clientName" FROM scans WHERE tenant_id=${req.user!.tenantId} ORDER BY timestamp DESC LIMIT 100`);
+      return res.json((result as any).rows || []);
+    } catch (error) { return next(error); }
+  });
+
+  router.post('/scans', requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const parsed = scanSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+      const { targetName, scanType, clientName } = parsed.data;
+      const timestamp = new Date().toISOString();
+      const scanId = id('scan');
+
+      // A scan record is only marked Scanning when a real passport-backed worker job
+      // can be queued. Otherwise we persist an explicit failure rather than claiming
+      // a scanner ran when it did not.
+      const passport = (await db.execute(sql`SELECT id FROM passports WHERE tenant_id=${req.user!.tenantId} AND (LOWER(name)=LOWER(${targetName}) OR id=${targetName}) LIMIT 1`)).rows?.[0] as any;
+      if (!passport) {
+        await db.execute(sql`INSERT INTO scans (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name) VALUES (${scanId},${req.user!.tenantId},${targetName},${scanType},${req.user!.uid},'Failed',0,NULL,${timestamp},${clientName})`);
+        return res.status(202).json({ id: scanId, targetName, scanType, triggeredBy: req.user!.uid, status: 'Failed', durationMs: 0, findingsCount: null, timestamp, clientName, error: 'No matching Software Passport exists for this scan target.' });
+      }
+
+      const jobId = id('job');
+      await db.execute(sql`INSERT INTO scans (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name) VALUES (${scanId},${req.user!.tenantId},${targetName},${scanType},${req.user!.uid},'Scanning',0,NULL,${timestamp},${clientName})`);
+      await db.execute(sql`INSERT INTO agent_jobs (id,tenant_id,agent_id,passport_id,job_type,status,progress,next_attempt_at,created_at,updated_at) VALUES (${jobId},${req.user!.tenantId},'comprehensive_scanner',${passport.id},'osv_manifest_scan','Pending',0,NOW(),NOW(),NOW())`);
+      await db.execute(sql`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES (${jobId},'comprehensive_scanner','Queued real OSV dependency vulnerability scan against the persisted SBOM.','Info')`);
+      return res.status(202).json({ id: scanId, jobId, targetName, scanType, triggeredBy: req.user!.uid, status: 'Scanning', durationMs: 0, findingsCount: null, timestamp, clientName });
+    } catch (error) { return next(error); }
+  });
+
+  router.get('/scans/schedules', async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const result = await db.execute(sql`SELECT id, asset_id AS "assetId", asset_host_name AS "assetHostName", asset_type AS "assetType", client_name AS "clientName", frequency, scan_type AS "scanType", status, last_run_at AS "lastRunAt", next_run_at AS "nextRunAt", created_at AS "createdAt" FROM scan_schedules WHERE tenant_id=${req.user!.tenantId} ORDER BY created_at DESC`);
+      return res.json((result as any).rows || []);
+    } catch (error) { return next(error); }
+  });
+
+  router.post('/scans/schedules', requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const parsed = scheduleSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+      const data = parsed.data;
+      const now = new Date();
+      const schedule = {
+        id: id('schedule'),
+        assetId: data.assetId,
+        assetHostName: data.assetHostName,
+        assetType: data.assetType,
+        clientName: data.clientName,
+        frequency: data.frequency,
+        scanType: data.scanType,
+        status: 'Active',
+        lastRunAt: null,
+        nextRunAt: nextRunAt(data.frequency, now),
+        createdAt: now.toISOString(),
+      };
+      await db.execute(sql`INSERT INTO scan_schedules (id,tenant_id,asset_id,asset_host_name,asset_type,client_name,frequency,scan_type,status,last_run_at,next_run_at,created_at) VALUES (${schedule.id},${req.user!.tenantId},${schedule.assetId},${schedule.assetHostName},${schedule.assetType},${schedule.clientName},${schedule.frequency},${schedule.scanType},${schedule.status},NULL,${schedule.nextRunAt},${schedule.createdAt})`);
+      return res.status(201).json(schedule);
+    } catch (error) { return next(error); }
+  });
+
+  router.put('/scans/schedules/:id', requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const parsed = scheduleUpdateSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+      const result = await db.execute(sql`UPDATE scan_schedules SET status=${parsed.data.status} WHERE id=${req.params.id} AND tenant_id=${req.user!.tenantId} RETURNING id, asset_id AS "assetId", asset_host_name AS "assetHostName", asset_type AS "assetType", client_name AS "clientName", frequency, scan_type AS "scanType", status, last_run_at AS "lastRunAt", next_run_at AS "nextRunAt", created_at AS "createdAt"`);
+      const row = (result as any).rows?.[0];
+      if (!row) return res.status(404).json({ error: 'Scan schedule not found' });
+      return res.json(row);
+    } catch (error) { return next(error); }
+  });
+
+  router.delete('/scans/schedules/:id', requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const result = await db.execute(sql`DELETE FROM scan_schedules WHERE id=${req.params.id} AND tenant_id=${req.user!.tenantId} RETURNING id`);
+      if (!((result as any).rows?.length)) return res.status(404).json({ error: 'Scan schedule not found' });
+      return res.status(204).send();
+    } catch (error) { return next(error); }
+  });
+
+  router.post('/scans/schedules/:id/run', requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const schedule = (await db.execute(sql`SELECT id, asset_id AS "assetId", asset_host_name AS "assetHostName", asset_type AS "assetType", client_name AS "clientName", frequency, scan_type AS "scanType", status, last_run_at AS "lastRunAt", next_run_at AS "nextRunAt", created_at AS "createdAt" FROM scan_schedules WHERE id=${req.params.id} AND tenant_id=${req.user!.tenantId} LIMIT 1`)).rows?.[0] as any;
+      if (!schedule) return res.status(404).json({ error: 'Scan schedule not found' });
+      const now = new Date();
+      const next = nextRunAt(schedule.frequency, now);
+      const scanId = id('scan');
+      await db.execute(sql`INSERT INTO scans (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name) VALUES (${scanId},${req.user!.tenantId},${schedule.assetHostName},${schedule.scanType},${req.user!.uid},'Scanning',0,NULL,${now.toISOString()},${schedule.clientName})`);
+      const passport = (await db.execute(sql`SELECT id FROM passports WHERE tenant_id=${req.user!.tenantId} AND (id=${schedule.assetId} OR LOWER(name)=LOWER(${schedule.assetHostName})) LIMIT 1`)).rows?.[0] as any;
+      if (passport) {
+        const jobId = id('job');
+        await db.execute(sql`INSERT INTO agent_jobs (id,tenant_id,agent_id,passport_id,job_type,status,progress,next_attempt_at,created_at,updated_at) VALUES (${jobId},${req.user!.tenantId},'comprehensive_scanner',${passport.id},'osv_manifest_scan','Pending',0,NOW(),NOW(),NOW())`);
+        await db.execute(sql`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES (${jobId},'comprehensive_scanner',${'Scheduled scan dispatched for ' + schedule.assetHostName},'Info')`);
+      }
+      const updated = (await db.execute(sql`UPDATE scan_schedules SET last_run_at=${now.toISOString()}, next_run_at=${next} WHERE id=${req.params.id} AND tenant_id=${req.user!.tenantId} RETURNING id, asset_id AS "assetId", asset_host_name AS "assetHostName", asset_type AS "assetType", client_name AS "clientName", frequency, scan_type AS "scanType", status, last_run_at AS "lastRunAt", next_run_at AS "nextRunAt", created_at AS "createdAt"`)).rows?.[0];
+      return res.status(202).json({ success: true, scanId, queued: Boolean(passport), schedule: updated });
+    } catch (error) { return next(error); }
+  });
 
   router.get('/agent-jobs', async (req: AuthenticatedRequest, res, next) => {
     try {
