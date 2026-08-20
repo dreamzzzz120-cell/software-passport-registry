@@ -1,7 +1,7 @@
 import { describe, expect, it, afterEach, vi } from 'vitest';
 import { collectProviderEvidence } from '../src/integrations/adapters.ts';
 
-const fakeResponse = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+const fakeResponse = (body: unknown, status = 200, headers: Record<string, string> = { 'content-type': 'application/json' }) => new Response(JSON.stringify(body), { status, headers });
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -22,7 +22,8 @@ describe('provider evidence collectors', () => {
     vi.stubGlobal('fetch', fetchMock);
     const result = await collectProviderEvidence('microsoft-365', { accessToken: 'test' });
     expect(fetchMock).toHaveBeenCalledOnce();
-    expect(fetchMock.mock.calls[0][0]).toContain('graph.microsoft.com/v1.0/organization');
+    const calledUrl = String(fetchMock.mock.calls[0][0]);
+    expect(calledUrl).toContain('graph.microsoft.com/v1.0/organization');
     expect(result.verificationMethod).toContain('Microsoft Graph');
   });
 
@@ -47,5 +48,28 @@ describe('provider evidence collectors', () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response('x'.repeat(2_000_001), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
     await expect(collectProviderEvidence('slack', { accessToken: 'test' })).rejects.toThrow('PROVIDER_RESPONSE_TOO_LARGE');
+  });
+
+  it('blocks localhost and private provider URLs before network access', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(collectProviderEvidence('gitlab', { accessToken: 'test', baseUrl: 'https://127.0.0.1:8443' })).rejects.toThrow('PROVIDER_URL_BLOCKED');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('blocks provider URLs that resolve to private addresses', async () => {
+    const fetchMock = vi.fn();
+    const dnsMock = vi.spyOn(await import('node:dns/promises'), 'lookup').mockResolvedValue([{ address: '10.0.0.5', family: 4 }] as never);
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(collectProviderEvidence('gitlab', { accessToken: 'test', baseUrl: 'https://evil.example' })).rejects.toThrow('PROVIDER_URL_RESOLVES_PRIVATE');
+    expect(fetchMock).not.toHaveBeenCalled();
+    dnsMock.mockRestore();
+  });
+
+  it('does not follow redirects to a private address', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 302, headers: { location: 'https://127.0.0.1/admin' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(collectProviderEvidence('microsoft-365', { accessToken: 'test' })).rejects.toThrow('PROVIDER_URL_BLOCKED');
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 });
