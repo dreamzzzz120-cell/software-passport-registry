@@ -1,3 +1,4 @@
+import { createServer } from 'node:http';
 import { runWorkerLoop } from './src/workers/osv-worker.ts';
 import { runMonitoringWorkerLoop } from './src/workers/monitoring-worker.ts';
 import { runWebhookWorkerLoop } from './src/workers/webhook-worker.ts';
@@ -17,7 +18,30 @@ function normalizeWorkerDatabaseEnv() {
   }
 }
 
+function startHealthServer() {
+  const port = Number.parseInt(process.env.PORT ?? '8080', 10);
+  const server = createServer((request, response) => {
+    if (request.url === '/health' && request.method === 'GET') {
+      response.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+      response.end(JSON.stringify({ ok: true, service: 'spr-worker' }));
+      return;
+    }
+    response.writeHead(404, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    response.end(JSON.stringify({ error: 'Not found' }));
+  });
+
+  server.on('error', (error) => {
+    console.error('[Worker] Health server error:', error);
+    process.exit(1);
+  });
+
+  server.listen(port, '0.0.0.0', () => {
+    console.log(`[Worker] Health endpoint listening on 0.0.0.0:${port}`);
+  });
+}
+
 normalizeWorkerDatabaseEnv();
+startHealthServer();
 
 async function main() {
   try {
