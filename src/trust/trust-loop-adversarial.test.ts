@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { correlateFindings, observationsToFindings } from './trust-loop.ts';
+import type { ControlObservation } from './trust-loop.ts';
 
 const base={tenantId:'tenant-a',passportId:'passport-a',clientId:'client-a',assetId:'asset-a'};
-const observation=(overrides:Partial<any>={})=>({provider:'provider-a',controlId:'control-a',title:'Control A',status:'FAIL',severity:'high',subject:'asset-a',observedAt:'2026-08-20T05:00:00.000Z',sourceUrl:'https://provider.example/control-a',verificationMethod:'authoritative-api',value:{observed:true},...overrides});
+const observation=(overrides:Partial<ControlObservation>={}):ControlObservation=>({provider:'provider-a',controlId:'control-a',title:'Control A',status:'FAIL',severity:'high',subject:'asset-a',observedAt:'2026-08-20T05:00:00.000Z',sourceUrl:'https://provider.example/control-a',verificationMethod:'authoritative-api',value:{observed:true},...overrides});
 
 describe('trust loop adversarial invariants',()=>{
   it('keeps UNKNOWN unknown even when the title sounds positive',()=>{
@@ -36,10 +37,11 @@ describe('trust loop adversarial invariants',()=>{
 
   it('does not correlate resolved conditions into an active critical finding',()=>{
     const findings=observationsToFindings({...base,observations:[
-      observation({controlId:'mfa-required',title:'MFA required',status:'RESOLVED' as any}),
+      observation({controlId:'mfa-required',title:'MFA required',status:'UNKNOWN'}),
       observation({controlId:'internet-exposure',title:'Internet exposed',status:'FAIL'}),
       observation({controlId:'privileged-account',title:'Privileged admin',status:'FAIL'}),
     ]});
+    findings[0].status='RESOLVED';
     expect(correlateFindings(findings).some(f=>f.controlId==='cross-source-privileged-exposure')).toBe(false);
   });
 });
