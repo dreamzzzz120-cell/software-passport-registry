@@ -43,6 +43,7 @@ const envSchema = z.object({
   SPR_INITIAL_OWNER_EMAIL: z.preprocess((value) => typeof value === 'string' ? (value.trim().toLowerCase() || undefined) : value, z.string().email().optional()),
   SPR_OWNER_BOOTSTRAP_SECRET: optionalTrimmedString,
   SPR_OWNER_BOOTSTRAP_SECRET_SHA256: z.preprocess((value) => typeof value === 'string' ? (value.trim().toLowerCase() || undefined) : value, z.string().regex(/^[a-f0-9]{64}$/).optional()),
+  SPR_PUBLIC_PASSPORT_SECRET: optionalTrimmedString,
   SENTRY_DSN: optionalTrimmedUrl, REDIS_URL: optionalTrimmedString, RATE_LIMIT_FAIL_OPEN: optionalBooleanString, MONITORING_ENABLED_TENANT_IDS: optionalTrimmedString,
 });
 
@@ -76,6 +77,7 @@ export const config = {
   stripe: { secretKey: parsedEnv.STRIPE_SECRET_KEY, webhookSecret: parsedEnv.STRIPE_WEBHOOK_SECRET },
   gemini: { apiKey: parsedEnv.GEMINI_API_KEY ?? parsedEnv.GOOGLE_GENAI_API_KEY }, aiGateway: { apiKey: parsedEnv.AI_GATEWAY_API_KEY },
   ownerBootstrap: { initialOwnerEmail: parsedEnv.SPR_INITIAL_OWNER_EMAIL, secret: parsedEnv.SPR_OWNER_BOOTSTRAP_SECRET, secretSha256: parsedEnv.SPR_OWNER_BOOTSTRAP_SECRET_SHA256 },
+  publicPassport: { secret: parsedEnv.SPR_PUBLIC_PASSPORT_SECRET },
   sentry: { dsn: parsedEnv.SENTRY_DSN }, redis: { url: parsedEnv.REDIS_URL, failOpen: parsedEnv.NODE_ENV !== 'production' && parseBoolean(parsedEnv.RATE_LIMIT_FAIL_OPEN, false) }, monitoring: { enabledTenantIds: parseCsv(parsedEnv.MONITORING_ENABLED_TENANT_IDS) },
 };
 
@@ -92,6 +94,7 @@ export function validateConfiguration() {
   if (config.database.sslVerify && !config.database.sslCa && !['verify-full', 'verify'].includes(parsedEnv.SQL_SSL ?? '')) missing.push('SQL_SSL_CA for certificate verification');
   if (!config.redis.url) missing.push('REDIS_URL');
   if (!config.firebase.serviceAccountKey && !config.firebase.serviceAccountKeyB64 && !config.firebase.googleApplicationCredentials) missing.push('FIREBASE_SERVICE_ACCOUNT_KEY, FIREBASE_SERVICE_ACCOUNT_KEY_B64, or GOOGLE_APPLICATION_CREDENTIALS');
+  if (!config.publicPassport.secret || config.publicPassport.secret.length < 32) missing.push('SPR_PUBLIC_PASSPORT_SECRET (32+ characters)');
   const bootstrapValues = [config.ownerBootstrap.initialOwnerEmail, config.ownerBootstrap.secret, config.ownerBootstrap.secretSha256];
   if (bootstrapValues.some(Boolean) && !bootstrapValues.every(Boolean)) throw new Error('Incomplete initial-owner bootstrap configuration: all three bootstrap values are required together.');
   if (config.ownerBootstrap.secret && config.ownerBootstrap.secret.length < 32) throw new Error('SPR_OWNER_BOOTSTRAP_SECRET must contain at least 32 characters.');
@@ -108,6 +111,7 @@ export const configurationCatalog = [
   { name: 'ENFORCE_HTTPS', category: 'requiredProduction', requiredInProduction: true }, { name: 'TRUST_PROXY', category: 'requiredProduction', requiredInProduction: true },
   { name: 'ALLOW_IFRAME', category: 'requiredProduction', requiredInProduction: true }, { name: 'SQL_SSL', category: 'requiredProduction', requiredInProduction: true },
   { name: 'SQL_SSL_CA', category: 'requiredWhenVerificationIsEnabled', requiredInProduction: false }, { name: 'REDIS_URL', category: 'requiredProduction', requiredInProduction: true }, { name: 'FIREBASE_SERVICE_ACCOUNT_KEY or FIREBASE_SERVICE_ACCOUNT_KEY_B64', category: 'requiredProduction', requiredInProduction: true },
+  { name: 'SPR_PUBLIC_PASSPORT_SECRET', category: 'requiredProduction', requiredInProduction: true },
   { name: 'AI_GATEWAY_API_KEY', category: 'featureSpecific', requiredInProduction: false }, { name: 'SPR_OWNER_BOOTSTRAP_SECRET_SHA256', category: 'bootstrap-only', requiredInProduction: false },
   { name: 'STRIPE_SECRET_KEY', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_WEBHOOK_SECRET', category: 'featureSpecific', requiredInProduction: false },
   { name: 'GEMINI_API_KEY', category: 'featureSpecific', requiredInProduction: false }, { name: 'SENTRY_DSN', category: 'optional', requiredInProduction: false },
