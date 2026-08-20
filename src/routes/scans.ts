@@ -61,9 +61,6 @@ export function createScansRouter() {
       const timestamp = new Date().toISOString();
       const scanId = id('scan');
 
-      // A scan record is only marked Scanning when a real passport-backed worker job
-      // can be queued. Otherwise we persist an explicit failure rather than claiming
-      // a scanner ran when it did not.
       const passport = (await db.execute(sql`SELECT id FROM passports WHERE tenant_id=${req.user!.tenantId} AND (LOWER(name)=LOWER(${targetName}) OR id=${targetName}) LIMIT 1`)).rows?.[0] as any;
       if (!passport) {
         await db.execute(sql`INSERT INTO scans (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name) VALUES (${scanId},${req.user!.tenantId},${targetName},${scanType},${req.user!.uid},'Failed',0,NULL,${timestamp},${clientName})`);
@@ -132,18 +129,22 @@ export function createScansRouter() {
     try {
       const schedule = (await db.execute(sql`SELECT id, asset_id AS "assetId", asset_host_name AS "assetHostName", asset_type AS "assetType", client_name AS "clientName", frequency, scan_type AS "scanType", status, last_run_at AS "lastRunAt", next_run_at AS "nextRunAt", created_at AS "createdAt" FROM scan_schedules WHERE id=${req.params.id} AND tenant_id=${req.user!.tenantId} LIMIT 1`)).rows?.[0] as any;
       if (!schedule) return res.status(404).json({ error: 'Scan schedule not found' });
+      if (schedule.status !== 'Active') return res.status(409).json({ error: 'Scan schedule is paused' });
+
+      // Resolve the passport before creating a scan record. A scheduled run must
+      // never create a fake "Scanning" record when no real worker job can be queued.
+      const passport = (await db.execute(sql`SELECT id FROM passports WHERE tenant_id=${req.user!.tenantId} AND (id=${schedule.assetId} OR LOWER(name)=LOWER(${schedule.assetHostName})) LIMIT 1`)).rows?.[0] as any;
+      if (!passport) return res.status(422).json({ error: 'No matching Software Passport exists for this scheduled target.', queued: false });
+
       const now = new Date();
       const next = nextRunAt(schedule.frequency, now);
       const scanId = id('scan');
+      const jobId = id('job');
       await db.execute(sql`INSERT INTO scans (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name) VALUES (${scanId},${req.user!.tenantId},${schedule.assetHostName},${schedule.scanType},${req.user!.uid},'Scanning',0,NULL,${now.toISOString()},${schedule.clientName})`);
-      const passport = (await db.execute(sql`SELECT id FROM passports WHERE tenant_id=${req.user!.tenantId} AND (id=${schedule.assetId} OR LOWER(name)=LOWER(${schedule.assetHostName})) LIMIT 1`)).rows?.[0] as any;
-      if (passport) {
-        const jobId = id('job');
-        await db.execute(sql`INSERT INTO agent_jobs (id,tenant_id,agent_id,passport_id,job_type,status,progress,next_attempt_at,created_at,updated_at) VALUES (${jobId},${req.user!.tenantId},'comprehensive_scanner',${passport.id},'osv_manifest_scan','Pending',0,NOW(),NOW(),NOW())`);
-        await db.execute(sql`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES (${jobId},'comprehensive_scanner',${'Scheduled scan dispatched for ' + schedule.assetHostName},'Info')`);
-      }
+      await db.execute(sql`INSERT INTO agent_jobs (id,tenant_id,agent_id,passport_id,job_type,status,progress,next_attempt_at,created_at,updated_at) VALUES (${jobId},${req.user!.tenantId},'comprehensive_scanner',${passport.id},'osv_manifest_scan','Pending',0,NOW(),NOW(),NOW())`);
+      await db.execute(sql`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES (${jobId},'comprehensive_scanner',${'Scheduled OSV dependency scan dispatched for ' + schedule.assetHostName},'Info')`);
       const updated = (await db.execute(sql`UPDATE scan_schedules SET last_run_at=${now.toISOString()}, next_run_at=${next} WHERE id=${req.params.id} AND tenant_id=${req.user!.tenantId} RETURNING id, asset_id AS "assetId", asset_host_name AS "assetHostName", asset_type AS "assetType", client_name AS "clientName", frequency, scan_type AS "scanType", status, last_run_at AS "lastRunAt", next_run_at AS "nextRunAt", created_at AS "createdAt"`)).rows?.[0];
-      return res.status(202).json({ success: true, scanId, queued: Boolean(passport), schedule: updated });
+      return res.status(202).json({ success: true, scanId, jobId, queued: true, schedule: updated });
     } catch (error) { return next(error); }
   });
 
