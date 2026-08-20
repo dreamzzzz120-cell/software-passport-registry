@@ -1,25 +1,7 @@
-import { defineConfig, type Plugin } from 'vite';
+import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'node:path';
-
-function lazyAppViews(): Plugin {
-  const componentImport = /^import\s+([A-Za-z_$][\w$]*)\s+from\s+['"](\.\/components\/[^'"]+)['"];?$/gm;
-
-  return {
-    name: 'spr-lazy-app-views',
-    enforce: 'pre',
-    transform(code, id) {
-      if (!id.replace(/\\/g, '/').endsWith('/src/App.tsx')) return null;
-      const transformed = code.replace(
-        componentImport,
-        (_match, name: string, modulePath: string) =>
-          `const ${name} = React.lazy(() => import('${modulePath}'));`,
-      );
-      return transformed === code ? null : { code: transformed, map: null };
-    },
-  };
-}
 
 export default defineConfig({
   resolve: {
@@ -27,7 +9,11 @@ export default defineConfig({
       'lucide-react': resolve(__dirname, 'src/lucide-compat.ts'),
     },
   },
-  plugins: [lazyAppViews(), react(), tailwindcss()],
+  // Keep App.tsx imports as normal synchronous React imports.
+  // The previous source-transform converted them to React.lazy() without
+  // importing React or providing Suspense, which can blank the entire SPA at
+  // runtime even though the Vite build succeeds.
+  plugins: [react(), tailwindcss()],
   build: {
     chunkSizeWarningLimit: 500,
     rollupOptions: {
