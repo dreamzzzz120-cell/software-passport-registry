@@ -13,9 +13,6 @@ const repositorySchema = z.object({
   subdirectory: z.string().max(500).default(''),
 }).strict();
 
-// The public scanner UI may send these optional fields, but the server owns the
-// actual worker selection. "automated_compliance_check" is retained only as a
-// compatibility alias and is normalized to the real osv_manifest_scan job.
 const passportSchema = z.object({
   passportId: z.string().min(1).max(200),
   agentId: z.literal('comprehensive_scanner').optional(),
@@ -142,10 +139,17 @@ export function createScansRouter() {
 
   router.get('/agent-jobs', async (req: AuthenticatedRequest, res, next) => {
     try {
-      // Preserve the historical UI contract (Success) while exposing the canonical
-      // database state separately. Workers continue to persist Completed.
       const result = await db.execute(sql`SELECT id, agent_id, passport_id, job_type, CASE WHEN status='Completed' THEN 'Success' ELSE status END AS status, status AS db_status, progress, result, error, attempt_count, max_attempts, completed_at, created_at, updated_at FROM agent_jobs WHERE tenant_id=${req.user!.tenantId} ORDER BY created_at DESC LIMIT 100`);
       return res.json((result as any).rows || []);
+    } catch (error) { return next(error); }
+  });
+
+  router.get('/agent-jobs/:id', async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const result = await db.execute(sql`SELECT id, agent_id AS "agentId", passport_id AS "passportId", job_type AS "jobType", status, progress, result, error, attempt_count AS "attemptCount", max_attempts AS "maxAttempts", completed_at AS "completedAt", created_at AS "createdAt", updated_at AS "updatedAt" FROM agent_jobs WHERE id=${req.params.id} AND tenant_id=${req.user!.tenantId} LIMIT 1`);
+      const row = (result as any).rows?.[0];
+      if (!row) return res.status(404).json({ error: 'Agent job not found' });
+      return res.json(row);
     } catch (error) { return next(error); }
   });
 
