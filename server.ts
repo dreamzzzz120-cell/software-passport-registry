@@ -15,6 +15,7 @@ import { createMonitoringRouter } from './src/routes/monitoring.ts';
 import { createPublicConnectRouter } from './src/routes/public-connect.ts';
 import { createScansRouter } from './src/routes/scans.ts';
 import { createTrustLoopRouter } from './src/routes/trust-loop.ts';
+import { createIntegrationMonitoringRouter } from './src/routes/integration-monitoring.ts';
 
 const app = express();
 const startedAt = Date.now();
@@ -23,12 +24,7 @@ if (config.trustProxy) app.set('trust proxy', true);
 app.disable('x-powered-by');
 if (config.sentry.dsn) Sentry.init({ dsn: config.sentry.dsn, environment: config.nodeEnv, tracesSampleRate: config.isProduction ? 0.1 : 1.0 });
 const allowedOrigins = new Set(config.allowedOrigins);
-const corsOrigin = (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) => {
-  if (!origin) return callback(null, true);
-  if (allowedOrigins.has(origin)) return callback(null, true);
-  try { if (new URL(origin).origin === new URL(config.appUrl || origin).origin) return callback(null, true); } catch (_) {}
-  return callback(new Error('CORS origin denied'));
-};
+const corsOrigin = (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) => { if (!origin) return callback(null, true); if (allowedOrigins.has(origin)) return callback(null, true); try { if (new URL(origin).origin === new URL(config.appUrl || origin).origin) return callback(null, true); } catch (_) {} return callback(new Error('CORS origin denied')); };
 app.use(helmet({ contentSecurityPolicy: { useDefaults: false, directives: { defaultSrc: ["'self'"], baseUri: ["'self'"], objectSrc: ["'none'"], frameAncestors: ["'none'"], formAction: ["'self'"], scriptSrc: ["'self'"], styleSrc: ["'self'", "'unsafe-inline'"], imgSrc: ["'self'", 'data:', 'blob:', 'https:'], fontSrc: ["'self'", 'data:', 'https:'], connectSrc: ["'self'", 'https:'], frameSrc: ["'self'", 'https:'], workerSrc: ["'self'", 'blob:'], manifestSrc: ["'self'"], upgradeInsecureRequests: [] } }, crossOriginEmbedderPolicy: false, frameguard: { action: 'deny' }, referrerPolicy: { policy: 'no-referrer' } }));
 app.use(cors({ origin: corsOrigin, credentials: true, methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], allowedHeaders: ['Authorization', 'Content-Type', 'X-Request-ID', 'X-API-Key'] }));
 app.use(express.json({ limit: requestBodyLimit, strict: true }));
@@ -43,14 +39,14 @@ app.use('/api/connect', rateLimiter, createConnectRouter());
 app.use('/api/integrations', rateLimiter, createIntegrationsRouter());
 app.use('/api/integrations-live', rateLimiter, createLiveIntegrationsRouter());
 app.use('/api/trust-loop', rateLimiter, createTrustLoopRouter());
+app.use('/api/integration-monitoring', rateLimiter, createIntegrationMonitoringRouter());
 app.use('/api/monitoring', rateLimiter, createMonitoringRouter());
 app.use('/api', rateLimiter, createScansRouter());
 const publicDir = __dirname;
 app.use(express.static(publicDir, { index: false, maxAge: config.isProduction ? '1y' : 0 }));
 app.get('*', (req, res, next) => { if (req.path.startsWith('/api/')) return next(); return res.sendFile(path.join(publicDir, 'index.html'), error => error ? next(error) : undefined); });
 app.use((err: any, req: Request, res: Response, next: NextFunction) => { if (res.headersSent) return next(err); const requestId = res.locals.requestId || `req_${randomUUID()}`; const status = Number.isInteger(err?.status) && err.status >= 400 && err.status < 600 ? err.status : 500; console.error('[HTTP_ERROR]', { requestId, status, method: req.method, path: req.path, message: err?.message || String(err) }); if (config.sentry.dsn) Sentry.captureException(err, { tags: { requestId } }); return res.status(status).json({ error: { code: status === 500 ? 'INTERNAL_SERVER_ERROR' : 'REQUEST_FAILED', message: status === 500 ? 'An unexpected server error occurred.' : err?.message || 'Request failed.', requestId } }); });
-let server: ReturnType<typeof app.listen> | undefined;
-let shuttingDown = false;
+let server: ReturnType<typeof app.listen> | undefined; let shuttingDown = false;
 async function shutdown(signal: string) { if (shuttingDown) return; shuttingDown = true; console.info(`[SPR] ${signal} received; shutting down gracefully.`); const forceTimer = setTimeout(() => process.exit(1), 15_000); forceTimer.unref(); if (server) await new Promise<void>(resolve => server!.close(() => resolve())); await closeDatabase().catch(error => console.error('[SPR] Database shutdown error:', error)); if (config.sentry.dsn) await Sentry.close(2_000).catch(() => undefined); clearTimeout(forceTimer); process.exit(0); }
 export async function startServer() { validateConfiguration(); const host = process.env.HOST || '0.0.0.0'; server = app.listen(config.port, host, () => console.info(`[SPR] listening on http://${host}:${config.port}`)); return server; }
 process.once('SIGTERM', () => void shutdown('SIGTERM')); process.once('SIGINT', () => void shutdown('SIGINT')); process.on('unhandledRejection', reason => console.error('[SPR] Unhandled rejection:', reason)); process.on('uncaughtException', error => { console.error('[SPR] Uncaught exception:', error); void shutdown('uncaughtException'); });
