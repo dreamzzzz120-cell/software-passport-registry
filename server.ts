@@ -21,7 +21,7 @@ import { createAgentApiRouter } from './src/routes/agent-api.ts';
 const app = express();
 const startedAt = Date.now();
 const requestBodyLimit = process.env.REQUEST_BODY_LIMIT || '2mb';
-if (config.trustProxy) app.set('trust proxy', true);
+if (config.trustProxy) app.set('trust proxy', config.trustProxyHops);
 app.disable('x-powered-by');
 if (config.sentry.dsn) Sentry.init({ dsn: config.sentry.dsn, environment: config.nodeEnv, tracesSampleRate: config.isProduction ? 0.1 : 1.0 });
 const allowedOrigins = new Set(config.allowedOrigins);
