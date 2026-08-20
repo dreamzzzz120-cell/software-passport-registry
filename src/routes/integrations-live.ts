@@ -2,11 +2,11 @@ import crypto from 'node:crypto';
 import { Router } from 'express';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { db } from '../db/index.ts';
-import { requireAuth, AuthenticatedRequest } from '../middleware/security.ts';
+import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/security.ts';
 import { INTEGRATION_CATALOG } from '../integrations/catalog.ts';
 import { collectProviderEvidence, Provider, ProviderCredentials } from '../integrations/adapters.ts';
 import { decryptCredentials, encryptCredentials } from '../integrations/credential-vault.ts';
+import { db } from '../db/index.ts';
 
 const PROVIDERS = new Set(INTEGRATION_CATALOG.map(item => item.provider));
 const credentialSchema = z.record(z.string().min(1).max(128), z.string().max(4096)).refine(v => Object.keys(v).length > 0, 'Credentials cannot be empty');
@@ -27,7 +27,7 @@ export function createLiveIntegrationsRouter() {
     } catch (error) { return next(error); }
   });
 
-  router.put('/:provider/credentials', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  router.put('/:provider/credentials', requireAuth, requireRole(['Owner', 'Admin']), async (req: AuthenticatedRequest, res, next) => {
     try {
       const provider = providerFromParam(req.params.provider);
       const parsed = credentialSchema.safeParse(req.body);
@@ -42,7 +42,7 @@ export function createLiveIntegrationsRouter() {
     }
   });
 
-  router.post('/:provider/test', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  router.post('/:provider/test', requireAuth, requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
     try {
       const provider = providerFromParam(req.params.provider);
       const parsed = testSchema.safeParse(req.body);

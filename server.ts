@@ -7,7 +7,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { config, validateConfiguration } from './src/config.ts';
 import { checkDatabaseHealth, closeDatabase } from './src/db/index.ts';
-import { rateLimiter } from './src/middleware/security.ts';
+import { AuthenticatedRequest, rateLimiter, requireAuth, requireRole } from './src/middleware/security.ts';
 import { createConnectRouter } from './src/routes/connect.ts';
 import { createIntegrationsRouter } from './src/routes/integrations.ts';
 import { createLiveIntegrationsRouter } from './src/routes/integrations-live.ts';
@@ -51,16 +51,28 @@ app.use((req, res, next) => {
 app.get('/health', (_req, res) => res.status(200).json({ status: 'ok', service: 'spr-app', uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000) }));
 app.get('/ready', async (_req, res) => { const database = await checkDatabaseHealth(); const ready = database.ok; res.status(ready ? 200 : 503).json({ status: ready ? 'ready' : 'not_ready', checks: { database }, uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000) }); });
 app.get('/api/health', async (_req, res) => { const database = await checkDatabaseHealth(); res.status(database.ok ? 200 : 503).json({ status: database.ok ? 'ok' : 'degraded', database }); });
-app.use('/api', rateLimiter, createPublicConnectRouter());
-app.use('/api', rateLimiter, createConnectRouter());
-app.use('/api/connect', rateLimiter, createConnectRouter());
-app.use('/api/integrations', rateLimiter, createIntegrationsRouter());
-app.use('/api/integrations-live', rateLimiter, createLiveIntegrationsRouter());
-app.use('/api/trust-loop', rateLimiter, createTrustLoopRouter());
-app.use('/api/integration-monitoring', rateLimiter, createIntegrationMonitoringRouter());
-app.use('/api/monitoring', rateLimiter, createMonitoringRouter());
-app.use('/api/agent/v1', rateLimiter, createAgentApiRouter());
-app.use('/api', rateLimiter, createScansRouter());
+// Apply the API limiter exactly once to the /api tree. Individual routers are
+// mounted without a second limiter so a single request cannot consume two
+// windows or receive two independent rate-limit decisions.
+app.use('/api', rateLimiter);
+app.use('/api', createPublicConnectRouter());
+app.use('/api', createConnectRouter());
+app.use('/api/connect', createConnectRouter());
+app.use('/api/integrations', createIntegrationsRouter());
+app.use('/api/integrations-live', createLiveIntegrationsRouter());
+// Defense-in-depth: every state-changing Trust Loop request requires an
+// operational role. Read-only findings/monitoring/ledger/report endpoints
+// remain available to authenticated viewers.
+const requireTrustMutationRole = (req: Request, res: Response, next: NextFunction) => {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+  return requireRole(['Owner', 'Admin', 'Operator', 'Technician'])(req as AuthenticatedRequest, res, next);
+};
+app.use('/api/trust-loop', requireAuth, requireTrustMutationRole);
+app.use('/api/trust-loop', createTrustLoopRouter());
+app.use('/api/integration-monitoring', createIntegrationMonitoringRouter());
+app.use('/api/monitoring', createMonitoringRouter());
+app.use('/api/agent/v1', createAgentApiRouter());
+app.use('/api', createScansRouter());
 const publicDir = __dirname;
 app.use(express.static(publicDir, { index: false, maxAge: config.isProduction ? '1y' : 0 }));
 app.get('*', (req, res, next) => { if (req.path.startsWith('/api/')) return next(); return res.sendFile(path.join(publicDir, 'index.html'), error => error ? next(error) : undefined); });
