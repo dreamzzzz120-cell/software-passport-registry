@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 type Health = { status: 'checking' | 'healthy' | 'degraded' | 'offline'; detail?: string };
 type Page = { path: string; label: string; group: string };
@@ -63,7 +63,7 @@ function useHealth() {
   return health;
 }
 
-function Shell({ children, health }: { children: React.ReactNode; health: Health }) {
+function Shell({ children, health }: { children: ReactNode; health: Health }) {
   const path = usePath();
   const groups = useMemo(() => Array.from(new Set(pages.map(p => p.group))), []);
   return (
@@ -114,7 +114,7 @@ function Dashboard({ health }: { health: Health }) {
 }
 
 function Action({ label, path }: { label: string; path: string }) { return <button onClick={() => navigate(path)} className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-left text-sm font-semibold hover:bg-white/10">{label}<span className="ml-2 text-cyan-300">→</span></button>; }
-function Panel({ title, children }: { title: string; children: React.ReactNode }) { return <section className="rounded-2xl border border-white/10 bg-white/[.03] p-5"><h2 className="font-semibold">{title}</h2><div className="mt-4">{children}</div></section>; }
+function Panel({ title, children }: { title: string; children: ReactNode }) { return <section className="rounded-2xl border border-white/10 bg-white/[.03] p-5"><h2 className="font-semibold">{title}</h2><div className="mt-4">{children}</div></section>; }
 function PageTitle({ title, subtitle }: { title: string; subtitle: string }) { return <div className="mb-6"><h1 className="text-3xl font-bold tracking-tight">{title}</h1><p className="mt-2 text-sm text-slate-400">{subtitle}</p></div>; }
 
 function GenericPage({ page }: { page: Page }) {
@@ -131,5 +131,5 @@ export default function App() {
   if (path === '/') return <Shell health={health}><Dashboard health={health} /></Shell>;
   if (path === '/login') return <Shell health={health}><Login /></Shell>;
   const page = pages.find(p => p.path === path);
-  return <Shell health={health}>{page ? <GenericPage page={page} /> : <><PageTitle title="Page not found" subtitle="The requested route does not exist." /><Action label="Go to dashboard" path="/dashboard" /></>}</Shell>;
+  return <Shell health={health}>{page ? <GenericPage page={page} /> : <><PageTitle title="Page not found" subtitle="The requested route does not exist." /><Action label="Go to dashboard" path="/dashboard" /></Shell>;
 }
