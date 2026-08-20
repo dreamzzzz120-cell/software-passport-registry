@@ -7,7 +7,6 @@ import { downloadArchive, generateRepositorySbom, runBounded, validateArchiveEnt
 import { runRealRepositoryScanners } from '../scanners/real-repository-scanners.ts';
 
 const WORKER_ID = `${os.hostname()}:${process.pid}:security`;
-const SYFT_VERSION = '1.49.0';
 const MAX_ARCHIVE_BYTES = 50 * 1024 * 1024;
 
 function createPool() {
@@ -30,7 +29,7 @@ async function claimJob(pool: Pool) {
 
 function sha256(value: string | Buffer) { return crypto.createHash('sha256').update(value).digest('hex'); }
 
-async function process(pool: Pool, job: any) {
+async function processSecurityJob(pool: Pool, job: any) {
   const source = (await pool.query('SELECT * FROM repository_scan_sources WHERE job_id=$1 AND tenant_id=$2', [job.id, job.tenant_id])).rows[0];
   if (!source) throw new Error('REPOSITORY_CONNECTION_NOT_FOUND');
   const connection = (await pool.query(`SELECT id FROM repository_connections WHERE id=$1 AND tenant_id=$2 AND provider='github' AND access_mode='public' AND status='Active'`, [source.connection_id, job.tenant_id])).rows[0];
@@ -75,9 +74,7 @@ async function process(pool: Pool, job: any) {
     const findings = scanned.findings;
 
     for (const finding of findings) {
-      await pool.query(`INSERT INTO scan_findings (id,tenant_id,asset_id,job_id,severity,category,title,description,component,status,detected_at,engine_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'Open',NOW(),$10)`, [
-        `finding-${crypto.randomUUID()}`, job.tenant_id, job.passport_id, job.id, finding.severity, finding.category, finding.title, finding.description, finding.component || null, finding.engineId,
-      ]);
+      await pool.query(`INSERT INTO scan_findings (id,tenant_id,asset_id,job_id,severity,category,title,description,component,status,detected_at,engine_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'Open',NOW(),$10)`, [`finding-${crypto.randomUUID()}`, job.tenant_id, job.passport_id, job.id, finding.severity, finding.category, finding.title, finding.description, finding.component || null, finding.engineId]);
     }
 
     const evidencePayload = JSON.stringify({ repository: `${source.repository_owner}/${source.repository_name}`, requestedRef, resolvedCommitSha: commit.sha, engines: ['Syft','OSV','spr-secret-scanner-v1','spr-iac-config-scanner-v1','spr-license-scanner-v1'], findingCount: findings.length, limitations: ['OSV results are provider observations, not cryptographic verification.','Secret/config rules are deterministic pattern scanners and can produce false positives/negatives.'] });
@@ -98,7 +95,7 @@ async function fail(pool: Pool, job: any, error: unknown) {
 export async function runSecurityScannerOnce(pool: Pool) {
   const job = await claimJob(pool);
   if (!job) return false;
-  try { await process(pool, job); } catch (error) { await fail(pool, job, error); }
+  try { await processSecurityJob(pool, job); } catch (error) { await fail(pool, job, error); }
   return true;
 }
 
