@@ -6,9 +6,6 @@
 import dotenv from 'dotenv';
 import { z } from 'zod';
 
-// Never load repository/container .env files in production. Railway/Vercel/etc.
-// must be the sole source of production secrets; local .env files can contain
-// dotenvx metadata/comments that corrupt structured secrets such as Firebase JSON.
 if (process.env.NODE_ENV !== 'production' && process.env.SKIP_DOTENV !== 'true') dotenv.config();
 
 const optionalTrimmedString = z.preprocess((value) => {
@@ -36,7 +33,9 @@ const envSchema = z.object({
   APP_URL: optionalTrimmedUrl, APP_ALLOWED_ORIGINS: optionalTrimmedString,
   ENFORCE_HTTPS: optionalBooleanString, TRUST_PROXY: optionalBooleanString, ALLOW_IFRAME: optionalBooleanString,
   SQL_HOST: optionalTrimmedString, SQL_USER: optionalTrimmedString, SQL_PASSWORD: optionalTrimmedString, SQL_DB_NAME: optionalTrimmedString,
-  DATABASE_URL: optionalTrimmedUrl, SQL_SSL: z.preprocess((value) => typeof value === 'string' ? (value.trim() || undefined) : value, z.enum(['true', 'require', 'false', '1', '0']).optional()),
+  DATABASE_URL: optionalTrimmedUrl,
+  SQL_SSL: z.preprocess((value) => typeof value === 'string' ? (value.trim() || undefined) : value, z.enum(['true', 'require', 'verify', 'verify-full', 'false', '1', '0']).optional()),
+  SQL_SSL_CA: optionalTrimmedString,
   SQL_POOL_MAX: optionalPositiveIntegerString, SQL_CONNECTION_TIMEOUT_MS: optionalPositiveIntegerString, SQL_IDLE_TIMEOUT_MS: optionalPositiveIntegerString, SQL_QUERY_TIMEOUT_MS: optionalPositiveIntegerString,
   FIREBASE_PROJECT_ID: optionalTrimmedString, FIREBASE_SERVICE_ACCOUNT_KEY: optionalTrimmedString, FIREBASE_SERVICE_ACCOUNT_KEY_B64: optionalTrimmedString, GOOGLE_APPLICATION_CREDENTIALS: optionalTrimmedString,
   STRIPE_SECRET_KEY: optionalTrimmedString, STRIPE_WEBHOOK_SECRET: optionalTrimmedString,
@@ -56,16 +55,20 @@ const parsedEnv = envSchema.parse(process.env);
 
 const railwayPublicUrl = process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN.trim()}` : undefined;
 const effectiveAppUrl = parsedEnv.APP_URL ?? railwayPublicUrl;
-// CORS is an explicit allowlist. A deployment platform hostname is never
-// implicitly trusted merely because it is where the service happens to run.
 const effectiveAllowedOrigins = parseOriginList(parsedEnv.APP_ALLOWED_ORIGINS);
+
+const sslMode = parsedEnv.SQL_SSL?.toLowerCase();
+const databaseSslEnabled = Boolean(sslMode && !['false', '0'].includes(sslMode));
+const databaseSslVerification = sslMode === 'verify' || sslMode === 'verify-full' || Boolean(parsedEnv.SQL_SSL_CA);
 
 export const config = {
   nodeEnv: parsedEnv.NODE_ENV ?? 'development', port: parsedEnv.PORT ? Number(parsedEnv.PORT) : 3000, isProduction: parsedEnv.NODE_ENV === 'production',
   appUrl: effectiveAppUrl, allowedOrigins: effectiveAllowedOrigins, enforceHttps: parseBoolean(parsedEnv.ENFORCE_HTTPS, false), trustProxy: parseBoolean(parsedEnv.TRUST_PROXY, false), allowIframe: parseBoolean(parsedEnv.ALLOW_IFRAME, false),
   database: {
     connectionString: parsedEnv.DATABASE_URL, host: parsedEnv.SQL_HOST, user: parsedEnv.SQL_USER, password: parsedEnv.SQL_PASSWORD, name: parsedEnv.SQL_DB_NAME,
-    ssl: parsedEnv.SQL_SSL ? ['true', 'require'].includes(parsedEnv.SQL_SSL.toLowerCase()) : false,
+    ssl: databaseSslEnabled,
+    sslVerify: databaseSslVerification,
+    sslCa: parsedEnv.SQL_SSL_CA,
     poolMax: parseNumber(parsedEnv.SQL_POOL_MAX, 20), connectionTimeoutMs: parseNumber(parsedEnv.SQL_CONNECTION_TIMEOUT_MS, 10000), idleTimeoutMs: parseNumber(parsedEnv.SQL_IDLE_TIMEOUT_MS, 30000), queryTimeoutMs: parseNumber(parsedEnv.SQL_QUERY_TIMEOUT_MS, 5000),
     isConfigured: Boolean(parsedEnv.DATABASE_URL || (parsedEnv.SQL_HOST && parsedEnv.SQL_USER && parsedEnv.SQL_PASSWORD && parsedEnv.SQL_DB_NAME)),
   },
@@ -85,26 +88,24 @@ export function validateConfiguration() {
   if (!config.trustProxy) missing.push('TRUST_PROXY=true');
   if (config.allowIframe) missing.push('ALLOW_IFRAME=false');
   if (!config.database.isConfigured) missing.push('DATABASE_URL or SQL_HOST/SQL_USER/SQL_PASSWORD/SQL_DB_NAME');
-  if (!config.database.ssl) missing.push('SQL_SSL=true/require');
+  if (!config.database.ssl) missing.push('SQL_SSL=true/require/verify/verify-full');
+  if (config.database.sslVerify && !config.database.sslCa && !['verify-full', 'verify'].includes(parsedEnv.SQL_SSL ?? '')) missing.push('SQL_SSL_CA for certificate verification');
   if (!config.redis.url) missing.push('REDIS_URL');
   if (!config.firebase.serviceAccountKey && !config.firebase.serviceAccountKeyB64 && !config.firebase.googleApplicationCredentials) missing.push('FIREBASE_SERVICE_ACCOUNT_KEY, FIREBASE_SERVICE_ACCOUNT_KEY_B64, or GOOGLE_APPLICATION_CREDENTIALS');
   const bootstrapValues = [config.ownerBootstrap.initialOwnerEmail, config.ownerBootstrap.secret, config.ownerBootstrap.secretSha256];
   if (bootstrapValues.some(Boolean) && !bootstrapValues.every(Boolean)) throw new Error('Incomplete initial-owner bootstrap configuration: all three bootstrap values are required together.');
   if (config.ownerBootstrap.secret && config.ownerBootstrap.secret.length < 32) throw new Error('SPR_OWNER_BOOTSTRAP_SECRET must contain at least 32 characters.');
   if (missing.length) throw new Error(`Production security configuration incomplete: ${missing.join(', ')}.`);
-  const appUrl = config.appUrl;
-  if (!appUrl) throw new Error('APP_URL or RAILWAY_PUBLIC_DOMAIN is required in production.');
-  const appOrigin = normalizeOrigin(appUrl);
-  const normalizedOrigins = config.allowedOrigins;
-  if (!normalizedOrigins.includes(appOrigin)) throw new Error('APP_ALLOWED_ORIGINS must explicitly include APP_URL origin.');
-  if (normalizedOrigins.some((origin) => origin === 'null' || origin.includes('*'))) throw new Error('Wildcard/null CORS origins are forbidden in production.');
+  const appOrigin = normalizeOrigin(config.appUrl);
+  if (!config.allowedOrigins.includes(appOrigin)) throw new Error('APP_ALLOWED_ORIGINS must explicitly include APP_URL origin.');
+  if (config.allowedOrigins.some((origin) => origin === 'null' || origin.includes('*'))) throw new Error('Wildcard/null CORS origins are forbidden in production.');
 }
 
 export const configurationCatalog = [
   { name: 'APP_URL', category: 'requiredProduction', requiredInProduction: true }, { name: 'APP_ALLOWED_ORIGINS', category: 'requiredProduction', requiredInProduction: true },
   { name: 'ENFORCE_HTTPS', category: 'requiredProduction', requiredInProduction: true }, { name: 'TRUST_PROXY', category: 'requiredProduction', requiredInProduction: true },
   { name: 'ALLOW_IFRAME', category: 'requiredProduction', requiredInProduction: true }, { name: 'SQL_SSL', category: 'requiredProduction', requiredInProduction: true },
-  { name: 'REDIS_URL', category: 'requiredProduction', requiredInProduction: true }, { name: 'FIREBASE_SERVICE_ACCOUNT_KEY or FIREBASE_SERVICE_ACCOUNT_KEY_B64', category: 'requiredProduction', requiredInProduction: true },
+  { name: 'SQL_SSL_CA', category: 'requiredWhenVerificationIsEnabled', requiredInProduction: false }, { name: 'REDIS_URL', category: 'requiredProduction', requiredInProduction: true }, { name: 'FIREBASE_SERVICE_ACCOUNT_KEY or FIREBASE_SERVICE_ACCOUNT_KEY_B64', category: 'requiredProduction', requiredInProduction: true },
   { name: 'AI_GATEWAY_API_KEY', category: 'featureSpecific', requiredInProduction: false }, { name: 'SPR_OWNER_BOOTSTRAP_SECRET_SHA256', category: 'bootstrap-only', requiredInProduction: false },
   { name: 'STRIPE_SECRET_KEY', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_WEBHOOK_SECRET', category: 'featureSpecific', requiredInProduction: false },
   { name: 'GEMINI_API_KEY', category: 'featureSpecific', requiredInProduction: false }, { name: 'SENTRY_DSN', category: 'optional', requiredInProduction: false },
