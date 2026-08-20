@@ -1,3 +1,4 @@
+import * as React from 'react';
 import { StrictMode, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
@@ -49,9 +50,5 @@ function Bootstrap() {
   }
   return <>{AppTree}</>;
 }
-
-// React is imported lazily here only to keep the initial bootstrap tiny and to
-// let module-load failures render a diagnostic screen rather than a white page.
-import * as React from 'react';
 
 createRoot(document.getElementById('root')!).render(<Bootstrap />);
