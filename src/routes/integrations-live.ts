@@ -3,10 +3,11 @@ import { Router } from 'express';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '../db/index.ts';
-import { requireAuth, AuthenticatedRequest } from '../middleware/security.ts';
+import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/security.ts';
 import { INTEGRATION_CATALOG } from '../integrations/catalog.ts';
 import { collectProviderEvidence, Provider, ProviderCredentials } from '../integrations/adapters.ts';
 import { decryptCredentials, encryptCredentials } from '../integrations/credential-vault.ts';
+import { validatePublicIntegrationUrl } from '../security/webhook-url.ts';
 
 const PROVIDERS = new Set(INTEGRATION_CATALOG.map(item => item.provider));
 const credentialSchema = z.record(z.string().min(1).max(128), z.string().max(4096)).refine(v => Object.keys(v).length > 0, 'Credentials cannot be empty');
@@ -27,7 +28,8 @@ export function createLiveIntegrationsRouter() {
     } catch (error) { return next(error); }
   });
 
-  router.put('/:provider/credentials', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  // Provider credentials are tenant secrets. Only Owner/Admin may replace them.
+  router.put('/:provider/credentials', requireAuth, requireRole(['Owner', 'Admin']), async (req: AuthenticatedRequest, res, next) => {
     try {
       const provider = providerFromParam(req.params.provider);
       const parsed = credentialSchema.safeParse(req.body);
@@ -53,7 +55,11 @@ export function createLiveIntegrationsRouter() {
       const stored = await db.execute(sql`SELECT encrypted_payload FROM integration_credentials WHERE tenant_id = ${tenantId} AND provider = ${provider} LIMIT 1`);
       const payload = (stored as any).rows?.[0]?.encrypted_payload;
       if (!payload) return res.status(409).json({ error: 'CREDENTIAL_NOT_CONFIGURED' });
-      const observation = await collectProviderEvidence(provider, decryptCredentials(payload) as ProviderCredentials);
+      const credentials = decryptCredentials(payload) as ProviderCredentials;
+      if (typeof credentials.baseUrl === 'string' && credentials.baseUrl.trim()) {
+        await validatePublicIntegrationUrl(credentials.baseUrl);
+      }
+      const observation = await collectProviderEvidence(provider, credentials);
       const evidenceId = id(`ev-${provider}`);
       await db.transaction(async tx => {
         await tx.execute(sql`INSERT INTO evidence_items (id, tenant_id, asset_id, name, type, verified, status, signer, timestamp, hash, raw_content, engine_id, verification_failure_reason) VALUES (${evidenceId}, ${tenantId}, ${parsed.data.passportId}, ${`${provider} authenticated observation`}, 'Integration Evidence', 0, 'OBSERVED', ${provider}, ${observation.observedAt}, ${observation.responseHash}, ${JSON.stringify(observation.observation)}, ${`integration-${provider}`}, NULL)`);
@@ -64,7 +70,7 @@ export function createLiveIntegrationsRouter() {
       return res.json({ provider, status: 'LIVE', evidenceId, subject: observation.subject, observedAt: observation.observedAt, responseHash: observation.responseHash, verificationMethod: observation.verificationMethod });
     } catch (error: any) {
       const message = error instanceof Error ? error.message : String(error);
-      if (/CREDENTIAL_|PROVIDER_|UNSUPPORTED_|HTTP_/.test(message)) return res.status(502).json({ error: message });
+      if (/CREDENTIAL_|PROVIDER_|UNSUPPORTED_|HTTP_|Integration URL|Integration destination/.test(message)) return res.status(502).json({ error: message });
       return next(error);
     }
   });

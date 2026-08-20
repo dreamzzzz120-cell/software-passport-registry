@@ -58,6 +58,16 @@ export function createAgentApiRouter() {
   return router;
 }
 
+function parseImmutablePayload(value: unknown) {
+  if (typeof value !== 'string') return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
 async function buildVerificationResponse(tenantId: string, passport: any, res: any, next: any) {
   try {
     const findings = (await db.execute(sql`
@@ -71,26 +81,45 @@ async function buildVerificationResponse(tenantId: string, passport: any, res: a
       ORDER BY observed_at DESC LIMIT 200
     `) as any).rows || [];
     const observations = (await db.execute(sql`
-      SELECT id,observation_version,generated_at,previous_observation_id,evidence_ids,finding_ids,canonical_payload_hash,completeness_basis_points,open_finding_count,unknown_dimension_count
+      SELECT id,observation_version,generated_at,previous_observation_id,evidence_ids,finding_ids,canonical_payload_hash,completeness_basis_points,open_finding_count,unknown_dimension_count,immutable_payload
       FROM trust_observations WHERE tenant_id=${tenantId} AND passport_id=${passport.id}
       ORDER BY observation_version DESC LIMIT 20
     `) as any).rows || [];
     const latest = observations[0];
     const openFindings = findings.filter((f: any) => !['resolved','closed','verified'].includes(String(f.status).toLowerCase()));
     const criticalOrHigh = openFindings.filter((f: any) => ['critical','high'].includes(String(f.severity).toLowerCase()));
+    const unknownFindings = findings.filter((f: any) => String(f.status).toLowerCase() === 'unknown');
     const completeness = latest?.completeness_basis_points == null ? null : Number(latest.completeness_basis_points) / 10000;
+    const immutable = parseImmutablePayload(latest?.immutable_payload);
+    const authoritativeScore = typeof immutable?.score === 'number' && Number.isFinite(immutable.score) ? immutable.score : null;
+    const authoritativeConfidence = typeof immutable?.confidenceBasisPoints === 'number' && Number.isFinite(immutable.confidenceBasisPoints)
+      ? Number(immutable.confidenceBasisPoints) / 100
+      : null;
+    const unknownDimensionCount = Number(latest?.unknown_dimension_count ?? immutable?.unknown ?? 0);
     let status: 'VERIFIED' | 'INVESTIGATE' | 'AVOID' | 'UNKNOWN' = 'UNKNOWN';
-    if (latest && evidence.length > 0) status = criticalOrHigh.length > 0 ? 'AVOID' : openFindings.length > 0 ? 'INVESTIGATE' : 'VERIFIED';
+    if (latest && evidence.length > 0) {
+      if (criticalOrHigh.length > 0) status = 'AVOID';
+      else if (openFindings.length > 0) status = 'INVESTIGATE';
+      else if (unknownFindings.length > 0 || unknownDimensionCount > 0 || (completeness !== null && completeness < 1)) status = 'UNKNOWN';
+      else status = 'VERIFIED';
+    }
     return res.json({
       schemaVersion: 'spr-agent-v1',
       status,
       software: { passportId: passport.id, name: passport.name },
-      scores: { overall: passport.overall_score ?? null, security: passport.security_score ?? null, compliance: passport.compliance_score ?? null },
+      // Do not expose legacy passport score columns as authoritative. Current
+      // scoring must come from the immutable observation payload, otherwise the
+      // agent could report stale/default scores as if they were current trust.
+      scores: {
+        overall: authoritativeScore,
+        confidence: authoritativeConfidence,
+        scorePolicyVersion: typeof immutable?.scoreVersion === 'string' ? immutable.scoreVersion : null,
+      },
       evidence: { count: evidence.length, completeness, latestObservationAt: latest?.generated_at ?? null, latestHash: latest?.canonical_payload_hash ?? null },
-      findings: { total: findings.length, open: openFindings.length, criticalOrHigh: criticalOrHigh.length, items: findings.slice(0, 50) },
+      findings: { total: findings.length, open: openFindings.length, unknown: unknownFindings.length, criticalOrHigh: criticalOrHigh.length, items: findings.slice(0, 50) },
       verification: { observed: Boolean(latest), evidenceBacked: evidence.length > 0, generatedAt: latest?.generated_at ?? null },
       sources: evidence.slice(0, 50).map((e: any) => ({ provider: e.provider, sourceUrl: e.source_url, observedAt: e.observed_at, verificationMethod: e.verification_method, evidenceHash: e.evidence_hash, limitation: e.limitation })),
-      policy: { rule: 'SPR reports observed evidence only; UNKNOWN means insufficient evidence and is not a trust approval.' },
+      policy: { rule: 'SPR reports observed evidence only; UNKNOWN means insufficient or incomplete evidence and is not a trust approval.' },
     });
   } catch (error) { return next(error); }
 }

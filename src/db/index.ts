@@ -39,19 +39,17 @@ export const createPool = () => {
     query_timeout: databaseConfigurationSummary.queryTimeoutMillis,
   };
 
-  // SQL_SSL=require means encrypted transport without certificate verification.
-  // SQL_SSL=verify/verify-full requires a trusted CA. Never silently downgrade
-  // an explicitly requested verification mode.
+  // Production requires encrypted PostgreSQL transport. Certificate
+  // verification is the default security posture; SQL_SSL_CA can supply an
+  // explicit trust anchor for providers that use a private CA.
   const sslConfig = config.database.ssl
     ? {
-        rejectUnauthorized: config.database.sslVerify,
+        rejectUnauthorized: true,
         ...(config.database.sslCa ? { ca: config.database.sslCa } : {}),
       }
     : undefined;
 
   if (config.database.connectionString) {
-    // Pass an explicit SSL object so pg cannot inherit a weaker/ambiguous URL
-    // setting. Certificate verification is controlled only by SQL_SSL/SQL_SSL_CA.
     return new Pool({ connectionString: config.database.connectionString, ssl: sslConfig, ...poolConfig });
   }
 

@@ -4,6 +4,6 @@ dockerfilePath = "Dockerfile"
 
 [deploy]
 startCommand = "node dist/server.cjs"
-healthcheckPath = "/health"
+healthcheckPath = "/ready"
 healthcheckTimeout = 120
 restartPolicyType = "ALWAYS"

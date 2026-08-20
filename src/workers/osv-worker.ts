@@ -34,10 +34,10 @@ function buildSsl() {
   const mode = (process.env.SQL_SSL || '').trim().toLowerCase();
   const ca = process.env.SQL_SSL_CA?.trim();
   if (!mode || mode === 'false' || mode === '0') return undefined;
-  if (mode === 'require' || mode === 'true' || mode === '1') return { rejectUnauthorized: false };
+  if (mode === 'require' || mode === 'true' || mode === '1') return { rejectUnauthorized: true };
   if (mode === 'verify' || mode === 'verify-full') {
     if (!ca) throw new Error('SQL_SSL_CA_REQUIRED_FOR_VERIFICATION');
-    return { rejectUnauthorized: true, ca, checkServerIdentity: undefined };
+    return { rejectUnauthorized: true, ca };
   }
   throw new Error('INVALID_SQL_SSL_MODE');
 }

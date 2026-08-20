@@ -29,7 +29,6 @@ function isPrivateIpv4(ip: string): boolean {
 
 function isBlockedIpv6(ip: string): boolean {
   const normalized = ip.toLowerCase().split('%')[0];
-  // Unspecified, loopback, ULA, link-local, multicast and IPv4-mapped space.
   if (normalized === '::1' || normalized === '::') return true;
   if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true;
   if (/^fe[89ab]/.test(normalized)) return true;
@@ -38,9 +37,6 @@ function isBlockedIpv6(ip: string): boolean {
     const mapped = normalized.slice(7);
     return net.isIP(mapped) === 4 && isPrivateIpv4(mapped);
   }
-  // Documentation, benchmarking, ORCHID, 6to4 and NAT64 prefixes are blocked
-  // because they are not valid public webhook destinations and some encode an
-  // IPv4 destination in the IPv6 address.
   if (/^2001:db8(?::|$)/.test(normalized)) return true;
   if (/^2001:2(?::|$)/.test(normalized)) return true;
   if (/^2001:10(?::|$)/.test(normalized)) return true;
@@ -54,6 +50,37 @@ function isBlockedAddress(address: string): boolean {
   return family === 4 ? isPrivateIpv4(address) : family === 6 ? isBlockedIpv6(address) : true;
 }
 
+function rejectNonPublicHost(host: string) {
+  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.internal')) {
+    throw new Error('Webhook destination is not publicly routable');
+  }
+  const directFamily = net.isIP(host);
+  if (directFamily && isBlockedAddress(host)) throw new Error('Webhook destination is not publicly routable');
+}
+
+/**
+ * SSRF guard for generic outbound integration endpoints. Unlike webhook
+ * validation this permits custom HTTPS ports because some enterprise
+ * connectors legitimately expose APIs on non-443 ports.
+ *
+ * Call this immediately before every outbound request. The request layer must
+ * also disable redirects so a public endpoint cannot redirect into a private
+ * network.
+ */
+export async function validatePublicIntegrationUrl(raw: string): Promise<URL> {
+  let url: URL;
+  try { url = new URL(raw); } catch { throw new Error('Integration URL is invalid'); }
+  if (url.protocol !== 'https:') throw new Error('Integration URL must use HTTPS');
+  if (url.username || url.password || url.hash) throw new Error('Integration URL cannot contain credentials or fragments');
+  const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  rejectNonPublicHost(host);
+  const records = await dns.lookup(host, { all: true, verbatim: true });
+  if (!records.length || records.some(record => isBlockedAddress(record.address))) {
+    throw new Error('Integration destination resolves to a blocked network address');
+  }
+  return url;
+}
+
 /**
  * SSRF guard for outbound webhook destinations.
  * DNS is resolved before persistence so hostnames resolving to non-public,
@@ -63,11 +90,7 @@ function isBlockedAddress(address: string): boolean {
  */
 export async function validateWebhookUrl(raw: string): Promise<URL> {
   let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    throw new Error('Webhook URL is invalid');
-  }
+  try { url = new URL(raw); } catch { throw new Error('Webhook URL is invalid'); }
 
   if (url.protocol !== 'https:') throw new Error('Webhook URL must use HTTPS');
   if (url.username || url.password) throw new Error('Webhook URL cannot contain credentials');
@@ -76,12 +99,7 @@ export async function validateWebhookUrl(raw: string): Promise<URL> {
   if (MAX_REDIRECTS !== 0) throw new Error('Webhook redirect policy is invalid');
 
   const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
-  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.internal')) {
-    throw new Error('Webhook destination is not publicly routable');
-  }
-
-  const directFamily = net.isIP(host);
-  if (directFamily && isBlockedAddress(host)) throw new Error('Webhook destination is not publicly routable');
+  rejectNonPublicHost(host);
 
   const records = await dns.lookup(host, { all: true, verbatim: true });
   if (!records.length || records.some(record => isBlockedAddress(record.address))) {
