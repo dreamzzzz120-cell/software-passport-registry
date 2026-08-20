@@ -9,17 +9,19 @@ import { runRealRepositoryScanners } from '../scanners/real-repository-scanners.
 
 const WORKER_ID = `${os.hostname()}:${process.pid}:security`;
 const MAX_ARCHIVE_BYTES = 50 * 1024 * 1024;
+const JOB_LEASE_MINUTES = 10;
 
 async function claimJob(pool: Pool) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const result = await client.query(`SELECT id, tenant_id, passport_id, attempt_count, max_attempts FROM agent_jobs WHERE status='Pending' AND job_type='repository_security_scan' AND (next_attempt_at IS NULL OR next_attempt_at <= NOW()) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1`);
+    const result = await client.query(`SELECT id, tenant_id, passport_id, attempt_count, max_attempts FROM agent_jobs WHERE job_type='repository_security_scan' AND attempt_count < max_attempts AND ((status='Pending' AND (next_attempt_at IS NULL OR next_attempt_at <= NOW())) OR (status='Running' AND locked_at IS NOT NULL AND locked_at < NOW() - INTERVAL '${JOB_LEASE_MINUTES} minutes')) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1`);
     const job = result.rows[0];
     if (!job) { await client.query('COMMIT'); return null; }
-    await client.query(`UPDATE agent_jobs SET status='Running', progress=5, attempt_count=attempt_count+1, locked_at=NOW(), locked_by=$2, updated_at=NOW() WHERE id=$1 AND tenant_id=$3`, [job.id, WORKER_ID, job.tenant_id]);
+    const updated = await client.query(`UPDATE agent_jobs SET status='Running', progress=5, attempt_count=attempt_count+1, locked_at=NOW(), locked_by=$2, updated_at=NOW() WHERE id=$1 AND tenant_id=$3 RETURNING id, tenant_id, passport_id, attempt_count, max_attempts`, [job.id, WORKER_ID, job.tenant_id]);
     await client.query('COMMIT');
-    return { ...job, attempt_count: Number(job.attempt_count) + 1 };
+    const claimed = updated.rows[0];
+    return claimed ? { ...claimed, attempt_count: Number(claimed.attempt_count) } : null;
   } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
 }
 
@@ -62,10 +64,10 @@ async function processSecurityJob(pool: Pool, job: any) {
     if (!scanRoot.startsWith(path.resolve(repositoryRoot) + path.sep) && scanRoot !== path.resolve(repositoryRoot)) throw new Error('REPOSITORY_PATH_INVALID');
 
     await pool.query(`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES ($1,$2,$3,'Info')`, [job.id, 'security-scanner', `Acquired GitHub commit ${commit.sha}`]);
-    await pool.query(`UPDATE agent_jobs SET progress=25,updated_at=NOW() WHERE id=$1 AND tenant_id=$2`, [job.id, job.tenant_id]);
+    await pool.query(`UPDATE agent_jobs SET progress=25,updated_at=NOW() WHERE id=$1 AND tenant_id=$2 AND status='Running' AND locked_by=$3`, [job.id, job.tenant_id, WORKER_ID]);
 
     const generated = await generateRepositorySbom(scanRoot, process.env.SYFT_PATH || 'syft');
-    await pool.query(`UPDATE agent_jobs SET progress=55,updated_at=NOW() WHERE id=$1 AND tenant_id=$2`, [job.id, job.tenant_id]);
+    await pool.query(`UPDATE agent_jobs SET progress=55,updated_at=NOW() WHERE id=$1 AND tenant_id=$2 AND status='Running' AND locked_by=$3`, [job.id, job.tenant_id, WORKER_ID]);
     const scanned = await runRealRepositoryScanners(scanRoot, generated.document);
     const findings = scanned.findings;
 
@@ -78,7 +80,8 @@ async function processSecurityJob(pool: Pool, job: any) {
     const evidenceHash = sha256(evidencePayload);
     await pool.query(`INSERT INTO evidence_items (id,tenant_id,asset_id,name,type,verified,status,signer,timestamp,hash,raw_content,engine_id) VALUES ($1,$2,$3,'Multi-engine repository security scan','Security Scan',0,'OBSERVED','SPR scanner',NOW(),$4,$5,'spr-security-orchestrator-v1') ON CONFLICT DO NOTHING`, [`ev-security-${job.id}-${evidenceHash.slice(0,24)}`, job.tenant_id, job.passport_id, `sha256:${evidenceHash}`, evidencePayload]);
     await pool.query(`INSERT INTO scans (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name) VALUES ($1,$2,$3,'Multi-engine repository security scan',$4,'Completed',0,$5,NOW(),$6) ON CONFLICT DO NOTHING`, [`scan-security-${job.id}-${commit.sha.slice(0,16)}`, job.tenant_id, `${source.repository_owner}/${source.repository_name}@${commit.sha.slice(0,12)}`, WORKER_ID, findings.length, source.repository_owner]);
-    await pool.query(`UPDATE agent_jobs SET status='Completed',progress=100,result=$2,error=NULL,completed_at=NOW(),locked_at=NULL,locked_by=NULL,updated_at=NOW() WHERE id=$1 AND tenant_id=$3 AND status='Running' AND locked_by=$4`, [job.id, JSON.stringify({ engines: ['Syft','OSV','Secret','IaC/Config','License'], findings: findings.length, commitSha: commit.sha, evidenceHash: `sha256:${evidenceHash}` }), job.tenant_id, WORKER_ID]);
+    const completed = await pool.query(`UPDATE agent_jobs SET status='Completed',progress=100,result=$2,error=NULL,completed_at=NOW(),locked_at=NULL,locked_by=NULL,updated_at=NOW() WHERE id=$1 AND tenant_id=$3 AND status='Running' AND locked_by=$4 RETURNING id`, [job.id, JSON.stringify({ engines: ['Syft','OSV','Secret','IaC/Config','License'], findings: findings.length, commitSha: commit.sha, evidenceHash: `sha256:${evidenceHash}` }), job.tenant_id, WORKER_ID]);
+    if (completed.rowCount !== 1) throw new Error('JOB_LEASE_LOST');
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
@@ -87,7 +90,12 @@ async function processSecurityJob(pool: Pool, job: any) {
 async function fail(pool: Pool, job: any, error: unknown) {
   const code = error instanceof Error ? error.message : 'SCAN_WORKER_ERROR';
   const retry = Number(job.attempt_count) < Number(job.max_attempts);
-  await pool.query(`UPDATE agent_jobs SET status=$2,progress=CASE WHEN $2='Failed' THEN 100 ELSE progress END,error=$3,next_attempt_at=CASE WHEN $2='Pending' THEN NOW()+INTERVAL '30 seconds' ELSE next_attempt_at END,locked_at=NULL,locked_by=NULL,completed_at=CASE WHEN $2='Failed' THEN NOW() ELSE completed_at END,updated_at=NOW() WHERE id=$1 AND tenant_id=$4 AND locked_by=$5`, [job.id, retry ? 'Pending' : 'Failed', code.slice(0,200), job.tenant_id, WORKER_ID]);
+  const nextStatus = retry ? 'Pending' : 'Failed';
+  const nextAttemptAt = retry ? new Date(Date.now() + 30_000).toISOString() : null;
+  const result = await pool.query(`UPDATE agent_jobs SET status=$2,progress=CASE WHEN $2='Failed' THEN 100 ELSE progress END,error=$3,next_attempt_at=$4,locked_at=NULL,locked_by=NULL,completed_at=CASE WHEN $2='Failed' THEN NOW() ELSE completed_at END,updated_at=NOW() WHERE id=$1 AND tenant_id=$5 AND status='Running' AND locked_by=$6 RETURNING id`, [job.id, nextStatus, code.slice(0,200), nextAttemptAt, job.tenant_id, WORKER_ID]);
+  if (result.rowCount === 1) {
+    await pool.query(`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES ($1,'security-scanner',$2,$3)`, [job.id, retry ? `Scan failed; retry scheduled: ${code.slice(0,180)}` : `Scan permanently failed: ${code.slice(0,180)}`, retry ? 'Warning' : 'Error']);
+  }
 }
 
 export async function runSecurityScannerOnce(pool: Pool) {
