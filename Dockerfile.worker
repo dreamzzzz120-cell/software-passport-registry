@@ -2,13 +2,14 @@ FROM node:22-slim AS builder
 WORKDIR /app
 ENV NODE_ENV=development
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false
+ENV NPM_CONFIG_FUND=false
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates curl unzip tar \
   && rm -rf /var/lib/apt/lists/*
 
-COPY package.json ./
-RUN npm install --ignore-scripts --no-audit --no-fund
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts --no-audit --no-fund
 ARG SOURCE_REV=railway-worker-hardening-20260819-v2
 RUN test "$SOURCE_REV" = "railway-worker-hardening-20260819-v2"
 COPY . ./
@@ -19,6 +20,7 @@ FROM node:22-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false
+ENV NPM_CONFIG_FUND=false
 ENV SYFT_PATH=/usr/local/bin/syft
 
 RUN apt-get update \
@@ -32,6 +34,7 @@ RUN apt-get update \
 
 RUN groupadd --system --gid 10001 spr && useradd --system --uid 10001 --gid 10001 --create-home --shell /usr/sbin/nologin spr
 COPY --from=builder --chown=10001:10001 /app/package.json ./
+COPY --from=builder --chown=10001:10001 /app/package-lock.json ./
 COPY --from=builder --chown=10001:10001 /app/node_modules ./node_modules
 COPY --from=builder --chown=10001:10001 /app/dist ./dist
 COPY --from=builder --chown=10001:10001 /app/migrations ./migrations
