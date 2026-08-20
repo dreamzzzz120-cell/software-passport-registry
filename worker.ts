@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import { runWorkerLoop } from './src/workers/osv-worker.ts';
 import { runMonitoringWorkerLoop } from './src/workers/monitoring-worker.ts';
 import { runWebhookWorkerLoop } from './src/workers/webhook-worker.ts';
+import { runSecurityScannerLoop } from './src/workers/security-scanner-worker.ts';
 
 function normalizeWorkerDatabaseEnv() {
   const raw = process.env.DATABASE_URL?.trim();
@@ -29,15 +30,11 @@ function startHealthServer() {
     response.writeHead(404, { 'content-type': 'application/json', 'cache-control': 'no-store' });
     response.end(JSON.stringify({ error: 'Not found' }));
   });
-
   server.on('error', (error) => {
     console.error('[Worker] Health server error:', error);
     process.exit(1);
   });
-
-  server.listen(port, '0.0.0.0', () => {
-    console.log(`[Worker] Health endpoint listening on 0.0.0.0:${port}`);
-  });
+  server.listen(port, '0.0.0.0', () => console.log(`[Worker] Health endpoint listening on 0.0.0.0:${port}`));
 }
 
 normalizeWorkerDatabaseEnv();
@@ -47,6 +44,7 @@ async function main() {
   try {
     await Promise.all([
       runWorkerLoop(),
+      runSecurityScannerLoop(),
       runMonitoringWorkerLoop(),
       runWebhookWorkerLoop(),
     ]);
