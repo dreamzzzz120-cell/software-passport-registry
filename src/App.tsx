@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { Alert, Client, Integration, Scan, SoftwarePassport, Vendor } from './types';
 import AlertsView from './components/AlertsView';
 import AssetsView from './components/AssetsView';
@@ -52,35 +52,23 @@ function usePath() {
   return path;
 }
 
-function AppShell({ children }: { children: React.ReactNode }) {
+function AppShell({ children }: { children: ReactNode }) {
   const path = usePath();
   return <div className="min-h-screen bg-slate-950 text-white">
     <header className="sticky top-0 z-30 border-b border-white/10 bg-slate-950/95 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
-        <button onClick={() => navigate('/dashboard')} className="text-left">
-          <div className="text-xs font-bold uppercase tracking-[.25em] text-cyan-300">SPR</div>
-          <div className="text-lg font-bold">Software Passport Registry</div>
-        </button>
-        <div className="flex items-center gap-2">
-          <button onClick={() => navigate('/dashboard')} className="rounded-lg px-3 py-2 text-sm text-slate-300 hover:bg-white/5">Workspace</button>
-          <button onClick={() => navigate('/login')} className="rounded-lg bg-cyan-300 px-3 py-2 text-sm font-semibold text-slate-950">Sign in</button>
-        </div>
+        <button onClick={() => navigate('/dashboard')} className="text-left"><div className="text-xs font-bold uppercase tracking-[.25em] text-cyan-300">SPR</div><div className="text-lg font-bold">Software Passport Registry</div></button>
+        <div className="flex items-center gap-2"><button onClick={() => navigate('/dashboard')} className="rounded-lg px-3 py-2 text-sm text-slate-300 hover:bg-white/5">Workspace</button><button onClick={() => navigate('/login')} className="rounded-lg bg-cyan-300 px-3 py-2 text-sm font-semibold text-slate-950">Sign in</button></div>
       </div>
     </header>
     <div className="mx-auto grid max-w-7xl grid-cols-1 md:grid-cols-[220px_1fr]">
-      <aside className="border-r border-white/10 p-3 md:min-h-[calc(100vh-73px)]">
-        <nav className="space-y-1">
-          {routes.filter(([route]) => route !== '/login').map(([route, label]) => <button key={route} onClick={() => navigate(route)} className={`w-full rounded-lg px-3 py-2 text-left text-sm ${path === route ? 'bg-cyan-300/10 text-cyan-200' : 'text-slate-300 hover:bg-white/5 hover:text-white'}`}>{label}</button>)}
-        </nav>
-      </aside>
+      <aside className="border-r border-white/10 p-3 md:min-h-[calc(100vh-73px)]"><nav className="space-y-1">{routes.filter(([route]) => route !== '/login').map(([route, label]) => <button key={route} onClick={() => navigate(route)} className={`w-full rounded-lg px-3 py-2 text-left text-sm ${path === route ? 'bg-cyan-300/10 text-cyan-200' : 'text-slate-300 hover:bg-white/5 hover:text-white'}`}>{label}</button>)}</nav></aside>
       <main className="min-w-0 p-4 md:p-7">{children}</main>
     </div>
   </div>;
 }
 
-function PublicHome() {
-  return <div className="min-h-screen bg-slate-950 px-6 py-12 text-white"><div className="mx-auto max-w-6xl"><p className="text-xs font-bold uppercase tracking-[.25em] text-cyan-300">SPR</p><h1 className="mt-3 text-4xl font-bold">Software Passport Registry</h1><p className="mt-4 max-w-2xl text-slate-300">Evidence-first software trust, verification, monitoring, and supply-chain visibility.</p><div className="mt-8 flex flex-wrap gap-3"><button onClick={() => navigate('/dashboard')} className="rounded-lg bg-cyan-300 px-5 py-3 font-semibold text-slate-950">Open workspace</button><button onClick={() => navigate('/free-review')} className="rounded-lg border border-white/15 px-5 py-3 font-semibold">Free review</button><button onClick={() => navigate('/pricing')} className="rounded-lg border border-white/15 px-5 py-3 font-semibold">Pricing</button></div></div></div>;
-}
+function PublicHome() { return <div className="min-h-screen bg-slate-950 px-6 py-12 text-white"><div className="mx-auto max-w-6xl"><p className="text-xs font-bold uppercase tracking-[.25em] text-cyan-300">SPR</p><h1 className="mt-3 text-4xl font-bold">Software Passport Registry</h1><p className="mt-4 max-w-2xl text-slate-300">Evidence-first software trust, verification, monitoring, and supply-chain visibility.</p><div className="mt-8 flex flex-wrap gap-3"><button onClick={() => navigate('/dashboard')} className="rounded-lg bg-cyan-300 px-5 py-3 font-semibold text-slate-950">Open workspace</button><button onClick={() => navigate('/free-review')} className="rounded-lg border border-white/15 px-5 py-3 font-semibold">Free review</button><button onClick={() => navigate('/pricing')} className="rounded-lg border border-white/15 px-5 py-3 font-semibold">Pricing</button></div></div></div>; }
 
 export default function App() {
   const path = usePath();
@@ -95,56 +83,40 @@ export default function App() {
   const [alerts, setAlerts] = useState<Alert[]>(EMPTY_ALERTS);
   const [scans, setScans] = useState<Scan[]>(EMPTY_SCANS);
   const [passports, setPassports] = useState<SoftwarePassport[]>(EMPTY_PASSPORTS);
-
-  const onNavigateTab = (tab: string, itemId?: string) => {
-    const normalized = tab.startsWith('/') ? tab : `/${tab}`;
-    if (itemId) navigate(`${normalized}/${encodeURIComponent(itemId)}`); else navigate(normalized);
-  };
-  const quickAction = (actionType: 'add-client' | 'register-passport' | 'scan-sbom') => {
-    const target = actionType === 'add-client' ? '/clients' : actionType === 'register-passport' ? '/passports' : '/scans';
-    navigate(target);
-  };
-  const onLoginSuccess = (user: { uid: string; email: string | null; displayName: string; token: string; emailVerified: boolean; onboarded: 0 }) => {
-    setUserRole('Owner');
-    navigate('/dashboard');
-  };
+  const onNavigateTab = (tab: string, itemId?: string) => { const normalized = tab.startsWith('/') ? tab : `/${tab}`; navigate(itemId ? `${normalized}/${encodeURIComponent(itemId)}` : normalized); };
+  const quickAction = (actionType: 'add-client' | 'register-passport' | 'scan-sbom') => navigate(actionType === 'add-client' ? '/clients' : actionType === 'register-passport' ? '/passports' : '/scans');
+  const onLoginSuccess = (_user: { uid: string; email: string | null; displayName: string; token: string; emailVerified: boolean; onboarded: 0 }) => { setUserRole('Owner'); navigate('/dashboard'); };
   const updateAlertStatus = (id: string, status: Alert['status']) => setAlerts(current => current.map(item => item.id === id ? { ...item, status } : item));
   const triggerScan = (scan: Scan) => setScans(current => [scan, ...current]);
   const toggleIntegration = (id: string) => { void id; };
   const syncIntegration = (id: string) => { void id; };
   const installExtension = (id: string) => setInstalledExtensions(current => current.includes(id) ? current : [...current, id]);
   const uninstallExtension = (id: string) => setInstalledExtensions(current => current.filter(item => item !== id));
-
   if (path === '/') return <PublicHome />;
   if (path === '/login') return <LoginView onLoginSuccess={onLoginSuccess} />;
-
-  const view = (() => {
-    switch (path) {
-      case '/dashboard': return <DashboardView selectedClientId={selectedClientId} clients={clients} alerts={alerts} scans={scans} passports={passports} onSelectClient={setSelectedClientId} onNavigateTab={onNavigateTab} onOpenQuickAction={quickAction} />;
-      case '/overview': return <OverviewView selectedClientId={selectedClientId} clients={clients} alerts={alerts} scans={scans} passports={passports} onOpenQuickAction={quickAction} />;
-      case '/assets': return <AssetsView clients={clients} searchQuery={searchQuery} assets={assets} onUpdateAssets={setAssets} />;
-      case '/passports':
-      case '/registry': return <PassportsView passports={passports} selectedPassportId={selectedPassportId} setSelectedPassportId={setSelectedPassportId} searchQuery={searchQuery} clients={clients} assets={assets} onUpdatePassport={(updated) => setPassports(current => current.map(item => item.id === updated.id ? updated : item))} onNavigateTab={onNavigateTab} />;
-      case '/scans': return <ScansView scans={scans} clients={clients} assets={assets} passports={passports} onTriggerNewScan={triggerScan} />;
-      case '/monitoring': return <MonitoringView />;
-      case '/alerts': return <AlertsView alerts={alerts} onUpdateAlertStatus={updateAlertStatus} />;
-      case '/security': return <SecurityCenterView clients={clients} passports={passports} />;
-      case '/compliance': return <ComplianceView clients={clients} />;
-      case '/clients': return <ClientsView clients={clients} selectedClientId={selectedClientId} setSelectedClientId={setSelectedClientId} passports={passports} onNavigateTab={onNavigateTab} searchQuery={searchQuery} />;
-      case '/vendors': return <VendorsView vendors={EMPTY_VENDORS} searchQuery={searchQuery} />;
-      case '/integrations': return <IntegrationsView integrations={EMPTY_INTEGRATIONS} onToggleConnection={toggleIntegration} onSyncIntegration={syncIntegration} onNavigateTab={(tab) => onNavigateTab(tab)} />;
-      case '/msp': return <MSPCommandCenter clients={clients} alerts={alerts} onSelectClient={setSelectedClientId} onNavigate={(tab) => onNavigateTab(tab)} />;
-      case '/enterprise-readiness': return <EnterpriseReadinessView clients={clients} />;
-      case '/investor': return <InvestorHomeView passports={passports} clients={clients} alerts={alerts} onShowTelemetry={() => navigate('/monitoring')} onNavigateTab={onNavigateTab} />;
-      case '/founder': return <FounderDashboardView userRole={userRole} />;
-      case '/extensions': return <ExtensionMarketplace installedExtensions={installedExtensions} onInstall={installExtension} onUninstall={uninstallExtension} onNavigateTab={(tab) => onNavigateTab(tab)} />;
-      case '/billing': return <BillingView />;
-      case '/settings': return <SettingsView theme={theme} onToggleTheme={() => setTheme(current => current === 'dark' ? 'light' : 'dark')} />;
-      case '/free-review': return <div className="mx-auto max-w-4xl py-12"><h1 className="text-3xl font-bold">Free Review</h1><p className="mt-3 text-slate-400">Start with evidence collection. No trust score is invented when evidence is missing.</p><button onClick={() => navigate('/login')} className="mt-6 rounded-lg bg-cyan-300 px-4 py-2 font-semibold text-slate-950">Sign in to continue</button></div>;
-      case '/pricing': return <div className="mx-auto max-w-5xl py-12"><h1 className="text-3xl font-bold">Pricing</h1><p className="mt-3 text-slate-400">Choose a verification workflow after authentication and tenant setup.</p></div>;
-      default: return <div className="py-12"><h1 className="text-3xl font-bold">Page not found</h1><button onClick={() => navigate('/dashboard')} className="mt-5 rounded-lg bg-cyan-300 px-4 py-2 font-semibold text-slate-950">Dashboard</button></div>;
-    }
-  })();
-
+  const view = (() => { switch (path) {
+    case '/dashboard': return <DashboardView selectedClientId={selectedClientId} clients={clients} alerts={alerts} scans={scans} passports={passports} onSelectClient={setSelectedClientId} onNavigateTab={onNavigateTab} onOpenQuickAction={quickAction} />;
+    case '/overview': return <OverviewView selectedClientId={selectedClientId} clients={clients} alerts={alerts} scans={scans} passports={passports} onOpenQuickAction={quickAction} />;
+    case '/assets': return <AssetsView clients={clients} searchQuery={searchQuery} assets={assets} onUpdateAssets={setAssets} />;
+    case '/passports': case '/registry': return <PassportsView passports={passports} selectedPassportId={selectedPassportId} setSelectedPassportId={setSelectedPassportId} searchQuery={searchQuery} clients={clients} assets={assets} onUpdatePassport={(updated) => setPassports(current => current.map(item => item.id === updated.id ? updated : item))} onNavigateTab={onNavigateTab} />;
+    case '/scans': return <ScansView scans={scans} clients={clients} assets={assets} passports={passports} onTriggerNewScan={triggerScan} />;
+    case '/monitoring': return <MonitoringView />;
+    case '/alerts': return <AlertsView alerts={alerts} onUpdateAlertStatus={updateAlertStatus} />;
+    case '/security': return <SecurityCenterView clients={clients} passports={passports} />;
+    case '/compliance': return <ComplianceView clients={clients} />;
+    case '/clients': return <ClientsView clients={clients} selectedClientId={selectedClientId} setSelectedClientId={setSelectedClientId} passports={passports} onNavigateTab={onNavigateTab} searchQuery={searchQuery} />;
+    case '/vendors': return <VendorsView vendors={EMPTY_VENDORS} searchQuery={searchQuery} />;
+    case '/integrations': return <IntegrationsView integrations={EMPTY_INTEGRATIONS} onToggleConnection={toggleIntegration} onSyncIntegration={syncIntegration} onNavigateTab={(tab) => onNavigateTab(tab)} />;
+    case '/msp': return <MSPCommandCenter clients={clients} alerts={alerts} onSelectClient={setSelectedClientId} onNavigate={(tab) => onNavigateTab(tab)} />;
+    case '/enterprise-readiness': return <EnterpriseReadinessView clients={clients} />;
+    case '/investor': return <InvestorHomeView passports={passports} clients={clients} alerts={alerts} onShowTelemetry={() => navigate('/monitoring')} onNavigateTab={onNavigateTab} />;
+    case '/founder': return <FounderDashboardView userRole={userRole} />;
+    case '/extensions': return <ExtensionMarketplace installedExtensions={installedExtensions} onInstall={installExtension} onUninstall={uninstallExtension} onNavigateTab={(tab) => onNavigateTab(tab)} />;
+    case '/billing': return <BillingView />;
+    case '/settings': return <SettingsView theme={theme} onToggleTheme={() => setTheme(current => current === 'dark' ? 'light' : 'dark')} />;
+    case '/free-review': return <div className="mx-auto max-w-4xl py-12"><h1 className="text-3xl font-bold">Free Review</h1><p className="mt-3 text-slate-400">Start with evidence collection. No trust score is invented when evidence is missing.</p><button onClick={() => navigate('/login')} className="mt-6 rounded-lg bg-cyan-300 px-4 py-2 font-semibold text-slate-950">Sign in to continue</button></div>;
+    case '/pricing': return <div className="mx-auto max-w-5xl py-12"><h1 className="text-3xl font-bold">Pricing</h1><p className="mt-3 text-slate-400">Choose a verification workflow after authentication and tenant setup.</p></div>;
+    default: return <div className="py-12"><h1 className="text-3xl font-bold">Page not found</h1><button onClick={() => navigate('/dashboard')} className="mt-5 rounded-lg bg-cyan-300 px-4 py-2 font-semibold text-slate-950">Dashboard</button></div>;
+  }})();
   return <AppShell>{view}</AppShell>;
 }
