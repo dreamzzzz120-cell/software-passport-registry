@@ -24,6 +24,7 @@ import ScansView from './components/ScansView';
 import SecurityCenterView from './components/SecurityCenterView';
 import SettingsView from './components/SettingsView';
 import VendorsView from './components/VendorsView';
+import AgentTrustView from './components/AgentTrustView';
 
 const EMPTY_CLIENTS: Client[] = [];
 const EMPTY_ALERTS: Alert[] = [];
@@ -36,7 +37,7 @@ const routes = [
   ['/dashboard', 'Dashboard'], ['/assets', 'Assets'], ['/registry', 'Registry'], ['/passports', 'Passports'],
   ['/scans', 'Scans'], ['/monitoring', 'Monitoring'], ['/alerts', 'Alerts'], ['/security', 'Security Center'],
   ['/compliance', 'Compliance'], ['/clients', 'Clients'], ['/vendors', 'Vendors'], ['/integrations', 'Integrations'],
-  ['/msp', 'MSP Command Center'], ['/enterprise-readiness', 'Enterprise Readiness'], ['/investor', 'Investor View'],
+  ['/agent-trust', 'AI Agent Trust'], ['/msp', 'MSP Command Center'], ['/enterprise-readiness', 'Enterprise Readiness'], ['/investor', 'Investor View'],
   ['/founder', 'Founder Dashboard'], ['/extensions', 'Extension Marketplace'], ['/billing', 'Billing'],
   ['/settings', 'Settings'], ['/login', 'Login'], ['/free-review', 'Free Review'], ['/pricing', 'Pricing'],
 ] as const;
@@ -103,6 +104,7 @@ export default function App() {
     case '/clients': return <ClientsView clients={clients} selectedClientId={selectedClientId} setSelectedClientId={setSelectedClientId} passports={passports} onNavigateTab={onNavigateTab} searchQuery={searchQuery} />;
     case '/vendors': return <VendorsView vendors={EMPTY_VENDORS} searchQuery={searchQuery} />;
     case '/integrations': return <><GitHubEvidencePanel /><IntegrationsView integrations={integrations} onToggleConnection={toggleIntegration} onSyncIntegration={syncIntegration} onNavigateTab={(tab) => onNavigateTab(tab)} /></>;
+    case '/agent-trust': return <AgentTrustView />;
     case '/msp': return <MSPCommandCenter clients={clients} alerts={alerts} onSelectClient={setSelectedClientId} onNavigate={(tab) => onNavigateTab(tab)} />;
     case '/enterprise-readiness': return <EnterpriseReadinessView clients={clients} />;
     case '/investor': return <InvestorHomeView passports={passports} clients={clients} alerts={alerts} onShowTelemetry={() => navigate('/monitoring')} onNavigateTab={onNavigateTab} />;
