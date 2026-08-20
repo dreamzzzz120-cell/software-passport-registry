@@ -9,6 +9,7 @@ import { config, validateConfiguration } from './src/config.ts';
 import { checkDatabaseHealth, closeDatabase } from './src/db/index.ts';
 import { rateLimiter } from './src/middleware/security.ts';
 import { createConnectRouter } from './src/routes/connect.ts';
+import { createIntegrationsRouter } from './src/routes/integrations.ts';
 import { createMonitoringRouter } from './src/routes/monitoring.ts';
 import { createPublicConnectRouter } from './src/routes/public-connect.ts';
 import { createScansRouter } from './src/routes/scans.ts';
@@ -63,6 +64,7 @@ app.get('/api/health', async (_req, res) => { const database = await checkDataba
 app.use('/api', rateLimiter, createPublicConnectRouter());
 app.use('/api', rateLimiter, createConnectRouter());
 app.use('/api/connect', rateLimiter, createConnectRouter());
+app.use('/api/integrations', rateLimiter, createIntegrationsRouter());
 app.use('/api/monitoring', rateLimiter, createMonitoringRouter());
 app.use('/api', rateLimiter, createScansRouter());
 
