@@ -14,6 +14,7 @@ import { createLiveIntegrationsRouter } from './src/routes/integrations-live.ts'
 import { createMonitoringRouter } from './src/routes/monitoring.ts';
 import { createPublicConnectRouter } from './src/routes/public-connect.ts';
 import { createScansRouter } from './src/routes/scans.ts';
+import { createTrustLoopRouter } from './src/routes/trust-loop.ts';
 
 const app = express();
 const startedAt = Date.now();
@@ -41,6 +42,7 @@ app.use('/api', rateLimiter, createConnectRouter());
 app.use('/api/connect', rateLimiter, createConnectRouter());
 app.use('/api/integrations', rateLimiter, createIntegrationsRouter());
 app.use('/api/integrations-live', rateLimiter, createLiveIntegrationsRouter());
+app.use('/api/trust-loop', rateLimiter, createTrustLoopRouter());
 app.use('/api/monitoring', rateLimiter, createMonitoringRouter());
 app.use('/api', rateLimiter, createScansRouter());
 const publicDir = __dirname;
