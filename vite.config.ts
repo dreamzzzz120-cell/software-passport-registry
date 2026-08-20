@@ -25,7 +25,6 @@ export default defineConfig({
   resolve: {
     alias: {
       'lucide-react': resolve(__dirname, 'src/lucide-compat.ts'),
-      motion: resolve(__dirname, 'src/motion-compat.ts'),
     },
   },
   plugins: [lazyAppViews(), react(), tailwindcss()],
