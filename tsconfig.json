@@ -17,11 +17,7 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["node", "vitest"],
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
-    "baseUrl": ".",
-    "paths": {
-      "lucide-react": ["src/lucide-compat.ts"],
-      "motion": ["src/motion-compat.ts"]
-    }
+    "baseUrl": "."
   },
   "files": ["src/types/express.d.ts"],
   "include": ["src", "tests", "server.ts", "worker.ts"],
