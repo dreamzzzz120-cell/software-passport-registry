@@ -12,19 +12,19 @@ const authMessage = (error: any, fallback: string) => {
     case 'auth/wrong-password': return 'The email or password is incorrect.';
     case 'auth/email-already-in-use': return 'An account already exists for this email.';
     case 'auth/invalid-email': return 'Enter a valid email address.';
-    case 'auth/weak-password': return 'Choose a stronger password with at least 6 characters.';
+    case 'auth/weak-password':
     case 'auth/password-does-not-meet-requirements': return 'Choose a stronger password that meets the account security requirements.';
     case 'auth/unauthorized-domain': return `Authentication is not authorized for ${window.location.hostname}. Add this exact production domain to Firebase Authentication → Settings → Authorized domains.`;
-    case 'auth/operation-not-allowed': return 'Email/password authentication is disabled in Firebase. Enable the Email/Password provider in Authentication → Sign-in method.';
-    case 'auth/quota-exceeded': return 'Authentication is temporarily rate-limited. Please wait and try again.';
-    case 'auth/too-many-requests': return 'Too many authentication attempts. Wait a few minutes before trying again.';
+    case 'auth/operation-not-allowed': return 'This authentication method is currently disabled. Please contact the administrator.';
+    case 'auth/quota-exceeded':
+    case 'auth/too-many-requests': return 'Authentication is temporarily rate-limited. Please wait and try again.';
     case 'auth/network-request-failed': return 'Firebase could not be reached. Check your connection and try again.';
     case 'auth/web-storage-unsupported': return 'Browser storage is unavailable. Enable cookies/site data for this site and try again.';
     case 'auth/popup-closed-by-user': return 'The Google sign-in window was closed before authentication completed.';
     case 'auth/popup-blocked': return 'Google sign-in was blocked by the browser. SPR uses secure redirect sign-in instead.';
     case 'auth/cancelled-popup-request': return 'A Google sign-in request is already in progress. Please wait a moment and try again.';
     case 'auth/internal-error': return 'Firebase returned an internal authentication error. Please try again.';
-    default: return error?.message ? `${fallback} (${error.code || 'unknown-error'})` : fallback;
+    default: return fallback;
   }
 };
 
@@ -69,6 +69,7 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
     if (busy) return;
     const normalizedEmail = normalizeEmail(email);
     if (!normalizedEmail) { setError('Enter your email address.'); return; }
+    if (!password) { setError('Enter your password.'); return; }
     setLoading(true); setError(''); setNotice('');
     try {
       const result = await signInWithEmailAndPassword(auth, normalizedEmail, password);
