@@ -6,18 +6,31 @@
 .spr-shell-content { position:relative; z-index:1; }
 .spr-section-label { font-size:.68rem; font-weight:700; letter-spacing:.2em; text-transform:uppercase; color:var(--spr-cyan); }
 
-/* Current authenticated AppShell chrome. */
+/* Authenticated command-center chrome. */
 body:has(aside) { background:var(--spr-bg); }
 body:has(aside) header { background:rgba(5,9,20,.68) !important; border-color:var(--spr-line) !important; backdrop-filter:blur(24px) saturate(150%); -webkit-backdrop-filter:blur(24px) saturate(150%); box-shadow:0 10px 40px rgba(0,0,0,.22); }
 body:has(aside) aside { background:rgba(5,9,20,.48); border-color:var(--spr-line) !important; backdrop-filter:blur(24px); -webkit-backdrop-filter:blur(24px); }
 body:has(aside) main { position:relative; }
-body:has(aside) main::before { content:""; position:absolute; inset:0; pointer-events:none; background:radial-gradient(circle at 15% 0%,rgba(34,211,238,.07),transparent 32%),radial-gradient(circle at 90% 15%,rgba(99,102,241,.07),transparent 30%); }
+body:has(aside) main::before { content:""; position:absolute; inset:0; pointer-events:none; background:radial-gradient(circle at 15% 0%,rgba(34,211,238,.08),transparent 32%),radial-gradient(circle at 90% 15%,rgba(99,102,241,.08),transparent 30%); }
 body:has(aside) main > * { position:relative; z-index:1; animation:spr-page-enter .28s ease-out both; }
 body:has(aside) aside nav button { position:relative; border:1px solid transparent; transition:transform .18s ease,background .18s ease,color .18s ease,box-shadow .18s ease,border-color .18s ease; }
 body:has(aside) aside nav button:hover { transform:translateX(2px); background:rgba(255,255,255,.055) !important; border-color:rgba(255,255,255,.06); }
 body:has(aside) aside nav button[class*="bg-cyan"] { background:linear-gradient(90deg,rgba(34,211,238,.16),rgba(99,102,241,.08)) !important; color:#cffafe !important; border-color:rgba(34,211,238,.12); box-shadow:inset 3px 0 0 var(--spr-cyan),0 0 28px rgba(34,211,238,.07); }
-body:has(aside) main [class*="rounded-xl"], body:has(aside) main [class*="rounded-2xl"] { border-color:rgba(255,255,255,.08); }
-body:has(aside) main [class*="shadow"] { box-shadow:0 18px 70px rgba(0,0,0,.22); }
+
+/* Dashboard becomes the product command center without rewriting its working data flows. */
+#msp-dashboard-view { max-width:1600px; margin-inline:auto; }
+#msp-dashboard-view > div:first-child { position:sticky; top:72px; z-index:20; padding:.35rem; border:1px solid var(--spr-line); border-radius:1rem; background:rgba(8,13,27,.72) !important; box-shadow:0 18px 55px rgba(0,0,0,.24); backdrop-filter:blur(22px) saturate(150%); -webkit-backdrop-filter:blur(22px) saturate(150%); }
+#msp-dashboard-view > div:first-child button { min-height:42px; border:1px solid transparent; transition:all .2s ease; }
+#msp-dashboard-view > div:first-child button:hover { transform:translateY(-1px); background:rgba(255,255,255,.06); }
+#msp-dashboard-view > div:first-child button[class*="bg-white"] { background:linear-gradient(135deg,rgba(103,232,249,.14),rgba(129,140,248,.12)) !important; border-color:rgba(103,232,249,.16) !important; box-shadow:0 8px 30px rgba(34,211,238,.08); }
+#msp-dashboard-view > div:not(:first-child) [class*="rounded-xl"], #msp-dashboard-view > div:not(:first-child) [class*="rounded-2xl"] { background:linear-gradient(145deg,rgba(15,23,42,.72),rgba(10,16,31,.54)) !important; border-color:var(--spr-line) !important; backdrop-filter:blur(18px) saturate(135%); -webkit-backdrop-filter:blur(18px) saturate(135%); box-shadow:0 18px 60px rgba(0,0,0,.2); }
+#msp-dashboard-view [class*="rounded-2xl"]:hover { border-color:rgba(103,232,249,.16) !important; box-shadow:0 20px 70px rgba(0,0,0,.25),0 0 40px rgba(34,211,238,.035); }
+#msp-dashboard-view input, #msp-dashboard-view select, #msp-dashboard-view textarea { background:rgba(255,255,255,.045); border-color:rgba(255,255,255,.1); }
+#msp-dashboard-view input:focus, #msp-dashboard-view select:focus, #msp-dashboard-view textarea:focus { border-color:rgba(103,232,249,.5); box-shadow:0 0 0 3px rgba(34,211,238,.08),0 0 28px rgba(34,211,238,.06); outline:none; }
+
+/* Extension/workflow surfaces: make each module feel independently shippable. */
+#msp-dashboard-view [data-extension], #msp-dashboard-view [data-workflow] { position:relative; overflow:hidden; }
+#msp-dashboard-view [data-extension]::after, #msp-dashboard-view [data-workflow]::after { content:""; position:absolute; inset:0; pointer-events:none; background:linear-gradient(120deg,rgba(103,232,249,.045),transparent 28%,rgba(129,140,248,.035) 72%,transparent); opacity:.8; }
 
 /* Cover/auth surface. */
 body:has(form) { background:radial-gradient(circle at 25% 15%,rgba(34,211,238,.13),transparent 32%),radial-gradient(circle at 80% 70%,rgba(99,102,241,.13),transparent 32%),var(--spr-bg); }
@@ -30,4 +43,4 @@ body:has(form) form button[type="submit"] { background:linear-gradient(135deg,#6
 body:has(form) form [role="alert"], body:has(form) form [role="status"] { border-radius:.75rem; padding:.75rem; background:rgba(255,255,255,.05); border:1px solid var(--spr-line); }
 @keyframes spr-page-enter { from { opacity:0; transform:translateY(7px); } to { opacity:1; transform:translateY(0); } }
 @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:.01ms !important; transition-duration:.01ms !important; } }
-@media (max-width:767px) { body:has(aside) aside { border-right:0 !important; border-bottom:1px solid var(--spr-line) !important; } }
+@media (max-width:767px) { body:has(aside) aside { border-right:0 !important; border-bottom:1px solid var(--spr-line) !important; } #msp-dashboard-view > div:first-child { top:56px; } }
