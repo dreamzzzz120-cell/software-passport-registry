@@ -7,7 +7,7 @@ import CommandCenter from './components/CommandCenter';
 import ExtensionWorkflow from './components/ExtensionWorkflow';
 import ExtensionMarketplace from './components/ExtensionMarketplace';
 import LoginView from './components/LoginView';
-import DashboardView from './components/DashboardView';
+import EvidenceDashboardView from './components/EvidenceDashboardView';
 import AssetsView from './components/AssetsView';
 import PassportsView from './components/PassportsView';
 import ScansView from './components/ScansView';
@@ -127,7 +127,7 @@ export default function App() {
   let view: ReactNode;
   if (selectedExtension) view = <ExtensionWorkflow id={selectedExtension} onNavigate={navigate} />;
   else switch (path) {
-    case '/dashboard': view = <DashboardView selectedClientId={selectedClientId} clients={clients} alerts={alerts} scans={scans} passports={passports} onSelectClient={setSelectedClientId} onNavigateTab={onNavigateTab} onOpenQuickAction={quickAction} />; break;
+    case '/dashboard': view = <EvidenceDashboardView clients={clients} alerts={alerts} scans={scans} passports={passports} onNavigateTab={onNavigateTab} onOpenQuickAction={quickAction} />; break;
     case '/assets': view = <AssetsView clients={clients} searchQuery="" assets={assets} />; break;
     case '/passports': case '/registry': view = <PassportsView passports={passports} selectedPassportId={selectedPassportId} setSelectedPassportId={setSelectedPassportId} searchQuery="" clients={clients} assets={assets} onNavigateTab={onNavigateTab} onUpdatePassport={(passport) => setPassports((current) => current.map((item) => item.id === passport.id ? passport : item))} />; break;
     case '/scans': view = <ScansView scans={scans} clients={clients} assets={assets} passports={passports} onTriggerNewScan={(scan) => setScans((current) => [scan, ...current.filter((item) => item.id !== scan.id)].slice(0, 100))} />; break;
