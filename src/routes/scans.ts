@@ -44,6 +44,21 @@ function nextRunAt(frequency: string, from = new Date()) {
   return next.toISOString();
 }
 
+async function queuePassportScan(req: AuthenticatedRequest, passportId: string, targetName: string, scanType: string, clientName: string) {
+  const tenantId = req.user!.tenantId;
+  const scanId = id('scan');
+  const jobId = id('job');
+  const timestamp = new Date().toISOString();
+
+  const passport = (await db.execute(sql`SELECT id FROM passports WHERE id=${passportId} AND tenant_id=${tenantId} LIMIT 1`)).rows?.[0] as any;
+  if (!passport) return null;
+
+  await db.execute(sql`INSERT INTO scans (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name) VALUES (${scanId},${tenantId},${targetName},${scanType},${req.user!.uid},'Scanning',0,NULL,${timestamp},${clientName})`);
+  await db.execute(sql`INSERT INTO agent_jobs (id,tenant_id,agent_id,passport_id,job_type,status,progress,result,next_attempt_at,created_at,updated_at) VALUES (${jobId},${tenantId},'comprehensive_scanner',${passportId},'osv_manifest_scan','Pending',0,${JSON.stringify({ scanId, targetName, scanType, clientName })},NOW(),NOW(),NOW())`);
+  await db.execute(sql`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES (${jobId},'comprehensive_scanner','Queued real OSV dependency vulnerability scan against the persisted SBOM.','Info')`);
+  return { scanId, jobId, timestamp };
+}
+
 export function createScansRouter() {
   const router = Router();
   router.use(requireAuth);
@@ -60,18 +75,15 @@ export function createScansRouter() {
       const parsed = scanSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
       const { targetName, scanType, clientName } = parsed.data;
-      const timestamp = new Date().toISOString();
-      const scanId = id('scan');
       const passport = (await db.execute(sql`SELECT id FROM passports WHERE tenant_id=${req.user!.tenantId} AND (LOWER(name)=LOWER(${targetName}) OR id=${targetName}) LIMIT 1`)).rows?.[0] as any;
       if (!passport) {
+        const scanId = id('scan');
+        const timestamp = new Date().toISOString();
         await db.execute(sql`INSERT INTO scans (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name) VALUES (${scanId},${req.user!.tenantId},${targetName},${scanType},${req.user!.uid},'Failed',0,NULL,${timestamp},${clientName})`);
         return res.status(202).json({ id: scanId, targetName, scanType, triggeredBy: req.user!.uid, status: 'Failed', durationMs: 0, findingsCount: null, timestamp, clientName, error: 'No matching Software Passport exists for this scan target.' });
       }
-      const jobId = id('job');
-      await db.execute(sql`INSERT INTO scans (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name) VALUES (${scanId},${req.user!.tenantId},${targetName},${scanType},${req.user!.uid},'Scanning',0,NULL,${timestamp},${clientName})`);
-      await db.execute(sql`INSERT INTO agent_jobs (id,tenant_id,agent_id,passport_id,job_type,status,progress,next_attempt_at,created_at,updated_at) VALUES (${jobId},${req.user!.tenantId},'comprehensive_scanner',${passport.id},'osv_manifest_scan','Pending',0,NOW(),NOW(),NOW())`);
-      await db.execute(sql`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES (${jobId},'comprehensive_scanner','Queued real OSV dependency vulnerability scan against the persisted SBOM.','Info')`);
-      return res.status(202).json({ id: scanId, jobId, targetName, scanType, triggeredBy: req.user!.uid, status: 'Scanning', durationMs: 0, findingsCount: null, timestamp, clientName });
+      const queued = await queuePassportScan(req, passport.id, targetName, scanType, clientName);
+      return res.status(202).json({ id: queued!.scanId, jobId: queued!.jobId, targetName, scanType, triggeredBy: req.user!.uid, status: 'Scanning', durationMs: 0, findingsCount: null, timestamp: queued!.timestamp, clientName });
     } catch (error) { return next(error); }
   });
 
@@ -127,13 +139,9 @@ export function createScansRouter() {
       if (!passport) return res.status(422).json({ error: 'No matching Software Passport exists for this scheduled target.', queued: false });
       const now = new Date();
       const next = nextRunAt(schedule.frequency, now);
-      const scanId = id('scan');
-      const jobId = id('job');
-      await db.execute(sql`INSERT INTO scans (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name) VALUES (${scanId},${req.user!.tenantId},${schedule.assetHostName},${schedule.scanType},${req.user!.uid},'Scanning',0,NULL,${now.toISOString()},${schedule.clientName})`);
-      await db.execute(sql`INSERT INTO agent_jobs (id,tenant_id,agent_id,passport_id,job_type,status,progress,next_attempt_at,created_at,updated_at) VALUES (${jobId},${req.user!.tenantId},'comprehensive_scanner',${passport.id},'osv_manifest_scan','Pending',0,NOW(),NOW(),NOW())`);
-      await db.execute(sql`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES (${jobId},'comprehensive_scanner',${'Scheduled OSV dependency scan dispatched for ' + schedule.assetHostName},'Info')`);
+      const queued = await queuePassportScan(req, passport.id, schedule.assetHostName, schedule.scanType, schedule.clientName);
       const updated = (await db.execute(sql`UPDATE scan_schedules SET last_run_at=${now.toISOString()}, next_run_at=${next} WHERE id=${req.params.id} AND tenant_id=${req.user!.tenantId} RETURNING id, asset_id AS "assetId", asset_host_name AS "assetHostName", asset_type AS "assetType", client_name AS "clientName", frequency, scan_type AS "scanType", status, last_run_at AS "lastRunAt", next_run_at AS "nextRunAt", created_at AS "createdAt"`)).rows?.[0];
-      return res.status(202).json({ success: true, scanId, jobId, queued: true, schedule: updated });
+      return res.status(202).json({ success: true, scanId: queued!.scanId, jobId: queued!.jobId, queued: true, schedule: updated });
     } catch (error) { return next(error); }
   });
 
@@ -164,12 +172,11 @@ export function createScansRouter() {
     try {
       const parsed = passportSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
-      const passport = (await db.execute(sql`SELECT id FROM passports WHERE id=${parsed.data.passportId} AND tenant_id=${req.user!.tenantId} LIMIT 1`)).rows?.[0] as any;
+      const passport = (await db.execute(sql`SELECT id, name, version FROM passports WHERE id=${parsed.data.passportId} AND tenant_id=${req.user!.tenantId} LIMIT 1`)).rows?.[0] as any;
       if (!passport) return res.status(404).json({ error: 'Passport not found' });
-      const jobId = id('job');
-      await db.execute(sql`INSERT INTO agent_jobs (id,tenant_id,agent_id,passport_id,job_type,status,progress,next_attempt_at,created_at,updated_at) VALUES (${jobId},${req.user!.tenantId},'comprehensive_scanner',${passport.id},'osv_manifest_scan','Pending',0,NOW(),NOW(),NOW())`);
-      await db.execute(sql`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES (${jobId},'comprehensive_scanner','Queued real OSV dependency vulnerability scan against the persisted SBOM.','Info')`);
-      return res.status(202).json({ id: jobId, status: 'Pending', jobType: 'osv_manifest_scan' });
+
+      const queued = await queuePassportScan(req, passport.id, `${passport.name}${passport.version ? ` ${passport.version}` : ''}`.trim(), 'OSV manifest component query', 'Persisted passport SBOM');
+      return res.status(202).json({ id: queued!.jobId, scanId: queued!.scanId, status: 'Pending', jobType: 'osv_manifest_scan' });
     } catch (error) { return next(error); }
   });
 
