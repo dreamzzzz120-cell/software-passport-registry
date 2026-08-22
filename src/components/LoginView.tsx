@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { createUserWithEmailAndPassword, getRedirectResult, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithRedirect, type User } from 'firebase/auth';
+import { createUserWithEmailAndPassword, getRedirectResult, reload, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithRedirect, type User } from 'firebase/auth';
 import { AlertCircle, ArrowRight, CheckCircle2, Eye, EyeOff, Loader, ShieldCheck } from 'lucide-react';
 import { auth, googleAuthProvider } from '../lib/firebase';
 
-interface LoginViewProps { onLoginSuccess: (user: { uid: string; email: string | null; displayName: string; token: string; emailVerified: boolean; onboarded: 0 }) => void; }
+interface LoginViewProps {
+  onLoginSuccess: (user: { uid: string; email: string | null; displayName: string; token: string; emailVerified: boolean; onboarded: 0 }) => void;
+}
 
 const authMessage = (error: any, fallback: string) => {
   switch (error?.code) {
@@ -15,12 +17,8 @@ const authMessage = (error: any, fallback: string) => {
     case 'auth/weak-password': return 'Choose a stronger password with at least 6 characters.';
     case 'auth/unauthorized-domain': return `Google sign-in is blocked for this site (${window.location.hostname}). Add this exact domain to Firebase Authentication → Settings → Authorized domains.`;
     case 'auth/operation-not-allowed': return 'Google sign-in is disabled in Firebase. Enable the Google provider in Authentication → Sign-in method.';
-    case 'auth/popup-closed-by-user': return 'The Google sign-in window was closed before authentication completed.';
-    case 'auth/popup-blocked': return 'Google popup sign-in was blocked. SPR will use secure redirect sign-in instead.';
-    case 'auth/cancelled-popup-request': return 'A Google sign-in request is already in progress. Please wait a moment and try again.';
-    case 'auth/network-request-failed': return 'Google sign-in could not reach Firebase. Check the network connection and try again.';
+    case 'auth/network-request-failed': return 'Authentication could not reach Firebase. Check the network connection and try again.';
     case 'auth/web-storage-unsupported': return 'Browser storage is unavailable. Enable cookies/site data for this site and try again.';
-    case 'auth/internal-error': return 'Google authentication returned an internal Firebase error. SPR will retry with secure redirect sign-in.';
     default: return error?.message ? `${fallback} (${error.code || 'unknown-error'})` : fallback;
   }
 };
@@ -35,12 +33,22 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
   const [notice, setNotice] = useState('');
 
   const complete = async (user: User) => {
+    // Firebase can cache emailVerified=false after the user verifies in a
+    // different browser/tab. Reload the authoritative user record first.
+    await reload(user);
     if (!user.emailVerified) {
-      setNotice('Please verify your email before entering the SPR workspace.');
+      setNotice('Your account is authenticated but your email is not verified yet. Verify it, then use Sign in again.');
       return;
     }
     const token = await user.getIdToken(true);
-    onLoginSuccess({ uid: user.uid, email: user.email, displayName: user.displayName || user.email?.split('@')[0] || 'User', token, emailVerified: user.emailVerified, onboarded: 0 });
+    onLoginSuccess({
+      uid: user.uid,
+      email: user.email,
+      displayName: user.displayName || user.email?.split('@')[0] || 'User',
+      token,
+      emailVerified: user.emailVerified,
+      onboarded: 0,
+    });
   };
 
   useEffect(() => {
@@ -52,9 +60,7 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
         setError('');
         await complete(result.user);
       })
-      .catch((e) => {
-        if (active) setError(authMessage(e, 'Google sign-in could not be completed.'));
-      })
+      .catch((e) => { if (active) setError(authMessage(e, 'Google sign-in could not be completed.')); })
       .finally(() => { if (active) setGoogleLoading(false); });
     return () => { active = false; };
   }, []);
@@ -84,11 +90,8 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
 
   const google = async () => {
     if (loading || googleLoading) return;
-    setGoogleLoading(true); setError(''); setNotice('');
+    setGoogleLoading(true); setError(''); setNotice('Opening secure Google sign-in…');
     try {
-      // Redirect-first is more reliable than popup auth on Vercel/Edge browsers:
-      // it avoids popup blockers and third-party storage restrictions entirely.
-      setNotice('Opening secure Google sign-in…');
       await signInWithRedirect(auth, googleAuthProvider);
     } catch (e: any) {
       setGoogleLoading(false);
@@ -108,7 +111,32 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
     } finally { setLoading(false); }
   };
 
+  const resendVerification = async () => {
+    const user = auth.currentUser;
+    if (!user || user.emailVerified) return;
+    setLoading(true); setError(''); setNotice('');
+    try {
+      await sendEmailVerification(user);
+      setNotice('A fresh verification email has been sent.');
+    } catch (e) {
+      setError(authMessage(e, 'Could not resend the verification email.'));
+    } finally { setLoading(false); }
+  };
+
   const busy = loading || googleLoading;
 
-  return <div className="min-h-screen flex items-center justify-center p-6"><form onSubmit={submit} className="w-full max-w-md space-y-5"><div className="text-center text-xs font-bold uppercase tracking-[.25em] text-cyan-300">Software Passport Registry</div>{error && <div role="alert"><AlertCircle className="inline mr-2" />{error}</div>}{notice && <div role="status"><CheckCircle2 className="inline mr-2" />{notice}</div>}<input aria-label="Email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required /><div><input aria-label="Password" type={showPassword ? 'text' : 'password'} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} required /><button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? <EyeOff /> : <Eye />}</button></div><button type="submit" disabled={busy}>{loading ? <Loader className="inline animate-spin" /> : <ArrowRight className="inline" />} Sign in</button><button type="button" disabled={busy} onClick={register}><ShieldCheck className="inline" /> Create account</button><button type="button" disabled={busy} onClick={google}>{googleLoading ? <Loader className="inline animate-spin" /> : null} Continue with Google</button><button type="button" disabled={busy} onClick={reset}>Reset password</button></form></div>;
+  return <div className="min-h-screen flex items-center justify-center p-6">
+    <form onSubmit={submit} className="w-full max-w-md space-y-5">
+      <div className="text-center text-xs font-bold uppercase tracking-[.25em] text-cyan-300">Software Passport Registry</div>
+      {error && <div role="alert"><AlertCircle className="inline mr-2" />{error}</div>}
+      {notice && <div role="status"><CheckCircle2 className="inline mr-2" />{notice}</div>}
+      <input aria-label="Email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+      <div><input aria-label="Password" type={showPassword ? 'text' : 'password'} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} required /><button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? <EyeOff /> : <Eye />}</button></div>
+      <button type="submit" disabled={busy}>{loading ? <Loader className="inline animate-spin" /> : <ArrowRight className="inline" />} Sign in</button>
+      <button type="button" disabled={busy} onClick={register}><ShieldCheck className="inline" /> Create account</button>
+      <button type="button" disabled={busy} onClick={google}>{googleLoading ? <Loader className="inline animate-spin" /> : null} Continue with Google</button>
+      <button type="button" disabled={busy} onClick={reset}>Reset password</button>
+      {auth.currentUser && !auth.currentUser.emailVerified && <button type="button" disabled={busy} onClick={resendVerification}>Resend verification email</button>}
+    </form>
+  </div>;
 }

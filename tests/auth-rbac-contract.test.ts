@@ -50,4 +50,14 @@ describe('SPR authentication/RBAC/database release contracts', () => {
     expect(connect).toContain('tenant_id = ${api.tenantId}');
     expect(connect).toContain('hash(raw)');
   });
+
+  it('keeps owner-only founder/self-passport routes server-authorized', () => {
+    const auth = read('src/routes/auth.ts');
+    expect(auth).toContain("router.get('/founder/metrics'");
+    expect(auth).toContain("requireRole('Owner')");
+    expect(auth).toContain("router.get('/passports/self-passport'");
+    expect(auth).toContain('req.user!.tenantId');
+    expect(auth).toContain("healthStatus: 'Not verified'");
+    expect(auth).toContain('overallScore: null');
+  });
 });

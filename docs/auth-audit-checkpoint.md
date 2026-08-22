@@ -1,1 +1,0 @@
-Temporary checkpoint created during production auth audit. Remove after auth flow repair.
