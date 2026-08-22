@@ -1,0 +1,6 @@
+/* SPR shell layer: opt-in utility classes for the new product chrome. */
+.spr-shell-header { position: sticky; top: 0; z-index: 40; border-bottom: 1px solid rgba(255,255,255,.08); background: rgba(5,9,20,.68); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); }
+.spr-brand-mark { display:inline-flex; align-items:center; gap:.65rem; }
+.spr-brand-dot { width:.62rem; height:.62rem; border-radius:999px; background:#67e8f9; box-shadow:0 0 18px rgba(34,211,238,.9); }
+.spr-shell-content { position:relative; z-index:1; }
+.spr-section-label { font-size:.68rem; font-weight:700; letter-spacing:.2em; text-transform:uppercase; color:#67e8f9; }
