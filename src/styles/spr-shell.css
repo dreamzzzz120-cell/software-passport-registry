@@ -1,30 +1,25 @@
 /* SPR premium shell — global chrome layer. */
 :root { --spr-bg:#050914; --spr-panel:rgba(12,18,35,.62); --spr-panel-strong:rgba(10,16,31,.82); --spr-line:rgba(255,255,255,.09); --spr-cyan:#67e8f9; --spr-indigo:#818cf8; }
-
 .spr-shell-header { position:sticky; top:0; z-index:40; border-bottom:1px solid var(--spr-line); background:rgba(5,9,20,.68); backdrop-filter:blur(24px) saturate(150%); -webkit-backdrop-filter:blur(24px) saturate(150%); box-shadow:0 10px 40px rgba(0,0,0,.22); }
 .spr-brand-mark { display:inline-flex; align-items:center; gap:.65rem; }
 .spr-brand-dot { width:.62rem; height:.62rem; border-radius:999px; background:var(--spr-cyan); box-shadow:0 0 18px rgba(34,211,238,.9); }
 .spr-shell-content { position:relative; z-index:1; }
 .spr-section-label { font-size:.68rem; font-weight:700; letter-spacing:.2em; text-transform:uppercase; color:var(--spr-cyan); }
 
-/* Existing AppShell chrome: restyle without changing routing/data behavior. */
-body:has(.spr-shell-content) { background:var(--spr-bg); }
-body:has(.spr-shell-content) header { background:rgba(5,9,20,.68) !important; border-color:var(--spr-line) !important; backdrop-filter:blur(24px) saturate(150%); -webkit-backdrop-filter:blur(24px) saturate(150%); box-shadow:0 10px 40px rgba(0,0,0,.22); }
-body:has(.spr-shell-content) aside { background:rgba(5,9,20,.48); border-color:var(--spr-line) !important; backdrop-filter:blur(24px); -webkit-backdrop-filter:blur(24px); }
-body:has(.spr-shell-content) main { position:relative; }
-body:has(.spr-shell-content) main::before { content:""; position:absolute; inset:0; pointer-events:none; background:radial-gradient(circle at 15% 0%,rgba(34,211,238,.07),transparent 32%),radial-gradient(circle at 90% 15%,rgba(99,102,241,.07),transparent 30%); }
-body:has(.spr-shell-content) main > * { position:relative; z-index:1; animation:spr-page-enter .28s ease-out both; }
+/* Current authenticated AppShell chrome. */
+body:has(aside) { background:var(--spr-bg); }
+body:has(aside) header { background:rgba(5,9,20,.68) !important; border-color:var(--spr-line) !important; backdrop-filter:blur(24px) saturate(150%); -webkit-backdrop-filter:blur(24px) saturate(150%); box-shadow:0 10px 40px rgba(0,0,0,.22); }
+body:has(aside) aside { background:rgba(5,9,20,.48); border-color:var(--spr-line) !important; backdrop-filter:blur(24px); -webkit-backdrop-filter:blur(24px); }
+body:has(aside) main { position:relative; }
+body:has(aside) main::before { content:""; position:absolute; inset:0; pointer-events:none; background:radial-gradient(circle at 15% 0%,rgba(34,211,238,.07),transparent 32%),radial-gradient(circle at 90% 15%,rgba(99,102,241,.07),transparent 30%); }
+body:has(aside) main > * { position:relative; z-index:1; animation:spr-page-enter .28s ease-out both; }
+body:has(aside) aside nav button { position:relative; border:1px solid transparent; transition:transform .18s ease,background .18s ease,color .18s ease,box-shadow .18s ease,border-color .18s ease; }
+body:has(aside) aside nav button:hover { transform:translateX(2px); background:rgba(255,255,255,.055) !important; border-color:rgba(255,255,255,.06); }
+body:has(aside) aside nav button[class*="bg-cyan"] { background:linear-gradient(90deg,rgba(34,211,238,.16),rgba(99,102,241,.08)) !important; color:#cffafe !important; border-color:rgba(34,211,238,.12); box-shadow:inset 3px 0 0 var(--spr-cyan),0 0 28px rgba(34,211,238,.07); }
+body:has(aside) main [class*="rounded-xl"], body:has(aside) main [class*="rounded-2xl"] { border-color:rgba(255,255,255,.08); }
+body:has(aside) main [class*="shadow"] { box-shadow:0 18px 70px rgba(0,0,0,.22); }
 
-/* Navigation becomes the persistent workflow rail. */
-body:has(.spr-shell-content) aside nav button { position:relative; border:1px solid transparent; transition:transform .18s ease,background .18s ease,color .18s ease,box-shadow .18s ease,border-color .18s ease; }
-body:has(.spr-shell-content) aside nav button:hover { transform:translateX(2px); background:rgba(255,255,255,.055) !important; border-color:rgba(255,255,255,.06); }
-body:has(.spr-shell-content) aside nav button[class*="bg-cyan"] { background:linear-gradient(90deg,rgba(34,211,238,.16),rgba(99,102,241,.08)) !important; color:#cffafe !important; border-color:rgba(34,211,238,.12); box-shadow:inset 3px 0 0 var(--spr-cyan),0 0 28px rgba(34,211,238,.07); }
-
-/* Glass treatment for common cards/panels without rewriting feature components. */
-body:has(.spr-shell-content) main [class*="rounded-xl"], body:has(.spr-shell-content) main [class*="rounded-2xl"] { border-color:rgba(255,255,255,.08); }
-body:has(.spr-shell-content) main [class*="shadow"] { box-shadow:0 18px 70px rgba(0,0,0,.22); }
-
-/* Public cover + authentication surfaces. */
+/* Cover/auth surface. */
 body:has(form) { background:radial-gradient(circle at 25% 15%,rgba(34,211,238,.13),transparent 32%),radial-gradient(circle at 80% 70%,rgba(99,102,241,.13),transparent 32%),var(--spr-bg); }
 body:has(form) form { padding:2rem; border:1px solid var(--spr-line); border-radius:1.5rem; background:linear-gradient(145deg,rgba(15,23,42,.78),rgba(15,23,42,.45)); box-shadow:0 30px 100px rgba(0,0,0,.4),0 0 70px rgba(34,211,238,.07); backdrop-filter:blur(28px) saturate(145%); -webkit-backdrop-filter:blur(28px) saturate(145%); }
 body:has(form) form input { width:100%; border:1px solid rgba(255,255,255,.1); border-radius:.8rem; background:rgba(255,255,255,.045); color:#f8fafc; padding:.8rem .9rem; outline:none; transition:border-color .18s,box-shadow .18s,background .18s; }
@@ -33,7 +28,6 @@ body:has(form) form button { border-radius:.8rem; border:1px solid rgba(255,255,
 body:has(form) form button:hover:not(:disabled) { transform:translateY(-1px); background:rgba(255,255,255,.08); border-color:rgba(103,232,249,.25); box-shadow:0 8px 30px rgba(0,0,0,.2); }
 body:has(form) form button[type="submit"] { background:linear-gradient(135deg,#67e8f9,#818cf8); color:#06101d; border:0; font-weight:800; box-shadow:0 10px 35px rgba(34,211,238,.18); }
 body:has(form) form [role="alert"], body:has(form) form [role="status"] { border-radius:.75rem; padding:.75rem; background:rgba(255,255,255,.05); border:1px solid var(--spr-line); }
-
 @keyframes spr-page-enter { from { opacity:0; transform:translateY(7px); } to { opacity:1; transform:translateY(0); } }
 @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:.01ms !important; transition-duration:.01ms !important; } }
-@media (max-width:767px) { body:has(.spr-shell-content) aside { border-right:0 !important; border-bottom:1px solid var(--spr-line) !important; } }
+@media (max-width:767px) { body:has(aside) aside { border-right:0 !important; border-bottom:1px solid var(--spr-line) !important; } }
