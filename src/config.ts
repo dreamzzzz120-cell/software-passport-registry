@@ -31,7 +31,7 @@ const optionalPositiveIntegerString = z.optional(z.string().regex(/^[1-9][0-9]*$
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).optional(), PORT: optionalPositiveIntegerString,
   APP_URL: optionalTrimmedUrl, APP_ALLOWED_ORIGINS: optionalTrimmedString,
-  ENFORCE_HTTPS: optionalBooleanString, TRUST_PROXY: optionalBooleanString, ALLOW_IFRAME: optionalBooleanString,
+  ENFORCE_HTTPS: optionalBooleanString, TRUST_PROXY: optionalBooleanString, TRUST_PROXY_HOPS: optionalPositiveIntegerString, ALLOW_IFRAME: optionalBooleanString,
   SQL_HOST: optionalTrimmedString, SQL_USER: optionalTrimmedString, SQL_PASSWORD: optionalTrimmedString, SQL_DB_NAME: optionalTrimmedString,
   DATABASE_URL: optionalTrimmedUrl,
   SQL_SSL: z.preprocess((value) => typeof value === 'string' ? (value.trim() || undefined) : value, z.enum(['true', 'require', 'verify', 'verify-full', 'false', '1', '0']).optional()),
@@ -64,7 +64,7 @@ const databaseSslVerification = sslMode === 'verify' || sslMode === 'verify-full
 
 export const config = {
   nodeEnv: parsedEnv.NODE_ENV ?? 'development', port: parsedEnv.PORT ? Number(parsedEnv.PORT) : 3000, isProduction: parsedEnv.NODE_ENV === 'production',
-  appUrl: effectiveAppUrl, allowedOrigins: effectiveAllowedOrigins, enforceHttps: parseBoolean(parsedEnv.ENFORCE_HTTPS, false), trustProxy: parseBoolean(parsedEnv.TRUST_PROXY, false), allowIframe: parseBoolean(parsedEnv.ALLOW_IFRAME, false),
+  appUrl: effectiveAppUrl, allowedOrigins: effectiveAllowedOrigins, enforceHttps: parseBoolean(parsedEnv.ENFORCE_HTTPS, false), trustProxy: parseBoolean(parsedEnv.TRUST_PROXY, false), trustProxyHops: parsedEnv.TRUST_PROXY_HOPS ? Number(parsedEnv.TRUST_PROXY_HOPS) : 1, allowIframe: parseBoolean(parsedEnv.ALLOW_IFRAME, false),
   database: {
     connectionString: parsedEnv.DATABASE_URL, host: parsedEnv.SQL_HOST, user: parsedEnv.SQL_USER, password: parsedEnv.SQL_PASSWORD, name: parsedEnv.SQL_DB_NAME,
     ssl: databaseSslEnabled,
@@ -88,6 +88,7 @@ export function validateConfiguration() {
   if (!config.allowedOrigins.length) missing.push('APP_ALLOWED_ORIGINS');
   if (!config.enforceHttps) missing.push('ENFORCE_HTTPS=true');
   if (!config.trustProxy) missing.push('TRUST_PROXY=true');
+  if (!Number.isInteger(config.trustProxyHops) || config.trustProxyHops < 1 || config.trustProxyHops > 5) missing.push('TRUST_PROXY_HOPS=1..5');
   if (config.allowIframe) missing.push('ALLOW_IFRAME=false');
   if (!config.database.isConfigured) missing.push('DATABASE_URL or SQL_HOST/SQL_USER/SQL_PASSWORD/SQL_DB_NAME');
   if (!config.database.ssl) missing.push('SQL_SSL=true/require/verify/verify-full');
@@ -108,7 +109,7 @@ export function validateConfiguration() {
 
 export const configurationCatalog = [
   { name: 'APP_URL', category: 'requiredProduction', requiredInProduction: true }, { name: 'APP_ALLOWED_ORIGINS', category: 'requiredProduction', requiredInProduction: true },
-  { name: 'ENFORCE_HTTPS', category: 'requiredProduction', requiredInProduction: true }, { name: 'TRUST_PROXY', category: 'requiredProduction', requiredInProduction: true },
+  { name: 'ENFORCE_HTTPS', category: 'requiredProduction', requiredInProduction: true }, { name: 'TRUST_PROXY', category: 'requiredProduction', requiredInProduction: true }, { name: 'TRUST_PROXY_HOPS', category: 'requiredProduction', requiredInProduction: true },
   { name: 'ALLOW_IFRAME', category: 'requiredProduction', requiredInProduction: true }, { name: 'SQL_SSL', category: 'requiredProduction', requiredInProduction: true },
   { name: 'SQL_SSL_CA', category: 'requiredWhenVerificationIsEnabled', requiredInProduction: false }, { name: 'REDIS_URL', category: 'requiredProduction', requiredInProduction: true }, { name: 'FIREBASE_SERVICE_ACCOUNT_KEY or FIREBASE_SERVICE_ACCOUNT_KEY_B64', category: 'requiredProduction', requiredInProduction: true },
   { name: 'SPR_PUBLIC_PASSPORT_SECRET', category: 'requiredProduction', requiredInProduction: true },
