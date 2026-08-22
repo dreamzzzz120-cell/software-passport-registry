@@ -12,18 +12,23 @@ const authMessage = (error: any, fallback: string) => {
     case 'auth/wrong-password': return 'The email or password is incorrect.';
     case 'auth/email-already-in-use': return 'An account already exists for this email.';
     case 'auth/invalid-email': return 'Enter a valid email address.';
-    case 'auth/weak-password': return 'Choose a stronger password with at least 6 characters.';
-    case 'auth/unauthorized-domain': return `Google sign-in is blocked for this site (${window.location.hostname}). Add this exact domain to Firebase Authentication → Settings → Authorized domains.`;
-    case 'auth/operation-not-allowed': return 'Google sign-in is disabled in Firebase. Enable the Google provider in Authentication → Sign-in method.';
-    case 'auth/popup-closed-by-user': return 'The Google sign-in window was closed before authentication completed.';
-    case 'auth/popup-blocked': return 'Google popup sign-in was blocked. SPR will use secure redirect sign-in instead.';
-    case 'auth/cancelled-popup-request': return 'A Google sign-in request is already in progress. Please wait a moment and try again.';
-    case 'auth/network-request-failed': return 'Google sign-in could not reach Firebase. Check the network connection and try again.';
+    case 'auth/weak-password':
+    case 'auth/password-does-not-meet-requirements': return 'Choose a stronger password that meets the account security requirements.';
+    case 'auth/unauthorized-domain': return `Authentication is not authorized for ${window.location.hostname}. Add this exact production domain to Firebase Authentication → Settings → Authorized domains.`;
+    case 'auth/operation-not-allowed': return 'This authentication method is currently disabled. Please contact the administrator.';
+    case 'auth/quota-exceeded':
+    case 'auth/too-many-requests': return 'Authentication is temporarily rate-limited. Please wait and try again.';
+    case 'auth/network-request-failed': return 'Firebase could not be reached. Check your connection and try again.';
     case 'auth/web-storage-unsupported': return 'Browser storage is unavailable. Enable cookies/site data for this site and try again.';
-    case 'auth/internal-error': return 'Google authentication returned an internal Firebase error. SPR will retry with secure redirect sign-in.';
-    default: return error?.message ? `${fallback} (${error.code || 'unknown-error'})` : fallback;
+    case 'auth/popup-closed-by-user': return 'The Google sign-in window was closed before authentication completed.';
+    case 'auth/popup-blocked': return 'Google sign-in was blocked by the browser. SPR uses secure redirect sign-in instead.';
+    case 'auth/cancelled-popup-request': return 'A Google sign-in request is already in progress. Please wait a moment and try again.';
+    case 'auth/internal-error': return 'Firebase returned an internal authentication error. Please try again.';
+    default: return fallback;
   }
 };
+
+const normalizeEmail = (value: string) => value.trim().toLowerCase();
 
 export default function LoginView({ onLoginSuccess }: LoginViewProps) {
   const [email, setEmail] = useState('');
@@ -61,9 +66,13 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (busy) return;
+    const normalizedEmail = normalizeEmail(email);
+    if (!normalizedEmail) { setError('Enter your email address.'); return; }
+    if (!password) { setError('Enter your password.'); return; }
     setLoading(true); setError(''); setNotice('');
     try {
-      const result = await signInWithEmailAndPassword(auth, email.trim(), password);
+      const result = await signInWithEmailAndPassword(auth, normalizedEmail, password);
       await complete(result.user);
     } catch (e) {
       setError(authMessage(e, 'Sign-in failed.'));
@@ -71,9 +80,13 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
   };
 
   const register = async () => {
+    if (busy) return;
+    const normalizedEmail = normalizeEmail(email);
+    if (!normalizedEmail) { setError('Enter your email address first.'); return; }
+    if (password.length < 6) { setError('Choose a password with at least 6 characters.'); return; }
     setLoading(true); setError(''); setNotice('');
     try {
-      const result = await createUserWithEmailAndPassword(auth, email.trim(), password);
+      const result = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
       await sendEmailVerification(result.user);
       setNotice('Account created. Check your email, verify it, then sign in.');
       await auth.signOut();
@@ -86,8 +99,6 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
     if (loading || googleLoading) return;
     setGoogleLoading(true); setError(''); setNotice('');
     try {
-      // Redirect-first is more reliable than popup auth on Vercel/Edge browsers:
-      // it avoids popup blockers and third-party storage restrictions entirely.
       setNotice('Opening secure Google sign-in…');
       await signInWithRedirect(auth, googleAuthProvider);
     } catch (e: any) {
@@ -98,17 +109,20 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
   };
 
   const reset = async () => {
-    if (!email.trim()) { setError('Enter your email first.'); return; }
+    const normalizedEmail = normalizeEmail(email);
+    if (!normalizedEmail) { setError('Enter your email first.'); return; }
+    if (busy) return;
     setLoading(true); setError(''); setNotice('');
     try {
-      await sendPasswordResetEmail(auth, email.trim());
-      setNotice('Password reset email sent.');
+      await sendPasswordResetEmail(auth, normalizedEmail);
+      setNotice('If an account exists for that email, a password reset message has been sent.');
     } catch (e) {
-      setError(authMessage(e, 'Could not send the reset email.'));
+      setError(authMessage(e, 'Could not process the password reset request.'));
     } finally { setLoading(false); }
   };
 
   const busy = loading || googleLoading;
+  const passwordAutoComplete = 'current-password';
 
-  return <div className="min-h-screen flex items-center justify-center p-6"><form onSubmit={submit} className="w-full max-w-md space-y-5"><div className="text-center text-xs font-bold uppercase tracking-[.25em] text-cyan-300">Software Passport Registry</div>{error && <div role="alert"><AlertCircle className="inline mr-2" />{error}</div>}{notice && <div role="status"><CheckCircle2 className="inline mr-2" />{notice}</div>}<input aria-label="Email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required /><div><input aria-label="Password" type={showPassword ? 'text' : 'password'} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} required /><button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? <EyeOff /> : <Eye />}</button></div><button type="submit" disabled={busy}>{loading ? <Loader className="inline animate-spin" /> : <ArrowRight className="inline" />} Sign in</button><button type="button" disabled={busy} onClick={register}><ShieldCheck className="inline" /> Create account</button><button type="button" disabled={busy} onClick={google}>{googleLoading ? <Loader className="inline animate-spin" /> : null} Continue with Google</button><button type="button" disabled={busy} onClick={reset}>Reset password</button></form></div>;
+  return <div className="min-h-screen flex items-center justify-center p-6"><form onSubmit={submit} noValidate className="w-full max-w-md space-y-5" aria-busy={busy}><div className="text-center text-xs font-bold uppercase tracking-[.25em] text-cyan-300">Software Passport Registry</div>{error && <div role="alert" aria-live="assertive"><AlertCircle className="inline mr-2" />{error}</div>}{notice && <div role="status" aria-live="polite"><CheckCircle2 className="inline mr-2" />{notice}</div>}<label className="sr-only" htmlFor="spr-email">Email</label><input id="spr-email" aria-label="Email" type="email" inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required /><div><label className="sr-only" htmlFor="spr-password">Password</label><input id="spr-password" aria-label="Password" type={showPassword ? 'text' : 'password'} autoComplete={passwordAutoComplete} value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} required /><button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword}>{showPassword ? <EyeOff /> : <Eye />}</button></div><button type="submit" disabled={busy}>{loading ? <Loader className="inline animate-spin" /> : <ArrowRight className="inline" />} Sign in</button><button type="button" disabled={busy} onClick={register}><ShieldCheck className="inline" /> Create account</button><button type="button" disabled={busy} onClick={google}>{googleLoading ? <Loader className="inline animate-spin" /> : null} Continue with Google</button><button type="button" disabled={busy} onClick={reset}>Reset password</button></form></div>;
 }
