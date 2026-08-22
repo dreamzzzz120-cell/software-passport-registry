@@ -1,0 +1,89 @@
+name: One-time Scan UI Hardening
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    if: ${{ !contains(github.event.head_commit.message, 'chore: apply scan UI hardening') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Remove fabricated/demo scan claims
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          path = Path('src/components/ScansView.tsx')
+          text = path.read_text(encoding='utf-8')
+          original = text
+
+          replacements = {
+              "const runActualScan = async (targetName: string, chosenClient: string = 'Vanguard Grid Operators') => {":
+                  "const runActualScan = async (targetName: string, chosenClient: string = '') => {",
+              "`[INFO] Target matched to verified Passport: ${matchedPassport.name} (v${matchedPassport.version})`,":
+                  "`[INFO] Target matched to Passport record: ${matchedPassport.name} (v${matchedPassport.version})`,",
+              "`[INFO] Initiating comprehensive full-stack 8-engine scan queue...`":
+                  "`[INFO] Submitting scan job to the background queue...`",
+              "<div className=\"text-[9px] text-slate-500\">Continuous background sweeps</div>":
+                  "<div className=\"text-[9px] text-slate-500\">Configured background scan schedules</div>",
+              "<div className=\"text-[9px] text-slate-500\">Critical Production nodes covered</div>":
+                  "<div className=\"text-[9px] text-slate-500\">Registered production assets covered</div>",
+          }
+          for old, new in replacements.items():
+              text = text.replace(old, new)
+
+          # The client-side signature helper is not authoritative evidence. It is unused
+          # by the scanner flow, so remove it rather than allowing heuristic labels to
+          # masquerade as observed facts.
+          text = re.sub(
+              r"\n  // Real-time Regex/Signature Matching Helper\r?\n  const getLiveMatch = \(name: string\) => \{.*?\n  \};\r?\n",
+              "\n",
+              text,
+              flags=re.S,
+          )
+
+          if text == original:
+              raise SystemExit('No expected hardening targets were found; refusing to create a no-op commit.')
+
+          path.write_text(text, encoding='utf-8', newline='')
+
+      - name: Verify no known fabricated scan claims remain
+        shell: bash
+        run: |
+          set -euo pipefail
+          forbidden=(
+            'Vanguard Grid Operators'
+            'full-stack 8-engine'
+            'Target matched to verified Passport'
+            'Nginx Edge Proxy'
+            'Redis In-Memory Store'
+            'Apache Log4j Core'
+            'Legacy Billing Connector'
+          )
+          for term in "${forbidden[@]}"; do
+            if grep -R --exclude-dir=.git --exclude-dir=node_modules -F "$term" src; then
+              echo "Forbidden/demo claim remains: $term" >&2
+              exit 1
+            fi
+          done
+
+      - name: Commit hardening and remove one-time workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/components/ScansView.tsx
+          git rm .github/workflows/one-time-scan-ui-hardening.yml
+          git commit -m 'chore: apply scan UI hardening'
+          git push origin HEAD:main
