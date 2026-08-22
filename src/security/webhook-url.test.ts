@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
-const lookup = vi.fn();
+const { lookup } = vi.hoisted(() => ({ lookup: vi.fn() }));
 vi.mock('node:dns/promises', () => ({ lookup }));
 
 import { validateWebhookUrl } from './webhook-url';
