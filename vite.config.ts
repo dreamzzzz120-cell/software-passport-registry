@@ -1,14 +1,10 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
-import { resolve } from 'node:path';
 
 export default defineConfig({
-  resolve: {
-    alias: {
-      'lucide-react': resolve(__dirname, 'src/lucide-compat.ts'),
-    },
-  },
+  // Use the real lucide-react package directly. The previous compatibility
+  // alias pointed at a deleted local shim and caused production builds to fail.
   // Keep App.tsx imports as normal synchronous React imports.
   // The previous source-transform converted them to React.lazy() without
   // importing React or providing Suspense, which can blank the entire SPA at
