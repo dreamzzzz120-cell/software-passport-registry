@@ -5,6 +5,8 @@ import { runSecurityScannerLoop } from './src/workers/security-scanner-worker.ts
 import { runTrustMonitoringWorkerLoop } from './src/workers/trust-monitoring-worker.ts';
 import { createWorkerPool, assertWorkerDatabase } from './src/workers/worker-db.ts';
 
+// Deployment sentinel: worker source changes intentionally retrigger Railway after
+// production hardening changes that affect shared runtime dependencies.
 let ready = false;
 
 function normalizeWorkerDatabaseEnv() {
