@@ -1,24 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import {
-  Search,
-  ArrowRight,
-  ChevronRight,
-  Award,
-  ShieldAlert,
-  Cpu,
-  Download,
-  FileText,
-  Activity,
-  Zap,
-  Building2,
-  Database,
-  X,
-  Sparkles,
-  RefreshCw,
-  Play,
-  Check
-} from 'lucide-react';
+import { motion } from 'motion/react';
+import { Search, ArrowRight, Award, ShieldAlert, Cpu, FileText, Activity, Zap, Building2, Database } from 'lucide-react';
 import { Client, SoftwarePassport, Alert } from '../types';
 import { apiFetch } from '../utils/apiClient';
 
@@ -30,881 +12,100 @@ interface InvestorHomeViewProps {
   alerts?: Alert[];
 }
 
-export default function InvestorHomeView({ 
-  passports, 
-  onShowTelemetry, 
-  onNavigateTab, 
-  clients = [],
-  alerts = []
-}: InvestorHomeViewProps) {
-  // STATE DEFINITIONS
+export default function InvestorHomeView({ passports, onShowTelemetry, onNavigateTab, clients = [], alerts = [] }: InvestorHomeViewProps) {
   const vendorProfiles = useMemo(() => {
     const seen = new Map<string, { id: string; name: string; category: string; trustRating: string; publisher: string; passportCount: number }>();
-    passports.forEach((p) => {
-      const publisher = p.publisher || p.name || 'Unknown Publisher';
+    passports.forEach((passport) => {
+      const publisher = passport.publisher || passport.name || 'Unknown Publisher';
       const slug = publisher.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
       if (!seen.has(publisher)) {
-        seen.set(publisher, {
-          id: `vendor-${slug}`,
-          name: publisher,
-          category: p.category || 'Software Publisher',
-          trustRating: p.overallScore >= 90 ? 'AAA' : p.overallScore >= 75 ? 'AA' : 'A',
-          publisher,
-          passportCount: 1
-        });
-      } else {
-        const existing = seen.get(publisher)!;
-        existing.passportCount += 1;
-      }
+        seen.set(publisher, { id: `vendor-${slug}`, name: publisher, category: passport.category || 'Software Publisher', trustRating: passport.overallScore == null ? 'Not verified' : passport.overallScore >= 90 ? 'AAA' : passport.overallScore >= 75 ? 'AA' : 'A', publisher, passportCount: 1 });
+      } else seen.get(publisher)!.passportCount += 1;
     });
     return Array.from(seen.values());
   }, [passports]);
 
-  // Dynamic Metrics derived directly from the API payload passed into this component.
-  const trustHealth = clients.length > 0
-    ? Math.round(clients.reduce((sum, c) => sum + (c.trustScore || 0), 0) / clients.length)
+  const trustHealth = clients.length > 0 && clients.some((client) => typeof client.trustScore === 'number')
+    ? Math.round(clients.reduce((sum, client) => sum + (typeof client.trustScore === 'number' ? client.trustScore : 0), 0) / clients.filter((client) => typeof client.trustScore === 'number').length)
     : null;
-
-  const softwareAssets = clients.reduce((sum, c) => sum + (c.passportCount || 0), 0);
-
-  const verifiedVendors = new Set(passports.map(p => p.publisher).filter(Boolean)).size;
-
-  const activeRisks = clients.reduce((sum, c) => sum + (c.criticalRisksCount || 0), 0);
-
-  const unknownDependencies = passports.reduce((sum, p) => {
+  const softwareAssets = clients.reduce((sum, client) => sum + (client.passportCount || 0), 0);
+  const publishers = new Set(passports.map((passport) => passport.publisher).filter(Boolean)).size;
+  const activeRisks = clients.reduce((sum, client) => sum + (client.criticalRisksCount || 0), 0);
+  const unknownDependencies = passports.reduce((sum, passport) => {
     try {
-      const sbom = Array.isArray(p.sbom) ? p.sbom : typeof p.sbom === 'string' ? JSON.parse(p.sbom) : [];
-      const untrusted = sbom.filter((comp: any) => comp && comp.trustLevel && comp.trustLevel !== 'Trusted').length;
-      return sum + untrusted;
-    } catch {
-      return sum;
-    }
+      const sbom = Array.isArray(passport.sbom) ? passport.sbom : typeof passport.sbom === 'string' ? JSON.parse(passport.sbom) : [];
+      return sum + sbom.filter((component: any) => component && component.trustLevel && component.trustLevel !== 'Trusted').length;
+    } catch { return sum; }
   }, 0);
-
-  const evidenceEvents = passports.reduce((sum, p) => sum + (Array.isArray(p.timeline) ? p.timeline.length : 0), 0);
-  const trackedPublishers = new Set(passports.map(p => p.publisher || p.name).filter(Boolean)).size;
   const hasRegistryData = passports.length > 0 || clients.length > 0;
 
-  // Modal views
   const [isRemediationOpen, setIsRemediationOpen] = useState(false);
   const [remediationLogs, setRemediationLogs] = useState<string[]>([]);
   const [isRemediating, setIsRemediating] = useState(false);
   const [remediationCompleted, setRemediationCompleted] = useState(false);
-
-  // Reports Hub
   const [isReportsOpen, setIsReportsOpen] = useState(false);
-  const [selectedReportId, setSelectedReportId] = useState<string>('rep-ceo');
+  const [selectedReportId, setSelectedReportId] = useState('rep-ceo');
   const [showCertificateSeal, setShowCertificateSeal] = useState(false);
-
-  // Filter lists for passive browsing in dashboard
   const [passportSearch, setPassportSearch] = useState('');
   const [vendorSearch, setVendorSearch] = useState('');
 
-  // Run Autopilot Remediation
   const triggerRemediation = async () => {
-    setIsRemediating(true);
-    setRemediationLogs([]);
+    setIsRemediating(true); setRemediationLogs([]);
     try {
-      const res = await apiFetch('/api/remediation/run', {
-        method: 'POST'
-      });
-      if (!res.ok) {
-        const failure = await res.json().catch(() => ({}));
-        throw new Error(failure.message || 'Remediation run failed');
-      }
-      const data = await res.json();
-      if (data.success) {
-        if (data.resolvedCount === 0) {
-          setRemediationLogs(['Zero active risks detected. Your trust posture is already pristine!']);
-          setIsRemediating(false);
-          setRemediationCompleted(true);
-          return;
-        }
-
-        // Fetch actual logs for the jobId!
-        const logsRes = await apiFetch(`/api/agent-jobs/${data.jobId}/logs`);
-        if (logsRes.ok) {
-          const logsData = await logsRes.json();
-          const messages = logsData.map((l: any) => `[${l.level.toLowerCase()}] ${l.message}`);
-          setRemediationLogs(messages);
+      const response = await apiFetch('/api/remediation/run', { method: 'POST' });
+      const failure = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(failure.message || 'Remediation run failed');
+      if (failure.success) {
+        if (failure.resolvedCount === 0) {
+          setRemediationLogs(['No remediation items were returned by the backend. This is not a claim that the environment is risk-free.']);
         } else {
-          setRemediationLogs([`Remediation request accepted. ${data.resolvedCount} risks were reported by the backend. Logs were not returned by the service.`]);
+          const logsResponse = await apiFetch(`/api/agent-jobs/${failure.jobId}/logs`);
+          if (logsResponse.ok) {
+            const logs = await logsResponse.json();
+            setRemediationLogs(Array.isArray(logs) ? logs.map((log: any) => `[${String(log.level || 'info').toLowerCase()}] ${log.message}`) : ['Remediation request accepted; execution logs were not returned.']);
+          } else setRemediationLogs([`Remediation request accepted. The backend reported ${failure.resolvedCount} item(s); execution logs were not returned.`]);
+          setRemediationCompleted(true);
+          window.dispatchEvent(new CustomEvent('refresh-data'));
         }
-        
-        setIsRemediating(false);
-        setRemediationCompleted(true);
-
-        // Dispatches global refresh event so App.tsx reloads the entire dataset
-        window.dispatchEvent(new CustomEvent('refresh-data'));
       }
-    } catch (err: any) {
-      console.error(err);
-      setRemediationLogs([`[unavailable] ${err?.message || 'No patch executor is configured.'}`]);
-      setIsRemediating(false);
-    }
+    } catch (error: any) { setRemediationLogs([`[unavailable] ${error?.message || 'No remediation executor is configured.'}`]); }
+    finally { setIsRemediating(false); }
   };
 
-  // Generate Report Helper
-  const handleCompileReport = () => {
-    setShowCertificateSeal(true);
-  };
+  const filteredPassports = passports.filter((passport) => passport.name.toLowerCase().includes(passportSearch.toLowerCase()) || passport.category.toLowerCase().includes(passportSearch.toLowerCase()));
+  const filteredVendors = vendorProfiles.filter((vendor) => vendor.name.toLowerCase().includes(vendorSearch.toLowerCase()) || vendor.category.toLowerCase().includes(vendorSearch.toLowerCase()));
 
-  // Trigger PDF Download
-  const handlePdfDownload = () => {
-    setShowCertificateSeal(false);
-  };
+  return <div className="space-y-8 py-4">
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="space-y-8 text-left">
+      {!hasRegistryData && <div className="rounded-2xl border border-dashed border-slate-300 dark:border-zinc-800 bg-slate-50/80 dark:bg-zinc-900/60 p-5"><p className="text-sm font-extrabold text-slate-900 dark:text-white">No registry records are available yet.</p><p className="mt-1 text-[11px] leading-relaxed text-slate-500 dark:text-zinc-400">The dashboard is showing current dataset counts only. No absence of records is treated as proof of safety.</p></div>}
 
-  // Filtered Passports for table in dashboard
-  const filteredPassports = passports.filter(p => 
-    p.name.toLowerCase().includes(passportSearch.toLowerCase()) ||
-    p.category.toLowerCase().includes(passportSearch.toLowerCase())
-  );
+      <div className="flex flex-col justify-between gap-4 border-b border-slate-100 pb-5 dark:border-zinc-900 md:flex-row md:items-center"><div><span className="mb-1 block text-[10px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400">CURRENT DATASET</span><h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white sm:text-3xl">Investor & Evidence View</h1><p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-slate-400">Decision support derived from the records currently returned by SPR. It is not a certification or attestation.</p></div><button onClick={onShowTelemetry} className="flex shrink-0 items-center gap-1 rounded-xl border border-indigo-100/30 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-400"><span>View Verification Telemetry</span><ArrowRight className="h-3.5 w-3.5" /></button></div>
 
-  // Filtered Vendors
-  const filteredVendors = vendorProfiles.filter(v =>
-    v.name.toLowerCase().includes(vendorSearch.toLowerCase()) ||
-    v.category.toLowerCase().includes(vendorSearch.toLowerCase())
-  );
+      <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-12">
+        <div className="relative flex min-h-[300px] flex-col justify-between overflow-hidden rounded-3xl border border-slate-800 bg-gradient-to-br from-slate-950 via-zinc-900 to-slate-950 p-6 text-white shadow-2xl lg:col-span-5"><div><span className="block text-[9px] font-black uppercase tracking-widest text-indigo-400">TRUST SCORE OBSERVATION</span><h3 className="text-sm font-black text-slate-100">Client Trust Index</h3></div><div className="flex items-center justify-around gap-6 py-2"><div className="relative flex h-36 w-36 items-center justify-center"><svg className="h-full w-full -rotate-90"><circle cx="72" cy="72" r="60" className="text-slate-800" strokeWidth="8" stroke="currentColor" fill="transparent"/><circle cx="72" cy="72" r="60" className={trustHealth === null ? 'text-slate-600' : 'text-indigo-500'} strokeWidth="8" strokeDasharray={377} strokeDashoffset={trustHealth === null ? 377 : 377 - (377 * trustHealth) / 100} strokeLinecap="round" stroke="currentColor" fill="transparent"/></svg><div className="absolute flex flex-col items-center justify-center text-center"><span className="text-3xl font-black">{trustHealth === null ? '—' : trustHealth}</span><span className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Observed score</span></div></div><div className="space-y-2 font-mono text-[10px] text-slate-400"><div className="flex justify-between gap-4 border-b border-slate-800 pb-1"><span>SCORE STATUS:</span><strong className="text-slate-300">{trustHealth === null ? 'NOT VERIFIED' : 'OBSERVED'}</strong></div><p className="pt-1 text-[9px] font-sans leading-normal text-slate-500">{trustHealth === null ? 'No client trust scores were returned by the backend.' : 'Average of returned client trust scores.'}</p></div></div><div className="border-t border-slate-900 pt-3 text-[9px] font-mono text-slate-500">External assurance, certifications, and infrastructure claims require separately connected evidence.</div></div>
 
-  return (
-    <div className="space-y-8 py-4">
-      <motion.div
-          key="dashboard"
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-          className="space-y-8 text-left"
-        >
-          {!hasRegistryData && (
-            <div className="rounded-2xl border border-dashed border-slate-300 dark:border-zinc-800 bg-slate-50/80 dark:bg-zinc-900/60 p-5 text-left">
-              <p className="text-sm font-display font-extrabold text-slate-900 dark:text-white">
-                No registry records are available yet.
-              </p>
-              <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-1 leading-relaxed">
-                The dashboard is showing the current dataset counts only. Passport and client data will appear once the backend returns records.
-              </p>
-            </div>
-          )}
+        <div className="grid grid-cols-2 items-stretch gap-4 lg:col-span-7">
+          <Metric label="SOFTWARE ASSETS" value={hasRegistryData ? softwareAssets : null} note={hasRegistryData ? 'Current client passport count' : 'No backend records loaded'} icon={<Database className="h-4 w-4"/>}/>
+          <Metric label="PUBLISHERS" value={hasRegistryData ? publishers : null} note={hasRegistryData ? 'Distinct publishers in the current passport set' : 'No backend records loaded'} icon={<Building2 className="h-4 w-4"/>}/>
+          <Metric label="RECORDED RISKS" value={hasRegistryData ? activeRisks : null} note={hasRegistryData ? 'Current client risk-count fields' : 'No backend records loaded'} icon={<ShieldAlert className="h-4 w-4"/>}/>
+          <Metric label="UNVERIFIED DEPENDENCIES" value={hasRegistryData ? unknownDependencies : null} note={hasRegistryData ? 'Components whose recorded trustLevel is not Trusted' : 'No backend records loaded'} icon={<Cpu className="h-4 w-4"/>}/>
+        </div>
+      </div>
 
-          {/* Header Block */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 dark:border-zinc-900 pb-5">
-            <div>
-              <span className="text-[10px] font-mono font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest block mb-1">
-                YOUR DIGITAL ENVIRONMENT
-              </span>
-              <h1 className="text-2xl sm:text-3xl font-display font-black text-slate-900 dark:text-white leading-none tracking-tight">
-                Software Trust Command & Control
-              </h1>
-              <p className="text-xs text-slate-400 dark:text-zinc-500 font-sans mt-1.5 max-w-2xl leading-relaxed">
-                The global trust registry and living history record for your organization's third-party software, upstream packages, and supplier entities.
-              </p>
-            </div>
-            
-            {/* System Telemetry Link */}
-            <button
-              onClick={onShowTelemetry}
-              className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 flex items-center gap-1 cursor-pointer transition-colors shrink-0 bg-indigo-50 dark:bg-indigo-950/40 px-3 py-2 rounded-xl border border-indigo-100/30 self-start md:self-center"
-            >
-              <span>View Engineering Telemetry</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+        <ActionCard title="Review remediation" description="Open the backend remediation workflow for recorded risks. An accepted task is not a verified fix." button="Open remediation" icon={<Zap className="h-4 w-4"/>} onClick={() => setIsRemediationOpen(true)}/>
+        <ActionCard title="Generate evidence report" description="Compile a report from current records. The report is not certified unless separately attested by evidence." button="Open report hub" icon={<FileText className="h-4 w-4"/>} onClick={() => setIsReportsOpen(true)}/>
+        <ActionCard title="Review trust graph" description="Navigate to the connected evidence workflow for dependency and relationship review." button="Open trust workflow" icon={<Activity className="h-4 w-4"/>} onClick={() => onNavigateTab?.('/extensions/trust-evidence')}/>
+      </div>
 
-          {/* THE MASTER METRIC Posture Scoreboard */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-            
-            {/* LARGE HEALTH POSTURE DIAL (5 COLS) */}
-            <div className="lg:col-span-5 bg-gradient-to-br from-slate-950 via-zinc-900 to-slate-950 rounded-3xl p-6 border border-slate-800 shadow-2xl flex flex-col justify-between relative overflow-hidden text-left text-white min-h-[300px]">
-              {/* Decorative cyber grid */}
-              <div className="absolute inset-0 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:16px_16px] opacity-5 pointer-events-none"></div>
-              <div className="absolute -top-12 -right-12 w-48 h-48 bg-indigo-600/10 rounded-full blur-2xl pointer-events-none"></div>
-              
-              <div className="space-y-1 relative z-10">
-                <span className="text-[9px] font-mono font-black text-indigo-400 uppercase tracking-widest block">
-                  TRUST QUALITY ASSURANCE
-                </span>
-                <h3 className="text-sm font-display font-black text-slate-100">
-                  Trust Health Posture
-                </h3>
-              </div>
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-zinc-900 dark:bg-zinc-950"><div className="flex flex-col justify-between gap-3 border-b border-slate-100 pb-4 dark:border-zinc-900 sm:flex-row sm:items-center"><div><h3 className="text-sm font-extrabold text-slate-900 dark:text-white">Software Passports</h3><p className="text-[11px] leading-tight text-slate-500 dark:text-zinc-500">Current passport records. Scores are shown only when returned by the backend.</p></div><div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 dark:border-zinc-800 dark:bg-zinc-900"><Search className="h-3.5 w-3.5 text-slate-400"/><input aria-label="Filter passports" type="text" placeholder="Filter passports..." value={passportSearch} onChange={(e) => setPassportSearch(e.target.value)} className="w-full bg-transparent text-[11px] outline-none dark:text-zinc-200"/></div></div><div className="mt-4 overflow-x-auto"><table className="w-full text-left text-xs text-slate-500 dark:text-zinc-400"><thead className="border-b border-slate-150 bg-slate-50 text-[9px] font-mono uppercase tracking-wider text-slate-400 dark:border-zinc-850 dark:bg-zinc-900"><tr><th className="px-3 py-2.5">Software</th><th className="px-3 py-2.5">Category</th><th className="px-3 py-2.5 text-center">Score</th><th className="px-3 py-2.5 text-right">Evidence state</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-zinc-900">{filteredPassports.map((passport) => <tr key={passport.id}><td className="px-3 py-3"><span className="block text-xs font-extrabold text-slate-800 dark:text-zinc-200">{passport.name}</span><span className="font-mono text-[10px] text-slate-400">v{passport.version} · {passport.publisher}</span></td><td className="px-3 py-3"><span className="rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold dark:bg-zinc-850">{passport.category}</span></td><td className="px-3 py-3 text-center font-mono font-bold text-slate-700 dark:text-zinc-300">{passport.overallScore ?? 'Not verified'}</td><td className="px-3 py-3 text-right text-[10px] font-mono text-slate-400">{passport.overallScore == null ? 'Score unavailable' : 'Score observed'}</td></tr>)}{filteredPassports.length === 0 && <tr><td colSpan={4} className="py-6 text-center italic text-slate-400">No matching passport records found.</td></tr>}</tbody></table></div></section>
 
-              {/* Graphical Circular Dial */}
-              <div className="py-2 flex items-center justify-around gap-6 relative z-10">
-                <div className="relative w-36 h-36 flex items-center justify-center shrink-0">
-                  <svg className="w-full h-full transform -rotate-90">
-                    <circle
-                      cx="72"
-                      cy="72"
-                      r="60"
-                      className="text-slate-800"
-                      strokeWidth="8"
-                      stroke="currentColor"
-                      fill="transparent"
-                    />
-                    <circle
-                      cx="72"
-                      cy="72"
-                      r="60"
-                      className={`transition-all duration-1000 ${
-                        trustHealth === null ? 'text-slate-600' : trustHealth >= 90 ? 'text-emerald-500' : 'text-indigo-500'
-                      }`}
-                      strokeWidth="8"
-                      strokeDasharray={377}
-                      strokeDashoffset={trustHealth === null ? 377 : 377 - (377 * trustHealth) / 100}
-                      strokeLinecap="round"
-                      stroke="currentColor"
-                      fill="transparent"
-                    />
-                  </svg>
-                  <div className="absolute flex flex-col items-center justify-center text-center">
-                    <span className="text-3xl font-display font-black text-white">{trustHealth === null ? '—' : trustHealth}</span>
-                    <span className="text-[8px] font-mono font-bold text-slate-400 uppercase tracking-wider">INDEX</span>
-                  </div>
-                </div>
-
-                <div className="space-y-2 font-mono text-[10px] text-slate-400">
-                  <div className="flex justify-between gap-4 border-b border-slate-800 pb-1">
-                    <span>SECURITY RATING:</span>
-                    <strong className={trustHealth === null ? 'text-slate-400' : trustHealth >= 90 ? 'text-emerald-400' : 'text-indigo-400'}>
-                      {trustHealth === null ? 'N/A' : trustHealth >= 90 ? 'AAA / HIGH' : 'AA / MONITORED'}
-                    </strong>
-                  </div>
-                  <div className="flex justify-between gap-4 border-b border-slate-800 pb-1">
-                    <span>STATUS:</span>
-                    <strong className={trustHealth === null ? 'text-slate-400' : trustHealth >= 90 ? 'text-emerald-400' : 'text-amber-400'}>
-                      {trustHealth === null ? 'NO DATA' : trustHealth >= 90 ? 'CURRENTLY HIGH' : 'REVIEW NEEDED'}
-                    </strong>
-                  </div>
-                  <p className="text-[9px] text-slate-500 font-sans leading-normal pt-1">
-                    {trustHealth === null
-                      ? 'No client trust scores were returned by the backend.'
-                      : 'Average trust score from the current client dataset.'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="text-[9px] font-mono text-slate-500 border-t border-slate-900 pt-3 relative z-10">
-                Continuous hash signatures checked against global NIST CVE and SBOM registry.
-              </div>
-            </div>
-
-            {/* BENTO STAT TILES (7 COLS) */}
-            <div className="lg:col-span-7 grid grid-cols-2 gap-4 items-stretch">
-              
-              {/* STAT 1: Software Assets */}
-              <div className="bg-white dark:bg-zinc-950 border border-slate-250/80 dark:border-zinc-900 p-5 rounded-2xl flex flex-col justify-between shadow-sm relative overflow-hidden">
-                <div className="absolute right-0 top-0 w-16 h-16 bg-slate-50 dark:bg-zinc-900 rounded-bl-full pointer-events-none"></div>
-                <div>
-                  <div className="flex items-center gap-2 text-slate-400 dark:text-zinc-500">
-                    <Database className="w-4 h-4 text-indigo-500" />
-                    <span className="text-[10px] font-mono font-extrabold uppercase tracking-widest">
-                      SOFTWARE ASSETS
-                    </span>
-                  </div>
-                  <h4 className="text-3xl font-display font-black text-slate-800 dark:text-zinc-100 mt-2">
-                    {hasRegistryData ? softwareAssets : '—'}
-                  </h4>
-                </div>
-                <p className="text-[10px] text-slate-400 dark:text-zinc-500 font-mono mt-1 leading-none">
-                  {hasRegistryData ? 'Current client passport count' : 'No backend records loaded'}
-                </p>
-              </div>
-
-              {/* STAT 2: Verified Vendors */}
-              <div className="bg-white dark:bg-zinc-950 border border-slate-250/80 dark:border-zinc-900 p-5 rounded-2xl flex flex-col justify-between shadow-sm relative overflow-hidden">
-                <div className="absolute right-0 top-0 w-16 h-16 bg-slate-50 dark:bg-zinc-900 rounded-bl-full pointer-events-none"></div>
-                <div>
-                  <div className="flex items-center gap-2 text-slate-400 dark:text-zinc-500">
-                    <Building2 className="w-4 h-4 text-indigo-500" />
-                    <span className="text-[10px] font-mono font-extrabold uppercase tracking-widest">
-                      VERIFIED VENDORS
-                    </span>
-                  </div>
-                  <h4 className="text-3xl font-display font-black text-slate-800 dark:text-zinc-100 mt-2">
-                    {hasRegistryData ? verifiedVendors : '—'}
-                  </h4>
-                </div>
-                <p className="text-[10px] text-slate-400 dark:text-zinc-500 font-mono mt-1 leading-none">
-                  {hasRegistryData ? 'Publishers from the current passport set' : 'No backend records loaded'}
-                </p>
-              </div>
-
-              {/* STAT 3: Active Risks */}
-              <div className="bg-white dark:bg-zinc-950 border border-slate-250/80 dark:border-zinc-900 p-5 rounded-2xl flex flex-col justify-between shadow-sm relative overflow-hidden">
-                <div className="absolute right-0 top-0 w-16 h-16 bg-slate-50 dark:bg-zinc-900 rounded-bl-full pointer-events-none"></div>
-                <div>
-                  <div className="flex items-center gap-2 text-slate-400 dark:text-zinc-500">
-                    <ShieldAlert className="w-4 h-4 text-rose-500" />
-                    <span className="text-[10px] font-mono font-extrabold uppercase tracking-widest">
-                      ACTIVE RISKS
-                    </span>
-                  </div>
-                  <h4 className={`text-3xl font-display font-black mt-2 ${
-                    activeRisks > 0 ? 'text-rose-500 animate-pulse' : 'text-slate-800 dark:text-zinc-100'
-                  }`}>
-                    {hasRegistryData ? activeRisks : '—'}
-                  </h4>
-                </div>
-                <p className="text-[10px] text-slate-400 dark:text-zinc-500 font-mono mt-1 leading-none">
-                  {hasRegistryData ? (activeRisks > 0 ? 'CVE advisories logged' : 'No active critical risks in the current client dataset') : 'No backend records loaded'}
-                </p>
-              </div>
-
-              {/* STAT 4: Unknown Dependencies */}
-              <div className="bg-white dark:bg-zinc-950 border border-slate-250/80 dark:border-zinc-900 p-5 rounded-2xl flex flex-col justify-between shadow-sm relative overflow-hidden">
-                <div className="absolute right-0 top-0 w-16 h-16 bg-slate-50 dark:bg-zinc-900 rounded-bl-full pointer-events-none"></div>
-                <div>
-                  <div className="flex items-center gap-2 text-slate-400 dark:text-zinc-500">
-                    <Cpu className="w-4 h-4 text-amber-500" />
-                    <span className="text-[10px] font-mono font-extrabold uppercase tracking-widest">
-                      UNKNOWN DEPS
-                    </span>
-                  </div>
-                  <h4 className={`text-3xl font-display font-black mt-2 ${
-                    unknownDependencies > 0 ? 'text-amber-500' : 'text-slate-800 dark:text-zinc-100'
-                  }`}>
-                    {hasRegistryData ? unknownDependencies : '—'}
-                  </h4>
-                </div>
-                <p className="text-[10px] text-slate-400 dark:text-zinc-500 font-mono mt-1 leading-none">
-                  {hasRegistryData ? (unknownDependencies > 0 ? 'Unverified library hashes' : 'All components attested in the current passport set') : 'No backend records loaded'}
-                </p>
-              </div>
-
-            </div>
-
-          </div>
-
-          {/* KEY CORE ACTIONS MODULES */}
-          <div className="bg-slate-50 dark:bg-zinc-900/50 border border-slate-200/80 dark:border-zinc-800/80 p-6 rounded-3xl grid grid-cols-1 md:grid-cols-3 gap-6">
-            
-            {/* ACTION 1: IMPROVE TRUST SCORE */}
-            <div className="space-y-3 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-900 p-5 rounded-2xl shadow-xs flex flex-col justify-between text-left">
-              <div className="space-y-1.5">
-                <div className="w-9 h-9 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 flex items-center justify-center border border-amber-100/40">
-                  <Zap className="w-4.5 h-4.5 animate-bounce" />
-                </div>
-                <h4 className="font-display font-extrabold text-slate-900 dark:text-white text-sm">
-                  Improve Trust Score
-                </h4>
-                <p className="text-[11px] text-slate-400 leading-relaxed font-sans font-light">
-                  Directly run the Trust Automation Engine to resolve unverified dependencies and sandbox known package vulnerability hazards.
-                </p>
-              </div>
-              <button
-                onClick={() => setIsRemediationOpen(true)}
-                className="w-full text-center py-2 bg-slate-900 hover:bg-slate-800 text-white font-sans font-bold text-xs rounded-xl cursor-pointer transition-colors shadow-xs mt-3 flex items-center justify-center gap-1.5"
-              >
-                <span>Automate Remediation</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            {/* ACTION 2: GENERATE TRUST REPORT */}
-            <div className="space-y-3 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-900 p-5 rounded-2xl shadow-xs flex flex-col justify-between text-left">
-              <div className="space-y-1.5">
-                <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 flex items-center justify-center border border-indigo-100/40">
-                  <FileText className="w-4.5 h-4.5" />
-                </div>
-                <h4 className="font-display font-extrabold text-slate-900 dark:text-white text-sm">
-                  Generate Trust Report
-                </h4>
-                <p className="text-[11px] text-slate-400 leading-relaxed font-sans font-light">
-                  Instantly compile certified reports customized for board members, compliance auditors, legal advisors, or procurement teams.
-                </p>
-              </div>
-              <button
-                onClick={() => setIsReportsOpen(true)}
-                className="w-full text-center py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-sans font-bold text-xs rounded-xl cursor-pointer transition-colors shadow-xs mt-3 flex items-center justify-center gap-1.5"
-              >
-                <span>Certified Report Hub</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            {/* ACTION 3: VIEW RISK MAP */}
-            <div className="space-y-3 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-900 p-5 rounded-2xl shadow-xs flex flex-col justify-between text-left">
-              <div className="space-y-1.5">
-                <div className="w-9 h-9 rounded-xl bg-teal-50 dark:bg-teal-950/40 text-teal-600 flex items-center justify-center border border-teal-100/40">
-                  <Activity className="w-4.5 h-4.5 animate-pulse" />
-                </div>
-                <h4 className="font-display font-extrabold text-slate-900 dark:text-white text-sm">
-                  View Risk Map
-                </h4>
-                <p className="text-[11px] text-slate-400 leading-relaxed font-sans font-light">
-                  Navigate directly into the fully interactive Trust Graph mapping software, dependencies, and connections.
-                </p>
-              </div>
-              <button
-                onClick={() => {
-                  if (onNavigateTab) onNavigateTab('trust-os');
-                }}
-                className="w-full text-center py-2 bg-teal-600 hover:bg-teal-500 text-white font-sans font-bold text-xs rounded-xl cursor-pointer transition-colors shadow-xs mt-3 flex items-center justify-center gap-1.5"
-              >
-                <span>Open Trust Graph</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-          </div>
-
-          {/* ACTIVE REGISTRIES BLOCK (TABULATED ASSET SEARCH AND DETAILS) */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 pt-2">
-            
-            {/* REGISTERED PASSPORTS (7 COLS) */}
-            <div className="lg:col-span-7 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-900 p-6 rounded-2xl shadow-xs">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-zinc-900 pb-4">
-                <div className="space-y-0.5 text-left">
-                  <h3 className="text-sm font-display font-extrabold text-slate-900 dark:text-white">
-                    Sealed Software Passports
-                  </h3>
-                  <p className="text-[11px] text-slate-500 dark:text-zinc-500 leading-tight">
-                    Active software catalogued on-chain with unique ledger signatures.
-                  </p>
-                </div>
-                
-                {/* Inline filter search */}
-                <div className="flex items-center gap-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 px-2.5 py-1.5 rounded-lg w-full sm:w-48">
-                  <Search className="w-3.5 h-3.5 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Filter passports..."
-                    value={passportSearch}
-                    onChange={(e) => setPassportSearch(e.target.value)}
-                    className="bg-transparent text-[11px] placeholder-slate-400 focus:outline-none w-full dark:text-zinc-200"
-                  />
-                </div>
-              </div>
-
-              {/* Table list */}
-              <div className="overflow-x-auto mt-4">
-                <table className="w-full text-left text-xs text-slate-500 dark:text-zinc-400">
-                  <thead className="bg-slate-50 dark:bg-zinc-900 text-[9px] font-mono text-slate-400 uppercase tracking-wider border-b border-slate-150 dark:border-zinc-850">
-                    <tr>
-                      <th className="px-3 py-2.5">Software Component</th>
-                      <th className="px-3 py-2.5">Category</th>
-                      <th className="px-3 py-2.5 text-center">Score</th>
-                      <th className="px-3 py-2.5 text-right">Certificate Seal</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-zinc-900 font-sans">
-                    {filteredPassports.map((p) => (
-                      <tr key={p.id} className="hover:bg-slate-50/60 dark:hover:bg-zinc-900/40">
-                        <td className="px-3 py-3">
-                          <div>
-                            <span className="font-extrabold text-slate-800 dark:text-zinc-200 block text-xs">{p.name}</span>
-                            <span className="text-[10px] text-slate-400 font-mono">v{p.version} • {p.publisher}</span>
-                          </div>
-                        </td>
-                        <td className="px-3 py-3 align-middle">
-                          <span className="bg-slate-100 dark:bg-zinc-850 text-slate-600 dark:text-zinc-400 font-mono text-[9px] font-bold px-1.5 py-0.5 rounded">
-                            {p.category}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3 text-center align-middle font-mono font-bold text-slate-700 dark:text-zinc-300">
-                          {p.overallScore}
-                        </td>
-                        <td className="px-3 py-3 text-right align-middle">
-                          <span className="text-[10px] font-mono font-bold text-slate-400">Live evidence</span>
-                        </td>
-                      </tr>
-                    ))}
-                    {filteredPassports.length === 0 && (
-                      <tr>
-                        <td colSpan={4} className="text-center py-6 text-slate-400 dark:text-zinc-500 italic">
-                          No matching software passports found.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* UPSTREAM VENDORS REGISTRY (5 COLS) */}
-            <div className="lg:col-span-5 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-900 p-6 rounded-2xl shadow-xs text-left flex flex-col justify-between">
-              <div>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-zinc-900 pb-4">
-                  <div className="space-y-0.5">
-                    <h3 className="text-sm font-display font-extrabold text-slate-900 dark:text-white">
-                      Upstream Vendors Registry
-                    </h3>
-                    <p className="text-[11px] text-slate-500 dark:text-zinc-500 leading-tight">
-                      Search rating profiles of software companies.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Vendor search bar */}
-                <div className="relative mt-4">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                  <input
-                    type="text"
-                    placeholder="Search vendor or publisher..."
-                    value={vendorSearch}
-                    onChange={(e) => {
-                      setVendorSearch(e.target.value);
-                    }}
-                    className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-250 dark:border-zinc-850 rounded-xl text-xs text-slate-800 dark:text-zinc-100 placeholder-slate-400 focus:outline-none"
-                  />
-                  {vendorSearch.trim() && (
-                    <div className="absolute left-0 right-0 top-11 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-900 rounded-xl shadow-xl z-20 overflow-hidden divide-y divide-slate-100 dark:divide-zinc-900">
-                      {filteredVendors.map(vendor => (
-                        <div key={vendor.id} className="w-full text-left px-4 py-2.5 flex justify-between items-center">
-                          <div className="space-y-0.5">
-                            <span className="font-extrabold text-xs text-slate-800 dark:text-zinc-200 block">{vendor.name}</span>
-                            <span className="text-[10px] text-slate-400 font-mono">{vendor.category}</span>
-                          </div>
-                          <span className="text-[10px] font-mono font-bold text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-850">
-                            {vendor.trustRating}
-                          </span>
-                        </div>
-                      ))}
-                      {filteredVendors.length === 0 && (
-                        <div className="p-3 text-center text-slate-400 dark:text-zinc-500 italic text-[11px]">
-                          No matching verified vendor or passport found for this query.
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Quick select vendor pills */}
-                <div className="mt-5 space-y-2.5">
-                  <span className="text-[9px] font-mono font-black text-slate-400 dark:text-zinc-500 uppercase tracking-widest block mb-2">
-                    VERIFIED VENDOR PROFILES
-                  </span>
-                  {vendorProfiles.slice(0, 4).map(v => (
-                    <div
-                      key={v.id}
-                      className="p-3 bg-slate-50 dark:bg-zinc-900/60 border border-slate-150 dark:border-zinc-850 rounded-xl flex items-center justify-between"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <Building2 className="w-4 h-4 text-slate-400" />
-                        <div>
-                          <span className="text-xs font-extrabold text-slate-800 dark:text-zinc-200 block">{v.name}</span>
-                          <span className="text-[9.5px] text-slate-400 font-sans leading-none">{v.category}</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[9px] font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/20 px-1.5 py-0.5 rounded border border-emerald-500/15">
-                          {v.trustRating} RATING
-                        </span>
-                        <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <p className="text-[10px] text-slate-400 dark:text-zinc-500 leading-normal font-sans italic mt-4 text-center">
-                *Tip: Evidence is displayed from the live registry and backend data sources only.
-              </p>
-            </div>
-
-          </div>
-
-          {/* S&P / Moody's Statistics */}
-          <div className="pt-8 border-t border-slate-150 dark:border-zinc-900 mt-8">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-2xl mx-auto text-center font-display">
-              <div>
-                <p className="text-3xl font-black text-slate-800 dark:text-zinc-100 tracking-tight">{passports.length}</p>
-                <p className="text-[9px] font-mono uppercase tracking-widest text-slate-400 dark:text-zinc-500 mt-1 font-bold">Software Passports Loaded</p>
-              </div>
-              <div>
-                <p className="text-3xl font-black text-slate-800 dark:text-zinc-100 tracking-tight">{evidenceEvents}</p>
-                <p className="text-[9px] font-mono uppercase tracking-widest text-slate-400 dark:text-zinc-500 mt-1 font-bold">Evidence Events Tracked</p>
-              </div>
-              <div>
-                <p className="text-3xl font-black text-slate-800 dark:text-zinc-100 tracking-tight">{trackedPublishers}</p>
-                <p className="text-[9px] font-mono uppercase tracking-widest text-slate-400 dark:text-zinc-500 mt-1 font-bold">Tracked Publishers</p>
-              </div>
-            </div>
-          </div>
-        </motion.div>
-
-      {/* ------------------ REMEDIATION DIALOG MODAL ------------------ */}
-      <AnimatePresence>
-        {isRemediationOpen && (
-          <div className="fixed inset-0 bg-slate-950/80 flex items-center justify-center p-4 z-50 animate-fade-in" id="remediation-remodel">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 15 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              className="bg-white dark:bg-zinc-950 rounded-3xl p-6 border border-slate-200 dark:border-zinc-900 shadow-2xl w-full max-w-xl text-left space-y-4 max-h-[90vh] overflow-y-auto"
-            >
-              <div className="flex justify-between items-start border-b border-slate-100 dark:border-zinc-900 pb-3">
-                <div className="flex items-center gap-2">
-                  <Zap className="w-5 h-5 text-indigo-600" />
-                  <div>
-                    <h3 className="text-sm font-display font-extrabold text-slate-900 dark:text-white">
-                      SPR Autopilot Remediation Engine
-                    </h3>
-                    <span className="text-[8px] font-mono bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
-                      Core Platform Worker
-                    </span>
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    setIsRemediationOpen(false);
-                    setRemediationLogs([]);
-                    setRemediationCompleted(false);
-                  }}
-                  className="p-1 hover:bg-slate-100 dark:hover:bg-zinc-900 rounded-lg text-slate-400"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              {!remediationCompleted ? (
-                <div className="space-y-4">
-                  <div className="bg-slate-50 dark:bg-zinc-900/60 p-4 rounded-xl border border-slate-200/50 dark:border-zinc-800">
-                    <p className="text-xs text-slate-700 dark:text-zinc-300 font-bold leading-normal">
-                      Remediation Queue Summary:
-                    </p>
-                    <ul className="text-[11px] text-slate-500 dark:text-zinc-400 space-y-1.5 mt-2 list-disc pl-4 font-sans">
-                      <li><strong>{unknownDependencies} Unknown Dependencies:</strong> Extract cryptographic hashes, resolve package provenance via secure repository registries.</li>
-                      <li><strong>{activeRisks} Active Risks (Vulnerabilities):</strong> Deploy isolation shields and pinning policies for containerized NPM/Maven packages.</li>
-                    </ul>
-                  </div>
-
-                  {/* Terminal console for logs */}
-                  {remediationLogs.length > 0 && (
-                    <div className="bg-zinc-950 rounded-xl p-4 font-mono text-[10px] text-zinc-300 min-h-40 space-y-2 border border-zinc-900 shadow-inner max-h-48 overflow-y-auto">
-                      {remediationLogs.map((log, idx) => (
-                        <div key={idx} className="flex gap-2">
-                          <span className="text-indigo-400 shrink-0">&gt;_</span>
-                          <span className={log.includes('[complete]') || log.includes('[info] Autopilot Remediation run completed') ? 'text-emerald-400 font-bold' : ''}>{log}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <button
-                    onClick={triggerRemediation}
-                    disabled={isRemediating}
-                    className="w-full text-center py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-sans font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    {isRemediating ? (
-                      <>
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        <span>Remediating & attestations signing...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Play className="w-3.5 h-3.5" />
-                        <span>Run SPR Autopilot Repair</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              ) : (
-                <div className="text-center py-6 space-y-4">
-                  <div className="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 flex items-center justify-center mx-auto border border-emerald-200">
-                    <Check className="w-6 h-6" />
-                  </div>
-                  <div className="space-y-1">
-                    <h4 className="font-display font-extrabold text-slate-900 dark:text-white text-base">
-                      Remediation Audit Completed!
-                    </h4>
-                    <p className="text-xs text-slate-500 dark:text-zinc-400 max-w-sm mx-auto leading-relaxed">
-                      All unknown packages have been cryptographically signed and registered. All vulnerability risks have been isolated. Your trust posture is pristine.
-                    </p>
-                  </div>
-                  <div className="bg-slate-50 dark:bg-zinc-900 p-4 rounded-xl font-mono text-[10px] text-slate-500 border border-slate-200/50 max-w-md mx-auto">
-                    LEDGER BLOCK SIGNATURE RECORDED:
-                    <span className="block font-bold text-slate-700 dark:text-zinc-300 select-all truncate mt-0.5">
-                      sha256-4277c07b69c6f2a89c96a6a6a6a6d6d6d1b777a83e6
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setIsRemediationOpen(false);
-                      setRemediationLogs([]);
-                      setRemediationCompleted(false);
-                    }}
-                    className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-sans font-bold text-xs rounded-xl cursor-pointer transition-colors"
-                  >
-                    Close & View New Score
-                  </button>
-                </div>
-              )}
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* ------------------ CERTIFIED REPORTS GENERATOR HUB MODAL ------------------ */}
-      <AnimatePresence>
-        {isReportsOpen && (
-          <div className="fixed inset-0 bg-slate-950/80 flex items-center justify-center p-4 z-50 animate-fade-in" id="reports-hub-remodel">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 15 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              className="bg-white dark:bg-zinc-950 rounded-3xl p-6 border border-slate-200 dark:border-zinc-900 shadow-2xl w-full max-w-3xl text-left space-y-6 max-h-[95vh] overflow-y-auto"
-            >
-              <div className="flex justify-between items-start border-b border-slate-100 dark:border-zinc-900 pb-3">
-                <div className="flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-indigo-600" />
-                  <div>
-                    <h3 className="text-sm font-display font-extrabold text-slate-900 dark:text-white">
-                      One-Click Certified Trust Reports Hub
-                    </h3>
-                    <p className="text-[10px] text-slate-400">
-                      Download professional attested certificates and data packages to show board members or regulatory auditors.
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    setIsReportsOpen(false);
-                    setShowCertificateSeal(false);
-                  }}
-                  className="p-1 hover:bg-slate-100 dark:hover:bg-zinc-900 rounded-lg text-slate-400"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-                
-                {/* Options List (5 cols) */}
-                <div className="md:col-span-5 space-y-2.5">
-                  <span className="text-[9px] font-mono font-black text-slate-400 uppercase tracking-widest block mb-2">
-                    AVAILABLE CERTIFIED FILE SCHEMAS
-                  </span>
-                  {[
-                    { id: 'rep-ceo', label: 'Executive Trust Report', desc: 'Summary tailored for CEOs & Boards.', role: 'CEO / Board Presentation' },
-                    { id: 'rep-investor', label: 'Investment Technology Report', desc: 'Full due-diligence audit of codebase.', role: 'Investors & Acquirers' },
-                    { id: 'rep-procurement', label: 'Vendor Security Report', desc: 'Upstream risk summary card.', role: 'Procurement Teams' },
-                    { id: 'rep-auditor', label: 'Compliance Evidence Package', desc: 'SOC 2 & NIST certified evidence.', role: 'Auditing Officers' },
-                    { id: 'rep-sale', label: 'Software Sale Certificate', desc: 'Seal showing build security.', role: 'Commercial Sales' }
-                  ].map((rep) => (
-                    <button
-                      key={rep.id}
-                      onClick={() => {
-                        setSelectedReportId(rep.id);
-                        setShowCertificateSeal(false);
-                      }}
-                      className={`w-full text-left p-3 rounded-xl border flex flex-col justify-between transition-all cursor-pointer ${
-                        selectedReportId === rep.id
-                          ? 'bg-indigo-50/50 dark:bg-indigo-950/40 border-indigo-600 shadow-xs'
-                          : 'bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 hover:border-slate-350'
-                      }`}
-                    >
-                      <div>
-                        <span className="font-extrabold text-xs text-slate-800 dark:text-zinc-100 block">{rep.label}</span>
-                        <p className="text-[10px] text-slate-400 mt-0.5 font-sans leading-tight font-light">{rep.desc}</p>
-                      </div>
-                      <span className="text-[8px] font-mono font-bold text-indigo-500 mt-2 block uppercase tracking-wider">
-                        ★ {rep.role}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-
-                {/* Living Preview Card (7 cols) */}
-                <div className="md:col-span-7 bg-slate-50 dark:bg-zinc-900 border border-slate-250 dark:border-zinc-850 p-6 rounded-2xl flex flex-col justify-between min-h-[350px] relative overflow-hidden">
-                  
-                  {/* Fine certificate style border */}
-                  <div className="absolute inset-2 border border-dashed border-indigo-600/20 rounded-xl pointer-events-none"></div>
-
-                  {!showCertificateSeal ? (
-                    <div className="space-y-4 my-auto text-center relative z-10 py-6">
-                      <Award className="w-10 h-10 text-indigo-600 mx-auto animate-pulse" />
-                      <div className="space-y-1">
-                        <h4 className="font-display font-extrabold text-slate-900 dark:text-white text-sm">
-                          Prepare a Trust Evidence Report
-                        </h4>
-                        <p className="text-[11px] text-slate-500 max-w-xs mx-auto leading-relaxed">
-                          This view shows the available evidence record from the live registry. Exporting a report requires a configured backend export service.
-                        </p>
-                      </div>
-                      <button
-                        onClick={handleCompileReport}
-                        className="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-sans font-bold text-xs rounded-xl cursor-pointer transition-colors shadow-md flex items-center justify-center gap-1.5 mx-auto"
-                      >
-                        <Sparkles className="w-3.5 h-3.5" />
-                        <span>Open Evidence Summary</span>
-                      </button>
-                    </div>
-                  ) : (
-                    /* THE SKEUOMORPHIC ATTESATION SEAL */
-                    <div className="space-y-4 text-center my-auto relative z-10 py-4 flex flex-col justify-between h-full">
-                      
-                      <div className="space-y-2">
-                        <span className="text-[8px] font-mono bg-yellow-500/10 text-yellow-600 border border-yellow-500/30 px-2 py-0.5 rounded font-bold uppercase tracking-widest block w-max mx-auto">
-                          LIVE EVIDENCE SUMMARY
-                        </span>
-                        
-                        <h3 className="text-base font-display font-extrabold text-slate-900 dark:text-white">
-                          {selectedReportId === 'rep-ceo' && 'Executive Environment Trust Certificate'}
-                          {selectedReportId === 'rep-investor' && 'Sovereign M&A Technology Due-Diligence Certificate'}
-                          {selectedReportId === 'rep-procurement' && 'Upstream Software Procurement Trust Attestation'}
-                          {selectedReportId === 'rep-auditor' && 'SOC-2 & NIST SP 800-161 Evidence Attestation'}
-                          {selectedReportId === 'rep-sale' && 'Commercial Software Compliance Sale Certificate'}
-                        </h3>
-                        
-                        <p className="text-[10px] text-slate-500 leading-relaxed font-sans max-w-sm mx-auto">
-                          This summary reflects the current evidence set for the selected registry records and the latest backend trust metrics available for this environment.
-                        </p>
-                      </div>
-
-                      {/* Certificate details block */}
-                      <div className="bg-white dark:bg-zinc-950 p-3 rounded-xl border border-slate-200/60 dark:border-zinc-850 font-mono text-[9px] text-slate-400 text-left space-y-1">
-                        <div className="flex justify-between gap-2">
-                          <span>PASSPORTS:</span>
-                          <span className="font-bold text-slate-700 dark:text-zinc-300">{passports.length}</span>
-                        </div>
-                        <div className="flex justify-between gap-2">
-                          <span>CLIENTS:</span>
-                          <span className="font-bold text-slate-700 dark:text-zinc-300">{clients.length}</span>
-                        </div>
-                        <div className="flex justify-between gap-2">
-                          <span>DATA SOURCE:</span>
-                          <span className="font-bold text-slate-700 dark:text-zinc-300">Current backend payload</span>
-                        </div>
-                      </div>
-
-                      {/* Download PDF button */}
-                      <div className="pt-2 flex gap-2">
-                        <button
-                          onClick={handlePdfDownload}
-                          className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-sans font-bold text-xs rounded-xl cursor-pointer shadow-md flex items-center justify-center gap-1.5 transition-colors"
-                        >
-                          <Download className="w-4 h-4" />
-                          <span>Export Unavailable</span>
-                        </button>
-                        
-                        <button
-                          onClick={() => {
-                            setIsReportsOpen(false);
-                            setShowCertificateSeal(false);
-                          }}
-                          className="px-4 py-2.5 border border-slate-300 dark:border-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-850 text-slate-600 dark:text-zinc-400 font-sans font-bold text-xs rounded-xl cursor-pointer"
-                        >
-                          Close
-                        </button>
-                      </div>
-
-                    </div>
-                  )}
-
-                  {/* Trust Badge Watermark */}
-                  <div className="absolute -bottom-8 -right-8 w-28 h-28 opacity-5 text-indigo-900 pointer-events-none">
-                    <Award className="w-full h-full" />
-                  </div>
-                </div>
-
-              </div>
-
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-    </div>
-  );
+      {isRemediationOpen && <Modal title="Remediation workflow" onClose={() => setIsRemediationOpen(false)}><p className="text-sm text-slate-400">Start the protected backend remediation workflow for this tenant. The UI will only report what the backend returns.</p><button disabled={isRemediating} onClick={() => void triggerRemediation()} className="mt-5 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{isRemediating ? 'Running…' : 'Run remediation'}</button>{remediationCompleted && <p className="mt-4 text-xs text-emerald-300">Remediation request completed; re-check the evidence source before treating any risk as resolved.</p>}{remediationLogs.length > 0 && <pre className="mt-4 max-h-52 overflow-auto rounded-xl bg-black/30 p-3 text-xs text-slate-300">{remediationLogs.join('\n')}</pre>}</Modal>}
+      {isReportsOpen && <Modal title="Evidence report hub" onClose={() => setIsReportsOpen(false)}><p className="text-sm text-slate-400">Reports compile current application records. Certification, external assurance, and attestation status remain unverified unless backed by a connected evidence source.</p><div className="mt-5 space-y-2"><button onClick={() => setSelectedReportId('executive')} className="w-full rounded-xl border border-white/10 p-3 text-left text-sm">Executive evidence summary</button><button onClick={() => setSelectedReportId('procurement')} className="w-full rounded-xl border border-white/10 p-3 text-left text-sm">Procurement evidence summary</button><button onClick={() => setSelectedReportId('compliance')} className="w-full rounded-xl border border-white/10 p-3 text-left text-sm">Compliance evidence summary</button></div><p className="mt-4 text-xs text-slate-500">Selected: {selectedReportId}. No certification seal is implied.</p></Modal>}
+    </motion.div>
+  </div>;
 }
+
+function Metric({ label, value, note, icon }: { label: string; value: number | null; note: string; icon: React.ReactNode }) { return <div className="relative flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-250/80 bg-white p-5 shadow-sm dark:border-zinc-900 dark:bg-zinc-950"><div className="flex items-center gap-2 text-slate-400 dark:text-zinc-500">{icon}<span className="text-[10px] font-mono font-extrabold uppercase tracking-widest">{label}</span></div><h4 className="mt-2 text-3xl font-black text-slate-800 dark:text-zinc-100">{value ?? 'Not verified'}</h4><p className="mt-1 text-[10px] font-mono leading-none text-slate-400 dark:text-zinc-500">{note}</p></div>; }
+function ActionCard({ title, description, button, icon, onClick }: { title: string; description: string; button: string; icon: React.ReactNode; onClick: () => void }) { return <div className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-zinc-900 dark:bg-zinc-950"><div><div className="flex h-9 w-9 items-center justify-center rounded-xl border border-indigo-100/40 bg-indigo-50 text-indigo-600 dark:border-indigo-900/40 dark:bg-indigo-950/40">{icon}</div><h4 className="mt-3 text-sm font-extrabold text-slate-900 dark:text-white">{title}</h4><p className="mt-2 text-[11px] leading-relaxed text-slate-400">{description}</p></div><button onClick={onClick} className="mt-4 flex items-center justify-center gap-1.5 rounded-xl bg-slate-900 py-2 text-xs font-bold text-white dark:bg-indigo-600">{button}<ArrowRight className="h-3.5 w-3.5"/></button></div>; }
+function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) { return <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-5" role="dialog" aria-modal="true"><div className="w-full max-w-xl rounded-3xl border border-white/10 bg-slate-950 p-6 shadow-2xl"><div className="flex items-center justify-between"><h2 className="text-xl font-semibold text-white">{title}</h2><button onClick={onClose} className="rounded-lg border border-white/10 px-2 py-1 text-slate-400">×</button></div>{children}</div></div>; }
