@@ -10,99 +10,65 @@ interface FetchOptions extends RequestInit {
   retries?: number;
 }
 
-/**
- * Intercepts all client requests targeting /api/* endpoints,
- * attaches the verified user metadata inside the Bearer Authorization header,
- * and adds resilience features like timeouts, retries, and clean error handling.
- */
+/** Hardened same-origin API client. Never sends Firebase credentials off-origin. */
 export const apiFetch = async (
   input: RequestInfo | URL,
-  init?: FetchOptions
+  init?: FetchOptions,
 ): Promise<Response> => {
-  const url = typeof input === 'string' 
-    ? input 
-    : (input instanceof URL ? input.href : (input as Request).url || '');
+  const rawUrl = typeof input === 'string'
+    ? input
+    : input instanceof URL
+      ? input.href
+      : input.url;
+  const resolvedUrl = new URL(rawUrl, window.location.origin);
+  const isSameOriginApiRequest =
+    resolvedUrl.origin === window.location.origin &&
+    (resolvedUrl.pathname === '/api' || resolvedUrl.pathname.startsWith('/api/'));
 
-  const isApiRequest = url.startsWith('/api/') || url.includes('/api/');
+  // Critical boundary: never attach an SPR bearer token to arbitrary URLs.
+  if (!isSameOriginApiRequest) return fetch(input, init);
 
-  if (isApiRequest) {
-    const newInit = { ...init };
-    const headers = new Headers(newInit.headers || {});
-    
-    let token = '';
-
-    // 1. Try to get token from current active Firebase session
-    if (auth.currentUser) {
-      try {
-        token = await auth.currentUser.getIdToken();
-      } catch (err) {
-        console.error('[API Client Firebase Token Retrieval Error]:', err);
-      }
+  const headers = new Headers(init?.headers || {});
+  if (auth.currentUser) {
+    try {
+      const token = await auth.currentUser.getIdToken();
+      if (token) headers.set('Authorization', `Bearer ${token}`);
+    } catch (err) {
+      console.error('[API Client Firebase Token Retrieval Error]:', err);
     }
-
-    if (token) {
-      headers.set('Authorization', `Bearer ${token}`);
-    }
-    
-    // Hardening: Enforce secure content negotiation headers
-    if (!headers.has('Accept')) {
-      headers.set('Accept', 'application/json');
-    }
-    // Set content-type for post/put requests automatically if not specified and body is present
-    if (newInit.body && !headers.has('Content-Type') && typeof newInit.body === 'string') {
-      headers.set('Content-Type', 'application/json');
-    }
-
-    newInit.headers = headers;
-
-    // Hardening: Timeout using AbortController (default 30 seconds)
-    const timeoutMs = init?.timeout || 30000;
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-    newInit.signal = controller.signal;
-
-    const maxRetries = init?.retries ?? (newInit.method === 'GET' ? 2 : 0); // Only retry safe idempotent GET requests
-    let attempt = 0;
-    let response: Response | null = null;
-    let lastError: any = null;
-
-    while (attempt <= maxRetries) {
-      try {
-        response = await fetch(input, newInit);
-        clearTimeout(timeoutId);
-        break;
-      } catch (err: any) {
-        lastError = err;
-        if (err.name === 'AbortError') {
-          console.warn(`[API Client Timeout] Request to ${url} aborted after ${timeoutMs}ms.`);
-          break;
-        }
-        
-        attempt++;
-        if (attempt <= maxRetries) {
-          const backoffDelay = attempt * 1000;
-          console.warn(`[API Client Network Error] Failed attempt ${attempt}/${maxRetries + 1} to fetch ${url}. Retrying in ${backoffDelay}ms...`);
-          await new Promise((resolve) => setTimeout(resolve, backoffDelay));
-        }
-      }
-    }
-
-    // Clean up timeout if we succeeded or if loop finished
-    clearTimeout(timeoutId);
-
-    if (!response) {
-      throw lastError || new Error(`Network failure connecting to ${url}`);
-    }
-
-    if (response.status === 401) {
-      console.warn('[API Client 401 Unauthorized] Dispatched session expiration trigger.');
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('auth-expired'));
-      }
-    }
-    
-    return response;
+  }
+  if (!headers.has('Accept')) headers.set('Accept', 'application/json');
+  if (init?.body && !headers.has('Content-Type') && typeof init.body === 'string') {
+    headers.set('Content-Type', 'application/json');
   }
 
-  return fetch(input, init);
+  const timeoutMs = init?.timeout ?? 30_000;
+  const method = (init?.method ?? 'GET').toUpperCase();
+  const maxRetries = init?.retries ?? (method === 'GET' ? 2 : 0);
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(resolvedUrl, { ...init, headers, signal: controller.signal });
+      if (response.status === 401) window.dispatchEvent(new CustomEvent('auth-expired'));
+      return response;
+    } catch (err) {
+      lastError = err;
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        console.warn(`[API Client Timeout] ${resolvedUrl.pathname} exceeded ${timeoutMs}ms.`);
+        break;
+      }
+      if (attempt < maxRetries) {
+        await new Promise(resolve => window.setTimeout(resolve, (attempt + 1) * 1000));
+      }
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(`Network failure connecting to ${resolvedUrl.pathname}`);
 };
