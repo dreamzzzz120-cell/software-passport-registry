@@ -9,16 +9,28 @@ function isPublicPath(pathname: string) {
 }
 
 export default function AuthGate({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => onAuthStateChanged(auth, (nextUser) => {
-    setUser(nextUser);
-    setReady(true);
-  }), []);
-
   const path = window.location.pathname || '/';
-  if (isPublicPath(path)) return <>{children}</>;
+  const publicPath = isPublicPath(path);
+  const [user, setUser] = useState<User | null>(null);
+  const [ready, setReady] = useState(publicPath);
+
+  // Never let Firebase initialization/network/auth configuration block public pages.
+  useEffect(() => {
+    if (publicPath) return;
+    return onAuthStateChanged(
+      auth,
+      (nextUser) => {
+        setUser(nextUser);
+        setReady(true);
+      },
+      () => {
+        setUser(null);
+        setReady(true);
+      },
+    );
+  }, [publicPath]);
+
+  if (publicPath) return <>{children}</>;
 
   if (!ready) {
     return <div className="min-h-screen bg-slate-950 text-white grid place-items-center"><div role="status" aria-live="polite" className="text-sm text-slate-300">Checking secure session…</div></div>;
