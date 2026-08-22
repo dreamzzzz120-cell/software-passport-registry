@@ -38,9 +38,11 @@ class BootBoundary extends Component<BootBoundaryProps, BootBoundaryState> {
   }
 
   render() {
-    if (!this.state.error) return this.props.children;
+    const { children } = this.props;
+    const { error } = this.state;
+    if (!error) return children;
 
-    const message = this.state.error.message || 'The application could not start.';
+    const message = error.message || 'The application could not start.';
     const firebaseConfigMissing = message.includes('VITE_FIREBASE_');
 
     return (
