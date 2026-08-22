@@ -4,7 +4,7 @@
  */
 
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, User, setPersistence, browserLocalPersistence } from 'firebase/auth';
+import { browserLocalPersistence, GoogleAuthProvider, getAuth, initializeAuth, signInWithPopup, signOut, type User } from 'firebase/auth';
 
 const envConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -21,9 +21,21 @@ if (!envConfig.apiKey || !envConfig.projectId || !envConfig.authDomain || !envCo
 }
 
 const app = initializeApp(envConfig);
-export const auth = getAuth(app);
+
+// Configure persistence at auth construction time so a reload cannot race
+// against an asynchronous setPersistence call.
+export const auth = (() => {
+  try {
+    return initializeAuth(app, { persistence: browserLocalPersistence });
+  } catch {
+    // Vite HMR can evaluate this module more than once; reuse the existing
+    // Firebase Auth instance in that case.
+    return getAuth(app);
+  }
+})();
+
 auth.useDeviceLanguage();
-void setPersistence(auth, browserLocalPersistence).catch((err) => console.warn('[Firebase Auth] Failed to persist session locally:', err));
+
 export const googleAuthProvider = new GoogleAuthProvider();
 googleAuthProvider.setCustomParameters({ prompt: 'select_account' });
 export { signInWithPopup, signOut };

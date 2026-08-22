@@ -40,6 +40,68 @@ export function createAuthRouter() {
     }
   });
 
+  // Owner-only founder metrics. Every value is either observed from tenant
+  // data or explicitly reported as not verified; this endpoint never invents
+  // production health, security, financial, or performance telemetry.
+  router.get('/founder/metrics', requireAuth, requireRole('Owner'), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const counts = await db.execute(sql`
+        SELECT
+          (SELECT COUNT(*)::int FROM clients WHERE tenant_id = ${req.user!.tenantId}) AS "clientCount",
+          (SELECT COUNT(*)::int FROM passports WHERE tenant_id = ${req.user!.tenantId}) AS "passportCount",
+          (SELECT COUNT(*)::int FROM scans WHERE tenant_id = ${req.user!.tenantId}) AS "scanCount"
+      `);
+      const row = (counts as any).rows?.[0] || {};
+      return res.json({
+        latency: 'Not verified',
+        capitalProtected: 'Not verified',
+        throughput: 'Not verified',
+        mitigations: 'Not verified',
+        overallScore: null,
+        auditEvents: null,
+        activeThreats: null,
+        systemIntegrity: 'Not verified',
+        observed: {
+          clientCount: Number(row.clientCount || 0),
+          passportCount: Number(row.passportCount || 0),
+          scanCount: Number(row.scanCount || 0),
+        },
+      });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  // Owner-only self-passport retrieval. Absence of evidence is represented as
+  // a 404 instead of a fabricated passport or trust score.
+  router.get('/passports/self-passport', requireAuth, requireRole('Owner'), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const result = await db.execute(sql`
+        SELECT
+          id,
+          name,
+          version,
+          publisher,
+          release_date AS "releaseDate",
+          evidence
+        FROM passports
+        WHERE tenant_id = ${req.user!.tenantId}
+        ORDER BY release_date DESC NULLS LAST, id DESC
+        LIMIT 1
+      `);
+      const row = (result as any).rows?.[0];
+      if (!row) return res.status(404).json({ error: 'Self passport evidence not found', code: 'SELF_PASSPORT_NOT_FOUND' });
+      return res.json({
+        ...row,
+        overallScore: null,
+        healthStatus: 'Not verified',
+        evidence: Array.isArray(row.evidence) ? row.evidence : [],
+      });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
   // Firebase-authenticated, tenant-scoped reads for the first-party SPA.
   // These are deliberately separate from /connect/v1, which is API-key based.
   router.get('/user/clients', requireAuth, async (req: AuthenticatedRequest, res, next) => {
