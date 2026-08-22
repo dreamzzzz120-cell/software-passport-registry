@@ -22,6 +22,9 @@ import EnterpriseReadinessView from './components/EnterpriseReadinessView';
 import FounderDashboardView from './components/FounderDashboardView';
 import InvestorHomeView from './components/InvestorHomeView';
 import SettingsView from './components/SettingsView';
+import MonitoringView from './components/MonitoringView';
+import SecurityCenterView from './components/SecurityCenterView';
+import MSPCommandCenter from './components/MSPCommandCenter';
 import { EXTENSIONS } from './workflows/extensionRegistry';
 
 const PUBLIC_PATHS = new Set(['/','/login','/free-review','/pricing']);
@@ -132,10 +135,10 @@ export default function App() {
     case '/clients': view = <ClientsView clients={clients} selectedClientId={selectedClientId} setSelectedClientId={setSelectedClientId} passports={passports} onNavigateTab={onNavigateTab} searchQuery="" />; break;
     case '/vendors': view = <VendorsView vendors={vendors} searchQuery="" />; break;
     case '/integrations': view = <IntegrationsView integrations={integrations} onToggleConnection={async (id) => { const response = await apiFetch(`/api/integrations/${encodeURIComponent(id)}/toggle`, { method: 'POST' }); if (response.ok) { const data = await response.json(); setIntegrations((current) => current.map((item) => item.id === id ? { ...item, connected: Boolean(data.connected) } : item)); } }} onSyncIntegration={async (id) => { const response = await apiFetch(`/api/integrations/${encodeURIComponent(id)}/sync`, { method: 'POST' }); if (response.ok) { const data = await response.json(); setIntegrations((current) => current.map((item) => item.id === id ? { ...item, lastSyncDate: data?.lastSyncDate || '' } : item)); } }} onNavigateTab={onNavigateTab} />; break;
-    case '/monitoring': view = <InvestorHomeView passports={passports} clients={clients} alerts={alerts} onShowTelemetry={() => navigate('/scans')} onNavigateTab={onNavigateTab} />; break;
-    case '/security': view = <AlertsView alerts={alerts} onUpdateAlertStatus={async () => undefined} />; break;
+    case '/monitoring': view = <MonitoringView />; break;
+    case '/security': view = <SecurityCenterView clients={clients} passports={passports} />; break;
     case '/compliance': view = <ComplianceView clients={clients} />; break;
-    case '/msp': view = <ComplianceView clients={clients} />; break;
+    case '/msp': view = <MSPCommandCenter clients={clients} alerts={alerts} onSelectClient={setSelectedClientId} onNavigate={navigate} />; break;
     case '/agent-trust': view = <AgentTrustView />; break;
     case '/enterprise-readiness': view = <EnterpriseReadinessView clients={clients} />; break;
     case '/investor': view = <InvestorHomeView passports={passports} clients={clients} alerts={alerts} onShowTelemetry={() => navigate('/scans')} onNavigateTab={onNavigateTab} />; break;
