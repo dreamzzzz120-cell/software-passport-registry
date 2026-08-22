@@ -64,10 +64,6 @@ function WorkflowBoundary({ title, description, extensionId, onNavigate }: { tit
   return <section className="space-y-5"><div className="rounded-3xl border border-white/[.07] bg-white/[.035] p-6 backdrop-blur-2xl md:p-8"><div className="text-[10px] font-bold uppercase tracking-[.2em] text-slate-600">Workflow boundary</div><h1 className="mt-2 text-3xl font-semibold tracking-tight">{title}</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">{description}</p>{extension && <button onClick={() => onNavigate(extension.entryPath)} className="mt-6 rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-semibold text-slate-950">Open {extension.name} →</button>}</div></section>;
 }
 
-function ExtensionsIndex({ onNavigate }: { onNavigate: (path: string) => void }) {
-  return <section className="space-y-6"><div><div className="text-[10px] font-bold uppercase tracking-[.2em] text-violet-300">Extension system</div><h1 className="mt-2 text-3xl font-semibold tracking-tight md:text-4xl">Every industry gets its own workflow.</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">The core platform stays stable while each extension owns its steps, evidence sources, permissions, and operational surface.</p></div><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{EXTENSIONS.map((extension) => <button key={extension.id} onClick={() => onNavigate(extension.entryPath)} className="group rounded-3xl border border-white/[.07] bg-white/[.025] p-5 text-left transition hover:-translate-y-0.5"><h2 className="text-lg font-semibold">{extension.name}</h2><p className="mt-2 text-sm leading-6 text-slate-500">{extension.description}</p><div className="mt-5 flex flex-wrap gap-1.5">{extension.steps.map((step) => <span key={step} className="rounded-full border border-white/[.07] bg-black/10 px-2.5 py-1 text-[10px] text-slate-500">{step}</span>)}</div></button>)}</div></section>;
-}
-
 export default function App() {
   const path = usePath();
   const [authReady, setAuthReady] = useState(false);
@@ -83,7 +79,6 @@ export default function App() {
   const [scans, setScans] = useState<Scan[]>(EMPTY_SCANS);
   const [integrations, setIntegrations] = useState<Integration[]>(EMPTY_INTEGRATIONS);
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
-  const [installedExtensions, setInstalledExtensions] = useState<string[]>([]);
 
   useEffect(() => onAuthStateChanged(auth, (currentUser) => { setUser(currentUser); setAuthReady(true); }), []);
   useEffect(() => { if (authReady && !user && !PUBLIC_PATHS.has(path)) navigate('/login'); }, [authReady, user, path]);
@@ -147,8 +142,7 @@ export default function App() {
     case '/founder': view = <FounderDashboardView userRole={role} />; break;
     case '/billing': view = <BillingView />; break;
     case '/settings': view = <SettingsView theme={theme} onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} />; break;
-    case '/extensions': view = <ExtensionsIndex onNavigate={navigate} />; break;
-    case '/marketplace': view = <ExtensionMarketplace installedExtensions={installedExtensions} onInstall={(id) => setInstalledExtensions((current) => current.includes(id) ? current : [...current, id])} onUninstall={(id) => setInstalledExtensions((current) => current.filter((item) => item !== id))} onNavigateTab={onNavigateTab} />; break;
+    case '/extensions': view = <ExtensionMarketplace onNavigateTab={onNavigateTab} />; break;
     default: view = <WorkflowBoundary title="Workflow" description="This authenticated capability is explicitly routed through the Command Center. Choose its owning workflow from the left rail." onNavigate={navigate} />;
   }
 
