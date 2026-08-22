@@ -29,147 +29,29 @@ import AgentTrustView from './components/AgentTrustView';
 const EMPTY_CLIENTS: Client[] = [];
 const EMPTY_PASSPORTS: SoftwarePassport[] = [];
 const EMPTY_VENDORS: Vendor[] = [];
-
 const routes = [
-  ['/dashboard', 'Dashboard'], ['/assets', 'Assets'], ['/registry', 'Registry'], ['/passports', 'Passports'],
-  ['/scans', 'Scans'], ['/monitoring', 'Monitoring'], ['/alerts', 'Alerts'], ['/security', 'Security Center'],
-  ['/compliance', 'Compliance'], ['/clients', 'Clients'], ['/vendors', 'Vendors'], ['/integrations', 'Integrations'],
-  ['/agent-trust', 'AI Agent Trust'], ['/msp', 'MSP Command Center'], ['/enterprise-readiness', 'Enterprise Readiness'], ['/investor', 'Investor View'],
-  ['/founder', 'Founder Dashboard'], ['/extensions', 'Extension Marketplace'], ['/billing', 'Billing'], ['/settings', 'Settings'],
-  ['/login', 'Login'], ['/free-review', 'Free Review'], ['/pricing', 'Pricing'],
+  ['/dashboard','Dashboard'],['/assets','Assets'],['/registry','Registry'],['/passports','Passports'],['/scans','Scans'],['/monitoring','Monitoring'],['/alerts','Alerts'],['/security','Security Center'],['/compliance','Compliance'],['/clients','Clients'],['/vendors','Vendors'],['/integrations','Integrations'],['/agent-trust','AI Agent Trust'],['/msp','MSP Command Center'],['/enterprise-readiness','Enterprise Readiness'],['/investor','Investor View'],['/founder','Founder Dashboard'],['/extensions','Extension Marketplace'],['/billing','Billing'],['/settings','Settings']
 ] as const;
-const PUBLIC_PATHS = new Set(['/', '/login', '/free-review', '/pricing']);
-function navigate(path: string) { window.history.pushState({}, '', path); window.dispatchEvent(new PopStateEvent('popstate')); }
-function usePath() { const [path, setPath] = useState(() => window.location.pathname || '/'); useEffect(() => { const update = () => setPath(window.location.pathname || '/'); window.addEventListener('popstate', update); return () => window.removeEventListener('popstate', update); }, []); return path; }
-function LoginRedirect() { useEffect(() => navigate('/dashboard'), []); return <AuthLoading />; }
-function AuthLoading() { return <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white"><div className="text-center"><div className="text-xs font-bold uppercase tracking-[.25em] text-cyan-300">SPR</div><div className="mt-3 text-slate-300">Checking secure session…</div></div></div>; }
+const PUBLIC_PATHS = new Set(['/','/login','/free-review','/pricing']);
+function navigate(path:string){window.history.pushState({},'',path);window.dispatchEvent(new PopStateEvent('popstate'));}
+function usePath(){const [path,setPath]=useState(()=>window.location.pathname||'/');useEffect(()=>{const update=()=>setPath(window.location.pathname||'/');window.addEventListener('popstate',update);return()=>window.removeEventListener('popstate',update)},[]);return path;}
+function AuthLoading(){return <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white"><div className="text-center"><div className="text-xs font-bold uppercase tracking-[.25em] text-cyan-300">SPR</div><div className="mt-3 text-slate-300">Checking secure session…</div></div></div>}
+function AppShell({children,user}:{children:ReactNode;user:User}){const path=usePath();const [signingOut,setSigningOut]=useState(false);const logout=async()=>{setSigningOut(true);try{await signOut(auth);navigate('/login')}finally{setSigningOut(false)}};return <div className="min-h-screen bg-slate-950 text-white"><header className="sticky top-0 z-30 border-b border-white/10 bg-slate-950/95 backdrop-blur"><div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4"><button onClick={()=>navigate('/dashboard')} className="text-left"><div className="text-xs font-bold uppercase tracking-[.25em] text-cyan-300">SPR</div><div className="text-lg font-bold">Software Passport Registry</div></button><div className="flex items-center gap-2"><span className="hidden max-w-56 truncate text-xs text-slate-400 sm:block">{user.email}</span><button onClick={()=>navigate('/settings')} className="rounded-lg px-3 py-2 text-sm text-slate-300 hover:bg-white/5">Settings</button><button onClick={logout} disabled={signingOut} className="rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-200 hover:bg-white/5">{signingOut?'Signing out…':'Sign out'}</button></div></div></header><div className="mx-auto grid max-w-7xl grid-cols-1 md:grid-cols-[220px_1fr]"><aside className="border-r border-white/10 p-3 md:min-h-[calc(100vh-73px)]"><nav className="space-y-1">{routes.map(([route,label])=><button key={route} onClick={()=>navigate(route)} className={`w-full rounded-lg px-3 py-2 text-left text-sm ${path===route?'bg-cyan-300/10 text-cyan-200':'text-slate-300 hover:bg-white/5 hover:text-white'}`}>{label}</button>)}</nav></aside><main className="min-w-0 p-4 md:p-7">{children}</main></div></div>}
+function PublicHome(){return <div className="min-h-screen bg-slate-950 px-6 py-12 text-white"><div className="mx-auto max-w-6xl"><p className="text-xs font-bold uppercase tracking-[.25em] text-cyan-300">SPR</p><h1 className="mt-3 text-4xl font-bold">Software Passport Registry</h1><p className="mt-4 max-w-2xl text-slate-300">Evidence-first software trust, verification, monitoring, and supply-chain visibility.</p><div className="mt-8 flex flex-wrap gap-3"><button onClick={()=>navigate('/login')} className="rounded-lg bg-cyan-300 px-5 py-3 font-semibold text-slate-950">Owner sign in</button><button onClick={()=>navigate('/free-review')} className="rounded-lg border border-white/15 px-5 py-3 font-semibold">Free review</button><button onClick={()=>navigate('/pricing')} className="rounded-lg border border-white/15 px-5 py-3 font-semibold">Pricing</button></div></div></div>}
+function normalizeSeverity(value:unknown):Alert['severity']{const s=String(value||'').toLowerCase();return s==='critical'?'Critical':s==='high'?'High':s==='medium'?'Medium':'Low'}
+function normalizeStatus(value:unknown):Alert['status']{const s=String(value||'').toLowerCase();return s==='resolved'||s==='closed'||s==='verified'?'Resolved':s==='snoozed'?'Snoozed':'Active'}
+function normalizePassport(row:any):SoftwarePassport{return {...row,id:String(row.id),name:String(row.name||'Unnamed software'),version:String(row.version||'unknown'),publisher:String(row.publisher||'unknown'),category:String(row.category||'software'),evidence:Array.isArray(row.evidence)?row.evidence:[],vulnerabilities:Array.isArray(row.vulnerabilities)?row.vulnerabilities:[],timeline:Array.isArray(row.timeline)?row.timeline:[],sbom:Array.isArray(row.sbom)?row.sbom:[],scores:null,scoreStatus:row.scoreStatus||'not_authoritatively_scored'} as SoftwarePassport}
+function normalizeClient(row:any):Client{return {...row,id:String(row.id),name:String(row.name||row.company_name||'Unnamed client')} as Client}
 
-function AppShell({ children, user }: { children: ReactNode; user: User }) {
-  const path = usePath();
-  const [signingOut, setSigningOut] = useState(false);
-  const logout = async () => { setSigningOut(true); try { await signOut(auth); navigate('/login'); } finally { setSigningOut(false); } };
-  return <div className="min-h-screen bg-slate-950 text-white"><header className="sticky top-0 z-30 border-b border-white/10 bg-slate-950/95 backdrop-blur"><div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4"><button onClick={() => navigate('/dashboard')} className="text-left"><div className="text-xs font-bold uppercase tracking-[.25em] text-cyan-300">SPR</div><div className="text-lg font-bold">Software Passport Registry</div></button><div className="flex items-center gap-2"><span className="hidden max-w-56 truncate text-xs text-slate-400 sm:block">{user.email}</span><button onClick={() => navigate('/settings')} className="rounded-lg px-3 py-2 text-sm text-slate-300 hover:bg-white/5">Settings</button><button onClick={logout} disabled={signingOut} className="rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-200 hover:bg-white/5">{signingOut ? 'Signing out…' : 'Sign out'}</button></div></div></header><div className="mx-auto grid max-w-7xl grid-cols-1 md:grid-cols-[220px_1fr]"><aside className="border-r border-white/10 p-3 md:min-h-[calc(100vh-73px)]"><nav className="space-y-1">{routes.filter(([route]) => route !== '/login' && !PUBLIC_PATHS.has(route)).map(([route, label]) => <button key={route} onClick={() => navigate(route)} className={`w-full rounded-lg px-3 py-2 text-left text-sm ${path === route ? 'bg-cyan-300/10 text-cyan-200' : 'text-slate-300 hover:bg-white/5 hover:text-white'}`}>{label}</button>)}</nav></aside><main className="min-w-0 p-4 md:p-7">{children}</main></div></div>;
-}
-function PublicHome() { return <div className="min-h-screen bg-slate-950 px-6 py-12 text-white"><div className="mx-auto max-w-6xl"><p className="text-xs font-bold uppercase tracking-[.25em] text-cyan-300">SPR</p><h1 className="mt-3 text-4xl font-bold">Software Passport Registry</h1><p className="mt-4 max-w-2xl text-slate-300">Evidence-first software trust, verification, monitoring, and supply-chain visibility.</p><div className="mt-8 flex flex-wrap gap-3"><button onClick={() => navigate('/login')} className="rounded-lg bg-cyan-300 px-5 py-3 font-semibold text-slate-950">Owner sign in</button><button onClick={() => navigate('/free-review')} className="rounded-lg border border-white/15 px-5 py-3 font-semibold">Free review</button><button onClick={() => navigate('/pricing')} className="rounded-lg border border-white/15 px-5 py-3 font-semibold">Pricing</button></div></div></div>; }
-
-function normalizeSeverity(value: unknown): Alert['severity'] { const s = String(value || '').toLowerCase(); return s === 'critical' ? 'Critical' : s === 'high' ? 'High' : s === 'medium' ? 'Medium' : 'Low'; }
-function normalizeStatus(value: unknown): Alert['status'] { const s = String(value || '').toLowerCase(); return s === 'resolved' || s === 'closed' || s === 'verified' ? 'Resolved' : s === 'snoozed' ? 'Snoozed' : 'Active'; }
-
-export default function App() {
-  const path = usePath();
-  const [authReady, setAuthReady] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
-  const [searchQuery] = useState('');
-  const [selectedClientId, setSelectedClientId] = useState('');
-  const [selectedPassportId, setSelectedPassportId] = useState<string | null>(null);
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
-  const [userRole] = useState('Owner');
-  const [installedExtensions, setInstalledExtensions] = useState<string[]>([]);
-  const [assets, setAssets] = useState<any[]>([]);
-  const [clients] = useState<Client[]>(EMPTY_CLIENTS);
-  const [passports] = useState<SoftwarePassport[]>(EMPTY_PASSPORTS);
-  const [vendors] = useState<Vendor[]>(EMPTY_VENDORS);
-  const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [scans, setScans] = useState<Scan[]>([]);
-  const [integrations, setIntegrations] = useState<Integration[]>([]);
-
-  useEffect(() => onAuthStateChanged(auth, currentUser => { setUser(currentUser); setAuthReady(true); }), []);
-  useEffect(() => { const expired = () => { void signOut(auth); navigate('/login'); }; window.addEventListener('auth-expired', expired); return () => window.removeEventListener('auth-expired', expired); }, []);
-  useEffect(() => { if (authReady && !user && !PUBLIC_PATHS.has(path)) navigate('/login'); }, [authReady, user, path]);
-
-  // Authoritative tenant-scoped reads. These replace the previous local/demo scan and alert state.
-  useEffect(() => {
-    if (!user) return;
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const [scansResponse, trustResponse] = await Promise.all([apiFetch('/api/scans'), apiFetch('/api/trust-loop/findings')]);
-        if (scansResponse.status === 401 || trustResponse.status === 401) { window.dispatchEvent(new Event('auth-expired')); return; }
-        if (scansResponse.ok) {
-          const data = await scansResponse.json();
-          if (!cancelled && Array.isArray(data)) setScans(data);
-        }
-        if (trustResponse.ok) {
-          const payload = await trustResponse.json();
-          const findings = Array.isArray(payload) ? payload : payload?.findings;
-          if (!cancelled && Array.isArray(findings)) setAlerts(findings.map((finding: any) => ({
-            id: String(finding.id),
-            title: String(finding.title || finding.control_id || 'Trust finding'),
-            severity: normalizeSeverity(finding.severity),
-            category: 'Compliance Gap',
-            clientName: String(finding.client_id || 'Tenant'),
-            description: String(finding.description || 'Evidence-backed trust finding.'),
-            timestamp: String(finding.updated_at || new Date().toISOString()),
-            status: normalizeStatus(finding.status),
-          })));
-        }
-      } catch (error) {
-        console.warn('[SPR authoritative data]', error);
-      }
-    };
-    void load();
-    return () => { cancelled = true; };
-  }, [user]);
-
-  useEffect(() => {
-    if (path !== '/integrations' || !user) return;
-    let cancelled = false;
-    void apiFetch('/api/integrations').then(async response => {
-      if (response.status === 401) { window.dispatchEvent(new Event('auth-expired')); return; }
-      if (!response.ok) throw new Error(`Integration catalog request failed (${response.status})`);
-      const data = await response.json();
-      if (!cancelled && Array.isArray(data)) setIntegrations(data.map((item: Integration) => ({ ...item, lastSyncDate: item.lastSyncDate || 'Never' })));
-    }).catch(error => console.warn('[SPR integrations]', error));
-    return () => { cancelled = true; };
-  }, [path, user]);
-
-  const onNavigateTab = (tab: string, itemId?: string) => { const normalized = tab.startsWith('/') ? tab : `/${tab}`; navigate(itemId ? `${normalized}/${encodeURIComponent(itemId)}` : normalized); };
-  const quickAction = (actionType: 'add-client' | 'register-passport' | 'scan-sbom') => navigate(actionType === 'add-client' ? '/clients' : actionType === 'register-passport' ? '/passports' : '/scans');
-  const onLoginSuccess = (_signedInUser: { uid: string; email: string | null; displayName: string; token: string; emailVerified: boolean; onboarded: 0 }) => navigate('/dashboard');
-  const updateAlertStatus = async (id: string, status: Alert['status']) => {
-    // Trust findings are authoritative server state. Do not silently mutate local-only state.
-    const backendStatus = status === 'Resolved' ? 'CLOSED' : status === 'Snoozed' ? 'BLOCKED' : 'OPEN';
-    try {
-      const response = await apiFetch(`/api/trust-loop/remediations/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: backendStatus }) });
-      if (response.ok) setAlerts(current => current.map(item => item.id === id ? { ...item, status } : item));
-    } catch (error) { console.warn('[SPR alert update]', error); }
-  };
-  const refreshScans = async () => { try { const response = await apiFetch('/api/scans'); if (response.ok) { const data = await response.json(); if (Array.isArray(data)) setScans(data); } } catch (error) { console.warn('[SPR scans refresh]', error); } };
-  const triggerScan = (_scan: Scan) => { void refreshScans(); };
-  const toggleIntegration = async (id: string) => { setIntegrations(current => current.map(item => item.id === id ? { ...item, connected: !item.connected } : item)); };
-  const syncIntegration = async (id: string) => { try { const response = await apiFetch(`/api/integrations/${encodeURIComponent(id)}/sync`, { method: 'POST' }); if (response.ok) { const data = await response.json(); setIntegrations(current => current.map(item => item.id === id ? { ...item, lastSyncDate: data?.lastSyncDate || new Date().toISOString() } : item)); } } catch (error) { console.warn('[SPR integration sync]', error); } };
-  const installExtension = (id: string) => setInstalledExtensions(current => current.includes(id) ? current : [...current, id]);
-  const uninstallExtension = (id: string) => setInstalledExtensions(current => current.filter(item => item !== id));
-
-  if (!authReady) return <AuthLoading />;
-  if (path === '/') return <PublicHome />;
-  if (path === '/login') return user ? <LoginRedirect /> : <LoginView onLoginSuccess={onLoginSuccess} />;
-  if (!user) return <AuthLoading />;
-
-  const view = (() => { switch (path) {
-    case '/dashboard': return <DashboardView selectedClientId={selectedClientId} clients={clients} alerts={alerts} scans={scans} passports={passports} onSelectClient={setSelectedClientId} onNavigateTab={onNavigateTab} onOpenQuickAction={quickAction} />;
-    case '/overview': return <OverviewView selectedClientId={selectedClientId} clients={clients} alerts={alerts} scans={scans} passports={passports} onOpenQuickAction={quickAction} />;
-    case '/assets': return <AssetsView clients={clients} searchQuery={searchQuery} assets={assets} onUpdateAssets={setAssets} />;
-    case '/passports': case '/registry': return <PassportsView passports={passports} selectedPassportId={selectedPassportId} setSelectedPassportId={setSelectedPassportId} searchQuery={searchQuery} clients={clients} assets={assets} onNavigateTab={onNavigateTab} />;
-    case '/scans': return <ScansView scans={scans} clients={clients} assets={assets} passports={passports} onTriggerNewScan={triggerScan} />;
-    case '/monitoring': return <MonitoringView />;
-    case '/alerts': return <AlertsView alerts={alerts} onUpdateAlertStatus={updateAlertStatus} />;
-    case '/security': return <SecurityCenterView clients={clients} passports={passports} />;
-    case '/compliance': return <ComplianceView clients={clients} />;
-    case '/clients': return <ClientsView clients={clients} selectedClientId={selectedClientId} setSelectedClientId={setSelectedClientId} passports={passports} onNavigateTab={onNavigateTab} searchQuery={searchQuery} />;
-    case '/vendors': return <VendorsView vendors={vendors} searchQuery={searchQuery} />;
-    case '/integrations': return <><GitHubEvidencePanel /><IntegrationsView integrations={integrations} onToggleConnection={toggleIntegration} onSyncIntegration={syncIntegration} onNavigateTab={(tab) => onNavigateTab(tab)} /></>;
-    case '/agent-trust': return <AgentTrustView />;
-    case '/msp': return <MSPCommandCenter clients={clients} alerts={alerts} onSelectClient={setSelectedClientId} onNavigate={(tab) => onNavigateTab(tab)} />;
-    case '/enterprise-readiness': return <EnterpriseReadinessView clients={clients} />;
-    case '/investor': return <InvestorHomeView passports={passports} clients={clients} alerts={alerts} onShowTelemetry={() => navigate('/monitoring')} onNavigateTab={onNavigateTab} />;
-    case '/founder': return <FounderDashboardView userRole={userRole} />;
-    case '/extensions': return <ExtensionMarketplace installedExtensions={installedExtensions} onInstall={installExtension} onUninstall={uninstallExtension} onNavigateTab={(tab) => onNavigateTab(tab)} />;
-    case '/billing': return <BillingView />;
-    case '/settings': return <SettingsView theme={theme} onToggleTheme={() => setTheme(current => current === 'dark' ? 'light' : 'dark')} />;
-    case '/free-review': return <div className="mx-auto max-w-4xl py-12"><h1 className="text-3xl font-bold">Free Review</h1><p className="mt-3 text-slate-400">Start with evidence collection. No trust score is invented when evidence is missing.</p><button onClick={() => navigate('/login')} className="mt-6 rounded-lg bg-cyan-300 px-4 py-2 font-semibold text-slate-950">Sign in to continue</button></div>;
-    case '/pricing': return <div className="mx-auto max-w-5xl py-12"><h1 className="text-3xl font-bold">Pricing</h1><p className="mt-3 text-slate-400">Choose a verification workflow after authentication and tenant setup.</p></div>;
-    default: return <div className="py-12"><h1 className="text-3xl font-bold">Page not found</h1><button onClick={() => navigate('/dashboard')} className="mt-5 rounded-lg bg-cyan-300 px-4 py-2 font-semibold text-slate-950">Dashboard</button></div>;
-  }})();
-  return <AppShell user={user}>{view}</AppShell>;
-}
+export default function App(){const path=usePath();const [authReady,setAuthReady]=useState(false);const [user,setUser]=useState<User|null>(null);const [selectedClientId,setSelectedClientId]=useState('');const [selectedPassportId,setSelectedPassportId]=useState<string|null>(null);const [installedExtensions,setInstalledExtensions]=useState<string[]>([]);const [assets,setAssets]=useState<any[]>([]);const [clients,setClients]=useState<Client[]>(EMPTY_CLIENTS);const [passports,setPassports]=useState<SoftwarePassport[]>(EMPTY_PASSPORTS);const [vendors]=useState<Vendor[]>(EMPTY_VENDORS);const [alerts,setAlerts]=useState<Alert[]>([]);const [scans,setScans]=useState<Scan[]>([]);const [integrations,setIntegrations]=useState<Integration[]>([]);
+useEffect(()=>onAuthStateChanged(auth,currentUser=>{setUser(currentUser);setAuthReady(true)}),[]);
+useEffect(()=>{const expired=()=>{void signOut(auth);navigate('/login')};window.addEventListener('auth-expired',expired);return()=>window.removeEventListener('auth-expired',expired)},[]);
+useEffect(()=>{if(authReady&&!user&&!PUBLIC_PATHS.has(path))navigate('/login')},[authReady,user,path]);
+useEffect(()=>{if(!user)return;let cancelled=false;const load=async()=>{try{const [scansResponse,trustResponse,passportResponse,clientResponse]=await Promise.all([apiFetch('/api/scans'),apiFetch('/api/trust-loop/findings'),apiFetch('/api/connect/v1/passports'),apiFetch('/api/connect/v1/software')]);if([scansResponse,trustResponse,passportResponse,clientResponse].some(r=>r.status===401)){window.dispatchEvent(new Event('auth-expired'));return}if(scansResponse.ok){const d=await scansResponse.json();if(!cancelled&&Array.isArray(d))setScans(d)}if(trustResponse.ok){const p=await trustResponse.json();const f=Array.isArray(p)?p:p?.findings;if(!cancelled&&Array.isArray(f))setAlerts(f.map((x:any)=>({id:String(x.id),title:String(x.title||x.control_id||'Trust finding'),severity:normalizeSeverity(x.severity),category:'Compliance Gap',clientName:String(x.client_id||'Tenant'),description:String(x.description||'Evidence-backed trust finding.'),timestamp:String(x.updated_at||new Date().toISOString()),status:normalizeStatus(x.status)})))}if(passportResponse.ok){const d=await passportResponse.json();const rows=Array.isArray(d)?d:d?.passports;if(!cancelled&&Array.isArray(rows))setPassports(rows.map(normalizePassport))}if(clientResponse.ok){const d=await clientResponse.json();const rows=Array.isArray(d)?d:d?.clients;if(!cancelled&&Array.isArray(rows))setClients(rows.map(normalizeClient))}}catch(error){console.warn('[SPR authoritative data]',error)}};void load();return()=>{cancelled=true}},[user]);
+useEffect(()=>{if(path!=='/integrations'||!user)return;let cancelled=false;void apiFetch('/api/integrations').then(async r=>{if(r.status===401){window.dispatchEvent(new Event('auth-expired'));return}if(!r.ok)throw new Error(`Integration request failed (${r.status})`);const d=await r.json();if(!cancelled&&Array.isArray(d))setIntegrations(d)}).catch(e=>console.warn('[SPR integrations]',e));return()=>{cancelled=true}},[path,user]);
+const onNavigateTab=(tab:string,itemId?:string)=>{const normalized=tab.startsWith('/')?tab:`/${tab}`;navigate(itemId?`${normalized}/${encodeURIComponent(itemId)}`:normalized)};const quickAction=(a:'add-client'|'register-passport'|'scan-sbom')=>navigate(a==='add-client'?'/clients':a==='register-passport'?'/passports':'/scans');const onLoginSuccess=()=>navigate('/dashboard');
+const updateAlertStatus=async(id:string,status:Alert['status'])=>{const backendStatus=status==='Resolved'?'CLOSED':status==='Snoozed'?'BLOCKED':'OPEN';try{const r=await apiFetch(`/api/trust-loop/remediations/${encodeURIComponent(id)}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:backendStatus})});if(r.ok)setAlerts(c=>c.map(x=>x.id===id?{...x,status}:x))}catch(e){console.warn('[SPR alert update]',e)}};
+const refreshScans=async()=>{try{const r=await apiFetch('/api/scans');if(r.ok){const d=await r.json();if(Array.isArray(d))setScans(d)}}catch(e){console.warn('[SPR scans]',e)}};const triggerScan=()=>void refreshScans();const toggleIntegration=async(id:string)=>{try{const r=await apiFetch(`/api/integrations/${encodeURIComponent(id)}/toggle`,{method:'POST'});if(r.ok){const d=await r.json();setIntegrations(c=>c.map(x=>x.id===id?{...x,connected:Boolean(d.connected)}:x))}}catch(e){console.warn('[SPR integration toggle]',e)}};const syncIntegration=async(id:string)=>{try{const r=await apiFetch(`/api/integrations/${encodeURIComponent(id)}/sync`,{method:'POST'});if(r.ok){const d=await r.json();setIntegrations(c=>c.map(x=>x.id===id?{...x,lastSyncDate:d?.lastSyncDate||new Date().toISOString()}:x))}}catch(e){console.warn('[SPR integration sync]',e)}};const installExtension=(id:string)=>setInstalledExtensions(c=>c.includes(id)?c:[...c,id]);const uninstallExtension=(id:string)=>setInstalledExtensions(c=>c.filter(x=>x!==id));
+if(!authReady)return <AuthLoading/>;if(path==='/')return <PublicHome/>;if(path==='/login')return user?<AuthLoading/>:<LoginView onLoginSuccess={onLoginSuccess}/>;if(!user)return <AuthLoading/>;
+let view:ReactNode;switch(path){case'/dashboard':view=<DashboardView selectedClientId={selectedClientId} clients={clients} alerts={alerts} scans={scans} passports={passports} onSelectClient={setSelectedClientId} onNavigateTab={onNavigateTab} onOpenQuickAction={quickAction}/>;break;case'/overview':view=<OverviewView selectedClientId={selectedClientId} clients={clients} alerts={alerts} scans={scans} passports={passports} onOpenQuickAction={quickAction}/>;break;case'/assets':view=<AssetsView clients={clients} searchQuery="" assets={assets} onUpdateAssets={setAssets}/>;break;case'/passports':case'/registry':view=<PassportsView passports={passports} selectedPassportId={selectedPassportId} setSelectedPassportId={setSelectedPassportId} searchQuery="" clients={clients} assets={assets} onNavigateTab={onNavigateTab} onUpdatePassport={p=>setPassports(c=>c.map(x=>x.id===p.id?p:x))}/>;break;case'/scans':view=<ScansView scans={scans} clients={clients} assets={assets} passports={passports} onTriggerNewScan={triggerScan}/>;break;case'/monitoring':view=<MonitoringView/>;break;case'/alerts':view=<AlertsView alerts={alerts} onUpdateAlertStatus={updateAlertStatus}/>;break;case'/security':view=<SecurityCenterView clients={clients} passports={passports}/>;break;case'/compliance':view=<ComplianceView clients={clients}/>;break;case'/clients':view=<ClientsView clients={clients} selectedClientId={selectedClientId} setSelectedClientId={setSelectedClientId} passports={passports} onNavigateTab={onNavigateTab} searchQuery=""/>;break;case'/vendors':view=<VendorsView vendors={vendors} searchQuery=""/>;break;case'/integrations':view=<><GitHubEvidencePanel/><IntegrationsView integrations={integrations} onToggleConnection={toggleIntegration} onSyncIntegration={syncIntegration} onNavigateTab={t=>onNavigateTab(t)}/></>;break;case'/agent-trust':view=<AgentTrustView/>;break;case'/msp':view=<MSPCommandCenter clients={clients} alerts={alerts} onSelectClient={setSelectedClientId} onNavigate={t=>onNavigateTab(t)}/>;break;case'/enterprise-readiness':view=<EnterpriseReadinessView clients={clients}/>;break;case'/investor':view=<InvestorHomeView passports={passports} clients={clients} alerts={alerts} onShowTelemetry={()=>navigate('/monitoring')} onNavigateTab={onNavigateTab}/>;break;case'/founder':view=<FounderDashboardView userRole="Owner"/>;break;case'/extensions':view=<ExtensionMarketplace installedExtensions={installedExtensions} onInstall={installExtension} onUninstall={uninstallExtension}/>;break;case'/billing':view=<BillingView/>;break;case'/settings':view=<SettingsView/>;break;default:view=<DashboardView selectedClientId={selectedClientId} clients={clients} alerts={alerts} scans={scans} passports={passports} onSelectClient={setSelectedClientId} onNavigateTab={onNavigateTab} onOpenQuickAction={quickAction}/>}
+return <AppShell user={user}>{view}</AppShell>}
