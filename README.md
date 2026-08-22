@@ -53,5 +53,6 @@ docker-compose up
 - Database migration runner reports zero errors.
 - Firebase Admin and Redis rate limiting are active in the production container.
 - Vercel Git integration uses this repository; this commit is intentionally present to synchronize the final hardened `main` head to Vercel.
+- Client boot failures now render an explicit diagnostic state instead of a blank screen.
 
 <!-- Railway source-sync trigger: 2026-08-18T06:00:00Z -->
