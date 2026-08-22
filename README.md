@@ -44,4 +44,14 @@ docker-compose up
 - **Vercel**: `vercel.json` configured for frontend
 - **Docker**: Multi-stage builds for optimized images
 
+## Hardened production status — 2026-08-22
+
+- Main branch hardened Command Center is merged.
+- Dead legacy dashboard/evidence views removed.
+- Production verification: 22 test files / 121 tests passing.
+- Railway production app and worker deployments verified successful.
+- Database migration runner reports zero errors.
+- Firebase Admin and Redis rate limiting are active in the production container.
+- Vercel Git integration uses this repository; this commit is intentionally present to synchronize the final hardened `main` head to Vercel.
+
 <!-- Railway source-sync trigger: 2026-08-18T06:00:00Z -->
