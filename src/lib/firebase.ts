@@ -4,7 +4,7 @@
  */
 
 import { initializeApp } from 'firebase/app';
-import { browserLocalPersistence, GoogleAuthProvider, getAuth, initializeAuth } from 'firebase/auth';
+import { browserLocalPersistence, GoogleAuthProvider, getAuth, initializeAuth, signInWithPopup, signOut, type User } from 'firebase/auth';
 
 const envConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -38,3 +38,5 @@ auth.useDeviceLanguage();
 
 export const googleAuthProvider = new GoogleAuthProvider();
 googleAuthProvider.setCustomParameters({ prompt: 'select_account' });
+export { signInWithPopup, signOut };
+export type { User };
