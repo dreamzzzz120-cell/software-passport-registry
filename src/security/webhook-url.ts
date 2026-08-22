@@ -1,4 +1,4 @@
-import dns from 'node:dns/promises';
+import { lookup } from 'node:dns/promises';
 import net from 'node:net';
 
 const MAX_REDIRECTS = 0;
@@ -29,7 +29,6 @@ function isPrivateIpv4(ip: string): boolean {
 
 function isBlockedIpv6(ip: string): boolean {
   const normalized = ip.toLowerCase().split('%')[0];
-  // Unspecified, loopback, ULA, link-local, multicast and IPv4-mapped space.
   if (normalized === '::1' || normalized === '::') return true;
   if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true;
   if (/^fe[89ab]/.test(normalized)) return true;
@@ -38,9 +37,6 @@ function isBlockedIpv6(ip: string): boolean {
     const mapped = normalized.slice(7);
     return net.isIP(mapped) === 4 && isPrivateIpv4(mapped);
   }
-  // Documentation, benchmarking, ORCHID, 6to4 and NAT64 prefixes are blocked
-  // because they are not valid public webhook destinations and some encode an
-  // IPv4 destination in the IPv6 address.
   if (/^2001:db8(?::|$)/.test(normalized)) return true;
   if (/^2001:2(?::|$)/.test(normalized)) return true;
   if (/^2001:10(?::|$)/.test(normalized)) return true;
@@ -54,13 +50,6 @@ function isBlockedAddress(address: string): boolean {
   return family === 4 ? isPrivateIpv4(address) : family === 6 ? isBlockedIpv6(address) : true;
 }
 
-/**
- * SSRF guard for outbound webhook destinations.
- * DNS is resolved before persistence so hostnames resolving to non-public,
- * special-purpose, multicast, metadata, loopback, link-local, RFC1918,
- * documentation or ULA space are rejected. Delivery code must still disable
- * redirects and re-check/pin the resolved destination immediately before send.
- */
 export async function validateWebhookUrl(raw: string): Promise<URL> {
   let url: URL;
   try {
@@ -83,7 +72,7 @@ export async function validateWebhookUrl(raw: string): Promise<URL> {
   const directFamily = net.isIP(host);
   if (directFamily && isBlockedAddress(host)) throw new Error('Webhook destination is not publicly routable');
 
-  const records = await dns.lookup(host, { all: true, verbatim: true });
+  const records = await lookup(host, { all: true, verbatim: true });
   if (!records.length || records.some(record => isBlockedAddress(record.address))) {
     throw new Error('Webhook destination resolves to a blocked network address');
   }
