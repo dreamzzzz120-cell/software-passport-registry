@@ -3,25 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from 'react';
-import {
-  Plus,
-  X,
-  Radar,
-  Award,
-  AlertTriangle,
-  Play,
-  CheckCircle2,
-  Loader2,
-  ShieldAlert,
-  Server,
-  Activity,
-  User,
-  Terminal,
-  ShieldCheck,
-  AlertCircle
-} from 'lucide-react';
-import { Client, Scan, Alert, Severity, AlertStatus } from '../types';
+import React, { useEffect, useRef, useState } from 'react';
+import { AlertTriangle, Award, CheckCircle2, Loader2, Play, Plus, Radar, ShieldAlert, ShieldCheck, X } from 'lucide-react';
+import { Client, Scan, Alert, Severity } from '../types';
 import { apiFetch } from '../utils/apiClient';
 
 interface QuickActionsSpeedDialProps {
@@ -31,233 +15,181 @@ interface QuickActionsSpeedDialProps {
   onOpenRegisterPassport: () => void;
 }
 
-export default function QuickActionsSpeedDial({
-  clients,
-  onTriggerNewScan,
-  onTriggerNewAlert,
-  onOpenRegisterPassport
-}: QuickActionsSpeedDialProps) {
+type Job = {
+  id: string;
+  status: string;
+  progress?: number;
+  result?: { findingsCount?: number | null } | null;
+  error?: string | null;
+};
+
+const TERMINAL = new Set(['Completed', 'Failed']);
+
+export default function QuickActionsSpeedDial({ clients, onTriggerNewScan, onTriggerNewAlert, onOpenRegisterPassport }: QuickActionsSpeedDialProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeModal, setActiveModal] = useState<'scan' | 'alert' | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
   const [scanTarget, setScanTarget] = useState('');
-  const [scanType, setScanType] = useState<'SBOM Verify' | 'Binary Attestation' | 'Source Code Codeql' | 'Container Image'>('SBOM Verify');
-  const [scanClient, setScanClient] = useState(clients[0]?.name || 'Apex Financial Portfolio');
+  const [scanClient, setScanClient] = useState(clients[0]?.name || '');
   const [scanProgress, setScanProgress] = useState(0);
   const [scanLogs, setScanLogs] = useState<string[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [scanCompleted, setScanCompleted] = useState(false);
-
   const [alertTitle, setAlertTitle] = useState('');
   const [alertSeverity, setAlertSeverity] = useState<Severity>('High');
   const [alertCategory, setAlertCategory] = useState<'Vulnerability' | 'Compliance Gap' | 'Unverified Attestation' | 'Policy Violation'>('Vulnerability');
-  const [alertClient, setAlertClient] = useState(clients[0]?.name || 'Apex Financial Portfolio');
+  const [alertClient, setAlertClient] = useState(clients[0]?.name || '');
   const [alertDescription, setAlertDescription] = useState('');
   const [isLoggingAlert, setIsLoggingAlert] = useState(false);
   const [alertCompleted, setAlertCompleted] = useState(false);
 
-  const resetScanWorkflow = () => {
+  useEffect(() => {
+    if (!scanClient && clients[0]) setScanClient(clients[0].name);
+    if (!alertClient && clients[0]) setAlertClient(clients[0].name);
+  }, [clients, scanClient, alertClient]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) setIsOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const resetScan = () => {
     setScanTarget('');
-    setScanType('SBOM Verify');
-    setScanClient(clients[0]?.name || 'Apex Financial Portfolio');
+    setScanClient(clients[0]?.name || '');
     setScanProgress(0);
     setScanLogs([]);
     setIsScanning(false);
     setScanCompleted(false);
   };
 
-  const resetAlertWorkflow = () => {
+  const resetAlert = () => {
     setAlertTitle('');
     setAlertSeverity('High');
     setAlertCategory('Vulnerability');
-    setAlertClient(clients[0]?.name || 'Apex Financial Portfolio');
+    setAlertClient(clients[0]?.name || '');
     setAlertDescription('');
     setIsLoggingAlert(false);
     setAlertCompleted(false);
   };
 
+  const pollJob = async (jobId: string): Promise<Job> => {
+    const deadline = Date.now() + 10 * 60 * 1000;
+    while (Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      const response = await apiFetch(`/api/agent-jobs/${encodeURIComponent(jobId)}`);
+      const job = await response.json().catch(() => null) as Job | null;
+      if (!response.ok || !job) throw new Error(job?.error || 'Unable to read scan job status.');
+      const progress = Number(job.progress);
+      setScanProgress(Number.isFinite(progress) ? Math.max(20, Math.min(95, progress)) : 20);
+      if (TERMINAL.has(job.status)) return job;
+    }
+    throw new Error('Scan remains queued or running after the 10-minute UI wait. Check the scan history for its server-side status.');
+  };
+
   const executeScan = async () => {
-    if (!scanTarget.trim()) return;
-
+    if (!scanTarget.trim() || !scanClient) return;
     setIsScanning(true);
+    setScanCompleted(false);
     setScanProgress(10);
-    setScanLogs(['[INFO] Requesting a server-side scan job...', `[INFO] Target: ${scanTarget}`]);
-
+    setScanLogs(['[INFO] Requesting the server-side OSV dependency scan.', `[INFO] Target: ${scanTarget}`]);
     try {
       const response = await apiFetch('/api/scans', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetName: scanTarget, scanType, clientName: scanClient })
+        body: JSON.stringify({ targetName: scanTarget.trim(), scanType: 'SBOM Verify', clientName: scanClient })
       });
-
       const scanRecord = await response.json().catch(() => null);
-      if (!response.ok) {
-        throw new Error(scanRecord?.error || 'Failed to create scan record on database.');
-      }
-
+      if (!response.ok) throw new Error(scanRecord?.error || 'Failed to create the scan record.');
       if (scanRecord?.status === 'Failed') {
-        setScanLogs(prev => [...prev, `[ERROR] ${scanRecord.error || 'Scan could not be queued.'}`]);
         setScanProgress(100);
-        setIsScanning(false);
+        setScanLogs(prev => [...prev, `[ERROR] ${scanRecord.error || 'No matching Software Passport exists for this target.'}`]);
         return;
       }
-
-      const jobId = scanRecord?.jobId;
-      if (!jobId) throw new Error('Server accepted the scan but did not return a job ID.');
-
+      if (!scanRecord?.jobId) throw new Error('Server accepted the scan but did not return a job ID.');
       setScanProgress(20);
-      setScanLogs(prev => [...prev, '[INFO] Scan job queued. Waiting for the worker to finish...', `[INFO] Job: ${jobId}`]);
-
-      const startedAt = Date.now();
-      const timeoutMs = 10 * 60 * 1000;
-      let terminalJob: any = null;
-
-      while (Date.now() - startedAt < timeoutMs) {
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        const jobResponse = await apiFetch(`/api/agent-jobs/${encodeURIComponent(jobId)}`);
-        const job = await jobResponse.json().catch(() => null);
-        if (!jobResponse.ok) throw new Error(job?.error || 'Unable to read scan job status.');
-
-        const progress = Number.isFinite(Number(job?.progress)) ? Number(job.progress) : 0;
-        setScanProgress(Math.max(20, Math.min(95, progress)));
-
-        if (job?.status === 'Completed' || job?.status === 'Failed') {
-          terminalJob = job;
-          break;
-        }
-      }
-
-      if (!terminalJob) {
-        throw new Error('Scan did not reach a terminal state within 10 minutes. It remains queued/running on the server.');
-      }
-
-      if (terminalJob.status === 'Failed') {
+      setScanLogs(prev => [...prev, `[INFO] Job queued: ${scanRecord.jobId}`, '[INFO] Waiting for the worker to reach a terminal state.']);
+      const job = await pollJob(scanRecord.jobId);
+      if (job.status === 'Failed') {
         setScanProgress(100);
-        setScanLogs(prev => [...prev, `[ERROR] Scan failed: ${terminalJob.error || 'Worker reported failure.'}`]);
-        setIsScanning(false);
+        setScanLogs(prev => [...prev, `[ERROR] Worker failed the scan: ${job.error || 'No failure reason was recorded.'}`]);
         return;
       }
-
       setScanProgress(100);
-      setScanLogs(prev => [...prev, '[SUCCESS] Scan worker completed. Findings and evidence are now available.']);
-      onTriggerNewScan({ ...scanRecord, status: 'Completed', jobId, findingsCount: terminalJob.result?.findingsCount ?? scanRecord.findingsCount ?? null });
+      setScanLogs(prev => [...prev, '[SUCCESS] Worker reached Completed. Review the resulting evidence before making a trust decision.']);
+      onTriggerNewScan({ ...scanRecord, status: 'Completed', jobId: scanRecord.jobId, findingsCount: job.result?.findingsCount ?? scanRecord.findingsCount ?? null });
       setScanCompleted(true);
-      setIsScanning(false);
-    } catch (err: any) {
-      console.error('Error executing quick scan:', err);
-      setScanLogs(prev => [...prev, `[ERROR] Scan execution failed: ${err.message || err}`]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown scan error';
+      setScanLogs(prev => [...prev, `[ERROR] ${message}`]);
+    } finally {
       setIsScanning(false);
     }
   };
 
-  const executeLogAlert = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!alertTitle.trim() || !alertDescription.trim()) return;
-
+  const executeLogAlert = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!alertTitle.trim() || !alertDescription.trim() || !alertClient) return;
     setIsLoggingAlert(true);
     try {
       const response = await apiFetch('/api/alerts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: alertTitle, severity: alertSeverity, category: alertCategory, clientName: alertClient, description: alertDescription })
+        body: JSON.stringify({ title: alertTitle.trim(), severity: alertSeverity, category: alertCategory, clientName: alertClient, description: alertDescription.trim() })
       });
-
-      if (response.ok) {
-        const savedAlert = await response.json();
-        onTriggerNewAlert(savedAlert);
-        setAlertCompleted(true);
-      } else {
-        const body = await response.json().catch(() => null);
-        throw new Error(body?.error || 'Failed to save alert on database.');
-      }
-    } catch (err: any) {
-      console.error('Error logging alert:', err);
-      alert(`Alert registration failed: ${err.message || err}`);
+      const saved = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(saved?.error || 'Failed to save the alert.');
+      onTriggerNewAlert(saved);
+      setAlertCompleted(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown alert error';
+      window.alert(`Alert registration failed: ${message}`);
     } finally {
       setIsLoggingAlert(false);
     }
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-3" ref={containerRef} id="quick-actions-speeddial-wrapper">
-      {isOpen && (
-        <div className="flex flex-col items-end gap-2.5 mb-2 animate-in fade-in slide-in-from-bottom-5 duration-200">
-          <div className="group flex items-center justify-end">
-            <span className="bg-slate-950 dark:bg-zinc-900 border border-slate-800 text-slate-100 text-[11px] font-bold px-2.5 py-1 rounded-md shadow-lg mr-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">Run Autopilot Security Scan</span>
-            <button onClick={() => { setIsOpen(false); resetScanWorkflow(); setActiveModal('scan'); }} className="w-11 h-11 rounded-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-200 shadow-lg flex items-center justify-center hover:bg-slate-50 dark:hover:bg-zinc-800 hover:-translate-y-0.5 transition-all cursor-pointer" title="Run Autopilot Scan"><Radar className="w-5 h-5 text-indigo-600 dark:text-indigo-400" /></button>
+    <div ref={containerRef} className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-3">
+      {isOpen && <div className="flex flex-col items-end gap-2.5 mb-2">
+        <button onClick={() => { setIsOpen(false); resetScan(); setActiveModal('scan'); }} className="w-11 h-11 rounded-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-lg flex items-center justify-center" title="Run OSV dependency scan"><Radar className="w-5 h-5 text-indigo-600" /></button>
+        <button onClick={() => { setIsOpen(false); onOpenRegisterPassport(); }} className="w-11 h-11 rounded-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-lg flex items-center justify-center" title="Register Software Passport"><Award className="w-5 h-5 text-emerald-600" /></button>
+        <button onClick={() => { setIsOpen(false); resetAlert(); setActiveModal('alert'); }} className="w-11 h-11 rounded-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-lg flex items-center justify-center" title="Log security alert"><AlertTriangle className="w-5 h-5 text-rose-600" /></button>
+      </div>}
+      <button onClick={() => setIsOpen(value => !value)} className="w-13 h-13 rounded-full bg-indigo-600 text-white flex items-center justify-center shadow-2xl" title="Quick Actions"><Plus className={`w-6 h-6 transition-transform ${isOpen ? 'rotate-45' : ''}`} /></button>
+
+      {activeModal === 'scan' && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+        <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden">
+          <div className="flex justify-between items-center px-6 py-4 border-b border-slate-200 dark:border-zinc-800">
+            <div><h3 className="text-sm font-bold">Run OSV Dependency Scan</h3><p className="text-[10px] text-slate-500">Only the server-side OSV worker is represented here.</p></div>
+            {!isScanning && <button onClick={() => setActiveModal(null)}><X className="w-4 h-4" /></button>}
           </div>
-          <div className="group flex items-center justify-end">
-            <span className="bg-slate-950 dark:bg-zinc-900 border border-slate-800 text-slate-100 text-[11px] font-bold px-2.5 py-1 rounded-md shadow-lg mr-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">Register Software Passport</span>
-            <button onClick={() => { setIsOpen(false); onOpenRegisterPassport(); }} className="w-11 h-11 rounded-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-200 shadow-lg flex items-center justify-center hover:bg-slate-50 dark:hover:bg-zinc-800 hover:-translate-y-0.5 transition-all cursor-pointer" title="Register Software Passport"><Award className="w-5 h-5 text-emerald-600 dark:text-emerald-400" /></button>
-          </div>
-          <div className="group flex items-center justify-end">
-            <span className="bg-slate-950 dark:bg-zinc-900 border border-slate-800 text-slate-100 text-[11px] font-bold px-2.5 py-1 rounded-md shadow-lg mr-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">Log Immediate Security Alert</span>
-            <button onClick={() => { setIsOpen(false); resetAlertWorkflow(); setActiveModal('alert'); }} className="w-11 h-11 rounded-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-200 shadow-lg flex items-center justify-center hover:bg-slate-50 dark:hover:bg-zinc-800 hover:-translate-y-0.5 transition-all cursor-pointer" title="Log Security Alert"><AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400" /></button>
+          <div className="p-6 space-y-4 text-xs">
+            {!isScanning && !scanCompleted ? <>
+              <div className="flex flex-col gap-1"><label className="font-bold">Software Passport target</label><input value={scanTarget} onChange={e => setScanTarget(e.target.value)} placeholder="Passport name or ID" className="bg-slate-50 dark:bg-zinc-850 border border-slate-200 dark:border-zinc-750 rounded-xl p-3" /></div>
+              <div className="flex flex-col gap-1"><label className="font-bold">Client tenant</label><select value={scanClient} onChange={e => setScanClient(e.target.value)} disabled={!clients.length} className="bg-slate-50 dark:bg-zinc-850 border border-slate-200 dark:border-zinc-750 rounded-xl p-3"><option value="">Select a client</option>{clients.map(client => <option key={client.id} value={client.name}>{client.name}</option>)}</select></div>
+              {!clients.length && <p className="text-amber-600">No client records are available for this tenant. A scan cannot be submitted until a client is loaded.</p>}
+              <div className="flex justify-end gap-2"><button onClick={() => setActiveModal(null)} className="px-4 py-2 border rounded-xl">Cancel</button><button onClick={executeScan} disabled={!scanTarget.trim() || !scanClient} className="px-5 py-2 bg-indigo-600 text-white rounded-xl disabled:opacity-50 flex items-center gap-2"><Play className="w-3.5 h-3.5" />Run OSV Scan</button></div>
+            </> : isScanning ? <div className="space-y-4 text-center py-6"><Loader2 className="w-10 h-10 mx-auto animate-spin text-indigo-600" /><div className="font-bold">Worker scan in progress</div><div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden"><div className="bg-indigo-600 h-full" style={{ width: `${scanProgress}%` }} /></div><div className="text-[10px] text-slate-500">{scanProgress}% reported by the job</div><div className="bg-slate-950 text-slate-300 font-mono text-[10px] p-4 rounded-xl text-left h-32 overflow-y-auto">{scanLogs.map((log, index) => <div key={index}>{log}</div>)}</div></div> : <div className="text-center py-6 space-y-4"><CheckCircle2 className="w-10 h-10 mx-auto text-emerald-600" /><h4 className="font-bold">Scan completed</h4><p className="text-[10px] text-slate-500">The worker reached Completed. Findings and evidence must be reviewed before a trust decision.</p><button onClick={() => { setActiveModal(null); resetScan(); }} className="px-6 py-2.5 bg-emerald-600 text-white rounded-xl">Close</button></div>}
           </div>
         </div>
-      )}
+      </div>}
 
-      <button onClick={() => setIsOpen(!isOpen)} className={`w-13 h-13 rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 transform active:scale-95 cursor-pointer ${isOpen ? 'bg-slate-800 dark:bg-zinc-800 text-white hover:bg-slate-900 dark:hover:bg-zinc-700 scale-105' : 'bg-indigo-600 hover:bg-indigo-700 text-white hover:scale-105'}`} id="quick-actions-floating-trigger" title="Quick Actions"><Plus className={`w-6 h-6 transition-transform duration-300 ${isOpen ? 'rotate-45' : ''}`} /></button>
-
-      {activeModal === 'scan' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
-          <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden flex flex-col">
-            <div className="flex justify-between items-center bg-slate-50 dark:bg-zinc-950 px-6 py-4 border-b border-slate-150 dark:border-zinc-850">
-              <div className="flex items-center gap-2.5"><div className="p-1.5 bg-indigo-50 dark:bg-indigo-950/40 rounded-lg text-indigo-600 dark:text-indigo-400"><Radar className="w-5 h-5" /></div><div><h3 className="text-sm font-bold text-slate-900 dark:text-zinc-50 font-display">Run Instant Security Scan</h3><p className="text-[10px] text-slate-500">Real server-side OSV dependency scan</p></div></div>
-              {!isScanning && <button onClick={() => setActiveModal(null)} className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 cursor-pointer"><X className="w-4.5 h-4.5" /></button>}
-            </div>
-            <div className="p-6 space-y-4 text-xs">
-              {!isScanning && !scanCompleted ? (
-                <>
-                  <div className="space-y-3">
-                    <div className="flex flex-col gap-1"><label className="font-bold text-slate-700 dark:text-zinc-300">Target Asset Host / Name</label><input type="text" placeholder="e.g. redis-cache-primary" value={scanTarget} onChange={(e) => setScanTarget(e.target.value)} className="bg-slate-50 dark:bg-zinc-850 border border-slate-200 dark:border-zinc-750 text-xs rounded-xl p-3 focus:outline-none focus:border-indigo-500 focus:bg-white dark:text-zinc-200 font-semibold" /></div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div className="flex flex-col gap-1"><label className="font-bold text-slate-700 dark:text-zinc-300">Scan Strategy Type</label><select value={scanType} onChange={(e) => setScanType(e.target.value as any)} className="bg-slate-50 dark:bg-zinc-850 border border-slate-200 dark:border-zinc-750 text-xs rounded-xl p-3 focus:outline-none cursor-pointer text-slate-700 dark:text-zinc-300 font-semibold"><option value="SBOM Verify">SBOM Deep Verify</option><option value="Binary Attestation">Binary Attestation</option><option value="Source Code Codeql">Source Code CodeQL</option><option value="Container Image">Container Image</option></select></div>
-                      <div className="flex flex-col gap-1"><label className="font-bold text-slate-700 dark:text-zinc-300">Client Organization</label><select value={scanClient} onChange={(e) => setScanClient(e.target.value)} className="bg-slate-50 dark:bg-zinc-850 border border-slate-200 dark:border-zinc-750 text-xs rounded-xl p-3 focus:outline-none cursor-pointer text-slate-700 dark:text-zinc-300 font-semibold">{clients.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}</select></div>
-                    </div>
-                  </div>
-                  <div className="pt-4 border-t border-slate-100 dark:border-zinc-800 flex justify-end gap-2"><button type="button" onClick={() => setActiveModal(null)} className="px-4 py-2.5 hover:bg-slate-100 dark:hover:bg-zinc-850 border border-slate-200 dark:border-zinc-800 rounded-xl text-slate-500 dark:text-zinc-400 font-semibold cursor-pointer">Cancel</button><button type="button" onClick={executeScan} disabled={!scanTarget.trim()} className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-extrabold rounded-xl shadow-md hover:shadow-indigo-500/10 transition cursor-pointer flex items-center gap-1.5"><Play className="w-3.5 h-3.5" /><span>Execute Scan Now</span></button></div>
-                </>
-              ) : isScanning ? (
-                <div className="space-y-4 py-4 text-center"><div className="relative w-20 h-20 mx-auto flex items-center justify-center"><Loader2 className="w-12 h-12 text-indigo-600 animate-spin absolute" /><Radar className="w-6 h-6 text-indigo-500 animate-pulse" /></div><div className="space-y-1"><span className="font-bold text-slate-800 dark:text-zinc-100">Scanning {scanTarget}...</span><div className="w-full max-w-xs mx-auto bg-slate-100 dark:bg-zinc-850 h-2 rounded-full overflow-hidden"><div className="bg-indigo-600 h-full rounded-full transition-all duration-100" style={{ width: `${scanProgress}%` }}></div></div><span className="text-[10px] font-mono text-slate-500 font-bold">{scanProgress}% completed</span></div><div className="bg-slate-950 text-slate-300 font-mono text-[10px] p-4 rounded-xl text-left h-36 overflow-y-auto border border-slate-800 space-y-1 select-text">{scanLogs.map((log, i) => <div key={i} className={`leading-relaxed ${log.startsWith('[SUCCESS]') ? 'text-emerald-400 font-bold' : log.startsWith('[ERROR]') ? 'text-rose-400 font-bold' : ''}`}>{log}</div>)}</div></div>
-              ) : (
-                <div className="text-center py-6 space-y-4"><div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-950/40 rounded-full flex items-center justify-center text-emerald-600 dark:text-emerald-400 mx-auto"><ShieldCheck className="w-7 h-7" /></div><div className="space-y-1"><h4 className="text-sm font-bold text-slate-800 dark:text-zinc-100">Scan Completed</h4><p className="text-[10px] text-slate-500 dark:text-zinc-400">Target <span className="font-bold font-mono text-indigo-600 dark:text-indigo-400">{scanTarget}</span> has reached a terminal worker state. Review the evidence before making a trust decision.</p></div><div className="pt-3 flex justify-center"><button onClick={() => { setActiveModal(null); resetScanWorkflow(); }} className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md transition cursor-pointer">Acknowledge & Close</button></div></div>
-              )}
-            </div>
+      {activeModal === 'alert' && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+        <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden">
+          <div className="flex justify-between items-center px-6 py-4 border-b border-slate-200 dark:border-zinc-800"><div><h3 className="text-sm font-bold">Log Security Alert</h3><p className="text-[10px] text-slate-500">Record a user-supplied alert; it is not treated as scanner evidence.</p></div>{!isLoggingAlert && <button onClick={() => setActiveModal(null)}><X className="w-4 h-4" /></button>}</div>
+          <div className="p-6 text-xs">
+            {!alertCompleted ? <form onSubmit={executeLogAlert} className="space-y-4">
+              <input required value={alertTitle} onChange={e => setAlertTitle(e.target.value)} placeholder="Alert title" className="w-full bg-slate-50 dark:bg-zinc-850 border border-slate-200 dark:border-zinc-750 rounded-xl p-3" />
+              <div className="grid grid-cols-3 gap-3"><select value={alertSeverity} onChange={e => setAlertSeverity(e.target.value as Severity)} className="bg-slate-50 border rounded-xl p-3"><option>Critical</option><option>High</option><option>Medium</option><option>Low</option></select><select value={alertCategory} onChange={e => setAlertCategory(e.target.value as typeof alertCategory)} className="bg-slate-50 border rounded-xl p-3"><option>Vulnerability</option><option>Compliance Gap</option><option>Unverified Attestation</option><option>Policy Violation</option></select><select value={alertClient} onChange={e => setAlertClient(e.target.value)} disabled={!clients.length} className="bg-slate-50 border rounded-xl p-3"><option value="">Select client</option>{clients.map(client => <option key={client.id} value={client.name}>{client.name}</option>)}</select></div>
+              <textarea required rows={4} value={alertDescription} onChange={e => setAlertDescription(e.target.value)} placeholder="Describe the observation or user-reported concern." className="w-full bg-slate-50 dark:bg-zinc-850 border border-slate-200 dark:border-zinc-750 rounded-xl p-3" />
+              <div className="flex justify-end gap-2"><button type="button" onClick={() => setActiveModal(null)} className="px-4 py-2 border rounded-xl">Cancel</button><button type="submit" disabled={isLoggingAlert || !alertClient} className="px-5 py-2 bg-rose-600 text-white rounded-xl disabled:opacity-50 flex items-center gap-2">{isLoggingAlert ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldAlert className="w-3.5 h-3.5" />}Log Alert</button></div>
+            </form> : <div className="text-center py-6 space-y-4"><ShieldCheck className="w-10 h-10 mx-auto text-rose-600" /><h4 className="font-bold">Alert recorded</h4><p className="text-[10px] text-slate-500">The alert was saved as a user-entered record. External SIEM delivery requires a configured integration.</p><button onClick={() => { setActiveModal(null); resetAlert(); }} className="px-6 py-2.5 bg-rose-600 text-white rounded-xl">Close</button></div>}
           </div>
         </div>
-      )}
-
-      {activeModal === 'alert' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
-          <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden flex flex-col">
-            <div className="flex justify-between items-center bg-slate-50 dark:bg-zinc-950 px-6 py-4 border-b border-slate-150 dark:border-zinc-850"><div className="flex items-center gap-2.5"><div className="p-1.5 bg-rose-50 dark:bg-rose-950/40 rounded-lg text-rose-600 dark:text-rose-400"><AlertCircle className="w-5 h-5" /></div><div><h3 className="text-sm font-bold text-slate-900 dark:text-zinc-50 font-display">Log Security Alert</h3><p className="text-[10px] text-slate-500">Record an immediate software vulnerability or compliance gap</p></div></div>{!isLoggingAlert && <button onClick={() => setActiveModal(null)} className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 cursor-pointer"><X className="w-4.5 h-4.5" /></button>}</div>
-            <div className="p-6 text-xs">
-              {!alertCompleted ? (
-                <form onSubmit={executeLogAlert} className="space-y-4">
-                  <div className="flex flex-col gap-1"><label className="font-bold text-slate-700 dark:text-zinc-300">Alert Title / Signature</label><input type="text" required placeholder="e.g. Critical Redis Out-of-Bounds Memory Vulnerability" value={alertTitle} onChange={(e) => setAlertTitle(e.target.value)} className="bg-slate-50 dark:bg-zinc-850 border border-slate-200 dark:border-zinc-750 text-xs rounded-xl p-3 focus:outline-none focus:border-rose-500 focus:bg-white dark:text-zinc-200 font-semibold" /></div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3"><div className="flex flex-col gap-1"><label className="font-bold text-slate-700 dark:text-zinc-300">Severity</label><select value={alertSeverity} onChange={(e) => setAlertSeverity(e.target.value as Severity)} className="bg-slate-50 dark:bg-zinc-850 border border-slate-200 dark:border-zinc-750 text-xs rounded-xl p-3 focus:outline-none cursor-pointer text-slate-700 dark:text-zinc-300 font-semibold"><option value="Critical">🚨 Critical</option><option value="High">🟠 High</option><option value="Medium">🟡 Medium</option><option value="Low">🔵 Low</option></select></div><div className="flex flex-col gap-1"><label className="font-bold text-slate-700 dark:text-zinc-300">Category</label><select value={alertCategory} onChange={(e) => setAlertCategory(e.target.value as any)} className="bg-slate-50 dark:bg-zinc-850 border border-slate-200 dark:border-zinc-750 text-xs rounded-xl p-3 focus:outline-none cursor-pointer text-slate-700 dark:text-zinc-300 font-semibold"><option value="Vulnerability">Vulnerability</option><option value="Compliance Gap">Compliance Gap</option><option value="Unverified Attestation">Unverified Attestation</option><option value="Policy Violation">Policy Violation</option></select></div><div className="flex flex-col gap-1"><label className="font-bold text-slate-700 dark:text-zinc-300">Client Tenant</label><select value={alertClient} onChange={(e) => setAlertClient(e.target.value)} className="bg-slate-50 dark:bg-zinc-850 border border-slate-200 dark:border-zinc-800 text-xs rounded-xl p-3 focus:outline-none focus:border-rose-500 focus:bg-white dark:text-zinc-200 font-semibold">{clients.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}</select></div></div>
-                  <div className="flex flex-col gap-1"><label className="font-bold text-slate-700 dark:text-zinc-300">Threat Narrative & Details</label><textarea required rows={3} placeholder="Supply diagnostic details, affected clusters or remediation owners..." value={alertDescription} onChange={(e) => setAlertDescription(e.target.value)} className="bg-slate-50 dark:bg-zinc-850 border border-slate-200 dark:border-zinc-750 text-xs rounded-xl p-3 focus:outline-none focus:border-rose-500 focus:bg-white dark:text-zinc-200 font-semibold resize-none" /></div>
-                  <div className="pt-4 border-t border-slate-100 dark:border-zinc-800 flex justify-end gap-2"><button type="button" onClick={() => setActiveModal(null)} className="px-4 py-2.5 hover:bg-slate-100 dark:hover:bg-zinc-850 border border-slate-200 dark:border-zinc-800 rounded-xl text-slate-500 dark:text-zinc-400 font-semibold cursor-pointer">Cancel</button><button type="submit" disabled={isLoggingAlert || !alertTitle.trim() || !alertDescription.trim()} className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-extrabold rounded-xl shadow-md hover:shadow-rose-500/10 transition cursor-pointer flex items-center gap-1.5">{isLoggingAlert ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /><span>Logging Alert...</span></> : <><AlertTriangle className="w-3.5 h-3.5" /><span>Log Security Alert</span></>}</button></div>
-                </form>
-              ) : (
-                <div className="text-center py-6 space-y-4"><div className="w-12 h-12 bg-rose-50 dark:bg-rose-950/40 rounded-full flex items-center justify-center text-rose-600 dark:text-rose-400 mx-auto"><ShieldAlert className="w-7 h-7" /></div><div className="space-y-1"><h4 className="text-sm font-bold text-slate-800 dark:text-zinc-100">Security Alert Logged Successfully!</h4><p className="text-[10px] text-slate-500 dark:text-zinc-400">The alert was saved to the SPR dashboard for <span className="font-bold text-slate-800 dark:text-zinc-200">{alertClient}</span>. External SIEM delivery requires a configured integration.</p></div><div className="pt-3 flex justify-center"><button onClick={() => { setActiveModal(null); resetAlertWorkflow(); }} className="px-6 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl shadow-md transition cursor-pointer">Acknowledge & Close</button></div></div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      </div>}
     </div>
   );
 }
