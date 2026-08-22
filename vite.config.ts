@@ -3,12 +3,8 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
-  // Use the real lucide-react package directly. The previous compatibility
-  // alias pointed at a deleted local shim and caused production builds to fail.
-  // Keep App.tsx imports as normal synchronous React imports.
-  // The previous source-transform converted them to React.lazy() without
-  // importing React or providing Suspense, which can blank the entire SPA at
-  // runtime even though the Vite build succeeds.
+  // Keep App.tsx imports synchronous. Feature components are already emitted
+  // as dedicated Rollup chunks; this config keeps the initial vendor graph small.
   plugins: [react(), tailwindcss()],
   build: {
     chunkSizeWarningLimit: 500,
@@ -22,6 +18,10 @@ export default defineConfig({
             }
             return undefined;
           }
+          // Keep React's runtime graph isolated from the general vendor graph.
+          // This improves cache reuse and prevents the shared vendor chunk from
+          // becoming the initial-page bottleneck as extensions are added.
+          if (id.includes('/react/') || id.includes('/react-dom/')) return 'react-runtime';
           if (id.includes('/jspdf/') || id.includes('/jspdf-autotable/')) return 'pdf-core';
           if (id.includes('/html2canvas/')) return 'html2canvas';
           if (id.includes('/firebase/')) return 'firebase';
