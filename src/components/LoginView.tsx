@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { createUserWithEmailAndPassword, getRedirectResult, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithPopup, signInWithRedirect, type User } from 'firebase/auth';
+import { createUserWithEmailAndPassword, getRedirectResult, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithRedirect, type User } from 'firebase/auth';
 import { AlertCircle, ArrowRight, CheckCircle2, Eye, EyeOff, Loader, ShieldCheck } from 'lucide-react';
 import { auth, googleAuthProvider } from '../lib/firebase';
 
@@ -13,14 +13,14 @@ const authMessage = (error: any, fallback: string) => {
     case 'auth/email-already-in-use': return 'An account already exists for this email.';
     case 'auth/invalid-email': return 'Enter a valid email address.';
     case 'auth/weak-password': return 'Choose a stronger password with at least 6 characters.';
-    case 'auth/unauthorized-domain': return `Google sign-in is blocked for this site (${window.location.hostname}). Add this domain to Firebase Authentication → Settings → Authorized domains.`;
+    case 'auth/unauthorized-domain': return `Google sign-in is blocked for this site (${window.location.hostname}). Add this exact domain to Firebase Authentication → Settings → Authorized domains.`;
     case 'auth/operation-not-allowed': return 'Google sign-in is disabled in Firebase. Enable the Google provider in Authentication → Sign-in method.';
     case 'auth/popup-closed-by-user': return 'The Google sign-in window was closed before authentication completed.';
-    case 'auth/popup-blocked': return 'Your browser blocked the Google sign-in popup. Use the Google button again to continue with secure redirect sign-in.';
+    case 'auth/popup-blocked': return 'Google popup sign-in was blocked. SPR will use secure redirect sign-in instead.';
     case 'auth/cancelled-popup-request': return 'A Google sign-in request is already in progress. Please wait a moment and try again.';
     case 'auth/network-request-failed': return 'Google sign-in could not reach Firebase. Check the network connection and try again.';
     case 'auth/web-storage-unsupported': return 'Browser storage is unavailable. Enable cookies/site data for this site and try again.';
-    case 'auth/internal-error': return 'Google authentication returned an internal Firebase error. The page will retry using secure redirect sign-in.';
+    case 'auth/internal-error': return 'Google authentication returned an internal Firebase error. SPR will retry with secure redirect sign-in.';
     default: return error?.message ? `${fallback} (${error.code || 'unknown-error'})` : fallback;
   }
 };
@@ -30,6 +30,7 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
@@ -42,20 +43,19 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
     onLoginSuccess({ uid: user.uid, email: user.email, displayName: user.displayName || user.email?.split('@')[0] || 'User', token, emailVerified: user.emailVerified, onboarded: 0 });
   };
 
-  // A redirect result is required when popup auth falls back to the browser redirect flow.
   useEffect(() => {
     let active = true;
     void getRedirectResult(auth)
       .then(async (result) => {
         if (!active || !result?.user) return;
-        setLoading(true);
+        setGoogleLoading(true);
         setError('');
         await complete(result.user);
       })
       .catch((e) => {
         if (active) setError(authMessage(e, 'Google sign-in could not be completed.'));
       })
-      .finally(() => { if (active) setLoading(false); });
+      .finally(() => { if (active) setGoogleLoading(false); });
     return () => { active = false; };
   }, []);
 
@@ -83,29 +83,17 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
   };
 
   const google = async () => {
-    if (loading) return;
-    setLoading(true); setError(''); setNotice('');
+    if (loading || googleLoading) return;
+    setGoogleLoading(true); setError(''); setNotice('');
     try {
-      // Popup is fastest on desktop. If the browser blocks it or Firebase reports
-      // a transient popup/internal failure, redirect is the reliable fallback.
-      const result = await signInWithPopup(auth, googleAuthProvider);
-      await complete(result.user);
+      // Redirect-first is more reliable than popup auth on Vercel/Edge browsers:
+      // it avoids popup blockers and third-party storage restrictions entirely.
+      setNotice('Opening secure Google sign-in…');
+      await signInWithRedirect(auth, googleAuthProvider);
     } catch (e: any) {
-      const fallbackCodes = new Set(['auth/popup-blocked', 'auth/popup-timeout', 'auth/internal-error', 'auth/cancelled-popup-request']);
-      if (fallbackCodes.has(e?.code)) {
-        setNotice('Opening secure Google sign-in…');
-        try {
-          await signInWithRedirect(auth, googleAuthProvider);
-          return;
-        } catch (redirectError) {
-          setError(authMessage(redirectError, 'Google sign-in failed.'));
-        }
-      } else {
-        setError(authMessage(e, 'Google sign-in failed.'));
-      }
-    } finally {
-      // Redirect navigation will unload the page; otherwise restore the button.
-      setLoading(false);
+      setGoogleLoading(false);
+      setNotice('');
+      setError(authMessage(e, 'Google sign-in failed.'));
     }
   };
 
@@ -120,5 +108,7 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
     } finally { setLoading(false); }
   };
 
-  return <div className="min-h-screen flex items-center justify-center p-6"><form onSubmit={submit} className="w-full max-w-md space-y-5"><div className="text-center text-xs font-bold uppercase tracking-[.25em] text-cyan-300">Software Passport Registry</div>{error && <div role="alert"><AlertCircle className="inline mr-2" />{error}</div>}{notice && <div role="status"><CheckCircle2 className="inline mr-2" />{notice}</div>}<input aria-label="Email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required /><div><input aria-label="Password" type={showPassword ? 'text' : 'password'} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} required /><button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? <EyeOff /> : <Eye />}</button></div><button type="submit" disabled={loading}>{loading ? <Loader className="inline animate-spin" /> : <ArrowRight className="inline" />} Sign in</button><button type="button" disabled={loading} onClick={register}><ShieldCheck className="inline" /> Create account</button><button type="button" disabled={loading} onClick={google}>Continue with Google</button><button type="button" disabled={loading} onClick={reset}>Reset password</button></form></div>;
+  const busy = loading || googleLoading;
+
+  return <div className="min-h-screen flex items-center justify-center p-6"><form onSubmit={submit} className="w-full max-w-md space-y-5"><div className="text-center text-xs font-bold uppercase tracking-[.25em] text-cyan-300">Software Passport Registry</div>{error && <div role="alert"><AlertCircle className="inline mr-2" />{error}</div>}{notice && <div role="status"><CheckCircle2 className="inline mr-2" />{notice}</div>}<input aria-label="Email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required /><div><input aria-label="Password" type={showPassword ? 'text' : 'password'} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} required /><button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? <EyeOff /> : <Eye />}</button></div><button type="submit" disabled={busy}>{loading ? <Loader className="inline animate-spin" /> : <ArrowRight className="inline" />} Sign in</button><button type="button" disabled={busy} onClick={register}><ShieldCheck className="inline" /> Create account</button><button type="button" disabled={busy} onClick={google}>{googleLoading ? <Loader className="inline animate-spin" /> : null} Continue with Google</button><button type="button" disabled={busy} onClick={reset}>Reset password</button></form></div>;
 }
