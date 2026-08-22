@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type Key } from 'react';
 import { apiFetch } from '../utils/apiClient';
 import { EXTENSION_BY_ID, type ExtensionDefinition } from '../workflows/extensionRegistry';
 
@@ -6,11 +6,13 @@ type Props = { id: string; onNavigate: (path: string) => void };
 type Snapshot = { passports: number; scans: number; findings: number; clients: number; integrations: number };
 const EMPTY: Snapshot = { passports: 0, scans: 0, findings: 0, clients: 0, integrations: 0 };
 
-function Metric({ label, value, loading }: { label: string; value: number; loading: boolean }) {
+type MetricProps = { label: string; value: number; loading: boolean; key?: Key };
+function Metric({ label, value, loading }: MetricProps) {
   return <div className="rounded-2xl border border-white/[.07] bg-white/[.035] p-4 backdrop-blur-xl"><div className="text-[10px] font-bold uppercase tracking-[.18em] text-slate-600">{label}</div><div className="mt-2 text-2xl font-semibold tracking-tight text-white">{loading ? '—' : value}</div></div>;
 }
 
-function Step({ index, label, active }: { index: number; label: string; active: boolean }) {
+type StepProps = { index: number; label: string; active: boolean; key?: Key };
+function Step({ index, label, active }: StepProps) {
   return <div className={`flex items-center gap-3 rounded-xl border px-3 py-3 ${active ? 'border-cyan-300/20 bg-cyan-300/[.07]' : 'border-white/[.06] bg-black/10'}`}><span className={`grid h-7 w-7 place-items-center rounded-full text-[10px] font-bold ${active ? 'bg-cyan-300 text-slate-950' : 'bg-white/[.06] text-slate-500'}`}>{index + 1}</span><span className={active ? 'text-sm text-white' : 'text-sm text-slate-500'}>{label}</span>{active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_12px_rgba(103,232,249,.8)]" />}</div>;
 }
 
