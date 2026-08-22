@@ -58,6 +58,6 @@ describe('SPR authentication/RBAC/database release contracts', () => {
     expect(auth).toContain("router.get('/passports/self-passport'");
     expect(auth).toContain('req.user!.tenantId');
     expect(auth).toContain("healthStatus: 'Not verified'");
-    expect(auth).toContain('scores: null');
+    expect(auth).toContain('overallScore: null');
   });
 });
