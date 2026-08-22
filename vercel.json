@@ -9,6 +9,10 @@
     {
       "source": "/health",
       "destination": "https://spr-app-production.up.railway.app/health"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ],
   "headers": [
