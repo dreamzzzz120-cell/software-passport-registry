@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { Key, ReactNode } from 'react';
 import { EXTENSIONS, type ExtensionDefinition } from '../workflows/extensionRegistry';
 
 type NavItem = { id: string; label: string; icon: string; path: string };
@@ -23,11 +23,13 @@ const SYSTEM: NavItem[] = [
   { id: 'settings', label: 'Settings', icon: '⚙', path: '/settings' },
 ];
 
-function NavButton({ item, active, onNavigate }: { item: NavItem; active: boolean; onNavigate: (path: string) => void }) {
+type NavButtonProps = { item: NavItem; active: boolean; onNavigate: (path: string) => void; key?: Key };
+function NavButton({ item, active, onNavigate }: NavButtonProps) {
   return <button onClick={() => onNavigate(item.path)} className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${active ? 'border border-cyan-300/20 bg-cyan-300/10 text-white shadow-[0_0_28px_rgba(34,211,238,.08)]' : 'text-slate-400 hover:bg-white/[.045] hover:text-white'}`}><span className={`grid h-7 w-7 place-items-center rounded-lg border text-xs ${active ? 'border-cyan-300/30 bg-cyan-300/10 text-cyan-200' : 'border-white/10 bg-white/[.025] text-slate-500 group-hover:text-slate-200'}`}>{item.icon}</span><span className="flex-1">{item.label}</span>{active && <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_12px_rgba(103,232,249,.9)]" />}</button>;
 }
 
-function ExtensionButton({ extension, active, onNavigate }: { extension: ExtensionDefinition; active: boolean; onNavigate: (path: string) => void }) {
+type ExtensionButtonProps = { extension: ExtensionDefinition; active: boolean; onNavigate: (path: string) => void; key?: Key };
+function ExtensionButton({ extension, active, onNavigate }: ExtensionButtonProps) {
   return <button onClick={() => onNavigate(extension.entryPath)} className={`group w-full rounded-xl border px-3 py-2.5 text-left transition ${active ? 'border-violet-300/25 bg-violet-300/10' : 'border-transparent hover:border-white/10 hover:bg-white/[.04]'}`}><div className="flex items-center gap-3"><span className="grid h-7 w-7 place-items-center rounded-lg border border-violet-300/20 bg-violet-300/10 text-[10px] font-bold text-violet-200">EX</span><span className="min-w-0 flex-1 truncate text-sm text-slate-300 group-hover:text-white">{extension.shortName}</span><span className="text-[10px] text-slate-600">→</span></div></button>;
 }
 
