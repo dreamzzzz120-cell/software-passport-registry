@@ -3,12 +3,14 @@ import { apiFetch } from '../utils/apiClient';
 import { EXTENSION_BY_ID, type ExtensionDefinition } from '../workflows/extensionRegistry';
 
 type Props = { id: string; onNavigate: (path: string) => void };
-type Snapshot = { passports: number; scans: number; findings: number; clients: number; integrations: number };
-const EMPTY: Snapshot = { passports: 0, scans: 0, findings: 0, clients: 0, integrations: 0 };
+type MetricValue = number | null;
+type Snapshot = { passports: MetricValue; scans: MetricValue; findings: MetricValue; clients: MetricValue; integrations: MetricValue };
+const EMPTY: Snapshot = { passports: null, scans: null, findings: null, clients: null, integrations: null };
 
-type MetricProps = { label: string; value: number; loading: boolean; key?: Key };
+type MetricProps = { label: string; value: MetricValue; loading: boolean; key?: Key };
 function Metric({ label, value, loading }: MetricProps) {
-  return <div className="rounded-2xl border border-white/[.07] bg-white/[.035] p-4 backdrop-blur-xl"><div className="text-[10px] font-bold uppercase tracking-[.18em] text-slate-600">{label}</div><div className="mt-2 text-2xl font-semibold tracking-tight text-white">{loading ? '—' : value}</div></div>;
+  const display = loading ? '—' : value === null ? 'Not verified' : value;
+  return <div className="rounded-2xl border border-white/[.07] bg-white/[.035] p-4 backdrop-blur-xl"><div className="text-[10px] font-bold uppercase tracking-[.18em] text-slate-600">{label}</div><div className="mt-2 text-2xl font-semibold tracking-tight text-white">{display}</div></div>;
 }
 
 type StepProps = { index: number; label: string; active: boolean; key?: Key };
@@ -21,6 +23,7 @@ export default function ExtensionWorkflow({ id, onNavigate }: Props) {
   const [snapshot, setSnapshot] = useState<Snapshot>(EMPTY);
   const [loading, setLoading] = useState(true);
   const [unauthorized, setUnauthorized] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [activeStep, setActiveStep] = useState(0);
 
   useEffect(() => {
@@ -28,26 +31,40 @@ export default function ExtensionWorkflow({ id, onNavigate }: Props) {
     const load = async () => {
       setLoading(true);
       setUnauthorized(false);
+      setLoadFailed(false);
       const responses = await Promise.all([
         apiFetch('/api/user/passports'), apiFetch('/api/scans'), apiFetch('/api/trust-loop/findings'), apiFetch('/api/user/clients'), apiFetch('/api/integrations'),
       ]);
       if (responses.some((response) => response.status === 401)) {
-        if (!cancelled) setUnauthorized(true);
+        if (!cancelled) { setUnauthorized(true); setLoading(false); }
         return;
       }
-      const readCount = async (response: Response) => { if (!response.ok) return 0; const body = await response.json().catch(() => null); if (Array.isArray(body)) return body.length; if (body && Array.isArray(body.passports)) return body.passports.length; if (body && Array.isArray(body.findings)) return body.findings.length; if (body && Array.isArray(body.clients)) return body.clients.length; if (body && Array.isArray(body.integrations)) return body.integrations.length; return 0; };
-      const values = await Promise.all(responses.map(readCount));
-      if (!cancelled) { setSnapshot({ passports: values[0], scans: values[1], findings: values[2], clients: values[3], integrations: values[4] }); setLoading(false); }
+      const readCount = async (response: Response): Promise<MetricValue> => {
+        if (!response.ok) return null;
+        const body = await response.json().catch(() => null);
+        if (Array.isArray(body)) return body.length;
+        if (body && Array.isArray(body.passports)) return body.passports.length;
+        if (body && Array.isArray(body.findings)) return body.findings.length;
+        if (body && Array.isArray(body.clients)) return body.clients.length;
+        if (body && Array.isArray(body.integrations)) return body.integrations.length;
+        return null;
+      };
+      try {
+        const values = await Promise.all(responses.map(readCount));
+        if (!cancelled) { setSnapshot({ passports: values[0], scans: values[1], findings: values[2], clients: values[3], integrations: values[4] }); setLoading(false); }
+      } catch {
+        if (!cancelled) { setLoadFailed(true); setSnapshot(EMPTY); setLoading(false); }
+      }
     };
-    void load().catch(() => { if (!cancelled) setLoading(false); });
+    void load().catch(() => { if (!cancelled) { setLoadFailed(true); setSnapshot(EMPTY); setLoading(false); } });
     return () => { cancelled = true; };
   }, [id]);
 
   const metrics = useMemo(() => {
     if (id === 'msp-compliance') return [['Clients', snapshot.clients], ['Findings', snapshot.findings], ['Passports', snapshot.passports]] as const;
-    if (id === 'integrations') return [['Sources', snapshot.integrations], ['Assets', snapshot.passports], ['Scans', snapshot.scans]] as const;
-    if (id === 'vendor-risk') return [['Vendors / assets', snapshot.passports], ['Findings', snapshot.findings], ['Clients', snapshot.clients]] as const;
-    if (id === 'agent-trust') return [['Agent evidence', snapshot.findings], ['Assets', snapshot.passports], ['Signals', snapshot.scans]] as const;
+    if (id === 'integrations') return [['Sources', snapshot.integrations], ['Passports', snapshot.passports], ['Scans', snapshot.scans]] as const;
+    if (id === 'vendor-risk') return [['Passports / assets', snapshot.passports], ['Findings', snapshot.findings], ['Clients', snapshot.clients]] as const;
+    if (id === 'agent-trust') return [['Agent evidence', snapshot.findings], ['Passports / assets', snapshot.passports], ['Scans', snapshot.scans]] as const;
     return [['Passports', snapshot.passports], ['Scans', snapshot.scans], ['Findings', snapshot.findings]] as const;
   }, [id, snapshot]);
 
@@ -65,7 +82,7 @@ export default function ExtensionWorkflow({ id, onNavigate }: Props) {
 
     <div className="grid gap-5 xl:grid-cols-[1.1fr_.9fr]">
       <div className="rounded-3xl border border-white/[.07] bg-white/[.025] p-5 backdrop-blur-xl"><div className="mb-4"><div className="text-sm font-semibold">Workflow</div><div className="mt-1 text-xs text-slate-600">Every extension owns its own operating sequence.</div></div><div className="space-y-2">{extension.steps.map((step, index) => <Step key={step} index={index} label={step} active={index === activeStep} />)}</div></div>
-      <div className="rounded-3xl border border-white/[.07] bg-white/[.025] p-5 backdrop-blur-xl"><div className="text-sm font-semibold">Observed evidence surface</div><p className="mt-1 text-xs leading-5 text-slate-600">Counts below are read from protected API responses. Unavailable sources are shown as zero rather than fabricated records.</p><div className="mt-5 space-y-3 text-xs">{[['Passports', snapshot.passports, '/passports'], ['Scans', snapshot.scans, '/scans'], ['Findings', snapshot.findings, '/alerts'], ['Clients', snapshot.clients, '/clients']].map(([label, value, path]) => <button key={String(label)} onClick={() => onNavigate(String(path))} className="flex w-full items-center justify-between rounded-xl border border-white/[.06] bg-black/10 px-3 py-3 text-left hover:border-white/15"><span className="text-slate-400">{label}</span><span className="font-semibold text-white">{loading ? '—' : String(value)} <span className="ml-2 text-slate-600">→</span></span></button>)}</div></div>
+      <div className="rounded-3xl border border-white/[.07] bg-white/[.025] p-5 backdrop-blur-xl"><div className="text-sm font-semibold">Observed evidence surface</div><p className="mt-1 text-xs leading-5 text-slate-600">Counts are displayed only when the protected API returns a recognized collection. Unavailable sources are explicitly marked <span className="text-slate-400">Not verified</span>.</p>{loadFailed && <div className="mt-3 rounded-xl border border-rose-300/15 bg-rose-300/[.04] p-3 text-xs text-rose-100/80">Evidence sources could not be loaded. No values are inferred.</div>}<div className="mt-5 space-y-3 text-xs">{[['Passports', snapshot.passports, '/passports'], ['Scans', snapshot.scans, '/scans'], ['Findings', snapshot.findings, '/alerts'], ['Clients', snapshot.clients, '/clients']].map(([label, value, path]) => <button key={String(label)} onClick={() => onNavigate(String(path))} className="flex w-full items-center justify-between rounded-xl border border-white/[.06] bg-black/10 px-3 py-3 text-left hover:border-white/15"><span className="text-slate-400">{label}</span><span className="font-semibold text-white">{loading ? '—' : value === null ? 'Not verified' : String(value)} <span className="ml-2 text-slate-600">→</span></span></button>)}</div></div>
     </div>
   </section>;
 }
