@@ -5,6 +5,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { createHash, randomUUID } from 'node:crypto';
+import IORedis from 'ioredis';
 import { adminAuth } from '../lib/firebase-admin.ts';
 import { config } from '../config.ts';
 import { db } from '../db/index.ts';
@@ -30,7 +31,7 @@ interface RateLimitStore { incr(key: string, windowMs: number, limit: number): P
 
 class InMemoryStore implements RateLimitStore {
   private map = new Map<string, RateLimitRecord>();
-  async incr(key: string, windowMs: number) {
+  async incr(key: string, windowMs: number, _limit: number) {
     const now = Date.now();
     const rec = this.map.get(key);
     if (!rec || now >= rec.resetAt) {
@@ -68,16 +69,10 @@ export class RedisStore implements RateLimitStore {
 }
 
 let sharedStore: RateLimitStore = new InMemoryStore();
-let IORedis: any;
-function loadIoredis() {
-  try { return require('ioredis'); } catch { return undefined; }
-}
 
 export function createSharedRateLimitStoreFromEnv(): RateLimitStore {
   if (!config.isProduction) return new InMemoryStore();
   if (!config.redis.url) throw new Error('REDIS_URL is required for production rate limiting');
-  IORedis ??= loadIoredis();
-  if (!IORedis) throw new Error('ioredis is required for production rate limiting');
   const client = new IORedis(config.redis.url, { lazyConnect: true, enableReadyCheck: true, maxRetriesPerRequest: 2, connectTimeout: 5000, commandTimeout: 5000, retryStrategy: (times: number) => Math.min(times * 250, 2000) });
   client.on('error', (err: Error) => console.error('[RateLimiter] Redis error:', err.message));
   client.on('ready', () => console.info('[RateLimiter] Redis ready'));
@@ -116,9 +111,6 @@ function limiterIdentity(req: Request) {
 export const rateLimiter = async (req: Request, res: Response, next: NextFunction) => {
   const budget = budgetFor(req);
   const { ip, credentialFingerprint } = limiterIdentity(req);
-  // Authentication may run after this middleware, so do not depend on req.user
-  // here. Authenticated credentials get a stable credential-scoped budget;
-  // anonymous traffic is independently bounded by source IP.
   const key = credentialFingerprint
     ? `rl:v2:${budget.className}:credential:${credentialFingerprint}`
     : `rl:v2:${budget.className}:ip:${ip}`;
