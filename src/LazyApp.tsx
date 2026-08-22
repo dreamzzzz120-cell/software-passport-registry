@@ -18,15 +18,18 @@ function AppBoot() {
   );
 }
 
-interface BootBoundaryProps {
-  children: ReactNode;
-}
-
 interface BootBoundaryState {
   error: Error | null;
 }
 
-class BootBoundary extends Component<BootBoundaryProps, BootBoundaryState> {
+class BootBoundary extends Component<{}, BootBoundaryState> {
+  private readonly children: ReactNode;
+
+  constructor(props: { children?: ReactNode }) {
+    super(props);
+    this.children = props.children ?? null;
+  }
+
   state: BootBoundaryState = { error: null };
 
   static getDerivedStateFromError(error: Error): BootBoundaryState {
@@ -38,9 +41,8 @@ class BootBoundary extends Component<BootBoundaryProps, BootBoundaryState> {
   }
 
   render() {
-    const { children } = this.props;
     const { error } = this.state;
-    if (!error) return children;
+    if (!error) return this.children;
 
     const message = error.message || 'The application could not start.';
     const firebaseConfigMissing = message.includes('VITE_FIREBASE_');
