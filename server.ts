@@ -24,7 +24,10 @@ import { executePublicMcpTool } from './src/mcp/execute.ts';
 const app = express();
 const startedAt = Date.now();
 const requestBodyLimit = process.env.REQUEST_BODY_LIMIT || '2mb';
-if (config.trustProxy) app.set('trust proxy', true);
+// Railway/Vercel places a single known reverse-proxy hop in front of the app.
+// Never trust arbitrary forwarded hops: Express proxy trust affects req.ip,
+// req.secure and therefore rate limiting and HTTPS enforcement.
+if (config.trustProxy) app.set('trust proxy', 1);
 app.disable('x-powered-by');
 if (config.sentry.dsn) Sentry.init({ dsn: config.sentry.dsn, environment: config.nodeEnv, tracesSampleRate: config.isProduction ? 0.1 : 1.0 });
 const allowedOrigins = new Set(config.allowedOrigins);
