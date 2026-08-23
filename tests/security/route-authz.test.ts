@@ -9,6 +9,7 @@ let server: Server | undefined;
 let baseUrl = '';
 const tokenA = process.env.SPR_TEST_TENANT_A_ID_TOKEN;
 const tokenB = process.env.SPR_TEST_TENANT_B_ID_TOKEN;
+const unverifiedToken = process.env.SPR_TEST_UNVERIFIED_ID_TOKEN;
 const passportA = process.env.SPR_TEST_TENANT_A_RESOURCE_ID;
 const passportB = process.env.SPR_TEST_TENANT_B_RESOURCE_ID;
 
@@ -36,6 +37,7 @@ describeRoute('authenticated tenant authorization boundaries', () => {
     expect(tokenA).toBeTruthy();
     expect(tokenB).toBeTruthy();
     expect(tokenA).not.toBe(tokenB);
+    expect(unverifiedToken).toBeTruthy();
     expect(passportA).toBeTruthy();
     expect(passportB).toBeTruthy();
     expect(passportA).not.toBe(passportB);
@@ -72,5 +74,10 @@ describeRoute('authenticated tenant authorization boundaries', () => {
       body: JSON.stringify({ findingId: 'nonexistent-cross-tenant-finding', title: 'cross-tenant mutation' }),
     });
     expect([404, 409]).toContain(response.status);
+  });
+
+  it('rejects an unverified identity from protected Trust Loop reads', async () => {
+    const response = await fetch(`${baseUrl}/api/trust-loop/findings`, { headers: auth(unverifiedToken!) });
+    expect(response.status).toBe(403);
   });
 });
