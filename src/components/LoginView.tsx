@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { createUserWithEmailAndPassword, getRedirectResult, reload, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithRedirect, type User } from 'firebase/auth';
+import { createUserWithEmailAndPassword, GoogleAuthProvider, onAuthStateChanged, reload, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithPopup, signOut, type User } from 'firebase/auth';
 import { AlertCircle, ArrowRight, CheckCircle2, Eye, EyeOff, Loader, ShieldCheck } from 'lucide-react';
 import { auth, googleAuthProvider } from '../lib/firebase';
 
@@ -17,6 +17,10 @@ const authMessage = (error: any, fallback: string) => {
     case 'auth/weak-password': return 'Choose a stronger password with at least 6 characters.';
     case 'auth/unauthorized-domain': return `Google sign-in is blocked for this site (${window.location.hostname}). Add this exact domain to Firebase Authentication → Settings → Authorized domains.`;
     case 'auth/operation-not-allowed': return 'Google sign-in is disabled in Firebase. Enable the Google provider in Authentication → Sign-in method.';
+    case 'auth/popup-blocked': return 'Your browser blocked the Google sign-in window. Allow pop-ups for this site and try again.';
+    case 'auth/popup-closed-by-user': return 'Google sign-in was cancelled.';
+    case 'auth/cancelled-popup-request': return 'Another Google sign-in request is already active.';
+    case 'auth/account-exists-with-different-credential': return 'This email already uses a different sign-in method. Sign in with that method first.';
     case 'auth/network-request-failed': return 'Authentication could not reach Firebase. Check the network connection and try again.';
     case 'auth/web-storage-unsupported': return 'Browser storage is unavailable. Enable cookies/site data for this site and try again.';
     default: return error?.message ? `${fallback} (${error.code || 'unknown-error'})` : fallback;
@@ -33,11 +37,9 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
   const [notice, setNotice] = useState('');
 
   const complete = async (user: User) => {
-    // Firebase can cache emailVerified=false after the user verifies in a
-    // different browser/tab. Reload the authoritative user record first.
     await reload(user);
     if (!user.emailVerified) {
-      setNotice('Your account is authenticated but your email is not verified yet. Verify it, then use Sign in again.');
+      setNotice('Your account is authenticated but your email is not verified yet. Verify it, then sign in again.');
       return;
     }
     const token = await user.getIdToken(true);
@@ -52,17 +54,20 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
   };
 
   useEffect(() => {
-    let active = true;
-    void getRedirectResult(auth)
-      .then(async (result) => {
-        if (!active || !result?.user) return;
-        setGoogleLoading(true);
-        setError('');
-        await complete(result.user);
-      })
-      .catch((e) => { if (active) setError(authMessage(e, 'Google sign-in could not be completed.')); })
-      .finally(() => { if (active) setGoogleLoading(false); });
-    return () => { active = false; };
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      if (!currentUser) return;
+      if (currentUser.emailVerified) return;
+      setNotice('Verify your email before entering the protected workspace.');
+    });
+    const onProvisioningFailure = () => {
+      setError('Your Firebase account is valid, but SPR has not provisioned this account in its workspace yet. Owner access is granted only through the controlled owner bootstrap.');
+      setNotice('Authentication succeeded; workspace authorization is still required.');
+    };
+    window.addEventListener('auth-provisioning-failed', onProvisioningFailure);
+    return () => {
+      unsubscribe();
+      window.removeEventListener('auth-provisioning-failed', onProvisioningFailure);
+    };
   }, []);
 
   const submit = async (e: React.FormEvent) => {
@@ -82,7 +87,7 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
       const result = await createUserWithEmailAndPassword(auth, email.trim(), password);
       await sendEmailVerification(result.user);
       setNotice('Account created. Check your email, verify it, then sign in.');
-      await auth.signOut();
+      await signOut(auth);
     } catch (e) {
       setError(authMessage(e, 'Account creation failed.'));
     } finally { setLoading(false); }
@@ -92,12 +97,12 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
     if (loading || googleLoading) return;
     setGoogleLoading(true); setError(''); setNotice('Opening secure Google sign-in…');
     try {
-      await signInWithRedirect(auth, googleAuthProvider);
+      const result = await signInWithPopup(auth, googleAuthProvider);
+      await complete(result.user);
     } catch (e: any) {
-      setGoogleLoading(false);
-      setNotice('');
       setError(authMessage(e, 'Google sign-in failed.'));
-    }
+      if (e?.code === 'auth/popup-closed-by-user') setNotice('');
+    } finally { setGoogleLoading(false); }
   };
 
   const reset = async () => {
@@ -126,12 +131,17 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
   const busy = loading || googleLoading;
 
   return <div className="min-h-screen flex items-center justify-center p-6">
-    <form onSubmit={submit} className="w-full max-w-md space-y-5">
+    <form onSubmit={submit} className="w-full max-w-md space-y-5" noValidate>
       <div className="text-center text-xs font-bold uppercase tracking-[.25em] text-cyan-300">Software Passport Registry</div>
-      {error && <div role="alert"><AlertCircle className="inline mr-2" />{error}</div>}
-      {notice && <div role="status"><CheckCircle2 className="inline mr-2" />{notice}</div>}
-      <input aria-label="Email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-      <div><input aria-label="Password" type={showPassword ? 'text' : 'password'} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} required /><button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? <EyeOff /> : <Eye />}</button></div>
+      {error && <div role="alert" className="rounded-xl border border-red-400/20 bg-red-400/10 p-3 text-sm text-red-200"><AlertCircle className="inline mr-2" />{error}</div>}
+      {notice && <div role="status" className="rounded-xl border border-cyan-300/20 bg-cyan-300/10 p-3 text-sm text-cyan-100"><CheckCircle2 className="inline mr-2" />{notice}</div>}
+      <label htmlFor="spr-email" className="sr-only">Email</label>
+      <input id="spr-email" aria-label="Email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+      <div>
+        <label htmlFor="spr-password" className="sr-only">Password</label>
+        <input id="spr-password" aria-label="Password" type={showPassword ? 'text' : 'password'} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} required />
+        <button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? <EyeOff /> : <Eye />}</button>
+      </div>
       <button type="submit" disabled={busy}>{loading ? <Loader className="inline animate-spin" /> : <ArrowRight className="inline" />} Sign in</button>
       <button type="button" disabled={busy} onClick={register}><ShieldCheck className="inline" /> Create account</button>
       <button type="button" disabled={busy} onClick={google}>{googleLoading ? <Loader className="inline animate-spin" /> : null} Continue with Google</button>
