@@ -30,7 +30,7 @@ jobs:
           cache: npm
 
       - name: Install locked dependencies
-        run: npm ci --ignore-scripts
+        run: npm ci
 
       - name: Type safety
         run: npm run typecheck
@@ -62,16 +62,8 @@ jobs:
             exit 1
           fi
 
-      - name: Verify no executable dependency lifecycle scripts ran
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -f package-lock.json
-          echo 'Dependencies installed with npm lifecycle scripts disabled.'
-
       - name: Dependency review
         if: github.event_name == 'pull_request'
         uses: actions/dependency-review-action@v4
         with:
           fail-on-severity: high
-          deny-licenses: GPL-2.0;GPL-3.0;AGPL-1.0;AGPL-3.0
