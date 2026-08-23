@@ -85,7 +85,10 @@ async function buildVerificationResponse(tenantId: string, passport: any, res: a
       schemaVersion: 'spr-agent-v1',
       status,
       software: { passportId: passport.id, name: passport.name },
-      scores: { overall: passport.overall_score ?? null, security: passport.security_score ?? null, compliance: passport.compliance_score ?? null },
+      // Legacy passport score columns are retained for migration compatibility,
+      // but are deliberately never exposed as authoritative verification scores.
+      // Trust decisions must come from the evidence ledger and current observation.
+      scores: { overall: null, security: null, compliance: null, status: 'not_authoritatively_scored' },
       evidence: { count: evidence.length, completeness, latestObservationAt: latest?.generated_at ?? null, latestHash: latest?.canonical_payload_hash ?? null },
       findings: { total: findings.length, open: openFindings.length, criticalOrHigh: criticalOrHigh.length, items: findings.slice(0, 50) },
       verification: { observed: Boolean(latest), evidenceBacked: evidence.length > 0, generatedAt: latest?.generated_at ?? null },
