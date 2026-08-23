@@ -16,7 +16,7 @@ permissions:
 jobs:
   route-security:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:16
@@ -35,10 +35,11 @@ jobs:
       NODE_ENV: test
       SPR_SECURITY_TEST_AUTH: 'true'
       SPR_TEST_DATABASE_URL: postgresql://spr_test:spr_test_only@127.0.0.1:5432/spr_security_test
-      SPR_TEST_FIREBASE_PROJECT_ID: spr-security-test
+      DATABASE_URL: postgresql://spr_test:spr_test_only@127.0.0.1:5432/spr_security_test
+      SPR_TEST_FIREBASE_PROJECT_ID: demo-spr-security
       SPR_TEST_TENANT_A_UID: tenant-a-test-user
       SPR_TEST_TENANT_B_UID: tenant-b-test-user
-      DATABASE_URL: postgresql://spr_test:spr_test_only@127.0.0.1:5432/spr_security_test
+      FIREBASE_AUTH_EMULATOR_HOST: 127.0.0.1:9099
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,12 +49,38 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --ignore-scripts
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools@latest
+      - name: Start Firebase Auth emulator
+        run: firebase emulators:start --only auth --project demo-spr-security > /tmp/firebase-emulator.log 2>&1 &
+      - name: Wait for Auth emulator
+        run: |
+          for i in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4000 >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/firebase-emulator.log
+          exit 1
+      - name: Create isolated emulator identities and export ID tokens
+        shell: bash
+        run: |
+          set -euo pipefail
+          create_user() {
+            local uid="$1" email="$2" out="$3"
+            curl --fail --silent --show-error \
+              -X POST \
+              -H 'content-type: application/json' \
+              -d "{\"localId\":\"${uid}\",\"email\":\"${email}\",\"password\":\"SecurityTest-Only-123!\",\"returnSecureToken\":true}" \
+              "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo-spr-security" > "$out"
+          }
+          create_user tenant-a-test-user tenant-a@security.test /tmp/a.json
+          create_user tenant-b-test-user tenant-b@security.test /tmp/b.json
+          echo "SPR_TEST_TENANT_A_ID_TOKEN=$(node -p \"require('/tmp/a.json').idToken\")" >> "$GITHUB_ENV"
+          echo "SPR_TEST_TENANT_B_ID_TOKEN=$(node -p \"require('/tmp/b.json').idToken\")" >> "$GITHUB_ENV"
       - name: Apply database migrations
         run: |
-          if [ -f migrations/0000_base_application_schema.sql ]; then
-            for migration in migrations/*.sql; do
-              PGPASSWORD=spr_test_only psql "$SPR_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
-            done
-          fi
+          for migration in migrations/*.sql; do
+            PGPASSWORD=spr_test_only psql "$SPR_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
+          done
       - name: Run route security tests
         run: npx vitest run tests/security/route-authz.test.ts tests/security/authorization-boundaries.test.ts tests/security/fixture-contract.test.ts
