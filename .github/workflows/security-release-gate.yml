@@ -1,0 +1,85 @@
+name: Security Release Gate
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  security-gate:
+    name: Security gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: spr_test
+          POSTGRES_PASSWORD: spr_test_only
+          POSTGRES_DB: spr_security_test
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U spr_test -d spr_security_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      NODE_ENV: test
+      SPR_SKIP_AUTOSTART: 'true'
+      SPR_SECURITY_TEST_AUTH: 'true'
+      SPR_TEST_DATABASE_URL: postgresql://spr_test:spr_test_only@127.0.0.1:5432/spr_security_test
+      DATABASE_URL: postgresql://spr_test:spr_test_only@127.0.0.1:5432/spr_security_test
+      SPR_TEST_FIREBASE_PROJECT_ID: demo-spr-security
+      FIREBASE_PROJECT_ID: demo-spr-security
+      FIREBASE_AUTH_EMULATOR_HOST: 127.0.0.1:9099
+      SPR_TEST_TENANT_A_UID: tenant-a-test-user
+      SPR_TEST_TENANT_B_UID: tenant-b-test-user
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools@latest
+      - name: Start Firebase Auth emulator
+        run: firebase emulators:start --only auth --project demo-spr-security > /tmp/firebase.log 2>&1 &
+      - name: Wait for emulator
+        run: |
+          for i in {1..30}; do curl --fail --silent http://127.0.0.1:4000 >/dev/null && exit 0; sleep 1; done
+          cat /tmp/firebase.log
+          exit 1
+      - name: Provision security identities
+        run: |
+          set -euo pipefail
+          create_user() {
+            local uid="$1" email="$2" verified="$3"
+            local body
+            body=$(node -e 'const [u,e,v]=process.argv.slice(1);console.log(JSON.stringify({localId:u,email:e,password:"SecurityTest-Only-123!",emailVerified:v==="true"}))' "$uid" "$email" "$verified")
+            curl --fail --silent --show-error -X POST -H 'content-type: application/json' -d "$body" "http://127.0.0.1:9099/emulator/v1/projects/demo-spr-security/accounts" >/tmp/user.json
+            test "$(node -p 'require("/tmp/user.json").localId')" = "$uid"
+            body=$(node -e 'console.log(JSON.stringify({email:process.argv[1],password:"SecurityTest-Only-123!",returnSecureToken:true}))' "$email")
+            curl --fail --silent --show-error -X POST -H 'content-type: application/json' -d "$body" "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo-spr-security" >/tmp/token.json
+            node -e 'if(!require("/tmp/token.json").idToken)process.exit(1)'
+          }
+          create_user tenant-a-test-user tenant-a@security.test true
+          create_user tenant-b-test-user tenant-b@security.test true
+          create_user unverified-test-user unverified@security.test false
+      - name: Apply migrations
+        run: |
+          shopt -s nullglob
+          migrations=(migrations/*.sql)
+          test ${#migrations[@]} -gt 0
+          for migration in "${migrations[@]}"; do PGPASSWORD=spr_test_only psql "$SPR_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"; done
+      - name: Seed authorization fixtures
+        run: |
+          test -f tests/security/seed-authz-fixtures.sql
+          PGPASSWORD=spr_test_only psql "$SPR_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/security/seed-authz-fixtures.sql
+      - name: Run security suite
+        run: npx vitest run tests/security/route-authz.test.ts tests/security/fixture-contract.test.ts tests/security/http-hardening.test.ts
+      - name: Verify production build
+        run: npm run build
