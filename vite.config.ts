@@ -3,19 +3,16 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig(({ mode }) => {
-  // Vercel currently stores the Firebase web config under unprefixed names
-  // (apiKey/authDomain/etc.). Vite only exposes VITE_* variables to browser
-  // code, so bridge the build-time values explicitly while preserving the
-  // existing VITE_FIREBASE_* names used by src/lib/firebase.ts.
-  const env = loadEnv(mode, process.cwd(), '');
+  const fileEnv = loadEnv(mode, process.cwd(), '');
+  const env = (name: string) => process.env[name] ?? fileEnv[name];
   const firebaseEnv = {
-    apiKey: env.VITE_FIREBASE_API_KEY ?? env.apiKey,
-    authDomain: env.VITE_FIREBASE_AUTH_DOMAIN ?? env.authDomain,
-    projectId: env.VITE_FIREBASE_PROJECT_ID ?? env.projectId,
-    storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET ?? env.storageBucket,
-    messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID ?? env.messagingSenderId,
-    appId: env.VITE_FIREBASE_APP_ID ?? env.appId,
-    measurementId: env.VITE_FIREBASE_MEASUREMENT_ID ?? env.measurementId,
+    apiKey: env('VITE_FIREBASE_API_KEY') ?? env('apiKey'),
+    authDomain: env('VITE_FIREBASE_AUTH_DOMAIN') ?? env('authDomain'),
+    projectId: env('VITE_FIREBASE_PROJECT_ID') ?? env('projectId'),
+    storageBucket: env('VITE_FIREBASE_STORAGE_BUCKET') ?? env('storageBucket'),
+    messagingSenderId: env('VITE_FIREBASE_MESSAGING_SENDER_ID') ?? env('messagingSenderId'),
+    appId: env('VITE_FIREBASE_APP_ID') ?? env('appId'),
+    measurementId: env('VITE_FIREBASE_MEASUREMENT_ID') ?? env('measurementId'),
   };
 
   return {
