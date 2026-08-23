@@ -4,13 +4,19 @@ import App from './App';
 import './index.css';
 import './styles/spr-shell.css';
 
-class BootstrapErrorBoundary extends Component<
-  { children: ReactNode },
-  { error: Error | null }
-> {
-  state = { error: null as Error | null };
+type BootstrapProps = { children: ReactNode };
+type BootstrapState = { error: Error | null };
 
-  static getDerivedStateFromError(error: Error) {
+class BootstrapErrorBoundary extends Component<BootstrapProps, BootstrapState> {
+  private readonly bootstrapChildren: ReactNode;
+
+  constructor(props: BootstrapProps) {
+    super(props);
+    this.bootstrapChildren = props.children;
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): BootstrapState {
     return { error };
   }
 
@@ -32,7 +38,7 @@ class BootstrapErrorBoundary extends Component<
         </main>
       );
     }
-    return this.props.children;
+    return this.bootstrapChildren;
   }
 }
 
