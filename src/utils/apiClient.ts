@@ -52,7 +52,16 @@ export const apiFetch = async (
     const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch(resolvedUrl, { ...init, headers, signal: controller.signal });
-      if (response.status === 401) window.dispatchEvent(new CustomEvent('auth-expired'));
+      if (response.status === 401) {
+        window.dispatchEvent(new CustomEvent('auth-expired'));
+      }
+      if (response.status === 403 && resolvedUrl.pathname === '/api/user/me') {
+        // A valid Firebase identity without a persisted SPR user record is
+        // authenticated but not authorized for the workspace. Do not render
+        // a partially initialized dashboard or silently fall back to Viewer.
+        window.dispatchEvent(new CustomEvent('auth-provisioning-failed'));
+        await auth.signOut().catch(() => undefined);
+      }
       return response;
     } catch (err) {
       lastError = err;
