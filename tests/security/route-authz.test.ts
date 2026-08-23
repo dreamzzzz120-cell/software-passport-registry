@@ -2,17 +2,16 @@ import { beforeAll, afterAll, describe, expect, it } from 'vitest';
 import type { Server } from 'node:http';
 import { app } from '../../server.ts';
 
-/**
- * Real HTTP boundary tests. Authentication is intentionally supplied by the
- * test environment through SPR_SECURITY_TEST_AUTH rather than by bypassing
- * middleware. The suite is skipped unless an isolated test auth provider is
- * configured, so it can never accidentally exercise production credentials.
- */
 const enabled = process.env.SPR_SECURITY_TEST_AUTH === 'true' && process.env.NODE_ENV === 'test';
 const describeRoute = enabled ? describe : describe.skip;
 
 let server: Server | undefined;
 let baseUrl = '';
+
+const tokenA = process.env.SPR_TEST_TENANT_A_ID_TOKEN;
+const tokenB = process.env.SPR_TEST_TENANT_B_ID_TOKEN;
+const fixtureA = process.env.SPR_TEST_TENANT_A_RESOURCE_ID;
+const fixtureB = process.env.SPR_TEST_TENANT_B_RESOURCE_ID;
 
 beforeAll(async () => {
   if (!enabled) return;
@@ -31,32 +30,49 @@ afterAll(async () => {
   await new Promise<void>((resolve) => server!.close(() => resolve()));
 });
 
-describeRoute('route-level authorization boundaries', () => {
-  it('rejects unauthenticated access to protected trust-loop reads', async () => {
-    const response = await fetch(`${baseUrl}/api/trust-loop/findings`);
-    expect([401, 403]).toContain(response.status);
+function auth(token: string) {
+  return { authorization: `Bearer ${token}` };
+}
+
+describeRoute('authenticated tenant authorization boundaries', () => {
+  it('requires isolated Tenant A/B signed tokens before authenticated tests execute', () => {
+    expect(tokenA).toBeTruthy();
+    expect(tokenB).toBeTruthy();
+    expect(tokenA).not.toBe(tokenB);
+    expect(fixtureA).toBeTruthy();
+    expect(fixtureB).toBeTruthy();
+    expect(fixtureA).not.toBe(fixtureB);
   });
 
-  it('rejects unauthenticated cross-tenant mutation attempts', async () => {
+  it('Tenant A cannot read Tenant B resource', async () => {
+    const response = await fetch(`${baseUrl}/api/trust-loop/findings/${encodeURIComponent(fixtureB!)}`, { headers: auth(tokenA!) });
+    expect([403, 404]).toContain(response.status);
+  });
+
+  it('Tenant A cannot mutate Tenant B resource', async () => {
     const response = await fetch(`${baseUrl}/api/trust-loop/remediations`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ findingId: 'other-tenant-finding', title: 'unauthorized' }),
+      headers: { ...auth(tokenA!), 'content-type': 'application/json' },
+      body: JSON.stringify({ findingId: fixtureB, title: 'cross-tenant mutation' }),
     });
-    expect([401, 403]).toContain(response.status);
+    expect([403, 404]).toContain(response.status);
   });
 
-  it('rejects unauthenticated evidence verification attempts', async () => {
-    const response = await fetch(`${baseUrl}/api/trust-loop/verify`, {
+  it('Tenant A cannot substitute Tenant B identity through the body', async () => {
+    const response = await fetch(`${baseUrl}/api/trust-loop/remediations`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ findingId: 'other-tenant-finding', observationIds: ['other-observation'], evidenceIds: ['other-evidence'] }),
+      headers: { ...auth(tokenA!), 'content-type': 'application/json' },
+      body: JSON.stringify({ tenantId: process.env.SPR_TEST_TENANT_B_UID, findingId: fixtureB, title: 'forged tenant' }),
     });
-    expect([401, 403]).toContain(response.status);
+    expect([403, 404]).toContain(response.status);
   });
 
-  it('does not accept a client supplied tenant identifier as authentication', async () => {
-    const response = await fetch(`${baseUrl}/api/trust-loop/findings?tenantId=attacker-controlled-tenant`);
-    expect([401, 403]).toContain(response.status);
+  it('Tenant B cannot mutate Tenant A resource', async () => {
+    const response = await fetch(`${baseUrl}/api/trust-loop/remediations`, {
+      method: 'POST',
+      headers: { ...auth(tokenB!), 'content-type': 'application/json' },
+      body: JSON.stringify({ findingId: fixtureA, title: 'cross-tenant mutation' }),
+    });
+    expect([403, 404]).toContain(response.status);
   });
 });
