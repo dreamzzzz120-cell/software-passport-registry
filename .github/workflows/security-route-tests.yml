@@ -82,5 +82,10 @@ jobs:
           for migration in migrations/*.sql; do
             PGPASSWORD=spr_test_only psql "$SPR_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
           done
+      - name: Seed isolated Tenant A/B resources
+        run: |
+          PGPASSWORD=spr_test_only psql "$SPR_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/security/seed-authz-fixtures.sql
+          echo 'SPR_TEST_TENANT_A_RESOURCE_ID=security-passport-a' >> "$GITHUB_ENV"
+          echo 'SPR_TEST_TENANT_B_RESOURCE_ID=security-passport-b' >> "$GITHUB_ENV"
       - name: Run route security tests
         run: npx vitest run tests/security/route-authz.test.ts tests/security/authorization-boundaries.test.ts tests/security/fixture-contract.test.ts
