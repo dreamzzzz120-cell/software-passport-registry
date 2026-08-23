@@ -100,4 +100,4 @@ jobs:
           echo 'SPR_TEST_TENANT_A_RESOURCE_ID=security-passport-a' >> "$GITHUB_ENV"
           echo 'SPR_TEST_TENANT_B_RESOURCE_ID=security-passport-b' >> "$GITHUB_ENV"
       - name: Run route security tests
-        run: npx vitest run tests/security/route-authz.test.ts tests/security/fixture-contract.test.ts
+        run: npx vitest run tests/security/route-authz.test.ts tests/security/fixture-contract.test.ts tests/security/http-hardening.test.ts
