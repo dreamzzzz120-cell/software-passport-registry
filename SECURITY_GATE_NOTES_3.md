@@ -1,0 +1,1 @@
+The security gate is fail-closed for high-severity dependency findings and tracked credential material.
