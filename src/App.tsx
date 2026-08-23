@@ -8,6 +8,7 @@ import ExtensionWorkflow from './components/ExtensionWorkflow';
 import ExtensionMarketplace from './components/ExtensionMarketplace';
 import LoginView from './components/LoginView';
 import EvidenceDashboardView from './components/EvidenceDashboardView';
+import CoverageView from './components/CoverageView';
 import AssetsView from './components/AssetsView';
 import PassportsView from './components/PassportsView';
 import ScansView from './components/ScansView';
@@ -128,6 +129,7 @@ export default function App() {
   if (selectedExtension) view = <ExtensionWorkflow id={selectedExtension} onNavigate={navigate} />;
   else switch (path) {
     case '/dashboard': view = <EvidenceDashboardView clients={clients} alerts={alerts} scans={scans} passports={passports} onNavigateTab={onNavigateTab} onOpenQuickAction={quickAction} />; break;
+    case '/coverage': view = <CoverageView clients={clients} scans={scans} passports={passports} onNavigateTab={onNavigateTab} />; break;
     case '/assets': view = <AssetsView clients={clients} searchQuery="" assets={assets} />; break;
     case '/passports': case '/registry': view = <PassportsView passports={passports} selectedPassportId={selectedPassportId} setSelectedPassportId={setSelectedPassportId} searchQuery="" clients={clients} assets={assets} onNavigateTab={onNavigateTab} onUpdatePassport={(passport) => setPassports((current) => current.map((item) => item.id === passport.id ? passport : item))} />; break;
     case '/scans': view = <ScansView scans={scans} clients={clients} assets={assets} passports={passports} onTriggerNewScan={(scan) => setScans((current) => [scan, ...current.filter((item) => item.id !== scan.id)].slice(0, 100))} />; break;
