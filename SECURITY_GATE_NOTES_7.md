@@ -1,0 +1,1 @@
+Fail-closed hardening gate for release verification.
