@@ -1,0 +1,1 @@
+Release gate documentation: repository checks do not prove external infrastructure health.
