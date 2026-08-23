@@ -1,0 +1,1 @@
+Security gate: typecheck, tests, production build, high-severity dependency audit, tracked-secret detection, tracked environment-file detection, and pull-request dependency review.
