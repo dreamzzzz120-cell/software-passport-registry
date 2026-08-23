@@ -28,9 +28,7 @@ jobs:
           - 5432:5432
         options: >-
           --health-cmd "pg_isready -U spr_test -d spr_security_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
+          --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       NODE_ENV: test
       SPR_SKIP_AUTOSTART: 'true'
@@ -44,12 +42,9 @@ jobs:
       FIREBASE_AUTH_EMULATOR_HOST: 127.0.0.1:9099
     steps:
       - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
+        with: { persist-credentials: false }
       - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
+        with: { node-version: 22, cache: npm }
       - run: npm ci --ignore-scripts
       - name: Install Firebase CLI
         run: npm install --global firebase-tools@latest
@@ -58,7 +53,7 @@ jobs:
       - name: Wait for Auth emulator
         run: |
           for i in {1..30}; do
-            if curl --fail --silent http://127.0.0.1:4000 >/dev/null; then exit 0; fi
+            curl --fail --silent http://127.0.0.1:4000 >/dev/null && exit 0
             sleep 1
           done
           cat /tmp/firebase-emulator.log
@@ -69,29 +64,5 @@ jobs:
           set -euo pipefail
           create_user() {
             local uid="$1" email="$2" verified="$3" out="$4"
-            curl --fail --silent --show-error -X POST \
-              -H 'content-type: application/json' \
-              -d "{\"localId\":\"${uid}\",\"email\":\"${email}\",\"password\":\"SecurityTest-Only-123!\",\"emailVerified\":${verified}}" \
-              "http://127.0.0.1:9099/emulator/v1/projects/demo-spr-security/accounts" >/dev/null
-            curl --fail --silent --show-error -X POST -H 'content-type: application/json' \
-              -d "{\"email\":\"${email}\",\"password\":\"SecurityTest-Only-123!\",\"returnSecureToken\":true}" \
-              "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo-spr-security" > "$out"
-          }
-          create_user tenant-a-test-user tenant-a@security.test true /tmp/a.json
-          create_user tenant-b-test-user tenant-b@security.test true /tmp/b.json
-          create_user unverified-test-user unverified@security.test false /tmp/u.json
-          echo "SPR_TEST_TENANT_A_ID_TOKEN=$(node -p \"require('/tmp/a.json').idToken\")" >> "$GITHUB_ENV"
-          echo "SPR_TEST_TENANT_B_ID_TOKEN=$(node -p \"require('/tmp/b.json').idToken\")" >> "$GITHUB_ENV"
-          echo "SPR_TEST_UNVERIFIED_ID_TOKEN=$(node -p \"require('/tmp/u.json').idToken\")" >> "$GITHUB_ENV"
-      - name: Apply database migrations
-        run: |
-          for migration in migrations/*.sql; do
-            PGPASSWORD=spr_test_only psql "$SPR_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
-          done
-      - name: Seed isolated Tenant A/B resources
-        run: |
-          PGPASSWORD=spr_test_only psql "$SPR_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/security/seed-authz-fixtures.sql
-          echo 'SPR_TEST_TENANT_A_RESOURCE_ID=security-passport-a' >> "$GITHUB_ENV"
-          echo 'SPR_TEST_TENANT_B_RESOURCE_ID=security-passport-b' >> "$GITHUB_ENV"
-      - name: Run route security tests
-        run: npx vitest run tests/security/route-authz.test.ts tests/security/fixture-contract.test.ts tests/security/http-hardening.test.ts
+            local payload
+            payload=$(node -e 'const [uid,email,verified]=process.argv.slice(1); process.stdout.write(JSON.stringify({localId:uid,email,password:"SecurityTest-Only-123!",emailVerified:verified==="true
