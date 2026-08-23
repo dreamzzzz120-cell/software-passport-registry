@@ -1,0 +1,1 @@
+Release hardening requires repository gates to pass and does not imply external infrastructure health.
