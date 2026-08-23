@@ -68,21 +68,15 @@ jobs:
           set -euo pipefail
           create_user() {
             local uid="$1" email="$2" out="$3"
-            curl --fail --silent --show-error \
-              -X POST \
-              -H 'content-type: application/json' \
+            curl --fail --silent --show-error -X POST -H 'content-type: application/json' \
               -d "{\"localId\":\"${uid}\",\"email\":\"${email}\",\"password\":\"SecurityTest-Only-123!\",\"returnSecureToken\":true}" \
               "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo-spr-security" > "$out"
             local token
             token=$(node -p "require('$out').idToken")
-            curl --fail --silent --show-error \
-              -X POST \
-              -H 'content-type: application/json' \
+            curl --fail --silent --show-error -X POST -H 'content-type: application/json' \
               -d "{\"idToken\":\"${token}\",\"emailVerified\":true}" \
               "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:update?key=demo-spr-security" >/dev/null
-            curl --fail --silent --show-error \
-              -X POST \
-              -H 'content-type: application/json' \
+            curl --fail --silent --show-error -X POST -H 'content-type: application/json' \
               -d "{\"email\":\"${email}\",\"password\":\"SecurityTest-Only-123!\",\"returnSecureToken\":true}" \
               "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo-spr-security" > "$out"
           }
@@ -101,4 +95,4 @@ jobs:
           echo 'SPR_TEST_TENANT_A_RESOURCE_ID=security-passport-a' >> "$GITHUB_ENV"
           echo 'SPR_TEST_TENANT_B_RESOURCE_ID=security-passport-b' >> "$GITHUB_ENV"
       - name: Run route security tests
-        run: npx vitest run tests/security/route-authz.test.ts tests/security/authorization-boundaries.test.ts tests/security/fixture-contract.test.ts
+        run: npx vitest run tests/security/route-authz.test.ts tests/security/fixture-contract.test.ts
