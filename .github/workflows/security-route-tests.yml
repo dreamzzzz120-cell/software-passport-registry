@@ -1,0 +1,59 @@
+name: Security Route Tests
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'server.ts'
+      - 'tests/security/**'
+      - 'migrations/**'
+      - '.github/workflows/security-route-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  route-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: spr_test
+          POSTGRES_PASSWORD: spr_test_only
+          POSTGRES_DB: spr_security_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U spr_test -d spr_security_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      SPR_SECURITY_TEST_AUTH: 'true'
+      SPR_TEST_DATABASE_URL: postgresql://spr_test:spr_test_only@127.0.0.1:5432/spr_security_test
+      SPR_TEST_FIREBASE_PROJECT_ID: spr-security-test
+      SPR_TEST_TENANT_A_UID: tenant-a-test-user
+      SPR_TEST_TENANT_B_UID: tenant-b-test-user
+      DATABASE_URL: postgresql://spr_test:spr_test_only@127.0.0.1:5432/spr_security_test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Apply database migrations
+        run: |
+          if [ -f migrations/0000_base_application_schema.sql ]; then
+            for migration in migrations/*.sql; do
+              PGPASSWORD=spr_test_only psql "$SPR_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
+            done
+          fi
+      - name: Run route security tests
+        run: npx vitest run tests/security/route-authz.test.ts tests/security/authorization-boundaries.test.ts tests/security/fixture-contract.test.ts
