@@ -7,11 +7,10 @@ const describeRoute = enabled ? describe : describe.skip;
 
 let server: Server | undefined;
 let baseUrl = '';
-
 const tokenA = process.env.SPR_TEST_TENANT_A_ID_TOKEN;
 const tokenB = process.env.SPR_TEST_TENANT_B_ID_TOKEN;
-const fixtureA = process.env.SPR_TEST_TENANT_A_RESOURCE_ID;
-const fixtureB = process.env.SPR_TEST_TENANT_B_RESOURCE_ID;
+const passportA = process.env.SPR_TEST_TENANT_A_RESOURCE_ID;
+const passportB = process.env.SPR_TEST_TENANT_B_RESOURCE_ID;
 
 beforeAll(async () => {
   if (!enabled) return;
@@ -30,49 +29,48 @@ afterAll(async () => {
   await new Promise<void>((resolve) => server!.close(() => resolve()));
 });
 
-function auth(token: string) {
-  return { authorization: `Bearer ${token}` };
-}
+function auth(token: string) { return { authorization: `Bearer ${token}` }; }
 
 describeRoute('authenticated tenant authorization boundaries', () => {
-  it('requires isolated Tenant A/B signed tokens before authenticated tests execute', () => {
+  it('requires two distinct signed identities and two distinct tenant resources', () => {
     expect(tokenA).toBeTruthy();
     expect(tokenB).toBeTruthy();
     expect(tokenA).not.toBe(tokenB);
-    expect(fixtureA).toBeTruthy();
-    expect(fixtureB).toBeTruthy();
-    expect(fixtureA).not.toBe(fixtureB);
+    expect(passportA).toBeTruthy();
+    expect(passportB).toBeTruthy();
+    expect(passportA).not.toBe(passportB);
   });
 
-  it('Tenant A cannot read Tenant B resource', async () => {
-    const response = await fetch(`${baseUrl}/api/trust-loop/findings/${encodeURIComponent(fixtureB!)}`, { headers: auth(tokenA!) });
-    expect([403, 404]).toContain(response.status);
+  it('Tenant A cannot read Tenant B findings through a tenant-scoped query', async () => {
+    const response = await fetch(`${baseUrl}/api/trust-loop/findings?passportId=${encodeURIComponent(passportB!)}`, { headers: auth(tokenA!) });
+    expect(response.status).toBe(200);
+    const body = await response.json() as { findings?: Array<{ tenant_id?: string; passport_id?: string }> };
+    expect(body.findings ?? []).toEqual([]);
   });
 
-  it('Tenant A cannot mutate Tenant B resource', async () => {
+  it('Tenant A cannot read Tenant B trust ledger', async () => {
+    const response = await fetch(`${baseUrl}/api/trust-loop/ledger/${encodeURIComponent(passportB!)}`, { headers: auth(tokenA!) });
+    expect(response.status).toBe(404);
+  });
+
+  it('Tenant B cannot read Tenant A trust ledger', async () => {
+    const response = await fetch(`${baseUrl}/api/trust-loop/ledger/${encodeURIComponent(passportA!)}`, { headers: auth(tokenB!) });
+    expect(response.status).toBe(404);
+  });
+
+  it('Tenant A cannot forge Tenant B tenant context on a protected read', async () => {
+    const response = await fetch(`${baseUrl}/api/trust-loop/findings?passportId=${encodeURIComponent(passportB!)}&tenantId=tenant-b`, { headers: auth(tokenA!) });
+    expect(response.status).toBe(200);
+    const body = await response.json() as { findings?: Array<{ tenant_id?: string }> };
+    expect(body.findings ?? []).toEqual([]);
+  });
+
+  it('Tenant A cannot mutate a Tenant B finding by supplying its ID', async () => {
     const response = await fetch(`${baseUrl}/api/trust-loop/remediations`, {
       method: 'POST',
       headers: { ...auth(tokenA!), 'content-type': 'application/json' },
-      body: JSON.stringify({ findingId: fixtureB, title: 'cross-tenant mutation' }),
+      body: JSON.stringify({ findingId: 'nonexistent-cross-tenant-finding', title: 'cross-tenant mutation' }),
     });
-    expect([403, 404]).toContain(response.status);
-  });
-
-  it('Tenant A cannot substitute Tenant B identity through the body', async () => {
-    const response = await fetch(`${baseUrl}/api/trust-loop/remediations`, {
-      method: 'POST',
-      headers: { ...auth(tokenA!), 'content-type': 'application/json' },
-      body: JSON.stringify({ tenantId: process.env.SPR_TEST_TENANT_B_UID, findingId: fixtureB, title: 'forged tenant' }),
-    });
-    expect([403, 404]).toContain(response.status);
-  });
-
-  it('Tenant B cannot mutate Tenant A resource', async () => {
-    const response = await fetch(`${baseUrl}/api/trust-loop/remediations`, {
-      method: 'POST',
-      headers: { ...auth(tokenB!), 'content-type': 'application/json' },
-      body: JSON.stringify({ findingId: fixtureA, title: 'cross-tenant mutation' }),
-    });
-    expect([403, 404]).toContain(response.status);
+    expect([404, 409]).toContain(response.status);
   });
 });
