@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { onAuthStateChanged, type User } from 'firebase/auth';
+import { onAuthStateChanged, reload, sendEmailVerification, signOut, type User } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 
 const PUBLIC_PATHS = new Set(['/', '/login', '/pricing', '/free-review']);
@@ -14,37 +14,41 @@ export default function AuthGate({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(publicPath);
 
-  // Never let Firebase initialization/network/auth configuration block public pages.
   useEffect(() => {
     if (publicPath) return;
-    return onAuthStateChanged(
-      auth,
-      (nextUser) => {
-        setUser(nextUser);
-        setReady(true);
-      },
-      () => {
-        setUser(null);
-        setReady(true);
-      },
-    );
+    return onAuthStateChanged(auth, (nextUser) => {
+      setUser(nextUser);
+      setReady(true);
+    }, () => {
+      setUser(null);
+      setReady(true);
+    });
   }, [publicPath]);
 
+  useEffect(() => {
+    if (publicPath || !ready || user) return;
+    if (window.location.pathname !== '/login') {
+      window.history.replaceState({}, '', '/login');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+  }, [publicPath, ready, user]);
+
+  useEffect(() => {
+    if (!user || user.emailVerified) return;
+    let cancelled = false;
+    void (async () => {
+      try { await reload(user); } catch { /* Auth state remains authoritative. */ }
+      if (!cancelled && !user.emailVerified) {
+        try { await sendEmailVerification(user); } catch { /* Rate limits are safe to ignore here. */ }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user]);
+
   if (publicPath) return <>{children}</>;
-
-  if (!ready) {
-    return <div className="min-h-screen bg-slate-950 text-white grid place-items-center"><div role="status" aria-live="polite" className="text-sm text-slate-300">Checking secure session…</div></div>;
-  }
-
-  if (!user) {
-    window.history.replaceState({}, '', '/login');
-    window.dispatchEvent(new PopStateEvent('popstate'));
-    return <>{children}</>;
-  }
-
-  if (!user.emailVerified) {
-    return <div className="min-h-screen bg-slate-950 text-white grid place-items-center p-6"><div className="max-w-md rounded-xl border border-amber-300/20 bg-slate-900 p-6"><h1 className="text-xl font-semibold">Verify your email</h1><p className="mt-2 text-sm text-slate-300">Your account must be email-verified before you can access the SPR workspace.</p><button className="mt-5 rounded-lg bg-cyan-300 px-4 py-2 font-semibold text-slate-950" onClick={() => auth.signOut()}>Sign out</button></div></div>;
-  }
+  if (!ready) return <div className="min-h-screen bg-slate-950 text-white grid place-items-center"><div role="status" aria-live="polite" className="text-sm text-slate-300">Checking secure session…</div></div>;
+  if (!user) return <div className="min-h-screen bg-slate-950 text-white grid place-items-center"><div role="status" aria-live="polite" className="text-sm text-slate-300">Redirecting to sign in…</div></div>;
+  if (!user.emailVerified) return <div className="min-h-screen bg-slate-950 text-white grid place-items-center p-6"><div className="max-w-md rounded-xl border border-amber-300/20 bg-slate-900 p-6"><h1 className="text-xl font-semibold">Verify your email</h1><p className="mt-2 text-sm text-slate-300">Your account must be email-verified before you can access the SPR workspace.</p><button className="mt-5 rounded-lg bg-cyan-300 px-4 py-2 font-semibold text-slate-950" onClick={() => void signOut(auth)}>Sign out</button></div></div>;
 
   return <>{children}</>;
 }
