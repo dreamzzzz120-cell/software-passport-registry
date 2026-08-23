@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
+import { db } from '../db/index.ts';
 import { requireAuth, AuthenticatedRequest } from '../middleware/security.ts';
 
 const passportInput = z.object({ passportId: z.string().trim().min(1).max(255) }).strict();
