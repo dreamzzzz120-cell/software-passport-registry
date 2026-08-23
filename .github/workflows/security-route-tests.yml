@@ -62,28 +62,32 @@ jobs:
           done
           cat /tmp/firebase-emulator.log
           exit 1
-      - name: Create isolated verified emulator identities and export ID tokens
+      - name: Create isolated emulator identities and export ID tokens
         shell: bash
         run: |
           set -euo pipefail
           create_user() {
-            local uid="$1" email="$2" out="$3"
+            local uid="$1" email="$2" out="$3" verify="$4"
             curl --fail --silent --show-error -X POST -H 'content-type: application/json' \
               -d "{\"localId\":\"${uid}\",\"email\":\"${email}\",\"password\":\"SecurityTest-Only-123!\",\"returnSecureToken\":true}" \
               "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo-spr-security" > "$out"
-            local token
-            token=$(node -p "require('$out').idToken")
-            curl --fail --silent --show-error -X POST -H 'content-type: application/json' \
-              -d "{\"idToken\":\"${token}\",\"emailVerified\":true}" \
-              "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:update?key=demo-spr-security" >/dev/null
-            curl --fail --silent --show-error -X POST -H 'content-type: application/json' \
-              -d "{\"email\":\"${email}\",\"password\":\"SecurityTest-Only-123!\",\"returnSecureToken\":true}" \
-              "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo-spr-security" > "$out"
+            if [ "$verify" = 'true' ]; then
+              local token
+              token=$(node -p "require('$out').idToken")
+              curl --fail --silent --show-error -X POST -H 'content-type: application/json' \
+                -d "{\"idToken\":\"${token}\",\"emailVerified\":true}" \
+                "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:update?key=demo-spr-security" >/dev/null
+              curl --fail --silent --show-error -X POST -H 'content-type: application/json' \
+                -d "{\"email\":\"${email}\",\"password\":\"SecurityTest-Only-123!\",\"returnSecureToken\":true}" \
+                "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo-spr-security" > "$out"
+            fi
           }
-          create_user tenant-a-test-user tenant-a@security.test /tmp/a.json
-          create_user tenant-b-test-user tenant-b@security.test /tmp/b.json
+          create_user tenant-a-test-user tenant-a@security.test /tmp/a.json true
+          create_user tenant-b-test-user tenant-b@security.test /tmp/b.json true
+          create_user unverified-test-user unverified@security.test /tmp/u.json false
           echo "SPR_TEST_TENANT_A_ID_TOKEN=$(node -p \"require('/tmp/a.json').idToken\")" >> "$GITHUB_ENV"
           echo "SPR_TEST_TENANT_B_ID_TOKEN=$(node -p \"require('/tmp/b.json').idToken\")" >> "$GITHUB_ENV"
+          echo "SPR_TEST_UNVERIFIED_ID_TOKEN=$(node -p \"require('/tmp/u.json').idToken\")" >> "$GITHUB_ENV"
       - name: Apply database migrations
         run: |
           for migration in migrations/*.sql; do
