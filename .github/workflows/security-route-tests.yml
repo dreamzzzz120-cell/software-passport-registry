@@ -33,6 +33,7 @@ jobs:
           --health-retries 10
     env:
       NODE_ENV: test
+      SPR_SKIP_AUTOSTART: 'true'
       SPR_SECURITY_TEST_AUTH: 'true'
       SPR_TEST_DATABASE_URL: postgresql://spr_test:spr_test_only@127.0.0.1:5432/spr_security_test
       DATABASE_URL: postgresql://spr_test:spr_test_only@127.0.0.1:5432/spr_security_test
