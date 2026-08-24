@@ -68,8 +68,6 @@ export class RedisStore implements RateLimitStore {
   }
 }
 
-let sharedStore: RateLimitStore = new InMemoryStore();
-
 export function createSharedRateLimitStoreFromEnv(): RateLimitStore {
   if (!config.isProduction) return new InMemoryStore();
   if (!config.redis.url) throw new Error('REDIS_URL is required for production rate limiting');
@@ -80,7 +78,45 @@ export function createSharedRateLimitStoreFromEnv(): RateLimitStore {
   void client.connect().catch((err: Error) => console.error('[RateLimiter] Redis initial connection failed:', err.message));
   return new RedisStore(createAtomicRateLimitClient('ioredis', client));
 }
-if (config.isProduction) sharedStore = createSharedRateLimitStoreFromEnv();
+
+// Lazily creates the production (Redis-backed) rate limit store on first use rather than
+// at module import time. This avoids crashing the process at startup if REDIS_URL hasn't
+// propagated to the environment yet. Until the store is successfully initialized, requests
+// fail closed (see rateLimiter()'s catch block), and initialization is retried on the next
+// request rather than being attempted only once.
+class LazyRateLimitStore implements RateLimitStore {
+  private store: RateLimitStore | null = null;
+  private initPromise: Promise<RateLimitStore> | null = null;
+
+  private initialize(): Promise<RateLimitStore> {
+    return (async () => {
+      try {
+        const store = createSharedRateLimitStoreFromEnv();
+        this.store = store;
+        console.info('[RateLimiter] Rate limit store initialized');
+        return store;
+      } catch (err) {
+        console.error('[RateLimiter] Rate limit store initialization failed (will retry on next request):', err instanceof Error ? err.message : String(err));
+        // Allow the next request to retry initialization instead of caching the failure forever.
+        this.initPromise = null;
+        throw err;
+      }
+    })();
+  }
+
+  private ensureStore(): Promise<RateLimitStore> {
+    if (this.store) return Promise.resolve(this.store);
+    if (!this.initPromise) this.initPromise = this.initialize();
+    return this.initPromise;
+  }
+
+  async incr(key: string, windowMs: number, limit: number): Promise<RateLimitRecord> {
+    const store = await this.ensureStore();
+    return store.incr(key, windowMs, limit);
+  }
+}
+
+let sharedStore: RateLimitStore = config.isProduction ? new LazyRateLimitStore() : new InMemoryStore();
 export function setRateLimiterStore(s: RateLimitStore) { if (!isTestMode()) throw new Error('setRateLimiterStore is only available in test mode'); sharedStore = s; }
 
 function budgetFor(req: Request) {
