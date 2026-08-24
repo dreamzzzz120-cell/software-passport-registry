@@ -1,9 +1,10 @@
 [build]
-builder = "RAILPACK"
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
 
 [deploy]
 startCommand = "npm start"
 preDeployCommand = ["node dist/migrate.cjs"]
 healthcheckPath = "/health"
-healthcheckTimeout = 120
+healthcheckTimeout = 180
 restartPolicyType = "ALWAYS"
