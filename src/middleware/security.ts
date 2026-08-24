@@ -111,9 +111,13 @@ function limiterIdentity(req: Request) {
 export const rateLimiter = async (req: Request, res: Response, next: NextFunction) => {
   const budget = budgetFor(req);
   const { ip, credentialFingerprint } = limiterIdentity(req);
-  const key = credentialFingerprint
-    ? `rl:v2:${budget.className}:credential:${credentialFingerprint}`
-    : `rl:v2:${budget.className}:ip:${ip}`;
+  // Bind the limit to both network origin and credential. This prevents an attacker
+  // from rotating API keys/bearer tokens to evade the per-IP abuse budget while still
+  // retaining a credential-specific dimension for legitimate multi-user clients.
+  const identity = credentialFingerprint
+    ? `ip:${ip}:credential:${credentialFingerprint}`
+    : `ip:${ip}`;
+  const key = `rl:v3:${budget.className}:${identity}`;
   try {
     const counter = await sharedStore.incr(key, budget.windowMs, budget.max);
     res.setHeader('X-RateLimit-Limit', String(budget.max));
