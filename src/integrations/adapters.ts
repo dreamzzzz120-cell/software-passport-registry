@@ -57,6 +57,7 @@ async function safeRequestJson(url: string, init: RequestInit = {}) {
     return { body, text };
   } catch (error: any) {
     if (error?.name === 'AbortError') throw new Error('PROVIDER_TIMEOUT');
+    if (error?.cause?.code === 'UND_ERR_REDIRECT' || /redirect/i.test(String(error?.message || ''))) throw new Error('PROVIDER_URL_BLOCKED');
     throw error;
   } finally { clearTimeout(timer); }
 }
