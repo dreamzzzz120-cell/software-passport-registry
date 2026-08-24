@@ -19,10 +19,9 @@ export type EvidenceResult = {
 
 const TIMEOUT_MS = 15_000;
 const MAX_RESPONSE_BYTES = 2_000_000;
-const MAX_REDIRECTS = 3;
 const BLOCKED_HOSTS = new Set(['localhost', 'localhost.localdomain', 'metadata.google.internal']);
 
-function isPrivateIp(address: string): boolean {
+export function blockPrivateAddress(address: string): boolean {
   const h = address.toLowerCase().replace(/^\[|\]$/g, '');
   if (h === '::1' || h === '::' || h.startsWith('fc') || h.startsWith('fd') || h.startsWith('fe80:')) return true;
   const p = h.split('.').map(Number);
@@ -36,24 +35,18 @@ async function validateOutboundUrl(raw: string): Promise<URL> {
   if (url.protocol !== 'https:') throw new Error('PROVIDER_URL_MUST_USE_HTTPS');
   if (url.username || url.password) throw new Error('PROVIDER_URL_CREDENTIALS_FORBIDDEN');
   const host = url.hostname.toLowerCase();
-  if (BLOCKED_HOSTS.has(host) || isPrivateIp(host)) throw new Error('PROVIDER_URL_BLOCKED');
+  if (BLOCKED_HOSTS.has(host) || blockPrivateAddress(host)) throw new Error('PROVIDER_URL_BLOCKED');
   const records = await dns.lookup(host, { all: true, verbatim: true });
-  if (!records.length || records.some(r => isPrivateIp(r.address))) throw new Error('PROVIDER_URL_RESOLVES_PRIVATE');
+  if (!records.length || records.some(r => blockPrivateAddress(r.address))) throw new Error('PROVIDER_URL_RESOLVES_PRIVATE');
   return url;
 }
 
-async function safeRequestJson(url: string, init: RequestInit = {}, redirects = 0) {
-  if (redirects > MAX_REDIRECTS) throw new Error('PROVIDER_REDIRECT_LIMIT');
+async function safeRequestJson(url: string, init: RequestInit = {}) {
   const safeUrl = await validateOutboundUrl(url);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const response = await fetch(safeUrl, { ...init, redirect: 'manual', signal: controller.signal, headers: { accept: 'application/json', ...(init.headers || {}) } });
-    if ([301, 302, 303, 307, 308].includes(response.status)) {
-      const location = response.headers.get('location');
-      if (!location) throw new Error('PROVIDER_REDIRECT_WITHOUT_LOCATION');
-      return safeRequestJson(new URL(location, safeUrl).toString(), init, redirects + 1);
-    }
+    const response = await fetch(safeUrl, { ...init, redirect: 'error', signal: controller.signal, headers: { accept: 'application/json', ...(init.headers || {}) } });
     const contentLength = Number(response.headers.get('content-length') || 0);
     if (contentLength > MAX_RESPONSE_BYTES) throw new Error('PROVIDER_RESPONSE_TOO_LARGE');
     const text = await response.text();
