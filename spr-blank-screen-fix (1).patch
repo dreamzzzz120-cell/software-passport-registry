@@ -1,0 +1,334 @@
+diff --git a/package.json b/package.json
+index fb99e0e..80d4271 100644
+--- a/package.json
++++ b/package.json
+@@ -3,10 +3,85 @@
+   "private": true,
+   "version": "1.0.1",
+   "type": "module",
+-  "engines": {"node": ">=22 <23"},
++  "engines": {
++    "node": ">=22 <23"
++  },
+   "packageManager": "npm@10.9.2",
+-  "scripts": {"dev": "cross-env NODE_ENV=development node --import tsx --import ./src/connect-preload.ts server.ts", "build": "cross-env NODE_ENV=production vite build && esbuild src/connect-preload.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/connect-preload.cjs && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/server.cjs && esbuild worker.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/worker.cjs && esbuild scripts/migrate.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/migrate.cjs", "build:owner-bootstrap": "esbuild scripts/bootstrap-initial-owner.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/bootstrap-initial-owner.cjs", "start": "cross-env NODE_ENV=production node -r ./dist/connect-preload.cjs dist/server.cjs", "worker": "cross-env NODE_ENV=production node dist/worker.cjs", "worker:dev": "tsx worker.ts", "ai:gateway": "tsx index.ts", "clean": "node -e \"import { rm } from 'fs/promises'; await rm('dist', { recursive: true, force: true }); await rm('server.js', { force: true });\"", "lint": "tsc --noEmit", "typecheck": "tsc --noEmit", "test": "vitest run", "zip:full": "node scripts/make-full-zip.js"},
+-  "dependencies": {"@google/genai":"^2.4.0","@sentry/node":"^10.68.0","@supabase/ssr":"^0.12.4","@supabase/supabase-js":"^2.112.2","ai":"^6.0.0","cors":"^2.8.6","cross-env":"^10.1.0","d3":"^7.9.0","dompurify":"^3.4.13","dotenv":"^17.0.0","drizzle-orm":"^0.45.2","express":"^4.18.2","express-async-errors":"^3.1.1","express-rate-limit":"^8.3.1","firebase":"^12.17.1","firebase-admin":"^13.6.0","helmet":"^8.1.0","html2canvas":"^1.4.1","ioredis":"^5.9.3","jspdf":"^4.2.1","jspdf-autotable":"^5.0.8","lucide-react":"^0.468.0","lucide-react-base":"npm:lucide-react@^0.468.0","motion":"^12.43.0","pg":"^8.23.0","qrcode":"^1.5.4","react":"^18.3.1","react-dom":"^18.3.1","recharts":"^2.10.3","stripe":"^14.12.0","zod":"^3.22.4"},
+-  "devDependencies": {"@tailwindcss/vite":"^4.1.14","@types/cors":"^2.8.19","@types/d3":"^7.4.3","@types/dompurify":"^3.0.5","@types/express":"^4.17.21","@types/node":"^22.14.0","@types/pg":"^8.23.1","@types/qrcode":"^1.5.6","@vitejs/plugin-react":"^5.2.0","drizzle-kit":"^0.31.10","esbuild":"^0.28.1","tailwindcss":"^4.1.14","tsx":"^4.7.0","typescript":"^5.3.3","vitest":"^3.2.7"},
+-  "overrides":{"brace-expansion":"5.0.9","minimatch":"10.2.5","nanoid":"3.3.18","@esbuild-kit/core-utils":{"esbuild":"0.28.1"},"@esbuild-kit/esm-loader":{"esbuild":"0.28.1"},"uuid":"11.1.1","recast":"0.24.1"}
++  "scripts": {
++    "dev": "cross-env NODE_ENV=development node --import tsx --import ./src/connect-preload.ts server.ts",
++    "build": "cross-env NODE_ENV=production vite build && esbuild src/connect-preload.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/connect-preload.cjs && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/server.cjs && esbuild worker.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/worker.cjs && esbuild scripts/migrate.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/migrate.cjs",
++    "build:owner-bootstrap": "esbuild scripts/bootstrap-initial-owner.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/bootstrap-initial-owner.cjs",
++    "start": "cross-env NODE_ENV=production node -r ./dist/connect-preload.cjs dist/server.cjs",
++    "worker": "cross-env NODE_ENV=production node dist/worker.cjs",
++    "worker:dev": "tsx worker.ts",
++    "ai:gateway": "tsx index.ts",
++    "clean": "node -e \"import { rm } from 'fs/promises'; await rm('dist', { recursive: true, force: true }); await rm('server.js', { force: true });\"",
++    "lint": "tsc --noEmit",
++    "typecheck": "tsc --noEmit",
++    "test": "vitest run",
++    "zip:full": "node scripts/make-full-zip.js"
++  },
++  "dependencies": {
++    "@google/genai": "^2.4.0",
++    "@sentry/node": "^10.68.0",
++    "@supabase/ssr": "^0.12.4",
++    "@supabase/supabase-js": "^2.112.2",
++    "ai": "^6.0.0",
++    "cors": "^2.8.6",
++    "cross-env": "^10.1.0",
++    "d3": "^7.9.0",
++    "dompurify": "^3.4.13",
++    "dotenv": "^17.0.0",
++    "drizzle-orm": "^0.45.2",
++    "express": "^4.18.2",
++    "express-async-errors": "^3.1.1",
++    "express-rate-limit": "^8.3.1",
++    "firebase": "^12.17.1",
++    "firebase-admin": "^13.6.0",
++    "helmet": "^8.1.0",
++    "html2canvas": "^1.4.1",
++    "ioredis": "^5.9.3",
++    "jspdf": "^4.2.1",
++    "jspdf-autotable": "^5.0.8",
++    "lucide-react": "^0.468.0",
++    "lucide-react-base": "npm:lucide-react@^0.468.0",
++    "motion": "^12.43.0",
++    "pg": "^8.23.0",
++    "qrcode": "^1.5.4",
++    "react": "^18.3.1",
++    "react-dom": "^18.3.1",
++    "recharts": "^2.10.3",
++    "stripe": "^14.12.0",
++    "zod": "^3.22.4"
++  },
++  "devDependencies": {
++    "@tailwindcss/vite": "^4.1.14",
++    "@types/cors": "^2.8.19",
++    "@types/d3": "^7.4.3",
++    "@types/dompurify": "^3.0.5",
++    "@types/express": "^4.17.21",
++    "@types/node": "^22.14.0",
++    "@types/pg": "^8.23.1",
++    "@types/qrcode": "^1.5.6",
++    "@vitejs/plugin-react": "^5.2.0",
++    "drizzle-kit": "^0.31.10",
++    "esbuild": "^0.28.1",
++    "tailwindcss": "^4.1.14",
++    "tsx": "^4.7.0",
++    "typescript": "^5.3.3",
++    "vitest": "^3.2.7"
++  },
++  "overrides": {
++    "brace-expansion": "5.0.9",
++    "minimatch": "10.2.5",
++    "nanoid": "3.3.18",
++    "@esbuild-kit/core-utils": {
++      "esbuild": "0.28.1"
++    },
++    "@esbuild-kit/esm-loader": {
++      "esbuild": "0.28.1"
++    },
++    "uuid": "11.1.1",
++    "recast": "0.24.1"
++  }
+ }
+diff --git a/src/App.tsx b/src/App.tsx
+index 3c1edf8..5ee7177 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -84,7 +84,10 @@ export default function App() {
+   const [integrations, setIntegrations] = useState<Integration[]>(EMPTY_INTEGRATIONS);
+   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+ 
+-  useEffect(() => onAuthStateChanged(auth, (currentUser) => { setUser(currentUser); setAuthReady(true); }), []);
++  useEffect(() => {
++    if (!auth) { setAuthReady(true); return; }
++    return onAuthStateChanged(auth, (currentUser) => { setUser(currentUser); setAuthReady(true); });
++  }, []);
+   useEffect(() => { if (authReady && !user && !PUBLIC_PATHS.has(path)) navigate('/login'); }, [authReady, user, path]);
+ 
+   useEffect(() => {
+@@ -94,7 +97,7 @@ export default function App() {
+       const responses = await Promise.all([
+         apiFetch('/api/user/me'), apiFetch('/api/scans'), apiFetch('/api/trust-loop/findings'), apiFetch('/api/user/passports'), apiFetch('/api/user/clients'), apiFetch('/api/integrations'),
+       ]);
+-      if (responses.some((response) => response.status === 401)) { await signOut(auth); navigate('/login'); return; }
++      if (responses.some((response) => response.status === 401)) { if (auth) await signOut(auth); navigate('/login'); return; }
+       const [me, scansResponse, findingsResponse, passportsResponse, clientsResponse, integrationsResponse] = responses;
+       if (me.ok) { const data = await me.json().catch(() => null); if (!cancelled) setRole(String(data?.role || 'Viewer')); }
+       if (scansResponse.ok) { const data = await scansResponse.json().catch(() => []); if (!cancelled && Array.isArray(data)) setScans(data); }
+@@ -116,7 +119,7 @@ export default function App() {
+   const onNavigateTab = (target: string, itemId?: string) => navigate(itemId ? `${target.startsWith('/') ? target : `/${target}`}/${encodeURIComponent(itemId)}` : target.startsWith('/') ? target : `/${target}`);
+   const quickAction = (action: 'add-client' | 'register-passport' | 'scan-sbom') => navigate(action === 'add-client' ? '/clients' : action === 'register-passport' ? '/passports' : '/scans');
+   const selectedExtension = useMemo(() => { const match = path.match(/^\/extensions\/([^/]+)/); return match ? decodeURIComponent(match[1]) : null; }, [path]);
+-  const signOutUser = async () => { await signOut(auth); navigate('/login'); };
++  const signOutUser = async () => { if (auth) await signOut(auth); navigate('/login'); };
+ 
+   if (!authReady) return <AuthLoading />;
+   if (path === '/') return <CoverPage />;
+diff --git a/src/components/AuthGate.tsx b/src/components/AuthGate.tsx
+index f76d5c6..e1560ac 100644
+--- a/src/components/AuthGate.tsx
++++ b/src/components/AuthGate.tsx
+@@ -16,6 +16,7 @@ export default function AuthGate({ children }: { children: ReactNode }) {
+ 
+   useEffect(() => {
+     if (publicPath) return;
++    if (!auth) { setUser(null); setReady(true); return; }
+     return onAuthStateChanged(auth, (nextUser) => {
+       setUser(nextUser);
+       setReady(true);
+@@ -48,7 +49,7 @@ export default function AuthGate({ children }: { children: ReactNode }) {
+   if (publicPath) return <>{children}</>;
+   if (!ready) return <div className="min-h-screen bg-slate-950 text-white grid place-items-center"><div role="status" aria-live="polite" className="text-sm text-slate-300">Checking secure session…</div></div>;
+   if (!user) return <div className="min-h-screen bg-slate-950 text-white grid place-items-center"><div role="status" aria-live="polite" className="text-sm text-slate-300">Redirecting to sign in…</div></div>;
+-  if (!user.emailVerified) return <div className="min-h-screen bg-slate-950 text-white grid place-items-center p-6"><div className="max-w-md rounded-xl border border-amber-300/20 bg-slate-900 p-6"><h1 className="text-xl font-semibold">Verify your email</h1><p className="mt-2 text-sm text-slate-300">Your account must be email-verified before you can access the SPR workspace.</p><button className="mt-5 rounded-lg bg-cyan-300 px-4 py-2 font-semibold text-slate-950" onClick={() => void signOut(auth)}>Sign out</button></div></div>;
++  if (!user.emailVerified) return <div className="min-h-screen bg-slate-950 text-white grid place-items-center p-6"><div className="max-w-md rounded-xl border border-amber-300/20 bg-slate-900 p-6"><h1 className="text-xl font-semibold">Verify your email</h1><p className="mt-2 text-sm text-slate-300">Your account must be email-verified before you can access the SPR workspace.</p><button className="mt-5 rounded-lg bg-cyan-300 px-4 py-2 font-semibold text-slate-950" onClick={() => { if (auth) void signOut(auth); }}>Sign out</button></div></div>;
+ 
+   return <>{children}</>;
+ }
+diff --git a/src/components/Header.tsx b/src/components/Header.tsx
+index b82db06..e290355 100644
+--- a/src/components/Header.tsx
++++ b/src/components/Header.tsx
+@@ -48,7 +48,7 @@ export default function Header({
+   const handleLogout = async () => {
+     try {
+       localStorage.removeItem('msp_user');
+-      await signOut(auth).catch(() => {});
++      if (auth) await signOut(auth).catch(() => {});
+       window.location.reload();
+     } catch (err) {
+       console.error('Logout error:', err);
+diff --git a/src/components/LoginView.tsx b/src/components/LoginView.tsx
+index 676c3d4..185bf5f 100644
+--- a/src/components/LoginView.tsx
++++ b/src/components/LoginView.tsx
+@@ -12,7 +12,7 @@ import {
+   type User,
+ } from 'firebase/auth';
+ import { AlertCircle, ArrowRight, CheckCircle2, Eye, EyeOff, Loader, ShieldCheck } from 'lucide-react';
+-import { auth, googleAuthProvider } from '../lib/firebase';
++import { auth, googleAuthProvider, requireAuth } from '../lib/firebase';
+ 
+ interface LoginViewProps {
+   onLoginSuccess: (user: { uid: string; email: string | null; displayName: string; token: string; emailVerified: boolean; onboarded: 0 }) => void;
+@@ -52,7 +52,7 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
+     await reload(user);
+     if (!user.emailVerified) {
+       try { await sendEmailVerification(user); } catch { /* Firebase may rate-limit repeated verification emails. */ }
+-      await signOut(auth);
++      await signOut(requireAuth());
+       setNotice('Verify your email before entering SPR. We sent a fresh verification email. Then sign in again.');
+       return;
+     }
+@@ -68,10 +68,12 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
+   };
+ 
+   useEffect(() => {
+-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+-      if (!currentUser || currentUser.emailVerified) return;
+-      setNotice('Verify your email before entering the protected workspace.');
+-    });
++    const unsubscribe = auth
++      ? onAuthStateChanged(auth, (currentUser) => {
++          if (!currentUser || currentUser.emailVerified) return;
++          setNotice('Verify your email before entering the protected workspace.');
++        })
++      : (() => { setError('Firebase authentication is not configured for this environment.'); return () => {}; })();
+     const onProvisioningFailure = () => {
+       setError('Your Firebase account is valid, but SPR has not provisioned this account in its workspace yet.');
+       setNotice('Authentication succeeded; workspace authorization is still required.');
+@@ -88,7 +90,7 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
+     if (loading || googleLoading) return;
+     setLoading(true); setError(''); setNotice('');
+     try {
+-      const result = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
++      const result = await signInWithEmailAndPassword(requireAuth(), email.trim().toLowerCase(), password);
+       await complete(result.user);
+     } catch (err: any) {
+       const message = authMessage(err, 'Sign-in failed.');
+@@ -100,9 +102,9 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
+     if (loading || googleLoading) return;
+     setLoading(true); setError(''); setNotice('');
+     try {
+-      const result = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
++      const result = await createUserWithEmailAndPassword(requireAuth(), email.trim().toLowerCase(), password);
+       await sendEmailVerification(result.user);
+-      await signOut(auth);
++      await signOut(requireAuth());
+       setNotice('Account created. Check your email, verify it, then sign in.');
+     } catch (err: any) {
+       setError(authMessage(err, 'Account creation failed.'));
+@@ -114,11 +116,11 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
+     setGoogleLoading(true); setError(''); setNotice('Opening secure Google sign-in…');
+     try {
+       try {
+-        const result = await signInWithPopup(auth, googleAuthProvider);
++        const result = await signInWithPopup(requireAuth(), googleAuthProvider);
+         await complete(result.user);
+       } catch (err: any) {
+         if (['auth/popup-blocked', 'auth/operation-not-supported-in-this-environment'].includes(err?.code)) {
+-          await signInWithRedirect(auth, googleAuthProvider);
++          await signInWithRedirect(requireAuth(), googleAuthProvider);
+           return;
+         }
+         throw err;
+@@ -133,7 +135,7 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
+     if (!email.trim()) { setError('Enter your email first.'); return; }
+     setLoading(true); setError(''); setNotice('');
+     try {
+-      await sendPasswordResetEmail(auth, email.trim().toLowerCase());
++      await sendPasswordResetEmail(requireAuth(), email.trim().toLowerCase());
+       setNotice('Password reset email sent.');
+     } catch (err: any) {
+       setError(authMessage(err, 'Could not send the reset email.'));
+@@ -141,7 +143,7 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
+   };
+ 
+   const resendVerification = async () => {
+-    const currentUser = auth.currentUser;
++    const currentUser = auth?.currentUser;
+     if (!currentUser || currentUser.emailVerified) return;
+     setLoading(true); setError(''); setNotice('');
+     try {
+diff --git a/src/components/OnboardingWizard.tsx b/src/components/OnboardingWizard.tsx
+index 5a25d57..3f38fb5 100644
+--- a/src/components/OnboardingWizard.tsx
++++ b/src/components/OnboardingWizard.tsx
+@@ -215,7 +215,7 @@ export default function OnboardingWizard({ user, onOnboardingComplete }: Onboard
+ 
+   const handleSignOut = async () => {
+     localStorage.removeItem('msp_user');
+-    await auth.signOut().catch(() => {});
++    await auth?.signOut().catch(() => {});
+     window.location.reload();
+   };
+ 
+diff --git a/src/components/SettingsView.tsx b/src/components/SettingsView.tsx
+index e06e850..7bbaec8 100644
+--- a/src/components/SettingsView.tsx
++++ b/src/components/SettingsView.tsx
+@@ -360,7 +360,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
+       if (res.ok) {
+         alert("Offboarding complete. Your tenant profile and isolated workspaces have been purged from storage nodes.");
+         localStorage.removeItem('msp_user');
+-        await auth.signOut().catch(() => {});
++        await auth?.signOut().catch(() => {});
+         window.location.reload();
+       } else {
+         const errorData = await res.json();
+diff --git a/src/lib/firebase.ts b/src/lib/firebase.ts
+index 3c0ccf0..59bec7b 100644
+--- a/src/lib/firebase.ts
++++ b/src/lib/firebase.ts
+@@ -4,7 +4,7 @@
+  */
+ 
+ import { initializeApp } from 'firebase/app';
+-import { browserLocalPersistence, GoogleAuthProvider, getAuth, initializeAuth, signInWithPopup, signOut, type User } from 'firebase/auth';
++import { browserLocalPersistence, GoogleAuthProvider, getAuth, initializeAuth, signInWithPopup, signOut, type Auth, type User } from 'firebase/auth';
+ 
+ const envConfig = {
+   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+@@ -40,6 +40,17 @@ export const auth = (() => {
+ 
+ if (auth) auth.useDeviceLanguage();
+ 
++/**
++ * Returns the initialized Auth instance or throws a clear, catchable error.
++ * Use inside handlers that are already wrapped in try/catch and want an
++ * actionable message instead of a silent crash when Firebase env vars are
++ * missing at build/runtime.
++ */
++export function requireAuth(): Auth {
++  if (!auth) throw new Error('Firebase authentication is not configured for this environment.');
++  return auth;
++}
++
+ export const googleAuthProvider = new GoogleAuthProvider();
+ googleAuthProvider.setCustomParameters({ prompt: 'select_account' });
+ export { signInWithPopup, signOut };
+diff --git a/src/utils/apiClient.ts b/src/utils/apiClient.ts
+index 1dfa10b..6f267b4 100644
+--- a/src/utils/apiClient.ts
++++ b/src/utils/apiClient.ts
+@@ -29,7 +29,7 @@ export const apiFetch = async (
+   if (!isSameOriginApiRequest) return fetch(input, init);
+ 
+   const headers = new Headers(init?.headers || {});
+-  if (auth.currentUser) {
++  if (auth?.currentUser) {
+     try {
+       const token = await auth.currentUser.getIdToken();
+       if (token) headers.set('Authorization', `Bearer ${token}`);
+@@ -60,7 +60,7 @@ export const apiFetch = async (
+         // authenticated but not authorized for the workspace. Do not render
+         // a partially initialized dashboard or silently fall back to Viewer.
+         window.dispatchEvent(new CustomEvent('auth-provisioning-failed'));
+-        await auth.signOut().catch(() => undefined);
++        await auth?.signOut().catch(() => undefined);
+       }
+       return response;
+     } catch (err) {
