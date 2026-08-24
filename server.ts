@@ -27,14 +27,22 @@ const requestBodyLimit = process.env.REQUEST_BODY_LIMIT || '2mb';
 const requestHeaderTimeoutMs = Number(process.env.REQUEST_HEADER_TIMEOUT_MS || 15_000);
 const requestTimeoutMs = Number(process.env.REQUEST_TIMEOUT_MS || 120_000);
 const keepAliveTimeoutMs = Number(process.env.KEEP_ALIVE_TIMEOUT_MS || 65_000);
+
+export function normalizeAllowedOrigins(origins: string[]): string[] {
+  return [...new Set(origins.map((origin) => new URL(origin).origin))].sort();
+}
+
 if (config.trustProxy) app.set('trust proxy', 1);
 app.disable('x-powered-by');
 if (config.sentry.dsn) Sentry.init({ dsn: config.sentry.dsn, environment: config.nodeEnv, tracesSampleRate: config.isProduction ? 0.1 : 1.0 });
-const allowedOrigins = new Set(config.allowedOrigins);
+const allowedOrigins = new Set(normalizeAllowedOrigins(config.allowedOrigins));
 const appOrigin = config.appUrl ? new URL(config.appUrl).origin : undefined;
 const corsOrigin = (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) => {
   if (!origin) return callback(null, true);
-  try { const normalizedOrigin = new URL(origin).origin; if (allowedOrigins.has(normalizedOrigin) || normalizedOrigin === appOrigin) return callback(null, true); } catch (_) {}
+  try {
+    const normalizedOrigin = new URL(origin).origin;
+    if (allowedOrigins.has(normalizedOrigin) && normalizedOrigin === appOrigin) return callback(null, true);
+  } catch (_) {}
   return callback(new Error('CORS origin denied'));
 };
 app.use(helmet({ contentSecurityPolicy: { useDefaults: false, directives: { defaultSrc: ["'self'"], baseUri: ["'self'"], objectSrc: ["'none'"], frameAncestors: ["'none'"], formAction: ["'self'"], scriptSrc: ["'self'"], styleSrc: ["'self'", "'unsafe-inline'"], imgSrc: ["'self'", 'data:', 'blob:', 'https:'], fontSrc: ["'self'", 'data:', 'https:'], connectSrc: ["'self'", ...(appOrigin ? [appOrigin] : [])], frameSrc: ["'self'", 'https:'], workerSrc: ["'self'", 'blob:'], manifestSrc: ["'self'"], upgradeInsecureRequests: [] } }, crossOriginEmbedderPolicy: false, frameguard: { action: 'deny' }, referrerPolicy: { policy: 'no-referrer' } }));
@@ -50,8 +58,10 @@ app.get('/api/health', async (_req, res) => { const database = await checkDataba
 app.use('/api', rateLimiter);
 app.use('/api', createAuthRouter());
 app.use('/api', createPublicConnectRouter());
-app.use('/api', createConnectRouter());
-app.use('/api/connect', createConnectRouter());
+const connectRouter = createConnectRouter();
+app.use('/api', connectRouter);
+app.use('/api/connect', connectRouter);
+app.use('/api/integrations/connect', connectRouter);
 app.use('/api/integrations', createIntegrationsRouter());
 app.use('/api/integrations-live', createLiveIntegrationsRouter());
 const requireTrustMutationRole = (req: Request, res: Response, next: NextFunction) => { if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next(); return requireRole(['Owner', 'Admin', 'Operator', 'Technician'])(req as AuthenticatedRequest, res, next); };
