@@ -16,25 +16,29 @@ const envConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
-if (!envConfig.apiKey || !envConfig.projectId || !envConfig.authDomain || !envConfig.appId) {
-  throw new Error('[Firebase Config] Missing required VITE_FIREBASE_* environment variables.');
-}
+const hasFirebaseConfig = Boolean(
+  envConfig.apiKey &&
+  envConfig.projectId &&
+  envConfig.authDomain &&
+  envConfig.appId,
+);
 
-const app = initializeApp(envConfig);
+// Do not crash the entire React application when browser configuration is
+// missing. The UI can render and surface an actionable authentication error.
+export const firebaseConfigured = hasFirebaseConfig;
 
-// Configure persistence at auth construction time so a reload cannot race
-// against an asynchronous setPersistence call.
+const app = hasFirebaseConfig ? initializeApp(envConfig) : null;
+
 export const auth = (() => {
+  if (!app) return null;
   try {
     return initializeAuth(app, { persistence: browserLocalPersistence });
   } catch {
-    // Vite HMR can evaluate this module more than once; reuse the existing
-    // Firebase Auth instance in that case.
     return getAuth(app);
   }
 })();
 
-auth.useDeviceLanguage();
+if (auth) auth.useDeviceLanguage();
 
 export const googleAuthProvider = new GoogleAuthProvider();
 googleAuthProvider.setCustomParameters({ prompt: 'select_account' });
