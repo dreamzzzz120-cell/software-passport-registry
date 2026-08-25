@@ -85,6 +85,32 @@ const connectRouter = createConnectRouter();
 app.use('/api', connectRouter);
 app.use('/api/connect', connectRouter);
 app.use('/api/integrations/connect', connectRouter);
+app.post('/api/ai/analyze-passport', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const passportId = typeof req.body?.passportId === 'string' ? req.body.passportId.trim() : '';
+    if (!passportId) return res.status(400).json({ error: { code: 'PASSPORT_ID_REQUIRED', message: 'passportId is required.' } });
+    const result = await db.execute(sql`
+      SELECT name, version, publisher, overall_score AS "overallScore",
+             jsonb_array_length(COALESCE(evidence, '[]'::jsonb)) AS "evidenceCount",
+             jsonb_array_length(COALESCE(vulnerabilities, '[]'::jsonb)) AS "findingCount"
+      FROM passports
+      WHERE id = ${passportId} AND tenant_id = ${req.user!.tenantId}
+      LIMIT 1
+    `);
+    const passport = (result.rows?.[0] ?? null) as {
+      name?: string; version?: string; publisher?: string; overallScore?: number | null;
+      evidenceCount?: number; findingCount?: number;
+    } | null;
+    if (!passport) return res.status(404).json({ error: { code: 'PASSPORT_NOT_FOUND', message: 'Passport not found.' } });
+    const status = passport.overallScore == null ? 'not verified' : `score ${passport.overallScore}`;
+    return res.json({
+      passportId,
+      analysis: `${passport.name ?? 'Passport'} ${passport.version ?? ''} by ${passport.publisher ?? 'unknown publisher'} is ${status}. Evidence records: ${passport.evidenceCount ?? 0}. Findings: ${passport.findingCount ?? 0}. Authoritative verification requires durable backend evidence.`,
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
 app.use('/api/integrations', createIntegrationsRouter());
 app.use('/api/integrations-live', createLiveIntegrationsRouter());
 const requireTrustMutationRole = (req: Request, res: Response, next: NextFunction) => { if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next(); return requireRole(['Owner', 'Admin', 'Operator', 'Technician'])(req as AuthenticatedRequest, res, next); };
