@@ -2,7 +2,7 @@
 builder = "RAILPACK"
 
 [deploy]
-startCommand = "npm start"
+startCommand = "node dist/worker.cjs"
 preDeployCommand = ["node dist/migrate.cjs"]
 healthcheckPath = "/health"
 healthcheckTimeout = 120
