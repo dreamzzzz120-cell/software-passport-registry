@@ -19,7 +19,8 @@ const optionalTrimmedString = z.preprocess((value) => {
 const optionalTrimmedUrl = z.preprocess((value) => {
   if (typeof value === 'string') {
     const trimmed = value.trim();
-    return trimmed.length === 0 ? undefined : trimmed;
+    if (trimmed.length === 0) return undefined;
+    try { new URL(trimmed); return trimmed; } catch { return undefined; }
   }
   return value;
 }, z.string().url().optional());
