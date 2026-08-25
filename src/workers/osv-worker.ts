@@ -216,9 +216,8 @@ async function processJob(pool: Pool, job: ClaimedJob) {
   if (!passport) throw new Error('PASSPORT_NOT_FOUND');
   let parsed: unknown;
   try { parsed = JSON.parse(passport.sbom || '[]'); } catch { throw new Error('SBOM_MALFORMED'); }
-  if (!Array.isArray(parsed) || parsed.length === 0) throw new Error('SBOM_EMPTY');
+  if (!Array.isArray(parsed)) throw new Error('SBOM_MALFORMED');
   const components = (parsed as SbomComponent[]).filter((component): component is Required<Pick<SbomComponent, 'name' | 'version'>> & SbomComponent => typeof component?.name === 'string' && component.name.length > 0 && typeof component?.version === 'string' && component.version.length > 0);
-  if (components.length === 0) throw new Error('SBOM_HAS_NO_VERSIONED_COMPONENTS');
 
   let findingCount = 0;
   for (const component of components) {
@@ -235,6 +234,27 @@ async function processJob(pool: Pool, job: ClaimedJob) {
   }
 
   const completedAt = new Date().toISOString();
+  if (components.length === 0) {
+    const evidencePayload = JSON.stringify({
+      source: 'SPR worker',
+      passportId: job.passport_id,
+      message: 'SBOM was present but contained no versioned components to query.',
+      completedAt,
+    });
+    await pool.query(`
+      INSERT INTO evidence_items
+        (id, tenant_id, asset_id, name, type, verified, status, signer, timestamp, hash, raw_content, engine_id, verification_failure_reason)
+      VALUES ($1, $2, $3, 'SBOM scan assessment', 'Security Scan', 0, 'OBSERVED', 'spr-worker', $4, $5, $6, 'osv-worker', 'SBOM_EMPTY')
+      ON CONFLICT (id) DO NOTHING
+    `, [
+      deterministicId('ev-sbom-empty', `${job.id}|${job.tenant_id}|${job.passport_id}`),
+      job.tenant_id,
+      job.passport_id,
+      completedAt,
+      `sha256:${sha256(evidencePayload)}`,
+      evidencePayload,
+    ]);
+  }
   await pool.query(`
     INSERT INTO scans (id, tenant_id, target_name, scan_type, triggered_by, status, duration_ms, findings_count, timestamp, client_name)
     VALUES ($1, $2, $3, 'OSV manifest component query', $4, 'Completed', 0, $5, $6, $7)
