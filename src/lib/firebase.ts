@@ -4,7 +4,7 @@
  */
 
 import { initializeApp } from 'firebase/app';
-import { browserLocalPersistence, GoogleAuthProvider, getAuth, initializeAuth, signInWithPopup, signOut, type User } from 'firebase/auth';
+import { GoogleAuthProvider, getAuth, signInWithPopup, signOut, type User } from 'firebase/auth';
 
 // Firebase browser configuration is public configuration. Prefer Vite environment
 // variables, but keep the production project's public config as a fallback so a
@@ -46,13 +46,7 @@ export const firebaseConfigured = Boolean(
 
 const app = initializeApp(firebaseConfig);
 
-export const auth = (() => {
-  try {
-    return initializeAuth(app, { persistence: browserLocalPersistence });
-  } catch {
-    return getAuth(app);
-  }
-})();
+export const auth = getAuth(app);
 
 auth.useDeviceLanguage();
 
