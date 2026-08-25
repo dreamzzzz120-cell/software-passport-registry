@@ -6,7 +6,8 @@ import * as Sentry from '@sentry/node';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { config, validateConfiguration } from './src/config.ts';
-import { checkDatabaseHealth, closeDatabase } from './src/db/index.ts';
+import { checkDatabaseHealth, closeDatabase, db } from './src/db/index.ts';
+import { sql } from 'drizzle-orm';
 import { AuthenticatedRequest, rateLimiter, requireAuth, requireRole } from './src/middleware/security.ts';
 import { createAuthRouter } from './src/routes/auth.ts';
 import { createConnectRouter } from './src/routes/connect.ts';
@@ -27,6 +28,28 @@ const requestBodyLimit = process.env.REQUEST_BODY_LIMIT || '2mb';
 const requestHeaderTimeoutMs = Number(process.env.REQUEST_HEADER_TIMEOUT_MS || 15_000);
 const requestTimeoutMs = Number(process.env.REQUEST_TIMEOUT_MS || 120_000);
 const keepAliveTimeoutMs = Number(process.env.KEEP_ALIVE_TIMEOUT_MS || 65_000);
+
+async function ensureInitialSelfPassport() {
+  const owner = (await db.execute(sql`SELECT tenant_id AS "tenantId" FROM users WHERE role = 'Owner' ORDER BY created_at ASC LIMIT 1`)).rows?.[0] as { tenantId?: string } | undefined;
+  if (!owner?.tenantId) {
+    console.warn('[SPR] Initial self-passport skipped: no Owner tenant exists yet.');
+    return;
+  }
+  await db.execute(sql`
+    INSERT INTO passports (
+      id, tenant_id, name, version, publisher, category, overall_score,
+      security_score, compliance_score, vendor_reputation_score, release_date,
+      file_hash, license_type, ai_summary, sbom, evidence, vulnerabilities, timeline
+    ) VALUES (
+      'passport_spr_self', ${owner.tenantId}, 'Software Passport Registry', '1.0.0',
+      'SPR', 'Platform', 0, 0, 0, 0, CURRENT_DATE::text, 'not-observed',
+      'Unknown', 'Initial SPR self-passport. Evidence collection is pending.',
+      '[]', '[]', '[]', '[]'
+    )
+    ON CONFLICT (id) DO NOTHING
+  `);
+  console.info('[SPR] Initial self-passport ready.');
+}
 
 export function normalizeAllowedOrigins(origins: string[]): string[] {
   return [...new Set(origins.map((origin) => new URL(origin).origin))].sort();
@@ -85,7 +108,7 @@ app.use((req, res, next) => { if (req.path.startsWith('/api/') || req.path === '
 app.use((err: any, req: Request, res: Response, next: NextFunction) => { if (res.headersSent) return next(err); const requestId = res.locals.requestId || `req_${randomUUID()}`; const status = Number.isInteger(err?.status) && err.status >= 400 && err.status < 600 ? err.status : 500; console.error('[HTTP_ERROR]', { requestId, status, method: req.method, path: req.path, message: err?.message || String(err) }); if (config.sentry.dsn) Sentry.captureException(err, { tags: { requestId } }); return res.status(status).json({ error: { code: status === 500 ? 'INTERNAL_SERVER_ERROR' : 'REQUEST_FAILED', message: status === 500 ? 'An unexpected server error occurred.' : err?.message || 'Request failed.', requestId } }); });
 let server: ReturnType<typeof app.listen> | undefined; let shuttingDown = false;
 async function shutdown(signal: string) { if (shuttingDown) return; shuttingDown = true; console.info(`[SPR] ${signal} received; shutting down gracefully.`); const forceTimer = setTimeout(() => process.exit(1), 15_000); forceTimer.unref(); if (server) await new Promise<void>(resolve => server!.close(() => resolve())); await closeDatabase().catch(error => console.error('[SPR] Database shutdown error:', error)); if (config.sentry.dsn) await Sentry.close(2_000).catch(() => undefined); clearTimeout(forceTimer); process.exit(0); }
-export async function startServer() { validateConfiguration(); const host = process.env.HOST || '0.0.0.0'; server = app.listen(config.port, host, () => console.info(`[SPR] listening on http://${host}:${config.port}`)); server.requestTimeout = Number.isFinite(requestTimeoutMs) && requestTimeoutMs > 0 ? requestTimeoutMs : 120_000; server.headersTimeout = Number.isFinite(requestHeaderTimeoutMs) && requestHeaderTimeoutMs > 0 ? requestHeaderTimeoutMs : 15_000; server.keepAliveTimeout = Number.isFinite(keepAliveTimeoutMs) && keepAliveTimeoutMs > 0 ? keepAliveTimeoutMs : 65_000; return server; }
+export async function startServer() { validateConfiguration(); await ensureInitialSelfPassport(); const host = process.env.HOST || '0.0.0.0'; server = app.listen(config.port, host, () => console.info(`[SPR] listening on http://${host}:${config.port}`)); server.requestTimeout = Number.isFinite(requestTimeoutMs) && requestTimeoutMs > 0 ? requestTimeoutMs : 120_000; server.headersTimeout = Number.isFinite(requestHeaderTimeoutMs) && requestHeaderTimeoutMs > 0 ? requestHeaderTimeoutMs : 15_000; server.keepAliveTimeout = Number.isFinite(keepAliveTimeoutMs) && keepAliveTimeoutMs > 0 ? keepAliveTimeoutMs : 65_000; return server; }
 process.once('SIGTERM', () => void shutdown('SIGTERM')); process.once('SIGINT', () => void shutdown('SIGINT')); process.on('unhandledRejection', reason => console.error('[SPR] Unhandled rejection:', reason)); process.on('uncaughtException', error => { console.error('[SPR] Uncaught exception:', error); void shutdown('uncaughtException'); });
 if (process.env.SPR_SKIP_AUTOSTART !== 'true') void startServer().catch(error => { console.error('[SPR] Startup failed:', error); process.exit(1); });
 export { app };
