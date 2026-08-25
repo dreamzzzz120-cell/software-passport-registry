@@ -34,9 +34,11 @@ export default function PassportsView({ passports, selectedPassportId, setSelect
     if (!selected) return;
     setAuditBusy(true); setAuditText(null);
     try {
-      const response = await apiFetch('/api/ai/analyze-passport', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ passportId: selected.id }) });
+      const response = await apiFetch('/api/agent-jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ passportId: selected.id, agentId: 'comprehensive_scanner', jobType: 'osv_manifest_scan' }) });
       const data = await response.json().catch(() => ({}));
-      setAuditText(data.analysis || data.error || 'Not verified.');
+      setAuditText(response.ok
+        ? `Live audit queued successfully. Job ${data.id ?? 'created'} is being processed by the background scanner.`
+        : data.error?.message || data.error || 'Not verified: audit request was rejected.');
     } catch {
       setAuditText('Not verified: audit request failed.');
     } finally { setAuditBusy(false); }
