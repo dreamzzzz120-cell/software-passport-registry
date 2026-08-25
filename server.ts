@@ -64,7 +64,7 @@ const corsOrigin = (origin: string | undefined, callback: (error: Error | null, 
   if (!origin) return callback(null, true);
   try {
     const normalizedOrigin = new URL(origin).origin;
-    if (allowedOrigins.has(normalizedOrigin) && normalizedOrigin === appOrigin) return callback(null, true);
+    if (allowedOrigins.has(normalizedOrigin)) return callback(null, true);
   } catch (_) {}
   return callback(new Error('CORS origin denied'));
 };
