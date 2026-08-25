@@ -12,6 +12,7 @@ const PROVIDERS = new Set(INTEGRATION_CATALOG.map(item => item.provider));
 const credentialSchema = z.record(z.string().min(1).max(128), z.string().max(4096)).refine(v => Object.keys(v).length > 0, 'Credentials cannot be empty');
 const testSchema = z.object({ passportId: z.string().trim().min(1).max(255) }).strict();
 function id(prefix: string) { return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`; }
+function routeParam(value: string | string[] | undefined): string { return Array.isArray(value) ? value[0] || '' : value || ''; }
 function providerFromParam(value: string): Provider { if (!PROVIDERS.has(value) || value === 'github') throw new Error('PROVIDER_NOT_SUPPORTED_BY_GENERIC_ADAPTER'); return value as Provider; }
 function integrationId(tenantId: string, provider: string) { return `int_${crypto.createHash('sha256').update(`${tenantId}:${provider}`).digest('hex').slice(0, 32)}`; }
 
@@ -29,7 +30,7 @@ export function createLiveIntegrationsRouter() {
 
   router.put('/:provider/credentials', requireAuth, requireRole(['Owner', 'Admin']), async (req: AuthenticatedRequest, res, next) => {
     try {
-      const provider = providerFromParam(req.params.provider);
+      const provider = providerFromParam(routeParam(req.params.provider));
       const parsed = credentialSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid credentials payload', details: parsed.error.flatten() });
       const tenantId = req.user!.tenantId;
@@ -44,7 +45,7 @@ export function createLiveIntegrationsRouter() {
 
   router.post('/:provider/test', requireAuth, requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
     try {
-      const provider = providerFromParam(req.params.provider);
+      const provider = providerFromParam(routeParam(req.params.provider));
       const parsed = testSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'passportId is required' });
       const tenantId = req.user!.tenantId;

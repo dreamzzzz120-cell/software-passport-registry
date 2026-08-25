@@ -4,6 +4,10 @@ import { and, desc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { config } from '../config.ts';
 import { db } from '../db/index.ts';
+
+function routeParam(value: string | string[] | undefined): string {
+  return Array.isArray(value) ? value[0] || '' : value || '';
+}
 import {
   alertSubscriptions, collectorJobs, inAppNotifications, monitoringConfigurations,
   passports,
@@ -116,7 +120,7 @@ export function createMonitoringRouter() {
 
   router.get('/monitoring-configurations/:id', async (req: AuthenticatedRequest, res) => {
     const row = await db.select().from(monitoringConfigurations).where(and(
-      eq(monitoringConfigurations.id, req.params.id),
+      eq(monitoringConfigurations.id, routeParam(req.params.id)),
       eq(monitoringConfigurations.tenantId, req.user!.tenantId),
     )).then(rows => rows[0]);
     if (!row) return res.status(404).json({ error: 'MONITORING_CONFIGURATION_NOT_FOUND' });
@@ -162,7 +166,7 @@ export function createMonitoringRouter() {
     const body = parse(monitoringPatchSchema, req.body, res);
     if (!body) return;
     const current = await db.select().from(monitoringConfigurations).where(and(
-      eq(monitoringConfigurations.id, req.params.id),
+      eq(monitoringConfigurations.id, routeParam(req.params.id)),
       eq(monitoringConfigurations.tenantId, req.user!.tenantId),
     )).then(rows => rows[0]);
     if (!current) return res.status(404).json({ error: 'MONITORING_CONFIGURATION_NOT_FOUND' });
@@ -176,7 +180,7 @@ export function createMonitoringRouter() {
       ...(body.credentialReferenceId === undefined ? {} : { credentialReferenceId: body.credentialReferenceId }),
       updatedBy: req.user!.uid, updatedAt: new Date().toISOString(),
     }).where(and(
-      eq(monitoringConfigurations.id, req.params.id),
+      eq(monitoringConfigurations.id, routeParam(req.params.id)),
       eq(monitoringConfigurations.tenantId, req.user!.tenantId),
     )).returning();
     res.json(publicConfiguration(updated));
@@ -184,7 +188,7 @@ export function createMonitoringRouter() {
 
   router.post('/monitoring-configurations/:id/run', requireRole(['Technician']), async (req: AuthenticatedRequest, res) => {
     const configuration = await db.select().from(monitoringConfigurations).where(and(
-      eq(monitoringConfigurations.id, req.params.id),
+      eq(monitoringConfigurations.id, routeParam(req.params.id)),
       eq(monitoringConfigurations.tenantId, req.user!.tenantId),
       eq(monitoringConfigurations.enabled, 1),
     )).then(rows => rows[0]);
@@ -228,7 +232,7 @@ export function createMonitoringRouter() {
 
   router.get('/collector-jobs/:id', async (req: AuthenticatedRequest, res) => {
     const row = await db.select().from(collectorJobs).where(and(
-      eq(collectorJobs.id, req.params.id), eq(collectorJobs.tenantId, req.user!.tenantId),
+      eq(collectorJobs.id, routeParam(req.params.id)), eq(collectorJobs.tenantId, req.user!.tenantId),
     )).then(rows => rows[0]);
     if (!row) return res.status(404).json({ error: 'COLLECTOR_JOB_NOT_FOUND' });
     res.json(row);
@@ -243,7 +247,7 @@ export function createMonitoringRouter() {
 
   router.get('/alert-subscriptions/:id', async (req: AuthenticatedRequest, res) => {
     const row = await db.select().from(alertSubscriptions).where(and(
-      eq(alertSubscriptions.id, req.params.id),
+      eq(alertSubscriptions.id, routeParam(req.params.id)),
       eq(alertSubscriptions.tenantId, req.user!.tenantId),
     )).then(rows => rows[0]);
     if (!row) return res.status(404).json({ error: 'ALERT_SUBSCRIPTION_NOT_FOUND' });
@@ -284,7 +288,7 @@ export function createMonitoringRouter() {
       updatedBy: req.user!.uid, updatedAt: new Date().toISOString(),
     };
     const [updated] = await db.update(alertSubscriptions).set({ ...update }).where(and(
-      eq(alertSubscriptions.id, req.params.id), eq(alertSubscriptions.tenantId, req.user!.tenantId),
+      eq(alertSubscriptions.id, routeParam(req.params.id)), eq(alertSubscriptions.tenantId, req.user!.tenantId),
     )).returning();
     if (!updated) return res.status(404).json({ error: 'ALERT_SUBSCRIPTION_NOT_FOUND' });
     res.json({ ...updated, alertTypes: JSON.parse(updated.alertTypes), enabled: updated.enabled === 1 });
@@ -292,7 +296,7 @@ export function createMonitoringRouter() {
 
   router.delete('/alert-subscriptions/:id', requireRole(['Technician']), async (req: AuthenticatedRequest, res) => {
     const deleted = await db.delete(alertSubscriptions).where(and(
-      eq(alertSubscriptions.id, req.params.id), eq(alertSubscriptions.tenantId, req.user!.tenantId),
+      eq(alertSubscriptions.id, routeParam(req.params.id)), eq(alertSubscriptions.tenantId, req.user!.tenantId),
     )).returning({ id: alertSubscriptions.id });
     if (!deleted[0]) return res.status(404).json({ error: 'ALERT_SUBSCRIPTION_NOT_FOUND' });
     res.status(204).send();
