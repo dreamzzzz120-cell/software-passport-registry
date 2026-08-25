@@ -57,7 +57,10 @@ const parsedEnv = envSchema.parse(process.env);
 
 const railwayPublicUrl = process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN.trim()}` : undefined;
 const effectiveAppUrl = parsedEnv.APP_URL ?? railwayPublicUrl;
-const effectiveAllowedOrigins = parseOriginList(parsedEnv.APP_ALLOWED_ORIGINS);
+const effectiveAllowedOrigins = [...new Set([
+  ...parseOriginList(parsedEnv.APP_ALLOWED_ORIGINS),
+  'https://software-passport-registry-vercel.vercel.app',
+])];
 
 const sslMode = parsedEnv.SQL_SSL?.toLowerCase();
 const databaseSslEnabled = Boolean(sslMode && !['false', '0'].includes(sslMode));
