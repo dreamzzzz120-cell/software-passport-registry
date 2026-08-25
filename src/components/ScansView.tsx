@@ -324,6 +324,27 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
     ]);
 
     try {
+      let sbom: string | undefined;
+      if (sbomFile) {
+        if (sbomFile.size > 5_000_000) {
+          throw new Error('SBOM file is too large. Files must be 5 MB or smaller.');
+        }
+        sbom = await sbomFile.text();
+        let document: unknown;
+        try {
+          document = JSON.parse(sbom);
+        } catch {
+          throw new Error('SBOM file must contain valid JSON.');
+        }
+        const components = Array.isArray((document as { components?: unknown })?.components)
+          ? (document as { components: unknown[] }).components
+          : Array.isArray((document as { packages?: unknown })?.packages)
+            ? (document as { packages: unknown[] }).packages
+            : [];
+        if (components.length === 0) {
+          throw new Error('JSON does not contain a versioned SBOM component list.');
+        }
+      }
       const response = await apiFetch('/api/agent-jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -331,12 +352,19 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
           agentId: 'comprehensive_scanner',
           passportId: matchedPassport.id,
           jobType: 'automated_compliance_check',
-          ...(sbomFile ? { sbom: await sbomFile.text() } : {})
+          ...(sbom !== undefined ? { sbom } : {})
         })
       });
 
       if (!response.ok) {
-        throw new Error('Failed to dispatch secure scanning job to background queue.');
+        let message = 'Failed to dispatch secure scanning job to background queue.';
+        try {
+          const error = await response.json();
+          if (typeof error?.error === 'string') message = error.error;
+        } catch {
+          // Keep the actionable default when the backend does not return JSON.
+        }
+        throw new Error(message);
       }
 
       const job = await response.json();
@@ -381,9 +409,9 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
         }
       }, 900);
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error in agent scanning execution:', err);
-      setScanLogs(l => [...l, `[ERROR] Scanner job dispatch failed: ${err.message || err}`]);
+      setScanLogs(l => [...l, `[ERROR] Scanner job dispatch failed: ${err instanceof Error ? err.message : 'Unable to start scan.'}`]);
       setIsScanning(false);
     }
   };

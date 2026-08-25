@@ -167,6 +167,7 @@ export function createScansRouter() {
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
       const passport = (await db.execute(sql`SELECT id, sbom FROM passports WHERE id=${parsed.data.passportId} AND tenant_id=${req.user!.tenantId} LIMIT 1`)).rows?.[0] as { id: string; sbom?: string } | undefined;
       if (!passport) return res.status(404).json({ error: 'Passport not found' });
+      let normalizedComponents: Array<{ name: string; version: string; type: string }> | undefined;
       if (parsed.data.sbom !== undefined) {
         let document: unknown;
         try { document = JSON.parse(parsed.data.sbom); } catch { return res.status(400).json({ error: 'SBOM must be valid JSON' }); }
@@ -180,12 +181,13 @@ export function createScansRouter() {
           .filter((component: { name: string; version: string }) => component.name && component.version)
           .slice(0, 10_000);
         if (components.length === 0) return res.status(400).json({ error: 'SBOM contains no versioned components' });
+        normalizedComponents = components;
         await db.execute(sql`UPDATE passports SET sbom=${JSON.stringify(components)} WHERE id=${passport.id} AND tenant_id=${req.user!.tenantId}`);
       }
       const jobId = id('job');
       const hasVersionedSbomComponent = (() => {
         try {
-          const sbom = JSON.parse(passport.sbom || '[]');
+          const sbom = normalizedComponents || JSON.parse(passport.sbom || '[]');
           return Array.isArray(sbom) && sbom.some((component) => typeof component?.name === 'string' && component.name.trim() && typeof component?.version === 'string' && component.version.trim());
         } catch {
           return false;
