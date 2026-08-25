@@ -164,9 +164,26 @@ export function createScansRouter() {
     try {
       const parsed = passportSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
-      const passport = (await db.execute(sql`SELECT id FROM passports WHERE id=${parsed.data.passportId} AND tenant_id=${req.user!.tenantId} LIMIT 1`)).rows?.[0] as any;
+      const passport = (await db.execute(sql`SELECT id, sbom FROM passports WHERE id=${parsed.data.passportId} AND tenant_id=${req.user!.tenantId} LIMIT 1`)).rows?.[0] as { id: string; sbom?: string } | undefined;
       if (!passport) return res.status(404).json({ error: 'Passport not found' });
       const jobId = id('job');
+      const hasVersionedSbomComponent = (() => {
+        try {
+          const sbom = JSON.parse(passport.sbom || '[]');
+          return Array.isArray(sbom) && sbom.some((component) => typeof component?.name === 'string' && component.name.trim() && typeof component?.version === 'string' && component.version.trim());
+        } catch {
+          return false;
+        }
+      })();
+      if (!hasVersionedSbomComponent) {
+        const completedAt = new Date().toISOString();
+        const evidencePayload = JSON.stringify({ source: 'SPR API', passportId: passport.id, message: 'SBOM scan completed without versioned components to query.', completedAt });
+        const evidenceHash = `sha256:${crypto.createHash('sha256').update(evidencePayload).digest('hex')}`;
+        await db.execute(sql`INSERT INTO agent_jobs (id,tenant_id,agent_id,passport_id,job_type,status,progress,result,created_at,updated_at,completed_at) VALUES (${jobId},${req.user!.tenantId},'comprehensive_scanner',${passport.id},'osv_manifest_scan','Completed',100,${JSON.stringify({ provider: 'OSV', evidenceState: 'No versioned SBOM components were present', componentsQueried: 0, findingsPersisted: 0, completedAt })},NOW(),NOW(),NOW())`);
+        await db.execute(sql`INSERT INTO evidence_items (id,tenant_id,asset_id,name,type,verified,status,signer,timestamp,hash,raw_content,engine_id,verification_failure_reason) VALUES (${id('ev')},${req.user!.tenantId},${passport.id},'SBOM scan assessment','Security Scan',0,'OBSERVED','spr-api',${completedAt},${evidenceHash},${evidencePayload},'osv-worker','SBOM_EMPTY')`);
+        await db.execute(sql`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES (${jobId},'comprehensive_scanner','Completed: the persisted SBOM contained no versioned components for OSV lookup.','Info')`);
+        return res.status(202).json({ id: jobId, status: 'Completed', jobType: 'osv_manifest_scan' });
+      }
       await db.execute(sql`INSERT INTO agent_jobs (id,tenant_id,agent_id,passport_id,job_type,status,progress,next_attempt_at,created_at,updated_at) VALUES (${jobId},${req.user!.tenantId},'comprehensive_scanner',${passport.id},'osv_manifest_scan','Pending',0,NOW(),NOW(),NOW())`);
       await db.execute(sql`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES (${jobId},'comprehensive_scanner','Queued real OSV dependency vulnerability scan against the persisted SBOM.','Info')`);
       return res.status(202).json({ id: jobId, status: 'Pending', jobType: 'osv_manifest_scan' });
