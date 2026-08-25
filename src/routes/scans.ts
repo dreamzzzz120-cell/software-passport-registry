@@ -17,6 +17,7 @@ const passportSchema = z.object({
   passportId: z.string().min(1).max(200),
   agentId: z.literal('comprehensive_scanner').optional(),
   jobType: z.enum(['osv_manifest_scan', 'automated_compliance_check']).optional(),
+  sbom: z.string().max(5_000_000).optional(),
 }).strict();
 const scanSchema = z.object({
   targetName: z.string().min(1).max(300),
@@ -166,6 +167,21 @@ export function createScansRouter() {
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
       const passport = (await db.execute(sql`SELECT id, sbom FROM passports WHERE id=${parsed.data.passportId} AND tenant_id=${req.user!.tenantId} LIMIT 1`)).rows?.[0] as { id: string; sbom?: string } | undefined;
       if (!passport) return res.status(404).json({ error: 'Passport not found' });
+      if (parsed.data.sbom !== undefined) {
+        let document: unknown;
+        try { document = JSON.parse(parsed.data.sbom); } catch { return res.status(400).json({ error: 'SBOM must be valid JSON' }); }
+        const sourceComponents = Array.isArray((document as any)?.components)
+          ? (document as any).components
+          : Array.isArray((document as any)?.packages)
+            ? (document as any).packages
+            : [];
+        const components = sourceComponents
+          .map((component: any) => ({ name: String(component?.name || component?.packageName || '').trim(), version: String(component?.version || component?.versionInfo || '').trim(), type: String(component?.type || 'library').trim() }))
+          .filter((component: { name: string; version: string }) => component.name && component.version)
+          .slice(0, 10_000);
+        if (components.length === 0) return res.status(400).json({ error: 'SBOM contains no versioned components' });
+        await db.execute(sql`UPDATE passports SET sbom=${JSON.stringify(components)} WHERE id=${passport.id} AND tenant_id=${req.user!.tenantId}`);
+      }
       const jobId = id('job');
       const hasVersionedSbomComponent = (() => {
         try {

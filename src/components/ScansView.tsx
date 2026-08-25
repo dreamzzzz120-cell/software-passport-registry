@@ -260,14 +260,14 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
     setIsDragging(false);
     const files = e.dataTransfer.files;
     if (files.length > 0) {
-      runActualScan(files[0].name, chosenClientName);
+      runActualScan(files[0].name, chosenClientName, files[0]);
     }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      runActualScan(files[0].name, chosenClientName);
+      runActualScan(files[0].name, chosenClientName, files[0]);
     }
   };
 
@@ -299,7 +299,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
   };
 
   // Executing actual backend AI Agent scanner with real-time logs polling
-  const runActualScan = async (targetName: string, chosenClient: string = 'Vanguard Grid Operators') => {
+  const runActualScan = async (targetName: string, chosenClient: string = 'Vanguard Grid Operators', sbomFile?: File) => {
     setIsScanning(true);
     setScanCompleted(false);
     setScanProgress(0);
@@ -330,7 +330,8 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
         body: JSON.stringify({
           agentId: 'comprehensive_scanner',
           passportId: matchedPassport.id,
-          jobType: 'automated_compliance_check'
+          jobType: 'automated_compliance_check',
+          ...(sbomFile ? { sbom: await sbomFile.text() } : {})
         })
       });
 
