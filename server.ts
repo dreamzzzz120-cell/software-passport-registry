@@ -91,8 +91,8 @@ app.post('/api/ai/analyze-passport', requireAuth, async (req: AuthenticatedReque
     if (!passportId) return res.status(400).json({ error: { code: 'PASSPORT_ID_REQUIRED', message: 'passportId is required.' } });
     const result = await db.execute(sql`
       SELECT name, version, publisher, overall_score AS "overallScore",
-             jsonb_array_length(COALESCE(evidence, '[]'::jsonb)) AS "evidenceCount",
-             jsonb_array_length(COALESCE(vulnerabilities, '[]'::jsonb)) AS "findingCount"
+             jsonb_array_length(COALESCE(NULLIF(evidence, '')::jsonb, '[]'::jsonb)) AS "evidenceCount",
+             jsonb_array_length(COALESCE(NULLIF(vulnerabilities, '')::jsonb, '[]'::jsonb)) AS "findingCount"
       FROM passports
       WHERE id = ${passportId} AND tenant_id = ${req.user!.tenantId}
       LIMIT 1
