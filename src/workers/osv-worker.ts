@@ -4,6 +4,8 @@ import path from 'node:path';
 import { mkdtemp, mkdir, writeFile, readdir, lstat, rm } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { Pool, PoolClient } from 'pg';
+import { assessOsvSeverity } from '../security/osv-severity.ts';
+import { componentIdentity, vulnerabilityIdentity } from '../security/osv-identity.ts';
 
 type ClaimedJob = {
   id: string;
@@ -162,22 +164,6 @@ function deterministicId(prefix: string, value: string) {
   return `${prefix}-${sha256(value).slice(0, 48)}`;
 }
 
-function vulnerabilitySeverity(vulnerability: any): 'Critical' | 'High' | 'Medium' | 'Low' | 'Unknown' {
-  const direct = typeof vulnerability?.database_specific?.severity === 'string'
-    ? vulnerability.database_specific.severity.toLowerCase() : '';
-  if (['critical', 'high', 'medium', 'low'].includes(direct)) return direct[0].toUpperCase() + direct.slice(1) as any;
-  const scores = Array.isArray(vulnerability?.severity) ? vulnerability.severity : [];
-  for (const item of scores) {
-    const score = Number.parseFloat(String(item?.score || '').match(/(?:^|\s)(10(?:\.0)?|[0-9](?:\.[0-9])?)(?:\s|$)/)?.[1] || 'NaN');
-    if (!Number.isFinite(score)) continue;
-    if (score >= 9) return 'Critical';
-    if (score >= 7) return 'High';
-    if (score >= 4) return 'Medium';
-    return 'Low';
-  }
-  return 'Unknown';
-}
-
 async function persistProviderResult(client: PoolClient, job: ClaimedJob, component: Required<Pick<SbomComponent, 'name' | 'version'>> & SbomComponent, providerResponse: unknown) {
   const receivedAt = new Date().toISOString();
   const responseHash = sha256(JSON.stringify(providerResponse));
@@ -195,7 +181,10 @@ async function persistProviderResult(client: PoolClient, job: ClaimedJob, compon
   const vulnerabilities = Array.isArray((providerResponse as any)?.vulns) ? (providerResponse as any).vulns : [];
   for (const vulnerability of vulnerabilities) {
     const aliases = Array.isArray(vulnerability?.aliases) ? vulnerability.aliases : [];
-    const vulnKey = `${job.id}|${job.tenant_id}|${job.passport_id}|${component.name}|${component.version}|${vulnerability?.id || aliases.join(',')}|${responseHash}`;
+    const vulnerabilityId = String(vulnerability?.id || aliases[0] || 'OSV vulnerability').trim();
+    const vulnKey = vulnerabilityIdentity({ tenantId: job.tenant_id, passportId: job.passport_id, vulnerabilityId, component });
+    const assessment = assessOsvSeverity(vulnerability);
+    const provenance = JSON.stringify({ source: 'api.osv.dev', vulnerabilityId, rationale: assessment.rationale, sourceSeverities: assessment.sourceSeverities, cvssScores: assessment.cvssScores, cvssVectors: assessment.cvssVectors });
     await client.query(`
       INSERT INTO scan_findings
         (id, tenant_id, asset_id, job_id, severity, category, title, description, component, status, detected_at, engine_id)
@@ -203,8 +192,8 @@ async function persistProviderResult(client: PoolClient, job: ClaimedJob, compon
       ON CONFLICT (id) DO NOTHING
     `, [
       deterministicId('finding-osv', vulnKey), job.tenant_id, job.passport_id, job.id,
-      vulnerabilitySeverity(vulnerability), vulnerability?.id || 'OSV vulnerability',
-      vulnerability?.summary || aliases.join(', ') || 'OSV returned a vulnerability record.',
+      assessment.severity, vulnerabilityId,
+      `${vulnerability?.summary || aliases.join(', ') || 'OSV returned a vulnerability record.'} Severity provenance: ${provenance}`,
       `${component.name}@${component.version}`, receivedAt,
     ]);
   }
@@ -217,7 +206,14 @@ async function processJob(pool: Pool, job: ClaimedJob) {
   let parsed: unknown;
   try { parsed = JSON.parse(passport.sbom || '[]'); } catch { throw new Error('SBOM_MALFORMED'); }
   if (!Array.isArray(parsed)) throw new Error('SBOM_MALFORMED');
-  const components = (parsed as SbomComponent[]).filter((component): component is Required<Pick<SbomComponent, 'name' | 'version'>> & SbomComponent => typeof component?.name === 'string' && component.name.length > 0 && typeof component?.version === 'string' && component.version.length > 0);
+  const seenComponents = new Set<string>();
+  const components = (parsed as SbomComponent[]).filter((component): component is Required<Pick<SbomComponent, 'name' | 'version'>> & SbomComponent => {
+    if (typeof component?.name !== 'string' || !component.name.trim() || typeof component?.version !== 'string' || !component.version.trim()) return false;
+    const identity = componentIdentity({ name: component.name, version: component.version, ecosystem: component.ecosystem });
+    if (seenComponents.has(identity)) return false;
+    seenComponents.add(identity);
+    return true;
+  });
 
   let findingCount = 0;
   for (const component of components) {
