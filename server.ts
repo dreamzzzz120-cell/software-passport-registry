@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import * as Sentry from '@sentry/node';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { config, validateConfiguration } from './src/config.ts';
 import { checkDatabaseHealth, closeDatabase, db } from './src/db/index.ts';
@@ -88,6 +89,7 @@ app.post('/api/ai/analyze-passport', requireAuth, async (req: AuthenticatedReque
   try {
     const passportId = typeof req.body?.passportId === 'string' ? req.body.passportId.trim() : '';
     if (!passportId) return res.status(400).json({ error: { code: 'PASSPORT_ID_REQUIRED', message: 'passportId is required.' } });
+    const db = req.db!;
     const result = await db.execute(sql`
       SELECT name, version, publisher, overall_score AS "overallScore",
              jsonb_array_length(COALESCE(NULLIF(evidence, '')::jsonb, '[]'::jsonb)) AS "evidenceCount",
@@ -126,9 +128,9 @@ if (mcpBearer) {
 }
 
 app.use('/api', createScansRouter());
-const publicDir = __dirname;
+const publicDir = path.dirname(fileURLToPath(import.meta.url));
 app.use(express.static(publicDir, { index: false, maxAge: config.isProduction ? '1y' : 0 }));
-app.get('*', (req, res, next) => { if (req.path.startsWith('/api/') || req.path === '/mcp') return next(); return res.sendFile(path.join(publicDir, 'index.html'), error => error ? next(error) : undefined); });
+app.get('/*splat', (req, res, next) => { if (req.path.startsWith('/api/') || req.path === '/mcp') return next(); return res.sendFile(path.join(publicDir, 'index.html'), error => error ? next(error) : undefined); });
 app.use((req, res, next) => { if (req.path.startsWith('/api/') || req.path === '/mcp') return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Route not found.', requestId: res.locals.requestId } }); return next(); });
 app.use((err: any, req: Request, res: Response, next: NextFunction) => { if (res.headersSent) return next(err); const requestId = res.locals.requestId || `req_${randomUUID()}`; const status = Number.isInteger(err?.status) && err.status >= 400 && err.status < 600 ? err.status : 500; console.error('[HTTP_ERROR]', { requestId, status, method: req.method, path: req.path, message: err?.message || String(err) }); if (config.sentry.dsn) Sentry.captureException(err, { tags: { requestId } }); return res.status(status).json({ error: { code: status === 500 ? 'INTERNAL_SERVER_ERROR' : 'REQUEST_FAILED', message: status === 500 ? 'An unexpected server error occurred.' : err?.message || 'Request failed.', requestId } }); });
 let server: ReturnType<typeof app.listen> | undefined; let shuttingDown = false;

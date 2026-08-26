@@ -15,6 +15,7 @@ export const users = pgTable('users', {
   role: text('role').notNull().default('Viewer'), // RBAC Roles: Owner, Admin, Technician, Viewer, Client
   companyName: text('company_name'),
   roleTitle: text('role_title'),
+  displayName: text('display_name'),
   numTechnicians: integer('num_technicians'),
   clientCount: integer('client_count'),
   primaryUseCase: text('primary_use_case'),

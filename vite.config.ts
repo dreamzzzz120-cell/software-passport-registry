@@ -26,6 +26,11 @@ export default defineConfig(({ mode }) => {
       'import.meta.env.VITE_FIREBASE_MEASUREMENT_ID': JSON.stringify(firebaseEnv.measurementId ?? ''),
     },
     plugins: [react(), tailwindcss()],
+    server: {
+      proxy: {
+        '/api': { target: env('VITE_DEV_API_PROXY_TARGET') ?? 'http://localhost:3000', changeOrigin: true },
+      },
+    },
     build: {
       chunkSizeWarningLimit: 1000,
     },

@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import dns from 'node:dns/promises';
+import { Agent } from 'undici';
 
 export type Provider =
   | 'gitlab' | 'bitbucket' | 'azure-devops' | 'jira' | 'confluence' | 'slack'
@@ -29,7 +30,7 @@ export function blockPrivateAddress(address: string): boolean {
   return p[0] === 0 || p[0] === 10 || p[0] === 127 || (p[0] === 169 && p[1] === 254) || (p[0] === 172 && p[1] >= 16 && p[1] <= 31) || (p[0] === 192 && p[1] === 168);
 }
 
-async function validateOutboundUrl(raw: string): Promise<URL> {
+async function validateOutboundUrl(raw: string): Promise<{ url: URL; pinnedIp: string }> {
   let url: URL;
   try { url = new URL(raw); } catch { throw new Error('PROVIDER_URL_INVALID'); }
   if (url.protocol !== 'https:') throw new Error('PROVIDER_URL_MUST_USE_HTTPS');
@@ -38,15 +39,31 @@ async function validateOutboundUrl(raw: string): Promise<URL> {
   if (BLOCKED_HOSTS.has(host) || blockPrivateAddress(host)) throw new Error('PROVIDER_URL_BLOCKED');
   const records = await dns.lookup(host, { all: true, verbatim: true });
   if (!records.length || records.some(r => blockPrivateAddress(r.address))) throw new Error('PROVIDER_URL_RESOLVES_PRIVATE');
-  return url;
+  // Pin the connection to the exact address just validated instead of letting
+  // the HTTP client re-resolve DNS a second time, which would reopen a
+  // DNS-rebinding window between validation and the actual request.
+  return { url, pinnedIp: records[0].address };
+}
+
+// A fresh undici Agent per call, whose connector is pinned to the exact IP
+// `validateOutboundUrl` already resolved and vetted. This is what actually
+// closes the DNS-rebinding window: the previous version passed the validated
+// URL straight to `fetch()`, which re-resolves the hostname itself, so a
+// rebinding DNS server could return a public IP for validation and a private
+// one moments later for the real connection.
+function pinnedDispatcher(ip: string) {
+  if (blockPrivateAddress(ip)) throw new Error('PROVIDER_URL_BLOCKED');
+  const family = ip.includes(':') ? 6 : 4;
+  return new Agent({ connect: { lookup: (_hostname, _options, callback) => callback(null, [{ address: ip, family }]) } } as any);
 }
 
 async function safeRequestJson(url: string, init: RequestInit = {}) {
-  const safeUrl = await validateOutboundUrl(url);
+  const { url: safeUrl, pinnedIp } = await validateOutboundUrl(url);
+  const dispatcher = pinnedDispatcher(pinnedIp);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const response = await fetch(safeUrl, { ...init, redirect: 'error', signal: controller.signal, headers: { accept: 'application/json', ...(init.headers || {}) } });
+    const response = await fetch(safeUrl, { ...init, redirect: 'error', signal: controller.signal, dispatcher, headers: { accept: 'application/json', ...(init.headers || {}) } } as any);
     if (response.status >= 300 && response.status < 400) throw new Error('PROVIDER_URL_BLOCKED');
     const contentLength = Number(response.headers.get('content-length') || 0);
     if (contentLength > MAX_RESPONSE_BYTES) throw new Error('PROVIDER_RESPONSE_TOO_LARGE');
@@ -60,7 +77,10 @@ async function safeRequestJson(url: string, init: RequestInit = {}) {
     if (error?.name === 'AbortError') throw new Error('PROVIDER_TIMEOUT');
     if (error?.cause?.code === 'UND_ERR_REDIRECT' || /redirect/i.test(String(error?.message || ''))) throw new Error('PROVIDER_URL_BLOCKED');
     throw error;
-  } finally { clearTimeout(timer); }
+  } finally {
+    clearTimeout(timer);
+    void dispatcher.close().catch(() => undefined);
+  }
 }
 
 function sha256(value: string) { return `sha256:${crypto.createHash('sha256').update(value, 'utf8').digest('hex')}`; }

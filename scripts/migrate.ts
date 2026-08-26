@@ -10,6 +10,7 @@
 import { Pool, PoolClient } from 'pg';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 interface MigrationRecord {
   version: string;
@@ -201,7 +202,8 @@ export async function main() {
   }
 }
 
-if (require.main === module) {
+const isDirectlyExecuted = Boolean(process.argv[1]) && fileURLToPath(import.meta.url) === process.argv[1];
+if (isDirectlyExecuted) {
   main().catch((error) => {
     console.error('[FATAL]', error);
     process.exit(1);

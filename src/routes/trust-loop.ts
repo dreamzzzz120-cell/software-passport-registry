@@ -2,8 +2,7 @@ import { Router } from 'express';
 import { sql } from 'drizzle-orm';
 import crypto from 'node:crypto';
 import { z } from 'zod';
-import { db } from '../db/index.ts';
-import { requireAuth, AuthenticatedRequest } from '../middleware/security.ts';
+import { AuthenticatedRequest } from '../middleware/security.ts';
 import { decryptCredentials } from '../integrations/credential-vault.ts';
 import { collectDeepProviderEvidence } from '../integrations/deep-collectors.ts';
 import { collectGitHubDeepEvidence } from '../integrations/github-deep.ts';
@@ -30,13 +29,14 @@ function parseJson(value: unknown, fallback: unknown = []) { try { return value 
 export function createTrustLoopRouter() {
   const router = Router();
 
-  router.post('/collect', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  router.post('/collect', async (req: AuthenticatedRequest, res, next) => {
     const parsed = collectSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'INVALID_PAYLOAD', details: parsed.error.flatten() });
     const { passportId, provider } = parsed.data;
     const tenantId = req.user!.tenantId;
     const runId = id('collect');
     const startedAt = new Date().toISOString();
+    const db = req.db!;
     try {
       const passport = (await db.execute(sql`SELECT id,client_id FROM passports WHERE id=${passportId} AND tenant_id=${tenantId} LIMIT 1`) as any).rows?.[0];
       if (!passport) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
@@ -59,8 +59,9 @@ export function createTrustLoopRouter() {
     }
   });
 
-  router.get('/findings', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  router.get('/findings', async (req: AuthenticatedRequest, res, next) => {
     try {
+      const db = req.db!;
       const tenantId = req.user!.tenantId;
       const passportId = typeof req.query.passportId === 'string' ? req.query.passportId : null;
       const rows = passportId
@@ -70,10 +71,11 @@ export function createTrustLoopRouter() {
     } catch (error) { return next(error); }
   });
 
-  router.post('/remediations', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  router.post('/remediations', async (req: AuthenticatedRequest, res, next) => {
     const parsed = remediationSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'INVALID_PAYLOAD', details: parsed.error.flatten() });
     try {
+      const db = req.db!;
       const p = parsed.data;
       const tenantId = req.user!.tenantId;
       const finding = (await db.execute(sql`SELECT id,client_id,passport_id,title,description FROM trust_findings WHERE id=${p.findingId} AND tenant_id=${tenantId} LIMIT 1`) as any).rows?.[0];
@@ -86,10 +88,11 @@ export function createTrustLoopRouter() {
     } catch (error) { return next(error); }
   });
 
-  router.patch('/remediations/:id', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  router.patch('/remediations/:id', async (req: AuthenticatedRequest, res, next) => {
     const parsed = remediationUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'INVALID_PAYLOAD', details: parsed.error.flatten() });
     try {
+      const db = req.db!;
       const tenantId = req.user!.tenantId;
       const p = parsed.data;
       const now = new Date().toISOString();
@@ -100,18 +103,20 @@ export function createTrustLoopRouter() {
     } catch (error) { return next(error); }
   });
 
-  router.post('/verify', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  router.post('/verify', async (req: AuthenticatedRequest, res, next) => {
     const parsed = verifySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'INVALID_PAYLOAD', details: parsed.error.flatten() });
     try {
+      const db = req.db!;
       const result = await verifyRemediation({ ...parsed.data, tenantId: req.user!.tenantId, actorId: req.user!.uid });
       await db.execute(sql`UPDATE trust_remediation_work_items SET status='VERIFIED',updated_at=${new Date().toISOString()},closed_at=${new Date().toISOString()} WHERE tenant_id=${req.user!.tenantId} AND finding_id=${parsed.data.findingId}`);
       return res.json(result);
     } catch (error) { return next(error); }
   });
 
-  router.get('/monitoring', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  router.get('/monitoring', async (req: AuthenticatedRequest, res, next) => {
     try {
+      const db = req.db!;
       const tenantId = req.user!.tenantId;
       const passportId = typeof req.query.passportId === 'string' ? req.query.passportId : null;
       const rows = passportId ? await db.execute(sql`SELECT * FROM trust_monitoring_state WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY provider`) : await db.execute(sql`SELECT * FROM trust_monitoring_state WHERE tenant_id=${tenantId} ORDER BY passport_id,provider`);
@@ -120,8 +125,9 @@ export function createTrustLoopRouter() {
     } catch (error) { return next(error); }
   });
 
-  router.get('/ledger/:passportId', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  router.get('/ledger/:passportId', async (req: AuthenticatedRequest, res, next) => {
     try {
+      const db = req.db!;
       const tenantId = req.user!.tenantId;
       const passportId = req.params.passportId;
       const scope = await db.execute(sql`SELECT id FROM passports WHERE id=${passportId} AND tenant_id=${tenantId} LIMIT 1`);
@@ -135,10 +141,11 @@ export function createTrustLoopRouter() {
     } catch (error) { return next(error); }
   });
 
-  router.get('/reports/:passportId', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  router.get('/reports/:passportId', async (req: AuthenticatedRequest, res, next) => {
     try {
       const parsed = reportTypes.safeParse(req.query.type || 'executive');
       if (!parsed.success) return res.status(400).json({ error: 'INVALID_REPORT_TYPE' });
+      const db = req.db!;
       const tenantId = req.user!.tenantId;
       const passportId = req.params.passportId;
       const passport = (await db.execute(sql`SELECT id,name,overall_score,security_score,compliance_score,evidence,vulnerabilities,timeline FROM passports WHERE id=${passportId} AND tenant_id=${tenantId} LIMIT 1`) as any).rows?.[0];

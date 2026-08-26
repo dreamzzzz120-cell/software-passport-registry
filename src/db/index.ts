@@ -71,6 +71,26 @@ pool.on('error', (err) => {
   console.error('[Database] Unexpected error on idle SQL pool client:', err?.message || err);
 });
 
+// Separate pool for the per-request, tenant-scoped connection used by the HTTP
+// API (see src/middleware/tenant-scope.ts). It targets APP_DATABASE_URL when an
+// operator has provisioned the least-privileged spr_app_runtime role (migration
+// 0020); otherwise it falls back to the same owner connection as `pool`, which
+// is a no-op for Row-Level Security since table owners bypass RLS entirely.
+const sslConfigFor = (connectionString: string | undefined) => config.database.ssl
+  ? { rejectUnauthorized: config.database.sslVerify, ...(config.database.sslCa ? { ca: config.database.sslCa } : {}) }
+  : undefined;
+export const appPool = config.database.appConnectionString
+  ? new Pool({
+      connectionString: config.database.appConnectionString,
+      ssl: sslConfigFor(config.database.appConnectionString),
+      connectionTimeoutMillis: databaseConfigurationSummary.connectionTimeoutMillis,
+      max: databaseConfigurationSummary.poolMax,
+      idleTimeoutMillis: databaseConfigurationSummary.idleTimeoutMillis,
+      query_timeout: databaseConfigurationSummary.queryTimeoutMillis,
+    })
+  : pool;
+if (appPool !== pool) appPool.on('error', (err) => console.error('[Database] Unexpected error on idle app-runtime pool client:', err?.message || err));
+
 export async function checkDatabaseHealth(): Promise<{ ok: true; latencyMs: number } | { ok: false; latencyMs: number; error: string }> {
   const started = Date.now();
   if (!isDatabaseConfigured) return { ok: false, latencyMs: 0, error: 'DB_MISCONFIGURED' };
@@ -88,6 +108,7 @@ export async function checkDatabaseHealth(): Promise<{ ok: true; latencyMs: numb
 
 export async function closeDatabase(): Promise<void> {
   await pool.end();
+  if (appPool !== pool) await appPool.end();
 }
 
 export const db = drizzle(pool, { schema });

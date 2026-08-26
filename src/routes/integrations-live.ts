@@ -6,7 +6,6 @@ import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/se
 import { INTEGRATION_CATALOG } from '../integrations/catalog.ts';
 import { collectProviderEvidence, Provider, ProviderCredentials } from '../integrations/adapters.ts';
 import { decryptCredentials, encryptCredentials } from '../integrations/credential-vault.ts';
-import { db } from '../db/index.ts';
 
 const PROVIDERS = new Set(INTEGRATION_CATALOG.map(item => item.provider));
 const credentialSchema = z.record(z.string().min(1).max(128), z.string().max(4096)).refine(v => Object.keys(v).length > 0, 'Credentials cannot be empty');
@@ -21,6 +20,7 @@ export function createLiveIntegrationsRouter() {
 
   router.get('/', requireAuth, async (req: AuthenticatedRequest, res, next) => {
     try {
+      const db = req.db!;
       const tenantId = req.user!.tenantId;
       const credentials = await db.execute(sql`SELECT provider, status, last_tested_at FROM integration_credentials WHERE tenant_id = ${tenantId}`);
       const rows = new Map<string, any>((credentials as any).rows?.map((r: any) => [r.provider, r]) ?? []);
@@ -33,6 +33,7 @@ export function createLiveIntegrationsRouter() {
       const provider = providerFromParam(routeParam(req.params.provider));
       const parsed = credentialSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid credentials payload', details: parsed.error.flatten() });
+      const db = req.db!;
       const tenantId = req.user!.tenantId;
       const encryptedPayload = encryptCredentials(parsed.data);
       await db.execute(sql`INSERT INTO integration_credentials (id, tenant_id, provider, encrypted_payload, key_version, status) VALUES (${id('cred')}, ${tenantId}, ${provider}, ${encryptedPayload}, 1, 'CONFIGURED') ON CONFLICT (tenant_id, provider) DO UPDATE SET encrypted_payload = EXCLUDED.encrypted_payload, key_version = EXCLUDED.key_version, status = 'CONFIGURED', updated_at = CURRENT_TIMESTAMP`);
@@ -48,6 +49,7 @@ export function createLiveIntegrationsRouter() {
       const provider = providerFromParam(routeParam(req.params.provider));
       const parsed = testSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'passportId is required' });
+      const db = req.db!;
       const tenantId = req.user!.tenantId;
       const passport = await db.execute(sql`SELECT id FROM passports WHERE id = ${parsed.data.passportId} AND tenant_id = ${tenantId} LIMIT 1`);
       if (!((passport as any).rows?.length)) return res.status(404).json({ error: 'Passport not found for this tenant.' });

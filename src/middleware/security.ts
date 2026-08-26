@@ -11,9 +11,13 @@ import { config } from '../config.ts';
 import { db } from '../db/index.ts';
 import { users } from '../db/schema.ts';
 import { eq } from 'drizzle-orm';
+import { attachTenantScope, ScopedDb } from './tenant-scope.ts';
+import { recordSession } from '../security/session-tracking.ts';
 
 export interface AuthenticatedRequest extends Request {
   user?: { id: number; uid: string; email: string; tenantId: string; role: string; emailVerified: boolean };
+  /** Per-request, tenant-scoped connection (Row-Level Security enforced). Set by requireAuth. */
+  db?: ScopedDb;
 }
 
 let rateLimitWindowMs = 60_000;
@@ -146,7 +150,10 @@ export const requireAuth = async (req: AuthenticatedRequest, res: Response, next
     const uid = decodedToken.uid;
     if (!uid || typeof uid !== 'string' || uid.length > 256) return res.status(401).json({ error: 'Unauthorized: Invalid security token' });
 
-    const isVerificationExemptPath = ['/api/user/me', '/api/auth/resend-verification', '/api/auth/verify-status'].includes(req.path);
+    // req.path has already had the router's mount prefix (e.g. '/api') stripped
+    // by Express, so the exemption must be checked against the full mounted
+    // path (req.baseUrl + req.path), not req.path alone.
+    const isVerificationExemptPath = ['/api/user/me', '/api/auth/resend-verification', '/api/auth/verify-status'].includes(req.baseUrl + req.path);
     const emailVerified = decodedToken.email_verified === true;
     if (!emailVerified && !isVerificationExemptPath) return res.status(403).json({ error: 'Email verification required', code: 'EMAIL_NOT_VERIFIED' });
 
@@ -160,6 +167,14 @@ export const requireAuth = async (req: AuthenticatedRequest, res: Response, next
     if (tokenEmail && dbEmail && tokenEmail !== dbEmail) return res.status(403).json({ error: 'User identity does not match the provisioned account' });
 
     req.user = { id: dbUser.id, uid, email: dbUser.email, tenantId: dbUser.tenantId, role: dbUser.role, emailVerified };
+    req.db = await attachTenantScope(dbUser.tenantId, res);
+    const ip = req.ip || req.socket.remoteAddress || 'unknown';
+    const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'].slice(0, 512) : '';
+    try {
+      await recordSession(req.db, { tenantId: dbUser.tenantId, userId: dbUser.id, uid, ip, userAgent });
+    } catch (err) {
+      console.error('[Session] recordSession failed:', err instanceof Error ? err.message : String(err));
+    }
     return next();
   } catch {
     return res.status(401).json({ error: 'Unauthorized: Invalid or expired security token' });

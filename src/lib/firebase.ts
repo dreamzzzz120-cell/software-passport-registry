@@ -4,7 +4,7 @@
  */
 
 import { initializeApp } from 'firebase/app';
-import { GoogleAuthProvider, getAuth, signInWithPopup, signOut, type User } from 'firebase/auth';
+import { GoogleAuthProvider, connectAuthEmulator, getAuth, signInWithPopup, signOut, type User } from 'firebase/auth';
 
 // Firebase browser configuration is public configuration. Prefer Vite environment
 // variables, but keep the production project's public config as a fallback so a
@@ -47,6 +47,12 @@ export const firebaseConfigured = Boolean(
 const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
+
+// Local development only: point the client SDK at a local Auth emulator
+// instead of the real spr4-c2c65 project. Never set VITE_FIREBASE_AUTH_EMULATOR_HOST
+// in a deployed environment.
+const emulatorHost = env.VITE_FIREBASE_AUTH_EMULATOR_HOST;
+if (emulatorHost) connectAuthEmulator(auth, `http://${emulatorHost}`, { disableWarnings: true });
 
 auth.useDeviceLanguage();
 

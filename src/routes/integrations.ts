@@ -2,8 +2,7 @@ import crypto from 'node:crypto';
 import { Router } from 'express';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { db } from '../db/index.ts';
-import { requireAuth, AuthenticatedRequest } from '../middleware/security.ts';
+import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/security.ts';
 import { INTEGRATION_CATALOG } from '../integrations/catalog.ts';
 
 const githubScanSchema = z.object({
@@ -31,6 +30,7 @@ export function createIntegrationsRouter() {
 
   router.get('/', requireAuth, async (req: AuthenticatedRequest, res, next) => {
     try {
+      const db = req.db!;
       const tenantId = req.user!.tenantId;
       const result = await db.execute(sql`SELECT name, connected, api_key_hint, last_sync_date FROM integrations WHERE tenant_id = ${tenantId}`);
       const rows = new Map<string, any>((result as any).rows?.map((row: any) => [row.name, row]) ?? []);
@@ -50,8 +50,9 @@ export function createIntegrationsRouter() {
    * the durable worker job was accepted; it is deliberately not a claim that
    * the repository is safe or that the scan has succeeded.
    */
-  router.post('/github/repository-scan', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  router.post('/github/repository-scan', requireAuth, requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
     try {
+      const db = req.db!;
       const parsed = githubScanSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
       const tenantId = req.user!.tenantId;

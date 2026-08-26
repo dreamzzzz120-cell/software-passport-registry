@@ -5,6 +5,9 @@ import { db } from '../db/index.ts';
 import { auditTrail, users } from '../db/schema.ts';
 import { adminAuth } from '../lib/firebase-admin.ts';
 
+/** Genesis marker for the audit_trail hash chain (see also src/security/audit-log.ts). */
+export const AUDIT_TRAIL_GENESIS_HASH = '0000000000000000000000000000000000000000000000000000000000000000';
+
 export type FirebaseUser = {
   uid: string;
   email?: string;
@@ -160,7 +163,7 @@ function createProductionStoreFor(executor: any): OwnerBootstrapStore {
       const action = 'Initial Owner Bootstrap';
       const actor = 'system:initial-owner-bootstrap';
       const payload = JSON.stringify({ outcome: 'success', mechanism: 'controlled-operational-bootstrap' });
-      const previousHash = lastBlock?.currentHash ?? '0000000000000000000000000000000000000000000000000000000000000000';
+      const previousHash = lastBlock?.currentHash ?? AUDIT_TRAIL_GENESIS_HASH;
       const currentHash = crypto.createHash('sha256')
         .update(action + timestamp + actor + payload + previousHash)
         .digest('hex');

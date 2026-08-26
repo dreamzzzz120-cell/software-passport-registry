@@ -35,6 +35,7 @@ const envSchema = z.object({
   ENFORCE_HTTPS: optionalBooleanString, TRUST_PROXY: optionalBooleanString, ALLOW_IFRAME: optionalBooleanString,
   SQL_HOST: optionalTrimmedString, SQL_USER: optionalTrimmedString, SQL_PASSWORD: optionalTrimmedString, SQL_DB_NAME: optionalTrimmedString,
   DATABASE_URL: optionalTrimmedUrl,
+  APP_DATABASE_URL: optionalTrimmedUrl, WORKER_DATABASE_URL: optionalTrimmedUrl,
   SQL_SSL: z.preprocess((value) => typeof value === 'string' ? (value.trim() || undefined) : value, z.enum(['true', 'require', 'verify', 'verify-full', 'false', '1', '0']).optional()),
   SQL_SSL_CA: optionalTrimmedString,
   SQL_POOL_MAX: optionalPositiveIntegerString, SQL_CONNECTION_TIMEOUT_MS: optionalPositiveIntegerString, SQL_IDLE_TIMEOUT_MS: optionalPositiveIntegerString, SQL_QUERY_TIMEOUT_MS: optionalPositiveIntegerString,
@@ -71,6 +72,13 @@ export const config = {
   appUrl: effectiveAppUrl, allowedOrigins: effectiveAllowedOrigins, enforceHttps: parseBoolean(parsedEnv.ENFORCE_HTTPS, false), trustProxy: parseBoolean(parsedEnv.TRUST_PROXY, false), allowIframe: parseBoolean(parsedEnv.ALLOW_IFRAME, false),
   database: {
     connectionString: parsedEnv.DATABASE_URL, host: parsedEnv.SQL_HOST, user: parsedEnv.SQL_USER, password: parsedEnv.SQL_PASSWORD, name: parsedEnv.SQL_DB_NAME,
+    // APP_DATABASE_URL/WORKER_DATABASE_URL point at least-privileged, RLS-bound
+    // Postgres roles (see migration 0020) so the HTTP API and background workers
+    // cannot see another tenant's rows even if a query forgets its own tenant_id
+    // filter. Falling back to the owner-role DATABASE_URL keeps existing
+    // deployments working unchanged until they provision the separate roles.
+    appConnectionString: parsedEnv.APP_DATABASE_URL ?? parsedEnv.DATABASE_URL,
+    workerConnectionString: parsedEnv.WORKER_DATABASE_URL ?? parsedEnv.DATABASE_URL,
     ssl: databaseSslEnabled,
     sslVerify: databaseSslVerification,
     sslCa: parsedEnv.SQL_SSL_CA,

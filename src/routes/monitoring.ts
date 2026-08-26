@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { config } from '../config.ts';
-import { db } from '../db/index.ts';
+import type { ScopedDb } from '../middleware/tenant-scope.ts';
 
 function routeParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] || '' : value || '';
@@ -65,7 +65,7 @@ function parse<T>(schema: z.ZodType<T>, body: unknown, res: any): T | null {
   return parsed.data;
 }
 
-async function ownedPassport(tenantId: string, passportId: string) {
+async function ownedPassport(db: ScopedDb, tenantId: string, passportId: string) {
   return db.select({ id: passports.id }).from(passports).where(and(
     eq(passports.id, passportId), eq(passports.tenantId, tenantId),
   )).then(rows => rows[0] || null);
@@ -112,6 +112,7 @@ export function createMonitoringRouter() {
   });
 
   router.get('/monitoring-configurations', async (req: AuthenticatedRequest, res) => {
+    const db = req.db!;
     const rows = await db.select().from(monitoringConfigurations).where(
       eq(monitoringConfigurations.tenantId, req.user!.tenantId),
     ).orderBy(desc(monitoringConfigurations.updatedAt));
@@ -119,6 +120,7 @@ export function createMonitoringRouter() {
   });
 
   router.get('/monitoring-configurations/:id', async (req: AuthenticatedRequest, res) => {
+    const db = req.db!;
     const row = await db.select().from(monitoringConfigurations).where(and(
       eq(monitoringConfigurations.id, routeParam(req.params.id)),
       eq(monitoringConfigurations.tenantId, req.user!.tenantId),
@@ -128,6 +130,7 @@ export function createMonitoringRouter() {
   });
 
   router.post('/monitoring-configurations', requireRole(['Admin']), async (req: AuthenticatedRequest, res) => {
+    const db = req.db!;
     const body = parse(monitoringCreateSchema, req.body, res);
     if (!body) return;
     const definition = COLLECTORS[body.collectorId];
@@ -137,7 +140,7 @@ export function createMonitoringRouter() {
     if (body.scheduleSeconds < definition.minimumScheduleSeconds) {
       return res.status(400).json({ error: 'SCHEDULE_BELOW_COLLECTOR_MINIMUM' });
     }
-    if (!await ownedPassport(req.user!.tenantId, body.passportId)) {
+    if (!await ownedPassport(db, req.user!.tenantId, body.passportId)) {
       return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
     }
     const now = new Date();
@@ -163,6 +166,7 @@ export function createMonitoringRouter() {
   });
 
   router.patch('/monitoring-configurations/:id', requireRole(['Admin']), async (req: AuthenticatedRequest, res) => {
+    const db = req.db!;
     const body = parse(monitoringPatchSchema, req.body, res);
     if (!body) return;
     const current = await db.select().from(monitoringConfigurations).where(and(
@@ -187,6 +191,7 @@ export function createMonitoringRouter() {
   });
 
   router.post('/monitoring-configurations/:id/run', requireRole(['Technician']), async (req: AuthenticatedRequest, res) => {
+    const db = req.db!;
     const configuration = await db.select().from(monitoringConfigurations).where(and(
       eq(monitoringConfigurations.id, routeParam(req.params.id)),
       eq(monitoringConfigurations.tenantId, req.user!.tenantId),
@@ -224,6 +229,7 @@ export function createMonitoringRouter() {
   });
 
   router.get('/collector-jobs', async (req: AuthenticatedRequest, res) => {
+    const db = req.db!;
     const rows = await db.select().from(collectorJobs).where(
       eq(collectorJobs.tenantId, req.user!.tenantId),
     ).orderBy(desc(collectorJobs.createdAt)).limit(200);
@@ -231,6 +237,7 @@ export function createMonitoringRouter() {
   });
 
   router.get('/collector-jobs/:id', async (req: AuthenticatedRequest, res) => {
+    const db = req.db!;
     const row = await db.select().from(collectorJobs).where(and(
       eq(collectorJobs.id, routeParam(req.params.id)), eq(collectorJobs.tenantId, req.user!.tenantId),
     )).then(rows => rows[0]);
@@ -239,6 +246,7 @@ export function createMonitoringRouter() {
   });
 
   router.get('/alert-subscriptions', async (req: AuthenticatedRequest, res) => {
+    const db = req.db!;
     const rows = await db.select().from(alertSubscriptions).where(
       eq(alertSubscriptions.tenantId, req.user!.tenantId),
     ).orderBy(desc(alertSubscriptions.updatedAt));
@@ -246,6 +254,7 @@ export function createMonitoringRouter() {
   });
 
   router.get('/alert-subscriptions/:id', async (req: AuthenticatedRequest, res) => {
+    const db = req.db!;
     const row = await db.select().from(alertSubscriptions).where(and(
       eq(alertSubscriptions.id, routeParam(req.params.id)),
       eq(alertSubscriptions.tenantId, req.user!.tenantId),
@@ -255,9 +264,10 @@ export function createMonitoringRouter() {
   });
 
   router.post('/alert-subscriptions', requireRole(['Technician']), async (req: AuthenticatedRequest, res) => {
+    const db = req.db!;
     const body = parse(subscriptionCreateSchema, req.body, res);
     if (!body) return;
-    if (body.passportId && !await ownedPassport(req.user!.tenantId, body.passportId)) {
+    if (body.passportId && !await ownedPassport(db, req.user!.tenantId, body.passportId)) {
       return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
     }
     const now = new Date().toISOString();
@@ -274,6 +284,7 @@ export function createMonitoringRouter() {
   });
 
   router.patch('/alert-subscriptions/:id', requireRole(['Technician']), async (req: AuthenticatedRequest, res) => {
+    const db = req.db!;
     const body = parse(subscriptionPatchSchema, req.body, res);
     if (!body) return;
     const update: Partial<typeof alertSubscriptions.$inferInsert> = {
@@ -295,6 +306,7 @@ export function createMonitoringRouter() {
   });
 
   router.delete('/alert-subscriptions/:id', requireRole(['Technician']), async (req: AuthenticatedRequest, res) => {
+    const db = req.db!;
     const deleted = await db.delete(alertSubscriptions).where(and(
       eq(alertSubscriptions.id, routeParam(req.params.id)), eq(alertSubscriptions.tenantId, req.user!.tenantId),
     )).returning({ id: alertSubscriptions.id });
@@ -303,6 +315,7 @@ export function createMonitoringRouter() {
   });
 
   router.get('/notifications', async (req: AuthenticatedRequest, res) => {
+    const db = req.db!;
     const rows = await db.select().from(inAppNotifications).where(
       eq(inAppNotifications.tenantId, req.user!.tenantId),
     ).orderBy(desc(inAppNotifications.createdAt)).limit(200);

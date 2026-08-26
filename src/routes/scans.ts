@@ -2,7 +2,6 @@ import crypto from 'node:crypto';
 import { Router } from 'express';
 import { z } from 'zod';
 import { sql } from 'drizzle-orm';
-import { db } from '../db/index.ts';
 import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/security.ts';
 
 const repositorySchema = z.object({
@@ -51,6 +50,7 @@ export function createScansRouter() {
 
   router.get('/scans', async (req: AuthenticatedRequest, res, next) => {
     try {
+      const db = req.db!;
       const result = await db.execute(sql`SELECT id, target_name AS "targetName", scan_type AS "scanType", triggered_by AS "triggeredBy", status, duration_ms AS "durationMs", findings_count AS "findingsCount", timestamp, client_name AS "clientName" FROM scans WHERE tenant_id=${req.user!.tenantId} ORDER BY timestamp DESC LIMIT 100`);
       return res.json((result as any).rows || []);
     } catch (error) { return next(error); }
@@ -60,6 +60,7 @@ export function createScansRouter() {
     try {
       const parsed = scanSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+      const db = req.db!;
       const { targetName, scanType, clientName } = parsed.data;
       const timestamp = new Date().toISOString();
       const scanId = id('scan');
@@ -78,6 +79,7 @@ export function createScansRouter() {
 
   router.get('/scans/schedules', async (req: AuthenticatedRequest, res, next) => {
     try {
+      const db = req.db!;
       const result = await db.execute(sql`SELECT id, asset_id AS "assetId", asset_host_name AS "assetHostName", asset_type AS "assetType", client_name AS "clientName", frequency, scan_type AS "scanType", status, last_run_at AS "lastRunAt", next_run_at AS "nextRunAt", created_at AS "createdAt" FROM scan_schedules WHERE tenant_id=${req.user!.tenantId} ORDER BY created_at DESC`);
       return res.json((result as any).rows || []);
     } catch (error) { return next(error); }
@@ -87,6 +89,7 @@ export function createScansRouter() {
     try {
       const parsed = scheduleSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+      const db = req.db!;
       const data = parsed.data;
       const now = new Date();
       const schedule = {
@@ -104,6 +107,7 @@ export function createScansRouter() {
     try {
       const parsed = scheduleUpdateSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+      const db = req.db!;
       const result = await db.execute(sql`UPDATE scan_schedules SET status=${parsed.data.status} WHERE id=${req.params.id} AND tenant_id=${req.user!.tenantId} RETURNING id, asset_id AS "assetId", asset_host_name AS "assetHostName", asset_type AS "assetType", client_name AS "clientName", frequency, scan_type AS "scanType", status, last_run_at AS "lastRunAt", next_run_at AS "nextRunAt", created_at AS "createdAt"`);
       const row = (result as any).rows?.[0];
       if (!row) return res.status(404).json({ error: 'Scan schedule not found' });
@@ -113,6 +117,7 @@ export function createScansRouter() {
 
   router.delete('/scans/schedules/:id', requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
     try {
+      const db = req.db!;
       const result = await db.execute(sql`DELETE FROM scan_schedules WHERE id=${req.params.id} AND tenant_id=${req.user!.tenantId} RETURNING id`);
       if (!((result as any).rows?.length)) return res.status(404).json({ error: 'Scan schedule not found' });
       return res.status(204).send();
@@ -121,6 +126,7 @@ export function createScansRouter() {
 
   router.post('/scans/schedules/:id/run', requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
     try {
+      const db = req.db!;
       const schedule = (await db.execute(sql`SELECT id, asset_id AS "assetId", asset_host_name AS "assetHostName", asset_type AS "assetType", client_name AS "clientName", frequency, scan_type AS "scanType", status, last_run_at AS "lastRunAt", next_run_at AS "nextRunAt", created_at AS "createdAt" FROM scan_schedules WHERE id=${req.params.id} AND tenant_id=${req.user!.tenantId} LIMIT 1`)).rows?.[0] as any;
       if (!schedule) return res.status(404).json({ error: 'Scan schedule not found' });
       if (schedule.status !== 'Active') return res.status(409).json({ error: 'Scan schedule is paused' });
@@ -140,6 +146,7 @@ export function createScansRouter() {
 
   router.get('/agent-jobs', async (req: AuthenticatedRequest, res, next) => {
     try {
+      const db = req.db!;
       const result = await db.execute(sql`SELECT id, agent_id, passport_id, job_type, CASE WHEN status='Completed' THEN 'Success' ELSE status END AS status, status AS db_status, progress, result, error, attempt_count, max_attempts, completed_at, created_at, updated_at FROM agent_jobs WHERE tenant_id=${req.user!.tenantId} ORDER BY created_at DESC LIMIT 100`);
       return res.json((result as any).rows || []);
     } catch (error) { return next(error); }
@@ -147,6 +154,7 @@ export function createScansRouter() {
 
   router.get('/agent-jobs/:id', async (req: AuthenticatedRequest, res, next) => {
     try {
+      const db = req.db!;
       const result = await db.execute(sql`SELECT id, agent_id AS "agentId", passport_id AS "passportId", job_type AS "jobType", status, progress, result, error, attempt_count AS "attemptCount", max_attempts AS "maxAttempts", completed_at AS "completedAt", created_at AS "createdAt", updated_at AS "updatedAt" FROM agent_jobs WHERE id=${req.params.id} AND tenant_id=${req.user!.tenantId} LIMIT 1`);
       const row = (result as any).rows?.[0];
       if (!row) return res.status(404).json({ error: 'Agent job not found' });
@@ -156,6 +164,7 @@ export function createScansRouter() {
 
   router.get('/agent-jobs/:id/logs', async (req: AuthenticatedRequest, res, next) => {
     try {
+      const db = req.db!;
       const result = await db.execute(sql`SELECT l.id, l.agent_id, l.message, l.level, l.timestamp FROM agent_logs l JOIN agent_jobs j ON j.id=l.job_id AND j.tenant_id=${req.user!.tenantId} WHERE l.job_id=${req.params.id} ORDER BY l.timestamp ASC, l.id ASC`);
       return res.json((result as any).rows || []);
     } catch (error) { return next(error); }
@@ -165,6 +174,7 @@ export function createScansRouter() {
     try {
       const parsed = passportSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+      const db = req.db!;
       const passport = (await db.execute(sql`SELECT id, sbom FROM passports WHERE id=${parsed.data.passportId} AND tenant_id=${req.user!.tenantId} LIMIT 1`)).rows?.[0] as { id: string; sbom?: string } | undefined;
       if (!passport) return res.status(404).json({ error: 'Passport not found' });
       let normalizedComponents: Array<{ name: string; version: string; type: string }> | undefined;
@@ -212,6 +222,7 @@ export function createScansRouter() {
     try {
       const parsed = repositorySchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+      const db = req.db!;
       const { passportId, owner, repository, ref, subdirectory } = parsed.data;
       const passport = (await db.execute(sql`SELECT id FROM passports WHERE id=${passportId} AND tenant_id=${req.user!.tenantId} LIMIT 1`)).rows?.[0] as any;
       if (!passport) return res.status(404).json({ error: 'Passport not found' });

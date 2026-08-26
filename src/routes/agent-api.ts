@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { db } from '../db/index.ts';
 import { requireAuth, AuthenticatedRequest } from '../middleware/security.ts';
+import type { ScopedDb } from '../middleware/tenant-scope.ts';
 
 const passportInput = z.object({ passportId: z.string().trim().min(1).max(255) }).strict();
 const softwareInput = z.object({ query: z.string().trim().min(1).max(500) }).strict();
@@ -17,6 +17,7 @@ export function createAgentApiRouter() {
     const parsed = softwareInput.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'INVALID_QUERY', details: parsed.error.flatten() });
     try {
+      const db = req.db!;
       const tenantId = req.user!.tenantId;
       const q = parsed.data.query.toLowerCase();
       const passport = (await db.execute(sql`
@@ -26,7 +27,7 @@ export function createAgentApiRouter() {
         LIMIT 1
       `) as any).rows?.[0];
       if (!passport) return res.status(404).json({ status: 'UNKNOWN', reason: 'SOFTWARE_NOT_REGISTERED', query: parsed.data.query });
-      return buildVerificationResponse(tenantId, passport, res, next);
+      return buildVerificationResponse(db, tenantId, passport, res, next);
     } catch (error) { return next(error); }
   });
 
@@ -34,31 +35,33 @@ export function createAgentApiRouter() {
     const parsed = passportInput.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'INVALID_PASSPORT_ID', details: parsed.error.flatten() });
     try {
+      const db = req.db!;
       const passport = (await db.execute(sql`
         SELECT id,name,overall_score,security_score,compliance_score,evidence,vulnerabilities,timeline
         FROM passports WHERE tenant_id=${req.user!.tenantId} AND id=${parsed.data.passportId} LIMIT 1
       `) as any).rows?.[0];
       if (!passport) return res.status(404).json({ status: 'UNKNOWN', reason: 'PASSPORT_NOT_FOUND', passportId: parsed.data.passportId });
-      return buildVerificationResponse(req.user!.tenantId, passport, res, next);
+      return buildVerificationResponse(db, req.user!.tenantId, passport, res, next);
     } catch (error) { return next(error); }
   });
 
   router.get('/passport/:passportId', async (req: AuthenticatedRequest, res, next) => {
     try {
+      const db = req.db!;
       const passportId = req.params.passportId;
       const scope = (await db.execute(sql`
         SELECT id,name,overall_score,security_score,compliance_score,evidence,vulnerabilities,timeline
         FROM passports WHERE tenant_id=${req.user!.tenantId} AND id=${passportId} LIMIT 1
       `) as any).rows?.[0];
       if (!scope) return res.status(404).json({ status: 'UNKNOWN', reason: 'PASSPORT_NOT_FOUND', passportId });
-      return buildVerificationResponse(req.user!.tenantId, scope, res, next);
+      return buildVerificationResponse(db, req.user!.tenantId, scope, res, next);
     } catch (error) { return next(error); }
   });
 
   return router;
 }
 
-async function buildVerificationResponse(tenantId: string, passport: any, res: any, next: any) {
+async function buildVerificationResponse(db: ScopedDb, tenantId: string, passport: any, res: any, next: any) {
   try {
     const findings = (await db.execute(sql`
       SELECT id,control_id,title,severity,status,description,remediation,evidence_ids,updated_at,resolved_at

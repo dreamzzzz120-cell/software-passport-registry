@@ -70,11 +70,12 @@ export async function offboardTenantData(tenantId: string) {
     ));
     const edges = ((edgesResult as any).rows || []) as TenantEdge[];
     const orderedTables = orderTenantTables(tables, edges);
-    const escapedTenantId = tenantId.replaceAll("'", "''");
 
     for (const table of orderedTables) {
-      const statement = 'DELETE FROM ' + quoteIdentifier(table) + " WHERE tenant_id = '" + escapedTenantId + "'";
-      await tx.execute(sql.raw(statement));
+      // Table names are safe to inline (they came from information_schema, not
+      // user input); the tenant ID is a real bind parameter rather than a
+      // hand-escaped string literal.
+      await tx.execute(sql`DELETE FROM ${sql.raw(quoteIdentifier(table))} WHERE tenant_id = ${tenantId}`);
     }
 
     console.log(`[Tenant Lifecycle Manager] Offboarding completed atomically for ${tenantId}. Tables purged: ${orderedTables.length}.`);
