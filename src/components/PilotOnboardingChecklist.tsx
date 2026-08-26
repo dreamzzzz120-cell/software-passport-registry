@@ -423,7 +423,7 @@ export default function PilotOnboardingChecklist({
                     <textarea
                       value={githubPrivateKey}
                       onChange={(e) => setGithubPrivateKey(e.target.value)}
-                      placeholder="-----BEGIN RSA PRIVATE KEY-----"
+                      placeholder="Paste the PEM-encoded private key"
                       rows={2}
                       className="w-full bg-slate-900/60 border border-slate-700/80 rounded-lg text-[9px] pl-16 pr-3 py-2 text-zinc-200 font-mono focus:outline-none resize-none"
                     />

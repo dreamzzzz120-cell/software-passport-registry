@@ -11,6 +11,10 @@
       "destination": "https://spr-app-production-28f5.up.railway.app/health"
     },
     {
+      "source": "/ready",
+      "destination": "https://spr-app-production-28f5.up.railway.app/ready"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

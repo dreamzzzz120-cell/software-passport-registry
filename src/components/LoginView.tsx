@@ -103,20 +103,24 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
     if (!auth || !firebaseConfigured) { setError('Firebase browser configuration is missing. Add the VITE_FIREBASE_* Production variables in Vercel and redeploy.'); return; }
     setGoogleLoading(true); setError(''); setNotice('Opening secure Google sign-in…');
     try {
-      try {
-        const result = await signInWithPopup(auth, googleAuthProvider);
-        await complete(result.user);
-      } catch (err: any) {
-        if (['auth/popup-blocked', 'auth/operation-not-supported-in-this-environment'].includes(err?.code)) {
+      const result = await signInWithPopup(auth, googleAuthProvider);
+      await complete(result.user);
+    } catch (err: any) {
+      if (['auth/popup-blocked', 'auth/operation-not-supported-in-this-environment'].includes(err?.code)) {
+        try {
           await signInWithRedirect(auth, googleAuthProvider);
           return;
+        } catch (redirectError: any) {
+          const message = authMessage(redirectError, 'Google sign-in failed.');
+          if (message) setError(message); else setNotice('');
+          setGoogleLoading(false);
+          return;
         }
-        throw err;
       }
-    } catch (err: any) {
       const message = authMessage(err, 'Google sign-in failed.');
       if (message) setError(message); else setNotice('');
-    } finally { setGoogleLoading(false); }
+      setGoogleLoading(false);
+    }
   };
 
   const reset = async () => {

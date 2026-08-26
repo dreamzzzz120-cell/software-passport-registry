@@ -152,7 +152,7 @@ export default function App() {
       const responses = await Promise.all([
         apiFetch('/api/user/me'), apiFetch('/api/scans'), apiFetch('/api/trust-loop/findings'), apiFetch('/api/user/passports'), apiFetch('/api/user/clients'), apiFetch('/api/integrations'),
       ]);
-      if (responses.some((response) => response.status === 401)) { await signOut(auth); navigate('/login'); return; }
+      if (responses.some((response) => response.status === 401)) { setUser(null); await signOut(auth); navigate('/login'); return; }
       const [me, scansResponse, findingsResponse, passportsResponse, clientsResponse, integrationsResponse] = responses;
       if (me.ok) { const data = await me.json().catch(() => null); if (!cancelled) setRole(String(data?.role || 'Viewer')); }
       if (scansResponse.ok) { const data = await scansResponse.json().catch(() => []); if (!cancelled && Array.isArray(data)) setScans(data); }
@@ -212,7 +212,7 @@ export default function App() {
 
   if (!authReady) return <AuthLoading />;
   if (path === '/') return <CoverPage />;
-  if (path === '/login') return user ? <AuthLoading /> : <LoginView onLoginSuccess={() => navigate('/dashboard')} />;
+  if (path === '/login') return <LoginView onLoginSuccess={() => navigate('/dashboard')} />;
   if (!user && path === '/free-review') return <PublicPage title="Free software review" description="Start an evidence-first review from the public entry point." action="Sign in to continue" onAction={() => navigate('/login')} />;
   if (!user && path === '/pricing') return <PublicPage title="SPR plans" description="Account and billing capabilities are available inside the authenticated workspace." action="Enter SPR" onAction={() => navigate('/login')} />;
   if (!user) return <AuthLoading />;
