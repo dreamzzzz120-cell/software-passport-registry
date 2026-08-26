@@ -5,8 +5,7 @@ ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts --no-audit --no-fund
-# Force Railway to rebuild the source layer after SPR security hardening.
-ARG SOURCE_REV=railway-security-hardening-20260819-v3
+ARG SOURCE_REV=railway-security-hardening-20260826-v1
 RUN test -n "$SOURCE_REV"
 COPY . ./
 RUN npm run typecheck && npm test && npm run build
