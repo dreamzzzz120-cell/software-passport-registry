@@ -214,7 +214,7 @@ export function createTrustLoopRouter() {
     try {
       const parsed = reportTypes.safeParse(req.query.type || 'executive');
       if (!parsed.success) return res.status(400).json({ error: 'INVALID_REPORT_TYPE' });
-      const report = await buildAndPersistReport(req.db!, req.user!.tenantId, req.params.passportId, parsed.data);
+      const report = await buildAndPersistReport(req.db!, req.user!.tenantId, String(req.params.passportId), parsed.data);
       if (!report) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
       return res.json(report);
     } catch (error) { return next(error); }
