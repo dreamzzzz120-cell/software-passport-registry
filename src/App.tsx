@@ -3,8 +3,6 @@ import { getRedirectResult, onAuthStateChanged, signOut, type User } from 'fireb
 import type { Alert, Client, Integration, Scan, SoftwarePassport, Vendor } from './types';
 import { apiFetch } from './utils/apiClient';
 import { auth } from './lib/firebase';
-import { setAuthNotice } from './lib/authNotice';
-import { isSignupTransitionActive, beginSignupTransition, endSignupTransition } from './lib/signupTransition';
 import CommandCenter from './components/CommandCenter';
 import ExtensionWorkflow from './components/ExtensionWorkflow';
 import ExtensionMarketplace from './components/ExtensionMarketplace';
@@ -19,10 +17,6 @@ import ScansView from './components/ScansView';
 import AlertsView from './components/AlertsView';
 import ClientsView from './components/ClientsView';
 import VendorsView from './components/VendorsView';
-import QuestionnairesView from './components/QuestionnairesView';
-import SavingsView from './components/SavingsView';
-import GovernanceView from './components/GovernanceView';
-import PrivacyView from './components/PrivacyView';
 import IntegrationsView from './components/IntegrationsView';
 import BillingView from './components/BillingView';
 import ComplianceView from './components/ComplianceView';
@@ -36,48 +30,11 @@ import AuditLogView from './components/AuditLogView';
 import MonitoringView from './components/MonitoringView';
 import SecurityCenterView from './components/SecurityCenterView';
 import MSPCommandCenter from './components/MSPCommandCenter';
-import MspPricingView from './components/MspPricingView';
-import MspLandingView from './components/MspLandingView';
-import HomePage from './components/HomePage';
-import FreeReviewView from './components/FreeReviewView';
-import DemoPassport from './components/DemoPassport';
-import ViewErrorBoundary from './components/ViewErrorBoundary';
-import { normalizeClientRecord, toJsonArrayColumn } from './lib/clientJsonColumns';
-import TermsView from './components/legal/TermsView';
-import PrivacyPolicyView from './components/legal/PrivacyPolicyView';
 import ReportsView from './components/ReportsView';
 import TrustGraphView from './components/TrustGraphView';
-import type { VerificationDecisionState } from './components/trust/TrustStateBadge';
-import type { VerificationDecisionDetail } from './components/design/CommandCenter';
 import { EXTENSIONS } from './workflows/extensionRegistry';
 
-const PUBLIC_PATHS = new Set(['/','/login','/free-review','/pricing','/msp','/terms','/privacy','/passport/demo']);
-
-// A completed Free Review result is addressable at
-//   /free-review/result/<passportId>/<token>
-// so it survives navigation and refresh, and can be reopened from a copied
-// link. The token is the same HMAC-signed, two-hour status token the API
-// already issues; it stays an opaque credential and is validated only
-// server-side by verifyFreeReviewStatusToken.
-//
-// Deliberately a narrow pattern rather than whitelisting /free-review/*:
-// only this exact three-segment shape is public. Anything else under
-// /free-review still falls through to the authenticated guard.
-const FREE_REVIEW_RESULT_PATH = /^\/free-review\/result\/([^/]+)\/([^/]+)\/?$/;
-
-function parseFreeReviewResultPath(path: string): { passportId: string; token: string } | null {
-  const match = FREE_REVIEW_RESULT_PATH.exec(path);
-  if (!match) return null;
-  try {
-    return { passportId: decodeURIComponent(match[1]), token: decodeURIComponent(match[2]) };
-  } catch {
-    return null;
-  }
-}
-
-function isPublicPath(path: string): boolean {
-  return PUBLIC_PATHS.has(path) || FREE_REVIEW_RESULT_PATH.test(path);
-}
+const PUBLIC_PATHS = new Set(['/','/login','/free-review','/pricing']);
 const EMPTY_CLIENTS: Client[] = [];
 const EMPTY_PASSPORTS: SoftwarePassport[] = [];
 const EMPTY_VENDORS: Vendor[] = [];
@@ -115,18 +72,24 @@ function usePath() {
 }
 
 function AuthLoading() {
-  return <div className="grid min-h-screen place-items-center bg-[var(--spr-surface)] text-[var(--spr-text)]"><div className="text-center"><img src="/brand/spr-icon.png" alt="SPR" className="mx-auto h-14 w-14 rounded-md border border-[var(--spr-border)] bg-white object-contain p-1.5" /><div className="mt-4 text-xs font-semibold uppercase tracking-[.15em] text-[var(--spr-text-muted)]">Securing workspace</div><div className="mt-1 text-sm text-[var(--spr-text-faint)]">Checking authenticated session…</div></div></div>;
+  return <div className="grid min-h-screen place-items-center bg-[#05070d] text-white"><div className="text-center"><div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 text-xs font-black text-cyan-200 shadow-[0_0_40px_rgba(34,211,238,.12)]">SPR</div><div className="mt-5 text-xs font-bold uppercase tracking-[.25em] text-cyan-200">Securing workspace</div><div className="mt-2 text-sm text-slate-600">Checking authenticated session…</div></div></div>;
 }
 
+function CoverPage() {
+  return <div className="relative min-h-screen overflow-hidden bg-[#05070d] text-white"><div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(34,211,238,.14),transparent_32%),radial-gradient(circle_at_80%_20%,rgba(139,92,246,.14),transparent_34%),radial-gradient(circle_at_50%_100%,rgba(16,185,129,.08),transparent_35%)]" /><div className="relative mx-auto flex min-h-screen max-w-7xl items-center px-6 py-16"><div className="max-w-4xl"><div className="mb-7 inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/[.06] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[.2em] text-cyan-200">Evidence-first software trust</div><h1 className="text-5xl font-semibold tracking-[-.04em] md:text-7xl">Software trust,<br /><span className="text-cyan-200">operated as a system.</span></h1><p className="mt-7 max-w-2xl text-base leading-7 text-slate-400 md:text-lg">Software Passport Registry turns software identity, security, provenance, reliability, compliance, and evidence into repeatable workflows for teams, buyers, and managed service providers.</p><div className="mt-9 flex flex-wrap gap-3"><button onClick={() => navigate('/login')} className="rounded-2xl bg-cyan-300 px-6 py-3.5 text-sm font-bold text-slate-950">Enter SPR</button><button onClick={() => navigate('/free-review')} className="rounded-2xl border border-white/10 bg-white/[.035] px-6 py-3.5 text-sm font-semibold text-slate-200">Free review</button></div></div></div></div>;
+}
+
+function PublicPage({ title, description, action, onAction }: { title: string; description: string; action: string; onAction: () => void }) {
+  return <div className="grid min-h-screen place-items-center bg-[#05070d] px-6 text-white"><div className="max-w-2xl rounded-3xl border border-white/[.08] bg-white/[.035] p-8 text-center backdrop-blur-2xl"><div className="text-[10px] font-bold uppercase tracking-[.2em] text-cyan-200">Software Passport Registry</div><h1 className="mt-3 text-3xl font-semibold">{title}</h1><p className="mt-4 text-sm leading-6 text-slate-400">{description}</p><button onClick={onAction} className="mt-7 rounded-xl bg-cyan-300 px-5 py-3 text-sm font-bold text-slate-950">{action}</button></div></div>;
+}
 
 function WorkflowBoundary({ title, description, extensionId, onNavigate }: { title: string; description: string; extensionId?: string; onNavigate: (path: string) => void }) {
   const extension = extensionId ? EXTENSIONS.find((item) => item.id === extensionId) : undefined;
-  return <section className="spr-panel p-6 md:p-8"><div className="text-[10px] font-semibold uppercase tracking-[.15em] text-[var(--spr-text-faint)]">Workflow boundary</div><h1 className="mt-2 text-2xl font-semibold tracking-tight text-[var(--spr-text)]">{title}</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--spr-text-muted)]">{description}</p>{extension && <button onClick={() => onNavigate(extension.entryPath)} className="spr-btn spr-btn-primary mt-5">Open {extension.name} →</button>}</section>;
+  return <section className="space-y-5"><div className="rounded-3xl border border-white/[.07] bg-white/[.035] p-6 backdrop-blur-2xl md:p-8"><div className="text-[10px] font-bold uppercase tracking-[.2em] text-slate-600">Workflow boundary</div><h1 className="mt-2 text-3xl font-semibold tracking-tight">{title}</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">{description}</p>{extension && <button onClick={() => onNavigate(extension.entryPath)} className="mt-6 rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-semibold text-slate-950">Open {extension.name} →</button>}</div></section>;
 }
 
 export default function App() {
   const path = usePath();
-  const freeReviewResult = useMemo(() => parseFreeReviewResultPath(path), [path]);
   const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState('Viewer');
@@ -140,26 +103,7 @@ export default function App() {
   const [findings, setFindings] = useState<unknown[]>([]);
   const [scans, setScans] = useState<Scan[]>(EMPTY_SCANS);
   const [integrations, setIntegrations] = useState<Integration[]>(EMPTY_INTEGRATIONS);
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    if (typeof window === 'undefined') return 'dark';
-    const saved = window.localStorage.getItem('spr-theme');
-    return saved === 'light' || saved === 'dark' ? saved : 'dark';
-  });
-  // Applies the chosen theme to the document root (so every CSS var-based
-  // surface repaints) and persists it, so the toggle in Settings survives
-  // a refresh and applies before React even mounts on the next load.
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    window.localStorage.setItem('spr-theme', theme);
-  }, [theme]);
-  // Authoritative verification decisions for every visible passport, fetched
-  // once via the batch endpoint. Surfaces consume this map instead of the
-  // legacy verification_status column, and no surface issues a per-passport
-  // verification request.
-  const [verificationDecisions, setVerificationDecisions] = useState<Record<string, VerificationDecisionState>>({});
-  // Full authoritative decision objects, keyed by passport id, so presentation
-  // surfaces can render the explanation, reason codes and counts verbatim.
-  const [verificationDetails, setVerificationDetails] = useState<Record<string, VerificationDecisionDetail>>({});
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
 
   useEffect(() => {
     let mounted = true;
@@ -168,20 +112,11 @@ export default function App() {
     const timeoutId = window.setTimeout(() => {
       if (mounted) setAuthReady(true);
     }, 10_000);
-    // Firebase auto-signs-in a newly created account before SPR has
-    // provisioned or verified it. That transient session must not be
-    // treated as a completed SPR login, or it unmounts LoginView mid-signup
-    // and triggers an authenticated data load that correctly 403s - which
-    // is what made a successful signup render as a provisioning failure.
-    const applyUser = (candidate: User | null) => {
-      if (candidate && isSignupTransitionActive()) return;
-      setUser(candidate);
-    };
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (!mounted) return;
       observedUser = currentUser;
       if (!redirectSettled) return;
-      applyUser(currentUser);
+      setUser(currentUser);
       setAuthReady(true);
       window.clearTimeout(timeoutId);
     }, () => {
@@ -192,13 +127,13 @@ export default function App() {
     });
     void getRedirectResult(auth).then((result) => {
       redirectSettled = true;
-      if (mounted) applyUser(result?.user || observedUser);
+      if (mounted) setUser(result?.user || observedUser);
       if (mounted) setAuthReady(true);
       window.clearTimeout(timeoutId);
     }).catch((error) => {
       redirectSettled = true;
       console.error('[Firebase redirect sign-in error]', error);
-      if (mounted) applyUser(observedUser);
+      if (mounted) setUser(observedUser);
       if (mounted) setAuthReady(true);
       window.clearTimeout(timeoutId);
     });
@@ -208,84 +143,23 @@ export default function App() {
       unsubscribe();
     };
   }, []);
-  useEffect(() => { if (authReady && !user && !isPublicPath(path)) navigate('/login'); }, [authReady, user, path]);
+  useEffect(() => { if (authReady && !user && !PUBLIC_PATHS.has(path)) navigate('/login'); }, [authReady, user, path]);
 
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
     const load = async () => {
-      // Ensure a verified identity has a workspace BEFORE the batch load runs.
-      //
-      // This is the only choke point that catches every way a session can
-      // begin. LoginView.complete() covers the email/password and Google-popup
-      // paths, but onAuthStateChanged fires the moment Firebase restores or
-      // completes a sign-in -- including the Google *redirect* path and a page
-      // reload on an existing session -- and this effect then starts loading
-      // against an account that may not be provisioned yet. Doing it here
-      // covers all of them.
-      //
-      // beginSignupTransition() suppresses apiClient's 403-on-/api/user/me
-      // auto-sign-out for the duration. Without it that handler fires first
-      // and signs the user out mid-provision: production showed a burst of
-      // 403s at 09:51:38 followed by a successful workspace POST at 09:51:40 --
-      // the workspace was created, but the user had already been bounced to
-      // /login with a stale "not a member of any workspace" notice.
-      beginSignupTransition();
-      try {
-        const probe = await apiFetch('/api/user/me');
-        if (probe.status === 403 && auth.currentUser?.emailVerified) {
-          const provisioned = await apiFetch('/api/auth/workspace', { method: 'POST' });
-          // Claims are stale immediately after provisioning; refresh so the
-          // batch load below authenticates against the new workspace.
-          if (provisioned.ok) await auth.currentUser.getIdToken(true);
-        }
-      } catch {
-        // A failed probe is not fatal: the batch load below reports the real
-        // outcome through the existing 401/403 handling.
-      } finally {
-        endSignupTransition();
-      }
-
       const responses = await Promise.all([
-        apiFetch('/api/user/me'), apiFetch('/api/scans'), apiFetch('/api/trust-loop/findings'), apiFetch('/api/user/passports'), apiFetch('/api/user/clients'), apiFetch('/api/integrations'), apiFetch('/api/vendors'),
+        apiFetch('/api/user/me'), apiFetch('/api/scans'), apiFetch('/api/trust-loop/findings'), apiFetch('/api/user/passports'), apiFetch('/api/user/clients'), apiFetch('/api/integrations'),
       ]);
-      if (responses.some((response) => response.status === 401)) {
-        setUser(null);
-        setAuthNotice('Your session could not be verified. Please sign in again.');
-        await signOut(auth);
-        navigate('/login');
-        return;
-      }
-      const [me, scansResponse, findingsResponse, passportsResponse, clientsResponse, integrationsResponse, vendorsResponse] = responses;
+      if (responses.some((response) => response.status === 401)) { await signOut(auth); navigate('/login'); return; }
+      const [me, scansResponse, findingsResponse, passportsResponse, clientsResponse, integrationsResponse] = responses;
       if (me.ok) { const data = await me.json().catch(() => null); if (!cancelled) setRole(String(data?.role || 'Viewer')); }
       if (scansResponse.ok) { const data = await scansResponse.json().catch(() => []); if (!cancelled && Array.isArray(data)) setScans(data); }
       if (findingsResponse.ok) { const data = await findingsResponse.json().catch(() => []); const rows = Array.isArray(data) ? data : data?.findings; if (!cancelled && Array.isArray(rows)) { setFindings(rows); setAlerts(rows.map((row: any) => ({ id: String(row.id), title: String(row.title || row.control_id || 'Trust finding'), severity: String(row.severity || 'Low').replace(/^./, (s: string) => s.toUpperCase()), category: 'Trust finding', clientName: String(row.client_id || 'Tenant'), description: String(row.description || 'Evidence-backed finding'), timestamp: String(row.updated_at || ''), status: deriveAlertStatus(row.remediation_status, row.status), remediationId: row.remediation_id ? String(row.remediation_id) : null, ownerDisplay: row.remediation_owner_display || null, slaDueAt: row.remediation_sla_due_at || null })) as Alert[]); } }
-      if (passportsResponse.ok) { const data = await passportsResponse.json().catch(() => []); const rows = Array.isArray(data) ? data : data?.passports; if (!cancelled && Array.isArray(rows)) { const normalized = rows.map((row: any) => ({ ...row, id: String(row.id), name: String(row.name || 'Unnamed software'), version: String(row.version || 'unknown'), publisher: String(row.publisher || 'unknown'), clientId: row.clientId ? String(row.clientId) : undefined, evidence: Array.isArray(row.evidence) ? row.evidence : [], vulnerabilities: Array.isArray(row.vulnerabilities) ? row.vulnerabilities : [], timeline: toJsonArrayColumn(row.timeline), sbom: toJsonArrayColumn(row.sbom), scores: null, scoreStatus: row.scoreStatus || 'not_authoritatively_scored' })) as SoftwarePassport[]; setPassports(normalized); setAssets(normalized.map((passport: any) => ({ id: passport.id, name: passport.name, hostName: passport.name, type: passport.category || 'software', clientId: passport.clientId, clientName: String(passport.clientId || 'Unobserved'), environment: String(passport.environment || 'Unobserved'), version: passport.version }))); } }
-      // normalizeClientRecord is applied server-side too; repeating it here is
-      // deliberate and idempotent. It guards against a legacy row, a cached
-      // response predating the server fix, or any other route that returns a
-      // client, so a raw JSON-string column can never reach a component that
-      // calls .some()/.map() on it.
-      if (clientsResponse.ok) { const data = await clientsResponse.json().catch(() => []); const rows = Array.isArray(data) ? data : data?.clients; if (!cancelled && Array.isArray(rows)) setClients(rows.map((row: any) => normalizeClientRecord({ ...row, id: String(row.id), name: String(row.name || row.company_name || 'Unnamed client') })) as Client[]); }
+      if (passportsResponse.ok) { const data = await passportsResponse.json().catch(() => []); const rows = Array.isArray(data) ? data : data?.passports; if (!cancelled && Array.isArray(rows)) { const normalized = rows.map((row: any) => ({ ...row, id: String(row.id), name: String(row.name || 'Unnamed software'), version: String(row.version || 'unknown'), publisher: String(row.publisher || 'unknown'), clientId: row.clientId ? String(row.clientId) : undefined, evidence: Array.isArray(row.evidence) ? row.evidence : [], vulnerabilities: Array.isArray(row.vulnerabilities) ? row.vulnerabilities : [], timeline: Array.isArray(row.timeline) ? row.timeline : [], sbom: Array.isArray(row.sbom) ? row.sbom : [], scores: null, scoreStatus: row.scoreStatus || 'not_authoritatively_scored' })) as SoftwarePassport[]; setPassports(normalized); setAssets(normalized.map((passport: any) => ({ id: passport.id, name: passport.name, hostName: passport.name, type: passport.category || 'software', clientId: passport.clientId, clientName: String(passport.clientId || 'Unobserved'), environment: String(passport.environment || 'Unobserved'), version: passport.version }))); setVendors(EMPTY_VENDORS); } }
+      if (clientsResponse.ok) { const data = await clientsResponse.json().catch(() => []); const rows = Array.isArray(data) ? data : data?.clients; if (!cancelled && Array.isArray(rows)) setClients(rows.map((row: any) => ({ ...row, id: String(row.id), name: String(row.name || row.company_name || 'Unnamed client') })) as Client[]); }
       if (integrationsResponse.ok) { const data = await integrationsResponse.json().catch(() => []); if (!cancelled && Array.isArray(data)) setIntegrations(data); }
-      if (vendorsResponse.ok) { const data = await vendorsResponse.json().catch(() => []); if (!cancelled && Array.isArray(data)) setVendors(data as Vendor[]); } else if (!cancelled) { setVendors(EMPTY_VENDORS); }
-      // One batch call for every visible passport's authoritative decision.
-      // A failure leaves the map empty, which renders UNINITIALIZED - it is
-      // never converted into a verified or otherwise reassuring state.
-      try {
-        const verificationResponse = await apiFetch('/api/user/verification');
-        if (verificationResponse.ok) {
-          const data = await verificationResponse.json().catch(() => null);
-          if (!cancelled && Array.isArray(data?.decisions)) {
-            const map: Record<string, VerificationDecisionState> = {};
-            for (const entry of data.decisions) { if (entry?.passportId && entry?.decision?.state) map[String(entry.passportId)] = entry.decision.state; }
-            setVerificationDecisions(map);
-            const details: Record<string, VerificationDecisionDetail> = {};
-            for (const entry of data.decisions) { if (entry?.passportId) details[String(entry.passportId)] = entry; }
-            setVerificationDetails(details);
-          }
-        }
-      } catch { if (!cancelled) { setVerificationDecisions({}); setVerificationDetails({}); } }
     };
     void load().catch((error) => console.warn('[SPR command center load]', error));
     return () => { cancelled = true; };
@@ -337,22 +211,10 @@ export default function App() {
   const signOutUser = async () => { await signOut(auth); navigate('/login'); };
 
   if (!authReady) return <AuthLoading />;
-  if (path === '/') return <HomePage onCreatePassport={() => navigate('/login')} onExploreTrustNetwork={() => navigate('/free-review')} onViewSamplePassport={() => navigate('/passport/demo')} />;
-  if (path === '/login') return <LoginView onLoginSuccess={() => navigate('/dashboard')} />;
-  // Public legal documents -- always reachable regardless of auth state,
-  // since /terms has no existing authenticated route to preserve. /privacy
-  // is intentionally only handled here for signed-out visitors: the existing
-  // authenticated '/privacy' route (below, in the CommandCenter switch) is
-  // the unrelated internal Privacy Governance tool and must not be replaced.
-  if (path === '/terms') return <TermsView />;
-  if (!user && path === '/privacy') return <PrivacyPolicyView />;
-  // Static sample Passport. Reads no database and no tenant - see
-  // DemoPassport.tsx. Public by design and explicitly labelled DEMO.
-  if (path === '/passport/demo') return <DemoPassport onRunFreeReview={() => navigate('/free-review')} onHome={() => navigate('/')} />;
-  if (!user && path === '/free-review') return <FreeReviewView onSignUp={() => navigate('/login')} />;
-  if (!user && freeReviewResult) return <FreeReviewView onSignUp={() => navigate('/login')} initialResult={freeReviewResult} />;
-  if (!user && path === '/pricing') return <MspPricingView isAuthenticated={false} onPrimaryAction={() => navigate('/login')} />;
-  if (!user && path === '/msp') return <MspLandingView onEnter={() => navigate('/login')} onViewPricing={() => navigate('/pricing')} />;
+  if (path === '/') return <CoverPage />;
+  if (path === '/login') return user ? <AuthLoading /> : <LoginView onLoginSuccess={() => navigate('/dashboard')} />;
+  if (!user && path === '/free-review') return <PublicPage title="Free software review" description="Start an evidence-first review from the public entry point." action="Sign in to continue" onAction={() => navigate('/login')} />;
+  if (!user && path === '/pricing') return <PublicPage title="SPR plans" description="Account and billing capabilities are available inside the authenticated workspace." action="Enter SPR" onAction={() => navigate('/login')} />;
   if (!user) return <AuthLoading />;
 
   let view: ReactNode;
@@ -362,44 +224,30 @@ export default function App() {
     case '/coverage': view = <CoverageView clients={clients} scans={scans} passports={passports} onNavigateTab={onNavigateTab} />; break;
     case '/evidence-explorer': view = <EvidenceExplorerView passports={passports} />; break;
     case '/assets': view = <AssetsView clients={clients} searchQuery="" assets={assets} />; break;
-    case '/passports': case '/registry': view = <PassportsView verificationDecisions={verificationDecisions} verificationDetails={verificationDetails} passports={passports} selectedPassportId={selectedPassportId} setSelectedPassportId={setSelectedPassportId} searchQuery="" clients={clients} assets={assets} role={role} onNavigateTab={onNavigateTab} onUpdatePassport={(passport) => setPassports((current) => current.map((item) => item.id === passport.id ? passport : item))} />; break;
+    case '/passports': case '/registry': view = <PassportsView passports={passports} selectedPassportId={selectedPassportId} setSelectedPassportId={setSelectedPassportId} searchQuery="" clients={clients} assets={assets} role={role} onNavigateTab={onNavigateTab} onUpdatePassport={(passport) => setPassports((current) => current.map((item) => item.id === passport.id ? passport : item))} />; break;
     case '/scans': view = <ScansView scans={scans} clients={clients} assets={assets} passports={passports} role={role} onTriggerNewScan={(scan) => setScans((current) => [scan, ...current.filter((item) => item.id !== scan.id)].slice(0, 100))} />; break;
-    case '/alerts': view = <AlertsView alerts={alerts} onAlertAction={performAlertAction} role={role} />; break;
+    case '/alerts': view = <AlertsView alerts={alerts} onAlertAction={performAlertAction} />; break;
     case '/reports': view = <ReportsView clients={clients} passports={passports} scans={scans} alerts={alerts} findings={findings} role={role} />; break;
     case '/trust-graph': view = <TrustGraphView clients={clients} passports={passports} assets={assets} findings={findings} />; break;
-    case '/clients': view = <ClientsView clients={clients} selectedClientId={selectedClientId} setSelectedClientId={setSelectedClientId} passports={passports} onNavigateTab={onNavigateTab} searchQuery="" role={role} onClientCreated={(client) => { setClients((current) => [client, ...current]); setSelectedClientId(client.id); }} />; break;
-    case '/vendors': view = <VendorsView vendors={vendors} searchQuery="" role={role} onVendorsChange={setVendors} />; break;
-    case '/questionnaires': view = <QuestionnairesView role={role} clients={clients} passports={passports} />; break;
-    case '/savings': view = <SavingsView role={role} />; break;
-    case '/governance': view = <GovernanceView role={role} />; break;
-    case '/privacy': view = <PrivacyView role={role} />; break;
-    case '/integrations': view = <IntegrationsView passports={passports} clients={clients} onNavigateTab={onNavigateTab} />; break;
-    case '/monitoring': view = <MonitoringView role={role} passports={passports} clients={clients} />; break;
+    case '/clients': view = <ClientsView clients={clients} selectedClientId={selectedClientId} setSelectedClientId={setSelectedClientId} passports={passports} onNavigateTab={onNavigateTab} searchQuery="" />; break;
+    case '/vendors': view = <VendorsView vendors={vendors} searchQuery="" />; break;
+    case '/integrations': view = <IntegrationsView passports={passports} onNavigateTab={onNavigateTab} />; break;
+    case '/monitoring': view = <MonitoringView role={role} />; break;
     case '/security': view = <SecurityCenterView clients={clients} passports={passports} />; break;
     case '/compliance': view = <ComplianceView clients={clients} role={role} />; break;
-    case '/msp': view = <MSPCommandCenter clients={clients} alerts={alerts} passports={passports} role={role} onSelectClient={setSelectedClientId} onSelectPassport={setSelectedPassportId} onNavigate={navigate} verificationDecisions={verificationDecisions} />; break;
+    case '/msp': view = <MSPCommandCenter clients={clients} alerts={alerts} findings={findings} role={role} onSelectClient={setSelectedClientId} onNavigate={navigate} />; break;
     case '/agent-trust': view = <AgentTrustView />; break;
     case '/ai-trust-center': view = <AITrustCenterView role={role} />; break;
     case '/enterprise-readiness': view = <EnterpriseReadinessView clients={clients} />; break;
     case '/investor': view = <InvestorHomeView passports={passports} clients={clients} alerts={alerts} onShowTelemetry={() => navigate('/scans')} onNavigateTab={onNavigateTab} />; break;
     case '/founder': view = <FounderDashboardView userRole={role} />; break;
     case '/billing': view = <BillingView />; break;
-    case '/pricing': view = <MspPricingView isAuthenticated={true} onPrimaryAction={() => navigate('/billing')} />; break;
     case '/settings': view = <SettingsView theme={theme} onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} />; break;
     case '/team': view = <TeamView role={role} />; break;
     case '/audit-log': view = <AuditLogView />; break;
     case '/extensions': view = <ExtensionMarketplace onNavigateTab={onNavigateTab} role={role} />; break;
-    // Free Review is a public tool, but a signed-in user reaching it fell
-    // through to the default WorkflowBoundary below - so following the link
-    // while authenticated landed on a generic "Workflow" page instead of the
-    // scanner. Render it inside the Command Center so the left rail stays.
-    case '/free-review': view = <FreeReviewView onSignUp={() => navigate('/passports')} />; break;
     default: view = <WorkflowBoundary title="Workflow" description="This authenticated capability is explicitly routed through the Command Center. Choose its owning workflow from the left rail." onNavigate={navigate} />;
   }
 
-  return (
-    <CommandCenter path={path} userEmail={user.email} role={role} onNavigate={navigate} onSignOut={() => void signOutUser()}>
-      <ViewErrorBoundary routeKey={path}>{view}</ViewErrorBoundary>
-    </CommandCenter>
-  );
+  return <CommandCenter path={path} userEmail={user.email} role={role} onNavigate={navigate} onSignOut={() => void signOutUser()}>{view}</CommandCenter>;
 }
