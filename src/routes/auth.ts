@@ -247,12 +247,18 @@ export function createAuthRouter() {
     try {
       const db = req.db!;
       const result = await db.execute(sql`
-        SELECT id, action, actor, current_hash AS "currentHash", previous_hash AS "previousHash"
+        SELECT id, action, timestamp, actor, payload, current_hash AS "currentHash", previous_hash AS "previousHash"
         FROM audit_trail WHERE tenant_id = ${req.user!.tenantId} ORDER BY id DESC LIMIT 50
       `);
-      const rows = ((result as any).rows ?? []) as Array<{ id: number; action: string; actor: string; currentHash: string; previousHash: string }>;
+      const rows = ((result as any).rows ?? []) as Array<{ id: number; action: string; timestamp: string; actor: string; payload: string; currentHash: string; previousHash: string }>;
       return res.json(rows.map(row => ({
+        id: row.id,
+        action: row.action,
+        timestamp: row.timestamp,
+        actor: row.actor,
+        payload: row.payload,
         hash: row.currentHash,
+        currentHash: row.currentHash,
         previousHash: row.previousHash,
         block: { action: row.action, userEmail: row.actor.includes('@') ? row.actor : null },
       })));

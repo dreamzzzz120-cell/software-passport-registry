@@ -17,6 +17,7 @@ const CORE: NavItem[] = [
 const GOVERNANCE: NavItem[] = [
   { id: 'security', label: 'Security', icon: '⌾', path: '/security' },
   { id: 'compliance', label: 'Compliance', icon: '✓', path: '/compliance' },
+  { id: 'audit-log', label: 'Audit Log', icon: '▥', path: '/audit-log' },
   { id: 'vendors', label: 'Vendors', icon: '◫', path: '/vendors' },
   { id: 'integrations', label: 'Integrations', icon: '↔', path: '/integrations' },
   { id: 'reports', label: 'Reports Center', icon: '▤', path: '/reports' },
@@ -29,6 +30,7 @@ const EXECUTIVE: NavItem[] = [
   { id: 'founder', label: 'Founder Dashboard', icon: 'FD', path: '/founder' },
 ];
 const SYSTEM: NavItem[] = [
+  { id: 'team', label: 'Team', icon: '♙', path: '/team' },
   { id: 'extensions', label: 'Extension Marketplace', icon: 'EX', path: '/extensions' },
   { id: 'billing', label: 'Billing', icon: '$', path: '/billing' },
   { id: 'settings', label: 'Settings', icon: '⚙', path: '/settings' },

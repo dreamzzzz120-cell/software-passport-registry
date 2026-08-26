@@ -23,6 +23,8 @@ import EnterpriseReadinessView from './components/EnterpriseReadinessView';
 import FounderDashboardView from './components/FounderDashboardView';
 import InvestorHomeView from './components/InvestorHomeView';
 import SettingsView from './components/SettingsView';
+import TeamView from './components/TeamView';
+import AuditLogView from './components/AuditLogView';
 import MonitoringView from './components/MonitoringView';
 import SecurityCenterView from './components/SecurityCenterView';
 import MSPCommandCenter from './components/MSPCommandCenter';
@@ -189,6 +191,8 @@ export default function App() {
     case '/founder': view = <FounderDashboardView userRole={role} />; break;
     case '/billing': view = <BillingView />; break;
     case '/settings': view = <SettingsView theme={theme} onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} />; break;
+    case '/team': view = <TeamView role={role} />; break;
+    case '/audit-log': view = <AuditLogView />; break;
     case '/extensions': view = <ExtensionMarketplace onNavigateTab={onNavigateTab} />; break;
     default: view = <WorkflowBoundary title="Workflow" description="This authenticated capability is explicitly routed through the Command Center. Choose its owning workflow from the left rail." onNavigate={navigate} />;
   }
