@@ -65,6 +65,16 @@ export default function ClientsView({
     return clients.find(c => c.id === selectedClientId) || null;
   }, [clients, selectedClientId]);
 
+  const clientPassports = useMemo(() => {
+    if (!client) return [];
+    const passportIds = new Set(client.softwareInventory.map(item => item.passportId));
+    return passports.filter(passport => passportIds.has(passport.id));
+  }, [client, passports]);
+
+  const securityScores = clientPassports
+    .map(passport => passport.securityScore)
+    .filter((score): score is number => typeof score === 'number' && Number.isFinite(score));
+
   // Filter clients list based on search and industry/risk selectors
   const filteredClients = useMemo(() => {
     return clients.filter(c => {
@@ -230,7 +240,7 @@ export default function ClientsView({
                 ) : (
                   <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
                     <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
-                    Supply Chain Guarded
+                    No critical risks recorded
                   </span>
                 )}
               </div>
@@ -370,26 +380,26 @@ export default function ClientsView({
                         <div className="bg-slate-50 dark:bg-zinc-900 border border-slate-150 dark:border-zinc-800 p-4 rounded-lg text-center">
                           <p className="text-[9px] text-slate-400 dark:text-zinc-500 font-mono font-bold uppercase">Overall score</p>
                           <p className="text-2xl font-display font-extrabold font-mono text-slate-850 dark:text-zinc-100 mt-1">{client.trustScore}</p>
-                          <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-semibold font-mono">Benchmark Pass</span>
+                          <span className="text-[9px] text-slate-500 dark:text-zinc-500 font-semibold font-mono">Observed client record</span>
                         </div>
                         <div className="bg-slate-50 dark:bg-zinc-900 border border-slate-150 dark:border-zinc-800 p-4 rounded-lg text-center">
                           <p className="text-[9px] text-slate-400 dark:text-zinc-500 font-mono font-bold uppercase">Security Score</p>
                           <p className="text-2xl font-display font-extrabold font-mono text-slate-850 dark:text-zinc-100 mt-1">
-                            {client.id === 'c-vanguard' ? 70 : 92}
+                            {securityScores.length > 0 ? Math.round(securityScores.reduce((sum, score) => sum + score, 0) / securityScores.length) : 'Not verified'}
                           </p>
-                          <span className="text-[9px] text-slate-400 dark:text-zinc-500 font-mono">CVSS Weighted</span>
+                          <span className="text-[9px] text-slate-400 dark:text-zinc-500 font-mono">Passport-derived</span>
                         </div>
                         <div className="bg-slate-50 dark:bg-zinc-900 border border-slate-150 dark:border-zinc-800 p-4 rounded-lg text-center">
                           <p className="text-[9px] text-slate-400 dark:text-zinc-500 font-mono font-bold uppercase">Compliance Score</p>
                           <p className="text-2xl font-display font-extrabold font-mono text-slate-850 dark:text-zinc-100 mt-1">{client.complianceProgress}%</p>
-                          <span className="text-[9px] text-indigo-600 dark:text-indigo-400 font-semibold font-mono">Continuous Audit</span>
+                          <span className="text-[9px] text-slate-400 dark:text-zinc-500 font-mono">Client record</span>
                         </div>
                         <div className="bg-slate-50 dark:bg-zinc-900 border border-slate-150 dark:border-zinc-800 p-4 rounded-lg text-center">
                           <p className="text-[9px] text-slate-400 dark:text-zinc-500 font-mono font-bold uppercase">Supplier Rep</p>
                           <p className="text-2xl font-display font-extrabold font-mono text-slate-850 dark:text-zinc-100 mt-1">
-                            {client.id === 'c-vanguard' ? 78 : 91}
+                            {                            'Not verified'}
                           </p>
-                          <span className="text-[9px] text-slate-400 dark:text-zinc-500 font-mono">Signed Signatures</span>
+                          <span className="text-[9px] text-slate-400 dark:text-zinc-500 font-mono">No vendor score observed</span>
                         </div>
                       </div>
                     </div>
@@ -427,7 +437,7 @@ export default function ClientsView({
                           </div>
                           <div className="flex justify-between border-b border-slate-100 dark:border-zinc-850 pb-1.5">
                             <span className="text-slate-400 dark:text-zinc-500 font-mono text-[10px]">COMPLIANCE TARGET</span>
-                            <span className="font-bold text-indigo-600 dark:text-indigo-400 font-mono">SOC2 Type II, ISO27001</span>
+                            <span className="font-bold text-indigo-600 dark:text-indigo-400 font-mono">{client.complianceStatus.length ? client.complianceStatus.map((item) => item.code).join(', ') : 'Not observed'}</span>
                           </div>
                         </div>
                       </div>
@@ -456,7 +466,7 @@ export default function ClientsView({
                           <div className="flex justify-between items-start">
                             <div>
                               <h4 className="text-xs font-bold text-slate-800 dark:text-zinc-100">{p.name}</h4>
-                              <p className="text-[10px] text-slate-400 dark:text-zinc-500 font-mono">Version: {p.version} | SLA Gold</p>
+                              <p className="text-[10px] text-slate-400 dark:text-zinc-500 font-mono">Version: {p.version || 'Not observed'}</p>
                             </div>
                             <span className="text-[10px] font-mono bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 border border-indigo-100 dark:border-indigo-900 rounded font-semibold">
                               {p.sbom.length} Dependencies
@@ -502,44 +512,17 @@ export default function ClientsView({
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100 dark:divide-zinc-850 text-slate-600 dark:text-zinc-300">
-                            {client.id !== 'c-vanguard' ? (
-                              <tr>
-                                <td colSpan={6} className="px-5 py-6 text-center text-slate-400 dark:text-zinc-500 font-mono">
-                                  ✓ Clean Scan Ledger: No active vulnerabilities or security gaps detected for this workspace.
-                                </td>
+                            {clientPassports.flatMap(passport => (passport.vulnerabilities || []).map(vulnerability => ({ passport, vulnerability }))).map(({ passport, vulnerability }, index) => (
+                              <tr key={`${passport.id}-${vulnerability.id}-${index}`} className="hover:bg-slate-50/50 dark:hover:bg-zinc-900/30">
+                                <td className="px-5 py-3.5 font-bold text-indigo-600 dark:text-indigo-400 font-mono">{vulnerability.id}</td>
+                                <td className="px-5 py-3.5 font-semibold text-slate-700 dark:text-zinc-300">{vulnerability.component}</td>
+                                <td className="px-5 py-3.5"><span className="rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-[9px] font-extrabold uppercase dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">{vulnerability.severity}</span></td>
+                                <td className="px-5 py-3.5 font-bold font-mono">{vulnerability.cvss ?? 'Not observed'}</td>
+                                <td className="px-5 py-3.5"><span className="rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-bold dark:border-zinc-700 dark:bg-zinc-800">{vulnerability.status}</span></td>
+                                <td className="max-w-sm truncate px-5 py-3.5 text-slate-500 dark:text-zinc-400" title={vulnerability.description}>{vulnerability.description || 'No description observed.'}</td>
                               </tr>
-                            ) : (
-                              <>
-                                <tr className="hover:bg-slate-50/50 dark:hover:bg-zinc-900/30">
-                                  <td className="px-5 py-3.5 font-bold text-indigo-600 dark:text-indigo-400 font-mono">CVE-2024-0567</td>
-                                  <td className="px-5 py-3.5 font-semibold text-slate-700 dark:text-zinc-300">runc-runtime</td>
-                                  <td className="px-5 py-3.5">
-                                    <span className="bg-rose-100 dark:bg-rose-950/40 text-rose-800 dark:text-rose-400 border border-rose-200 dark:border-rose-900 px-2.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase">Critical</span>
-                                  </td>
-                                  <td className="px-5 py-3.5 font-bold font-mono">9.8</td>
-                                  <td className="px-5 py-3.5">
-                                    <span className="bg-rose-50 dark:bg-rose-950/20 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-850 px-2 py-0.5 rounded text-[9px] font-bold">Open</span>
-                                  </td>
-                                  <td className="px-5 py-3.5 text-slate-500 dark:text-zinc-400 max-w-sm truncate" title="A critical file descriptor leak inside runc allows containers to escape containment.">
-                                    File descriptor leak inside runc container runtime.
-                                  </td>
-                                </tr>
-                                <tr className="hover:bg-slate-50/50 dark:hover:bg-zinc-900/30">
-                                  <td className="px-5 py-3.5 font-bold text-indigo-600 dark:text-indigo-400 font-mono">CVE-2023-35116</td>
-                                  <td className="px-5 py-3.5 font-semibold text-slate-700 dark:text-zinc-300">jackson-databind</td>
-                                  <td className="px-5 py-3.5">
-                                    <span className="bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-400 border border-amber-200 dark:border-amber-900 px-2.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase">High</span>
-                                  </td>
-                                  <td className="px-5 py-3.5 font-bold font-mono">7.5</td>
-                                  <td className="px-5 py-3.5">
-                                    <span className="bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-850 px-2 py-0.5 rounded text-[9px] font-bold">Open</span>
-                                  </td>
-                                  <td className="px-5 py-3.5 text-slate-500 dark:text-zinc-400 max-w-sm truncate" title="Jackson-databind cyclic dependency denial of service.">
-                                    Jackson databind cyclic deserialization StackOverflow denial of service.
-                                  </td>
-                                </tr>
-                              </>
-                            )}
+                            ))}
+                            {clientPassports.every(passport => !passport.vulnerabilities?.length) && <tr><td colSpan={6} className="px-5 py-6 text-center text-slate-400 dark:text-zinc-500 font-mono">No vulnerability observations are recorded for this client.</td></tr>}
                           </tbody>
                         </table>
                       </div>

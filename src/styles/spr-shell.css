@@ -48,3 +48,58 @@ body:has(form) form [role="alert"],body:has(form) form [role="status"]{border-ra
 @keyframes spr-page-enter{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
 @media(max-width:767px){body:has(aside) aside{border-right:0!important;border-bottom:1px solid var(--spr-line)!important}body:has(aside) aside nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));max-height:15rem;overflow:auto}#msp-dashboard-view>div:first-child{position:relative;top:auto}}
+
+/* Shared treatment for the older workflow surfaces. Keep the data models and
+   actions intact while bringing every authenticated route into the same OS. */
+body:has(aside) #msp-integrations-view,
+body:has(aside) #msp-clients-index,
+body:has(aside) #msp-vendors-view-dashboard,
+body:has(aside) #msp-founder-dashboard {
+  color: var(--spr-text);
+}
+body:has(aside) #msp-integrations-view .bg-white,
+body:has(aside) #msp-integrations-view .bg-slate-50,
+body:has(aside) #msp-clients-index .bg-white,
+body:has(aside) #msp-clients-index .bg-slate-50,
+body:has(aside) #msp-vendors-view-dashboard .bg-white,
+body:has(aside) #msp-vendors-view-dashboard .bg-slate-50 {
+  background: linear-gradient(145deg, rgba(15,23,42,.76), rgba(15,23,42,.48)) !important;
+  border-color: var(--spr-line) !important;
+}
+body:has(aside) #msp-integrations-view .text-slate-900,
+body:has(aside) #msp-integrations-view .text-slate-800,
+body:has(aside) #msp-clients-index .text-slate-900,
+body:has(aside) #msp-clients-index .text-slate-800,
+body:has(aside) #msp-vendors-view-dashboard .text-slate-900,
+body:has(aside) #msp-vendors-view-dashboard .text-slate-800 {
+  color: #f8fafc !important;
+}
+body:has(aside) #msp-integrations-view .text-slate-700,
+body:has(aside) #msp-integrations-view .text-slate-600,
+body:has(aside) #msp-clients-index .text-slate-700,
+body:has(aside) #msp-clients-index .text-slate-600,
+body:has(aside) #msp-vendors-view-dashboard .text-slate-700,
+body:has(aside) #msp-vendors-view-dashboard .text-slate-600 {
+  color: #cbd5e1 !important;
+}
+body:has(aside) #msp-integrations-view input,
+body:has(aside) #msp-integrations-view select,
+body:has(aside) #msp-clients-index input,
+body:has(aside) #msp-clients-index select,
+body:has(aside) #msp-vendors-view-dashboard input,
+body:has(aside) #msp-vendors-view-dashboard select {
+  color: #e2e8f0;
+  background-color: rgba(2,6,23,.45);
+  border-color: var(--spr-line);
+}
+body:has(aside) #msp-integrations-view .border-slate-100,
+body:has(aside) #msp-integrations-view .border-slate-200,
+body:has(aside) #msp-clients-index .border-slate-100,
+body:has(aside) #msp-clients-index .border-slate-200,
+body:has(aside) #msp-vendors-view-dashboard .border-slate-100,
+body:has(aside) #msp-vendors-view-dashboard .border-slate-200 {
+  border-color: var(--spr-line) !important;
+}
+body:has(aside) #msp-integrations-view .bg-slate-900 {
+  background: linear-gradient(145deg, rgba(10,16,31,.92), rgba(15,23,42,.72)) !important;
+}

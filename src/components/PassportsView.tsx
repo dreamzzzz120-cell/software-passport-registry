@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { CheckCircle2, FileCheck2, Search, ShieldCheck, TriangleAlert } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
 import SoftwareLineageTracker from './SoftwareLineageTracker';
 import SoftwareSectorsPanel from './SoftwareSectorsPanel';
@@ -18,6 +19,7 @@ interface PassportsViewProps {
 export default function PassportsView({ passports, selectedPassportId, setSelectedPassportId, searchQuery, onNavigateTab, clients = [], assets = [] }: PassportsViewProps) {
   const [tab, setTab] = useState<'catalog' | 'lineage' | 'sectors'>('catalog');
   const [category, setCategory] = useState('all');
+  const [localQuery, setLocalQuery] = useState('');
   const [auditText, setAuditText] = useState<string | null>(null);
   const [auditBusy, setAuditBusy] = useState(false);
   const [remediationBusy, setRemediationBusy] = useState<string | null>(null);
@@ -25,10 +27,12 @@ export default function PassportsView({ passports, selectedPassportId, setSelect
   const selected = useMemo(() => passports.find((p) => p.id === selectedPassportId) ?? null, [passports, selectedPassportId]);
   const categories = useMemo(() => Array.from(new Set(passports.map((p) => p.category).filter(Boolean))), [passports]);
   const filtered = useMemo(() => passports.filter((p) => {
-    const query = searchQuery.trim().toLowerCase();
+    const query = (localQuery || searchQuery).trim().toLowerCase();
     const text = `${p.name ?? ''} ${p.publisher ?? ''} ${p.category ?? ''}`.toLowerCase();
     return (!query || text.includes(query)) && (category === 'all' || p.category === category);
-  }), [passports, searchQuery, category]);
+  }), [passports, searchQuery, localQuery, category]);
+  const evidenceCount = passports.filter((passport) => passport.evidence?.length > 0).length;
+  const findingCount = passports.reduce((total, passport) => total + (passport.vulnerabilities?.length || 0), 0);
 
   const runAudit = async () => {
     if (!selected) return;
@@ -72,22 +76,24 @@ export default function PassportsView({ passports, selectedPassportId, setSelect
 
   return (
     <section className="space-y-6">
-      <header className="rounded-3xl border border-white/10 bg-white/[.035] p-6 backdrop-blur-2xl text-white">
+      <header className="rounded-[28px] border border-white/10 bg-white/[.035] p-6 text-white backdrop-blur-2xl md:p-8">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div><div className="text-[10px] font-bold uppercase tracking-[.22em] text-cyan-200">Evidence-first registry</div><h1 className="mt-2 text-2xl font-semibold">Software Passport Catalog</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">Observed passport records, evidence, findings, lineage and server-backed trust workflows. Missing evidence is shown as unverified.</p></div>
+          <div><div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.22em] text-cyan-200"><ShieldCheck className="h-4 w-4" /> Evidence-first registry</div><h1 className="mt-3 text-3xl font-semibold tracking-tight">Software passport catalog</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">Observed software identities, evidence, findings, lineage and server-backed trust workflows. Missing evidence stays unverified.</p></div>
           <button onClick={() => void runAudit()} disabled={!selected || auditBusy} className="rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50">{auditBusy ? 'Auditing…' : 'Run live audit'}</button>
         </div>
+        <div className="mt-7 grid gap-3 sm:grid-cols-3"><PassportMetric icon={<FileCheck2 />} label="Passport records" value={passports.length} /><PassportMetric icon={<CheckCircle2 />} label="With evidence" value={evidenceCount} /><PassportMetric icon={<TriangleAlert />} label="Recorded findings" value={findingCount} /></div>
         {auditText && <div className="mt-5 rounded-2xl border border-cyan-300/15 bg-black/20 p-4 text-sm leading-6 text-slate-300 whitespace-pre-wrap">{auditText}</div>}
       </header>
 
       <div className="flex flex-wrap items-center gap-2">
         {(['catalog', 'lineage', 'sectors'] as const).map((item) => <button key={item} onClick={() => setTab(item)} className={`rounded-xl border px-3 py-2 text-xs font-semibold ${tab === item ? 'border-cyan-300/25 bg-cyan-300/10 text-cyan-200' : 'border-white/10 bg-white/[.025] text-slate-400'}`}>{item === 'catalog' ? 'Catalog' : item === 'lineage' ? 'Lineage' : 'Sectors'}</button>)}
-        {tab === 'catalog' && <select value={category} onChange={(e) => setCategory(e.target.value)} className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs text-slate-300"><option value="all">All categories</option>{categories.map((item) => <option key={String(item)} value={String(item)}>{String(item)}</option>)}</select>}
+        {tab === 'catalog' && <><label className="flex min-w-56 items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2"><Search className="h-4 w-4 text-slate-600" /><input value={localQuery} onChange={(event) => setLocalQuery(event.target.value)} placeholder="Search name, publisher, category" aria-label="Search passports" className="min-w-0 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-slate-600" /></label><select value={category} onChange={(e) => setCategory(e.target.value)} className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs text-slate-300"><option value="all">All categories</option>{categories.map((item) => <option key={String(item)} value={String(item)}>{String(item)}</option>)}</select></>}
       </div>
 
       {tab === 'lineage' ? <SoftwareLineageTracker passports={passports} clients={clients} assets={assets} /> : tab === 'sectors' ? <SoftwareSectorsPanel passports={passports} onFilterCategory={(value) => { setCategory(value); setTab('catalog'); }} onNavigateTab={onNavigateTab} setSelectedPassportId={setSelectedPassportId} /> : <>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {filtered.map((passport) => <button key={passport.id} onClick={() => setSelectedPassportId(passport.id)} className={`rounded-2xl border p-5 text-left transition ${selectedPassportId === passport.id ? 'border-cyan-300/30 bg-cyan-300/[.06]' : 'border-white/10 bg-white/[.025] hover:bg-white/[.045]'}`}><div className="text-sm font-semibold text-white">{passport.name || 'Unnamed software'}</div><div className="mt-1 text-xs text-slate-500">{passport.version || 'Version not observed'} · {passport.publisher || 'Publisher not observed'}</div><div className="mt-4 flex items-center justify-between gap-3"><span className="text-[10px] uppercase tracking-[.18em] text-slate-600">Trust status</span><span className="text-xs text-slate-300">{passport.overallScore == null ? 'Not verified' : String(passport.overallScore)}</span></div></button>)}
+          {filtered.map((passport) => { const hasEvidence = passport.evidence?.length > 0; return <button key={passport.id} onClick={() => setSelectedPassportId(passport.id)} className={`rounded-2xl border p-5 text-left transition hover:-translate-y-0.5 ${selectedPassportId === passport.id ? 'border-cyan-300/30 bg-cyan-300/[.06]' : 'border-white/10 bg-white/[.025] hover:border-cyan-300/20 hover:bg-white/[.045]'}`}><div className="flex items-start justify-between gap-3"><span className="grid h-9 w-9 place-items-center rounded-xl border border-cyan-300/15 bg-cyan-300/[.06]"><FileCheck2 className="h-4 w-4 text-cyan-200" /></span><span className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${hasEvidence ? 'border-emerald-300/20 bg-emerald-300/[.06] text-emerald-200' : 'border-amber-300/20 bg-amber-300/[.06] text-amber-200'}`}>{hasEvidence ? 'Evidence present' : 'Not verified'}</span></div><div className="mt-4 text-sm font-semibold text-white">{passport.name || 'Unnamed software'}</div><div className="mt-1 truncate text-xs text-slate-500">{passport.version || 'Version not observed'} · {passport.publisher || 'Publisher not observed'}</div><div className="mt-4 grid grid-cols-2 gap-2 text-[11px]"><span className="rounded-lg border border-white/[.07] bg-black/15 px-2 py-2 text-slate-500">Evidence <strong className="float-right text-slate-300">{passport.evidence?.length || 0}</strong></span><span className="rounded-lg border border-white/[.07] bg-black/15 px-2 py-2 text-slate-500">Findings <strong className="float-right text-slate-300">{passport.vulnerabilities?.length || 0}</strong></span></div></button>; })}
+          {filtered.length === 0 && <div className="rounded-2xl border border-dashed border-white/10 p-12 text-center md:col-span-2 xl:col-span-3"><FileCheck2 className="mx-auto h-8 w-8 text-slate-700" /><p className="mt-3 text-sm font-semibold text-slate-300">No passport records match this view.</p><p className="mt-1 text-xs text-slate-600">Adjust the search or category filter.</p></div>}
         </div>
 
         {selected && <div className="rounded-3xl border border-white/10 bg-white/[.035] p-6 text-white">
@@ -103,4 +109,8 @@ export default function PassportsView({ passports, selectedPassportId, setSelect
       </>}
     </section>
   );
+}
+
+function PassportMetric({ icon, label, value }: { icon: React.ReactNode; label: string; value: number }) {
+  return <div className="rounded-2xl border border-white/[.07] bg-black/15 p-4"><div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.14em] text-slate-500"><span className="h-4 w-4 text-cyan-200">{icon}</span>{label}</div><div className="mt-3 text-2xl font-semibold text-white">{value}</div></div>;
 }
