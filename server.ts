@@ -3,7 +3,6 @@ import cors from 'cors';
 import helmet from 'helmet';
 import * as Sentry from '@sentry/node';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { config, validateConfiguration } from './src/config.ts';
 import { checkDatabaseHealth, closeDatabase, db } from './src/db/index.ts';
@@ -101,19 +100,11 @@ app.post('/api/ai/analyze-passport', requireAuth, async (req: AuthenticatedReque
       WHERE id = ${passportId} AND tenant_id = ${req.user!.tenantId}
       LIMIT 1
     `);
-    const passport = (result.rows?.[0] ?? null) as {
-      name?: string; version?: string; publisher?: string; overallScore?: number | null;
-      evidenceCount?: number; findingCount?: number;
-    } | null;
+    const passport = (result.rows?.[0] ?? null) as { name?: string; version?: string; publisher?: string; overallScore?: number | null; evidenceCount?: number; findingCount?: number } | null;
     if (!passport) return res.status(404).json({ error: { code: 'PASSPORT_NOT_FOUND', message: 'Passport not found.' } });
     const status = passport.overallScore == null ? 'not verified' : `score ${passport.overallScore}`;
-    return res.json({
-      passportId,
-      analysis: `${passport.name ?? 'Passport'} ${passport.version ?? ''} by ${passport.publisher ?? 'unknown publisher'} is ${status}. Evidence records: ${passport.evidenceCount ?? 0}. Findings: ${passport.findingCount ?? 0}. Authoritative verification requires durable backend evidence.`,
-    });
-  } catch (error) {
-    return next(error);
-  }
+    return res.json({ passportId, analysis: `${passport.name ?? 'Passport'} ${passport.version ?? ''} by ${passport.publisher ?? 'unknown publisher'} is ${status}. Evidence records: ${passport.evidenceCount ?? 0}. Findings: ${passport.findingCount ?? 0}. Authoritative verification requires durable backend evidence.` });
+  } catch (error) { return next(error); }
 });
 app.use('/api/integrations', createIntegrationsRouter());
 app.use('/api/integrations-live', createLiveIntegrationsRouter());
@@ -134,32 +125,17 @@ if (mcpBearer) {
 
 app.use('/api', createScansRouter());
 app.use('/api/compliance', createComplianceRouter());
-// esbuild bundles this to a real CJS module for production (dist/server.cjs),
-// where __dirname is a genuine, reliable global; its import.meta.url shim is
-// not. tsx runs this file directly as native ESM for local dev, where
-// __dirname is not defined, so fall back to deriving it from import.meta.url.
-const publicDir = typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath(import.meta.url));
+// Resolve the static asset root from the process working directory in both
+// production CJS and local tsx execution. This avoids import.meta.url in the
+// CJS bundle while keeping the deployed /app layout deterministic.
+const publicDir = path.resolve(process.cwd());
 app.use(express.static(publicDir, { index: false, maxAge: config.isProduction ? '1y' : 0 }));
 app.get('/*splat', (req, res, next) => { if (req.path.startsWith('/api/') || req.path === '/mcp') return next(); return res.sendFile(path.join(publicDir, 'index.html'), error => error ? next(error) : undefined); });
 app.use((req, res, next) => { if (req.path.startsWith('/api/') || req.path === '/mcp') return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Route not found.', requestId: res.locals.requestId } }); return next(); });
 app.use((err: any, req: Request, res: Response, next: NextFunction) => { if (res.headersSent) return next(err); const requestId = res.locals.requestId || `req_${randomUUID()}`; const status = Number.isInteger(err?.status) && err.status >= 400 && err.status < 600 ? err.status : 500; console.error('[HTTP_ERROR]', { requestId, status, method: req.method, path: req.path, message: err?.message || String(err) }); if (config.sentry.dsn) Sentry.captureException(err, { tags: { requestId } }); return res.status(status).json({ error: { code: status === 500 ? 'INTERNAL_SERVER_ERROR' : 'REQUEST_FAILED', message: status === 500 ? 'An unexpected server error occurred.' : err?.message || 'Request failed.', requestId } }); });
 let server: ReturnType<typeof app.listen> | undefined; let shuttingDown = false;
 async function shutdown(signal: string) { if (shuttingDown) return; shuttingDown = true; console.info(`[SPR] ${signal} received; shutting down gracefully.`); const forceTimer = setTimeout(() => process.exit(1), 15_000); forceTimer.unref(); if (server) await new Promise<void>(resolve => server!.close(() => resolve())); await closeDatabase().catch(error => console.error('[SPR] Database shutdown error:', error)); if (config.sentry.dsn) await Sentry.close(2_000).catch(() => undefined); clearTimeout(forceTimer); process.exit(0); }
-export async function startServer() {
-  validateConfiguration();
-  // This must never block app.listen(): the app already exposes a proper
-  // liveness/readiness split (/health always 200, /ready and /api/health
-  // report real DB status), but a raw, unguarded await here previously
-  // meant a DB hiccup at boot (still starting, brief network blip, wrong
-  // connection string) crashed the whole process before it ever bound its
-  // port — no /health, no static assets, nothing for an orchestrator to
-  // see. Best-effort and non-fatal; /ready still reports the true DB state.
-  try {
-    await ensureInitialSelfPassport();
-  } catch (error) {
-    console.error('[SPR] Initial self-passport bootstrap failed; continuing startup. /ready will report the database as unavailable.', error);
-  }
-  const host = process.env.HOST || '0.0.0.0'; server = app.listen(config.port, host, () => console.info(`[SPR] listening on http://${host}:${config.port}`)); server.requestTimeout = Number.isFinite(requestTimeoutMs) && requestTimeoutMs > 0 ? requestTimeoutMs : 120_000; server.headersTimeout = Number.isFinite(requestHeaderTimeoutMs) && requestHeaderTimeoutMs > 0 ? requestHeaderTimeoutMs : 15_000; server.keepAliveTimeout = Number.isFinite(keepAliveTimeoutMs) && keepAliveTimeoutMs > 0 ? keepAliveTimeoutMs : 65_000; return server; }
+async function startServer() { validateConfiguration(); try { await ensureInitialSelfPassport(); } catch (error) { console.error('[SPR] Initial self-passport bootstrap failed; continuing startup. /ready will report the database as unavailable.', error); } const host = process.env.HOST || '0.0.0.0'; server = app.listen(config.port, host, () => console.info(`[SPR] listening on http://${host}:${config.port}`)); server.requestTimeout = Number.isFinite(requestTimeoutMs) && requestTimeoutMs > 0 ? requestTimeoutMs : 120_000; server.headersTimeout = Number.isFinite(requestHeaderTimeoutMs) && requestHeaderTimeoutMs > 0 ? requestHeaderTimeoutMs : 15_000; server.keepAliveTimeout = Number.isFinite(keepAliveTimeoutMs) && keepAliveTimeoutMs > 0 ? keepAliveTimeoutMs : 65_000; return server; }
 process.once('SIGTERM', () => void shutdown('SIGTERM')); process.once('SIGINT', () => void shutdown('SIGINT')); process.on('unhandledRejection', reason => console.error('[SPR] Unhandled rejection:', reason)); process.on('uncaughtException', error => { console.error('[SPR] Uncaught exception:', error); void shutdown('uncaughtException'); });
 if (process.env.SPR_SKIP_AUTOSTART !== 'true') void startServer().catch(error => { console.error('[SPR] Startup failed:', error); process.exit(1); });
 export { app };
