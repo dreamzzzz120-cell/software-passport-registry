@@ -371,16 +371,18 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
       const jobId = job.id;
 
       // Start periodic real-evidence state polling
+      let pollInFlight = false;
       const interval = setInterval(async () => {
+        if (pollInFlight) return;
+        pollInFlight = true;
         try {
           const [jobRes, logsRes] = await Promise.all([
-            apiFetch('/api/agent-jobs'),
+            apiFetch(`/api/agent-jobs/${jobId}`),
             apiFetch(`/api/agent-jobs/${jobId}/logs`)
           ]);
 
           if (jobRes.ok && logsRes.ok) {
-            const jobsList = await jobRes.json();
-            const currentJob = jobsList.find((j: any) => j.id === jobId);
+            const currentJob = await jobRes.json();
             const logsList = await logsRes.json();
 
             if (currentJob) {
@@ -406,8 +408,10 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
           }
         } catch (pollErr) {
           console.error('Error polling agent job progress:', pollErr);
+        } finally {
+          pollInFlight = false;
         }
-      }, 900);
+      }, 1500);
 
     } catch (err: unknown) {
       console.error('Error in agent scanning execution:', err);
