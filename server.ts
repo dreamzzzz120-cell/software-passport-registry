@@ -25,9 +25,6 @@ import { createAiTrustRouter } from './src/routes/ai-trust.ts';
 import { createMcpTransport } from './src/mcp/transport.ts';
 import { executePublicMcpTool } from './src/mcp/execute.ts';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 const app = express();
 const startedAt = Date.now();
 const requestBodyLimit = process.env.REQUEST_BODY_LIMIT || '2mb';
