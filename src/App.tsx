@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
+import { getRedirectResult, onAuthStateChanged, signOut, type User } from 'firebase/auth';
 import type { Alert, Client, Integration, Scan, SoftwarePassport, Vendor } from './types';
 import { apiFetch } from './utils/apiClient';
 import { auth } from './lib/firebase';
@@ -26,6 +26,8 @@ import SettingsView from './components/SettingsView';
 import MonitoringView from './components/MonitoringView';
 import SecurityCenterView from './components/SecurityCenterView';
 import MSPCommandCenter from './components/MSPCommandCenter';
+import ReportsView from './components/ReportsView';
+import TrustGraphView from './components/TrustGraphView';
 import { EXTENSIONS } from './workflows/extensionRegistry';
 
 const PUBLIC_PATHS = new Set(['/','/login','/free-review','/pricing']);
@@ -80,11 +82,49 @@ export default function App() {
   const [passports, setPassports] = useState<SoftwarePassport[]>(EMPTY_PASSPORTS);
   const [vendors, setVendors] = useState<Vendor[]>(EMPTY_VENDORS);
   const [alerts, setAlerts] = useState<Alert[]>(EMPTY_ALERTS);
+  const [findings, setFindings] = useState<unknown[]>([]);
   const [scans, setScans] = useState<Scan[]>(EMPTY_SCANS);
   const [integrations, setIntegrations] = useState<Integration[]>(EMPTY_INTEGRATIONS);
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
 
-  useEffect(() => onAuthStateChanged(auth, (currentUser) => { setUser(currentUser); setAuthReady(true); }), []);
+  useEffect(() => {
+    let mounted = true;
+    let redirectSettled = false;
+    let observedUser: User | null = null;
+    const timeoutId = window.setTimeout(() => {
+      if (mounted) setAuthReady(true);
+    }, 10_000);
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      if (!mounted) return;
+      observedUser = currentUser;
+      if (!redirectSettled) return;
+      setUser(currentUser);
+      setAuthReady(true);
+      window.clearTimeout(timeoutId);
+    }, () => {
+      if (mounted) {
+        setAuthReady(true);
+        window.clearTimeout(timeoutId);
+      }
+    });
+    void getRedirectResult(auth).then((result) => {
+      redirectSettled = true;
+      if (mounted) setUser(result?.user || observedUser);
+      if (mounted) setAuthReady(true);
+      window.clearTimeout(timeoutId);
+    }).catch((error) => {
+      redirectSettled = true;
+      console.error('[Firebase redirect sign-in error]', error);
+      if (mounted) setUser(observedUser);
+      if (mounted) setAuthReady(true);
+      window.clearTimeout(timeoutId);
+    });
+    return () => {
+      mounted = false;
+      window.clearTimeout(timeoutId);
+      unsubscribe();
+    };
+  }, []);
   useEffect(() => { if (authReady && !user && !PUBLIC_PATHS.has(path)) navigate('/login'); }, [authReady, user, path]);
 
   useEffect(() => {
@@ -98,8 +138,8 @@ export default function App() {
       const [me, scansResponse, findingsResponse, passportsResponse, clientsResponse, integrationsResponse] = responses;
       if (me.ok) { const data = await me.json().catch(() => null); if (!cancelled) setRole(String(data?.role || 'Viewer')); }
       if (scansResponse.ok) { const data = await scansResponse.json().catch(() => []); if (!cancelled && Array.isArray(data)) setScans(data); }
-      if (findingsResponse.ok) { const data = await findingsResponse.json().catch(() => []); const rows = Array.isArray(data) ? data : data?.findings; if (!cancelled && Array.isArray(rows)) setAlerts(rows.map((row: any) => ({ id: String(row.id), title: String(row.title || row.control_id || 'Trust finding'), severity: String(row.severity || 'Low').replace(/^./, (s: string) => s.toUpperCase()), category: 'Trust finding', clientName: String(row.client_id || 'Tenant'), description: String(row.description || 'Evidence-backed finding'), timestamp: String(row.updated_at || ''), status: String(row.status || 'Active').toLowerCase() === 'closed' ? 'Resolved' : 'Active' })) as Alert[]); }
-      if (passportsResponse.ok) { const data = await passportsResponse.json().catch(() => []); const rows = Array.isArray(data) ? data : data?.passports; if (!cancelled && Array.isArray(rows)) { const normalized = rows.map((row: any) => ({ ...row, id: String(row.id), name: String(row.name || 'Unnamed software'), version: String(row.version || 'unknown'), publisher: String(row.publisher || 'unknown'), evidence: Array.isArray(row.evidence) ? row.evidence : [], vulnerabilities: Array.isArray(row.vulnerabilities) ? row.vulnerabilities : [], timeline: Array.isArray(row.timeline) ? row.timeline : [], sbom: Array.isArray(row.sbom) ? row.sbom : [], scores: null, scoreStatus: row.scoreStatus || 'not_authoritatively_scored' })) as SoftwarePassport[]; setPassports(normalized); setAssets(normalized.map((passport: any) => ({ id: passport.id, name: passport.name, hostName: passport.name, type: passport.category || 'software', clientName: String(passport.clientId || 'Unobserved'), environment: String(passport.environment || 'Unobserved'), version: passport.version }))); setVendors(EMPTY_VENDORS); } }
+      if (findingsResponse.ok) { const data = await findingsResponse.json().catch(() => []); const rows = Array.isArray(data) ? data : data?.findings; if (!cancelled && Array.isArray(rows)) { setFindings(rows); setAlerts(rows.map((row: any) => ({ id: String(row.id), title: String(row.title || row.control_id || 'Trust finding'), severity: String(row.severity || 'Low').replace(/^./, (s: string) => s.toUpperCase()), category: 'Trust finding', clientName: String(row.client_id || 'Tenant'), description: String(row.description || 'Evidence-backed finding'), timestamp: String(row.updated_at || ''), status: String(row.status || 'Active').toLowerCase() === 'closed' ? 'Resolved' : 'Active' })) as Alert[]); } }
+      if (passportsResponse.ok) { const data = await passportsResponse.json().catch(() => []); const rows = Array.isArray(data) ? data : data?.passports; if (!cancelled && Array.isArray(rows)) { const normalized = rows.map((row: any) => ({ ...row, id: String(row.id), name: String(row.name || 'Unnamed software'), version: String(row.version || 'unknown'), publisher: String(row.publisher || 'unknown'), clientId: row.clientId ? String(row.clientId) : undefined, evidence: Array.isArray(row.evidence) ? row.evidence : [], vulnerabilities: Array.isArray(row.vulnerabilities) ? row.vulnerabilities : [], timeline: Array.isArray(row.timeline) ? row.timeline : [], sbom: Array.isArray(row.sbom) ? row.sbom : [], scores: null, scoreStatus: row.scoreStatus || 'not_authoritatively_scored' })) as SoftwarePassport[]; setPassports(normalized); setAssets(normalized.map((passport: any) => ({ id: passport.id, name: passport.name, hostName: passport.name, type: passport.category || 'software', clientId: passport.clientId, clientName: String(passport.clientId || 'Unobserved'), environment: String(passport.environment || 'Unobserved'), version: passport.version }))); setVendors(EMPTY_VENDORS); } }
       if (clientsResponse.ok) { const data = await clientsResponse.json().catch(() => []); const rows = Array.isArray(data) ? data : data?.clients; if (!cancelled && Array.isArray(rows)) setClients(rows.map((row: any) => ({ ...row, id: String(row.id), name: String(row.name || row.company_name || 'Unnamed client') })) as Client[]); }
       if (integrationsResponse.ok) { const data = await integrationsResponse.json().catch(() => []); if (!cancelled && Array.isArray(data)) setIntegrations(data); }
     };
@@ -134,6 +174,8 @@ export default function App() {
     case '/passports': case '/registry': view = <PassportsView passports={passports} selectedPassportId={selectedPassportId} setSelectedPassportId={setSelectedPassportId} searchQuery="" clients={clients} assets={assets} onNavigateTab={onNavigateTab} onUpdatePassport={(passport) => setPassports((current) => current.map((item) => item.id === passport.id ? passport : item))} />; break;
     case '/scans': view = <ScansView scans={scans} clients={clients} assets={assets} passports={passports} onTriggerNewScan={(scan) => setScans((current) => [scan, ...current.filter((item) => item.id !== scan.id)].slice(0, 100))} />; break;
     case '/alerts': view = <AlertsView alerts={alerts} onUpdateAlertStatus={async (id, status) => { const backendStatus = status === 'Resolved' ? 'CLOSED' : status === 'Snoozed' ? 'BLOCKED' : 'OPEN'; const response = await apiFetch(`/api/trust-loop/remediations/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: backendStatus }) }); if (response.ok) setAlerts((current) => current.map((item) => item.id === id ? { ...item, status } : item)); }} />; break;
+    case '/reports': view = <ReportsView clients={clients} passports={passports} scans={scans} alerts={alerts} findings={findings} />; break;
+    case '/trust-graph': view = <TrustGraphView clients={clients} passports={passports} assets={assets} findings={findings} />; break;
     case '/clients': view = <ClientsView clients={clients} selectedClientId={selectedClientId} setSelectedClientId={setSelectedClientId} passports={passports} onNavigateTab={onNavigateTab} searchQuery="" />; break;
     case '/vendors': view = <VendorsView vendors={vendors} searchQuery="" />; break;
     case '/integrations': view = <IntegrationsView integrations={integrations} onToggleConnection={async (id) => { const response = await apiFetch(`/api/integrations/${encodeURIComponent(id)}/toggle`, { method: 'POST' }); if (response.ok) { const data = await response.json(); setIntegrations((current) => current.map((item) => item.id === id ? { ...item, connected: Boolean(data.connected) } : item)); } }} onSyncIntegration={async (id) => { const response = await apiFetch(`/api/integrations/${encodeURIComponent(id)}/sync`, { method: 'POST' }); if (response.ok) { const data = await response.json(); setIntegrations((current) => current.map((item) => item.id === id ? { ...item, lastSyncDate: data?.lastSyncDate || '' } : item)); } }} onNavigateTab={onNavigateTab} />; break;

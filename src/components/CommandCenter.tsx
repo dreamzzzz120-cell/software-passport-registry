@@ -12,12 +12,14 @@ const CORE: NavItem[] = [
   { id: 'monitoring', label: 'Monitoring', icon: '◉', path: '/monitoring' },
   { id: 'alerts', label: 'Alerts', icon: '!', path: '/alerts' },
   { id: 'clients', label: 'Clients', icon: '◎', path: '/clients' },
+  { id: 'trust-graph', label: 'Trust Graph', icon: '◌', path: '/trust-graph' },
 ];
 const GOVERNANCE: NavItem[] = [
   { id: 'security', label: 'Security', icon: '⌾', path: '/security' },
   { id: 'compliance', label: 'Compliance', icon: '✓', path: '/compliance' },
   { id: 'vendors', label: 'Vendors', icon: '◫', path: '/vendors' },
   { id: 'integrations', label: 'Integrations', icon: '↔', path: '/integrations' },
+  { id: 'reports', label: 'Reports Center', icon: '▤', path: '/reports' },
 ];
 const EXECUTIVE: NavItem[] = [
   { id: 'msp', label: 'MSP Command', icon: '▦', path: '/msp' },
