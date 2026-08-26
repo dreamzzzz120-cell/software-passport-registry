@@ -146,7 +146,21 @@ app.use((req, res, next) => { if (req.path.startsWith('/api/') || req.path === '
 app.use((err: any, req: Request, res: Response, next: NextFunction) => { if (res.headersSent) return next(err); const requestId = res.locals.requestId || `req_${randomUUID()}`; const status = Number.isInteger(err?.status) && err.status >= 400 && err.status < 600 ? err.status : 500; console.error('[HTTP_ERROR]', { requestId, status, method: req.method, path: req.path, message: err?.message || String(err) }); if (config.sentry.dsn) Sentry.captureException(err, { tags: { requestId } }); return res.status(status).json({ error: { code: status === 500 ? 'INTERNAL_SERVER_ERROR' : 'REQUEST_FAILED', message: status === 500 ? 'An unexpected server error occurred.' : err?.message || 'Request failed.', requestId } }); });
 let server: ReturnType<typeof app.listen> | undefined; let shuttingDown = false;
 async function shutdown(signal: string) { if (shuttingDown) return; shuttingDown = true; console.info(`[SPR] ${signal} received; shutting down gracefully.`); const forceTimer = setTimeout(() => process.exit(1), 15_000); forceTimer.unref(); if (server) await new Promise<void>(resolve => server!.close(() => resolve())); await closeDatabase().catch(error => console.error('[SPR] Database shutdown error:', error)); if (config.sentry.dsn) await Sentry.close(2_000).catch(() => undefined); clearTimeout(forceTimer); process.exit(0); }
-export async function startServer() { validateConfiguration(); await ensureInitialSelfPassport(); const host = process.env.HOST || '0.0.0.0'; server = app.listen(config.port, host, () => console.info(`[SPR] listening on http://${host}:${config.port}`)); server.requestTimeout = Number.isFinite(requestTimeoutMs) && requestTimeoutMs > 0 ? requestTimeoutMs : 120_000; server.headersTimeout = Number.isFinite(requestHeaderTimeoutMs) && requestHeaderTimeoutMs > 0 ? requestHeaderTimeoutMs : 15_000; server.keepAliveTimeout = Number.isFinite(keepAliveTimeoutMs) && keepAliveTimeoutMs > 0 ? keepAliveTimeoutMs : 65_000; return server; }
+export async function startServer() {
+  validateConfiguration();
+  // This must never block app.listen(): the app already exposes a proper
+  // liveness/readiness split (/health always 200, /ready and /api/health
+  // report real DB status), but a raw, unguarded await here previously
+  // meant a DB hiccup at boot (still starting, brief network blip, wrong
+  // connection string) crashed the whole process before it ever bound its
+  // port — no /health, no static assets, nothing for an orchestrator to
+  // see. Best-effort and non-fatal; /ready still reports the true DB state.
+  try {
+    await ensureInitialSelfPassport();
+  } catch (error) {
+    console.error('[SPR] Initial self-passport bootstrap failed; continuing startup. /ready will report the database as unavailable.', error);
+  }
+  const host = process.env.HOST || '0.0.0.0'; server = app.listen(config.port, host, () => console.info(`[SPR] listening on http://${host}:${config.port}`)); server.requestTimeout = Number.isFinite(requestTimeoutMs) && requestTimeoutMs > 0 ? requestTimeoutMs : 120_000; server.headersTimeout = Number.isFinite(requestHeaderTimeoutMs) && requestHeaderTimeoutMs > 0 ? requestHeaderTimeoutMs : 15_000; server.keepAliveTimeout = Number.isFinite(keepAliveTimeoutMs) && keepAliveTimeoutMs > 0 ? keepAliveTimeoutMs : 65_000; return server; }
 process.once('SIGTERM', () => void shutdown('SIGTERM')); process.once('SIGINT', () => void shutdown('SIGINT')); process.on('unhandledRejection', reason => console.error('[SPR] Unhandled rejection:', reason)); process.on('uncaughtException', error => { console.error('[SPR] Uncaught exception:', error); void shutdown('uncaughtException'); });
 if (process.env.SPR_SKIP_AUTOSTART !== 'true') void startServer().catch(error => { console.error('[SPR] Startup failed:', error); process.exit(1); });
 export { app };

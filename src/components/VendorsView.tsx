@@ -148,6 +148,12 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
   }, [vendors, activeSearchQuery, statusFilter, riskFilter, reputationFilter, auditStatusFilter, sortBy, sortOrder]);
 
   // Handle lodging new audit event
+  // This only updates local component state — there is no vendor-audit
+  // persistence endpoint anywhere in the backend (no vendors table exists
+  // at all yet). Currently unreachable in practice since `vendors` is
+  // always empty upstream (App.tsx has no vendor data source either), but
+  // if that ever changes, this form will silently lose every submitted
+  // audit on refresh/navigation unless a real API call is added here first.
   const handleAddAuditAttestation = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedVendor) return;
@@ -440,8 +446,17 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
             ) : (
               <div className="p-8 text-center text-slate-400 space-y-2">
                 <AlertCircle className="w-8 h-8 text-slate-300 mx-auto" />
-                <p className="text-xs font-semibold">No publishers matching selected filters.</p>
-                <p className="text-[10px]">Try broading your criteria or clearing the search query.</p>
+                {vendors.length === 0 ? (
+                  <>
+                    <p className="text-xs font-semibold">No vendor records loaded for this tenant.</p>
+                    <p className="text-[10px]">SPR has no vendor data source configured yet — this view has nothing to show, not a filter mismatch.</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-xs font-semibold">No publishers matching selected filters.</p>
+                    <p className="text-[10px]">Try broading your criteria or clearing the search query.</p>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -467,7 +482,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
               <div>
                 <div className="text-[10px] font-mono text-slate-400 uppercase font-bold">Avg Reputation score</div>
                 <div className="text-sm font-bold text-slate-800">
-                  {Math.round(vendors.reduce((acc, v) => acc + (v.reputationScore ?? v.overallTrustScore), 0) / vendors.length)}/100
+                  {vendors.length === 0 ? '—' : `${Math.round(vendors.reduce((acc, v) => acc + (v.reputationScore ?? v.overallTrustScore), 0) / vendors.length)}/100`}
                 </div>
               </div>
             </div>

@@ -14,9 +14,15 @@ interface PassportsViewProps {
   onNavigateTab?: (tab: string, itemId?: string) => void;
   clients?: Client[];
   assets?: any[];
+  role?: string;
 }
 
-export default function PassportsView({ passports, selectedPassportId, setSelectedPassportId, searchQuery, onNavigateTab, clients = [], assets = [] }: PassportsViewProps) {
+export default function PassportsView({ passports, selectedPassportId, setSelectedPassportId, searchQuery, onNavigateTab, clients = [], assets = [], role = 'Viewer' }: PassportsViewProps) {
+  // Matches backend gating exactly: POST /api/agent-jobs requires
+  // Owner/Admin/Operator (scans.ts); POST /api/trust-loop/remediations
+  // additionally allows Technician (server.ts requireTrustMutationRole).
+  const canRunAudit = ['Owner', 'Admin', 'Operator'].includes(role);
+  const canCreateRemediation = ['Owner', 'Admin', 'Operator', 'Technician'].includes(role);
   const [tab, setTab] = useState<'catalog' | 'lineage' | 'sectors'>('catalog');
   const [category, setCategory] = useState('all');
   const [localQuery, setLocalQuery] = useState('');
@@ -79,7 +85,7 @@ export default function PassportsView({ passports, selectedPassportId, setSelect
       <header className="rounded-[28px] border border-white/10 bg-white/[.035] p-6 text-white backdrop-blur-2xl md:p-8">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div><div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.22em] text-cyan-200"><ShieldCheck className="h-4 w-4" /> Evidence-first registry</div><h1 className="mt-3 text-3xl font-semibold tracking-tight">Software passport catalog</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">Observed software identities, evidence, findings, lineage and server-backed trust workflows. Missing evidence stays unverified.</p></div>
-          <button onClick={() => void runAudit()} disabled={!selected || auditBusy} className="rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50">{auditBusy ? 'Auditing…' : 'Run live audit'}</button>
+          <button onClick={() => void runAudit()} disabled={!canRunAudit || !selected || auditBusy} title={!canRunAudit ? `Your ${role} role cannot run audits.` : undefined} className="rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50">{auditBusy ? 'Auditing…' : 'Run live audit'}</button>
         </div>
         <div className="mt-7 grid gap-3 sm:grid-cols-3"><PassportMetric icon={<FileCheck2 />} label="Passport records" value={passports.length} /><PassportMetric icon={<CheckCircle2 />} label="With evidence" value={evidenceCount} /><PassportMetric icon={<TriangleAlert />} label="Recorded findings" value={findingCount} /></div>
         {auditText && <div className="mt-5 rounded-2xl border border-cyan-300/15 bg-black/20 p-4 text-sm leading-6 text-slate-300 whitespace-pre-wrap">{auditText}</div>}
@@ -102,7 +108,7 @@ export default function PassportsView({ passports, selectedPassportId, setSelect
 
           {selected.evidence?.length > 0 && <div className="mt-6"><div className="mb-3 text-[10px] uppercase tracking-[.18em] text-slate-600">Evidence ledger snapshot</div><div className="grid gap-3 md:grid-cols-2">{selected.evidence.map((item: any) => <div key={String(item.id)} className="rounded-2xl border border-white/10 bg-black/20 p-4"><div className="text-sm font-semibold text-slate-200">{String(item.name || item.type || 'Evidence item')}</div><div className="mt-1 text-xs text-slate-500">Status: {String(item.status || 'Not verified')}</div></div>)}</div></div>}
 
-          {selected.vulnerabilities?.length > 0 && <div className="mt-6"><div className="mb-3 text-[10px] uppercase tracking-[.18em] text-slate-600">Trust findings / remediation</div><div className="space-y-2">{selected.vulnerabilities.map((v: any) => { const id = String(v.findingId ?? v.id ?? ''); return <div key={id} className="rounded-2xl border border-white/10 bg-black/20 p-4"><div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"><div><div className="text-sm font-semibold text-slate-200">{String(v.title || id)}</div><div className="mt-1 text-xs text-slate-500">{String(v.status || 'Open')} · {String(v.severity || 'Unknown severity')}</div></div><button onClick={() => void createRemediation(v)} disabled={!id || remediationBusy === id} className="rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-xs font-semibold text-cyan-200 disabled:opacity-50">{remediationBusy === id ? 'Persisting…' : 'Create persisted remediation'}</button></div></div>; })}</div></div>}
+          {selected.vulnerabilities?.length > 0 && <div className="mt-6"><div className="mb-3 text-[10px] uppercase tracking-[.18em] text-slate-600">Trust findings / remediation</div><div className="space-y-2">{selected.vulnerabilities.map((v: any) => { const id = String(v.findingId ?? v.id ?? ''); return <div key={id} className="rounded-2xl border border-white/10 bg-black/20 p-4"><div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"><div><div className="text-sm font-semibold text-slate-200">{String(v.title || id)}</div><div className="mt-1 text-xs text-slate-500">{String(v.status || 'Open')} · {String(v.severity || 'Unknown severity')}</div></div><button onClick={() => void createRemediation(v)} disabled={!canCreateRemediation || !id || remediationBusy === id} title={!canCreateRemediation ? `Your ${role} role cannot create remediations.` : undefined} className="rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-xs font-semibold text-cyan-200 disabled:opacity-50">{remediationBusy === id ? 'Persisting…' : 'Create persisted remediation'}</button></div></div>; })}</div></div>}
 
           <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-4 text-xs leading-5 text-slate-400">This workflow never upgrades self-submitted data to VERIFIED. Durable evidence and remediation state must come from the Trust Loop backend.</div>
         </div>}

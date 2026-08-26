@@ -453,6 +453,9 @@ export default function ClientsView({
                       <span className="text-[10px] text-slate-400 dark:text-zinc-500 font-mono">Count: {client.passportCount}</span>
                     </div>
 
+                    {client.softwareInventory.length === 0 && (
+                      <div className="rounded-xl border border-dashed border-slate-200 dark:border-zinc-800 px-5 py-10 text-center text-xs text-slate-400 dark:text-zinc-500">No software passports registered for this client yet.</div>
+                    )}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {passports.filter(p => {
                         const clientPassportIds = new Set(client.softwareInventory.map(item => item.passportId));
@@ -533,6 +536,9 @@ export default function ClientsView({
                 {/* 4. Compliance Framework Matrices Tab */}
                 {workspaceTab === 'compliance' && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {client.complianceStatus.length === 0 && (
+                      <div className="col-span-full rounded-xl border border-dashed border-slate-200 dark:border-zinc-800 px-5 py-10 text-center text-xs text-slate-400 dark:text-zinc-500">No compliance frameworks recorded for this client yet.</div>
+                    )}
                     {client.complianceStatus.map((comp) => (
                       <div key={comp.id} className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-xs flex flex-col justify-between gap-4">
                         <div className="flex justify-between items-start">
@@ -585,6 +591,9 @@ export default function ClientsView({
                       <p className="text-[10px] text-slate-400 dark:text-zinc-500 font-mono mt-0.5">Authorizing authorities registered with access privileges inside this workspace.</p>
                     </div>
                     <div className="divide-y divide-slate-100 dark:divide-zinc-850">
+                      {client.teamMembers.length === 0 && (
+                        <div className="px-5 py-10 text-center text-xs text-slate-400 dark:text-zinc-500">No stakeholders recorded for this client yet.</div>
+                      )}
                       {client.teamMembers.map((member, i) => (
                         <div key={i} className="px-5 py-4 flex items-center justify-between hover:bg-slate-50/30 dark:hover:bg-zinc-900/10">
                           <div className="flex items-center gap-3">

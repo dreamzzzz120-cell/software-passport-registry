@@ -23,22 +23,27 @@ export default function BillingView() {
   const [billingList, setBillingList] = useState<BillingItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [payingId, setPayingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadBilling();
   }, []);
 
+  // No /api/billing route exists anywhere in the backend — there is no
+  // billing/Stripe integration built yet, not a config problem. Surface
+  // that honestly instead of only logging to console.
   const loadBilling = () => {
     setLoading(true);
+    setError(null);
     apiFetch('/api/billing')
       .then((res) => {
-        if (!res.ok) throw new Error('Failed to pull billing invoices');
+        if (!res.ok) throw new Error('Billing is not available on this deployment yet.');
         return res.json();
       })
       .then((data) => {
         setBillingList(data);
       })
-      .catch((err) => console.error('[Billing Loader Error]:', err))
+      .catch((err) => { console.error('[Billing Loader Error]:', err); setError('Billing is not available on this deployment yet.'); setBillingList([]); })
       .finally(() => setLoading(false));
   };
 
@@ -63,7 +68,7 @@ export default function BillingView() {
       }
     } catch (err) {
       console.error('[Stripe Ingress Error]:', err);
-      alert('Checkout is unavailable. Configure the billing gateway first.');
+      alert('Checkout is not available — there is no billing gateway built into this deployment yet.');
     } finally {
       setPayingId(null);
     }
@@ -92,6 +97,12 @@ export default function BillingView() {
         </button>
       </div>
 
+      {error && (
+        <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-900 px-4 py-3 text-xs text-amber-800 dark:text-amber-300">
+          {error}
+        </div>
+      )}
+
       {loading && billingList.length === 0 ? (
         <div className="flex flex-col items-center justify-center p-20 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl space-y-2">
           <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
@@ -117,7 +128,9 @@ export default function BillingView() {
             </div>
             <div className="bg-white dark:bg-zinc-900 p-4.5 rounded-xl border border-slate-200 dark:border-zinc-800/80 shadow-sm text-center">
               <p className="text-[9px] text-slate-400 font-mono font-bold uppercase">Mean Cost Per Deployed Passport</p>
-              <h3 className="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-1">$45.00</h3>
+              <h3 className="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-1">
+                {(() => { const passports = billingList.reduce((acc, b) => acc + b.activePassportsCount, 0); return passports > 0 ? `$${(totalDueAmount / passports).toFixed(2)}` : '—'; })()}
+              </h3>
               <span className="text-[8px] text-emerald-600 font-mono font-bold">Includes automated SBOM attestations</span>
             </div>
           </div>

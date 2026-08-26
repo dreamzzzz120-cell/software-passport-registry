@@ -68,7 +68,7 @@ export default function InvestorHomeView({ passports, onShowTelemetry, onNavigat
           window.dispatchEvent(new CustomEvent('refresh-data'));
         }
       }
-    } catch (error: any) { setRemediationLogs([`[unavailable] ${error?.message || 'No remediation executor is configured.'}`]); }
+    } catch { setRemediationLogs(['Bulk remediation is not built into this deployment yet — there is no /api/remediation/run backend. Use per-finding remediation from the Passports or MSP Command Center views instead.']); }
     finally { setIsRemediating(false); }
   };
 

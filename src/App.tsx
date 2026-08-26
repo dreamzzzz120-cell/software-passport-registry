@@ -224,15 +224,15 @@ export default function App() {
     case '/coverage': view = <CoverageView clients={clients} scans={scans} passports={passports} onNavigateTab={onNavigateTab} />; break;
     case '/evidence-explorer': view = <EvidenceExplorerView passports={passports} />; break;
     case '/assets': view = <AssetsView clients={clients} searchQuery="" assets={assets} />; break;
-    case '/passports': case '/registry': view = <PassportsView passports={passports} selectedPassportId={selectedPassportId} setSelectedPassportId={setSelectedPassportId} searchQuery="" clients={clients} assets={assets} onNavigateTab={onNavigateTab} onUpdatePassport={(passport) => setPassports((current) => current.map((item) => item.id === passport.id ? passport : item))} />; break;
-    case '/scans': view = <ScansView scans={scans} clients={clients} assets={assets} passports={passports} onTriggerNewScan={(scan) => setScans((current) => [scan, ...current.filter((item) => item.id !== scan.id)].slice(0, 100))} />; break;
+    case '/passports': case '/registry': view = <PassportsView passports={passports} selectedPassportId={selectedPassportId} setSelectedPassportId={setSelectedPassportId} searchQuery="" clients={clients} assets={assets} role={role} onNavigateTab={onNavigateTab} onUpdatePassport={(passport) => setPassports((current) => current.map((item) => item.id === passport.id ? passport : item))} />; break;
+    case '/scans': view = <ScansView scans={scans} clients={clients} assets={assets} passports={passports} role={role} onTriggerNewScan={(scan) => setScans((current) => [scan, ...current.filter((item) => item.id !== scan.id)].slice(0, 100))} />; break;
     case '/alerts': view = <AlertsView alerts={alerts} onAlertAction={performAlertAction} />; break;
     case '/reports': view = <ReportsView clients={clients} passports={passports} scans={scans} alerts={alerts} findings={findings} role={role} />; break;
     case '/trust-graph': view = <TrustGraphView clients={clients} passports={passports} assets={assets} findings={findings} />; break;
     case '/clients': view = <ClientsView clients={clients} selectedClientId={selectedClientId} setSelectedClientId={setSelectedClientId} passports={passports} onNavigateTab={onNavigateTab} searchQuery="" />; break;
     case '/vendors': view = <VendorsView vendors={vendors} searchQuery="" />; break;
     case '/integrations': view = <IntegrationsView passports={passports} onNavigateTab={onNavigateTab} />; break;
-    case '/monitoring': view = <MonitoringView />; break;
+    case '/monitoring': view = <MonitoringView role={role} />; break;
     case '/security': view = <SecurityCenterView clients={clients} passports={passports} />; break;
     case '/compliance': view = <ComplianceView clients={clients} />; break;
     case '/msp': view = <MSPCommandCenter clients={clients} alerts={alerts} role={role} onSelectClient={setSelectedClientId} onNavigate={navigate} />; break;
@@ -245,7 +245,7 @@ export default function App() {
     case '/settings': view = <SettingsView theme={theme} onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} />; break;
     case '/team': view = <TeamView role={role} />; break;
     case '/audit-log': view = <AuditLogView />; break;
-    case '/extensions': view = <ExtensionMarketplace onNavigateTab={onNavigateTab} />; break;
+    case '/extensions': view = <ExtensionMarketplace onNavigateTab={onNavigateTab} role={role} />; break;
     default: view = <WorkflowBoundary title="Workflow" description="This authenticated capability is explicitly routed through the Command Center. Choose its owning workflow from the left rail." onNavigate={navigate} />;
   }
 

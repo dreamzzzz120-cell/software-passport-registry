@@ -13,6 +13,7 @@ interface ExtensionMarketplaceProps {
   onInstall?: (id: string) => void;
   onUninstall?: (id: string) => void;
   onNavigateTab?: (tabId: string) => void;
+  role?: string;
 }
 
 const categoryFor = (extension: ExtensionDefinition) => {
@@ -23,7 +24,10 @@ const categoryFor = (extension: ExtensionDefinition) => {
   return 'Security';
 };
 
-export default function ExtensionMarketplace({ onNavigateTab }: ExtensionMarketplaceProps) {
+export default function ExtensionMarketplace({ onNavigateTab, role = 'Viewer' }: ExtensionMarketplaceProps) {
+  // Matches backend gating exactly: POST/DELETE /api/user/extensions/:id
+  // require Owner/Admin/Operator (auth.ts).
+  const canManage = ['Owner', 'Admin', 'Operator'].includes(role);
   const [installed, setInstalled] = useState<string[]>([]);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('All');
@@ -52,15 +56,17 @@ export default function ExtensionMarketplace({ onNavigateTab }: ExtensionMarketp
   }), [category, query]);
 
   const toggleInstallation = async (extension: ExtensionDefinition) => {
+    if (!canManage) { setError(`Your ${role} role cannot install or remove extensions.`); return; }
     setBusyId(extension.id);
     setError(null);
     const isInstalled = installed.includes(extension.id);
     try {
       const response = await apiFetch(`/api/user/extensions/${encodeURIComponent(extension.id)}`, { method: isInstalled ? 'DELETE' : 'POST' });
+      if (response.status === 403) throw new Error(`Your ${role} role cannot ${isInstalled ? 'remove' : 'install'} extensions.`);
       if (!response.ok) throw new Error('installation request failed');
       setInstalled((current) => isInstalled ? current.filter((id) => id !== extension.id) : [...current, extension.id]);
-    } catch {
-      setError(`Could not ${isInstalled ? 'remove' : 'install'} ${extension.name}.`);
+    } catch (err) {
+      setError(err instanceof Error && err.message.includes('role') ? err.message : `Could not ${isInstalled ? 'remove' : 'install'} ${extension.name}.`);
     } finally {
       setBusyId(null);
     }
@@ -99,7 +105,7 @@ export default function ExtensionMarketplace({ onNavigateTab }: ExtensionMarketp
           <div className="mt-4 flex flex-wrap gap-1.5">{extension.steps.map((step) => <span key={step} className="rounded-full border border-white/[.07] px-2.5 py-1 text-[10px] text-slate-500">{step}</span>)}</div>
           <div className="mt-4 flex gap-2">
             <button onClick={() => setSelected(extension)} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-slate-200">Details</button>
-            <button disabled={busyId === extension.id} onClick={() => void toggleInstallation(extension)} className="inline-flex items-center gap-2 rounded-xl bg-cyan-300 px-3 py-2 text-xs font-bold text-slate-950 disabled:opacity-50">{installedNow ? <Trash2 size={13}/> : <Download size={13}/>} {busyId === extension.id ? 'Saving…' : installedNow ? 'Remove' : 'Install'}</button>
+            <button disabled={!canManage || busyId === extension.id} title={!canManage ? `Your ${role} role cannot install or remove extensions.` : undefined} onClick={() => void toggleInstallation(extension)} className="inline-flex items-center gap-2 rounded-xl bg-cyan-300 px-3 py-2 text-xs font-bold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50">{installedNow ? <Trash2 size={13}/> : <Download size={13}/>} {busyId === extension.id ? 'Saving…' : installedNow ? 'Remove' : 'Install'}</button>
           </div>
         </article>;
       })}

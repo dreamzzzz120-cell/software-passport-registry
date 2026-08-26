@@ -40,6 +40,15 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
   const [teamError, setTeamError] = useState<string | null>(null);
   const [teamSuccess, setTeamSuccess] = useState<string | null>(null);
 
+  // profile is fetched from /api/user/me, which already returns the caller's
+  // role — derive gating from it directly rather than requiring a separate
+  // prop. Matches backend enforcement exactly: POST /api/tenant/offboard is
+  // requireRole('Owner'); team invite/role-change/remove are requireRole
+  // (['Owner','Admin']) (auth.ts).
+  const currentRole: string = profile?.role || 'Viewer';
+  const isOwner = currentRole === 'Owner';
+  const canManageTeam = isOwner || currentRole === 'Admin';
+
   const fetchProfileAndTeam = async () => {
     setLoadingTeam(true);
     try {
@@ -68,7 +77,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
 
   const handleInviteMember = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inviteEmail) return;
+    if (!inviteEmail || !canManageTeam) return;
     setTeamError(null);
     setTeamSuccess(null);
     try {
@@ -91,6 +100,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
   };
 
   const handleUpdateMemberRole = async (userId: string, newRole: string) => {
+    if (!canManageTeam) return;
     setTeamError(null);
     setTeamSuccess(null);
     try {
@@ -112,6 +122,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
   };
 
   const handleRemoveMember = async (userId: string) => {
+    if (!canManageTeam) return;
     const confirmed = window.confirm('Are you sure you want to revoke this user\'s workspace security credentials?');
     if (!confirmed) return;
     setTeamError(null);
@@ -329,24 +340,32 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
     }
   };
 
+  // There is no test-runner endpoint in the backend (running the test suite
+  // from an HTTP request would itself be a code-execution risk), and no
+  // endpoint separately verifies RLS isolation, OAuth handshakes, or API
+  // quota safety. This checks the one thing SPR can actually report on
+  // itself: real database connectivity, via the existing /api/ready
+  // readiness probe — the same one an orchestrator uses.
   const runDiagnosticSuite = async () => {
     setTesting(true);
     try {
-      const res = await apiFetch('/api/tests/run');
-      if (res.ok) {
-        const data = await res.json();
-        setTestResults(data.results || []);
-      } else {
-        alert('Could not run diagnostics.');
-      }
+      const res = await apiFetch('/api/ready');
+      const data = await res.json().catch(() => ({}));
+      const dbOk = Boolean(data?.checks?.database?.ok);
+      setTestResults([
+        { name: 'Database connectivity', status: dbOk ? 'PASS' : 'FAIL', details: dbOk ? `Responded in ${data.checks.database.latencyMs}ms` : data?.checks?.database?.error || 'Database unavailable' },
+        { name: 'API reachability', status: 'PASS', details: `/api/ready responded HTTP ${res.status}` },
+      ]);
     } catch (err) {
-      console.error('Error running integration tests:', err);
+      console.error('Error running readiness check:', err);
+      setTestResults([{ name: 'API reachability', status: 'FAIL', details: 'The readiness request itself failed' }]);
     } finally {
       setTesting(false);
     }
   };
 
   const handleOffboardTenant = async () => {
+    if (!isOwner) { alert(`Your ${currentRole} role cannot offboard this workspace. Owner is required.`); return; }
     const confirmed = window.confirm(
       "CRITICAL SECURITY ALERT: Are you absolutely certain you want to offboard this tenant? This will cascade-delete all databases, software passports, compliance statuses, and credentials instantly from our PostgreSQL storage nodes. This action cannot be undone."
     );
@@ -374,9 +393,14 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
     }
   };
 
+  // No backend endpoint persists these fields (SLA target, MFA toggle, SSO
+  // config, daily-scan cadence) — they are local component state only and
+  // reset on reload/navigation. This used to show a "Portal configuration
+  // updated!" success message that implied a real save; keep that claim
+  // honest until real persistence exists rather than build a fake one.
   const handleSaveSettings = () => {
     setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 2000);
+    setTimeout(() => setSaveSuccess(false), 4000);
   };
 
   const activeBibleProduct = useMemo(() => {
@@ -892,6 +916,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
               )}
 
               <div className="space-y-3 font-mono text-[10px]">
+                {auditChain.length === 0 && <p className="text-slate-400 dark:text-zinc-500 font-sans">No audit events recorded yet.</p>}
                 {auditChain.slice(0, 3).map((blockObj, idx) => (
                   <div key={idx} className="p-3 bg-slate-50 dark:bg-zinc-800/30 rounded-xl border border-slate-200/60 dark:border-zinc-800 space-y-1 text-slate-600 dark:text-zinc-400 relative overflow-hidden">
                     <div className="absolute right-2 top-2 text-[8px] bg-slate-200 dark:bg-zinc-800 text-slate-500 dark:text-zinc-500 px-1.5 py-0.5 rounded uppercase font-bold">
@@ -968,8 +993,9 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                   </div>
                   <button
                     onClick={handleOffboardTenant}
-                    disabled={offboarding}
-                    className="bg-rose-600 hover:bg-rose-700 text-white font-sans font-bold text-xs px-4 py-2.5 rounded-lg cursor-pointer transition-colors shadow-sm disabled:opacity-50 shrink-0"
+                    disabled={!isOwner || offboarding}
+                    title={!isOwner ? `Your ${currentRole} role cannot offboard this workspace. Owner is required.` : undefined}
+                    className="bg-rose-600 hover:bg-rose-700 text-white font-sans font-bold text-xs px-4 py-2.5 rounded-lg cursor-pointer transition-colors shadow-sm disabled:cursor-not-allowed disabled:opacity-50 shrink-0"
                   >
                     {offboarding ? 'Purging Context...' : 'Offboard Workspace'}
                   </button>
@@ -979,13 +1005,14 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
 
             <div className="flex justify-end gap-2">
               {saveSuccess && (
-                <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                <span className="text-xs text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1">
                   <CheckCircle className="w-4 h-4" />
-                  <span>Portal configuration updated!</span>
+                  <span>Not saved to a server — these fields are local to this browser session only.</span>
                 </span>
               )}
               <button
                 onClick={handleSaveSettings}
+                title="These settings are not persisted to a backend yet."
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-sans font-semibold text-xs rounded-lg shadow-sm cursor-pointer transition-all"
               >
                 Save Platform Settings
@@ -1055,10 +1082,10 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
             <div className="studio-card p-5 space-y-4 h-fit">
               <h3 className="text-xs font-bold text-slate-800 dark:text-zinc-200 font-display flex items-center gap-1.5 pb-2 border-b border-slate-100 dark:border-zinc-800/80">
                 <CheckCircle className="w-4.5 h-4.5 text-emerald-500" />
-                <span>CI/CD Integration Diagnostics</span>
+                <span>Readiness Diagnostics</span>
               </h3>
               <p className="text-[10px] text-slate-400 dark:text-zinc-500 font-sans leading-relaxed">
-                Verify database connectivity, multi-tenant row-level isolation rules, OAuth handshakes, and API quota safety layers in real-time.
+                Checks live database connectivity via the same /api/ready probe an orchestrator uses. This does not verify row-level isolation, OAuth handshakes, or API quota — those have no self-check endpoint yet.
               </p>
 
               <button
@@ -1066,7 +1093,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                 disabled={testing}
                 className="w-full py-2 bg-slate-900 hover:bg-slate-800 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-white font-sans font-bold text-xs rounded-lg transition-colors cursor-pointer"
               >
-                {testing ? 'Running Diagnostics...' : 'Run Integration Tests'}
+                {testing ? 'Checking…' : 'Check Readiness'}
               </button>
 
               {testResults.length > 0 && (
@@ -1263,11 +1290,14 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
 
                 <button
                   type="submit"
-                  className="mt-5 md:mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-5 py-2.5 rounded-xl shrink-0 transition shadow-sm cursor-pointer"
+                  disabled={!canManageTeam}
+                  title={!canManageTeam ? `Your ${currentRole} role cannot invite team members.` : undefined}
+                  className="mt-5 md:mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-5 py-2.5 rounded-xl shrink-0 transition shadow-sm cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Send Invitation
                 </button>
               </form>
+              {!canManageTeam && <p className="text-[10px] text-amber-600 dark:text-amber-400">Your {currentRole} role has read-only team access.</p>}
             </div>
 
             {/* Team Members List Card */}
@@ -1317,8 +1347,10 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                           ) : (
                             <select
                               value={member.role}
+                              disabled={!canManageTeam}
+                              title={!canManageTeam ? `Your ${currentRole} role cannot change roles.` : undefined}
                               onChange={(e) => handleUpdateMemberRole(member.id, e.target.value)}
-                              className="bg-transparent border border-slate-200 dark:border-zinc-700 rounded p-1 font-mono text-[10px] font-bold cursor-pointer text-slate-800 dark:text-zinc-300 focus:outline-none focus:border-indigo-500"
+                              className="bg-transparent border border-slate-200 dark:border-zinc-700 rounded p-1 font-mono text-[10px] font-bold cursor-pointer text-slate-800 dark:text-zinc-300 focus:outline-none focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               <option value="Admin">Admin</option>
                               <option value="Technician">Technician</option>
@@ -1328,7 +1360,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                           )}
                         </td>
                         <td className="py-3.5 text-right">
-                          {member.role !== 'Owner' && member.id !== profile?.id && (
+                          {member.role !== 'Owner' && member.id !== profile?.id && canManageTeam && (
                             <button
                               onClick={() => handleRemoveMember(member.id)}
                               className="px-2.5 py-1.5 text-[10px] font-bold text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-950 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-lg cursor-pointer transition-colors"
