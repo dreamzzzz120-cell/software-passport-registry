@@ -389,7 +389,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
               setScanProgress(currentJob.progress || 0);
               setScanLogs(logsList.map((l: any) => `[${l.level.toUpperCase()}] ${l.message}`));
 
-              if (currentJob.status === 'Success' || currentJob.status === 'Failed') {
+              if (currentJob.status === 'Success' || currentJob.status === 'Completed' || currentJob.status === 'Failed') {
                 clearInterval(interval);
                 setIsScanning(false);
                 setScanCompleted(true);
