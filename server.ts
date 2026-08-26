@@ -128,7 +128,11 @@ if (mcpBearer) {
 }
 
 app.use('/api', createScansRouter());
-const publicDir = path.dirname(fileURLToPath(import.meta.url));
+// esbuild bundles this to a real CJS module for production (dist/server.cjs),
+// where __dirname is a genuine, reliable global; its import.meta.url shim is
+// not. tsx runs this file directly as native ESM for local dev, where
+// __dirname is not defined, so fall back to deriving it from import.meta.url.
+const publicDir = typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath(import.meta.url));
 app.use(express.static(publicDir, { index: false, maxAge: config.isProduction ? '1y' : 0 }));
 app.get('/*splat', (req, res, next) => { if (req.path.startsWith('/api/') || req.path === '/mcp') return next(); return res.sendFile(path.join(publicDir, 'index.html'), error => error ? next(error) : undefined); });
 app.use((req, res, next) => { if (req.path.startsWith('/api/') || req.path === '/mcp') return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Route not found.', requestId: res.locals.requestId } }); return next(); });

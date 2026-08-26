@@ -202,7 +202,14 @@ export async function main() {
   }
 }
 
-const isDirectlyExecuted = Boolean(process.argv[1]) && fileURLToPath(import.meta.url) === process.argv[1];
+// esbuild bundles this to a real CJS module for production (dist/migrate.cjs),
+// where require/module are genuine globals and its import.meta.url shim is not
+// reliable; require.main is the correct, robust check there. tsx runs this file
+// directly as native ESM for local dev (npm run migrate), where require/module
+// are not defined, so fall back to comparing import.meta.url against argv[1].
+const isDirectlyExecuted = typeof require !== 'undefined' && typeof module !== 'undefined'
+  ? require.main === module
+  : Boolean(process.argv[1]) && fileURLToPath(import.meta.url) === process.argv[1];
 if (isDirectlyExecuted) {
   main().catch((error) => {
     console.error('[FATAL]', error);
