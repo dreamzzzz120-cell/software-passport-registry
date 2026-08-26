@@ -82,7 +82,7 @@ export function createAuthRouter() {
     try {
       const db = req.db!;
       const result = await db.execute(sql`
-        SELECT id, email, display_name AS "displayName", role, created_at AS "createdAt"
+        SELECT id, email, display_name AS "displayName", role, onboarded, created_at AS "createdAt"
         FROM users WHERE tenant_id = ${req.user!.tenantId} ORDER BY created_at ASC
       `);
       return res.json((result as any).rows ?? []);
@@ -246,7 +246,14 @@ export function createAuthRouter() {
   router.get('/auth/audit-chain', requireAuth, async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
-      const result = await db.execute(sql`
+      const beforeRaw = typeof req.query.before === 'string' ? Number(req.query.before) : null;
+      const before = Number.isInteger(beforeRaw) && beforeRaw! > 0 ? beforeRaw : null;
+      const result = before
+        ? await db.execute(sql`
+            SELECT id, action, timestamp, actor, payload, current_hash AS "currentHash", previous_hash AS "previousHash"
+            FROM audit_trail WHERE tenant_id = ${req.user!.tenantId} AND id < ${before} ORDER BY id DESC LIMIT 50
+          `)
+        : await db.execute(sql`
         SELECT id, action, timestamp, actor, payload, current_hash AS "currentHash", previous_hash AS "previousHash"
         FROM audit_trail WHERE tenant_id = ${req.user!.tenantId} ORDER BY id DESC LIMIT 50
       `);

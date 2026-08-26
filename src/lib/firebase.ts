@@ -7,41 +7,42 @@ import { initializeApp } from 'firebase/app';
 import { GoogleAuthProvider, connectAuthEmulator, getAuth, signInWithPopup, signOut, type User } from 'firebase/auth';
 
 // Firebase browser configuration is public configuration. Prefer Vite environment
-// variables, but keep the production project's public config as a fallback so a
-// missing Vercel build variable cannot blank the entire React application.
+// variables, but fall back to a harmless demo config (rather than a real production
+// project) so a missing Vercel build variable cannot blank the entire React application
+// or silently point local/dev builds at the production Firebase project.
+export function resolveFirebaseConfig(env: Record<string, string | undefined>) {
+  const fallbackConfig = {
+    apiKey: 'demo-api-key',
+    authDomain: 'demo-project.firebaseapp.com',
+    projectId: 'demo-project',
+    storageBucket: 'demo-project.appspot.com',
+    messagingSenderId: '0000000000',
+    appId: '1:0000000000:web:demo',
+    measurementId: 'G-DEMO123',
+  };
+
+  return {
+    apiKey: env.VITE_FIREBASE_API_KEY || fallbackConfig.apiKey,
+    authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || fallbackConfig.authDomain,
+    projectId: env.VITE_FIREBASE_PROJECT_ID || fallbackConfig.projectId,
+    storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || fallbackConfig.storageBucket,
+    messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || fallbackConfig.messagingSenderId,
+    appId: env.VITE_FIREBASE_APP_ID || fallbackConfig.appId,
+    measurementId: env.VITE_FIREBASE_MEASUREMENT_ID || fallbackConfig.measurementId,
+  };
+}
+
 const env = import.meta.env;
-const envConfig = {
-  apiKey: env.VITE_FIREBASE_API_KEY,
-  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: env.VITE_FIREBASE_APP_ID,
-  measurementId: env.VITE_FIREBASE_MEASUREMENT_ID,
-};
+const envConfig = resolveFirebaseConfig(env);
 
-const fallbackConfig = {
-  apiKey: 'AIzaSyC1C1o3ekPT6QtZJwP1RmLwuA2-TIxRAtc',
-  authDomain: 'spr4-c2c65.firebaseapp.com',
-  projectId: 'spr4-c2c65',
-  storageBucket: 'spr4-c2c65.firebasestorage.app',
-  messagingSenderId: '535878442566',
-  appId: '1:535878442566:web:21c920f618a402aad63447',
-  measurementId: 'G-MG0KW2RCQ5',
-};
+if (!env.VITE_FIREBASE_API_KEY || !env.VITE_FIREBASE_PROJECT_ID || !env.VITE_FIREBASE_AUTH_DOMAIN || !env.VITE_FIREBASE_APP_ID) {
+  console.warn('[Firebase Config] Missing required VITE_FIREBASE_* environment variables; using safe demo config in the browser.');
+}
 
-const firebaseConfig = {
-  apiKey: envConfig.apiKey || fallbackConfig.apiKey,
-  authDomain: envConfig.authDomain || fallbackConfig.authDomain,
-  projectId: envConfig.projectId || fallbackConfig.projectId,
-  storageBucket: envConfig.storageBucket || fallbackConfig.storageBucket,
-  messagingSenderId: envConfig.messagingSenderId || fallbackConfig.messagingSenderId,
-  appId: envConfig.appId || fallbackConfig.appId,
-  measurementId: envConfig.measurementId || fallbackConfig.measurementId,
-};
+const firebaseConfig = envConfig;
 
 export const firebaseConfigured = Boolean(
-  firebaseConfig.apiKey && firebaseConfig.projectId && firebaseConfig.authDomain && firebaseConfig.appId,
+  env.VITE_FIREBASE_API_KEY && env.VITE_FIREBASE_PROJECT_ID && env.VITE_FIREBASE_AUTH_DOMAIN && env.VITE_FIREBASE_APP_ID,
 );
 
 const app = initializeApp(firebaseConfig);

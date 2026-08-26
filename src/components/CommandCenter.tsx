@@ -8,6 +8,7 @@ const CORE: NavItem[] = [
   { id: 'assets', label: 'Assets', icon: '◈', path: '/assets' },
   { id: 'passports', label: 'Passports', icon: '◇', path: '/passports' },
   { id: 'coverage', label: 'Evidence coverage', icon: '▤', path: '/coverage' },
+  { id: 'evidence-explorer', label: 'Evidence Explorer', icon: '⛾', path: '/evidence-explorer' },
   { id: 'scans', label: 'Scans', icon: '⌁', path: '/scans' },
   { id: 'monitoring', label: 'Monitoring', icon: '◉', path: '/monitoring' },
   { id: 'alerts', label: 'Alerts', icon: '!', path: '/alerts' },
@@ -25,6 +26,7 @@ const GOVERNANCE: NavItem[] = [
 const EXECUTIVE: NavItem[] = [
   { id: 'msp', label: 'MSP Command', icon: '▦', path: '/msp' },
   { id: 'agent-trust', label: 'AI Agent Trust', icon: 'AI', path: '/agent-trust' },
+  { id: 'ai-trust-center', label: 'AI Trust Center', icon: 'AI', path: '/ai-trust-center' },
   { id: 'enterprise-readiness', label: 'Enterprise Readiness', icon: 'ER', path: '/enterprise-readiness' },
   { id: 'investor', label: 'Investor View', icon: 'IV', path: '/investor' },
   { id: 'founder', label: 'Founder Dashboard', icon: 'FD', path: '/founder' },

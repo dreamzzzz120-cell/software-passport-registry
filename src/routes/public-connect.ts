@@ -7,10 +7,18 @@ import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/se
 import { attachTenantScope, ScopedDb } from '../middleware/tenant-scope.ts';
 
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30;
+const REPORT_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7;
+const REPORT_TYPES = ['executive', 'technical', 'msp', 'customer', 'compliance', 'vendor', 'auditor', 'evidence-ledger'];
 
 function base64url(input: string | Buffer) { return Buffer.from(input).toString('base64url'); }
 function signPublicPassportToken(passportId: string, tenantId: string, expiresAt: number) { if (!config.publicPassport.secret) throw new Error('Public Passport signing is not configured'); const payload = base64url(JSON.stringify({ v: 1, passportId, tenantId, exp: expiresAt })); const signature = crypto.createHmac('sha256', config.publicPassport.secret).update(payload).digest('base64url'); return `${payload}.${signature}`; }
 export function verifyPublicPassportToken(token: string, passportId: string) { if (!config.publicPassport.secret) return null; const parts = token.split('.'); if (parts.length !== 2 || !parts[0] || !parts[1] || token.length > 4096) return null; const expected = crypto.createHmac('sha256', config.publicPassport.secret).update(parts[0]).digest(); let supplied: Buffer; try { supplied = Buffer.from(parts[1], 'base64url'); } catch { return null; } if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) return null; try { const payload = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8')) as { v?: number; passportId?: string; tenantId?: string; exp?: number }; if (payload.v !== 1 || payload.passportId !== passportId || !payload.tenantId || !payload.exp || payload.exp <= Math.floor(Date.now() / 1000)) return null; return payload; } catch { return null; } }
+
+// Report share tokens are signed with the same secret but carry a distinct `kind`
+// discriminator so a passport verification link can never be replayed against the
+// report endpoint (or vice versa) even though both are bearer tokens on the same key.
+function signPublicReportToken(passportId: string, tenantId: string, reportType: string, expiresAt: number) { if (!config.publicPassport.secret) throw new Error('Public Passport signing is not configured'); const payload = base64url(JSON.stringify({ v: 1, kind: 'report', passportId, tenantId, reportType, exp: expiresAt })); const signature = crypto.createHmac('sha256', config.publicPassport.secret).update(payload).digest('base64url'); return `${payload}.${signature}`; }
+export function verifyPublicReportToken(token: string, passportId: string) { if (!config.publicPassport.secret) return null; const parts = token.split('.'); if (parts.length !== 2 || !parts[0] || !parts[1] || token.length > 4096) return null; const expected = crypto.createHmac('sha256', config.publicPassport.secret).update(parts[0]).digest(); let supplied: Buffer; try { supplied = Buffer.from(parts[1], 'base64url'); } catch { return null; } if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) return null; try { const payload = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8')) as { v?: number; kind?: string; passportId?: string; tenantId?: string; reportType?: string; exp?: number }; if (payload.v !== 1 || payload.kind !== 'report' || payload.passportId !== passportId || !payload.tenantId || !payload.reportType || !payload.exp || payload.exp <= Math.floor(Date.now() / 1000)) return null; return payload; } catch { return null; } }
 
 export async function publicTrustResponse(scopedDb: ScopedDb, passport: any) {
   const findings = (await scopedDb.execute(sql`SELECT id,control_id,title,severity,status,updated_at,resolved_at FROM trust_findings WHERE tenant_id=${passport.tenant_id} AND passport_id=${passport.id} ORDER BY CASE severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 WHEN 'low' THEN 4 ELSE 5 END, updated_at DESC LIMIT 50`) as any).rows || [];
@@ -37,5 +45,34 @@ export function createPublicConnectRouter() {
   router.post('/public/v1/passports/:id/token', requireAuth, requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => { try { const db = req.db!; const passportId = req.params.id; const passport = (await db.execute(sql`SELECT id,tenant_id FROM passports WHERE id=${passportId} AND tenant_id=${req.user!.tenantId} LIMIT 1`) as any).rows?.[0]; if (!passport) return res.status(404).json({ error: 'Passport not found' }); const expiresAt = Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS; const token = signPublicPassportToken(passport.id, passport.tenant_id, expiresAt); const baseUrl = config.appUrl || ''; return res.status(201).json({ passportId: passport.id, token, expiresAt: new Date(expiresAt * 1000).toISOString(), verificationUrl: `${baseUrl}/api/public/v1/passports/${encodeURIComponent(passport.id)}/trust/${encodeURIComponent(token)}` }); } catch (error) { return next(error); } });
   router.get('/public/v1/passports/:id/trust/:token', async (req, res, next) => { try { const payload = verifyPublicPassportToken(req.params.token, req.params.id); if (!payload || !payload.tenantId) return res.status(401).json({ error: 'Invalid or expired Passport verification token' }); const scopedDb = await attachTenantScope(payload.tenantId, res); const passport = (await scopedDb.execute(sql`SELECT id,tenant_id,name,version,publisher,category FROM passports WHERE id=${req.params.id} AND tenant_id=${payload.tenantId} LIMIT 1`) as any).rows?.[0]; if (!passport) return res.status(404).json({ error: 'Passport not found' }); res.setHeader('cache-control', 'public, max-age=60, stale-while-revalidate=300'); res.setHeader('x-content-type-options', 'nosniff'); return res.json(await publicTrustResponse(scopedDb, passport)); } catch (error) { return next(error); } });
   router.get('/public/v1/passports/:id/trust', async (_req, res) => res.status(410).json({ error: 'Signed Passport verification link required', code: 'SIGNED_PASSPORT_LINK_REQUIRED' }));
+
+  router.post('/public/v1/reports/:id/token', requireAuth, requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const reportType = REPORT_TYPES.includes(String(req.body?.type)) ? String(req.body.type) : 'executive';
+      const db = req.db!;
+      const passportId = req.params.id;
+      const passport = (await db.execute(sql`SELECT id,tenant_id FROM passports WHERE id=${passportId} AND tenant_id=${req.user!.tenantId} LIMIT 1`) as any).rows?.[0];
+      if (!passport) return res.status(404).json({ error: 'Passport not found' });
+      const expiresAt = Math.floor(Date.now() / 1000) + REPORT_TOKEN_TTL_SECONDS;
+      const token = signPublicReportToken(passport.id, passport.tenant_id, reportType, expiresAt);
+      const baseUrl = config.appUrl || '';
+      return res.status(201).json({ passportId: passport.id, reportType, token, expiresAt: new Date(expiresAt * 1000).toISOString(), shareUrl: `${baseUrl}/api/public/v1/reports/${encodeURIComponent(passport.id)}/${encodeURIComponent(token)}` });
+    } catch (error) { return next(error); }
+  });
+
+  router.get('/public/v1/reports/:id/:token', async (req, res, next) => {
+    try {
+      const payload = verifyPublicReportToken(req.params.token, req.params.id);
+      if (!payload || !payload.tenantId) return res.status(401).json({ error: 'Invalid or expired report share link' });
+      const scopedDb = await attachTenantScope(payload.tenantId, res);
+      const passport = (await scopedDb.execute(sql`SELECT id,tenant_id,name,version,publisher,category FROM passports WHERE id=${req.params.id} AND tenant_id=${payload.tenantId} LIMIT 1`) as any).rows?.[0];
+      if (!passport) return res.status(404).json({ error: 'Passport not found' });
+      res.setHeader('cache-control', 'private, max-age=0, no-store');
+      res.setHeader('x-content-type-options', 'nosniff');
+      const trust = await publicTrustResponse(scopedDb, passport);
+      return res.json({ ...trust, reportType: payload.reportType });
+    } catch (error) { return next(error); }
+  });
+
   return router;
 }

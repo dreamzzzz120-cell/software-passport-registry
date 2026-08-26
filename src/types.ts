@@ -6,7 +6,7 @@
 export type Severity = 'Critical' | 'High' | 'Medium' | 'Low';
 export type RiskLevel = 'Critical' | 'High' | 'Medium' | 'Low' | 'Safe' | 'Unknown';
 export type ScanStatus = 'Success' | 'Completed' | 'Failed' | 'Scanning' | 'scan target not yet instrumented';
-export type AlertStatus = 'Active' | 'Snoozed' | 'Resolved';
+export type AlertStatus = 'Active' | 'Acknowledged' | 'Snoozed' | 'Resolved' | 'Cancelled';
 
 export interface SoftwareComponent { name: string; version: string; license: string; purl: string; depth: number; dependencyType: 'Direct' | 'Transitive'; trustLevel: 'Trusted' | 'Review Required' | 'Blocked'; }
 export interface Vulnerability { id: string; title: string; severity: Severity; cvss: number; component: string; fixedVersion: string; publishedDate: string; status: 'Open' | 'Mitigated' | 'Resolved' | 'Snoozed'; description: string; mitigationPlan?: string; mitigationOwner?: string; mitigationTargetDate?: string; }
@@ -21,7 +21,7 @@ export interface Client { id: string; name: string; domain: string; industry: st
 export interface VendorAudit { id: string; date: string; auditType: string; status: 'Passed' | 'Failed' | 'Under Review'; details: string; auditor: string; referenceHash: string; }
 export interface Vendor { id: string; name: string; riskTier: RiskLevel; overallTrustScore: number; category: string; locations: string; activePassportsCount: number; reviewStatus: 'Approved' | 'Under Review' | 'Blocked'; securityIncidentsCount: number; website: string; lastAuditDate: string; reputationScore?: number; auditHistory?: VendorAudit[]; }
 export interface Scan { id: string; targetName: string; scanType: 'SBOM Verify' | 'Binary Attestation' | 'Source Code Codeql' | 'Container Image' | 'Unclassified Attestation'; triggeredBy: string; status: ScanStatus; durationMs: number; findingsCount: number | null; timestamp: string; clientName: string; }
-export interface Alert { id: string; title: string; severity: Severity; category: 'Vulnerability' | 'Compliance Gap' | 'Unverified Attestation' | 'Policy Violation' | 'Trust finding'; clientName: string; description: string; timestamp: string; status: AlertStatus; }
+export interface Alert { id: string; title: string; severity: Severity; category: 'Vulnerability' | 'Compliance Gap' | 'Unverified Attestation' | 'Policy Violation' | 'Trust finding'; clientName: string; description: string; timestamp: string; status: AlertStatus; remediationId?: string | null; ownerDisplay?: string | null; slaDueAt?: string | null; }
 
 export interface Integration {
   id: string;

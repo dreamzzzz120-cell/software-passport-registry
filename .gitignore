@@ -21,3 +21,5 @@ secret*.json
 *password*.json
 *credential*.json
 test-temp-file.txt
+.vercel
+.env*

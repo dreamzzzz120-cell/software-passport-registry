@@ -26,6 +26,36 @@ const reportTypes = z.enum(['executive', 'technical', 'msp', 'customer', 'compli
 function id(prefix: string) { return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`; }
 function parseJson(value: unknown, fallback: unknown = []) { try { return value ? JSON.parse(String(value)) : fallback; } catch { return fallback; } }
 
+const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low'];
+
+function buildReportTypeExtras(reportType: string, passport: any, findings: any[]) {
+  if (reportType === 'sbom') {
+    const components = parseJson(passport.sbom, []) as any[];
+    const vulnerabilities = parseJson(passport.vulnerabilities, []) as any[];
+    const sbom = components.map((component) => {
+      const name = component?.name || component?.packageName || component?.component;
+      const matched = vulnerabilities.filter((vuln) => (vuln?.component || vuln?.packageName || vuln?.package) === name);
+      return { ...component, vulnerabilityCount: matched.length, criticalOrHighCount: matched.filter((vuln) => SEVERITY_ORDER.slice(0, 2).includes(String(vuln?.severity || '').toLowerCase())).length };
+    });
+    return { sbom };
+  }
+  if (reportType === 'compliance') {
+    const byControl = new Map<string, { controlId: string; findingCount: number; openCount: number; worstSeverity: string; findingIds: string[] }>();
+    for (const finding of findings) {
+      const controlId = finding.control_id || 'unmapped';
+      const entry = byControl.get(controlId) || { controlId, findingCount: 0, openCount: 0, worstSeverity: 'low', findingIds: [] as string[] };
+      entry.findingCount += 1;
+      entry.findingIds.push(finding.id);
+      if (!['resolved', 'closed', 'verified'].includes(String(finding.status || '').toLowerCase())) entry.openCount += 1;
+      const severity = String(finding.severity || '').toLowerCase();
+      if (SEVERITY_ORDER.includes(severity) && SEVERITY_ORDER.indexOf(severity) < SEVERITY_ORDER.indexOf(entry.worstSeverity)) entry.worstSeverity = severity;
+      byControl.set(controlId, entry);
+    }
+    return { controls: [...byControl.values()] };
+  }
+  return {};
+}
+
 export function createTrustLoopRouter() {
   const router = Router();
 
@@ -59,14 +89,28 @@ export function createTrustLoopRouter() {
     }
   });
 
+  // Every finding's workflow state actually lives on its most recent remediation
+  // work item, not on the finding row itself — without this join the frontend has
+  // no way to know a remediation already exists, so "resolve"/"assign" actions on
+  // an alert would PATCH a work item id that was never created and silently no-op.
+  const findingsWithRemediationSelect = sql`
+    SELECT f.*, r.id AS remediation_id, r.status AS remediation_status, r.owner_id AS remediation_owner_id,
+           r.owner_display AS remediation_owner_display, r.sla_due_at AS remediation_sla_due_at, r.updated_at AS remediation_updated_at
+    FROM trust_findings f
+    LEFT JOIN LATERAL (
+      SELECT * FROM trust_remediation_work_items w
+      WHERE w.tenant_id = f.tenant_id AND w.finding_id = f.id
+      ORDER BY w.created_at DESC LIMIT 1
+    ) r ON true
+  `;
   router.get('/findings', async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
       const tenantId = req.user!.tenantId;
       const passportId = typeof req.query.passportId === 'string' ? req.query.passportId : null;
       const rows = passportId
-        ? await db.execute(sql`SELECT * FROM trust_findings WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY CASE severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 WHEN 'low' THEN 4 ELSE 5 END,updated_at DESC`)
-        : await db.execute(sql`SELECT * FROM trust_findings WHERE tenant_id=${tenantId} ORDER BY updated_at DESC`);
+        ? await db.execute(sql`${findingsWithRemediationSelect} WHERE f.tenant_id=${tenantId} AND f.passport_id=${passportId} ORDER BY CASE f.severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 WHEN 'low' THEN 4 ELSE 5 END,f.updated_at DESC`)
+        : await db.execute(sql`${findingsWithRemediationSelect} WHERE f.tenant_id=${tenantId} ORDER BY f.updated_at DESC`);
       return res.json({ findings: (rows as any).rows || [] });
     } catch (error) { return next(error); }
   });
@@ -141,6 +185,31 @@ export function createTrustLoopRouter() {
     } catch (error) { return next(error); }
   });
 
+  router.get('/reports/:passportId/history', async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const passportId = req.params.passportId;
+      const typeFilter = typeof req.query.type === 'string' ? reportTypes.safeParse(req.query.type) : null;
+      if (typeFilter && !typeFilter.success) return res.status(400).json({ error: 'INVALID_REPORT_TYPE' });
+      const rows = typeFilter?.success
+        ? await db.execute(sql`SELECT id,report_type,generated_at,score,confidence_basis_points,completeness_basis_points,canonical_payload_hash FROM trust_report_snapshots WHERE tenant_id=${tenantId} AND passport_id=${passportId} AND report_type=${typeFilter.data} ORDER BY generated_at DESC LIMIT 50`)
+        : await db.execute(sql`SELECT id,report_type,generated_at,score,confidence_basis_points,completeness_basis_points,canonical_payload_hash FROM trust_report_snapshots WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY generated_at DESC LIMIT 50`);
+      return res.json({ snapshots: (rows as any).rows || [] });
+    } catch (error) { return next(error); }
+  });
+
+  router.get('/reports/:passportId/history/:snapshotId', async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const row = (await db.execute(sql`SELECT payload,canonical_payload_hash,generated_at,report_type FROM trust_report_snapshots WHERE id=${req.params.snapshotId} AND tenant_id=${tenantId} AND passport_id=${req.params.passportId} LIMIT 1`) as any).rows?.[0];
+      if (!row) return res.status(404).json({ error: 'REPORT_SNAPSHOT_NOT_FOUND' });
+      const payload = parseJson(row.payload, {});
+      return res.json({ ...(payload as object), reportHash: row.canonical_payload_hash });
+    } catch (error) { return next(error); }
+  });
+
   router.get('/reports/:passportId', async (req: AuthenticatedRequest, res, next) => {
     try {
       const parsed = reportTypes.safeParse(req.query.type || 'executive');
@@ -148,7 +217,7 @@ export function createTrustLoopRouter() {
       const db = req.db!;
       const tenantId = req.user!.tenantId;
       const passportId = req.params.passportId;
-      const passport = (await db.execute(sql`SELECT id,name,overall_score,security_score,compliance_score,evidence,vulnerabilities,timeline FROM passports WHERE id=${passportId} AND tenant_id=${tenantId} LIMIT 1`) as any).rows?.[0];
+      const passport = (await db.execute(sql`SELECT id,name,overall_score,security_score,compliance_score,sbom,evidence,vulnerabilities,timeline FROM passports WHERE id=${passportId} AND tenant_id=${tenantId} LIMIT 1`) as any).rows?.[0];
       if (!passport) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
       const findings = (await db.execute(sql`SELECT id,control_id,title,severity,status,description,remediation,evidence_ids,updated_at,resolved_at FROM trust_findings WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY CASE severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 WHEN 'low' THEN 4 ELSE 5 END,updated_at DESC`) as any).rows || [];
       const evidence = (await db.execute(sql`SELECT id,provider,control_id,subject,source_url,observed_at,verification_method,status,severity,evidence_hash,limitation FROM evidence_ledger WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY observed_at DESC`) as any).rows || [];
@@ -164,6 +233,7 @@ export function createTrustLoopRouter() {
         traceability: 'Report -> Passport -> Risk -> Finding -> Observation -> Provider -> Source -> Timestamp -> Hash',
         resolutionTraceability: 'Finding -> remediation -> new observation -> independent verification',
         limitations: evidence.filter((item: any) => item.limitation).map((item: any) => ({ evidenceId: item.id, limitation: item.limitation })),
+        ...buildReportTypeExtras(parsed.data, passport, findings),
       };
       const canonicalPayload = JSON.stringify(report);
       const reportHash = crypto.createHash('sha256').update(canonicalPayload).digest('hex');

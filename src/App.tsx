@@ -8,6 +8,8 @@ import ExtensionWorkflow from './components/ExtensionWorkflow';
 import ExtensionMarketplace from './components/ExtensionMarketplace';
 import LoginView from './components/LoginView';
 import EvidenceDashboardView from './components/EvidenceDashboardView';
+import EvidenceExplorerView from './components/EvidenceExplorerView';
+import AITrustCenterView from './components/AITrustCenterView';
 import CoverageView from './components/CoverageView';
 import AssetsView from './components/AssetsView';
 import PassportsView from './components/PassportsView';
@@ -39,6 +41,20 @@ const EMPTY_VENDORS: Vendor[] = [];
 const EMPTY_INTEGRATIONS: Integration[] = [];
 const EMPTY_SCANS: Scan[] = [];
 const EMPTY_ALERTS: Alert[] = [];
+
+// An alert's real workflow state lives on its most recent remediation work
+// item (trust_remediation_work_items.status), not on the finding row itself —
+// a finding can exist with no remediation ever created for it yet.
+function deriveAlertStatus(remediationStatus: string | null | undefined, findingStatus: string | null | undefined): Alert['status'] {
+  switch (remediationStatus) {
+    case 'IN_PROGRESS': case 'READY_FOR_VERIFICATION': return 'Acknowledged';
+    case 'BLOCKED': return 'Snoozed';
+    case 'VERIFIED': case 'CLOSED': return 'Resolved';
+    case 'CANCELLED': return 'Cancelled';
+    case 'OPEN': return 'Active';
+    default: return String(findingStatus || '').toLowerCase() === 'resolved' ? 'Resolved' : 'Active';
+  }
+}
 
 function navigate(path: string) {
   window.history.pushState({}, '', path);
@@ -140,7 +156,7 @@ export default function App() {
       const [me, scansResponse, findingsResponse, passportsResponse, clientsResponse, integrationsResponse] = responses;
       if (me.ok) { const data = await me.json().catch(() => null); if (!cancelled) setRole(String(data?.role || 'Viewer')); }
       if (scansResponse.ok) { const data = await scansResponse.json().catch(() => []); if (!cancelled && Array.isArray(data)) setScans(data); }
-      if (findingsResponse.ok) { const data = await findingsResponse.json().catch(() => []); const rows = Array.isArray(data) ? data : data?.findings; if (!cancelled && Array.isArray(rows)) { setFindings(rows); setAlerts(rows.map((row: any) => ({ id: String(row.id), title: String(row.title || row.control_id || 'Trust finding'), severity: String(row.severity || 'Low').replace(/^./, (s: string) => s.toUpperCase()), category: 'Trust finding', clientName: String(row.client_id || 'Tenant'), description: String(row.description || 'Evidence-backed finding'), timestamp: String(row.updated_at || ''), status: String(row.status || 'Active').toLowerCase() === 'closed' ? 'Resolved' : 'Active' })) as Alert[]); } }
+      if (findingsResponse.ok) { const data = await findingsResponse.json().catch(() => []); const rows = Array.isArray(data) ? data : data?.findings; if (!cancelled && Array.isArray(rows)) { setFindings(rows); setAlerts(rows.map((row: any) => ({ id: String(row.id), title: String(row.title || row.control_id || 'Trust finding'), severity: String(row.severity || 'Low').replace(/^./, (s: string) => s.toUpperCase()), category: 'Trust finding', clientName: String(row.client_id || 'Tenant'), description: String(row.description || 'Evidence-backed finding'), timestamp: String(row.updated_at || ''), status: deriveAlertStatus(row.remediation_status, row.status), remediationId: row.remediation_id ? String(row.remediation_id) : null, ownerDisplay: row.remediation_owner_display || null, slaDueAt: row.remediation_sla_due_at || null })) as Alert[]); } }
       if (passportsResponse.ok) { const data = await passportsResponse.json().catch(() => []); const rows = Array.isArray(data) ? data : data?.passports; if (!cancelled && Array.isArray(rows)) { const normalized = rows.map((row: any) => ({ ...row, id: String(row.id), name: String(row.name || 'Unnamed software'), version: String(row.version || 'unknown'), publisher: String(row.publisher || 'unknown'), clientId: row.clientId ? String(row.clientId) : undefined, evidence: Array.isArray(row.evidence) ? row.evidence : [], vulnerabilities: Array.isArray(row.vulnerabilities) ? row.vulnerabilities : [], timeline: Array.isArray(row.timeline) ? row.timeline : [], sbom: Array.isArray(row.sbom) ? row.sbom : [], scores: null, scoreStatus: row.scoreStatus || 'not_authoritatively_scored' })) as SoftwarePassport[]; setPassports(normalized); setAssets(normalized.map((passport: any) => ({ id: passport.id, name: passport.name, hostName: passport.name, type: passport.category || 'software', clientId: passport.clientId, clientName: String(passport.clientId || 'Unobserved'), environment: String(passport.environment || 'Unobserved'), version: passport.version }))); setVendors(EMPTY_VENDORS); } }
       if (clientsResponse.ok) { const data = await clientsResponse.json().catch(() => []); const rows = Array.isArray(data) ? data : data?.clients; if (!cancelled && Array.isArray(rows)) setClients(rows.map((row: any) => ({ ...row, id: String(row.id), name: String(row.name || row.company_name || 'Unnamed client') })) as Client[]); }
       if (integrationsResponse.ok) { const data = await integrationsResponse.json().catch(() => []); if (!cancelled && Array.isArray(data)) setIntegrations(data); }
@@ -157,6 +173,40 @@ export default function App() {
 
   const onNavigateTab = (target: string, itemId?: string) => navigate(itemId ? `${target.startsWith('/') ? target : `/${target}`}/${encodeURIComponent(itemId)}` : target.startsWith('/') ? target : `/${target}`);
   const quickAction = (action: 'add-client' | 'register-passport' | 'scan-sbom') => navigate(action === 'add-client' ? '/clients' : action === 'register-passport' ? '/passports' : '/scans');
+
+  const performAlertAction = async (alert: Alert, action: 'acknowledge' | 'assign' | 'resolve' | 'escalate' | 'snooze' | 'reopen', assigneeDisplay?: string) => {
+    let remediationId = alert.remediationId;
+    if (!remediationId) {
+      const created = await apiFetch('/api/trust-loop/remediations', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ findingId: alert.id, title: alert.title, description: alert.description, priority: alert.severity.toUpperCase() }),
+      });
+      if (!created.ok) return;
+      const createdBody = await created.json().catch(() => null);
+      remediationId = createdBody?.id ? String(createdBody.id) : undefined;
+      if (!remediationId) return;
+    }
+    const patchBody: Record<string, unknown> = {
+      acknowledge: { status: 'IN_PROGRESS' },
+      resolve: { status: 'CLOSED' },
+      snooze: { status: 'BLOCKED' },
+      reopen: { status: 'OPEN' },
+      escalate: { status: 'IN_PROGRESS', slaDueAt: new Date(Date.now() + 4 * 3600 * 1000).toISOString() },
+      assign: { status: 'IN_PROGRESS', ownerDisplay: assigneeDisplay || '' },
+    }[action];
+    const response = await apiFetch(`/api/trust-loop/remediations/${encodeURIComponent(remediationId)}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patchBody),
+    });
+    if (!response.ok) return;
+    const updated = await response.json().catch(() => null);
+    setAlerts((current) => current.map((item) => item.id === alert.id ? {
+      ...item,
+      remediationId,
+      status: deriveAlertStatus(updated?.status ?? String(patchBody.status), null),
+      ownerDisplay: updated?.owner_display ?? (patchBody.ownerDisplay as string | undefined) ?? item.ownerDisplay,
+      slaDueAt: updated?.sla_due_at ?? (patchBody.slaDueAt as string | undefined) ?? item.slaDueAt,
+    } : item));
+  };
   const selectedExtension = useMemo(() => { const match = path.match(/^\/extensions\/([^/]+)/); return match ? decodeURIComponent(match[1]) : null; }, [path]);
   const signOutUser = async () => { await signOut(auth); navigate('/login'); };
 
@@ -170,22 +220,24 @@ export default function App() {
   let view: ReactNode;
   if (selectedExtension) view = <ExtensionWorkflow id={selectedExtension} onNavigate={navigate} />;
   else switch (path) {
-    case '/dashboard': view = <EvidenceDashboardView clients={clients} alerts={alerts} scans={scans} passports={passports} onNavigateTab={onNavigateTab} onOpenQuickAction={quickAction} />; break;
+    case '/dashboard': view = <EvidenceDashboardView clients={clients} alerts={alerts} scans={scans} passports={passports} findings={findings} onNavigateTab={onNavigateTab} onOpenQuickAction={quickAction} />; break;
     case '/coverage': view = <CoverageView clients={clients} scans={scans} passports={passports} onNavigateTab={onNavigateTab} />; break;
+    case '/evidence-explorer': view = <EvidenceExplorerView passports={passports} />; break;
     case '/assets': view = <AssetsView clients={clients} searchQuery="" assets={assets} />; break;
     case '/passports': case '/registry': view = <PassportsView passports={passports} selectedPassportId={selectedPassportId} setSelectedPassportId={setSelectedPassportId} searchQuery="" clients={clients} assets={assets} onNavigateTab={onNavigateTab} onUpdatePassport={(passport) => setPassports((current) => current.map((item) => item.id === passport.id ? passport : item))} />; break;
     case '/scans': view = <ScansView scans={scans} clients={clients} assets={assets} passports={passports} onTriggerNewScan={(scan) => setScans((current) => [scan, ...current.filter((item) => item.id !== scan.id)].slice(0, 100))} />; break;
-    case '/alerts': view = <AlertsView alerts={alerts} onUpdateAlertStatus={async (id, status) => { const backendStatus = status === 'Resolved' ? 'CLOSED' : status === 'Snoozed' ? 'BLOCKED' : 'OPEN'; const response = await apiFetch(`/api/trust-loop/remediations/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: backendStatus }) }); if (response.ok) setAlerts((current) => current.map((item) => item.id === id ? { ...item, status } : item)); }} />; break;
-    case '/reports': view = <ReportsView clients={clients} passports={passports} scans={scans} alerts={alerts} findings={findings} />; break;
+    case '/alerts': view = <AlertsView alerts={alerts} onAlertAction={performAlertAction} />; break;
+    case '/reports': view = <ReportsView clients={clients} passports={passports} scans={scans} alerts={alerts} findings={findings} role={role} />; break;
     case '/trust-graph': view = <TrustGraphView clients={clients} passports={passports} assets={assets} findings={findings} />; break;
     case '/clients': view = <ClientsView clients={clients} selectedClientId={selectedClientId} setSelectedClientId={setSelectedClientId} passports={passports} onNavigateTab={onNavigateTab} searchQuery="" />; break;
     case '/vendors': view = <VendorsView vendors={vendors} searchQuery="" />; break;
-    case '/integrations': view = <IntegrationsView integrations={integrations} onToggleConnection={async (id) => { const response = await apiFetch(`/api/integrations/${encodeURIComponent(id)}/toggle`, { method: 'POST' }); if (response.ok) { const data = await response.json(); setIntegrations((current) => current.map((item) => item.id === id ? { ...item, connected: Boolean(data.connected) } : item)); } }} onSyncIntegration={async (id) => { const response = await apiFetch(`/api/integrations/${encodeURIComponent(id)}/sync`, { method: 'POST' }); if (response.ok) { const data = await response.json(); setIntegrations((current) => current.map((item) => item.id === id ? { ...item, lastSyncDate: data?.lastSyncDate || '' } : item)); } }} onNavigateTab={onNavigateTab} />; break;
+    case '/integrations': view = <IntegrationsView passports={passports} onNavigateTab={onNavigateTab} />; break;
     case '/monitoring': view = <MonitoringView />; break;
     case '/security': view = <SecurityCenterView clients={clients} passports={passports} />; break;
     case '/compliance': view = <ComplianceView clients={clients} />; break;
-    case '/msp': view = <MSPCommandCenter clients={clients} alerts={alerts} onSelectClient={setSelectedClientId} onNavigate={navigate} />; break;
+    case '/msp': view = <MSPCommandCenter clients={clients} alerts={alerts} role={role} onSelectClient={setSelectedClientId} onNavigate={navigate} />; break;
     case '/agent-trust': view = <AgentTrustView />; break;
+    case '/ai-trust-center': view = <AITrustCenterView role={role} />; break;
     case '/enterprise-readiness': view = <EnterpriseReadinessView clients={clients} />; break;
     case '/investor': view = <InvestorHomeView passports={passports} clients={clients} alerts={alerts} onShowTelemetry={() => navigate('/scans')} onNavigateTab={onNavigateTab} />; break;
     case '/founder': view = <FounderDashboardView userRole={role} />; break;

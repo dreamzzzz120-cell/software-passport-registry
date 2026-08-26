@@ -1,22 +1,51 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ArrowRight, Building2, CheckCircle2, Clock3, FileSearch, ShieldAlert, X } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Building2, CheckCircle2, Clock3, FileSearch, ShieldAlert, User, X } from 'lucide-react';
 import { Alert, Client } from '../types';
 import { apiFetch } from '../utils/apiClient';
 
 interface Props {
   clients: Client[];
   alerts: Alert[];
+  role?: string;
   onSelectClient: (id: string) => void;
   onNavigate: (tab: string) => void;
 }
+
+type Assignment = { id: string; client_id: string; technician_display: string; assigned_by: string; updated_at: string };
+type TeamMember = { id: number; email: string; displayName?: string | null; role: string };
 
 const severityClass = (severity: Alert['severity']) => severity === 'Critical'
   ? 'bg-rose-500/10 text-rose-300 border-rose-500/25'
   : severity === 'High' ? 'bg-amber-500/10 text-amber-200 border-amber-500/25'
   : 'bg-sky-500/10 text-sky-200 border-sky-500/25';
 
-export default function MSPCommandCenter({ clients, alerts, onSelectClient, onNavigate }: Props) {
+export default function MSPCommandCenter({ clients, alerts, role = 'Viewer', onSelectClient, onNavigate }: Props) {
   const [selected, setSelected] = useState<Alert | null>(null);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [team, setTeam] = useState<TeamMember[]>([]);
+  const [assigningClientId, setAssigningClientId] = useState<string | null>(null);
+  const canAssign = role === 'Owner' || role === 'Admin';
+
+  const loadAssignments = () => { apiFetch('/api/msp/assignments').then((r) => r.ok ? r.json() : null).then((data) => { if (Array.isArray(data?.assignments)) setAssignments(data.assignments); }).catch(() => {}); };
+  useEffect(() => { loadAssignments(); apiFetch('/api/organization/team').then((r) => r.ok ? r.json() : null).then((data) => { if (Array.isArray(data)) setTeam(data); }).catch(() => {}); }, []);
+
+  const assignmentByClient = useMemo(() => new Map(assignments.map((a) => [a.client_id, a])), [assignments]);
+  const assignTechnician = async (clientId: string, member: TeamMember) => {
+    const response = await apiFetch('/api/msp/assignments', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, technicianUserId: member.id, technicianDisplay: member.displayName || member.email }) });
+    if (response.ok) { loadAssignments(); setAssigningClientId(null); }
+  };
+  const unassignTechnician = async (clientId: string) => {
+    const response = await apiFetch(`/api/msp/assignments/${encodeURIComponent(clientId)}`, { method: 'DELETE' });
+    if (response.ok) loadAssignments();
+  };
+
+  const clientRiskRollup = useMemo(() => clients.map((client) => {
+    const clientAlerts = alerts.filter((a) => a.clientName === client.name);
+    const active = clientAlerts.filter((a) => a.status !== 'Resolved' && a.status !== 'Cancelled');
+    const critical = active.filter((a) => a.severity === 'Critical').length;
+    const high = active.filter((a) => a.severity === 'High').length;
+    return { client, activeCount: active.length, critical, high, assignment: assignmentByClient.get(client.id) };
+  }).sort((a, b) => (b.critical - a.critical) || (b.high - a.high) || (b.activeCount - a.activeCount)), [clients, alerts, assignmentByClient]);
   const [finding, setFinding] = useState<any | null>(null);
   const [findingError, setFindingError] = useState<string | null>(null);
   const [findingLoading, setFindingLoading] = useState(false);
@@ -111,6 +140,42 @@ export default function MSPCommandCenter({ clients, alerts, onSelectClient, onNa
       <Metric label="Healthy" value={Math.max(0, clients.length - criticalClients - attentionClients)} icon={<CheckCircle2 />} tone="text-emerald-300" />
       <Metric label="Need attention" value={attentionClients} icon={<AlertTriangle />} tone="text-amber-200" />
       <Metric label="Critical" value={criticalClients} icon={<ShieldAlert />} tone="text-rose-300" />
+    </section>
+
+    <section className="rounded-2xl border border-slate-800 bg-[#0d1322] shadow-2xl shadow-black/20">
+      <div className="flex flex-col gap-3 border-b border-slate-800 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
+        <div><h2 className="text-lg font-bold text-white">Cross-client risk</h2><p className="mt-1 text-sm text-slate-400">Every client ranked by active critical and high findings, with technician assignment.</p></div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px] text-left text-sm">
+          <thead className="border-b border-slate-800 text-[10px] uppercase tracking-[.14em] text-slate-600"><tr><th className="px-5 py-3">Client</th><th className="px-5 py-3">Critical</th><th className="px-5 py-3">High</th><th className="px-5 py-3">Active findings</th><th className="px-5 py-3">Assigned technician</th></tr></thead>
+          <tbody className="divide-y divide-slate-800">
+            {clientRiskRollup.map(({ client, activeCount, critical, high, assignment }) => (
+              <tr key={client.id}>
+                <td className="px-5 py-3 font-medium text-slate-100">{client.name}</td>
+                <td className="px-5 py-3">{critical > 0 ? <span className="rounded-md border border-rose-500/25 bg-rose-500/10 px-2 py-0.5 text-xs font-bold text-rose-300">{critical}</span> : <span className="text-slate-600">0</span>}</td>
+                <td className="px-5 py-3">{high > 0 ? <span className="rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-xs font-bold text-amber-200">{high}</span> : <span className="text-slate-600">0</span>}</td>
+                <td className="px-5 py-3 text-slate-300">{activeCount}</td>
+                <td className="px-5 py-3">
+                  {assigningClientId === client.id ? (
+                    <select autoFocus onBlur={() => setAssigningClientId(null)} onChange={(e) => { const member = team.find((m) => String(m.id) === e.target.value); if (member) void assignTechnician(client.id, member); }} className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200">
+                      <option value="">Select technician…</option>
+                      {team.map((member) => <option key={member.id} value={member.id}>{member.displayName || member.email}</option>)}
+                    </select>
+                  ) : assignment ? (
+                    <div className="flex items-center gap-2 text-xs text-slate-300"><User className="h-3 w-3 text-slate-500" />{assignment.technician_display}
+                      {canAssign && <button onClick={() => void unassignTechnician(client.id)} className="text-slate-600 hover:text-rose-300">×</button>}
+                      {canAssign && <button onClick={() => setAssigningClientId(client.id)} className="text-cyan-400 hover:text-cyan-300">change</button>}
+                    </div>
+                  ) : canAssign ? (
+                    <button onClick={() => setAssigningClientId(client.id)} className="rounded-lg border border-slate-700 px-2.5 py-1 text-xs text-slate-400 hover:bg-slate-800">Assign…</button>
+                  ) : <span className="text-xs text-slate-600">Unassigned</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <section className="rounded-2xl border border-slate-800 bg-[#0d1322] shadow-2xl shadow-black/20">

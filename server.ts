@@ -19,8 +19,13 @@ import { createScansRouter } from './src/routes/scans.ts';
 import { createTrustLoopRouter } from './src/routes/trust-loop.ts';
 import { createIntegrationMonitoringRouter } from './src/routes/integration-monitoring.ts';
 import { createAgentApiRouter } from './src/routes/agent-api.ts';
+import { createMspRouter } from './src/routes/msp.ts';
+import { createAiTrustRouter } from './src/routes/ai-trust.ts';
 import { createMcpTransport } from './src/mcp/transport.ts';
 import { executePublicMcpTool } from './src/mcp/execute.ts';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const startedAt = Date.now();
@@ -120,6 +125,8 @@ app.use('/api/trust-loop', createTrustLoopRouter());
 app.use('/api/integration-monitoring', createIntegrationMonitoringRouter());
 app.use('/api/monitoring', createMonitoringRouter());
 app.use('/api/agent/v1', createAgentApiRouter());
+app.use('/api/msp', requireAuth, createMspRouter());
+app.use('/api/ai-trust', requireAuth, createAiTrustRouter());
 
 const mcpBearer = process.env.SPR_MCP_BEARER_TOKEN;
 if (mcpBearer) {
