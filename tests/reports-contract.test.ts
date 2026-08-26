@@ -20,7 +20,7 @@ describe('SPR reports center contracts', () => {
     expect(trustLoop).toContain('function buildReportTypeExtras');
     expect(trustLoop).toContain("if (reportType === 'sbom')");
     expect(trustLoop).toContain("if (reportType === 'compliance')");
-    expect(trustLoop).toContain('...buildReportTypeExtras(parsed.data, passport, findings)');
+    expect(trustLoop).toContain('...buildReportTypeExtras(reportType, passport, findings)');
   });
 
   it('signs report share tokens with a kind discriminator distinct from passport verification tokens', () => {

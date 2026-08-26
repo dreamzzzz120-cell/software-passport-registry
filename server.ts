@@ -16,6 +16,7 @@ import { createLiveIntegrationsRouter } from './src/routes/integrations-live.ts'
 import { createMonitoringRouter } from './src/routes/monitoring.ts';
 import { createPublicConnectRouter } from './src/routes/public-connect.ts';
 import { createScansRouter } from './src/routes/scans.ts';
+import { createComplianceRouter } from './src/routes/compliance.ts';
 import { createTrustLoopRouter } from './src/routes/trust-loop.ts';
 import { createIntegrationMonitoringRouter } from './src/routes/integration-monitoring.ts';
 import { createAgentApiRouter } from './src/routes/agent-api.ts';
@@ -135,6 +136,7 @@ if (mcpBearer) {
 }
 
 app.use('/api', createScansRouter());
+app.use('/api/compliance', createComplianceRouter());
 // esbuild bundles this to a real CJS module for production (dist/server.cjs),
 // where __dirname is a genuine, reliable global; its import.meta.url shim is
 // not. tsx runs this file directly as native ESM for local dev, where

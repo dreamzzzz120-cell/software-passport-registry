@@ -61,7 +61,10 @@ const FRAMEWORKS: Record<Framework, { name: string; description: string; control
 
 const formatDate = (value?: string | null) => value ? new Date(value).toLocaleString() : 'Not observed';
 
-export default function ComplianceView({ clients }: { clients: Client[] }) {
+export default function ComplianceView({ clients, role = 'Viewer' }: { clients: Client[]; role?: string }) {
+  // Matches backend gating exactly: POST/PUT/DELETE /api/compliance/schedules
+  // and POST .../run all require Owner/Admin/Operator (src/routes/compliance.ts).
+  const canManageSchedules = ['Owner', 'Admin', 'Operator'].includes(role);
   const [framework, setFramework] = useState<Framework>('SOC2');
   const [query, setQuery] = useState('');
   const [schedules, setSchedules] = useState<ComplianceSchedule[]>([]);
@@ -95,6 +98,7 @@ export default function ComplianceView({ clients }: { clients: Client[] }) {
 
   const createSchedule = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!canManageSchedules) return;
     if (!newClientId || !newTargetEmail) { setError('Select a client and provide a target email.'); return; }
     setActionLoading('create'); setError(null);
     try {
@@ -108,6 +112,7 @@ export default function ComplianceView({ clients }: { clients: Client[] }) {
   };
 
   const toggleSchedule = async (schedule: ComplianceSchedule) => {
+    if (!canManageSchedules) return;
     setActionLoading(`${schedule.id}:toggle`); setError(null);
     try {
       const nextStatus = schedule.status === 'Active' ? 'Paused' : 'Active';
@@ -120,6 +125,7 @@ export default function ComplianceView({ clients }: { clients: Client[] }) {
   };
 
   const deleteSchedule = async (id: string) => {
+    if (!canManageSchedules) return;
     setActionLoading(`${id}:delete`); setError(null);
     try {
       const response = await apiFetch(`/api/compliance/schedules/${encodeURIComponent(id)}`, { method: 'DELETE' });
@@ -130,6 +136,7 @@ export default function ComplianceView({ clients }: { clients: Client[] }) {
   };
 
   const runSchedule = async (id: string) => {
+    if (!canManageSchedules) return;
     setActionLoading(`${id}:run`); setError(null);
     try {
       const response = await apiFetch(`/api/compliance/schedules/${encodeURIComponent(id)}/run`, { method: 'POST' });
@@ -152,9 +159,9 @@ export default function ComplianceView({ clients }: { clients: Client[] }) {
 
     <section className="rounded-3xl border border-white/[.07] bg-white/[.025] p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">{FRAMEWORKS[framework].name}</h2><p className="mt-1 text-sm text-slate-500">{FRAMEWORKS[framework].description}</p></div><label className="flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2"><Search size={15} className="text-slate-500"/><input aria-label="Search compliance controls" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search controls" className="bg-transparent text-sm outline-none"/></label></div><div className="mt-5 space-y-3">{controls.map((control) => <article key={control.code} className="rounded-2xl border border-white/[.07] bg-black/10 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><div className="text-xs font-mono text-cyan-200">{control.code}</div><h3 className="mt-1 font-medium">{control.description}</h3></div><span className="rounded-full border border-amber-300/20 bg-amber-300/[.05] px-2.5 py-1 text-[10px] font-semibold text-amber-100">Not verified</span></div><p className="mt-2 text-xs text-slate-500">{control.evidence}</p></article>)}</div></section>
 
-    <section className="rounded-3xl border border-white/[.07] bg-white/[.025] p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">Compliance verification schedules</h2><p className="mt-1 text-sm text-slate-500">Server-backed schedules only. A queued audit is not itself a passed audit.</p></div><button onClick={() => setShowAdd((value) => !value)} className="inline-flex items-center gap-2 rounded-xl bg-cyan-300 px-3 py-2 text-xs font-bold text-slate-950"><Plus size={14}/> Add schedule</button></div>
+    <section className="rounded-3xl border border-white/[.07] bg-white/[.025] p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">Compliance verification schedules</h2><p className="mt-1 text-sm text-slate-500">Server-backed schedules only. A queued audit is not itself a passed audit. "Verify now" generates a real report — it does not email anyone or run automatically.</p></div><button onClick={() => setShowAdd((value) => !value)} disabled={!canManageSchedules} title={!canManageSchedules ? `Your ${role} role cannot manage compliance schedules.` : undefined} className="inline-flex items-center gap-2 rounded-xl bg-cyan-300 px-3 py-2 text-xs font-bold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"><Plus size={14}/> Add schedule</button></div>
       {showAdd && <form onSubmit={createSchedule} className="mt-4 grid gap-3 rounded-2xl border border-white/[.07] bg-black/10 p-4 md:grid-cols-4"><select aria-label="Client" value={newClientId} onChange={(event) => setNewClientId(event.target.value)} className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm"><option value="">Select client</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select><select aria-label="Frequency" value={newFrequency} onChange={(event) => setNewFrequency(event.target.value)} className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm"><option>Daily</option><option>Weekly</option><option>Monthly</option></select><input aria-label="Target email" type="email" required value={newTargetEmail} onChange={(event) => setNewTargetEmail(event.target.value)} placeholder="notification@example.com" className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm"/><button type="submit" disabled={actionLoading === 'create'} className="rounded-xl bg-cyan-300 px-3 py-2 text-sm font-bold text-slate-950">{actionLoading === 'create' ? 'Saving…' : 'Create'}</button></form>}
-      {loading ? <div className="mt-4 text-sm text-slate-500">Loading schedules…</div> : schedules.length === 0 ? <div className="mt-4 rounded-2xl border border-dashed border-white/10 p-8 text-center"><CalendarClock className="mx-auto h-8 w-8 text-slate-600"/><p className="mt-2 text-sm text-slate-400">No compliance schedules are configured.</p></div> : <div className="mt-4 space-y-3">{schedules.map((schedule) => <article key={schedule.id} className="rounded-2xl border border-white/[.07] p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="text-sm font-semibold">{clients.find((client) => client.id === schedule.clientId)?.name || 'Unresolved client'}</div><div className="mt-1 text-xs text-slate-500">{schedule.frequency} · Last run {formatDate(schedule.lastAuditAt)} · Next check {formatDate(schedule.nextAuditAt)}</div></div><span className="rounded-full border border-white/10 px-2 py-1 text-[10px] text-slate-400">{schedule.status}</span></div><div className="mt-4 flex flex-wrap gap-2"><button disabled={!!actionLoading} onClick={() => void runSchedule(schedule.id)} className="inline-flex items-center gap-2 rounded-lg bg-indigo-500 px-3 py-2 text-xs font-semibold disabled:opacity-50"><Play size={13}/> {actionLoading === `${schedule.id}:run` ? 'Queueing…' : 'Verify now'}</button><button disabled={!!actionLoading} onClick={() => void toggleSchedule(schedule)} className="rounded-lg border border-white/10 px-3 py-2 text-xs disabled:opacity-50">{schedule.status === 'Active' ? 'Pause' : 'Resume'}</button><button disabled={!!actionLoading} onClick={() => void deleteSchedule(schedule.id)} className="inline-flex items-center gap-2 rounded-lg border border-rose-300/15 px-3 py-2 text-xs text-rose-200 disabled:opacity-50"><Trash2 size={13}/> Delete</button></div></article>)}</div>}
+      {loading ? <div className="mt-4 text-sm text-slate-500">Loading schedules…</div> : schedules.length === 0 ? <div className="mt-4 rounded-2xl border border-dashed border-white/10 p-8 text-center"><CalendarClock className="mx-auto h-8 w-8 text-slate-600"/><p className="mt-2 text-sm text-slate-400">No compliance schedules are configured.</p></div> : <div className="mt-4 space-y-3">{schedules.map((schedule) => <article key={schedule.id} className="rounded-2xl border border-white/[.07] p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="text-sm font-semibold">{clients.find((client) => client.id === schedule.clientId)?.name || 'Unresolved client'}</div><div className="mt-1 text-xs text-slate-500">{schedule.frequency} · Last run {formatDate(schedule.lastAuditAt)} · Next check {formatDate(schedule.nextAuditAt)}</div></div><span className="rounded-full border border-white/10 px-2 py-1 text-[10px] text-slate-400">{schedule.status}</span></div><div className="mt-4 flex flex-wrap gap-2"><button disabled={!canManageSchedules || !!actionLoading} title={!canManageSchedules ? `Your ${role} role cannot run compliance verifications.` : undefined} onClick={() => void runSchedule(schedule.id)} className="inline-flex items-center gap-2 rounded-lg bg-indigo-500 px-3 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"><Play size={13}/> {actionLoading === `${schedule.id}:run` ? 'Queueing…' : 'Verify now'}</button><button disabled={!canManageSchedules || !!actionLoading} title={!canManageSchedules ? `Your ${role} role cannot change schedules.` : undefined} onClick={() => void toggleSchedule(schedule)} className="rounded-lg border border-white/10 px-3 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50">{schedule.status === 'Active' ? 'Pause' : 'Resume'}</button><button disabled={!canManageSchedules || !!actionLoading} title={!canManageSchedules ? `Your ${role} role cannot delete schedules.` : undefined} onClick={() => void deleteSchedule(schedule.id)} className="inline-flex items-center gap-2 rounded-lg border border-rose-300/15 px-3 py-2 text-xs text-rose-200 disabled:cursor-not-allowed disabled:opacity-50"><Trash2 size={13}/> Delete</button></div></article>)}</div>}
     </section>
 
     <footer className="rounded-2xl border border-white/[.07] bg-white/[.02] p-4 text-xs text-slate-500">{clients.length} client record{clients.length === 1 ? '' : 's'} are available to this workspace. This is observed application data, not a compliance certification.</footer>

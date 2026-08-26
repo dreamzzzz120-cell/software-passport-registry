@@ -214,33 +214,41 @@ export function createTrustLoopRouter() {
     try {
       const parsed = reportTypes.safeParse(req.query.type || 'executive');
       if (!parsed.success) return res.status(400).json({ error: 'INVALID_REPORT_TYPE' });
-      const db = req.db!;
-      const tenantId = req.user!.tenantId;
-      const passportId = req.params.passportId;
-      const passport = (await db.execute(sql`SELECT id,name,overall_score,security_score,compliance_score,sbom,evidence,vulnerabilities,timeline FROM passports WHERE id=${passportId} AND tenant_id=${tenantId} LIMIT 1`) as any).rows?.[0];
-      if (!passport) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
-      const findings = (await db.execute(sql`SELECT id,control_id,title,severity,status,description,remediation,evidence_ids,updated_at,resolved_at FROM trust_findings WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY CASE severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 WHEN 'low' THEN 4 ELSE 5 END,updated_at DESC`) as any).rows || [];
-      const evidence = (await db.execute(sql`SELECT id,provider,control_id,subject,source_url,observed_at,verification_method,status,severity,evidence_hash,limitation FROM evidence_ledger WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY observed_at DESC`) as any).rows || [];
-      const observations = (await db.execute(sql`SELECT id,observation_version,generated_at,previous_observation_id,evidence_ids,finding_ids,canonical_payload_hash,completeness_basis_points,open_finding_count,unknown_dimension_count FROM trust_observations WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY observation_version DESC`) as any).rows || [];
-      const remediation = (await db.execute(sql`SELECT * FROM trust_remediation_work_items WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY updated_at DESC`) as any).rows || [];
-      const verification = (await db.execute(sql`SELECT * FROM remediation_verification_ledger WHERE tenant_id=${tenantId} AND finding_id IN (SELECT id FROM trust_findings WHERE tenant_id=${tenantId} AND passport_id=${passportId}) ORDER BY created_at DESC`) as any).rows || [];
-      const latest = observations[0];
-      const report = {
-        schemaVersion: 'spr.report.v2', reportType: parsed.data, generatedAt: new Date().toISOString(), passport: { id: passport.id, name: passport.name },
-        risk: { overall: passport.overall_score, security: passport.security_score, compliance: passport.compliance_score },
-        evidenceQuality: { completenessBasisPoints: latest?.completeness_basis_points ?? 0, unknownDimensions: latest?.unknown_dimension_count ?? 0, latestObservationAt: latest?.generated_at ?? null },
-        findings, evidence, observations, remediation, verification,
-        traceability: 'Report -> Passport -> Risk -> Finding -> Observation -> Provider -> Source -> Timestamp -> Hash',
-        resolutionTraceability: 'Finding -> remediation -> new observation -> independent verification',
-        limitations: evidence.filter((item: any) => item.limitation).map((item: any) => ({ evidenceId: item.id, limitation: item.limitation })),
-        ...buildReportTypeExtras(parsed.data, passport, findings),
-      };
-      const canonicalPayload = JSON.stringify(report);
-      const reportHash = crypto.createHash('sha256').update(canonicalPayload).digest('hex');
-      await db.execute(sql`INSERT INTO trust_report_snapshots (id,tenant_id,passport_id,report_type,generated_at,score,confidence_basis_points,completeness_basis_points,evidence_ids,finding_ids,observation_id,canonical_payload_hash,payload,created_at) VALUES (${id('report')},${tenantId},${passportId},${parsed.data},${report.generatedAt},${Number(passport.overall_score ?? 0)},${Number(latest?.confidence_basis_points ?? 0)},${Number(latest?.completeness_basis_points ?? 0)},${JSON.stringify(evidence.map((item: any) => item.id))},${JSON.stringify(findings.map((item: any) => item.id))},${latest?.id ?? null},${reportHash},${canonicalPayload},${report.generatedAt}) ON CONFLICT (tenant_id,passport_id,report_type,canonical_payload_hash) DO NOTHING`);
-      return res.json({ ...report, reportHash });
+      const report = await buildAndPersistReport(req.db!, req.user!.tenantId, req.params.passportId, parsed.data);
+      if (!report) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
+      return res.json(report);
     } catch (error) { return next(error); }
   });
 
   return router;
+}
+
+// Shared by GET /reports/:passportId above and by other routers (e.g. the
+// compliance-schedule "run" action) that need to generate the same
+// evidence-backed report rather than building a second generator. Returns
+// null if the passport doesn't exist for this tenant; the caller decides
+// how to surface that (404 vs. skip-and-continue for a multi-passport run).
+export async function buildAndPersistReport(db: any, tenantId: string, passportId: string, reportType: string) {
+  const passport = (await db.execute(sql`SELECT id,name,overall_score,security_score,compliance_score,sbom,evidence,vulnerabilities,timeline FROM passports WHERE id=${passportId} AND tenant_id=${tenantId} LIMIT 1`) as any).rows?.[0];
+  if (!passport) return null;
+  const findings = (await db.execute(sql`SELECT id,control_id,title,severity,status,description,remediation,evidence_ids,updated_at,resolved_at FROM trust_findings WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY CASE severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 WHEN 'low' THEN 4 ELSE 5 END,updated_at DESC`) as any).rows || [];
+  const evidence = (await db.execute(sql`SELECT id,provider,control_id,subject,source_url,observed_at,verification_method,status,severity,evidence_hash,limitation FROM evidence_ledger WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY observed_at DESC`) as any).rows || [];
+  const observations = (await db.execute(sql`SELECT id,observation_version,generated_at,previous_observation_id,evidence_ids,finding_ids,canonical_payload_hash,completeness_basis_points,open_finding_count,unknown_dimension_count FROM trust_observations WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY observation_version DESC`) as any).rows || [];
+  const remediation = (await db.execute(sql`SELECT * FROM trust_remediation_work_items WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY updated_at DESC`) as any).rows || [];
+  const verification = (await db.execute(sql`SELECT * FROM remediation_verification_ledger WHERE tenant_id=${tenantId} AND finding_id IN (SELECT id FROM trust_findings WHERE tenant_id=${tenantId} AND passport_id=${passportId}) ORDER BY created_at DESC`) as any).rows || [];
+  const latest = observations[0];
+  const report = {
+    schemaVersion: 'spr.report.v2', reportType, generatedAt: new Date().toISOString(), passport: { id: passport.id, name: passport.name },
+    risk: { overall: passport.overall_score, security: passport.security_score, compliance: passport.compliance_score },
+    evidenceQuality: { completenessBasisPoints: latest?.completeness_basis_points ?? 0, unknownDimensions: latest?.unknown_dimension_count ?? 0, latestObservationAt: latest?.generated_at ?? null },
+    findings, evidence, observations, remediation, verification,
+    traceability: 'Report -> Passport -> Risk -> Finding -> Observation -> Provider -> Source -> Timestamp -> Hash',
+    resolutionTraceability: 'Finding -> remediation -> new observation -> independent verification',
+    limitations: evidence.filter((item: any) => item.limitation).map((item: any) => ({ evidenceId: item.id, limitation: item.limitation })),
+    ...buildReportTypeExtras(reportType, passport, findings),
+  };
+  const canonicalPayload = JSON.stringify(report);
+  const reportHash = crypto.createHash('sha256').update(canonicalPayload).digest('hex');
+  await db.execute(sql`INSERT INTO trust_report_snapshots (id,tenant_id,passport_id,report_type,generated_at,score,confidence_basis_points,completeness_basis_points,evidence_ids,finding_ids,observation_id,canonical_payload_hash,payload,created_at) VALUES (${id('report')},${tenantId},${passportId},${reportType},${report.generatedAt},${Number(passport.overall_score ?? 0)},${Number(latest?.confidence_basis_points ?? 0)},${Number(latest?.completeness_basis_points ?? 0)},${JSON.stringify(evidence.map((item: any) => item.id))},${JSON.stringify(findings.map((item: any) => item.id))},${latest?.id ?? null},${reportHash},${canonicalPayload},${report.generatedAt}) ON CONFLICT (tenant_id,passport_id,report_type,canonical_payload_hash) DO NOTHING`);
+  return { ...report, reportHash };
 }
