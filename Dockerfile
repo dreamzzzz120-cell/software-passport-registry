@@ -3,8 +3,8 @@ WORKDIR /app
 ENV NODE_ENV=development
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 
-COPY package.json ./
-RUN npm install --ignore-scripts --no-audit --no-fund
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts --no-audit --no-fund
 # Force Railway to rebuild the source layer after SPR security hardening.
 ARG SOURCE_REV=railway-security-hardening-20260819-v3
 RUN test -n "$SOURCE_REV"
