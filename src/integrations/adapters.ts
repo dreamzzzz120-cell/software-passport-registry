@@ -86,6 +86,31 @@ export async function safeRequestJson(url: string, init: RequestInit = {}) {
 function sha256(value: string) { return `sha256:${crypto.createHash('sha256').update(value, 'utf8').digest('hex')}`; }
 function canonicalJson(value: unknown): string { if (value === null || typeof value !== 'object') return JSON.stringify(value); if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`; return `{${Object.keys(value as Record<string, unknown>).sort().map(k => `${JSON.stringify(k)}:${canonicalJson((value as Record<string, unknown>)[k])}`).join(',')}}`; }
 export function bearer(credentials: ProviderCredentials) { if (!credentials.accessToken) throw new Error('CREDENTIAL_MISSING_ACCESS_TOKEN'); return { Authorization: `Bearer ${credentials.accessToken}` }; }
+function base64url(input: Buffer | string): string { return (Buffer.isBuffer(input) ? input : Buffer.from(input)).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+// Google service-account keys don't work as a bearer token directly -- they
+// must sign a short-lived JWT and exchange it for a real access token
+// (RFC 7523 / Google's server-to-server OAuth2 flow). Split out from the
+// network call so the JWT construction itself is unit-testable without a
+// real Google credential.
+export function buildGoogleServiceAccountJwt(serviceAccountKeyJson: string, scope: string, nowSeconds: number = Math.floor(Date.now() / 1000)): { jwt: string; tokenUri: string } {
+  let key: any;
+  try { key = JSON.parse(serviceAccountKeyJson); } catch { throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY_INVALID_JSON'); }
+  if (key?.type !== 'service_account' || !key.client_email || !key.private_key) throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY_MISSING_FIELDS');
+  const tokenUri = typeof key.token_uri === 'string' && key.token_uri ? key.token_uri : 'https://oauth2.googleapis.com/token';
+  const header = { alg: 'RS256', typ: 'JWT' };
+  const claims = { iss: key.client_email, scope, aud: tokenUri, iat: nowSeconds, exp: nowSeconds + 3600 };
+  const unsigned = `${base64url(JSON.stringify(header))}.${base64url(JSON.stringify(claims))}`;
+  const signature = crypto.sign('RSA-SHA256', Buffer.from(unsigned), key.private_key);
+  return { jwt: `${unsigned}.${base64url(signature)}`, tokenUri };
+}
+export async function mintGoogleServiceAccountAccessToken(serviceAccountKeyJson: string, scope = 'https://www.googleapis.com/auth/cloud-platform.read-only'): Promise<string> {
+  const { jwt, tokenUri } = buildGoogleServiceAccountJwt(serviceAccountKeyJson, scope);
+  const body = new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: jwt }).toString();
+  const r = await safeRequestJson(tokenUri, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body });
+  const accessToken = (r.body as any)?.access_token;
+  if (typeof accessToken !== 'string' || !accessToken) throw new Error('GOOGLE_TOKEN_EXCHANGE_FAILED');
+  return accessToken;
+}
 export function basic(credentials: ProviderCredentials) { if (!credentials.email || !credentials.apiToken) throw new Error('CREDENTIAL_MISSING_EMAIL_OR_TOKEN'); return { Authorization: `Basic ${Buffer.from(`${credentials.email}:${credentials.apiToken}`).toString('base64')}` }; }
 function evidence(provider: Provider, subject: string, sourceUrl: string, body: unknown, verificationMethod: string): EvidenceResult { const observedAt = new Date().toISOString(); const canonical = canonicalJson({ provider, subject, sourceUrl, observedAt, body }); return { provider, subject, observedAt, verificationMethod, sourceUrl, responseHash: sha256(canonical), observation: body }; }
 function hmac(key: crypto.BinaryLike, data: string, encoding?: crypto.BinaryToTextEncoding): Buffer | string { const digest = crypto.createHmac('sha256', key).update(data, 'utf8').digest(); return encoding ? digest.toString(encoding) : digest; }
@@ -102,7 +127,7 @@ export async function collectProviderEvidence(provider: Provider, credentials: P
     case 'microsoft-365': { const orgUrl = 'https://graph.microsoft.com/v1.0/organization'; const org = await safeRequestJson(orgUrl, { headers: bearer(credentials) }); return evidence(provider, 'tenant-organization', orgUrl, org.body, 'Microsoft Graph organization API authenticated request'); }
     case 'aws': { const request = awsSignedSts(credentials); const r = await safeRequestJson(request.url, { method: 'POST', headers: request.headers, body: request.body }); return evidence(provider, 'aws-account-identity', request.url, r.body, 'AWS Signature Version 4 STS GetCallerIdentity request'); }
     case 'azure': { const subscriptionId = credentials.subscriptionId; if (!subscriptionId || !credentials.accessToken) throw new Error('CREDENTIAL_MISSING'); const subUrl = `https://management.azure.com/subscriptions/${encodeURIComponent(subscriptionId)}?api-version=2022-12-01`; const rgUrl = `https://management.azure.com/subscriptions/${encodeURIComponent(subscriptionId)}/resourcegroups?api-version=2021-04-01&$top=5`; const subscription = await safeRequestJson(subUrl, { headers: bearer(credentials) }); const resourceGroups = await safeRequestJson(rgUrl, { headers: bearer(credentials) }); return evidence(provider, subscriptionId, subUrl, { subscription: subscription.body, resourceGroups: resourceGroups.body }, 'Azure Resource Manager subscription and resource-group requests'); }
-    case 'google-cloud': { const url = 'https://cloudresourcemanager.googleapis.com/v3/projects?pageSize=5'; const r = await safeRequestJson(url, { headers: bearer(credentials) }); return evidence(provider, 'accessible-projects', url, r.body, 'Google Cloud Resource Manager authenticated project request'); }
+    case 'google-cloud': { const url = 'https://cloudresourcemanager.googleapis.com/v3/projects?pageSize=5'; const usingServiceAccount = Boolean(credentials.serviceAccountKey); const token = usingServiceAccount ? await mintGoogleServiceAccountAccessToken(credentials.serviceAccountKey) : credentials.accessToken; if (!token) throw new Error('CREDENTIAL_MISSING_ACCESS_TOKEN'); const r = await safeRequestJson(url, { headers: { Authorization: `Bearer ${token}` } }); return evidence(provider, 'accessible-projects', url, r.body, usingServiceAccount ? 'Google Cloud Resource Manager authenticated project request (service-account JWT exchange)' : 'Google Cloud Resource Manager authenticated project request'); }
     case 'connectwise': { const base = credentials.baseUrl?.replace(/\/$/, ''); if (!base || !credentials.companyId || !credentials.publicKey || !credentials.privateKey) throw new Error('CREDENTIAL_MISSING'); const auth = Buffer.from(`${credentials.companyId}+${credentials.publicKey}:${credentials.privateKey}`).toString('base64'); const url = `${base}/v4_6_release/apis/3.0/company/companies?pageSize=5`; const r = await safeRequestJson(url, { headers: { Authorization: `Basic ${auth}` } }); return evidence(provider, credentials.companyId, url, r.body, 'ConnectWise Manage company inventory API authenticated request'); }
     case 'autotask': { const base = credentials.baseUrl?.replace(/\/$/, ''); if (!base || !credentials.username || !credentials.secret || !credentials.integrationCode) throw new Error('CREDENTIAL_MISSING'); const url = `${base}/v1.0/Companies/query`; const r = await safeRequestJson(url, { method: 'POST', headers: { ApiIntegrationCode: credentials.integrationCode, UserName: credentials.username, Secret: credentials.secret, 'Content-Type': 'application/json' }, body: JSON.stringify({ filter: [], MaxRecords: 5 }) }); return evidence(provider, credentials.username, url, r.body, 'Autotask Companies API authenticated request'); }
     case 'ninjaone': { const base = (credentials.baseUrl || 'https://app.ninjarmm.com').replace(/\/$/, ''); const url = `${base}/api/v2/devices?pageSize=5`; const r = await safeRequestJson(url, { headers: bearer(credentials) }); return evidence(provider, 'accessible-devices', url, r.body, 'NinjaOne device inventory API authenticated request'); }

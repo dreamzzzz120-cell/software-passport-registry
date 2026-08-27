@@ -40,6 +40,16 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
   const [teamError, setTeamError] = useState<string | null>(null);
   const [teamSuccess, setTeamSuccess] = useState<string | null>(null);
 
+  // Persistent white-label branding (migration 0030) -- set once, applied to
+  // every future white-label report export instead of retyping it each time.
+  const [brandingCompanyName, setBrandingCompanyName] = useState('');
+  const [brandingColor, setBrandingColor] = useState('#3794ff');
+  const [brandingLogoDataUrl, setBrandingLogoDataUrl] = useState<string | null>(null);
+  const [brandingUpdatedAt, setBrandingUpdatedAt] = useState<string | null>(null);
+  const [savingBranding, setSavingBranding] = useState(false);
+  const [brandingError, setBrandingError] = useState<string | null>(null);
+  const [brandingSuccess, setBrandingSuccess] = useState<string | null>(null);
+
   // profile is fetched from /api/user/me, which already returns the caller's
   // role — derive gating from it directly rather than requiring a separate
   // prop. Matches backend enforcement exactly: POST /api/tenant/offboard is
@@ -72,6 +82,55 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
       console.error('Error fetching profile or organization team:', err);
     } finally {
       setLoadingTeam(false);
+    }
+  };
+
+  const fetchBranding = async () => {
+    try {
+      const res = await apiFetch('/api/organization/branding');
+      if (res.ok) {
+        const data = await res.json();
+        setBrandingCompanyName(data.companyName || '');
+        setBrandingColor(data.brandColor || '#3794ff');
+        setBrandingLogoDataUrl(data.logoDataUrl || null);
+        setBrandingUpdatedAt(data.updatedAt || null);
+      }
+    } catch (err) {
+      console.error('Error fetching branding:', err);
+    }
+  };
+
+  const handleBrandingLogoFile = (file: File | null) => {
+    if (!file) return;
+    if (file.size > 220_000) { setBrandingError('Logo file is too large. Use an image under ~200KB.'); return; }
+    const reader = new FileReader();
+    reader.onload = () => { if (typeof reader.result === 'string') setBrandingLogoDataUrl(reader.result); };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveBranding = async () => {
+    if (!canManageTeam) return;
+    setSavingBranding(true);
+    setBrandingError(null);
+    setBrandingSuccess(null);
+    try {
+      const res = await apiFetch('/api/organization/branding', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyName: brandingCompanyName.trim() || null,
+          brandColor: brandingColor || null,
+          logoDataUrl: brandingLogoDataUrl || null,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || 'Failed to save branding.');
+      setBrandingUpdatedAt(data.updatedAt || null);
+      setBrandingSuccess('Branding saved. Future white-label reports will use it automatically.');
+    } catch (err) {
+      setBrandingError(err instanceof Error ? err.message : 'Failed to save branding.');
+    } finally {
+      setSavingBranding(false);
     }
   };
 
@@ -321,6 +380,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
   useEffect(() => {
     fetchAuthDataLedgers();
     fetchProfileAndTeam();
+    fetchBranding();
   }, []);
 
   const handleRevokeSession = async (sessionId: string) => {
@@ -1246,6 +1306,90 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
               <p className="text-[10px] leading-relaxed">
                 RBAC enforces strict isolation gates. Permissions cascade in order: <strong>Owner &gt; Admin &gt; Technician &gt; Viewer &gt; Client</strong>. Modifying team permissions automatically triggers a cryptographic token invalidation audit block.
               </p>
+            </div>
+
+            {/* Persistent white-label branding */}
+            <div className="spr-panel p-5 space-y-4 text-left">
+              <h3 className="text-xs font-bold text-[#d4d4d4] flex items-center gap-2 pb-2 border-b border-[#3c3c3c]">
+                <FileText className="w-4.5 h-4.5 text-[#3794ff]" />
+                <span>White-label Branding</span>
+              </h3>
+              <p className="text-[10px] leading-relaxed text-[#9d9d9d]">
+                Set once here; the Reports page's white-label export uses this automatically instead of asking you to retype it every time. This only changes report packaging — it never changes any score or evidence.
+              </p>
+
+              {brandingError && (
+                <div className="p-3 bg-[#2d2d2d] text-[#f14c4c] border border-[#3c3c3c] rounded-md flex gap-2 text-[11px]">
+                  <ShieldAlert className="w-4 h-4 shrink-0" />
+                  <p>{brandingError}</p>
+                </div>
+              )}
+              {brandingSuccess && (
+                <div className="p-3 bg-[#2d2d2d] text-[#89d185] border border-[#3c3c3c] rounded-md flex gap-2 text-[11px]">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <p>{brandingSuccess}</p>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-1">
+                <label className="font-semibold text-[#9d9d9d] text-[11px]">Company / MSP name</label>
+                <input
+                  type="text"
+                  value={brandingCompanyName}
+                  onChange={(e) => setBrandingCompanyName(e.target.value)}
+                  disabled={!canManageTeam}
+                  placeholder="Your MSP name"
+                  className="rounded-md border border-[#3c3c3c] text-[#d4d4d4] focus:outline-none focus:border-[#3794ff] p-2.5 bg-[#2d2d2d] text-xs disabled:opacity-50"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="font-semibold text-[#9d9d9d] text-[11px]">Brand color</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={brandingColor}
+                    onChange={(e) => setBrandingColor(e.target.value)}
+                    disabled={!canManageTeam}
+                    className="h-9 w-14 rounded-md border border-[#3c3c3c] bg-[#2d2d2d] disabled:opacity-50"
+                  />
+                  <span className="font-mono text-[11px] text-[#9d9d9d]">{brandingColor}</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="font-semibold text-[#9d9d9d] text-[11px]">Logo (under ~200KB)</label>
+                {brandingLogoDataUrl && (
+                  <div className="mb-1 flex items-center gap-2">
+                    <img src={brandingLogoDataUrl} alt="Logo preview" className="h-10 w-auto rounded border border-[#3c3c3c] bg-white p-1" />
+                    {canManageTeam && (
+                      <button type="button" onClick={() => setBrandingLogoDataUrl(null)} className="text-[10px] text-[#f14c4c] hover:underline">Remove</button>
+                    )}
+                  </div>
+                )}
+                {canManageTeam && (
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                    onChange={(e) => handleBrandingLogoFile(e.target.files?.[0] || null)}
+                    className="text-[10px] text-[#9d9d9d] file:mr-2 file:rounded-md file:border file:border-[#3c3c3c] file:bg-[#2d2d2d] file:px-2.5 file:py-1.5 file:text-[10px] file:text-[#d4d4d4]"
+                  />
+                )}
+              </div>
+
+              {canManageTeam ? (
+                <button
+                  type="button"
+                  onClick={handleSaveBranding}
+                  disabled={savingBranding}
+                  className="w-full py-2 bg-[#0e639c] hover:bg-[#1177bb] text-white font-sans font-bold text-xs rounded-lg cursor-pointer transition-colors disabled:opacity-50"
+                >
+                  {savingBranding ? 'Saving…' : 'Save branding'}
+                </button>
+              ) : (
+                <p className="text-[10px] text-[#6f6f6f]">Only Owner/Admin can change branding.</p>
+              )}
+              {brandingUpdatedAt && <p className="text-[9px] text-[#6f6f6f]">Last updated {new Date(brandingUpdatedAt).toLocaleString()}</p>}
             </div>
           </div>
 

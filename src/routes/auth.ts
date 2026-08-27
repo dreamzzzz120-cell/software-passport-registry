@@ -23,6 +23,14 @@ const profileUpdateSchema = z.object({
   companyName: z.string().trim().max(200).optional(),
 }).strict();
 const revokeSessionSchema = z.object({ sessionId: z.string().trim().min(1).max(200) }).strict();
+// 300KB base64 comfortably fits a small compressed logo (PNG/JPEG at
+// reasonable dimensions) while keeping a single UPDATE well under any
+// practical row-size or request-body concern.
+const brandingSchema = z.object({
+  companyName: z.string().trim().max(200).nullable().optional(),
+  brandColor: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/, 'brandColor must be a #rrggbb hex color').nullable().optional(),
+  logoDataUrl: z.string().trim().max(300_000).regex(/^data:image\/(png|jpeg|jpg|svg\+xml|webp);base64,/, 'logoDataUrl must be a base64 image data URL').nullable().optional(),
+}).strict();
 
 export function createAuthRouter() {
   const router = Router();
@@ -86,6 +94,48 @@ export function createAuthRouter() {
         FROM users WHERE tenant_id = ${req.user!.tenantId} ORDER BY created_at ASC
       `);
       return res.json((result as any).rows ?? []);
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  // Persistent white-label branding (migration 0030). This is display
+  // packaging only -- it never touches scoring, evidence, or which report
+  // data is included; ReportsView's white-label export already only uses a
+  // client's real, already-loaded software inventory and scores.
+  router.get('/organization/branding', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const db = req.db!;
+      const result = await db.execute(sql`
+        SELECT company_name AS "companyName", brand_color AS "brandColor", logo_data_url AS "logoDataUrl", updated_at AS "updatedAt"
+        FROM tenant_branding WHERE tenant_id = ${req.user!.tenantId} LIMIT 1
+      `);
+      const row = (result as any).rows?.[0];
+      return res.json(row ?? { companyName: null, brandColor: null, logoDataUrl: null, updatedAt: null });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  router.put('/organization/branding', requireAuth, requireRole(['Owner', 'Admin']), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const db = req.db!;
+      const parsed = brandingSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+      const tenantId = req.user!.tenantId;
+      const result = await db.execute(sql`
+        INSERT INTO tenant_branding (tenant_id, company_name, brand_color, logo_data_url, updated_at, updated_by)
+        VALUES (${tenantId}, ${parsed.data.companyName ?? null}, ${parsed.data.brandColor ?? null}, ${parsed.data.logoDataUrl ?? null}, CURRENT_TIMESTAMP, ${req.user!.email})
+        ON CONFLICT (tenant_id) DO UPDATE SET
+          company_name = EXCLUDED.company_name,
+          brand_color = EXCLUDED.brand_color,
+          logo_data_url = EXCLUDED.logo_data_url,
+          updated_at = EXCLUDED.updated_at,
+          updated_by = EXCLUDED.updated_by
+        RETURNING company_name AS "companyName", brand_color AS "brandColor", logo_data_url AS "logoDataUrl", updated_at AS "updatedAt"
+      `);
+      await appendAuditEntry(db, { tenantId, action: 'branding.updated', actor: req.user!.email, payload: {} });
+      return res.json((result as any).rows?.[0]);
     } catch (error) {
       return next(error);
     }

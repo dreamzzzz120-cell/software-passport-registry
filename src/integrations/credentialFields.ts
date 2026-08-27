@@ -12,7 +12,7 @@
  * generic adapter's single-observation contract, so it is intentionally not
  * routed through /api/integrations-live/:provider/test.
  */
-export type CredentialField = { key: string; label: string; type: 'text' | 'password'; required: boolean; placeholder?: string };
+export type CredentialField = { key: string; label: string; type: 'text' | 'password' | 'textarea'; required: boolean; placeholder?: string };
 
 export const CREDENTIAL_FIELDS: Record<string, CredentialField[]> = {
   github: [
@@ -57,7 +57,11 @@ export const CREDENTIAL_FIELDS: Record<string, CredentialField[]> = {
     { key: 'accessToken', label: 'Azure Resource Manager access token', type: 'password', required: true },
   ],
   'google-cloud': [
-    { key: 'accessToken', label: 'Access token', type: 'password', required: true },
+    // A service-account key is signed into a short-lived access token
+    // server-side (adapters.ts: mintGoogleServiceAccountAccessToken) rather
+    // than used directly, since Google's IAM token itself expires hourly and
+    // isn't something a real user has lying around to paste in.
+    { key: 'serviceAccountKey', label: 'Service account JSON key', type: 'textarea', required: true, placeholder: '{"type":"service_account","project_id":"...","private_key":"...","client_email":"...ACCOUNT@PROJECT.iam.gserviceaccount.com",...}' },
   ],
   connectwise: [
     { key: 'baseUrl', label: 'Base URL', type: 'text', required: true, placeholder: 'https://api-na.myconnectwise.net' },

@@ -362,7 +362,11 @@ export default function IntegrationsView({ passports = [], clients = [], onNavig
                   {fields.map((field) => (
                     <div key={field.key}>
                       <label className="text-[10px] font-bold text-[#9d9d9d]">{field.label}{field.required ? ' *' : ''}</label>
-                      <input type={field.type} placeholder={field.placeholder} value={credentialValues[field.key] || ''} onChange={(e) => setCredentialValues((current) => ({ ...current, [field.key]: e.target.value }))} className="mt-0.5 w-full rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-2.5 py-1.5 text-xs text-[#d4d4d4]" />
+                      {field.type === 'textarea' ? (
+                        <textarea rows={5} placeholder={field.placeholder} value={credentialValues[field.key] || ''} onChange={(e) => setCredentialValues((current) => ({ ...current, [field.key]: e.target.value }))} className="mt-0.5 w-full rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-2.5 py-1.5 text-xs text-[#d4d4d4] font-mono resize-y" />
+                      ) : (
+                        <input type={field.type} placeholder={field.placeholder} value={credentialValues[field.key] || ''} onChange={(e) => setCredentialValues((current) => ({ ...current, [field.key]: e.target.value }))} className="mt-0.5 w-full rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-2.5 py-1.5 text-xs text-[#d4d4d4]" />
+                      )}
                     </div>
                   ))}
                   <button onClick={() => void saveCredentials(item.provider)} disabled={savingProvider === item.provider || fields.some((f) => f.required && !credentialValues[f.key]?.trim())} className="w-full spr-btn spr-btn-primary disabled:opacity-40">{savingProvider === item.provider ? 'Saving…' : 'Save credentials'}</button>

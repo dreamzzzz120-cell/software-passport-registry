@@ -113,6 +113,18 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
     }
   }, [clients, whiteLabelClientId]);
 
+  // Pre-fill from the tenant's saved branding (Settings -> Team & Profile)
+  // instead of leaving these blank every time -- still fully editable per
+  // export, this only changes the starting values.
+  useEffect(() => {
+    apiFetch('/api/organization/branding').then((r) => r.ok ? r.json() : null).then((data) => {
+      if (!data) return;
+      if (data.companyName) setMspName(data.companyName);
+      if (data.brandColor) setBrandColor(data.brandColor);
+      if (data.logoDataUrl) setLogoBase64(data.logoDataUrl);
+    }).catch(() => {});
+  }, []);
+
   useEffect(() => {
     setReport(null);
     setHistory([]);
