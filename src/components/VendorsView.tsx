@@ -534,36 +534,27 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                   </h3>
 
                   <div className="space-y-2.5">
-                    {/* Code Signing Attestation */}
+                    {/* Code Signing Attestation -- there is no code-signing evidence source
+                        wired to vendors yet. This used to synthesize a percentage from
+                        reputationScore (+2, or a hardcoded 95 fallback), which fabricated a
+                        metric that was never actually observed. Show the true state instead. */}
                     <div>
                       <div className="flex justify-between text-[10px] font-semibold text-[#6f6f6f] mb-1">
                         <span>Binary & Code Signing Attestation</span>
-                        <span className="font-mono font-bold">
-                          {selectedVendor.reputationScore ? Math.min(100, selectedVendor.reputationScore + 2) : 95}%
-                        </span>
+                        <span className="font-mono font-bold text-[#9d9d9d]">Not available</span>
                       </div>
-                      <div className="w-full h-1.5 bg-[#2d2d2d] rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-[#0e639c] rounded-full transition-all duration-500"
-                          style={{ width: `${selectedVendor.reputationScore ? Math.min(100, selectedVendor.reputationScore + 2) : 95}%` }}
-                        ></div>
-                      </div>
+                      <div className="w-full h-1.5 bg-[#2d2d2d] rounded-full overflow-hidden" title="No code-signing attestation evidence source is connected for this vendor." />
                     </div>
 
-                    {/* Vulnerability SLA performance */}
+                    {/* Vulnerability SLA performance -- previously re-displayed
+                        overallTrustScore under an unrelated label; there is no real
+                        SLA-response-time data source for vendors. */}
                     <div>
                       <div className="flex justify-between text-[10px] font-semibold text-[#6f6f6f] mb-1">
                         <span>Vulnerability SLA Response Speed</span>
-                        <span className="font-mono font-bold">
-                          {selectedVendor.overallTrustScore}%
-                        </span>
+                        <span className="font-mono font-bold text-[#9d9d9d]">Not available</span>
                       </div>
-                      <div className="w-full h-1.5 bg-[#2d2d2d] rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-[#89d185] rounded-full transition-all duration-500"
-                          style={{ width: `${selectedVendor.overallTrustScore}%` }}
-                        ></div>
-                      </div>
+                      <div className="w-full h-1.5 bg-[#2d2d2d] rounded-full overflow-hidden" title="No SLA response-time evidence source is connected for this vendor." />
                     </div>
 
                     {/* Threat / Incident frequency */}
