@@ -53,6 +53,31 @@ describe('GET /api/trust-loop/monitoring respects client isolation for alerts', 
   });
 });
 
+describe('monitoring route role gates include Owner', () => {
+  const source = () => read('src/routes/monitoring.ts');
+
+  // Real production bug found via live testing: requireRole is an exact
+  // allowlist with no Owner-implies-Admin hierarchy (see
+  // middleware/security.ts), so a route gated on requireRole(['Admin']) or
+  // requireRole(['Technician']) alone locks out the Owner role entirely --
+  // including the only account that existed in production. Every other
+  // Owner/Admin-tier route in this codebase (client creation, invites,
+  // billing) explicitly lists 'Owner'; these did not.
+  it('lets an Owner create and update monitoring configurations, not just Admin', () => {
+    const s = source();
+    expect(s).toContain("router.post('/monitoring-configurations', requireRole(['Owner', 'Admin'])");
+    expect(s).toContain("router.patch('/monitoring-configurations/:id', requireRole(['Owner', 'Admin'])");
+  });
+
+  it('lets an Owner or Admin run a verification and manage alert subscriptions, matching MonitoringView\'s canRun/canManageAlerts gates', () => {
+    const s = source();
+    expect(s).toContain("router.post('/monitoring-configurations/:id/run', requireRole(['Owner', 'Admin', 'Technician'])");
+    expect(s).toContain("router.post('/alert-subscriptions', requireRole(['Owner', 'Admin', 'Technician'])");
+    expect(s).toContain("router.patch('/alert-subscriptions/:id', requireRole(['Owner', 'Admin', 'Technician'])");
+    expect(s).toContain("router.delete('/alert-subscriptions/:id', requireRole(['Owner', 'Admin', 'Technician'])");
+  });
+});
+
 describe('monitoring route client isolation', () => {
   const source = () => read('src/routes/monitoring.ts');
 

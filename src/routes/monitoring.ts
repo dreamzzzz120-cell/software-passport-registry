@@ -144,7 +144,7 @@ export function createMonitoringRouter() {
     res.json(publicConfiguration(row));
   });
 
-  router.post('/monitoring-configurations', requireRole(['Admin']), async (req: AuthenticatedRequest, res) => {
+  router.post('/monitoring-configurations', requireRole(['Owner', 'Admin']), async (req: AuthenticatedRequest, res) => {
     const db = req.db!;
     const body = parse(monitoringCreateSchema, req.body, res);
     if (!body) return;
@@ -183,7 +183,7 @@ export function createMonitoringRouter() {
     }
   });
 
-  router.patch('/monitoring-configurations/:id', requireRole(['Admin']), async (req: AuthenticatedRequest, res) => {
+  router.patch('/monitoring-configurations/:id', requireRole(['Owner', 'Admin']), async (req: AuthenticatedRequest, res) => {
     const db = req.db!;
     const body = parse(monitoringPatchSchema, req.body, res);
     if (!body) return;
@@ -208,7 +208,7 @@ export function createMonitoringRouter() {
     res.json(publicConfiguration(updated));
   });
 
-  router.post('/monitoring-configurations/:id/run', requireRole(['Technician']), async (req: AuthenticatedRequest, res) => {
+  router.post('/monitoring-configurations/:id/run', requireRole(['Owner', 'Admin', 'Technician']), async (req: AuthenticatedRequest, res) => {
     const db = req.db!;
     const configuration = await db.select().from(monitoringConfigurations).where(and(
       eq(monitoringConfigurations.id, routeParam(req.params.id)),
@@ -291,7 +291,7 @@ export function createMonitoringRouter() {
     res.json({ ...row, alertTypes: JSON.parse(row.alertTypes), enabled: row.enabled === 1 });
   });
 
-  router.post('/alert-subscriptions', requireRole(['Technician']), async (req: AuthenticatedRequest, res) => {
+  router.post('/alert-subscriptions', requireRole(['Owner', 'Admin', 'Technician']), async (req: AuthenticatedRequest, res) => {
     const db = req.db!;
     const body = parse(subscriptionCreateSchema, req.body, res);
     if (!body) return;
@@ -314,7 +314,7 @@ export function createMonitoringRouter() {
     res.status(201).json({ ...created, alertTypes: JSON.parse(created.alertTypes), enabled: created.enabled === 1 });
   });
 
-  router.patch('/alert-subscriptions/:id', requireRole(['Technician']), async (req: AuthenticatedRequest, res) => {
+  router.patch('/alert-subscriptions/:id', requireRole(['Owner', 'Admin', 'Technician']), async (req: AuthenticatedRequest, res) => {
     const db = req.db!;
     const body = parse(subscriptionPatchSchema, req.body, res);
     if (!body) return;
@@ -339,7 +339,7 @@ export function createMonitoringRouter() {
     res.json({ ...updated, alertTypes: JSON.parse(updated.alertTypes), enabled: updated.enabled === 1 });
   });
 
-  router.delete('/alert-subscriptions/:id', requireRole(['Technician']), async (req: AuthenticatedRequest, res) => {
+  router.delete('/alert-subscriptions/:id', requireRole(['Owner', 'Admin', 'Technician']), async (req: AuthenticatedRequest, res) => {
     const db = req.db!;
     const deleted = await db.delete(alertSubscriptions).where(and(
       eq(alertSubscriptions.id, routeParam(req.params.id)), eq(alertSubscriptions.tenantId, req.user!.tenantId),
