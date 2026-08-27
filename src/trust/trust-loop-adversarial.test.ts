@@ -44,4 +44,16 @@ describe('trust loop adversarial invariants',()=>{
     findings[0].status='RESOLVED';
     expect(correlateFindings(findings).some(f=>f.controlId==='cross-source-privileged-exposure')).toBe(false);
   });
+
+  // Real production bug: a passport not owned by any MSP client (client_id
+  // null -- a real, supported state, e.g. the seeded self-hosted "Software
+  // Passport Registry" passport) previously had its own id substituted as a
+  // fake client id one layer up, in routes/trust-loop.ts, which violated
+  // trust_observations' foreign key to clients() and failed every provider's
+  // collection for that passport. Findings must carry the real (possibly
+  // null) client id through, not a fabricated one.
+  it('accepts a null clientId for a passport with no owning client, without fabricating one', () => {
+    const [finding] = observationsToFindings({ ...base, clientId: null, observations: [observation()] });
+    expect(finding.clientId).toBeNull();
+  });
 });

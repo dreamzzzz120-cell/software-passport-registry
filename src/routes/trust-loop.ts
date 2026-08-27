@@ -94,7 +94,10 @@ export function createTrustLoopRouter() {
       await db.execute(sql`INSERT INTO trust_collection_runs (id,tenant_id,passport_id,provider,started_at,status,idempotency_key,created_at) VALUES (${runId},${tenantId},${passportId},${provider},${startedAt},'RUNNING',${`${tenantId}:${passportId}:${provider}:${startedAt}`},${startedAt})`);
       const credentials = decryptCredentials(stored.encrypted_payload) as Record<string, string>;
       const observations = provider === 'github' ? await collectGitHubDeepEvidence(credentials) : await collectDeepProviderEvidence(provider as any, credentials);
-      const result = await persistTrustLoop({ tenantId, passportId, clientId: passport.client_id || passport.id, assetId: passport.id, observations, generationReason: 'provider_collection', actorType: 'worker', collectorVersionMap: { [provider]: 'deep-v2' } });
+      // A passport not owned by any MSP client (client_id null) is real and
+      // supported -- never substitute the passport's own id as a fake
+      // client id here. See migrations/0027_client_optional_trust_loop.
+      const result = await persistTrustLoop({ tenantId, passportId, clientId: passport.client_id ?? null, assetId: passport.id, observations, generationReason: 'provider_collection', actorType: 'worker', collectorVersionMap: { [provider]: 'deep-v2' } });
       const completedAt = new Date().toISOString();
       await db.execute(sql`UPDATE trust_collection_runs SET completed_at=${completedAt},status='SUCCEEDED',observation_count=${observations.length},evidence_count=${result.evidenceIds.length},failure_count=${observations.filter((o) => o.status === 'FAIL').length},collector_version='deep-v2' WHERE id=${runId} AND tenant_id=${tenantId}`);
       // A real, completed collection run is the only thing that may move a
