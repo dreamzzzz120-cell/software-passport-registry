@@ -21,6 +21,7 @@ import { createIntegrationMonitoringRouter } from './src/routes/integration-moni
 import { createAgentApiRouter } from './src/routes/agent-api.ts';
 import { createMspRouter } from './src/routes/msp.ts';
 import { createAiTrustRouter } from './src/routes/ai-trust.ts';
+import { createBillingRouter, stripeWebhookHandler } from './src/routes/billing.ts';
 import { createMcpTransport } from './src/mcp/transport.ts';
 import { executePublicMcpTool } from './src/mcp/execute.ts';
 
@@ -86,6 +87,10 @@ const corsOrigin = (origin: string | undefined, callback: (error: Error | null, 
 app.use(helmet({ contentSecurityPolicy: { useDefaults: false, directives: { defaultSrc: ["'self'"], baseUri: ["'self'"], objectSrc: ["'none'"], frameAncestors: ["'none'"], formAction: ["'self'"], scriptSrc: ["'self'"], styleSrc: ["'self'", "'unsafe-inline'"], imgSrc: ["'self'", 'data:', 'blob:', 'https:'], fontSrc: ["'self'", 'data:', 'https:'], connectSrc: ["'self'", ...(appOrigin ? [appOrigin] : [])], frameSrc: ["'self'", 'https:'], workerSrc: ["'self'", 'blob:'], manifestSrc: ["'self'"], upgradeInsecureRequests: [] } }, crossOriginEmbedderPolicy: false, frameguard: { action: 'deny' }, referrerPolicy: { policy: 'no-referrer' } }));
 app.use(cors({ origin: corsOrigin, credentials: true, methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], allowedHeaders: ['Authorization', 'Content-Type', 'X-Request-ID', 'X-API-Key'] }));
 app.use((req, res, next) => { if (req.method === 'TRACE' || req.method === 'CONNECT') return res.status(405).json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'HTTP method is not allowed.' } }); if (req.headers['content-length'] && !/^\d+$/.test(String(req.headers['content-length']))) return res.status(400).json({ error: { code: 'INVALID_CONTENT_LENGTH', message: 'Invalid Content-Length header.' } }); return next(); });
+// Stripe's signature verification needs the exact raw request bytes, so this
+// must be registered with express.raw() before the global express.json()
+// below parses (and discards) the raw body for every other route.
+app.post('/api/billing/webhook', express.raw({ type: 'application/json', limit: requestBodyLimit }), stripeWebhookHandler);
 app.use(express.json({ limit: requestBodyLimit, strict: true, type: ['application/json', 'application/*+json'] }));
 app.use(express.urlencoded({ extended: false, limit: requestBodyLimit }));
 app.use((req, res, next) => { const supplied = req.headers['x-request-id']; const requestId = typeof supplied === 'string' && /^[A-Za-z0-9._:-]{1,100}$/.test(supplied) ? supplied : `req_${randomUUID()}`; res.setHeader('X-Request-ID', requestId); res.setHeader('Cache-Control', req.path.startsWith('/api/') ? 'no-store, max-age=0' : 'public, max-age=0, must-revalidate'); res.locals.requestId = requestId; next(); });
@@ -128,6 +133,7 @@ app.use('/api/integration-monitoring', createIntegrationMonitoringRouter());
 app.use('/api/monitoring', createMonitoringRouter());
 app.use('/api/agent/v1', createAgentApiRouter());
 app.use('/api/msp', requireAuth, createMspRouter());
+app.use('/api/billing', createBillingRouter());
 app.use('/api/ai-trust', requireAuth, createAiTrustRouter());
 
 const mcpBearer = process.env.SPR_MCP_BEARER_TOKEN;
