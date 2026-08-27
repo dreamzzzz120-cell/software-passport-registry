@@ -19,7 +19,7 @@ interface SettingsViewProps {
 }
 
 export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps) {
-  const [activeSubTab, setActiveSubTab] = useState<'configurations' | 'bible' | 'organization'>('configurations');
+  const [activeSubTab, setActiveSubTab] = useState<'configurations' | 'bible' | 'organization' | 'guide'>('configurations');
   const [mfaEnabled, setMfaEnabled] = useState(true);
   const [slaTarget, setSlaTarget] = useState(85);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -653,6 +653,18 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
             >
               <BookOpen className="w-3.5 h-3.5" />
               <span>Master Bible</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveSubTab('guide')}
+              className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeSubTab === 'guide'
+                  ? 'bg-[#094771] text-white font-bold'
+                  : 'text-[#9d9d9d] hover:text-[#d4d4d4] '
+              }`}
+            >
+              <HelpCircle className="w-3.5 h-3.5" />
+              <span>Getting Started</span>
             </button>
           </div>
 
@@ -1529,7 +1541,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
             </div>
           </div>
         </div>
-      ) : (
+      ) : activeSubTab === 'bible' ? (
         <div className="space-y-6 animate-fadeIn" id="product-master-bible-container">
           {/* Welcome Alert / Info Bar */}
           <div className="spr-panel p-5">
@@ -2018,7 +2030,111 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
 
           </div>
         </div>
+      ) : (
+        <GettingStartedGuide />
       )}
+    </div>
+  );
+}
+
+// Kept as real, current documentation of what's actually live -- update this
+// alongside any feature that changes what it describes, the same way code
+// comments describe the code next to them. Nothing here should claim a
+// capability exists before it's actually built and deployed.
+function GettingStartedGuide() {
+  const step = (title: string, children: React.ReactNode) => (
+    <li className="pl-1">
+      <span className="font-semibold text-[#d4d4d4]">{title}</span>
+      <div className="mt-0.5 text-[#9d9d9d]">{children}</div>
+    </li>
+  );
+  return (
+    <div className="space-y-6 animate-fadeIn text-xs" id="settings-getting-started-guide">
+      <div className="spr-panel p-5">
+        <h3 className="text-xs font-bold text-[#d4d4d4] flex items-center gap-2 pb-2 border-b border-[#3c3c3c]">
+          <HelpCircle className="w-4.5 h-4.5 text-[#3794ff]" />
+          <span>Getting Started</span>
+        </h3>
+        <p className="mt-3 text-[#9d9d9d] leading-relaxed">
+          Every capability below is real and connected to the backend — nothing here is a UI-only mockup. Where something isn't built yet, it's listed honestly under "Not available yet" instead of being left for you to discover the hard way.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div className="spr-panel p-5 space-y-3">
+          <h4 className="text-[11px] font-bold text-[#d4d4d4] uppercase tracking-wide">GitHub connector</h4>
+          <ol className="space-y-2.5 list-decimal list-inside leading-relaxed">
+            {step('Go to Integrations', 'Find the GitHub card, click Connect.')}
+            {step('Paste a personal access token', 'Create one on github.com under Settings → Developer settings → Personal access tokens, with read access to Contents, Metadata, Secret scanning alerts, and Code scanning alerts.')}
+            {step('Save credentials, then pick a passport', 'Use the selector at the top of the page.')}
+            {step('Click Test connection', 'Status turns Live on success, Error on failure with the real reason shown.')}
+            {step('Discover repositories → pick one → Run software scan', 'Queues a real Syft SBOM + OSV vulnerability scan.')}
+          </ol>
+        </div>
+
+        <div className="spr-panel p-5 space-y-3">
+          <h4 className="text-[11px] font-bold text-[#d4d4d4] uppercase tracking-wide">Google Cloud connector</h4>
+          <ol className="space-y-2.5 list-decimal list-inside leading-relaxed">
+            {step('Integrations → Google Cloud → Connect', 'Paste the entire contents of a service-account JSON key file.')}
+            {step('Save credentials, pick a passport, Run live test', 'This signs a real JWT with your key and exchanges it for a Google access token, then queries your accessible Cloud projects.')}
+          </ol>
+        </div>
+
+        <div className="spr-panel p-5 space-y-3">
+          <h4 className="text-[11px] font-bold text-[#d4d4d4] uppercase tracking-wide">Other connectors</h4>
+          <p className="leading-relaxed">GitLab, Bitbucket, Azure DevOps, Jira, Confluence, Slack, Microsoft 365, AWS, Azure: same pattern — Connect, fill in the fields shown for that provider, Save credentials, pick a passport, Run live test.</p>
+        </div>
+
+        <div className="spr-panel p-5 space-y-3">
+          <h4 className="text-[11px] font-bold text-[#d4d4d4] uppercase tracking-wide">MSP connectors (ConnectWise, Autotask, NinjaOne, Hudu)</h4>
+          <ol className="space-y-2.5 list-decimal list-inside leading-relaxed">
+            {step('Connect and test', 'Same as above.')}
+            {step('Discover customers', 'Once Live, a customer-mapping panel appears on the card automatically — pulls the provider’s real customer list.')}
+            {step('Map each one to an SPR Client', 'Enforced server-side: you can only map to a client your own tenant owns.')}
+          </ol>
+        </div>
+
+        <div className="spr-panel p-5 space-y-3">
+          <h4 className="text-[11px] font-bold text-[#d4d4d4] uppercase tracking-wide">Persistent white-label branding</h4>
+          <ol className="space-y-2.5 list-decimal list-inside leading-relaxed">
+            {step('Settings → Team & Profile', 'Find the White-label Branding panel.')}
+            {step('Set company name, brand color, logo', 'Under ~200KB.')}
+            {step('Save branding', 'Owner/Admin only — this is saved once for the whole tenant.')}
+          </ol>
+        </div>
+
+        <div className="spr-panel p-5 space-y-3">
+          <h4 className="text-[11px] font-bold text-[#d4d4d4] uppercase tracking-wide">White-label PDF report export</h4>
+          <ol className="space-y-2.5 list-decimal list-inside leading-relaxed">
+            {step('Reports → "White-label client report"', 'Your saved branding pre-fills automatically; you can still override it just for this export.')}
+            {step('Pick the client and sections, Generate white-label PDF', 'Uses that client’s real, already-loaded inventory and scores — nothing is fabricated for the export.')}
+          </ol>
+        </div>
+
+        <div className="spr-panel p-5 space-y-3">
+          <h4 className="text-[11px] font-bold text-[#d4d4d4] uppercase tracking-wide">Core evidence workflow</h4>
+          <p className="leading-relaxed"><strong className="text-[#d4d4d4]">Passports</strong> — browse/search software passports. <strong className="text-[#d4d4d4]">Evidence Explorer</strong> — underlying evidence records. <strong className="text-[#d4d4d4]">Trust Graph</strong> — relationships across assets/vendors/evidence. <strong className="text-[#d4d4d4]">Scans</strong> — SBOM/vulnerability history. <strong className="text-[#d4d4d4]">Monitoring</strong> — scheduled re-collection status. <strong className="text-[#d4d4d4]">Alerts</strong> — findings needing attention.</p>
+        </div>
+
+        <div className="spr-panel p-5 space-y-3">
+          <h4 className="text-[11px] font-bold text-[#d4d4d4] uppercase tracking-wide">Public Passport</h4>
+          <p className="leading-relaxed">Generated from a passport's detail view — a signed public link. It never exposes your authoritative trust score publicly, only observed evidence and a status of AVOID / INVESTIGATE / VERIFIED / UNKNOWN.</p>
+        </div>
+
+        <div className="spr-panel p-5 space-y-3">
+          <h4 className="text-[11px] font-bold text-[#d4d4d4] uppercase tracking-wide">Team & RBAC</h4>
+          <p className="leading-relaxed">Settings → Team & Profile → invite teammates by email and role (Owner/Admin/Technician/Viewer/Client). Only Owner/Admin can invite, change roles, or remove members.</p>
+        </div>
+
+        <div className="spr-panel p-5 space-y-3 border-dashed">
+          <h4 className="text-[11px] font-bold text-[#cca700] uppercase tracking-wide flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> Not available yet</h4>
+          <ul className="space-y-1.5 list-disc list-inside leading-relaxed">
+            <li><strong className="text-[#d4d4d4]">Billing</strong> — no backend exists yet; the Billing page says so rather than showing fake data.</li>
+            <li><strong className="text-[#d4d4d4]">Custom domains</strong> — not implemented.</li>
+            <li><strong className="text-[#d4d4d4]">Branding on the public passport / emails</strong> — your saved branding currently only feeds the Reports PDF export, not yet the public passport page itself.</li>
+          </ul>
+        </div>
+      </div>
     </div>
   );
 }
