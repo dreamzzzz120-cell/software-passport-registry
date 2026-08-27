@@ -135,9 +135,12 @@ export function createTrustLoopRouter() {
       const db = req.db!;
       const tenantId = req.user!.tenantId;
       const passportId = typeof req.query.passportId === 'string' ? req.query.passportId : null;
+      // A 'Client'-role user only sees findings for their own client, same
+      // scoping rule as GET /user/clients and GET /user/passports.
+      const clientScope = req.user!.role === 'Client' ? req.user!.clientId : null;
       const rows = passportId
-        ? await db.execute(sql`${findingsWithRemediationSelect} WHERE f.tenant_id=${tenantId} AND f.passport_id=${passportId} ORDER BY CASE f.severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 WHEN 'low' THEN 4 ELSE 5 END,f.updated_at DESC`)
-        : await db.execute(sql`${findingsWithRemediationSelect} WHERE f.tenant_id=${tenantId} ORDER BY f.updated_at DESC`);
+        ? await db.execute(sql`${findingsWithRemediationSelect} WHERE f.tenant_id=${tenantId} AND f.passport_id=${passportId} AND (${clientScope}::text IS NULL OR f.client_id = ${clientScope}) ORDER BY CASE f.severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 WHEN 'low' THEN 4 ELSE 5 END,f.updated_at DESC`)
+        : await db.execute(sql`${findingsWithRemediationSelect} WHERE f.tenant_id=${tenantId} AND (${clientScope}::text IS NULL OR f.client_id = ${clientScope}) ORDER BY f.updated_at DESC`);
       return res.json({ findings: (rows as any).rows || [] });
     } catch (error) { return next(error); }
   });

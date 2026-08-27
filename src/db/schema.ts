@@ -13,6 +13,9 @@ export const users = pgTable('users', {
   email: text('email').notNull(),
   tenantId: text('tenant_id').notNull().default('tenant-default'), // Default tenant_id
   role: text('role').notNull().default('Viewer'), // RBAC Roles: Owner, Admin, Technician, Viewer, Client
+  // Only set for role='Client' -- restricts that user to one client's data.
+  // Every other role leaves this null and sees the whole tenant.
+  clientId: text('client_id'),
   companyName: text('company_name'),
   roleTitle: text('role_title'),
   displayName: text('display_name'),

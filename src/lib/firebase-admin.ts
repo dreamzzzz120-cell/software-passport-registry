@@ -106,9 +106,12 @@ if (config.firebase.projectId) adminOptions.projectId = config.firebase.projectI
 const app = getApps().length === 0 ? initializeApp(adminOptions) : getApp();
 export const adminAuth = getAuth(app);
 
-export async function setUserCustomClaims(uid: string, claims: { workspaceId: string; role: string }): Promise<{ success: boolean; reason?: string }> {
+export async function setUserCustomClaims(uid: string, claims: { workspaceId: string; role: string; clientId?: string | null }): Promise<{ success: boolean; reason?: string }> {
   try {
-    const expectedClaims = { workspaceId: claims.workspaceId, tenantId: claims.workspaceId, role: claims.role };
+    // clientId is included for consistency with the actual authorization
+    // source (the users.client_id column, read fresh on every request by
+    // requireAuth) -- this app never authorizes from JWT claims alone.
+    const expectedClaims = { workspaceId: claims.workspaceId, tenantId: claims.workspaceId, role: claims.role, clientId: claims.clientId ?? null };
     await adminAuth.setCustomUserClaims(uid, expectedClaims);
     const updatedUser = await adminAuth.getUser(uid);
     const actualClaims = updatedUser.customClaims || {};

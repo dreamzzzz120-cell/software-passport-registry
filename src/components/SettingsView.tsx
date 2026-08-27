@@ -32,6 +32,8 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('Technician');
+  const [inviteClientId, setInviteClientId] = useState('');
+  const [clientsList, setClientsList] = useState<{ id: string; name: string }[]>([]);
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileName, setProfileName] = useState('');
   const [profileJobTitle, setProfileJobTitle] = useState('');
@@ -134,24 +136,30 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
     }
   };
 
+  const fetchClientsList = () => {
+    apiFetch('/api/user/clients').then((r) => r.ok ? r.json() : []).then((data) => { if (Array.isArray(data)) setClientsList(data.map((c: any) => ({ id: c.id, name: c.name }))); }).catch(() => {});
+  };
+
   const handleInviteMember = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteEmail || !canManageTeam) return;
+    if (inviteRole === 'Client' && !inviteClientId) { setTeamError('Select which client this invitation is for.'); return; }
     setTeamError(null);
     setTeamSuccess(null);
     try {
       const res = await apiFetch('/api/organization/invite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: inviteEmail, role: inviteRole })
+        body: JSON.stringify({ email: inviteEmail, role: inviteRole, clientId: inviteRole === 'Client' ? inviteClientId : undefined })
       });
       if (res.ok) {
         setTeamSuccess(`Successfully sent security invitation to ${inviteEmail}`);
         setInviteEmail('');
+        setInviteClientId('');
         fetchProfileAndTeam();
       } else {
-        const errData = await res.json();
-        setTeamError(errData.message || 'Failed to send workspace invitation.');
+        const errData = await res.json().catch(() => null);
+        setTeamError(errData?.error || errData?.message || 'Failed to send workspace invitation.');
       }
     } catch (err) {
       setTeamError('Network error while dispatching invitation.');
@@ -381,6 +389,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
     fetchAuthDataLedgers();
     fetchProfileAndTeam();
     fetchBranding();
+    fetchClientsList();
   }, []);
 
   const handleRevokeSession = async (sessionId: string) => {
@@ -1435,7 +1444,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                   </label>
                   <select
                     value={inviteRole}
-                    onChange={(e) => setInviteRole(e.target.value)}
+                    onChange={(e) => { setInviteRole(e.target.value); setInviteClientId(''); }}
                     className="rounded-md border border-[#3c3c3c] text-[#d4d4d4] focus:outline-none focus:border-[#3794ff] p-2.5 bg-[#2d2d2d] cursor-pointer font-semibold text-[#d4d4d4]"
                   >
                     <option value="Admin">Admin</option>
@@ -1444,6 +1453,23 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                     <option value="Client">Client</option>
                   </select>
                 </div>
+
+                {inviteRole === 'Client' && (
+                  <div className="w-full md:w-52 flex flex-col gap-1">
+                    <label className="block text-[10px] font-mono font-bold text-[#6f6f6f] uppercase">
+                      Client
+                    </label>
+                    <select
+                      required
+                      value={inviteClientId}
+                      onChange={(e) => setInviteClientId(e.target.value)}
+                      className="rounded-md border border-[#3c3c3c] text-[#d4d4d4] focus:outline-none focus:border-[#3794ff] p-2.5 bg-[#2d2d2d] cursor-pointer font-semibold text-[#d4d4d4]"
+                    >
+                      <option value="">{clientsList.length ? 'Select client…' : 'No clients yet'}</option>
+                      {clientsList.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+                )}
 
                 <button
                   type="submit"

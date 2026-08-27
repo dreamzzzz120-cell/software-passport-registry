@@ -15,8 +15,17 @@ import { describeUserAgent, sessionFingerprint } from '../security/session-track
 import { offboardTenantData } from '../db/sync.ts';
 
 const INVITABLE_ROLES = ['Admin', 'Technician', 'Viewer', 'Client'] as const;
-const inviteSchema = z.object({ email: z.string().trim().email().max(255), role: z.enum(INVITABLE_ROLES) }).strict();
+// A 'Client'-role invite must name the one client it scopes to; every other
+// role must not carry a clientId (it would be meaningless -- those roles see
+// the whole tenant).
+const inviteSchema = z.object({ email: z.string().trim().email().max(255), role: z.enum(INVITABLE_ROLES), clientId: z.string().trim().min(1).max(255).nullable().optional() }).strict()
+  .refine((body) => (body.role === 'Client') === Boolean(body.clientId), { message: "clientId is required when role is 'Client', and must be omitted otherwise", path: ['clientId'] });
 const roleUpdateSchema = z.object({ role: z.enum(INVITABLE_ROLES) }).strict();
+const createClientSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  domain: z.string().trim().toLowerCase().min(1).max(255).regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/, 'domain must look like a real domain, e.g. acme.com'),
+  industry: z.string().trim().min(1).max(100),
+}).strict();
 const profileUpdateSchema = z.object({
   displayName: z.string().trim().max(200).optional(),
   roleTitle: z.string().trim().max(200).optional(),
@@ -151,6 +160,17 @@ export function createAuthRouter() {
       const existing = await db.execute(sql`SELECT id FROM users WHERE tenant_id = ${req.user!.tenantId} AND lower(btrim(email)) = ${email} LIMIT 1`);
       if ((existing as any).rows?.length) return res.status(409).json({ error: 'This email is already a member of your workspace.' });
 
+      // A 'Client'-role invite must name a client that actually belongs to
+      // this tenant -- never trust a client id supplied in the request body
+      // without verifying tenant ownership first (the same class of check
+      // migration 0025's customer-mapping route already applies).
+      let clientId: string | null = null;
+      if (parsed.data.role === 'Client') {
+        const client = await db.execute(sql`SELECT id FROM clients WHERE id = ${parsed.data.clientId} AND tenant_id = ${req.user!.tenantId} LIMIT 1`);
+        if (!(client as any).rows?.length) return res.status(404).json({ error: 'Client not found in this workspace.' });
+        clientId = parsed.data.clientId!;
+      }
+
       let firebaseUser;
       try {
         firebaseUser = await adminAuth.getUserByEmail(email);
@@ -159,16 +179,16 @@ export function createAuthRouter() {
       }
 
       const inserted = await db.execute(sql`
-        INSERT INTO users (uid, email, tenant_id, role, invited_by, onboarded)
-        VALUES (${firebaseUser.uid}, ${email}, ${req.user!.tenantId}, ${parsed.data.role}, ${req.user!.email}, 0)
-        RETURNING id, email, role
+        INSERT INTO users (uid, email, tenant_id, role, client_id, invited_by, onboarded)
+        VALUES (${firebaseUser.uid}, ${email}, ${req.user!.tenantId}, ${parsed.data.role}, ${clientId}, ${req.user!.email}, 0)
+        RETURNING id, email, role, client_id AS "clientId"
       `);
-      await setUserCustomClaims(firebaseUser.uid, { workspaceId: req.user!.tenantId, role: parsed.data.role });
+      await setUserCustomClaims(firebaseUser.uid, { workspaceId: req.user!.tenantId, role: parsed.data.role, clientId });
 
       let inviteLink: string | null = null;
       try { inviteLink = await adminAuth.generatePasswordResetLink(email); } catch { inviteLink = null; }
 
-      await appendAuditEntry(db, { tenantId: req.user!.tenantId, action: 'team.invited', actor: req.user!.email, payload: { invitedEmail: email, role: parsed.data.role } });
+      await appendAuditEntry(db, { tenantId: req.user!.tenantId, action: 'team.invited', actor: req.user!.email, payload: { invitedEmail: email, role: parsed.data.role, clientId } });
       return res.status(201).json({ ...(inserted as any).rows?.[0], inviteLink });
     } catch (error) {
       return next(error);
@@ -414,8 +434,47 @@ export function createAuthRouter() {
   router.get('/user/clients', requireAuth, async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
-      const result = await db.execute(sql`SELECT id, name, domain, industry, trust_score AS "trustScore", risk_level AS "riskLevel", avatar_color AS "avatarColor", subscription_tier AS "subscriptionTier", joined_date AS "joinedDate", team_count AS "teamCount", passport_count AS "passportCount", critical_risks_count AS "criticalRisksCount", compliance_progress AS "complianceProgress", software_inventory AS "softwareInventory", compliance_status AS "complianceStatus", team_members AS "teamMembers", activity_timeline AS "activityTimeline" FROM clients WHERE tenant_id=${req.user!.tenantId} ORDER BY joined_date DESC`);
+      // A 'Client'-role user is scoped to exactly the one client they were
+      // invited under -- they see a list of one, not the MSP's full roster.
+      // Every other role is unrestricted at the client level (tenant RLS is
+      // still the structural backstop either way).
+      const clientScope = req.user!.role === 'Client' ? req.user!.clientId : null;
+      const result = await db.execute(sql`
+        SELECT id, name, domain, industry, trust_score AS "trustScore", risk_level AS "riskLevel", avatar_color AS "avatarColor", subscription_tier AS "subscriptionTier", joined_date AS "joinedDate", team_count AS "teamCount", passport_count AS "passportCount", critical_risks_count AS "criticalRisksCount", compliance_progress AS "complianceProgress", software_inventory AS "softwareInventory", compliance_status AS "complianceStatus", team_members AS "teamMembers", activity_timeline AS "activityTimeline"
+        FROM clients
+        WHERE tenant_id=${req.user!.tenantId} AND (${clientScope}::text IS NULL OR id = ${clientScope})
+        ORDER BY joined_date DESC
+      `);
       return res.json((result as any).rows || []);
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  router.post('/user/clients', requireAuth, requireRole(['Owner', 'Admin']), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const db = req.db!;
+      const parsed = createClientSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+      const tenantId = req.user!.tenantId;
+      const newId = `client_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+      let inserted;
+      try {
+        inserted = await db.execute(sql`
+          INSERT INTO clients (id, tenant_id, name, domain, industry, joined_date)
+          VALUES (${newId}, ${tenantId}, ${parsed.data.name}, ${parsed.data.domain}, ${parsed.data.industry}, ${new Date().toISOString()})
+          RETURNING id, name, domain, industry, trust_score AS "trustScore", risk_level AS "riskLevel", avatar_color AS "avatarColor", subscription_tier AS "subscriptionTier", joined_date AS "joinedDate", team_count AS "teamCount", passport_count AS "passportCount", critical_risks_count AS "criticalRisksCount", compliance_progress AS "complianceProgress", software_inventory AS "softwareInventory", compliance_status AS "complianceStatus", team_members AS "teamMembers", activity_timeline AS "activityTimeline"
+        `);
+      } catch (error: any) {
+        // Real unique constraint (migration 0032), not just an app-level
+        // pre-check -- closes the race where two concurrent creates for the
+        // same domain could otherwise both succeed.
+        if (error?.code === '23505') return res.status(409).json({ error: 'A client with this domain already exists in your workspace.' });
+        throw error;
+      }
+      const row = (inserted as any).rows?.[0];
+      await appendAuditEntry(db, { tenantId, action: 'client.created', actor: req.user!.email, payload: { clientId: row.id, name: row.name, domain: row.domain } });
+      return res.status(201).json(row);
     } catch (error) {
       return next(error);
     }
@@ -424,7 +483,10 @@ export function createAuthRouter() {
   router.get('/user/passports', requireAuth, async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
-      const result = await db.execute(sql`SELECT p.id, p.client_id AS "clientId", p.name, p.version, p.publisher, p.category, p.release_date AS "releaseDate", p.license_type AS "licenseType", p.sbom, COALESCE((SELECT json_agg(json_build_object('id', e.id, 'name', e.name, 'type', e.type, 'verified', e.verified, 'status', e.status, 'signer', e.signer, 'timestamp', e.timestamp, 'hash', e.hash, 'engineId', e.engine_id, 'verificationFailureReason', e.verification_failure_reason) ORDER BY e.timestamp DESC) FROM evidence_items e WHERE e.tenant_id=p.tenant_id AND e.asset_id=p.id), '[]'::json) AS evidence, COALESCE((SELECT json_agg(json_build_object('id', f.id, 'findingId', f.id, 'severity', f.severity, 'category', f.category, 'title', f.title, 'description', f.description, 'component', f.component, 'fixedVersion', f.fixed_version, 'status', f.status, 'detectedAt', f.detected_at, 'engineId', f.engine_id) ORDER BY f.detected_at DESC) FROM scan_findings f WHERE f.tenant_id=p.tenant_id AND f.asset_id=p.id), '[]'::json) AS vulnerabilities, p.timeline, NULL AS scores, 'not_authoritatively_scored' AS "scoreStatus" FROM passports p WHERE p.tenant_id=${req.user!.tenantId} ORDER BY p.name ASC`);
+      // Mirrors GET /user/clients: a 'Client'-role user only sees passports
+      // belonging to their own client, not the MSP's whole portfolio.
+      const clientScope = req.user!.role === 'Client' ? req.user!.clientId : null;
+      const result = await db.execute(sql`SELECT p.id, p.client_id AS "clientId", p.name, p.version, p.publisher, p.category, p.release_date AS "releaseDate", p.license_type AS "licenseType", p.sbom, COALESCE((SELECT json_agg(json_build_object('id', e.id, 'name', e.name, 'type', e.type, 'verified', e.verified, 'status', e.status, 'signer', e.signer, 'timestamp', e.timestamp, 'hash', e.hash, 'engineId', e.engine_id, 'verificationFailureReason', e.verification_failure_reason) ORDER BY e.timestamp DESC) FROM evidence_items e WHERE e.tenant_id=p.tenant_id AND e.asset_id=p.id), '[]'::json) AS evidence, COALESCE((SELECT json_agg(json_build_object('id', f.id, 'findingId', f.id, 'severity', f.severity, 'category', f.category, 'title', f.title, 'description', f.description, 'component', f.component, 'fixedVersion', f.fixed_version, 'status', f.status, 'detectedAt', f.detected_at, 'engineId', f.engine_id) ORDER BY f.detected_at DESC) FROM scan_findings f WHERE f.tenant_id=p.tenant_id AND f.asset_id=p.id), '[]'::json) AS vulnerabilities, p.timeline, NULL AS scores, 'not_authoritatively_scored' AS "scoreStatus" FROM passports p WHERE p.tenant_id=${req.user!.tenantId} AND (${clientScope}::text IS NULL OR p.client_id = ${clientScope}) ORDER BY p.name ASC`);
       return res.json((result as any).rows || []);
     } catch (error) {
       return next(error);

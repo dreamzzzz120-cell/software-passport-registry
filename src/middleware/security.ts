@@ -15,7 +15,7 @@ import { attachTenantScope, ScopedDb } from './tenant-scope.ts';
 import { recordSession } from '../security/session-tracking.ts';
 
 export interface AuthenticatedRequest extends Request {
-  user?: { id: number; uid: string; email: string; tenantId: string; role: string; emailVerified: boolean };
+  user?: { id: number; uid: string; email: string; tenantId: string; role: string; clientId: string | null; emailVerified: boolean };
   /** Per-request, tenant-scoped connection (Row-Level Security enforced). Set by requireAuth. */
   db?: ScopedDb;
 }
@@ -166,7 +166,7 @@ export const requireAuth = async (req: AuthenticatedRequest, res: Response, next
     const tokenEmail = typeof decodedToken.email === 'string' ? decodedToken.email.trim().toLowerCase() : '';
     if (tokenEmail && dbEmail && tokenEmail !== dbEmail) return res.status(403).json({ error: 'User identity does not match the provisioned account' });
 
-    req.user = { id: dbUser.id, uid, email: dbUser.email, tenantId: dbUser.tenantId, role: dbUser.role, emailVerified };
+    req.user = { id: dbUser.id, uid, email: dbUser.email, tenantId: dbUser.tenantId, role: dbUser.role, clientId: dbUser.clientId ?? null, emailVerified };
     req.db = await attachTenantScope(dbUser.tenantId, res);
     const ip = req.ip || req.socket.remoteAddress || 'unknown';
     const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'].slice(0, 512) : '';
