@@ -66,11 +66,20 @@ app.disable('x-powered-by');
 if (config.sentry.dsn) Sentry.init({ dsn: config.sentry.dsn, environment: config.nodeEnv, tracesSampleRate: config.isProduction ? 0.1 : 1.0 });
 const allowedOrigins = new Set(normalizeAllowedOrigins(config.allowedOrigins));
 const appOrigin = config.appUrl ? new URL(config.appUrl).origin : undefined;
+// Every Vercel deploy of this project (preview or production) gets its own
+// unique-hash subdomain, e.g. software-passport-registry-ff1zu4h0c-sprteam.vercel.app,
+// none of which can be enumerated in allowedOrigins ahead of time. Vercel
+// itself controls issuance of subdomains under vercel.app, so trusting any
+// hostname ending in exactly "-sprteam.vercel.app" (this project's team
+// slug) is scoped to deployments this team owns -- not a blanket *.vercel.app
+// trust, which would accept any other tenant's Vercel project too.
+const VERCEL_TEAM_PREVIEW_ORIGIN = /^https:\/\/[a-z0-9-]+-sprteam\.vercel\.app$/i;
 const corsOrigin = (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) => {
   if (!origin) return callback(null, true);
   try {
     const normalizedOrigin = new URL(origin).origin;
     if (allowedOrigins.has(normalizedOrigin)) return callback(null, true);
+    if (VERCEL_TEAM_PREVIEW_ORIGIN.test(normalizedOrigin)) return callback(null, true);
   } catch (_) {}
   return callback(new Error('CORS origin denied'));
 };
