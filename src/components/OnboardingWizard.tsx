@@ -220,30 +220,26 @@ export default function OnboardingWizard({ user, onOnboardingComplete }: Onboard
   };
 
   return (
-    <div className="min-h-screen w-screen flex flex-col items-center justify-center bg-slate-900 font-sans text-white p-4">
-      {/* Background Ambience */}
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 rounded-full bg-emerald-500/5 blur-3xl pointer-events-none" />
-
+    <div className="min-h-screen w-screen flex flex-col items-center justify-center bg-[#1e1e1e] font-sans text-[#d4d4d4] p-4">
       {/* Header Info */}
       <div className="text-center space-y-2 mb-8 relative z-10">
         <div className="flex justify-center mb-4">
-          <div className="bg-indigo-500/10 border border-indigo-500/30 p-3 rounded-2xl">
-            <ShieldCheck className="h-8 w-8 text-indigo-400" />
+          <div className="bg-[#094771] border border-[#0e639c]/40 p-3 rounded-md">
+            <ShieldCheck className="h-8 w-8 text-[#3794ff]" />
           </div>
         </div>
         <h1 className="text-3xl font-bold tracking-tight font-display">Set up your SPR workspace</h1>
-        <p className="text-sm text-slate-300 max-w-md">
+        <p className="text-sm text-[#d4d4d4] max-w-md">
           Four short steps. You can change these settings later.
         </p>
       </div>
 
       {/* Wizard Card */}
-      <div className="max-w-md w-full bg-slate-950 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-2xl relative z-10 flex flex-col justify-between min-h-[380px]">
+      <div className="max-w-md w-full spr-panel p-6 md:p-8 relative z-10 flex flex-col justify-between min-h-[380px]">
         
         {/* Progress Bar */}
-        <div className="flex items-center justify-between mb-6 border-b border-slate-900 pb-4">
-          <span className="text-[10px] font-mono uppercase text-slate-400 font-bold tracking-wider">
+        <div className="flex items-center justify-between mb-6 border-b border-[#3c3c3c] pb-4">
+          <span className="text-[10px] font-mono uppercase text-[#9d9d9d] font-bold tracking-wider">
             Step {step} of 4: {step === 1 && 'Workspace'}
             {step === 2 && 'Preferences'}
             {step === 3 && 'Account security'}
@@ -255,10 +251,10 @@ export default function OnboardingWizard({ user, onOnboardingComplete }: Onboard
                 key={s}
                 className={`h-1.5 w-8 rounded-full transition-all duration-300 ${
                   s === step 
-                    ? 'bg-indigo-500' 
+                    ? 'bg-[#3794ff]'
                     : s < step 
-                      ? 'bg-emerald-500' 
-                      : 'bg-slate-800'
+                      ? 'bg-[#89d185]'
+                      : 'bg-[#3c3c3c]'
                 }`}
               />
             ))}
@@ -267,8 +263,8 @@ export default function OnboardingWizard({ user, onOnboardingComplete }: Onboard
 
         {/* Errors Display */}
         {error && (
-          <div className="mb-4 p-3 bg-rose-950/40 text-rose-300 border border-rose-900/50 rounded-xl text-xs flex gap-2 items-start">
-            <Sliders className="h-4 w-4 shrink-0 mt-0.5 text-rose-400" />
+          <div className="mb-4 p-3 bg-[#f14c4c]/10 text-[#f14c4c] border border-[#f14c4c]/30 rounded-md text-xs flex gap-2 items-start">
+            <Sliders className="h-4 w-4 shrink-0 mt-0.5 text-[#f14c4c]" />
             <p>{error}</p>
           </div>
         )}
@@ -278,36 +274,36 @@ export default function OnboardingWizard({ user, onOnboardingComplete }: Onboard
           <div className="space-y-4 text-left flex-1">
             <div>
               <h2 className="text-lg font-semibold">Name your workspace</h2>
-              <p className="mt-1 text-sm text-slate-400">Use the company or team name your members will recognize.</p>
+              <p className="mt-1 text-sm text-[#9d9d9d]">Use the company or team name your members will recognize.</p>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+              <label className="block text-xs font-semibold text-[#d4d4d4] mb-1.5">
                 Workspace name
               </label>
               <div className="relative">
-                <Building2 className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-500" />
+                <Building2 className="absolute left-3.5 top-3.5 h-4 w-4 text-[#9d9d9d]" />
                 <input
                   type="text"
                   value={companyName}
                   onChange={(e) => setCompanyName(e.target.value)}
                   placeholder="Example: Acme Security"
                   autoFocus
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-10 pr-4 py-3 text-sm text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-[#2d2d2d] border border-[#3c3c3c] rounded-md pl-10 pr-4 py-3 text-sm text-[#d4d4d4] focus:outline-none focus:border-[#3794ff]"
                   required
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+              <label className="block text-xs font-semibold text-[#d4d4d4] mb-1.5">
                 Your role
               </label>
               <div className="relative">
-                <User2 className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-500" />
+                <User2 className="absolute left-3.5 top-3.5 h-4 w-4 text-[#9d9d9d]" />
                 <select
                   value={role}
                   onChange={(e) => setRole(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-10 pr-4 py-3 text-sm text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
+                  className="w-full bg-[#2d2d2d] border border-[#3c3c3c] rounded-md pl-10 pr-4 py-3 text-sm text-[#d4d4d4] focus:outline-none focus:border-[#3794ff] cursor-pointer"
                 >
                   <option value="Owner">Owner</option>
                   <option value="Admin">Administrator</option>
@@ -318,7 +314,7 @@ export default function OnboardingWizard({ user, onOnboardingComplete }: Onboard
               </div>
             </div>
             
-            <p className="text-xs text-slate-400 leading-normal">
+            <p className="text-xs text-[#9d9d9d] leading-normal">
               As the person creating this workspace, your account will receive the Owner role.
             </p>
           </div>
@@ -329,11 +325,11 @@ export default function OnboardingWizard({ user, onOnboardingComplete }: Onboard
           <div className="space-y-4 text-left flex-1">
             <div>
               <h2 className="text-lg font-semibold">Tell us what you need</h2>
-              <p className="mt-1 text-sm text-slate-400">These answers personalize the workspace. They do not change your plan.</p>
+              <p className="mt-1 text-sm text-[#9d9d9d]">These answers personalize the workspace. They do not change your plan.</p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-[10px] font-mono font-bold text-slate-400 uppercase mb-1.5">
+                <label className="block text-[10px] font-mono font-bold text-[#9d9d9d] uppercase mb-1.5">
                   Team members
                 </label>
                 <input
@@ -341,12 +337,12 @@ export default function OnboardingWizard({ user, onOnboardingComplete }: Onboard
                   min="1"
                   value={numTechnicians}
                   onChange={(e) => setNumTechnicians(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
+                  className="w-full bg-[#2d2d2d] border border-[#3c3c3c] rounded-md px-4 py-3 text-xs text-[#d4d4d4] focus:outline-none focus:border-[#3794ff] font-mono"
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] font-mono font-bold text-slate-400 uppercase mb-1.5">
+                <label className="block text-[10px] font-mono font-bold text-[#9d9d9d] uppercase mb-1.5">
                   Clients
                 </label>
                 <input
@@ -354,19 +350,19 @@ export default function OnboardingWizard({ user, onOnboardingComplete }: Onboard
                   min="0"
                   value={clientCount}
                   onChange={(e) => setClientCount(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
+                  className="w-full bg-[#2d2d2d] border border-[#3c3c3c] rounded-md px-4 py-3 text-xs text-[#d4d4d4] focus:outline-none focus:border-[#3794ff] font-mono"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-[10px] font-mono font-bold text-slate-400 uppercase mb-1.5">
+              <label className="block text-[10px] font-mono font-bold text-[#9d9d9d] uppercase mb-1.5">
                 Main goal
               </label>
               <select
                 value={primaryUseCase}
                 onChange={(e) => setPrimaryUseCase(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
+                className="w-full bg-[#2d2d2d] border border-[#3c3c3c] rounded-md px-4 py-3 text-xs text-[#d4d4d4] focus:outline-none focus:border-[#3794ff] cursor-pointer"
               >
                 <option value="NIST Mapping & Risk Assessments">NIST Mapping & Risk Assessments</option>
                 <option value="Continuous SBOM Monitoring">Continuous SBOM Monitoring</option>
@@ -382,12 +378,12 @@ export default function OnboardingWizard({ user, onOnboardingComplete }: Onboard
           <div className="space-y-4 text-left flex-1">
             <div>
               <h2 className="text-lg font-semibold">Protect your account</h2>
-              <p className="mt-1 text-sm text-slate-400">Add an authenticator code now, or turn this option off and continue.</p>
+              <p className="mt-1 text-sm text-[#9d9d9d]">Add an authenticator code now, or turn this option off and continue.</p>
             </div>
-            <div className="flex items-center justify-between p-3.5 bg-slate-900 rounded-2xl border border-slate-800">
+            <div className="flex items-center justify-between p-3.5 bg-[#2d2d2d] rounded-md border border-[#3c3c3c]">
               <div className="space-y-1 pr-2">
-                <h4 className="text-sm font-semibold text-slate-200">Use an authenticator app</h4>
-                <p className="text-xs text-slate-400 leading-normal">
+                <h4 className="text-sm font-semibold text-[#d4d4d4]">Use an authenticator app</h4>
+                <p className="text-xs text-[#9d9d9d] leading-normal">
                   Recommended for workspace owners.
                 </p>
               </div>
@@ -401,21 +397,21 @@ export default function OnboardingWizard({ user, onOnboardingComplete }: Onboard
                     setTotpError(null);
                   }
                 }}
-                className="h-5 w-5 accent-indigo-500 shrink-0 cursor-pointer"
+                className="h-5 w-5 accent-[#0e639c] shrink-0 cursor-pointer"
               />
             </div>
 
             {mfaEnabled && (
-              <div className="p-4 bg-black/60 rounded-2xl border border-slate-850 space-y-4">
+              <div className="p-4 bg-[#2d2d2d] rounded-md border border-[#3c3c3c] space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <KeyRound className="h-4 w-4 text-indigo-400" />
-                    <span className="text-[10px] font-mono uppercase text-indigo-300 font-bold tracking-wider">
+                    <KeyRound className="h-4 w-4 text-[#3794ff]" />
+                    <span className="text-[10px] font-mono uppercase text-[#3794ff] font-bold tracking-wider">
                       Authenticator setup
                     </span>
                   </div>
                   {isTotpVerified && (
-                    <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-2 py-0.5 rounded-full">
+                    <span className="flex items-center gap-1 text-[10px] font-bold text-[#89d185]">
                       <CheckCircle2 className="h-3 w-3" />
                       MFA Verified
                     </span>
@@ -432,25 +428,25 @@ export default function OnboardingWizard({ user, onOnboardingComplete }: Onboard
                         className="h-20 w-20"
                       />
                     ) : (
-                      <div className="h-20 w-20 bg-slate-200 flex items-center justify-center text-[10px] text-slate-500 font-mono">
+                      <div className="h-20 w-20 bg-[#3c3c3c] flex items-center justify-center text-[10px] text-[#9d9d9d] font-mono">
                         Generating QR...
                       </div>
                     )}
                   </div>
                   <div className="space-y-1">
-                    <span className="text-xs text-slate-400 block">Manual setup key</span>
-                    <span className="font-mono text-xs text-white tracking-widest font-bold bg-slate-900 px-2 py-1 rounded border border-slate-800 select-all block">
+                    <span className="text-xs text-[#9d9d9d] block">Manual setup key</span>
+                    <span className="font-mono text-xs text-[#d4d4d4] tracking-widest font-bold bg-[#2d2d2d] px-2 py-1 rounded border border-[#3c3c3c] select-all block">
                       {mfaSecret}
                     </span>
-                    <p className="text-[9px] text-slate-500">
+                    <p className="text-[9px] text-[#9d9d9d]">
                       Scan the QR code, or enter this key in your authenticator app.
                     </p>
                   </div>
                 </div>
 
                 {/* Verification Code Input */}
-                <div className="pt-2 border-t border-slate-800 space-y-2">
-                  <label className="text-[10px] font-mono uppercase text-slate-400 block">
+                <div className="pt-2 border-t border-[#3c3c3c] space-y-2">
+                  <label className="text-[10px] font-mono uppercase text-[#9d9d9d] block">
                     Enter the 6-digit code
                   </label>
                   <div className="flex gap-2">
@@ -463,24 +459,24 @@ export default function OnboardingWizard({ user, onOnboardingComplete }: Onboard
                         setTotpError(null);
                       }}
                       placeholder="e.g. 123456"
-                      className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs font-mono text-white tracking-widest focus:outline-none focus:border-indigo-500 w-36"
+                      className="bg-[#2d2d2d] border border-[#3c3c3c] rounded-md px-3 py-1.5 text-xs font-mono text-[#d4d4d4] tracking-widest focus:outline-none focus:border-[#3794ff] w-36"
                     />
                     <button
                       type="button"
                       onClick={handleVerifyTotp}
                       disabled={totpCodeInput.length !== 6 || totpVerifying}
-                      className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white font-bold text-xs px-3 py-1.5 rounded-xl cursor-pointer transition-colors"
+                      className="spr-btn spr-btn-primary disabled:opacity-40 cursor-pointer"
                     >
                       {totpVerifying ? 'Verifying...' : 'Verify Code'}
                     </button>
                   </div>
                   {totpError && (
-                    <p className="text-[10px] text-rose-400 font-medium leading-tight">
+                    <p className="text-[10px] text-[#f14c4c] font-medium leading-tight">
                       {totpError}
                     </p>
                   )}
                   {isTotpVerified && (
-                    <p className="text-[10px] text-emerald-400 font-medium leading-tight">
+                    <p className="text-[10px] text-[#89d185] font-medium leading-tight">
                       ✓ Code verified successfully! MFA active for this workspace.
                     </p>
                   )}
@@ -492,29 +488,29 @@ export default function OnboardingWizard({ user, onOnboardingComplete }: Onboard
 
         {/* STEP 4: SERVER-BACKED WORKSPACE SETUP */}
         {step === 4 && (
-          <div className="space-y-4 text-left flex-1 font-mono text-[11px] text-slate-300 leading-normal">
+          <div className="space-y-4 text-left flex-1 font-mono text-[11px] text-[#d4d4d4] leading-normal">
             <div className="font-sans">
               <h2 className="text-lg font-semibold">Creating your workspace</h2>
-              <p className="mt-1 text-sm text-slate-400">SPR is saving your settings and applying your Owner permissions.</p>
+              <p className="mt-1 text-sm text-[#9d9d9d]">SPR is saving your settings and applying your Owner permissions.</p>
             </div>
-            <div className="p-4 bg-black/80 rounded-2xl border border-slate-850 space-y-2 min-h-36 max-h-48 overflow-y-auto" role="status" aria-live="polite">
+            <div className="p-4 bg-[#2d2d2d] rounded-md border border-[#3c3c3c] space-y-2 min-h-36 max-h-48 overflow-y-auto" role="status" aria-live="polite">
               {setupLogs.map((log, index) => (
-                <div key={index} className="flex gap-2 items-start text-emerald-400">
-                  <Check className="h-3.5 w-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                <div key={index} className="flex gap-2 items-start text-[#89d185]">
+                  <Check className="h-3.5 w-3.5 text-[#89d185] shrink-0 mt-0.5" />
                   <span>{log}</span>
                 </div>
               ))}
               {setupLogs.length < 4 && (
-                <div className="flex items-center gap-2 text-slate-500 animate-pulse">
-                  <RefreshCw className="h-3 w-3 animate-spin text-slate-400" />
+                <div className="flex items-center gap-2 text-[#9d9d9d] animate-pulse">
+                  <RefreshCw className="h-3 w-3 animate-spin text-[#9d9d9d]" />
                   <span>Saving your setup...</span>
                 </div>
               )}
             </div>
             
             {setupLogs.length === 4 && (
-              <div className="p-3 bg-indigo-950/20 text-indigo-300 border border-indigo-900/40 rounded-xl flex gap-2 items-center text-[10px]">
-                <Sparkles className="h-4 w-4 text-indigo-400 shrink-0" />
+              <div className="p-3 bg-[#094771]/40 text-[#3794ff] border border-[#0e639c]/40 rounded-md flex gap-2 items-center text-[10px]">
+                <Sparkles className="h-4 w-4 text-[#3794ff] shrink-0" />
                 <span>Your workspace is ready.</span>
               </div>
             )}
@@ -522,18 +518,18 @@ export default function OnboardingWizard({ user, onOnboardingComplete }: Onboard
         )}
 
         {/* ACTIONS */}
-        <div className="flex justify-between items-center mt-6 pt-4 border-t border-slate-900">
+        <div className="flex justify-between items-center mt-6 pt-4 border-t border-[#3c3c3c]">
           {step > 1 && step < 4 ? (
             <button
               onClick={() => setStep((s) => (s - 1) as any)}
-              className="px-4 py-2 hover:bg-slate-900 border border-slate-800 rounded-xl text-slate-400 text-xs font-semibold cursor-pointer"
+              className="spr-btn spr-btn-secondary cursor-pointer"
             >
               Back
             </button>
           ) : (
             <button
               onClick={handleSignOut}
-              className="flex items-center gap-1 px-4 py-2 hover:bg-rose-950/10 hover:text-rose-400 border border-transparent rounded-xl text-slate-500 text-xs font-semibold cursor-pointer"
+              className="flex items-center gap-1 px-4 py-2 hover:bg-[#f14c4c]/10 hover:text-[#f14c4c] border border-transparent rounded-md text-[#9d9d9d] text-xs font-semibold cursor-pointer"
             >
               <LogOut className="h-3.5 w-3.5" />
               <span>Sign out</span>
@@ -543,7 +539,7 @@ export default function OnboardingWizard({ user, onOnboardingComplete }: Onboard
           {step < 4 ? (
             <button
               onClick={handleNextStep}
-              className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-4 rounded-xl shadow-lg text-xs cursor-pointer"
+              className="flex items-center gap-1.5 spr-btn spr-btn-primary cursor-pointer"
             >
               <span>{step === 3 ? 'Create workspace' : 'Continue'}</span>
               <ArrowRight className="h-4 w-4" />
@@ -552,7 +548,7 @@ export default function OnboardingWizard({ user, onOnboardingComplete }: Onboard
             <button
               onClick={handleCompleteOnboarding}
               disabled={setupLogs.length < 4 || loading}
-              className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-xl shadow-lg text-xs cursor-pointer disabled:opacity-40"
+              className="flex items-center gap-1.5 spr-btn spr-btn-primary cursor-pointer disabled:opacity-40"
             >
               {loading ? (
                 <RefreshCw className="h-3.5 w-3.5 animate-spin text-white" />

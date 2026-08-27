@@ -543,27 +543,27 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
   return (
     <div className="space-y-6" id="msp-settings-view">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-slate-100 dark:border-zinc-800 pb-4">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-[#3c3c3c] pb-4">
         <div>
-          <h1 className="text-xl font-display font-bold text-slate-900 dark:text-zinc-100 flex items-center gap-2">
-            <Settings className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+          <h1 className="text-xl font-bold text-[#d4d4d4] flex items-center gap-2">
+            <Settings className="w-5 h-5 text-[#3794ff]" />
             <span>Platform Settings & Compliance Bible</span>
           </h1>
-          <p className="text-xs text-slate-500 dark:text-zinc-400 font-sans mt-1">
+          <p className="text-xs text-[#9d9d9d] font-sans mt-1">
             Configure thresholds, SAML authentication gateways, operator sessions, and access the master product security Bible.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           {/* Sub-Tab Selector */}
-          <div className="flex bg-slate-100 dark:bg-zinc-800 p-1 rounded-xl text-xs">
+          <div className="flex bg-[#2d2d2d] p-1 rounded-md text-xs">
             <button
               type="button"
               onClick={() => setActiveSubTab('configurations')}
               className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
                 activeSubTab === 'configurations'
-                  ? 'bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 font-bold shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200'
+                  ? 'bg-[#094771] text-white font-bold'
+                  : 'text-[#9d9d9d] hover:text-[#d4d4d4] '
               }`}
             >
               <Sliders className="w-3.5 h-3.5" />
@@ -574,8 +574,8 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
               onClick={() => setActiveSubTab('organization')}
               className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
                 activeSubTab === 'organization'
-                  ? 'bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 font-bold shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200'
+                  ? 'bg-[#094771] text-white font-bold'
+                  : 'text-[#9d9d9d] hover:text-[#d4d4d4] '
               }`}
             >
               <Layers className="w-3.5 h-3.5" />
@@ -586,8 +586,8 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
               onClick={() => setActiveSubTab('bible')}
               className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
                 activeSubTab === 'bible'
-                  ? 'bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 font-bold shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200'
+                  ? 'bg-[#094771] text-white font-bold'
+                  : 'text-[#9d9d9d] hover:text-[#d4d4d4] '
               }`}
             >
               <BookOpen className="w-3.5 h-3.5" />
@@ -598,7 +598,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
           <button
             onClick={fetchAuthDataLedgers}
             disabled={loadingLedgers}
-            className="p-2 bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-300 rounded-xl hover:bg-slate-50 dark:hover:bg-zinc-700/80 transition flex items-center gap-1.5 text-xs font-mono cursor-pointer"
+            className="p-2 bg-[#2d2d2d] border border-[#3c3c3c] text-[#d4d4d4] rounded-md hover:bg-[#383838] transition flex items-center gap-1.5 text-xs font-mono cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loadingLedgers ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline">Sync Audits</span>
@@ -612,15 +612,15 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
           <div className="lg:col-span-2 space-y-6">
             
             {/* General platform settings card */}
-            <div className="studio-card p-5 space-y-4">
-              <h3 className="text-xs font-bold text-slate-800 dark:text-zinc-200 font-display flex items-center gap-1.5 pb-2 border-b border-slate-100 dark:border-zinc-800/80">
-                <Sliders className="w-4.5 h-4.5 text-indigo-500" />
+            <div className="spr-panel p-5 space-y-4">
+              <h3 className="text-xs font-bold text-[#d4d4d4] flex items-center gap-1.5 pb-2 border-b border-[#3c3c3c]">
+                <Sliders className="w-4.5 h-4.5 text-[#3794ff]" />
                 <span>General Platform Parameters</span>
               </h3>
 
               <div className="space-y-3.5 text-xs">
                 <div className="flex flex-col gap-1">
-                  <label className="font-semibold text-slate-700 dark:text-zinc-300">Audit Trust SLA Target Threshold (Score)</label>
+                  <label className="font-semibold text-[#d4d4d4]">Audit Trust SLA Target Threshold (Score)</label>
                   <div className="flex gap-2 items-center">
                     <input
                       type="range"
@@ -628,66 +628,66 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                       max="98"
                       value={slaTarget}
                       onChange={(e) => setSlaTarget(Number(e.target.value))}
-                      className="flex-1 bg-slate-100 dark:bg-zinc-800 h-1.5 rounded-full cursor-pointer accent-indigo-600"
+                      className="flex-1 bg-[#2d2d2d] h-1.5 rounded-full cursor-pointer accent-[#3794ff]"
                     />
-                    <span className="font-mono font-bold text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/60 px-2 py-1 rounded">
+                    <span className="font-mono font-bold text-[#3794ff] bg-[#094771] border border-[#3c3c3c] px-2 py-1 rounded">
                       {slaTarget}/100
                     </span>
                   </div>
-                  <p className="text-[10px] text-slate-400 dark:text-zinc-500 mt-0.5">Alerts are compiled if a software passport overall rating drops below this value.</p>
+                  <p className="text-[10px] text-[#6f6f6f] mt-0.5">Alerts are compiled if a software passport overall rating drops below this value.</p>
                 </div>
 
-                <div className="flex justify-between items-center border-t border-slate-100 dark:border-zinc-800/80 pt-3">
+                <div className="flex justify-between items-center border-t border-[#3c3c3c] pt-3">
                   <div>
-                    <span className="font-semibold text-slate-700 dark:text-zinc-300 block">Enable Automated Daily Recalculation Scans</span>
-                    <p className="text-[10px] text-slate-400 dark:text-zinc-500 leading-snug">Automatically scan active client software inventory on CVE database updates.</p>
+                    <span className="font-semibold text-[#d4d4d4] block">Enable Automated Daily Recalculation Scans</span>
+                    <p className="text-[10px] text-[#6f6f6f] leading-snug">Automatically scan active client software inventory on CVE database updates.</p>
                   </div>
                   <input
                     type="checkbox"
                     defaultChecked
-                    className="w-4.5 h-4.5 text-indigo-600 dark:text-indigo-500 border-slate-300 dark:border-zinc-700 rounded focus:ring-indigo-500"
+                    className="w-4.5 h-4.5 text-[#3794ff] border-[#3c3c3c] rounded focus:ring-[#3794ff]"
                   />
                 </div>
               </div>
             </div>
 
             {/* Theme & Interface Customization Card */}
-            <div className="studio-card p-5 space-y-4">
-              <h3 className="text-xs font-bold text-slate-800 dark:text-zinc-200 font-display flex items-center gap-1.5 pb-2 border-b border-slate-100 dark:border-zinc-800/80">
-                <Sun className="w-4.5 h-4.5 text-indigo-500" />
+            <div className="spr-panel p-5 space-y-4">
+              <h3 className="text-xs font-bold text-[#d4d4d4] flex items-center gap-1.5 pb-2 border-b border-[#3c3c3c]">
+                <Sun className="w-4.5 h-4.5 text-[#3794ff]" />
                 <span>Theme & Interface Customization</span>
               </h3>
 
               <div className="space-y-4 text-xs">
                 <div className="flex flex-col gap-1.5">
-                  <span className="font-semibold text-slate-700 dark:text-zinc-300">Active Theme Preference</span>
-                  <p className="text-[10px] text-slate-400 dark:text-zinc-500">Choose between high-contrast light mode or a dark interface designed for operating centers.</p>
+                  <span className="font-semibold text-[#d4d4d4]">Active Theme Preference</span>
+                  <p className="text-[10px] text-[#6f6f6f] ">Choose between high-contrast light mode or a dark interface designed for operating centers.</p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
                     onClick={() => theme === 'dark' && onToggleTheme()}
-                    className={`flex items-center justify-center gap-2.5 p-3 rounded-xl border transition-all cursor-pointer ${
+                    className={`flex items-center justify-center gap-2.5 p-3 rounded-md border transition-all cursor-pointer ${
                       theme === 'light'
-                        ? 'bg-indigo-50/55 border-indigo-200 text-indigo-700 font-semibold shadow-sm'
-                        : 'bg-zinc-900 border-zinc-800 text-zinc-450 hover:text-zinc-200 hover:bg-zinc-800/60'
+                        ? 'bg-[#094771] border-[#3c3c3c] text-[#3794ff] font-semibold shadow-sm'
+                        : 'bg-[#2d2d2d] border-[#3c3c3c] text-[#9d9d9d] hover:text-[#d4d4d4] hover:bg-[#383838]'
                     }`}
                   >
-                    <Sun className="w-4 h-4 text-amber-500" />
+                    <Sun className="w-4 h-4 text-[#cca700]" />
                     <span>Light Mode</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => theme === 'light' && onToggleTheme()}
-                    className={`flex items-center justify-center gap-2.5 p-3 rounded-xl border transition-all cursor-pointer ${
+                    className={`flex items-center justify-center gap-2.5 p-3 rounded-md border transition-all cursor-pointer ${
                       theme === 'dark'
-                        ? 'bg-indigo-950/20 border-indigo-800/50 text-indigo-200 font-semibold shadow-inner'
-                        : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-800'
+                        ? 'bg-[#094771] border-[#3c3c3c] text-[#3794ff] font-semibold shadow-inner'
+                        : 'bg-[#2d2d2d] hover:bg-[#383838] border-[#3c3c3c] text-[#9d9d9d] hover:text-[#d4d4d4]'
                     }`}
                   >
-                    <Moon className="w-4 h-4 text-indigo-400" />
+                    <Moon className="w-4 h-4 text-[#3794ff]" />
                     <span>Dark Mode</span>
                   </button>
                 </div>
@@ -695,22 +695,22 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
             </div>
 
             {/* SAML SSO Configuration Card */}
-            <div className="studio-card p-5 space-y-4">
-              <h3 className="text-xs font-bold text-slate-800 dark:text-zinc-200 font-display flex items-center gap-1.5 pb-2 border-b border-slate-100 dark:border-zinc-800/80">
-                <Globe className="w-4.5 h-4.5 text-indigo-500" />
+            <div className="spr-panel p-5 space-y-4">
+              <h3 className="text-xs font-bold text-[#d4d4d4] flex items-center gap-1.5 pb-2 border-b border-[#3c3c3c]">
+                <Globe className="w-4.5 h-4.5 text-[#3794ff]" />
                 <span>Enterprise SAML / SSO Integration Configuration</span>
               </h3>
 
               <div className="space-y-4 text-xs">
                 <div className="flex justify-between items-center">
                   <div>
-                    <span className="font-semibold text-slate-700 dark:text-zinc-300 block">SAML SSO Access Gate</span>
-                    <p className="text-[10px] text-slate-400 dark:text-zinc-500 leading-snug">Redirect unauthenticated corporate domains to the unified Identity Provider (IdP).</p>
+                    <span className="font-semibold text-[#d4d4d4] block">SAML SSO Access Gate</span>
+                    <p className="text-[10px] text-[#6f6f6f] leading-snug">Redirect unauthenticated corporate domains to the unified Identity Provider (IdP).</p>
                   </div>
                   <button
                     onClick={() => setSsoEnabled(!ssoEnabled)}
                     className={`px-3 py-1 text-xs font-bold rounded-md border cursor-pointer transition-colors ${
-                      ssoEnabled ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-400' : 'bg-slate-50 dark:bg-zinc-800 border-slate-200 dark:border-zinc-700 text-slate-500 dark:text-zinc-400'
+                      ssoEnabled ? 'bg-[#2d2d2d] border-[#3c3c3c] text-[#89d185]' : 'bg-[#2d2d2d] border-[#3c3c3c] text-[#9d9d9d]'
                     }`}
                   >
                     {ssoEnabled ? 'SSO Active' : 'SSO Inactive'}
@@ -719,30 +719,30 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
                   <div>
-                    <label className="block text-[10px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase mb-1">Corporate Identity Provider</label>
+                    <label className="block text-[10px] font-mono font-bold text-[#6f6f6f] uppercase mb-1">Corporate Identity Provider</label>
                     <input
                       type="text"
                       value={ssoProvider}
                       onChange={(e) => setSsoProvider(e.target.value)}
-                      className="w-full studio-input p-2.5 bg-slate-50 dark:bg-zinc-800/50"
+                      className="w-full rounded-md border border-[#3c3c3c] text-[#d4d4d4] focus:outline-none focus:border-[#3794ff] p-2.5 bg-[#2d2d2d]"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase mb-1">Client ID / Issuer URL</label>
+                    <label className="block text-[10px] font-mono font-bold text-[#6f6f6f] uppercase mb-1">Client ID / Issuer URL</label>
                     <input
                       type="text"
                       value={ssoClientId}
                       onChange={(e) => setSsoClientId(e.target.value)}
-                      className="w-full studio-input p-2.5 bg-slate-50 dark:bg-zinc-800/50 font-mono"
+                      className="w-full rounded-md border border-[#3c3c3c] text-[#d4d4d4] focus:outline-none focus:border-[#3794ff] p-2.5 bg-[#2d2d2d] font-mono"
                     />
                   </div>
                   <div className="md:col-span-2">
-                    <label className="block text-[10px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase mb-1">SAML 2.0 Metadata XML Endpoint URL</label>
+                    <label className="block text-[10px] font-mono font-bold text-[#6f6f6f] uppercase mb-1">SAML 2.0 Metadata XML Endpoint URL</label>
                     <input
                       type="text"
                       value={ssoMetadataUrl}
                       onChange={(e) => setSsoMetadataUrl(e.target.value)}
-                      className="w-full studio-input p-2.5 bg-slate-50 dark:bg-zinc-800/50 font-mono"
+                      className="w-full rounded-md border border-[#3c3c3c] text-[#d4d4d4] focus:outline-none focus:border-[#3794ff] p-2.5 bg-[#2d2d2d] font-mono"
                     />
                   </div>
                 </div>
@@ -750,13 +750,13 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
             </div>
 
             {/* Active Sessions Monitoring Ledger */}
-            <div className="studio-card p-5 space-y-4">
-              <h3 className="text-xs font-bold text-slate-800 dark:text-zinc-200 font-display flex items-center justify-between pb-2 border-b border-slate-100 dark:border-zinc-800/80">
+            <div className="spr-panel p-5 space-y-4">
+              <h3 className="text-xs font-bold text-[#d4d4d4] flex items-center justify-between pb-2 border-b border-[#3c3c3c]">
                 <span className="flex items-center gap-1.5">
-                  <Lock className="w-4.5 h-4.5 text-indigo-500" />
+                  <Lock className="w-4.5 h-4.5 text-[#3794ff]" />
                   <span>Active Operator Sessions Ledger</span>
                 </span>
-                <span className="font-mono text-[10px] text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded border border-indigo-200/50">
+                <span className="font-mono text-[10px] text-[#3794ff] bg-[#094771] px-2 py-0.5 rounded border border-[#3c3c3c]">
                   {sessions.length} Active Node{sessions.length !== 1 ? 's' : ''}
                 </span>
               </h3>
@@ -764,34 +764,34 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
               <div className="overflow-x-auto text-xs">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="border-b border-slate-100 dark:border-zinc-800 text-slate-400 dark:text-zinc-500 font-mono text-[10px] uppercase">
+                    <tr className="border-b border-[#3c3c3c] text-[#6f6f6f] font-mono text-[10px] uppercase">
                       <th className="py-2">User / Identity</th>
                       <th className="py-2">IP Address</th>
                       <th className="py-2">Device & Location</th>
                       <th className="py-2 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/40 font-sans">
+                  <tbody className="divide-y divide-[#3c3c3c] font-sans">
                     {sessions.map((sess) => (
-                      <tr key={sess.id} className="hover:bg-slate-50/50 dark:hover:bg-zinc-800/20">
-                        <td className="py-3 pr-2 font-semibold text-slate-800 dark:text-zinc-200">
+                      <tr key={sess.id} className="hover:bg-[#383838]">
+                        <td className="py-3 pr-2 font-semibold text-[#d4d4d4]">
                           {sess.email}
                           {sess.current && (
-                            <span className="ml-2 font-mono text-[8px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 px-1.5 py-0.2 rounded font-bold uppercase">
+                            <span className="ml-2 font-mono text-[8px] bg-[#2d2d2d] text-[#89d185] border border-[#3c3c3c] px-1.5 py-0.2 rounded font-bold uppercase">
                               Current Node
                             </span>
                           )}
                         </td>
-                        <td className="py-3 font-mono text-slate-500">{sess.ip}</td>
-                        <td className="py-3 text-slate-600 dark:text-zinc-400 leading-normal">
+                        <td className="py-3 font-mono text-[#9d9d9d]">{sess.ip}</td>
+                        <td className="py-3 text-[#9d9d9d] leading-normal">
                           <span className="block">{sess.device}</span>
-                          <span className="text-[10px] text-slate-400">{sess.location}</span>
+                          <span className="text-[10px] text-[#6f6f6f]">{sess.location}</span>
                         </td>
                         <td className="py-3 text-right">
                           {!sess.current && (
                             <button
                               onClick={() => handleRevokeSession(sess.id)}
-                              className="p-1.5 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-lg cursor-pointer transition"
+                              className="p-1.5 text-[#f14c4c] hover:bg-[#383838] rounded-lg cursor-pointer transition"
                               title="Revoke session and force termination"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -802,7 +802,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                     ))}
                     {sessions.length === 0 && (
                       <tr>
-                        <td colSpan={4} className="py-4 text-center text-slate-400 font-mono">
+                        <td colSpan={4} className="py-4 text-center text-[#6f6f6f] font-mono">
                           No active sessions identified in memory.
                         </td>
                       </tr>
@@ -813,19 +813,19 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
             </div>
 
             {/* Cryptographically Chained Audit Ledger visualization */}
-            <div className="studio-card p-5 space-y-4">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-zinc-800/80">
-                <h3 className="text-xs font-bold text-slate-800 dark:text-zinc-200 font-display flex items-center gap-1.5">
-                  <FileCode className="w-4.5 h-4.5 text-indigo-500" />
+            <div className="spr-panel p-5 space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-[#3c3c3c]">
+                <h3 className="text-xs font-bold text-[#d4d4d4] flex items-center gap-1.5">
+                  <FileCode className="w-4.5 h-4.5 text-[#3794ff]" />
                   <span>Cryptographic Blockchain Audit Ledger</span>
                 </h3>
-                <span className="font-mono text-[10px] text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-200/50 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="font-mono text-[10px] text-[#89d185] bg-[#2d2d2d] px-2 py-0.5 rounded border border-[#3c3c3c] flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#89d185] animate-pulse" />
                   Tamper-Proof SLA verified
                 </span>
               </div>
               
-              <p className="text-[10px] text-slate-400 dark:text-zinc-500 font-sans leading-relaxed">
+              <p className="text-[10px] text-[#6f6f6f] font-sans leading-relaxed">
                 Every critical login event and administrative action is recorded into a secure hash chain. Each block references the SHA-256 hash of its predecessor, creating a mathematically unalterable audit trail.
               </p>
 
@@ -835,7 +835,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                   type="button"
                   onClick={handleVerifyLedger}
                   disabled={verifyingLedger}
-                  className="flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-400 dark:disabled:bg-zinc-800 rounded-lg shadow-sm cursor-pointer transition-all shrink-0"
+                  className="flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-bold text-white bg-[#0e639c] hover:bg-[#1177bb] disabled:bg-[#2d2d2d] rounded-lg shadow-sm cursor-pointer transition-all shrink-0"
                 >
                   {verifyingLedger ? (
                     <>
@@ -856,7 +856,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                   <button
                     type="button"
                     onClick={() => setVerificationResult(null)}
-                    className="text-[10px] font-sans font-semibold text-slate-500 hover:text-slate-700 dark:text-zinc-400 dark:hover:text-zinc-300 px-3 py-2 bg-slate-100 hover:bg-slate-200/80 dark:bg-zinc-800/60 dark:hover:bg-zinc-800 rounded-lg cursor-pointer transition-colors"
+                    className="text-[10px] font-sans font-semibold text-[#9d9d9d] hover:text-[#d4d4d4] px-3 py-2 bg-[#2d2d2d] hover:bg-[#383838] rounded-lg cursor-pointer transition-colors"
                   >
                     Clear Audit Report
                   </button>
@@ -865,21 +865,21 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
 
               {/* Dynamic Verification Report */}
               {verificationResult && (
-                <div className={`p-4 rounded-xl border font-sans text-xs ${
+                <div className={`p-4 rounded-md border font-sans text-xs ${
                   verificationResult.isValid 
-                    ? 'bg-emerald-50/50 dark:bg-emerald-950/10 border-emerald-200/60 dark:border-emerald-900/40 text-emerald-800 dark:text-emerald-400' 
-                    : 'bg-rose-50/50 dark:bg-rose-950/10 border-rose-200/60 dark:border-rose-900/40 text-rose-800 dark:text-rose-400'
+                    ? 'bg-[#2d2d2d] border-[#3c3c3c] text-[#89d185]'
+                    : 'bg-[#2d2d2d] border-[#3c3c3c] text-[#f14c4c]'
                 } space-y-2.5 transition-all duration-300`}>
                   <div className="flex items-center justify-between">
                     <span className="font-bold flex items-center gap-1.5 uppercase tracking-wide text-[10px]">
                       {verificationResult.isValid ? (
-                        <CheckCircle2 className="w-4.5 h-4.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <CheckCircle2 className="w-4.5 h-4.5 text-[#89d185] shrink-0" />
                       ) : (
-                        <AlertCircle className="w-4.5 h-4.5 text-rose-600 dark:text-rose-400 shrink-0" />
+                        <AlertCircle className="w-4.5 h-4.5 text-[#f14c4c] shrink-0" />
                       )}
                       <span>LEDGER ATTESTATION REPORT</span>
                     </span>
-                    <span className="font-mono text-[9px] text-slate-400 dark:text-zinc-500">
+                    <span className="font-mono text-[9px] text-[#6f6f6f] ">
                       Verified At: {new Date(verificationResult.verifiedAt).toLocaleTimeString()}
                     </span>
                   </div>
@@ -891,20 +891,20 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                   
                   {/* Verified Blocks Scrollable List */}
                   {verificationResult.details && verificationResult.details.length > 0 && (
-                    <div className="bg-white/40 dark:bg-black/20 p-2.5 rounded-lg max-h-40 overflow-y-auto font-mono text-[9px] space-y-1.5 border border-slate-200/40 dark:border-zinc-800/40">
-                      <div className="font-sans font-bold text-[8px] text-slate-400 dark:text-zinc-500 border-b border-slate-200/30 dark:border-zinc-800/30 pb-1 mb-1.5 uppercase">
+                    <div className="bg-[#2d2d2d] p-2.5 rounded-lg max-h-40 overflow-y-auto font-mono text-[9px] space-y-1.5 border border-[#3c3c3c]">
+                      <div className="font-sans font-bold text-[8px] text-[#6f6f6f] border-b border-[#3c3c3c] pb-1 mb-1.5 uppercase">
                         Cryptographic Signatures Checked
                       </div>
                       {verificationResult.details.map((vBlock: any, vIdx: number) => (
                         <div key={vIdx} className="flex justify-between items-center gap-2">
-                          <div className="truncate text-slate-600 dark:text-zinc-400">
+                          <div className="truncate text-[#9d9d9d]">
                             Block #{vBlock.id} ({vBlock.action}): 
-                            <span className="ml-1 text-slate-400 select-all">{vBlock.storedHash.substring(0, 16)}...</span>
+                            <span className="ml-1 text-[#6f6f6f] select-all">{vBlock.storedHash.substring(0, 16)}...</span>
                           </div>
                           <span className={`px-1.5 py-0.5 rounded text-[8px] uppercase font-bold shrink-0 ${
                             vBlock.valid 
-                              ? 'bg-emerald-100 dark:bg-emerald-950/55 text-emerald-700 dark:text-emerald-400' 
-                              : 'bg-rose-100 dark:bg-rose-950/55 text-rose-700 dark:text-rose-400'
+                              ? 'bg-[#2d2d2d] text-[#89d185]'
+                              : 'bg-[#2d2d2d] text-[#f14c4c]'
                           }`}>
                             {vBlock.valid ? 'Verified' : 'Corrupt'}
                           </span>
@@ -916,32 +916,32 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
               )}
 
               <div className="space-y-3 font-mono text-[10px]">
-                {auditChain.length === 0 && <p className="text-slate-400 dark:text-zinc-500 font-sans">No audit events recorded yet.</p>}
+                {auditChain.length === 0 && <p className="text-[#6f6f6f] font-sans">No audit events recorded yet.</p>}
                 {auditChain.slice(0, 3).map((blockObj, idx) => (
-                  <div key={idx} className="p-3 bg-slate-50 dark:bg-zinc-800/30 rounded-xl border border-slate-200/60 dark:border-zinc-800 space-y-1 text-slate-600 dark:text-zinc-400 relative overflow-hidden">
-                    <div className="absolute right-2 top-2 text-[8px] bg-slate-200 dark:bg-zinc-800 text-slate-500 dark:text-zinc-500 px-1.5 py-0.5 rounded uppercase font-bold">
+                  <div key={idx} className="p-3 bg-[#2d2d2d] rounded-md border border-[#3c3c3c] space-y-1 text-[#9d9d9d] relative overflow-hidden">
+                    <div className="absolute right-2 top-2 text-[8px] bg-[#2d2d2d] text-[#9d9d9d] px-1.5 py-0.5 rounded uppercase font-bold">
                       Block #{auditChain.length - 1 - idx}
                     </div>
                     <div className="flex gap-2">
-                      <span className="text-indigo-600 dark:text-indigo-400 font-bold uppercase">EVENT:</span>
-                      <span className="text-slate-800 dark:text-zinc-200 font-bold">
+                      <span className="text-[#3794ff] font-bold uppercase">EVENT:</span>
+                      <span className="text-[#d4d4d4] font-bold">
                         {blockObj.block?.actionType || blockObj.block?.action || 'Genesis Node Initiated'}
                       </span>
                     </div>
                     {blockObj.block?.userEmail && (
                       <div className="flex gap-2">
-                        <span className="text-slate-400">IDENTITY:</span>
-                        <span className="text-slate-700 dark:text-zinc-300 font-semibold">{blockObj.block?.userEmail}</span>
+                        <span className="text-[#6f6f6f]">IDENTITY:</span>
+                        <span className="text-[#d4d4d4] font-semibold">{blockObj.block?.userEmail}</span>
                       </div>
                     )}
                     <div className="space-y-0.5">
                       <div className="flex gap-2 text-[9px] truncate">
-                        <span className="text-slate-400 uppercase font-bold shrink-0">BLOCK HASH:</span>
-                        <span className="text-indigo-500 dark:text-indigo-400 select-all font-mono truncate">{blockObj.hash}</span>
+                        <span className="text-[#6f6f6f] uppercase font-bold shrink-0">BLOCK HASH:</span>
+                        <span className="text-[#3794ff] select-all font-mono truncate">{blockObj.hash}</span>
                       </div>
                       <div className="flex gap-2 text-[9px] truncate">
-                        <span className="text-slate-400 uppercase shrink-0">PREV HASH:</span>
-                        <span className="text-slate-500 select-all font-mono truncate">{blockObj.previousHash}</span>
+                        <span className="text-[#6f6f6f] uppercase shrink-0">PREV HASH:</span>
+                        <span className="text-[#9d9d9d] select-all font-mono truncate">{blockObj.previousHash}</span>
                       </div>
                     </div>
                   </div>
@@ -950,44 +950,44 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
             </div>
 
             {/* Security Credentials settings */}
-            <div className="studio-card p-5 space-y-4">
-              <h3 className="text-xs font-bold text-slate-800 dark:text-zinc-200 font-display flex items-center gap-1.5 pb-2 border-b border-slate-100 dark:border-zinc-800/80">
-                <KeyRound className="w-4.5 h-4.5 text-indigo-500" />
+            <div className="spr-panel p-5 space-y-4">
+              <h3 className="text-xs font-bold text-[#d4d4d4] flex items-center gap-1.5 pb-2 border-b border-[#3c3c3c]">
+                <KeyRound className="w-4.5 h-4.5 text-[#3794ff]" />
                 <span>Operator Authentication & Security Keys</span>
               </h3>
 
               <div className="space-y-3.5 text-xs">
                 <div className="flex justify-between items-center">
                   <div>
-                    <span className="font-semibold text-slate-700 dark:text-zinc-300 block">Enforce Multi-Factor Authentication (MFA)</span>
-                    <p className="text-[10px] text-slate-400 dark:text-zinc-500 leading-snug">All MSP users must provide TOTP codes on logon.</p>
+                    <span className="font-semibold text-[#d4d4d4] block">Enforce Multi-Factor Authentication (MFA)</span>
+                    <p className="text-[10px] text-[#6f6f6f] leading-snug">All MSP users must provide TOTP codes on logon.</p>
                   </div>
                   <button
                     onClick={() => setMfaEnabled(!mfaEnabled)}
                     className={`px-3 py-1 text-xs font-bold rounded-md border cursor-pointer transition-colors ${
-                      mfaEnabled ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-400' : 'bg-slate-50 dark:bg-zinc-800 border-slate-200 dark:border-zinc-700 text-slate-500 dark:text-zinc-400'
+                      mfaEnabled ? 'bg-[#2d2d2d] border-[#3c3c3c] text-[#89d185]' : 'bg-[#2d2d2d] border-[#3c3c3c] text-[#9d9d9d]'
                     }`}
                   >
                     {mfaEnabled ? 'MFA Enabled' : 'MFA Disabled'}
                   </button>
                 </div>
 
-                <div className="flex justify-between items-center border-t border-slate-100 dark:border-zinc-800/80 pt-3">
+                <div className="flex justify-between items-center border-t border-[#3c3c3c] pt-3">
                   <div>
-                    <span className="font-semibold text-slate-700 dark:text-zinc-300 block">Cryptographic PGP Auditing Key (Private)</span>
-                    <p className="text-[10px] text-slate-400 dark:text-zinc-500">Used for signing generated software passports and audit attestations.</p>
+                    <span className="font-semibold text-[#d4d4d4] block">Cryptographic PGP Auditing Key (Private)</span>
+                    <p className="text-[10px] text-[#6f6f6f] ">Used for signing generated software passports and audit attestations.</p>
                   </div>
-                  <button className="bg-slate-900 hover:bg-slate-800 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-white font-sans font-semibold text-xs px-3.5 py-1.8 rounded-lg cursor-pointer transition-colors">
+                  <button className="bg-[#2d2d2d] hover:bg-[#383838] text-white font-sans font-semibold text-xs px-3.5 py-1.8 rounded-lg cursor-pointer transition-colors">
                     Regenerate Sign Key
                   </button>
                 </div>
 
-                <div className="flex justify-between items-center border-t border-rose-100 dark:border-rose-950/40 pt-4 mt-2 bg-rose-50/20 dark:bg-rose-950/5 p-3.5 rounded-lg border border-dashed border-rose-200 dark:border-rose-900/40">
+                <div className="flex justify-between items-center border-t border-[#3c3c3c] pt-4 mt-2 bg-[#2d2d2d] p-3.5 rounded-lg border border-dashed border-[#3c3c3c]">
                   <div>
-                    <span className="font-bold text-rose-700 dark:text-rose-400 block flex items-center gap-1.5">
-                      <Shield className="w-4 h-4 text-rose-500" /> Tenant Offboarding & Data Deletion (DPA Compliance)
+                    <span className="font-bold text-[#f14c4c] block flex items-center gap-1.5">
+                      <Shield className="w-4 h-4 text-[#f14c4c]" /> Tenant Offboarding & Data Deletion (DPA Compliance)
                     </span>
-                    <p className="text-[10px] text-slate-500 dark:text-zinc-400 leading-snug mt-1">
+                    <p className="text-[10px] text-[#9d9d9d] leading-snug mt-1">
                       Cascading-delete all client lists, passports, vulnerability logs, and active integrations. This action is immediate and completely irreversible under GDPR/DPA compliance standards.
                     </p>
                   </div>
@@ -995,7 +995,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                     onClick={handleOffboardTenant}
                     disabled={!isOwner || offboarding}
                     title={!isOwner ? `Your ${currentRole} role cannot offboard this workspace. Owner is required.` : undefined}
-                    className="bg-rose-600 hover:bg-rose-700 text-white font-sans font-bold text-xs px-4 py-2.5 rounded-lg cursor-pointer transition-colors shadow-sm disabled:cursor-not-allowed disabled:opacity-50 shrink-0"
+                    className="bg-[#f14c4c] hover:bg-[#e04343] text-white font-sans font-bold text-xs px-4 py-2.5 rounded-lg cursor-pointer transition-colors shadow-sm disabled:cursor-not-allowed disabled:opacity-50 shrink-0"
                   >
                     {offboarding ? 'Purging Context...' : 'Offboard Workspace'}
                   </button>
@@ -1005,7 +1005,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
 
             <div className="flex justify-end gap-2">
               {saveSuccess && (
-                <span className="text-xs text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1">
+                <span className="text-xs text-[#cca700] font-semibold flex items-center gap-1">
                   <CheckCircle className="w-4 h-4" />
                   <span>Not saved to a server — these fields are local to this browser session only.</span>
                 </span>
@@ -1013,7 +1013,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
               <button
                 onClick={handleSaveSettings}
                 title="These settings are not persisted to a backend yet."
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-sans font-semibold text-xs rounded-lg shadow-sm cursor-pointer transition-all"
+                className="px-4 py-2 bg-[#0e639c] hover:bg-[#1177bb] text-white font-sans font-semibold text-xs rounded-lg shadow-sm cursor-pointer transition-all"
               >
                 Save Platform Settings
               </button>
@@ -1024,91 +1024,91 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
           <div className="space-y-6">
             
             {/* Active Login Audit Trail Panel */}
-            <div className="studio-card p-5 space-y-4">
-              <h3 className="text-xs font-bold text-slate-800 dark:text-zinc-200 font-display flex items-center gap-1.5 pb-2 border-b border-slate-100 dark:border-zinc-800/80">
-                <Fingerprint className="w-4.5 h-4.5 text-indigo-500" />
+            <div className="spr-panel p-5 space-y-4">
+              <h3 className="text-xs font-bold text-[#d4d4d4] flex items-center gap-1.5 pb-2 border-b border-[#3c3c3c]">
+                <Fingerprint className="w-4.5 h-4.5 text-[#3794ff]" />
                 <span>Real-time Login Audit Trail</span>
               </h3>
 
               <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
                 {history.map((log) => (
-                  <div key={log.id} className="p-2.5 rounded-xl border border-slate-100 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-850/30 text-[10px] space-y-1 text-left">
+                  <div key={log.id} className="p-2.5 rounded-md border border-[#3c3c3c] bg-[#2d2d2d] text-[10px] space-y-1 text-left">
                     <div className="flex justify-between items-center">
-                      <span className="font-mono font-bold text-slate-700 dark:text-zinc-300 truncate max-w-36">{log.email}</span>
+                      <span className="font-mono font-bold text-[#d4d4d4] truncate max-w-36">{log.email}</span>
                       <span className={`font-mono text-[8px] font-bold px-1.5 py-0.2 rounded ${
-                        log.status === 'Verified' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-400' : 'bg-rose-100 text-rose-800'
+                        log.status === 'Verified' ? 'bg-[#2d2d2d] text-[#89d185] ' : 'bg-[#2d2d2d] text-[#f14c4c]'
                       }`}>
                         {log.status}
                       </span>
                     </div>
-                    <div className="text-slate-500 dark:text-zinc-400">
+                    <div className="text-[#9d9d9d]">
                       <span className="block font-medium">{log.action}</span>
                       <span className="block text-[9px] font-mono mt-0.5">{new Date(log.timestamp).toLocaleString()}</span>
                     </div>
-                    <div className="flex justify-between font-mono text-[9px] text-slate-400 border-t border-slate-100 dark:border-zinc-800/40 pt-1 mt-1">
+                    <div className="flex justify-between font-mono text-[9px] text-[#6f6f6f] border-t border-[#3c3c3c] pt-1 mt-1">
                       <span>IP: {log.ip}</span>
                       <span>Loc: {log.location}</span>
                     </div>
                   </div>
                 ))}
                 {history.length === 0 && (
-                  <p className="text-center font-mono text-slate-400 py-4">No audit logs identified.</p>
+                  <p className="text-center font-mono text-[#6f6f6f] py-4">No audit logs identified.</p>
                 )}
               </div>
             </div>
 
-            <div className="studio-card p-5 space-y-4 h-fit">
-              <h3 className="text-xs font-bold text-slate-800 dark:text-zinc-200 font-display flex items-center gap-1.5 pb-2 border-b border-slate-100 dark:border-zinc-800/80">
-                <Shield className="w-4.5 h-4.5 text-slate-400 dark:text-zinc-500" />
+            <div className="spr-panel p-5 space-y-4 h-fit">
+              <h3 className="text-xs font-bold text-[#d4d4d4] flex items-center gap-1.5 pb-2 border-b border-[#3c3c3c]">
+                <Shield className="w-4.5 h-4.5 text-[#6f6f6f] " />
                 <span>Platform Pedigree Coordinates</span>
               </h3>
 
-              <div className="text-xs space-y-2.5 font-mono text-slate-400 dark:text-zinc-500">
-                <div className="flex justify-between border-b border-slate-100 dark:border-zinc-800/40 pb-1.5">
+              <div className="text-xs space-y-2.5 font-mono text-[#6f6f6f] ">
+                <div className="flex justify-between border-b border-[#3c3c3c] pb-1.5">
                   <span>PORTAL SERVICE:</span>
-                  <span className="font-bold text-slate-700 dark:text-zinc-300">SPR-CORE-VM</span>
+                  <span className="font-bold text-[#d4d4d4]">SPR-CORE-VM</span>
                 </div>
-                <div className="flex justify-between border-b border-slate-100 dark:border-zinc-800/40 pb-1.5">
+                <div className="flex justify-between border-b border-[#3c3c3c] pb-1.5">
                   <span>COMPILATION:</span>
-                  <span className="font-bold text-slate-700 dark:text-zinc-300">DOCKER PROD v2.4</span>
+                  <span className="font-bold text-[#d4d4d4]">DOCKER PROD v2.4</span>
                 </div>
-                <div className="flex justify-between border-b border-slate-100 dark:border-zinc-800/40 pb-1.5">
+                <div className="flex justify-between border-b border-[#3c3c3c] pb-1.5">
                   <span>SLA COMPLIANCE:</span>
-                  <span className="font-bold text-emerald-600 dark:text-emerald-400">99.98%</span>
+                  <span className="font-bold text-[#89d185]">99.98%</span>
                 </div>
               </div>
             </div>
 
-            <div className="studio-card p-5 space-y-4 h-fit">
-              <h3 className="text-xs font-bold text-slate-800 dark:text-zinc-200 font-display flex items-center gap-1.5 pb-2 border-b border-slate-100 dark:border-zinc-800/80">
-                <CheckCircle className="w-4.5 h-4.5 text-emerald-500" />
+            <div className="spr-panel p-5 space-y-4 h-fit">
+              <h3 className="text-xs font-bold text-[#d4d4d4] flex items-center gap-1.5 pb-2 border-b border-[#3c3c3c]">
+                <CheckCircle className="w-4.5 h-4.5 text-[#89d185]" />
                 <span>Readiness Diagnostics</span>
               </h3>
-              <p className="text-[10px] text-slate-400 dark:text-zinc-500 font-sans leading-relaxed">
+              <p className="text-[10px] text-[#6f6f6f] font-sans leading-relaxed">
                 Checks live database connectivity via the same /api/ready probe an orchestrator uses. This does not verify row-level isolation, OAuth handshakes, or API quota — those have no self-check endpoint yet.
               </p>
 
               <button
                 onClick={runDiagnosticSuite}
                 disabled={testing}
-                className="w-full py-2 bg-slate-900 hover:bg-slate-800 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-white font-sans font-bold text-xs rounded-lg transition-colors cursor-pointer"
+                className="w-full py-2 bg-[#2d2d2d] hover:bg-[#383838] text-white font-sans font-bold text-xs rounded-lg transition-colors cursor-pointer"
               >
                 {testing ? 'Checking…' : 'Check Readiness'}
               </button>
 
               {testResults.length > 0 && (
-                <div className="space-y-2.5 pt-2.5 border-t border-slate-100 dark:border-zinc-800/40">
+                <div className="space-y-2.5 pt-2.5 border-t border-[#3c3c3c]">
                   {testResults.map((t: any, idx: number) => (
                     <div key={idx} className="text-[10px] space-y-0.5">
                       <div className="flex justify-between items-center">
-                        <span className="font-bold text-slate-700 dark:text-zinc-300">{t.name}</span>
+                        <span className="font-bold text-[#d4d4d4]">{t.name}</span>
                         <span className={`font-mono font-bold px-1.5 py-0.2 rounded text-[8px] ${
-                          t.status === 'PASS' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400' : 'bg-rose-100 text-rose-800'
+                          t.status === 'PASS' ? 'bg-[#2d2d2d] text-[#89d185] ' : 'bg-[#2d2d2d] text-[#f14c4c]'
                         }`}>
                           {t.status}
                         </span>
                       </div>
-                      <p className="text-slate-400 dark:text-zinc-500 font-sans leading-snug">{t.details}</p>
+                      <p className="text-[#6f6f6f] font-sans leading-snug">{t.details}</p>
                     </div>
                   ))}
                 </div>
@@ -1120,21 +1120,21 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fadeIn text-xs">
           {/* Profile Management Section */}
           <div className="lg:col-span-1 space-y-6">
-            <div className="studio-card p-5 space-y-4 text-left">
-              <h3 className="text-xs font-bold text-slate-800 dark:text-zinc-200 font-display flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-zinc-800/80">
-                <Sliders className="w-4.5 h-4.5 text-indigo-500" />
+            <div className="spr-panel p-5 space-y-4 text-left">
+              <h3 className="text-xs font-bold text-[#d4d4d4] flex items-center gap-2 pb-2 border-b border-[#3c3c3c]">
+                <Sliders className="w-4.5 h-4.5 text-[#3794ff]" />
                 <span>User Profile Credentials</span>
               </h3>
 
               {teamError && (
-                <div className="p-3 bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-400 border border-rose-150 rounded-xl flex gap-2">
+                <div className="p-3 bg-[#2d2d2d] text-[#f14c4c] border border-[#3c3c3c] rounded-md flex gap-2">
                   <ShieldAlert className="w-4 h-4 shrink-0" />
                   <p>{teamError}</p>
                 </div>
               )}
 
               {teamSuccess && (
-                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-150 rounded-xl flex gap-2">
+                <div className="p-3 bg-[#2d2d2d] text-[#89d185] border border-[#3c3c3c] rounded-md flex gap-2">
                   <CheckCircle2 className="w-4 h-4 shrink-0" />
                   <p>{teamSuccess}</p>
                 </div>
@@ -1143,35 +1143,35 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
               {editingProfile ? (
                 <form onSubmit={handleSaveProfile} className="space-y-3.5">
                   <div className="flex flex-col gap-1">
-                    <label className="font-semibold text-slate-500">Display Name</label>
+                    <label className="font-semibold text-[#9d9d9d]">Display Name</label>
                     <input
                       type="text"
                       required
                       value={profileName}
                       onChange={(e) => setProfileName(e.target.value)}
-                      className="studio-input p-2.5 bg-slate-50 dark:bg-zinc-800/50"
+                      className="rounded-md border border-[#3c3c3c] text-[#d4d4d4] focus:outline-none focus:border-[#3794ff] p-2.5 bg-[#2d2d2d]"
                     />
                   </div>
 
                   <div className="flex flex-col gap-1">
-                    <label className="font-semibold text-slate-500">Corporate Job Title</label>
+                    <label className="font-semibold text-[#9d9d9d]">Corporate Job Title</label>
                     <input
                       type="text"
                       required
                       value={profileJobTitle}
                       onChange={(e) => setProfileJobTitle(e.target.value)}
-                      className="studio-input p-2.5 bg-slate-50 dark:bg-zinc-800/50"
+                      className="rounded-md border border-[#3c3c3c] text-[#d4d4d4] focus:outline-none focus:border-[#3794ff] p-2.5 bg-[#2d2d2d]"
                     />
                   </div>
 
                   <div className="flex flex-col gap-1">
-                    <label className="font-semibold text-slate-500">Organization Name</label>
+                    <label className="font-semibold text-[#9d9d9d]">Organization Name</label>
                     <input
                       type="text"
                       required
                       value={profileCompany}
                       onChange={(e) => setProfileCompany(e.target.value)}
-                      className="studio-input p-2.5 bg-slate-50 dark:bg-zinc-800/50"
+                      className="rounded-md border border-[#3c3c3c] text-[#d4d4d4] focus:outline-none focus:border-[#3794ff] p-2.5 bg-[#2d2d2d]"
                     />
                   </div>
 
@@ -1179,13 +1179,13 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                     <button
                       type="button"
                       onClick={() => setEditingProfile(false)}
-                      className="px-3 py-1.5 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-100 cursor-pointer"
+                      className="px-3 py-1.5 border border-[#3c3c3c] rounded-lg text-[#9d9d9d] hover:bg-[#383838] cursor-pointer"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="px-3 py-1.5 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 cursor-pointer"
+                      className="px-3 py-1.5 bg-[#0e639c] text-white font-bold rounded-lg hover:bg-[#1177bb] cursor-pointer"
                     >
                       Save Profile
                     </button>
@@ -1194,31 +1194,31 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
               ) : (
                 <div className="space-y-4">
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 font-bold flex items-center justify-center text-lg border border-indigo-200 dark:border-indigo-900/40">
+                    <div className="w-12 h-12 rounded-md bg-[#094771] text-[#3794ff] font-bold flex items-center justify-center text-lg border border-[#3c3c3c]">
                       {profileName ? profileName.substring(0, 2).toUpperCase() : 'U'}
                     </div>
                     <div>
-                      <h4 className="font-bold text-sm text-slate-800 dark:text-zinc-100">
+                      <h4 className="font-bold text-sm text-[#d4d4d4]">
                         {profileName || 'Active Operator'}
                       </h4>
-                      <p className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 font-mono mt-0.5">
+                      <p className="text-[10px] font-semibold text-[#3794ff] font-mono mt-0.5">
                         {profileJobTitle || 'Workspace Administrator'}
                       </p>
                     </div>
                   </div>
 
-                  <div className="space-y-2 border-t border-slate-100 dark:border-zinc-850 pt-3 text-[11px] leading-normal text-slate-600 dark:text-zinc-400">
+                  <div className="space-y-2 border-t border-[#3c3c3c] pt-3 text-[11px] leading-normal text-[#9d9d9d]">
                     <div className="flex justify-between">
-                      <span className="text-slate-400">Email Identifier:</span>
-                      <span className="font-mono font-bold text-slate-800 dark:text-zinc-200 select-all">{profile?.email || 'N/A'}</span>
+                      <span className="text-[#6f6f6f]">Email Identifier:</span>
+                      <span className="font-mono font-bold text-[#d4d4d4] select-all">{profile?.email || 'N/A'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-400">Active Tenant ID:</span>
-                      <span className="font-mono text-slate-500 select-all">{profile?.tenantId || 'global'}</span>
+                      <span className="text-[#6f6f6f]">Active Tenant ID:</span>
+                      <span className="font-mono text-[#9d9d9d] select-all">{profile?.tenantId || 'global'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-400">MSP Workspace:</span>
-                      <span className="font-bold text-slate-800 dark:text-zinc-200">{profile?.companyName || 'Not Defined'}</span>
+                      <span className="text-[#6f6f6f]">MSP Workspace:</span>
+                      <span className="font-bold text-[#d4d4d4]">{profile?.companyName || 'Not Defined'}</span>
                     </div>
                   </div>
 
@@ -1230,7 +1230,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                       setProfileCompany(profile?.companyName || '');
                       setEditingProfile(true);
                     }}
-                    className="w-full py-2 border border-indigo-200 dark:border-indigo-900/60 text-indigo-700 dark:text-indigo-400 font-semibold rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-950/20 cursor-pointer transition text-center"
+                    className="w-full py-2 border border-[#3c3c3c] text-[#3794ff] font-semibold rounded-lg hover:bg-[#383838] cursor-pointer transition text-center"
                   >
                     Edit Profile Details
                   </button>
@@ -1238,8 +1238,8 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
               )}
             </div>
 
-            <div className="studio-card p-5 space-y-3.5 text-left text-slate-400">
-              <h4 className="text-[10px] font-mono font-bold uppercase text-slate-500 tracking-wider">
+            <div className="spr-panel p-5 space-y-3.5 text-left text-[#6f6f6f]">
+              <h4 className="text-[10px] font-mono font-bold uppercase text-[#9d9d9d] tracking-wider">
                 Authorized Role Hierarchy
               </h4>
               <p className="text-[10px] leading-relaxed">
@@ -1251,15 +1251,15 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
           {/* Organization & Team Access List Section */}
           <div className="lg:col-span-2 space-y-6 text-left">
             {/* Invite form card */}
-            <div className="studio-card p-5 space-y-4">
-              <h3 className="text-xs font-bold text-slate-800 dark:text-zinc-200 font-display flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-zinc-800/80">
-                <PlusCircle className="w-4.5 h-4.5 text-indigo-500" />
+            <div className="spr-panel p-5 space-y-4">
+              <h3 className="text-xs font-bold text-[#d4d4d4] flex items-center gap-2 pb-2 border-b border-[#3c3c3c]">
+                <PlusCircle className="w-4.5 h-4.5 text-[#3794ff]" />
                 <span>Invite New MSP Team Member</span>
               </h3>
 
               <form onSubmit={handleInviteMember} className="flex flex-col md:flex-row gap-3">
                 <div className="flex-1 flex flex-col gap-1">
-                  <label className="block text-[10px] font-mono font-bold text-slate-400 uppercase">
+                  <label className="block text-[10px] font-mono font-bold text-[#6f6f6f] uppercase">
                     Email Address
                   </label>
                   <input
@@ -1268,18 +1268,18 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                     placeholder="e.g. associate@company.com"
                     value={inviteEmail}
                     onChange={(e) => setInviteEmail(e.target.value)}
-                    className="studio-input p-2.5 bg-slate-50 dark:bg-zinc-800/50"
+                    className="rounded-md border border-[#3c3c3c] text-[#d4d4d4] focus:outline-none focus:border-[#3794ff] p-2.5 bg-[#2d2d2d]"
                   />
                 </div>
 
                 <div className="w-full md:w-44 flex flex-col gap-1">
-                  <label className="block text-[10px] font-mono font-bold text-slate-400 uppercase">
+                  <label className="block text-[10px] font-mono font-bold text-[#6f6f6f] uppercase">
                     Security Role
                   </label>
                   <select
                     value={inviteRole}
                     onChange={(e) => setInviteRole(e.target.value)}
-                    className="studio-input p-2.5 bg-slate-50 dark:bg-zinc-800/50 cursor-pointer font-semibold text-slate-700 dark:text-zinc-300"
+                    className="rounded-md border border-[#3c3c3c] text-[#d4d4d4] focus:outline-none focus:border-[#3794ff] p-2.5 bg-[#2d2d2d] cursor-pointer font-semibold text-[#d4d4d4]"
                   >
                     <option value="Admin">Admin</option>
                     <option value="Technician">Technician</option>
@@ -1292,22 +1292,22 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                   type="submit"
                   disabled={!canManageTeam}
                   title={!canManageTeam ? `Your ${currentRole} role cannot invite team members.` : undefined}
-                  className="mt-5 md:mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-5 py-2.5 rounded-xl shrink-0 transition shadow-sm cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                  className="mt-5 md:mt-4 bg-[#0e639c] hover:bg-[#1177bb] text-white font-bold px-5 py-2.5 rounded-md shrink-0 transition shadow-sm cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Send Invitation
                 </button>
               </form>
-              {!canManageTeam && <p className="text-[10px] text-amber-600 dark:text-amber-400">Your {currentRole} role has read-only team access.</p>}
+              {!canManageTeam && <p className="text-[10px] text-[#cca700]">Your {currentRole} role has read-only team access.</p>}
             </div>
 
             {/* Team Members List Card */}
-            <div className="studio-card p-5 space-y-4">
-              <h3 className="text-xs font-bold text-slate-800 dark:text-zinc-200 font-display flex items-center justify-between pb-2 border-b border-slate-100 dark:border-zinc-800/80">
+            <div className="spr-panel p-5 space-y-4">
+              <h3 className="text-xs font-bold text-[#d4d4d4] flex items-center justify-between pb-2 border-b border-[#3c3c3c]">
                 <span className="flex items-center gap-2">
-                  <Lock className="w-4.5 h-4.5 text-indigo-500" />
+                  <Lock className="w-4.5 h-4.5 text-[#3794ff]" />
                   <span>Workspace Associates Matrix</span>
                 </span>
-                <span className="font-mono text-[9px] text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded border border-indigo-200/50">
+                <span className="font-mono text-[9px] text-[#3794ff] bg-[#094771] px-2 py-0.5 rounded border border-[#3c3c3c]">
                   {teamMembers.length} Registered Nodes
                 </span>
               </h3>
@@ -1315,25 +1315,25 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
-                    <tr className="border-b border-slate-100 dark:border-zinc-850 text-slate-400 dark:text-zinc-500 font-mono text-[10px] uppercase">
+                    <tr className="border-b border-[#3c3c3c] text-[#6f6f6f] font-mono text-[10px] uppercase">
                       <th className="py-2.5">User Details</th>
                       <th className="py-2.5">Authority Role</th>
                       <th className="py-2.5 text-right">Administrative Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-150 dark:divide-zinc-850/40">
+                  <tbody className="divide-y divide-[#3c3c3c]">
                     {teamMembers.map((member) => (
-                      <tr key={member.id} className="hover:bg-slate-50/50 dark:hover:bg-zinc-850/20">
+                      <tr key={member.id} className="hover:bg-[#383838]">
                         <td className="py-3.5 pr-3">
                           <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 font-bold flex items-center justify-center text-xs shrink-0 border border-slate-200 dark:border-zinc-700">
+                            <div className="w-9 h-9 rounded-md bg-[#2d2d2d] text-[#9d9d9d] font-bold flex items-center justify-center text-xs shrink-0 border border-[#3c3c3c]">
                               {member.displayName ? member.displayName.substring(0, 2).toUpperCase() : member.email.substring(0, 2).toUpperCase()}
                             </div>
                             <div>
-                              <span className="font-bold text-slate-800 dark:text-zinc-200 block">
+                              <span className="font-bold text-[#d4d4d4] block">
                                 {member.displayName || 'Pending Associate Registration'}
                               </span>
-                              <span className="text-[10px] font-mono text-slate-400 select-all block">
+                              <span className="text-[10px] font-mono text-[#6f6f6f] select-all block">
                                 {member.email}
                               </span>
                             </div>
@@ -1341,7 +1341,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                         </td>
                         <td className="py-3.5">
                           {member.role === 'Owner' ? (
-                            <span className="font-mono text-[9px] font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded uppercase">
+                            <span className="font-mono text-[9px] font-bold bg-[#0e639c] text-[#3794ff] border border-[#3794ff] px-2 py-0.5 rounded uppercase">
                               Owner (Root)
                             </span>
                           ) : (
@@ -1350,7 +1350,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                               disabled={!canManageTeam}
                               title={!canManageTeam ? `Your ${currentRole} role cannot change roles.` : undefined}
                               onChange={(e) => handleUpdateMemberRole(member.id, e.target.value)}
-                              className="bg-transparent border border-slate-200 dark:border-zinc-700 rounded p-1 font-mono text-[10px] font-bold cursor-pointer text-slate-800 dark:text-zinc-300 focus:outline-none focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+                              className="bg-transparent border border-[#3c3c3c] rounded p-1 font-mono text-[10px] font-bold cursor-pointer text-[#d4d4d4] focus:outline-none focus:border-[#3794ff] disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               <option value="Admin">Admin</option>
                               <option value="Technician">Technician</option>
@@ -1363,7 +1363,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                           {member.role !== 'Owner' && member.id !== profile?.id && canManageTeam && (
                             <button
                               onClick={() => handleRemoveMember(member.id)}
-                              className="px-2.5 py-1.5 text-[10px] font-bold text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-950 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-lg cursor-pointer transition-colors"
+                              className="px-2.5 py-1.5 text-[10px] font-bold text-[#f14c4c] border border-[#3c3c3c] hover:bg-[#383838] rounded-lg cursor-pointer transition-colors"
                             >
                               Revoke Access
                             </button>
@@ -1373,7 +1373,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                     ))}
                     {teamMembers.length === 0 && (
                       <tr>
-                        <td colSpan={3} className="py-6 text-center text-slate-400 font-mono">
+                        <td colSpan={3} className="py-6 text-center text-[#6f6f6f] font-mono">
                           {loadingTeam ? 'Securing team data...' : 'No other associates mapped to this workspace.'}
                         </td>
                       </tr>
@@ -1387,17 +1387,17 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
       ) : (
         <div className="space-y-6 animate-fadeIn" id="product-master-bible-container">
           {/* Welcome Alert / Info Bar */}
-          <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950/20 dark:to-purple-950/20 border border-indigo-100 dark:border-indigo-900/40 rounded-xl p-5 shadow-xs">
+          <div className="spr-panel p-5">
             <div className="flex items-start gap-4">
-              <div className="p-2.5 bg-indigo-600 rounded-xl text-white">
+              <div className="p-2.5 bg-[#0e639c] rounded-md text-white">
                 <BookOpen className="w-5 h-5" />
               </div>
               <div className="space-y-1">
-                <h3 className="text-xs font-bold text-indigo-900 dark:text-indigo-300 font-display">Enterprise Platform Master Product Bible</h3>
-                <p className="text-xs text-indigo-700 dark:text-indigo-400 font-sans leading-relaxed">
+                <h3 className="text-xs font-bold text-[#3794ff]">Enterprise Platform Master Product Bible</h3>
+                <p className="text-xs text-[#3794ff] font-sans leading-relaxed">
                   This Bible defines standard secure baseline versions, permitted/copyleft licenses, risk classifications, and operational NIST/ISO security safeguard guidelines. Ingested Software Passports must be checked against these standards to prevent compliance violations.
                 </p>
-                <div className="flex gap-4 pt-2 text-[10px] font-semibold text-indigo-800 dark:text-indigo-300">
+                <div className="flex gap-4 pt-2 text-[10px] font-semibold text-[#3794ff]">
                   <span>• Policy Reference: NIST SP 800-53 r5</span>
                   <span>• Legal Stand: SSPL/AGPL Copyleft Blocked</span>
                   <span>• Baseline updates: Automated daily RSS synchronizations</span>
@@ -1411,15 +1411,15 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
             
             {/* Left Column: List of Products with Search & Add option */}
             <div className="lg:col-span-1 space-y-4">
-              <div className="bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 p-5 shadow-sm space-y-4">
+              <div className="spr-panel p-5 space-y-4">
                 <div className="flex justify-between items-center">
                   <div>
-                    <h4 className="text-xs font-bold text-slate-800 dark:text-zinc-200 font-display">Product Bible Index</h4>
-                    <p className="text-[10px] text-slate-400 dark:text-zinc-500 font-sans">Index of certified system components</p>
+                    <h4 className="text-xs font-bold text-[#d4d4d4]">Product Bible Index</h4>
+                    <p className="text-[10px] text-[#6f6f6f] font-sans">Index of certified system components</p>
                   </div>
                   <button
                     onClick={() => setShowAddBibleProduct(!showAddBibleProduct)}
-                    className="p-1.5 text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-zinc-800 rounded-lg cursor-pointer transition flex items-center gap-1 text-[11px] font-bold"
+                    className="p-1.5 text-[#3794ff] hover:bg-[#383838] rounded-lg cursor-pointer transition flex items-center gap-1 text-[11px] font-bold"
                     title="Register a new software specification"
                   >
                     <PlusCircle className="w-4.5 h-4.5" />
@@ -1429,18 +1429,18 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
 
                 {/* Quick Search & Filter */}
                 <div className="space-y-2 text-xs">
-                  <div className="flex items-center gap-2 bg-slate-50 dark:bg-zinc-800/40 px-3 py-2 rounded-lg border border-slate-200 dark:border-zinc-700">
-                    <Search className="w-4 h-4 text-slate-400" />
+                  <div className="flex items-center gap-2 bg-[#2d2d2d] px-3 py-2 rounded-lg border border-[#3c3c3c]">
+                    <Search className="w-4 h-4 text-[#6f6f6f]" />
                     <input
                       type="text"
                       placeholder="Search specifications..."
                       value={bibleSearchQuery}
                       onChange={(e) => setBibleSearchQuery(e.target.value)}
-                      className="w-full bg-transparent focus:outline-none text-slate-700 dark:text-zinc-350"
+                      className="w-full bg-transparent focus:outline-none text-[#d4d4d4] "
                     />
                   </div>
 
-                  <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-zinc-500 pt-1">
+                  <div className="flex items-center justify-between text-[10px] text-[#9d9d9d] pt-1">
                     <span>Risk Filter:</span>
                     <div className="flex gap-1.5 font-semibold">
                       {['all', 'low', 'medium', 'high'].map(r => (
@@ -1449,8 +1449,8 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                           onClick={() => setBibleFilterRisk(r)}
                           className={`px-1.5 py-0.5 rounded capitalize cursor-pointer transition ${
                             bibleFilterRisk === r
-                              ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 font-bold'
-                              : 'hover:text-slate-800 dark:hover:text-zinc-300'
+                              ? 'bg-[#094771] text-[#3794ff] font-bold'
+                              : 'hover:text-[#d4d4d4]'
                           }`}
                         >
                           {r}
@@ -1462,28 +1462,28 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
 
                 {/* Add New Specification Form Block */}
                 {showAddBibleProduct && (
-                  <form onSubmit={handleAddBibleProduct} className="p-4 bg-slate-50 dark:bg-zinc-850/45 rounded-xl border border-slate-200 dark:border-zinc-800 text-xs space-y-3">
-                    <h5 className="font-bold text-slate-800 dark:text-zinc-200 font-display">New Standard Specifications Registration</h5>
+                  <form onSubmit={handleAddBibleProduct} className="p-4 bg-[#2d2d2d] rounded-md border border-[#3c3c3c] text-xs space-y-3">
+                    <h5 className="font-bold text-[#d4d4d4]">New Standard Specifications Registration</h5>
                     
                     <div>
-                      <label className="block text-[10px] text-slate-400 uppercase font-bold font-mono mb-1">Product / Package Name</label>
+                      <label className="block text-[10px] text-[#6f6f6f] uppercase font-bold font-mono mb-1">Product / Package Name</label>
                       <input
                         type="text"
                         placeholder="e.g. Apache Kafka"
                         required
                         value={newBpName}
                         onChange={(e) => setNewBpName(e.target.value)}
-                        className="w-full studio-input p-2 bg-white dark:bg-zinc-800"
+                        className="w-full rounded-md border border-[#3c3c3c] bg-[#2d2d2d] text-[#d4d4d4] focus:outline-none focus:border-[#3794ff] p-2"
                       />
                     </div>
 
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-[10px] text-slate-400 uppercase font-bold font-mono mb-1">Class Type</label>
+                        <label className="block text-[10px] text-[#6f6f6f] uppercase font-bold font-mono mb-1">Class Type</label>
                         <select
                           value={newBpType}
                           onChange={(e) => setNewBpType(e.target.value)}
-                          className="w-full studio-input p-1.5 bg-white dark:bg-zinc-800"
+                          className="w-full rounded-md border border-[#3c3c3c] bg-[#2d2d2d] text-[#d4d4d4] focus:outline-none focus:border-[#3794ff] p-1.5"
                         >
                           <option value="Web Infrastructure / Proxy">Web / Proxy</option>
                           <option value="Database Systems">Database</option>
@@ -1495,45 +1495,45 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                       </div>
 
                       <div>
-                        <label className="block text-[10px] text-slate-400 uppercase font-bold font-mono mb-1">Secure Baseline</label>
+                        <label className="block text-[10px] text-[#6f6f6f] uppercase font-bold font-mono mb-1">Secure Baseline</label>
                         <input
                           type="text"
                           placeholder="e.g. 3.4.0"
                           required
                           value={newBpVersion}
                           onChange={(e) => setNewBpVersion(e.target.value)}
-                          className="w-full studio-input p-1.5 bg-white dark:bg-zinc-800"
+                          className="w-full rounded-md border border-[#3c3c3c] bg-[#2d2d2d] text-[#d4d4d4] focus:outline-none focus:border-[#3794ff] p-1.5"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-[10px] text-slate-400 uppercase font-bold font-mono mb-1">Permitted Licenses</label>
+                      <label className="block text-[10px] text-[#6f6f6f] uppercase font-bold font-mono mb-1">Permitted Licenses</label>
                       <input
                         type="text"
                         value={newBpAllowedLics}
                         onChange={(e) => setNewBpAllowedLics(e.target.value)}
-                        className="w-full studio-input p-2 font-mono text-[10px] bg-white dark:bg-zinc-800"
+                        className="w-full rounded-md border border-[#3c3c3c] bg-[#2d2d2d] text-[#d4d4d4] focus:outline-none focus:border-[#3794ff] p-2 font-mono text-[10px]"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[10px] text-slate-400 uppercase font-bold font-mono mb-1">Prohibited Copylefts</label>
+                      <label className="block text-[10px] text-[#6f6f6f] uppercase font-bold font-mono mb-1">Prohibited Copylefts</label>
                       <input
                         type="text"
                         value={newBpDisallowedLics}
                         onChange={(e) => setNewBpDisallowedLics(e.target.value)}
-                        className="w-full studio-input p-2 font-mono text-[10px] bg-white dark:bg-zinc-800"
+                        className="w-full rounded-md border border-[#3c3c3c] bg-[#2d2d2d] text-[#d4d4d4] focus:outline-none focus:border-[#3794ff] p-2 font-mono text-[10px]"
                       />
                     </div>
 
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-[10px] text-slate-400 uppercase font-bold font-mono mb-1">Risk Tier</label>
+                        <label className="block text-[10px] text-[#6f6f6f] uppercase font-bold font-mono mb-1">Risk Tier</label>
                         <select
                           value={newBpRisk}
                           onChange={(e) => setNewBpRisk(e.target.value as any)}
-                          className="w-full studio-input p-1.5 bg-white dark:bg-zinc-800"
+                          className="w-full rounded-md border border-[#3c3c3c] bg-[#2d2d2d] text-[#d4d4d4] focus:outline-none focus:border-[#3794ff] p-1.5"
                         >
                           <option value="Low">Low</option>
                           <option value="Medium">Medium</option>
@@ -1542,25 +1542,25 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                       </div>
 
                       <div>
-                        <label className="block text-[10px] text-slate-400 uppercase font-bold font-mono mb-1">Target Compliance</label>
+                        <label className="block text-[10px] text-[#6f6f6f] uppercase font-bold font-mono mb-1">Target Compliance</label>
                         <input
                           type="text"
                           placeholder="e.g. HIPAA CC4 / ISO"
                           value={newBpCompliance}
                           onChange={(e) => setNewBpCompliance(e.target.value)}
-                          className="w-full studio-input p-1.5 bg-white dark:bg-zinc-800"
+                          className="w-full rounded-md border border-[#3c3c3c] bg-[#2d2d2d] text-[#d4d4d4] focus:outline-none focus:border-[#3794ff] p-1.5"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-[10px] text-slate-400 uppercase font-bold font-mono mb-1">Operational Safeguard Policy</label>
+                      <label className="block text-[10px] text-[#6f6f6f] uppercase font-bold font-mono mb-1">Operational Safeguard Policy</label>
                       <textarea
                         rows={2}
                         placeholder="Safeguards required..."
                         value={newBpSafeguard}
                         onChange={(e) => setNewBpSafeguard(e.target.value)}
-                        className="w-full studio-input p-2 bg-white dark:bg-zinc-800"
+                        className="w-full rounded-md border border-[#3c3c3c] bg-[#2d2d2d] text-[#d4d4d4] focus:outline-none focus:border-[#3794ff] p-2"
                       />
                     </div>
 
@@ -1568,13 +1568,13 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                       <button
                         type="button"
                         onClick={() => setShowAddBibleProduct(false)}
-                        className="px-2.5 py-1.5 bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-750 text-slate-600 dark:text-zinc-300 rounded font-bold transition cursor-pointer"
+                        className="px-2.5 py-1.5 bg-[#2d2d2d] border border-[#3c3c3c] hover:bg-[#383838] text-[#9d9d9d] rounded font-bold transition cursor-pointer"
                       >
                         Cancel
                       </button>
                       <button
                         type="submit"
-                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold transition flex items-center gap-1 cursor-pointer"
+                        className="px-3 py-1.5 bg-[#0e639c] hover:bg-[#1177bb] text-white rounded font-bold transition flex items-center gap-1 cursor-pointer"
                       >
                         <Check className="w-3.5 h-3.5" />
                         <span>Register Spec</span>
@@ -1586,7 +1586,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                 {/* List of Specs */}
                 <div className="space-y-1.5 max-h-[400px] overflow-y-auto pr-1">
                   {filteredBibleProducts.length === 0 ? (
-                    <p className="text-center text-[10px] text-slate-400 py-6">No matching standard specifications found.</p>
+                    <p className="text-center text-[10px] text-[#6f6f6f] py-6">No matching standard specifications found.</p>
                   ) : (
                     filteredBibleProducts.map(bp => {
                       const isSelected = bp.id === selectedBibleProductId;
@@ -1596,24 +1596,24 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                           onClick={() => setSelectedBibleProductId(bp.id)}
                           className={`w-full text-left p-3 rounded-lg border text-xs flex justify-between items-center transition cursor-pointer ${
                             isSelected
-                              ? 'bg-indigo-50 border-indigo-200 dark:bg-indigo-950/20 dark:border-indigo-900 text-indigo-900 dark:text-indigo-300 font-bold shadow-xs'
-                              : 'bg-slate-50 dark:bg-zinc-850/30 border-slate-150 dark:border-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-800/40 text-slate-750 dark:text-zinc-300'
+                              ? 'bg-[#094771] border-[#3c3c3c] text-[#3794ff] font-bold shadow-xs'
+                              : 'bg-[#2d2d2d] border-[#3c3c3c] hover:bg-[#383838] text-[#d4d4d4]'
                           }`}
                         >
                           <div className="min-w-0">
                             <p className="truncate font-sans leading-snug">{bp.name}</p>
-                            <span className="text-[8px] font-mono text-slate-400 block mt-0.5">{bp.type}</span>
+                            <span className="text-[8px] font-mono text-[#6f6f6f] block mt-0.5">{bp.type}</span>
                           </div>
 
                           <div className="flex items-center gap-1.5 shrink-0 ml-2">
                             <span className={`px-1.5 py-0.2 rounded-[4px] text-[8px] font-mono font-bold ${
-                              bp.riskTier === 'High' ? 'bg-rose-50 text-rose-700 border border-rose-100' :
-                              bp.riskTier === 'Medium' ? 'bg-amber-50 text-amber-700 border border-amber-100' :
-                              'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                              bp.riskTier === 'High' ? 'bg-[#2d2d2d] text-[#f14c4c] border border-[#3c3c3c]' :
+                              bp.riskTier === 'Medium' ? 'bg-[#2d2d2d] text-[#cca700] border border-[#3c3c3c]' :
+                              'bg-[#2d2d2d] text-[#89d185] border border-[#3c3c3c]'
                             }`}>
                               {bp.riskTier}
                             </span>
-                            <ChevronRight className={`w-3.5 h-3.5 ${isSelected ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
+                            <ChevronRight className={`w-3.5 h-3.5 ${isSelected ? 'text-[#3794ff]' : 'text-[#6f6f6f]'}`} />
                           </div>
                         </button>
                       );
@@ -1628,18 +1628,18 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
               
               {/* Card 1: Active Specification detail */}
               {activeBibleProduct && (
-                <div className="bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 p-5 shadow-sm space-y-4">
-                  <div className="flex justify-between items-start border-b border-slate-150 dark:border-zinc-800 pb-3">
+                <div className="spr-panel p-5 space-y-4">
+                  <div className="flex justify-between items-start border-b border-[#3c3c3c] pb-3">
                     <div>
-                      <span className="text-[8px] font-mono uppercase tracking-widest font-bold text-indigo-600 dark:text-indigo-400">Approved Platform Standard Spec</span>
-                      <h3 className="text-sm font-bold text-slate-800 dark:text-zinc-100 mt-1 font-display flex items-center gap-1.5">
-                        <CheckCircle2 className="w-4.5 h-4.5 text-emerald-500" />
+                      <span className="text-[8px] font-mono uppercase tracking-widest font-bold text-[#3794ff]">Approved Platform Standard Spec</span>
+                      <h3 className="text-sm font-bold text-[#d4d4d4] mt-1 flex items-center gap-1.5">
+                        <CheckCircle2 className="w-4.5 h-4.5 text-[#89d185]" />
                         {activeBibleProduct.name}
                       </h3>
-                      <p className="text-[10px] text-slate-400 font-sans mt-0.5">{activeBibleProduct.type}</p>
+                      <p className="text-[10px] text-[#6f6f6f] font-sans mt-0.5">{activeBibleProduct.type}</p>
                     </div>
 
-                    <span className="bg-indigo-900 text-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase border border-indigo-850">
+                    <span className="bg-[#094771] text-[#3794ff] text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase border border-[#3c3c3c]">
                       Baseline: v{activeBibleProduct.baselineSecureVersion}
                     </span>
                   </div>
@@ -1647,54 +1647,54 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-sans">
                     <div className="space-y-3">
                       <div>
-                        <span className="text-[9px] text-slate-400 dark:text-zinc-500 block font-mono font-bold uppercase">Permitted Security greenlist licenses</span>
+                        <span className="text-[9px] text-[#6f6f6f] block font-mono font-bold uppercase">Permitted Security greenlist licenses</span>
                         <div className="flex flex-wrap gap-1.5 mt-1.5">
                           {activeBibleProduct.allowedLicenses.map((lic: string) => (
-                            <span key={lic} className="bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 text-[10px] font-mono px-2 py-0.5 rounded border border-emerald-150 dark:border-emerald-900/60 font-semibold">
+                            <span key={lic} className="bg-[#2d2d2d] text-[#89d185] text-[10px] font-mono px-2 py-0.5 rounded border border-[#3c3c3c] font-semibold">
                               {lic}
                             </span>
                           ))}
-                          {activeBibleProduct.allowedLicenses.length === 0 && <span className="text-slate-500 italic text-[11px]">None specified</span>}
+                          {activeBibleProduct.allowedLicenses.length === 0 && <span className="text-[#9d9d9d] italic text-[11px]">None specified</span>}
                         </div>
                       </div>
 
                       <div>
-                        <span className="text-[9px] text-slate-400 dark:text-zinc-500 block font-mono font-bold uppercase">Prohibited copyleft blacklisted licenses</span>
+                        <span className="text-[9px] text-[#6f6f6f] block font-mono font-bold uppercase">Prohibited copyleft blacklisted licenses</span>
                         <div className="flex flex-wrap gap-1.5 mt-1.5">
                           {activeBibleProduct.disallowedLicenses.map((lic: string) => (
-                            <span key={lic} className="bg-rose-50 dark:bg-rose-950/20 text-rose-700 dark:text-rose-400 text-[10px] font-mono px-2 py-0.5 rounded border border-rose-150 dark:border-rose-900/60 font-semibold">
+                            <span key={lic} className="bg-[#2d2d2d] text-[#f14c4c] text-[10px] font-mono px-2 py-0.5 rounded border border-[#3c3c3c] font-semibold">
                               {lic}
                             </span>
                           ))}
-                          {activeBibleProduct.disallowedLicenses.length === 0 && <span className="text-slate-500 italic text-[11px]">None prohibited</span>}
+                          {activeBibleProduct.disallowedLicenses.length === 0 && <span className="text-[#9d9d9d] italic text-[11px]">None prohibited</span>}
                         </div>
                       </div>
                     </div>
 
-                    <div className="p-3.5 bg-slate-50 dark:bg-zinc-850/30 rounded-xl border border-slate-200 dark:border-zinc-800 space-y-2">
-                      <span className="text-[9px] text-slate-400 dark:text-zinc-500 block font-mono font-bold uppercase">Target Regulatory Framework Compliance</span>
-                      <p className="font-bold text-slate-700 dark:text-zinc-300">{activeBibleProduct.complianceTarget}</p>
-                      <p className="text-[10px] text-slate-450 dark:text-zinc-400 leading-normal">
+                    <div className="p-3.5 bg-[#2d2d2d] rounded-md border border-[#3c3c3c] space-y-2">
+                      <span className="text-[9px] text-[#6f6f6f] block font-mono font-bold uppercase">Target Regulatory Framework Compliance</span>
+                      <p className="font-bold text-[#d4d4d4]">{activeBibleProduct.complianceTarget}</p>
+                      <p className="text-[10px] text-[#9d9d9d] leading-normal">
                         Ingested components of this product category must be validated in accordance with audit guidelines mapped to this baseline.
                       </p>
                     </div>
                   </div>
 
-                  <div className="p-4 bg-indigo-50/30 dark:bg-indigo-950/10 rounded-xl border border-indigo-100/70 dark:border-indigo-900/40 space-y-1.5 text-xs">
-                    <span className="font-bold text-indigo-950 dark:text-indigo-400 font-mono text-[9px] uppercase tracking-wider block">Standard Core Safeguards Policy</span>
-                    <p className="text-slate-750 dark:text-zinc-300 leading-normal font-sans text-[11px]">{activeBibleProduct.safeguardPolicy}</p>
+                  <div className="p-4 bg-[#094771] rounded-md border border-[#3c3c3c] space-y-1.5 text-xs">
+                    <span className="font-bold text-[#3794ff] font-mono text-[9px] uppercase tracking-wider block">Standard Core Safeguards Policy</span>
+                    <p className="text-[#d4d4d4] leading-normal font-sans text-[11px]">{activeBibleProduct.safeguardPolicy}</p>
                   </div>
                 </div>
               )}
 
               {/* Card 2: Interactive Sandbox Compliance Auditor */}
-              <div className="bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 p-5 shadow-sm space-y-4">
+              <div className="spr-panel p-5 space-y-4">
                 <div>
-                  <h3 className="text-xs font-bold text-slate-800 dark:text-zinc-100 font-display flex items-center gap-1.5">
-                    <Sparkles className="w-4.5 h-4.5 text-amber-500 animate-bounce" />
+                  <h3 className="text-xs font-bold text-[#d4d4d4] flex items-center gap-1.5">
+                    <Sparkles className="w-4.5 h-4.5 text-[#cca700] animate-bounce" />
                     <span>Interactive Product Compliance Sandbox Auditor</span>
                   </h3>
-                  <p className="text-[10px] text-slate-500 dark:text-zinc-550 font-sans mt-0.5">
+                  <p className="text-[10px] text-[#9d9d9d] font-sans mt-0.5">
                     Simulate software ingest requests and instantly query compliance safety standards against the Master Product Bible.
                   </p>
                 </div>
@@ -1702,7 +1702,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-sans">
                   <div className="space-y-3.5">
                     <div>
-                      <label className="block text-[10px] text-slate-400 dark:text-zinc-500 font-mono uppercase font-bold mb-1">Select Target Product Class</label>
+                      <label className="block text-[10px] text-[#6f6f6f] font-mono uppercase font-bold mb-1">Select Target Product Class</label>
                       <select
                         value={sandboxProduct}
                         onChange={(e) => {
@@ -1713,7 +1713,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                             setSandboxLicense(found.allowedLicenses[0] || 'MIT');
                           }
                         }}
-                        className="w-full studio-input p-2.5 bg-slate-50 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300"
+                        className="w-full rounded-md border border-[#3c3c3c] text-[#d4d4d4] focus:outline-none focus:border-[#3794ff] p-2.5 bg-[#2d2d2d] text-[#d4d4d4]"
                       >
                         {bibleProducts.map(bp => (
                           <option key={bp.id} value={bp.name}>{bp.name}</option>
@@ -1724,43 +1724,43 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
 
                     {sandboxProduct === 'custom' && (
                       <div className="animate-fadeIn">
-                        <label className="block text-[10px] text-slate-400 dark:text-zinc-500 font-mono uppercase font-bold mb-1">Custom Product Name</label>
+                        <label className="block text-[10px] text-[#6f6f6f] font-mono uppercase font-bold mb-1">Custom Product Name</label>
                         <input
                           type="text"
                           placeholder="e.g. Apache Kafka"
                           value={sandboxCustomName}
                           onChange={(e) => setSandboxCustomName(e.target.value)}
-                          className="w-full studio-input p-2.5 bg-white dark:bg-zinc-800"
+                          className="w-full rounded-md border border-[#3c3c3c] bg-[#2d2d2d] text-[#d4d4d4] focus:outline-none focus:border-[#3794ff] p-2.5"
                         />
                       </div>
                     )}
 
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-[10px] text-slate-400 dark:text-zinc-500 font-mono uppercase font-bold mb-1">Ingested Version</label>
+                        <label className="block text-[10px] text-[#6f6f6f] font-mono uppercase font-bold mb-1">Ingested Version</label>
                         <input
                           type="text"
                           value={sandboxVersion}
                           onChange={(e) => setSandboxVersion(e.target.value)}
-                          className="w-full studio-input p-2 font-mono bg-white dark:bg-zinc-800 text-slate-700 dark:text-zinc-350"
+                          className="w-full rounded-md border border-[#3c3c3c] bg-[#2d2d2d] text-[#d4d4d4] focus:outline-none focus:border-[#3794ff] p-2 font-mono"
                           placeholder="e.g. 1.25.0"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-[10px] text-slate-400 dark:text-zinc-500 font-mono uppercase font-bold mb-1">License SPDX</label>
+                        <label className="block text-[10px] text-[#6f6f6f] font-mono uppercase font-bold mb-1">License SPDX</label>
                         <input
                           type="text"
                           value={sandboxLicense}
                           onChange={(e) => setSandboxLicense(e.target.value)}
-                          className="w-full studio-input p-2 font-mono bg-white dark:bg-zinc-800 text-slate-700 dark:text-zinc-350"
+                          className="w-full rounded-md border border-[#3c3c3c] bg-[#2d2d2d] text-[#d4d4d4] focus:outline-none focus:border-[#3794ff] p-2 font-mono"
                           placeholder="e.g. GPL-3.0-only"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-[10px] text-slate-400 dark:text-zinc-500 font-mono uppercase font-bold mb-1">Target Deploy Environment</label>
+                      <label className="block text-[10px] text-[#6f6f6f] font-mono uppercase font-bold mb-1">Target Deploy Environment</label>
                       <div className="grid grid-cols-3 gap-2">
                         {['Production', 'Staging', 'Development'].map(env => (
                           <button
@@ -1769,8 +1769,8 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                             onClick={() => setSandboxEnv(env)}
                             className={`p-2 rounded-lg border text-center font-semibold cursor-pointer transition ${
                               sandboxEnv === env
-                                ? 'bg-indigo-50 border-indigo-200 text-indigo-700 font-bold dark:bg-indigo-950/30 dark:text-indigo-300 dark:border-indigo-800/80'
-                                : 'bg-slate-50 dark:bg-zinc-850/40 border-slate-150 dark:border-zinc-800 hover:bg-slate-100 text-slate-600 dark:text-zinc-400 dark:hover:text-zinc-300'
+                                ? 'bg-[#094771] border-[#3c3c3c] text-[#3794ff] font-bold '
+                                : 'bg-[#2d2d2d] border-[#3c3c3c] hover:bg-[#383838] text-[#9d9d9d] '
                             }`}
                           >
                             {env}
@@ -1782,32 +1782,32 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                     <button
                       type="button"
                       onClick={handleRunSandboxAudit}
-                      className="w-full py-2.5 bg-slate-900 hover:bg-slate-850 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-white font-bold rounded-lg transition cursor-pointer flex items-center justify-center gap-1.5 text-xs shadow-xs"
+                      className="w-full py-2.5 bg-[#2d2d2d] hover:bg-[#383838] text-white font-bold rounded-lg transition cursor-pointer flex items-center justify-center gap-1.5 text-xs shadow-xs"
                     >
-                      <Play className="w-3.5 h-3.5 fill-current text-emerald-400" />
+                      <Play className="w-3.5 h-3.5 fill-current text-[#89d185]" />
                       <span>Run Sandbox Compliance Attestation</span>
                     </button>
                   </div>
 
                   {/* Attestation Sandbox Report panel */}
-                  <div className="border border-slate-200 dark:border-zinc-850 rounded-xl p-4.5 bg-slate-50/50 dark:bg-zinc-950/10 flex flex-col justify-between min-h-[240px]">
+                  <div className="border border-[#3c3c3c] rounded-md p-4.5 bg-[#2d2d2d] flex flex-col justify-between min-h-[240px]">
                     {sandboxReport ? (
                       <div className="space-y-3 font-sans animate-fadeIn">
-                        <div className="flex justify-between items-center border-b border-slate-200 dark:border-zinc-800 pb-2">
+                        <div className="flex justify-between items-center border-b border-[#3c3c3c] pb-2">
                           <div>
-                            <span className="text-[8px] font-mono text-slate-400 dark:text-zinc-500 font-bold block">ATTESTATION REPORT</span>
-                            <h4 className="font-bold text-slate-800 dark:text-zinc-150 text-[11px] font-mono uppercase truncate max-w-[130px]">{sandboxReport.productName}</h4>
+                            <span className="text-[8px] font-mono text-[#6f6f6f] font-bold block">ATTESTATION REPORT</span>
+                            <h4 className="font-bold text-[#d4d4d4] text-[11px] font-mono uppercase truncate max-w-[130px]">{sandboxReport.productName}</h4>
                           </div>
 
                           <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase flex items-center gap-1 ${
-                            sandboxReport.overallStatus === 'PASS' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400 border border-emerald-200/50' :
-                            sandboxReport.overallStatus === 'WARN' ? 'bg-amber-100 text-amber-850 dark:bg-amber-950/30 dark:text-amber-400 border border-amber-200/50' :
-                            'bg-rose-100 text-rose-800 dark:bg-rose-950/30 dark:text-rose-400 border border-rose-200/50'
+                            sandboxReport.overallStatus === 'PASS' ? 'bg-[#2d2d2d] text-[#89d185] border border-[#3c3c3c]' :
+                            sandboxReport.overallStatus === 'WARN' ? 'bg-[#2d2d2d] text-[#cca700] border border-[#3c3c3c]' :
+                            'bg-[#2d2d2d] text-[#f14c4c] border border-[#3c3c3c]'
                           }`}>
                             <span className={`w-1.5 h-1.5 rounded-full ${
-                              sandboxReport.overallStatus === 'PASS' ? 'bg-emerald-500' :
-                              sandboxReport.overallStatus === 'WARN' ? 'bg-amber-500 animate-pulse' :
-                              'bg-rose-500 animate-pulse'
+                              sandboxReport.overallStatus === 'PASS' ? 'bg-[#89d185]' :
+                              sandboxReport.overallStatus === 'WARN' ? 'bg-[#cca700] animate-pulse' :
+                              'bg-[#f14c4c] animate-pulse'
                             }`} />
                             {sandboxReport.overallStatus}
                           </span>
@@ -1816,49 +1816,49 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                         <div className="space-y-2 text-[10px] leading-normal font-sans">
                           <div className="flex items-start gap-1.5">
                             {sandboxReport.versionStatus === 'Compliant' ? (
-                              <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                              <Check className="w-3.5 h-3.5 text-[#89d185] shrink-0 mt-0.5" />
                             ) : sandboxReport.versionStatus === 'Warning' ? (
-                              <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                              <AlertTriangle className="w-3.5 h-3.5 text-[#cca700] shrink-0 mt-0.5" />
                             ) : (
-                              <ShieldAlert className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
+                              <ShieldAlert className="w-3.5 h-3.5 text-[#f14c4c] shrink-0 mt-0.5" />
                             )}
                             <div>
-                              <span className="font-bold text-slate-700 dark:text-zinc-300">Version Standard: </span>
-                              <span className="text-slate-500 dark:text-zinc-400">{sandboxReport.versionDetails}</span>
+                              <span className="font-bold text-[#d4d4d4]">Version Standard: </span>
+                              <span className="text-[#9d9d9d]">{sandboxReport.versionDetails}</span>
                             </div>
                           </div>
 
                           <div className="flex items-start gap-1.5">
                             {sandboxReport.licenseStatus === 'Compliant' ? (
-                              <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                              <Check className="w-3.5 h-3.5 text-[#89d185] shrink-0 mt-0.5" />
                             ) : sandboxReport.licenseStatus === 'Warning' ? (
-                              <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                              <AlertTriangle className="w-3.5 h-3.5 text-[#cca700] shrink-0 mt-0.5" />
                             ) : (
-                              <ShieldAlert className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
+                              <ShieldAlert className="w-3.5 h-3.5 text-[#f14c4c] shrink-0 mt-0.5" />
                             )}
                             <div>
-                              <span className="font-bold text-slate-700 dark:text-zinc-300">License Standard: </span>
-                              <span className="text-slate-500 dark:text-zinc-400">{sandboxReport.licenseDetails}</span>
+                              <span className="font-bold text-[#d4d4d4]">License Standard: </span>
+                              <span className="text-[#9d9d9d]">{sandboxReport.licenseDetails}</span>
                             </div>
                           </div>
                         </div>
 
-                        <div className="p-2.5 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded text-[9px] text-slate-500 dark:text-zinc-400 leading-normal space-y-1 shadow-inner">
-                          <p className="font-bold text-slate-700 dark:text-zinc-300 font-mono text-[8px] uppercase">Compliance Checklist ({sandboxReport.complianceTarget}):</p>
+                        <div className="p-2.5 bg-[#2d2d2d] border border-[#3c3c3c] rounded text-[9px] text-[#9d9d9d] leading-normal space-y-1">
+                          <p className="font-bold text-[#d4d4d4] font-mono text-[8px] uppercase">Compliance Checklist ({sandboxReport.complianceTarget}):</p>
                           <p className="font-sans italic">{sandboxReport.safeguardPolicy}</p>
                         </div>
                       </div>
                     ) : (
-                      <div className="text-center py-10 text-slate-400 dark:text-zinc-500 space-y-2 font-sans flex flex-col justify-center items-center h-full">
-                        <Sliders className="w-8 h-8 text-slate-300 dark:text-zinc-700" />
-                        <p className="text-[11px] font-bold text-slate-600 dark:text-zinc-400 mt-2">Attestation Pending</p>
-                        <p className="text-[9px] text-slate-400 dark:text-zinc-500 leading-snug max-w-[180px]">
+                      <div className="text-center py-10 text-[#6f6f6f] space-y-2 font-sans flex flex-col justify-center items-center h-full">
+                        <Sliders className="w-8 h-8 text-[#6f6f6f]" />
+                        <p className="text-[11px] font-bold text-[#9d9d9d] mt-2">Attestation Pending</p>
+                        <p className="text-[9px] text-[#6f6f6f] leading-snug max-w-[180px]">
                           Configure simulation parameters and run Sandbox Compliance Attestation to test build parameters against standards.
                         </p>
                       </div>
                     )}
 
-                    <div className="text-[8px] font-mono text-slate-400 dark:text-zinc-650 border-t border-slate-200 dark:border-zinc-850 pt-2 mt-2 flex justify-between items-center">
+                    <div className="text-[8px] font-mono text-[#6f6f6f] border-t border-[#3c3c3c] pt-2 mt-2 flex justify-between items-center">
                       <span>AUDIT KERNEL: SEC_ENGINE_v1.0</span>
                       {sandboxReport && (
                         <span>Attested: {new Date(sandboxReport.timestamp).toLocaleTimeString()}</span>

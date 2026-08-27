@@ -89,59 +89,59 @@ export default function PassportSwarmView({ passport }: PassportSwarmViewProps) 
   const running = job && ['Pending', 'Running'].includes(job.status);
 
   return (
-    <div className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="space-y-5 rounded-md border border-[#3c3c3c] bg-[#252526] p-6 shadow-sm">
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div>
           <h2 className="text-lg font-bold">AI Swarm — Supported Worker</h2>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm text-[#9d9d9d]">
             SPR currently runs one independent worker here: OSV manifest-component scanning. Other advertised agents are unavailable.
           </p>
         </div>
         <button
           onClick={startScan}
           disabled={loading || Boolean(running)}
-          className="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          className="flex items-center justify-center gap-2 rounded-xl bg-[#094771] px-4 py-2 text-sm font-semibold text-[#d4d4d4] disabled:opacity-50"
         >
           {loading || running ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
           {running ? 'Worker running' : 'Run OSV scan'}
         </button>
       </div>
 
-      <div className="rounded-xl border border-slate-200 p-4 dark:border-zinc-700">
+      <div className="rounded-xl border border-[#3c3c3c] p-4">
         <div className="flex items-center justify-between">
           <div>
             <p className="font-semibold">OSV manifest worker</p>
-            <p className="text-xs text-slate-500">Queries observed SBOM components against api.osv.dev and persists provider responses and findings.</p>
+            <p className="text-xs text-[#9d9d9d]">Queries observed SBOM components against api.osv.dev and persists provider responses and findings.</p>
           </div>
-          <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
+          <span className="rounded-full bg-[#2d2d2d] px-2 py-1 text-xs font-semibold text-[#6f6f6f]">
             {job?.status || 'No job'}
           </span>
         </div>
         {job && (
           <div className="mt-3">
-            <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-              <div className="h-full bg-indigo-500" style={{ width: `${Math.max(0, Math.min(100, job.progress || 0))}%` }} />
+            <div className="h-2 overflow-hidden rounded-full bg-[#2d2d2d]">
+              <div className="h-full bg-[#094771]" style={{ width: `${Math.max(0, Math.min(100, job.progress || 0))}%` }} />
             </div>
-            <p className="mt-1 text-xs text-slate-500">Job {job.id} · {job.progress || 0}%</p>
+            <p className="mt-1 text-xs text-[#9d9d9d]">Job {job.id} · {job.progress || 0}%</p>
           </div>
         )}
       </div>
 
       {error && (
-        <div className="flex gap-2 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+        <div className="flex gap-2 rounded-xl border border-[#f14c4c]/40 bg-[#f14c4c]/15 p-4 text-sm text-[#f14c4c]">
           <AlertTriangle className="h-4 w-4 shrink-0" />
           {error}
         </div>
       )}
 
-      <div className="rounded-xl bg-slate-950 p-4 text-slate-200">
-        <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase text-slate-400">
+      <div className="rounded-xl bg-[#1e1e1e] p-4 text-[#d4d4d4]">
+        <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase text-[#9d9d9d]">
           <Terminal className="h-4 w-4" /> Persisted worker logs
         </div>
         <div className="max-h-64 space-y-2 overflow-y-auto font-mono text-xs">
-          {logs.length === 0 && <p className="text-slate-500">No persisted logs for this passport.</p>}
+          {logs.length === 0 && <p className="text-[#9d9d9d]">No persisted logs for this passport.</p>}
           {logs.map(log => (
-            <p key={log.id} className={log.level === 'Error' ? 'text-rose-300' : 'text-slate-300'}>
+            <p key={log.id} className={log.level === 'Error' ? 'text-[#f14c4c]' : 'text-[#d4d4d4]'}>
               [{log.level}] {log.message}
             </p>
           ))}

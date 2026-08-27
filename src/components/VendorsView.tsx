@@ -227,32 +227,32 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
     <div className="space-y-6" id="msp-vendors-view-dashboard">
       {/* Page Header */}
       <div>
-        <h1 className="text-xl font-display font-bold text-slate-900 flex items-center gap-2">
-          <Factory className="w-5 h-5 text-indigo-600" />
+        <h1 className="text-xl font-display font-bold text-[#d4d4d4] flex items-center gap-2">
+          <Factory className="w-5 h-5 text-[#3794ff]" />
           <span>Vendor Trust Registry</span>
         </h1>
-        <p className="text-xs text-slate-500 font-sans mt-1">
+        <p className="text-xs text-[#9d9d9d] font-sans mt-1">
           Trace supply chain vulnerability vectors, query validated publisher reputation indices, and inspect continuous compliance audit records.
         </p>
       </div>
 
       {/* Control Panel: Search & Filter Grid */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3">
+      <div className="spr-panel p-4 space-y-3">
         <div className="flex flex-col md:flex-row gap-3">
           {/* Main search bar */}
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-[#9d9d9d]" />
             <input
               type="text"
               placeholder="Search by vendor name, category, location, or audit type..."
               value={localSearch}
               onChange={(e) => setLocalSearch(e.target.value)}
-              className="w-full bg-slate-50/50 hover:bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-xs focus:outline-none focus:border-indigo-500 focus:bg-white transition-all text-slate-800 placeholder-slate-400"
+              className="w-full bg-[#2d2d2d] hover:bg-[#252526] border border-[#3c3c3c] rounded-md pl-9 pr-4 py-2 text-xs focus:outline-none focus:border-[#3794ff] focus:bg-white transition-all text-[#d4d4d4] placeholder-[#6f6f6f]"
             />
             {localSearch && (
               <button
                 onClick={() => setLocalSearch('')}
-                className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 text-xs"
+                className="absolute right-3 top-2.5 text-[#9d9d9d] hover:text-[#6f6f6f] text-xs"
               >
                 Clear
               </button>
@@ -268,7 +268,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                 setReputationFilter('all');
                 setAuditStatusFilter('all');
               }}
-              className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold px-2 py-1 bg-indigo-50 hover:bg-indigo-100/80 rounded-lg transition-all"
+              className="text-xs text-[#3794ff] hover:text-[#5fa8ff] font-semibold px-2 py-1 bg-[#094771] hover:bg-[#0e639c]/30 rounded-md transition-all"
             >
               Reset Filters
             </button>
@@ -279,19 +279,19 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
           {/* Review Status Filter */}
           <div className="space-y-1">
-            <label className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider block">Review Status</label>
+            <label className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase tracking-wider block">Review Status</label>
             <div className="relative">
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full bg-white border border-slate-200 hover:border-slate-300 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 focus:outline-none focus:border-indigo-500 cursor-pointer appearance-none"
+                className="w-full bg-white border border-[#3c3c3c] hover:border-[#525252] rounded-md px-2.5 py-1.5 text-[11px] font-semibold text-[#6f6f6f] focus:outline-none focus:border-[#3794ff] cursor-pointer appearance-none"
               >
                 <option value="all">All Statuses</option>
                 <option value="Approved">Approved Only</option>
                 <option value="Under Review">Under Review</option>
                 <option value="Blocked">Blocked Only</option>
               </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400">
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[#9d9d9d]">
                 <ChevronRight className="w-3.5 h-3.5 rotate-90" />
               </div>
             </div>
@@ -299,19 +299,19 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
           {/* Risk Tier Filter */}
           <div className="space-y-1">
-            <label className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider block">Risk Tier</label>
+            <label className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase tracking-wider block">Risk Tier</label>
             <div className="relative">
               <select
                 value={riskFilter}
                 onChange={(e) => setRiskFilter(e.target.value)}
-                className="w-full bg-white border border-slate-200 hover:border-slate-300 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 focus:outline-none focus:border-indigo-500 cursor-pointer appearance-none"
+                className="w-full bg-white border border-[#3c3c3c] hover:border-[#525252] rounded-md px-2.5 py-1.5 text-[11px] font-semibold text-[#6f6f6f] focus:outline-none focus:border-[#3794ff] cursor-pointer appearance-none"
               >
                 <option value="all">All Risk Tiers</option>
                 <option value="Low">Low Risk</option>
                 <option value="Medium">Medium Risk</option>
                 <option value="High">High Risk</option>
               </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400">
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[#9d9d9d]">
                 <ChevronRight className="w-3.5 h-3.5 rotate-90" />
               </div>
             </div>
@@ -319,12 +319,12 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
           {/* Reputation Score Filter */}
           <div className="space-y-1">
-            <label className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider block">Reputation Index</label>
+            <label className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase tracking-wider block">Reputation Index</label>
             <div className="relative">
               <select
                 value={reputationFilter}
                 onChange={(e) => setReputationFilter(e.target.value)}
-                className="w-full bg-white border border-slate-200 hover:border-slate-300 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 focus:outline-none focus:border-indigo-500 cursor-pointer appearance-none"
+                className="w-full bg-white border border-[#3c3c3c] hover:border-[#525252] rounded-md px-2.5 py-1.5 text-[11px] font-semibold text-[#6f6f6f] focus:outline-none focus:border-[#3794ff] cursor-pointer appearance-none"
               >
                 <option value="all">All Scores</option>
                 <option value="excellent">Excellent (90+)</option>
@@ -332,7 +332,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                 <option value="fair">Fair (70-79)</option>
                 <option value="critical">Critical (&lt;70)</option>
               </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400">
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[#9d9d9d]">
                 <ChevronRight className="w-3.5 h-3.5 rotate-90" />
               </div>
             </div>
@@ -340,19 +340,19 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
           {/* Compliance Audit Status Filter */}
           <div className="space-y-1">
-            <label className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider block">Audit Ledger Status</label>
+            <label className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase tracking-wider block">Audit Ledger Status</label>
             <div className="relative">
               <select
                 value={auditStatusFilter}
                 onChange={(e) => setAuditStatusFilter(e.target.value)}
-                className="w-full bg-white border border-slate-200 hover:border-slate-300 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 focus:outline-none focus:border-indigo-500 cursor-pointer appearance-none"
+                className="w-full bg-white border border-[#3c3c3c] hover:border-[#525252] rounded-md px-2.5 py-1.5 text-[11px] font-semibold text-[#6f6f6f] focus:outline-none focus:border-[#3794ff] cursor-pointer appearance-none"
               >
                 <option value="all">All Audit Outcomes</option>
                 <option value="Passed">Passed Audits</option>
                 <option value="Under Review">Under Review Only</option>
                 <option value="Failed">Failed/Gaps Only</option>
               </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400">
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[#9d9d9d]">
                 <ChevronRight className="w-3.5 h-3.5 rotate-90" />
               </div>
             </div>
@@ -365,19 +365,19 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
         
         {/* LEFT COLUMN: Vendor Directory List */}
         <div className="lg:col-span-3 space-y-4">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="spr-panel overflow-hidden">
             {/* Header with Sorting Indicators */}
-            <div className="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center text-[10px] font-mono text-slate-400 font-bold uppercase">
-              <span className="flex items-center gap-1 cursor-pointer hover:text-slate-700" onClick={() => toggleSort('name')}>
+            <div className="bg-[#252526] border-b border-[#3c3c3c] px-4 py-2.5 flex justify-between items-center text-[10px] font-mono text-[#9d9d9d] font-bold uppercase">
+              <span className="flex items-center gap-1 cursor-pointer hover:text-[#6f6f6f]" onClick={() => toggleSort('name')}>
                 Publisher Organization
                 <ArrowUpDown className="w-3 h-3" />
               </span>
               <div className="flex items-center gap-6">
-                <span className="flex items-center gap-1 cursor-pointer hover:text-slate-700" onClick={() => toggleSort('passports')}>
+                <span className="flex items-center gap-1 cursor-pointer hover:text-[#6f6f6f]" onClick={() => toggleSort('passports')}>
                   Passports
                   <ArrowUpDown className="w-3 h-3" />
                 </span>
-                <span className="flex items-center gap-1 cursor-pointer hover:text-slate-700" onClick={() => toggleSort('score')}>
+                <span className="flex items-center gap-1 cursor-pointer hover:text-[#6f6f6f]" onClick={() => toggleSort('score')}>
                   Trust Score
                   <ArrowUpDown className="w-3 h-3" />
                 </span>
@@ -386,7 +386,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
             {/* List Body */}
             {filteredVendors.length > 0 ? (
-              <div className="divide-y divide-slate-100 max-h-[500px] overflow-y-auto">
+              <div className="divide-y divide-[#3c3c3c] max-h-[500px] overflow-y-auto">
                 {filteredVendors.map((vendor) => {
                   const isSelected = selectedVendor?.id === vendor.id;
                   const score = vendor.reputationScore ?? vendor.overallTrustScore;
@@ -397,23 +397,23 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                       onClick={() => setSelectedVendorId(vendor.id)}
                       className={`px-4 py-3.5 transition-all cursor-pointer flex justify-between items-center ${
                         isSelected 
-                          ? 'bg-indigo-50/45 border-l-4 border-indigo-600' 
-                          : 'hover:bg-slate-50/50 border-l-4 border-transparent'
+                          ? 'bg-[#094771]/45 border-l-4 border-[#0e639c]'
+                          : 'hover:bg-[#2d2d2d] border-l-4 border-transparent'
                       }`}
                     >
                       {/* Name / Category */}
                       <div className="space-y-1 min-w-0 pr-4">
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-slate-800 text-xs truncate">{vendor.name}</span>
+                          <span className="font-bold text-[#d4d4d4] text-xs truncate">{vendor.name}</span>
                           <span className={`px-1.5 py-0.5 rounded-full text-[8px] font-bold ${
-                            vendor.reviewStatus === 'Approved' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                            vendor.reviewStatus === 'Approved' ? 'bg-[#89d185]/15 text-[#89d185]' : 'bg-[#cca700]/15 text-[#cca700]'
                           }`}>
                             {vendor.reviewStatus}
                           </span>
                         </div>
-                        <div className="flex items-center gap-2 text-[10px] text-slate-500 font-sans">
+                        <div className="flex items-center gap-2 text-[10px] text-[#9d9d9d] font-sans">
                           <span>{vendor.category}</span>
-                          <span className="text-slate-300">•</span>
+                          <span className="text-[#6f6f6f]">•</span>
                           <span className="text-[9px] font-mono truncate">{vendor.locations}</span>
                         </div>
                       </div>
@@ -421,7 +421,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                       {/* Score / Status */}
                       <div className="flex items-center gap-5 shrink-0">
                         {/* Passport Count */}
-                        <span className="text-xs font-mono font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                        <span className="text-xs font-mono font-bold text-[#6f6f6f] bg-[#2d2d2d] px-2 py-0.5 rounded-md border border-[#3c3c3c]">
                           {vendor.activePassportsCount} {vendor.activePassportsCount === 1 ? 'Passport' : 'Passports'}
                         </span>
 
@@ -429,14 +429,14 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                         <div className="flex items-center gap-1.5">
                           <div className={`w-8 h-8 rounded-full flex items-center justify-center font-mono font-bold text-xs ${
                             score >= 90 
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                              ? 'bg-[#89d185]/10 text-[#89d185] border border-[#89d185]/30'
                               : score >= 80 
-                                ? 'bg-amber-50 text-amber-700 border border-amber-200' 
-                                : 'bg-rose-50 text-rose-700 border border-rose-200'
+                                ? 'bg-[#cca700]/10 text-[#cca700] border border-[#cca700]/30'
+                                : 'bg-[#f14c4c]/10 text-[#f14c4c] border border-[#f14c4c]/30'
                           }`}>
                             {score}
                           </div>
-                          <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${isSelected ? 'translate-x-0.5 text-indigo-500' : ''}`} />
+                          <ChevronRight className={`w-4 h-4 text-[#9d9d9d] transition-transform ${isSelected ? 'translate-x-0.5 text-[#3794ff]' : ''}`} />
                         </div>
                       </div>
                     </div>
@@ -444,8 +444,8 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                 })}
               </div>
             ) : (
-              <div className="p-8 text-center text-slate-400 space-y-2">
-                <AlertCircle className="w-8 h-8 text-slate-300 mx-auto" />
+              <div className="p-8 text-center text-[#9d9d9d] space-y-2">
+                <AlertCircle className="w-8 h-8 text-[#6f6f6f] mx-auto" />
                 {vendors.length === 0 ? (
                   <>
                     <p className="text-xs font-semibold">No vendor records loaded for this tenant.</p>
@@ -463,37 +463,37 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
           {/* Quick Metrics Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <div className="spr-panel p-3 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-md bg-[#89d185]/10 text-[#89d185] flex items-center justify-center">
                 <ShieldCheck className="w-4 h-4" />
               </div>
               <div>
-                <div className="text-[10px] font-mono text-slate-400 uppercase font-bold">Approved Publishers</div>
-                <div className="text-sm font-bold text-slate-800">
+                <div className="text-[10px] font-mono text-[#9d9d9d] uppercase font-bold">Approved Publishers</div>
+                <div className="text-sm font-bold text-[#d4d4d4]">
                   {vendors.filter(v => v.reviewStatus === 'Approved').length} / {vendors.length}
                 </div>
               </div>
             </div>
 
-            <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+            <div className="spr-panel p-3 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-md bg-[#094771] text-[#3794ff] flex items-center justify-center">
                 <Award className="w-4 h-4" />
               </div>
               <div>
-                <div className="text-[10px] font-mono text-slate-400 uppercase font-bold">Avg Reputation score</div>
-                <div className="text-sm font-bold text-slate-800">
+                <div className="text-[10px] font-mono text-[#9d9d9d] uppercase font-bold">Avg Reputation score</div>
+                <div className="text-sm font-bold text-[#d4d4d4]">
                   {vendors.length === 0 ? '—' : `${Math.round(vendors.reduce((acc, v) => acc + (v.reputationScore ?? v.overallTrustScore), 0) / vendors.length)}/100`}
                 </div>
               </div>
             </div>
 
-            <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+            <div className="spr-panel p-3 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-md bg-[#cca700]/10 text-[#cca700] flex items-center justify-center">
                 <Activity className="w-4 h-4" />
               </div>
               <div>
-                <div className="text-[10px] font-mono text-slate-400 uppercase font-bold">Unobserved Audits</div>
-                <div className="text-sm font-bold text-slate-800">
+                <div className="text-[10px] font-mono text-[#9d9d9d] uppercase font-bold">Unobserved Audits</div>
+                <div className="text-sm font-bold text-[#d4d4d4]">
                   {vendors.filter(v => v.reviewStatus === 'Under Review').length} Under Review
                 </div>
               </div>
@@ -507,20 +507,20 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
             <div className="space-y-4">
               
               {/* Card 1: Vendor Trust Profile */}
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
-                <div className="flex justify-between items-start border-b border-slate-100 pb-3">
+              <div className="spr-panel p-5 space-y-4">
+                <div className="flex justify-between items-start border-b border-[#3c3c3c] pb-3">
                   <div>
-                    <span className="text-[9px] font-mono font-bold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded uppercase">
+                    <span className="text-[9px] font-mono font-bold bg-[#094771] text-[#3794ff] px-2 py-0.5 rounded uppercase">
                       Publisher Profile
                     </span>
-                    <h2 className="text-sm font-bold text-slate-900 mt-1">{selectedVendor.name}</h2>
-                    <p className="text-[10px] text-slate-400 mt-0.5">{selectedVendor.category}</p>
+                    <h2 className="text-sm font-bold text-[#d4d4d4] mt-1">{selectedVendor.name}</h2>
+                    <p className="text-[10px] text-[#9d9d9d] mt-0.5">{selectedVendor.category}</p>
                   </div>
                   <a
                     href={selectedVendor.website}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-slate-400 hover:text-slate-600 p-1.5 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all"
+                    className="text-[#9d9d9d] hover:text-[#6f6f6f] p-1.5 bg-[#252526] hover:bg-[#2d2d2d] rounded-md transition-all"
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
                   </a>
@@ -528,22 +528,22 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
                 {/* Sub-scores metrics block */}
                 <div className="space-y-3">
-                  <h3 className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">
+                  <h3 className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase tracking-wider">
                     Supply Chain Reputation Metrics
                   </h3>
 
                   <div className="space-y-2.5">
                     {/* Code Signing Attestation */}
                     <div>
-                      <div className="flex justify-between text-[10px] font-semibold text-slate-700 mb-1">
+                      <div className="flex justify-between text-[10px] font-semibold text-[#6f6f6f] mb-1">
                         <span>Binary & Code Signing Attestation</span>
                         <span className="font-mono font-bold">
                           {selectedVendor.reputationScore ? Math.min(100, selectedVendor.reputationScore + 2) : 95}%
                         </span>
                       </div>
-                      <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="w-full h-1.5 bg-[#2d2d2d] rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-indigo-600 rounded-full transition-all duration-500"
+                          className="h-full bg-[#0e639c] rounded-full transition-all duration-500"
                           style={{ width: `${selectedVendor.reputationScore ? Math.min(100, selectedVendor.reputationScore + 2) : 95}%` }}
                         ></div>
                       </div>
@@ -551,30 +551,30 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
                     {/* Vulnerability SLA performance */}
                     <div>
-                      <div className="flex justify-between text-[10px] font-semibold text-slate-700 mb-1">
+                      <div className="flex justify-between text-[10px] font-semibold text-[#6f6f6f] mb-1">
                         <span>Vulnerability SLA Response Speed</span>
                         <span className="font-mono font-bold">
                           {selectedVendor.overallTrustScore}%
                         </span>
                       </div>
-                      <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="w-full h-1.5 bg-[#2d2d2d] rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                          className="h-full bg-[#89d185] rounded-full transition-all duration-500"
                           style={{ width: `${selectedVendor.overallTrustScore}%` }}
                         ></div>
                       </div>
                     </div>
 
                     {/* Threat / Incident frequency */}
-                    <div className="flex justify-between items-center text-[10px] bg-slate-50 border border-slate-150 rounded-lg p-2.5 font-sans">
+                    <div className="flex justify-between items-center text-[10px] bg-[#252526] border border-[#3c3c3c] rounded-md p-2.5 font-sans">
                       <div className="space-y-0.5">
-                        <span className="text-slate-700 font-semibold block">Known Threat Incidents</span>
-                        <span className="text-[9px] text-slate-400">Past 12 Months</span>
+                        <span className="text-[#6f6f6f] font-semibold block">Known Threat Incidents</span>
+                        <span className="text-[9px] text-[#9d9d9d]">Past 12 Months</span>
                       </div>
                       <span className={`font-mono font-bold px-2 py-0.5 rounded ${
                         selectedVendor.securityIncidentsCount === 0 
-                          ? 'bg-emerald-50 text-emerald-700' 
-                          : 'bg-rose-50 text-rose-700'
+                          ? 'bg-[#89d185]/10 text-[#89d185]'
+                          : 'bg-[#f14c4c]/10 text-[#f14c4c]'
                       }`}>
                         {selectedVendor.securityIncidentsCount} {selectedVendor.securityIncidentsCount === 1 ? 'Incident' : 'Incidents'}
                       </span>
@@ -584,17 +584,17 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
               </div>
 
               {/* Card 2: Associated Compliance Audit History */}
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
-                <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <div className="spr-panel p-5 space-y-4">
+                <div className="flex justify-between items-center border-b border-[#3c3c3c] pb-3">
                   <div className="flex items-center gap-1.5">
-                    <FileText className="w-4.5 h-4.5 text-slate-500" />
-                    <h3 className="text-xs font-bold text-slate-800">Compliance Audit Ledger</h3>
+                    <FileText className="w-4.5 h-4.5 text-[#9d9d9d]" />
+                    <h3 className="text-xs font-bold text-[#d4d4d4]">Compliance Audit Ledger</h3>
                   </div>
 
                   {/* Add attestation action */}
                   <button
                     onClick={() => setIsAddingAudit(!isAddingAudit)}
-                    className="text-[10px] font-sans font-bold bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1 rounded-lg flex items-center gap-0.5 shadow-sm transition-all cursor-pointer"
+                    className="text-[10px] font-sans font-bold bg-[#0e639c] hover:bg-[#1177bb] text-white px-2 py-1 rounded-md flex items-center gap-0.5 transition-all cursor-pointer"
                   >
                     {isAddingAudit ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
                     <span>{isAddingAudit ? 'Cancel' : 'Lodge Proof'}</span>
@@ -603,9 +603,9 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
                 {/* Lodge Attestation Panel Form */}
                 {isAddingAudit && (
-                  <form onSubmit={handleAddAuditAttestation} className="p-3.5 bg-slate-900 border border-slate-800 text-slate-200 rounded-lg space-y-3">
-                    <div className="flex justify-between items-center border-b border-slate-800 pb-1.5">
-                      <span className="text-[10px] font-mono font-bold text-indigo-400 flex items-center gap-1">
+                  <form onSubmit={handleAddAuditAttestation} className="p-3.5 spr-panel-alt text-[#d4d4d4] space-y-3">
+                    <div className="flex justify-between items-center border-b border-[#3c3c3c] pb-1.5">
+                      <span className="text-[10px] font-mono font-bold text-[#3794ff] flex items-center gap-1">
                         <Lock className="w-3 h-3" /> Lock Attestation Proof
                       </span>
                     </div>
@@ -613,11 +613,11 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                     <div className="space-y-2 text-xs">
                       {/* Audit Standard Type */}
                       <div className="space-y-0.5">
-                        <label className="text-[9px] font-mono text-slate-400 block uppercase">Audit Type</label>
+                        <label className="text-[9px] font-mono text-[#9d9d9d] block uppercase">Audit Type</label>
                         <select
                           value={newAuditType}
                           onChange={(e) => setNewAuditType(e.target.value)}
-                          className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1 text-xs text-white"
+                          className="w-full bg-[#1e1e1e] border border-[#3c3c3c] rounded px-2.5 py-1 text-xs text-white"
                         >
                           <option value="SOC 2 Type II Continuous compliance">SOC 2 Type II Continuous</option>
                           <option value="ISO 27001 Blueprint Verification">ISO 27001 ISMS</option>
@@ -630,24 +630,24 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
                       {/* Auditor Name */}
                       <div className="space-y-0.5">
-                        <label className="text-[9px] font-mono text-slate-400 block uppercase">Auditor / Entity ID</label>
+                        <label className="text-[9px] font-mono text-[#9d9d9d] block uppercase">Auditor / Entity ID</label>
                         <input
                           type="text"
                           required
                           placeholder="e.g. KPMG Cyber Team, NCC Group"
                           value={newAuditor}
                           onChange={(e) => setNewAuditor(e.target.value)}
-                          className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1 text-xs text-white"
+                          className="w-full bg-[#1e1e1e] border border-[#3c3c3c] rounded px-2.5 py-1 text-xs text-white"
                         />
                       </div>
 
                       {/* Audit Status */}
                       <div className="space-y-0.5">
-                        <label className="text-[9px] font-mono text-slate-400 block uppercase">Audit Outcome</label>
+                        <label className="text-[9px] font-mono text-[#9d9d9d] block uppercase">Audit Outcome</label>
                         <select
                           value={newAuditStatus}
                           onChange={(e: any) => setNewAuditStatus(e.target.value)}
-                          className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1 text-xs text-white"
+                          className="w-full bg-[#1e1e1e] border border-[#3c3c3c] rounded px-2.5 py-1 text-xs text-white"
                         >
                           <option value="Passed">PASSED (Score Boosts)</option>
                           <option value="Under Review">UNDER REVIEW (No Score Impact)</option>
@@ -657,31 +657,31 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
                       {/* Details */}
                       <div className="space-y-0.5">
-                        <label className="text-[9px] font-mono text-slate-400 block uppercase">Attestation Logs</label>
+                        <label className="text-[9px] font-mono text-[#9d9d9d] block uppercase">Attestation Logs</label>
                         <textarea
                           placeholder="Detailed results or parameters verified..."
                           value={newAuditDetails}
                           onChange={(e) => setNewAuditDetails(e.target.value)}
                           rows={2}
-                          className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1 text-xs text-white"
+                          className="w-full bg-[#1e1e1e] border border-[#3c3c3c] rounded px-2.5 py-1 text-xs text-white"
                         />
                       </div>
 
                       {/* Cryptographic reference hash */}
                       <div className="space-y-0.5">
-                        <label className="text-[9px] font-mono text-slate-400 block uppercase">Cryptographical Hash reference (Optional)</label>
+                        <label className="text-[9px] font-mono text-[#9d9d9d] block uppercase">Cryptographical Hash reference (Optional)</label>
                         <input
                           type="text"
                           placeholder="Leave blank to auto-generate ledger hash..."
                           value={newAuditHash}
                           onChange={(e) => setNewAuditHash(e.target.value)}
-                          className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1 font-mono text-[10px] text-white"
+                          className="w-full bg-[#1e1e1e] border border-[#3c3c3c] rounded px-2.5 py-1 font-mono text-[10px] text-white"
                         />
                       </div>
 
                       <button
                         type="submit"
-                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-sans font-bold py-1.5 rounded transition-colors flex justify-center items-center gap-1 shadow-sm cursor-pointer mt-1"
+                        className="w-full bg-[#0e639c] hover:bg-[#1177bb] text-white font-sans font-bold py-1.5 rounded transition-colors flex justify-center items-center gap-1 cursor-pointer mt-1"
                       >
                         <Check className="w-3.5 h-3.5" />
                         <span>Lock into Ledger</span>
@@ -700,71 +700,71 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                       return (
                         <div
                           key={audit.id}
-                          className={`p-3.5 border rounded-lg space-y-2 transition-all ${
+                          className={`p-3.5 border rounded-md space-y-2 transition-all ${
                             isPassed 
-                              ? 'bg-emerald-50/15 border-emerald-100' 
+                              ? 'bg-[#89d185]/10 border-[#89d185]/25'
                               : isFailed 
-                                ? 'bg-rose-50/15 border-rose-100' 
-                                : 'bg-amber-50/15 border-amber-100'
+                                ? 'bg-[#f14c4c]/10 border-[#f14c4c]/25'
+                                : 'bg-[#cca700]/10 border-[#cca700]/25'
                           }`}
                         >
                           {/* Header of Audit Event */}
                           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1">
                             <div className="space-y-0.5">
-                              <span className="text-[10px] font-bold text-slate-800 block leading-tight">
+                              <span className="text-[10px] font-bold text-[#d4d4d4] block leading-tight">
                                 {audit.auditType}
                               </span>
-                              <span className="text-[9px] text-slate-400 font-mono flex items-center gap-1">
-                                <Calendar className="w-3 h-3 text-slate-400" />
+                              <span className="text-[9px] text-[#9d9d9d] font-mono flex items-center gap-1">
+                                <Calendar className="w-3 h-3 text-[#9d9d9d]" />
                                 <span>{audit.date}</span>
                               </span>
                             </div>
                             
                             <span className={`px-2 py-0.5 rounded font-mono text-[8px] font-bold self-start ${
                               isPassed 
-                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                                ? 'bg-[#89d185]/15 text-[#89d185] border border-emerald-200'
                                 : isFailed 
-                                  ? 'bg-rose-100 text-rose-800 border border-rose-200' 
-                                  : 'bg-amber-100 text-amber-800 border border-amber-200'
+                                  ? 'bg-[#f14c4c]/15 text-[#f14c4c] border border-[#f14c4c]/30'
+                                  : 'bg-[#cca700]/15 text-[#cca700] border border-amber-200'
                             }`}>
                               {audit.status.toUpperCase()}
                             </span>
                           </div>
 
                           {/* Details description */}
-                          <p className="text-[10px] text-slate-600 leading-relaxed">
+                          <p className="text-[10px] text-[#6f6f6f] leading-relaxed">
                             {audit.details}
                           </p>
 
                           {/* Metadata: Auditor & Cryptographic Hash References */}
-                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 font-mono text-[9px] text-slate-500 bg-slate-50/70 p-2 rounded-md">
+                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#3c3c3c] font-mono text-[9px] text-[#9d9d9d] bg-[#2d2d2d] p-2 rounded-md">
                             <div>
-                              <span className="block text-slate-400 font-bold uppercase text-[7px]">Auditor</span>
-                              <span className="font-semibold text-slate-700 flex items-center gap-1 mt-0.5 truncate" title={audit.auditor}>
-                                <User className="w-2.5 h-2.5 shrink-0 text-slate-400" />
+                              <span className="block text-[#9d9d9d] font-bold uppercase text-[7px]">Auditor</span>
+                              <span className="font-semibold text-[#6f6f6f] flex items-center gap-1 mt-0.5 truncate" title={audit.auditor}>
+                                <User className="w-2.5 h-2.5 shrink-0 text-[#9d9d9d]" />
                                 {audit.auditor}
                               </span>
                             </div>
 
                             <div>
-                              <span className="block text-slate-400 font-bold uppercase text-[7px]">Ledger Hash Proof</span>
+                              <span className="block text-[#9d9d9d] font-bold uppercase text-[7px]">Ledger Hash Proof</span>
                               <button
                                 type="button"
                                 onClick={() => audit.referenceHash && copyToClipboard(audit.referenceHash, audit.id)}
                                 disabled={!audit.referenceHash}
-                                className="font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 mt-0.5 text-left w-full truncate cursor-copy disabled:cursor-default disabled:text-slate-400"
+                                className="font-semibold text-[#3794ff] hover:text-[#5fa8ff] flex items-center gap-1 mt-0.5 text-left w-full truncate cursor-copy disabled:cursor-default disabled:text-[#9d9d9d]"
                                 title={audit.referenceHash ? 'Click to copy hash proof' : 'No reference hash was provided for this attestation'}
                               >
-                                <Hash className="w-2.5 h-2.5 shrink-0 text-slate-400" />
+                                <Hash className="w-2.5 h-2.5 shrink-0 text-[#9d9d9d]" />
                                 <span className="truncate">
                                   {audit.referenceHash ? `${audit.referenceHash.substring(0, 15)}...` : 'Not provided'}
                                 </span>
                                 {copiedAuditId === audit.id ? (
-                                  <span className="text-[8px] text-emerald-600 bg-emerald-50 px-1 rounded uppercase font-bold font-sans">
+                                  <span className="text-[8px] text-[#89d185] bg-[#89d185]/10 px-1 rounded uppercase font-bold font-sans">
                                     Copied!
                                   </span>
                                 ) : (
-                                  <span className="text-[8px] text-slate-300 font-sans group-hover:block">
+                                  <span className="text-[8px] text-[#6f6f6f] font-sans group-hover:block">
                                     Copy
                                   </span>
                                 )}
@@ -775,8 +775,8 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                       );
                     })
                   ) : (
-                    <div className="text-center p-6 text-slate-400">
-                      <HelpCircle className="w-7 h-7 text-slate-300 mx-auto mb-1.5" />
+                    <div className="text-center p-6 text-[#9d9d9d]">
+                      <HelpCircle className="w-7 h-7 text-[#6f6f6f] mx-auto mb-1.5" />
                       <p className="text-xs">No audit logs listed on the secure ledger.</p>
                       <p className="text-[10px]">Click "Lodge Proof" above to register an audit.</p>
                     </div>
@@ -785,7 +785,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
               </div>
             </div>
           ) : (
-            <div className="h-full flex items-center justify-center p-8 text-center bg-white border border-slate-200 rounded-xl text-slate-400">
+            <div className="h-full flex items-center justify-center p-8 text-center spr-panel text-[#9d9d9d]">
               Select a software vendor to view reputation breakdowns and audit history.
             </div>
           )}

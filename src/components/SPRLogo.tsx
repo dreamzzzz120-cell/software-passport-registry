@@ -60,7 +60,7 @@ export default function SPRLogo({
             </linearGradient>
 
             <linearGradient id="sprEmeraldGlow" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#34d399" />
+              <stop offset="0%" stopColor="#89d185" />
               <stop offset="100%" stopColor="#059669" />
             </linearGradient>
 
@@ -107,10 +107,10 @@ export default function SPRLogo({
           />
 
           {/* Corner Verification Nodes */}
-          <circle cx="50" cy="14" r="3.5" fill="#34d399" />
+          <circle cx="50" cy="14" r="3.5" fill="#89d185" />
           <circle cx="82" cy="30" r="3.5" fill="#fbbf24" />
           <circle cx="82" cy="70" r="3.5" fill="#60a5fa" />
-          <circle cx="50" cy="86" r="3.5" fill="#34d399" />
+          <circle cx="50" cy="86" r="3.5" fill="#89d185" />
           <circle cx="18" cy="70" r="3.5" fill="#fbbf24" />
           <circle cx="18" cy="30" r="3.5" fill="#60a5fa" />
         </svg>
@@ -118,7 +118,7 @@ export default function SPRLogo({
         {/* Live Status Pulse Dot */}
         <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500 border border-slate-900"></span>
+          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500 border border-[#3c3c3c]"></span>
         </span>
       </div>
 
@@ -126,15 +126,15 @@ export default function SPRLogo({
       {showText && variant !== 'icon' && (
         <div className="flex flex-col leading-none">
           <div className="flex items-center gap-1.5">
-            <span className={`font-display font-black tracking-tight text-slate-900 dark:text-white ${textSizes[size]}`}>
+            <span className={`font-display font-black tracking-tight text-[#d4d4d4] ${textSizes[size]}`}>
               SPR
             </span>
-            <span className="bg-indigo-600/10 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30 font-mono text-[9px] font-bold px-1.5 py-0.5 rounded tracking-wider uppercase">
+            <span className="bg-[#094771] text-[#3794ff] border border-[#3794ff]/40 font-mono text-[9px] font-bold px-1.5 py-0.5 rounded tracking-wider uppercase">
               TRUST-OS
             </span>
           </div>
           {subtext && (
-            <span className="text-[8px] font-mono font-bold tracking-widest text-slate-500 dark:text-slate-400 uppercase mt-1">
+            <span className="text-[8px] font-mono font-bold tracking-widest text-[#9d9d9d] uppercase mt-1">
               {subtext}
             </span>
           )}

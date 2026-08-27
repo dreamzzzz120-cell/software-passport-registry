@@ -36,29 +36,29 @@ export default function RiskMitigation({
   };
 
   const severityColors = {
-    Critical: 'bg-rose-100 text-rose-800 border-rose-200',
+    Critical: 'bg-[#f14c4c]/15 text-[#f14c4c] border-[#f14c4c]/40',
     High: 'bg-amber-100 text-amber-800 border-amber-200',
     Medium: 'bg-blue-100 text-blue-800 border-blue-200',
-    Low: 'bg-slate-100 text-slate-800 border-slate-200'
+    Low: 'bg-[#2d2d2d] text-[#d4d4d4] border-[#3c3c3c]'
   };
 
   return (
-    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4.5 space-y-4 animate-fade-in">
-      <div className="flex justify-between items-start pb-3 border-b border-slate-200">
+    <div className="bg-[#2d2d2d] border border-[#3c3c3c] rounded-xl p-4.5 space-y-4 animate-fade-in">
+      <div className="flex justify-between items-start pb-3 border-b border-[#3c3c3c]">
         <div className="flex items-center gap-2">
-          <ShieldAlert className="w-4 h-4 text-indigo-600" />
+          <ShieldAlert className="w-4 h-4 text-[#3794ff]" />
           <div>
-            <h4 className="text-xs font-bold text-slate-900 font-display flex items-center gap-1.5">
+            <h4 className="text-xs font-bold text-[#d4d4d4] font-display flex items-center gap-1.5">
               <span>Risk Remediation Plan</span>
-              <span className="text-[10px] text-slate-400 font-mono">({vulnerability.id})</span>
+              <span className="text-[10px] text-[#9d9d9d] font-mono">({vulnerability.id})</span>
             </h4>
-            <p className="text-[10px] text-slate-500 mt-0.5">{vulnerability.title}</p>
+            <p className="text-[10px] text-[#9d9d9d] mt-0.5">{vulnerability.title}</p>
           </div>
         </div>
         <button
           type="button"
           onClick={onCancel}
-          className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-md transition-colors cursor-pointer"
+          className="p-1 text-[#9d9d9d] hover:text-[#6f6f6f] hover:bg-[#2d2d2d] rounded-md transition-colors cursor-pointer"
         >
           <X className="w-4 h-4" />
         </button>
@@ -68,8 +68,8 @@ export default function RiskMitigation({
         {/* Row 1: Owner & Target Date */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="flex flex-col gap-1">
-            <label className="font-semibold text-slate-700 flex items-center gap-1">
-              <User className="w-3.5 h-3.5 text-slate-400" />
+            <label className="font-semibold text-[#6f6f6f] flex items-center gap-1">
+              <User className="w-3.5 h-3.5 text-[#9d9d9d]" />
               <span>Assigned Owner</span>
             </label>
             <input
@@ -78,13 +78,13 @@ export default function RiskMitigation({
               placeholder="e.g. Alice Vance (Security Lead)"
               value={owner}
               onChange={(e) => setOwner(e.target.value)}
-              className="bg-white border border-slate-250 rounded-lg p-2 focus:outline-none focus:border-indigo-500 transition-colors"
+              className="bg-[#2d2d2d] border border-[#3c3c3c] rounded-lg p-2 focus:outline-none focus:border-[#3794ff]/40 transition-colors"
             />
           </div>
 
           <div className="flex flex-col gap-1">
-            <label className="font-semibold text-slate-700 flex items-center gap-1">
-              <Calendar className="w-3.5 h-3.5 text-slate-400" />
+            <label className="font-semibold text-[#6f6f6f] flex items-center gap-1">
+              <Calendar className="w-3.5 h-3.5 text-[#9d9d9d]" />
               <span>Target Completion Date</span>
             </label>
             <input
@@ -92,19 +92,19 @@ export default function RiskMitigation({
               required
               value={targetDate}
               onChange={(e) => setTargetDate(e.target.value)}
-              className="bg-white border border-slate-250 rounded-lg p-2 focus:outline-none focus:border-indigo-500 transition-colors font-mono cursor-pointer"
+              className="bg-[#2d2d2d] border border-[#3c3c3c] rounded-lg p-2 focus:outline-none focus:border-[#3794ff]/40 transition-colors font-mono cursor-pointer"
             />
           </div>
 
           <div className="flex flex-col gap-1">
-            <label className="font-semibold text-slate-700 flex items-center gap-1">
-              <CheckCircle className="w-3.5 h-3.5 text-slate-400" />
+            <label className="font-semibold text-[#6f6f6f] flex items-center gap-1">
+              <CheckCircle className="w-3.5 h-3.5 text-[#9d9d9d]" />
               <span>Vulnerability Status</span>
             </label>
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as any)}
-              className="bg-white border border-slate-250 rounded-lg p-2 focus:outline-none focus:border-indigo-500 transition-colors cursor-pointer font-medium text-slate-800"
+              className="bg-[#2d2d2d] border border-[#3c3c3c] rounded-lg p-2 focus:outline-none focus:border-[#3794ff]/40 transition-colors cursor-pointer font-medium text-[#d4d4d4]"
             >
               <option value="Open">Open (Active Risk)</option>
               <option value="Mitigated">Mitigated (Plan active)</option>
@@ -116,8 +116,8 @@ export default function RiskMitigation({
 
         {/* Row 2: Action Details Plan */}
         <div className="flex flex-col gap-1">
-          <label className="font-semibold text-slate-700 flex items-center gap-1">
-            <FileText className="w-3.5 h-3.5 text-slate-400" />
+          <label className="font-semibold text-[#6f6f6f] flex items-center gap-1">
+            <FileText className="w-3.5 h-3.5 text-[#9d9d9d]" />
             <span>Remediation & Mitigation Plan</span>
           </label>
           <textarea
@@ -126,22 +126,22 @@ export default function RiskMitigation({
             placeholder="Outline the mitigation steps, fallback controls, patch deployment schedule, or validation criteria..."
             value={plan}
             onChange={(e) => setPlan(e.target.value)}
-            className="bg-white border border-slate-250 rounded-lg p-2.5 focus:outline-none focus:border-indigo-500 transition-colors leading-relaxed resize-none"
+            className="bg-[#2d2d2d] border border-[#3c3c3c] rounded-lg p-2.5 focus:outline-none focus:border-[#3794ff]/40 transition-colors leading-relaxed resize-none"
           />
         </div>
 
         {/* Form Actions */}
-        <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
+        <div className="pt-3 border-t border-[#3c3c3c] flex justify-end gap-2">
           <button
             type="button"
             onClick={onCancel}
-            className="px-3 py-1.5 hover:bg-slate-200 border border-slate-300 rounded-lg text-slate-600 text-xs font-semibold cursor-pointer transition-colors"
+            className="px-3 py-1.5 hover:bg-[#383838] border border-[#3c3c3c] rounded-lg text-[#6f6f6f] text-xs font-semibold cursor-pointer transition-colors"
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-sm cursor-pointer transition-colors flex items-center gap-1.5"
+            className="px-3.5 py-1.5 bg-[#094771] hover:bg-[#094771] text-[#d4d4d4] text-xs font-semibold rounded-lg shadow-sm cursor-pointer transition-colors flex items-center gap-1.5"
           >
             <Save className="w-3.5 h-3.5" />
             <span>Save Mitigation Plan</span>

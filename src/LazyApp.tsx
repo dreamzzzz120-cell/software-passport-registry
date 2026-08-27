@@ -9,10 +9,10 @@ const App = lazy(() => import('./App'));
 
 function AppBoot() {
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-6">
+    <div className="min-h-screen bg-[#1e1e1e] text-[#d4d4d4] flex items-center justify-center px-6">
       <div className="max-w-lg text-center" role="status" aria-live="polite">
-        <div className="text-xs font-bold uppercase tracking-[.25em] text-cyan-300">SPR</div>
-        <div className="mt-3 text-sm text-slate-300">Loading secure workspace…</div>
+        <div className="text-xs font-bold uppercase tracking-[.25em] text-[#3794ff]">SPR</div>
+        <div className="mt-3 text-sm text-[#9d9d9d]">Loading secure workspace…</div>
       </div>
     </div>
   );
@@ -48,20 +48,20 @@ class BootBoundary extends Component<{}, BootBoundaryState> {
     const firebaseConfigMissing = message.includes('VITE_FIREBASE_');
 
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-6">
-        <div className="w-full max-w-2xl rounded-3xl border border-red-400/20 bg-white/[.04] p-8 shadow-2xl">
-          <div className="text-xs font-bold uppercase tracking-[.25em] text-red-300">SPR startup failure</div>
+      <div className="min-h-screen bg-[#1e1e1e] text-[#d4d4d4] flex items-center justify-center px-6">
+        <div className="w-full max-w-2xl rounded-md border border-[#f14c4c]/40 bg-[#252526] p-8">
+          <div className="text-xs font-bold uppercase tracking-[.25em] text-[#f14c4c]">SPR startup failure</div>
           <h1 className="mt-3 text-2xl font-semibold">The workspace could not start.</h1>
-          <p className="mt-3 text-sm leading-6 text-slate-300">
+          <p className="mt-3 text-sm leading-6 text-[#9d9d9d]">
             {firebaseConfigMissing
               ? 'Firebase web configuration is missing from this deployment. Add the required VITE_FIREBASE_* variables to the Vercel environment, then redeploy.'
               : 'A client module failed during startup. The page is showing the real startup error instead of remaining blank.'}
           </p>
-          <pre className="mt-5 overflow-auto rounded-2xl border border-white/10 bg-black/30 p-4 text-xs text-slate-400">{message}</pre>
+          <pre className="mt-5 overflow-auto rounded-md border border-[#3c3c3c] bg-[#181818] p-4 text-xs text-[#9d9d9d]">{message}</pre>
           <button
             type="button"
             onClick={() => window.location.reload()}
-            className="mt-6 rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-bold text-slate-950"
+            className="mt-6 rounded-[3px] bg-[#0e639c] px-4 py-2.5 text-sm font-bold text-white"
           >
             Reload application
           </button>

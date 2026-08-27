@@ -309,7 +309,7 @@ export default function PassportD3Graph({
       .enter()
       .append('line')
       .attr('stroke', (d: any) => {
-        if (d.type === 'governs') return '#e2e8f0'; // slate-200 / light gray
+        if (d.type === 'governs') return '#3c3c3c';
         if (d.type === 'depends') return '#cbd5e1'; 
         return '#f1f5f9';
       })
@@ -368,7 +368,7 @@ export default function PassportD3Graph({
       .attr('fill', (d: any) => d.color)
       .attr('stroke', '#ffffff')
       .attr('stroke-width', 2)
-      .attr('shadow', '0 4px 6px -1px rgb(0 0 0 / 0.1)')
+      .attr('', '0 4px 6px -1px rgb(0 0 0 / 0.1)')
       .attr('class', 'node-circle');
 
     // Append labels above nodes
@@ -378,7 +378,7 @@ export default function PassportD3Graph({
       .attr('font-size', '10px')
       .attr('font-family', '"JetBrains Mono", monospace')
       .attr('font-weight', (d: any) => (d.type === 'passport' || d.type === 'agent' ? 'bold' : 'normal'))
-      .attr('fill', '#334155') // slate-700
+      .attr('fill', '#9d9d9d')
       .text((d: any) => d.label);
 
     // Update coordinates in real-time on simulation ticks
@@ -494,7 +494,7 @@ export default function PassportD3Graph({
           if (sourceId === activeStepAgentId || targetId === activeStepAgentId) {
             return '#f59e0b'; // Amber for active audit scanning channels
           }
-          return '#e2e8f0';
+          return '#3c3c3c';
         })
         .attr('stroke-width', (d: any) => {
           const sourceId = typeof d.source === 'object' ? d.source.id : d.source;
@@ -509,7 +509,7 @@ export default function PassportD3Graph({
       svg.selectAll('.links line')
         .transition()
         .duration(300)
-        .attr('stroke', '#e2e8f0')
+        .attr('stroke', '#3c3c3c')
         .attr('stroke-width', 1.2);
     }
 
@@ -530,17 +530,17 @@ export default function PassportD3Graph({
   };
 
   return (
-    <div className="bg-slate-50 dark:bg-zinc-950/40 border border-slate-150 dark:border-zinc-850 rounded-2xl p-4.5 relative" id="swarm-d3-visualization-box">
+    <div className="bg-[#2d2d2d] border border-[#3c3c3c] rounded-md p-4.5 relative" id="swarm-d3-visualization-box">
       <div className="flex justify-between items-center mb-3">
-        <div className="flex items-center gap-1.8 text-xs text-slate-500 font-mono">
-          <Activity className={`w-3.5 h-3.5 ${isSwarmActive ? 'text-indigo-500 animate-pulse' : 'text-slate-400'}`} />
+        <div className="flex items-center gap-1.8 text-xs text-[#9d9d9d] font-mono">
+          <Activity className={`w-3.5 h-3.5 ${isSwarmActive ? 'text-[#3794ff] animate-pulse' : 'text-[#9d9d9d]'}`} />
           <span>Interactive Cognitive Relation Ledger</span>
         </div>
         
         <div className="flex items-center gap-2">
           <button
             onClick={handleResetZoom}
-            className="p-1.5 hover:bg-white dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-850 rounded-lg text-slate-500 dark:text-zinc-400 transition-colors cursor-pointer text-[10px] font-bold flex items-center gap-1"
+            className="p-1.5 hover:bg-[#252526] border border-[#3c3c3c] rounded-md text-[#9d9d9d] transition-colors cursor-pointer text-[10px] font-bold flex items-center gap-1"
             title="Recenter and Fit View"
           >
             <RotateCcw className="w-3 h-3" />
@@ -551,7 +551,7 @@ export default function PassportD3Graph({
 
       <div 
         ref={containerRef} 
-        className="w-full h-[400px] border border-slate-200/60 dark:border-zinc-850/60 rounded-xl overflow-hidden bg-white dark:bg-zinc-950 relative shadow-inner"
+        className="w-full h-[400px] border border-[#3c3c3c] rounded-md overflow-hidden bg-[#252526] relative "
       >
         <svg 
           ref={svgRef} 
@@ -563,7 +563,7 @@ export default function PassportD3Graph({
         {/* Hover absolute tooltip inside the absolute SVG bounds */}
         {hoveredNode && (
           <div 
-            className="absolute z-30 bg-slate-900/95 dark:bg-zinc-900/95 border border-slate-800 backdrop-blur-md text-white p-3.5 rounded-xl shadow-xl max-w-xs pointer-events-none text-left animate-in fade-in zoom-in-95 duration-100"
+            className="absolute z-30 bg-[#1e1e1e] border border-[#3c3c3c] text-[#d4d4d4] p-3.5 rounded-md max-w-xs pointer-events-none text-left animate-in fade-in zoom-in-95 duration-100"
             style={{ 
               left: `${tooltipPos.x}px`, 
               top: `${tooltipPos.y}px`,
@@ -575,15 +575,15 @@ export default function PassportD3Graph({
                 className="w-2.5 h-2.5 rounded-full" 
                 style={{ backgroundColor: hoveredNode.color }}
               />
-              <h5 className="text-[11px] font-bold font-mono uppercase tracking-wide text-slate-100 leading-none">
+              <h5 className="text-[11px] font-bold font-mono uppercase tracking-wide text-[#d4d4d4] leading-none">
                 {hoveredNode.label}
               </h5>
             </div>
-            <p className="text-[10px] text-slate-300 font-sans mt-2 leading-relaxed">
+            <p className="text-[10px] text-[#d4d4d4] font-sans mt-2 leading-relaxed">
               {hoveredNode.desc}
             </p>
             {hoveredNode.type === 'agent' && (
-              <div className="mt-2.5 pt-2 border-t border-slate-800 text-[9px] text-indigo-300 font-mono font-semibold flex items-center gap-1">
+              <div className="mt-2.5 pt-2 border-t border-[#3c3c3c] text-[9px] text-[#3794ff] font-mono font-semibold flex items-center gap-1">
                 <span>⚡ Click node to load agent console telemetry</span>
               </div>
             )}
@@ -591,15 +591,15 @@ export default function PassportD3Graph({
         )}
 
         {/* Grid Overlay Guide Watermark */}
-        <div className="absolute right-3.5 bottom-3 text-[9px] font-mono text-slate-400/80 pointer-events-none select-none uppercase tracking-widest flex items-center gap-1.5 bg-slate-50/50 dark:bg-zinc-900/40 px-2 py-1 rounded-md border border-slate-100 dark:border-zinc-800/30">
+        <div className="absolute right-3.5 bottom-3 text-[9px] font-mono text-[#9d9d9d] pointer-events-none select-none uppercase tracking-widest flex items-center gap-1.5 bg-[#2d2d2d] px-2 py-1 rounded-md border border-[#3c3c3c] ">
           <span>D3-FORCE GRAPH engine active</span>
         </div>
       </div>
 
       {/* Mini Node Color/Icon Legend Bar */}
-      <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 mt-3 pt-3 border-t border-slate-150 dark:border-zinc-850 text-[10px] text-slate-500 font-mono">
+      <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 mt-3 pt-3 border-t border-[#3c3c3c] text-[10px] text-[#9d9d9d] font-mono">
         <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
+          <span className="w-2.5 h-2.5 rounded-full bg-[#0e639c]"></span>
           <span>Central Passport Asset</span>
         </span>
         <span className="flex items-center gap-1.5">

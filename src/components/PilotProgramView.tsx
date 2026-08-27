@@ -696,28 +696,28 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
   return (
     <div className="space-y-6" id="spr-pilot-program-master-viewport">
       {/* 1. Header Hero Panel with Role Switcher */}
-      <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 border-b border-slate-200 dark:border-zinc-800 pb-5">
+      <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 border-b border-[#3c3c3c] pb-5">
         <div>
-          <div className="flex items-center gap-2 text-xs font-mono font-bold tracking-wider text-indigo-600 dark:text-indigo-400 uppercase">
-            <Award className="w-4 h-4 text-indigo-500" />
+          <div className="flex items-center gap-2 text-xs font-mono font-bold tracking-wider text-[#3794ff] uppercase">
+            <Award className="w-4 h-4 text-[#3794ff]" />
             <span>SPR FOUNDING PILOT PROGRAM CORE ENGINE</span>
           </div>
-          <h1 className="text-xl font-display font-black text-slate-900 dark:text-zinc-50 mt-1">Founding Pilot Program Portal</h1>
-          <p className="text-xs text-slate-500 dark:text-zinc-400 font-sans mt-1">
+          <h1 className="text-xl font-display font-black text-[#d4d4d4] mt-1">Founding Pilot Program Portal</h1>
+          <p className="text-xs text-[#9d9d9d] font-sans mt-1">
             Acquire prospects, manage multi-tenant compliance evaluations, generate Software Passports, and track commercial conversions.
           </p>
         </div>
 
         {/* User Role Permission Context Selector */}
-        <div className="flex items-center gap-2 bg-slate-100 dark:bg-zinc-900 p-1.5 rounded-xl border border-slate-200 dark:border-zinc-800 text-xs shadow-sm">
-          <span className="font-mono font-semibold text-slate-500 pl-2">Role:</span>
+        <div className="flex items-center gap-2 bg-[#2d2d2d] p-1.5 rounded-xl border border-[#3c3c3c] text-xs shadow-sm">
+          <span className="font-mono font-semibold text-[#9d9d9d] pl-2">Role:</span>
           <select
             value={selectedRole}
             onChange={(e) => {
               setSelectedRole(e.target.value as any);
               triggerBanner(`Switched RBAC execution context to: ${e.target.value}`);
             }}
-            className="bg-white dark:bg-zinc-950 border border-slate-250 dark:border-zinc-800 rounded-lg py-1 px-2.5 outline-none font-bold text-indigo-600 dark:text-indigo-400"
+            className="bg-[#2d2d2d] border border-[#3c3c3c] rounded-lg py-1 px-2.5 outline-none font-bold text-[#3794ff]"
           >
             <option value="SPR Admin">SPR Admin (Full RW)</option>
             <option value="Pilot Partner Admin">Pilot Partner Admin</option>
@@ -731,8 +731,8 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
       {banner && (
         <div className={`p-4 rounded-xl text-xs flex items-center gap-3 animate-fade-in border ${
           banner.error
-            ? 'bg-rose-50 dark:bg-rose-950/20 text-rose-700 dark:text-rose-400 border-rose-100 dark:border-rose-900'
-            : 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border-emerald-100 dark:border-emerald-900'
+            ? 'bg-[#f14c4c]/15 text-[#f14c4c] border-[#f14c4c]/40'
+            : 'bg-emerald-50 text-emerald-700 border-emerald-100'
         }`}>
           {banner.error ? <AlertTriangle className="w-4 h-4 shrink-0" /> : <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />}
           <span className="font-semibold">{banner.text}</span>
@@ -740,7 +740,7 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
       )}
 
       {/* Sub-Tab Navigation Bar */}
-      <div className="flex items-center gap-1.5 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1.5 rounded-2xl shadow-sm overflow-x-auto scrollbar-none">
+      <div className="flex items-center gap-1.5 bg-[#2d2d2d] border border-[#3c3c3c] p-1.5 rounded-md shadow-sm overflow-x-auto scrollbar-none">
         {[
           { id: 'overview', label: 'Overview', icon: Award },
           { id: 'apply', label: 'Apply Form', icon: ClipboardCheck },
@@ -758,8 +758,8 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
               onClick={() => handleSubTabChange(tab.id as any)}
               className={`flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer whitespace-nowrap ${
                 isSelected
-                  ? 'bg-indigo-600 text-white shadow-md'
-                  : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100 hover:bg-slate-50 dark:hover:bg-zinc-800/50'
+                  ? 'bg-[#094771] text-[#d4d4d4] shadow-md'
+                  : 'text-[#6f6f6f] hover:text-[#d4d4d4] hover:bg-[#2d2d2d]'
               }`}
             >
               <Icon className="w-4 h-4 shrink-0" />
@@ -773,30 +773,30 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
       {localSubTab === 'overview' && (
         <div className="space-y-8 animate-fade-in" id="overview-view">
           {/* Main Hero Jumbotron */}
-          <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 text-white rounded-2xl p-8 border border-slate-800 relative overflow-hidden shadow-xl">
+          <div className="bg-[#181818] text-[#d4d4d4] rounded-md p-8 border border-[#3c3c3c] relative overflow-hidden shadow-xl">
             <div className="absolute top-0 right-0 opacity-10 transform translate-x-12 -translate-y-12">
-              <Award className="w-96 h-96 text-indigo-400" />
+              <Award className="w-96 h-96 text-[#3794ff]" />
             </div>
             <div className="relative max-w-2xl space-y-4">
-              <span className="bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 px-3 py-1 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider">
+              <span className="bg-[#094771] border border-[#3794ff]/40 text-[#3794ff] px-3 py-1 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider">
                 Limited Founding slot allocation (Active PoC)
               </span>
               <h2 className="text-2xl sm:text-3xl font-display font-black tracking-tight leading-snug">
                 Accelerate software trust mapping across your enterprise pipeline.
               </h2>
-              <p className="text-slate-300 text-xs sm:text-sm leading-relaxed">
+              <p className="text-[#d4d4d4] text-xs sm:text-sm leading-relaxed">
                 Connect deep compliance auditing structures with live Software Passports. Secure compliance alignment, run automated NIST scans, and minimize supply chain visibility blinds.
               </p>
               <div className="flex gap-3 pt-2">
                 <button
                   onClick={() => handleSubTabChange('apply')}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-5 py-2.5 rounded-lg shadow-md transition-all cursor-pointer flex items-center gap-1"
+                  className="bg-[#094771] hover:bg-[#094771] text-[#d4d4d4] font-bold text-xs px-5 py-2.5 rounded-lg shadow-md transition-all cursor-pointer flex items-center gap-1"
                 >
                   Apply For Pilot <ChevronRight className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => handleSubTabChange('demo')}
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-xs px-5 py-2.5 rounded-lg transition-all cursor-pointer flex items-center gap-1"
+                  className="bg-[#2d2d2d] hover:bg-[#383838] text-[#d4d4d4] border border-[#3c3c3c] font-bold text-xs px-5 py-2.5 rounded-lg transition-all cursor-pointer flex items-center gap-1"
                 >
                   Launch Evaluation Playbook <Play className="w-3.5 h-3.5" />
                 </button>
@@ -807,93 +807,93 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
           {/* Analytics Dashboard Panel */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider">Founding Pilot Program Analytics</h3>
-              <span className="text-[10px] bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 font-mono font-bold py-0.5 px-2 rounded">
+              <h3 className="text-xs font-mono font-bold text-[#9d9d9d] uppercase tracking-wider">Founding Pilot Program Analytics</h3>
+              <span className="text-[10px] bg-[#094771] text-[#3794ff] font-mono font-bold py-0.5 px-2 rounded">
                 Updated in real-time
               </span>
             </div>
 
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Card 1 */}
-              <div className="bg-white dark:bg-zinc-900 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm relative overflow-hidden">
+              <div className="bg-[#2d2d2d] p-5 rounded-xl border border-[#3c3c3c] shadow-sm relative overflow-hidden">
                 <div className="flex justify-between items-start">
-                  <span className="text-[10px] font-mono text-slate-400 font-bold uppercase block">Pilot Companies</span>
-                  <Users className="w-4 h-4 text-indigo-500" />
+                  <span className="text-[10px] font-mono text-[#9d9d9d] font-bold uppercase block">Pilot Companies</span>
+                  <Users className="w-4 h-4 text-[#3794ff]" />
                 </div>
                 <div className="mt-2 flex items-baseline gap-2">
-                  <span className="text-2xl font-display font-black text-slate-800 dark:text-zinc-50">{totalPilots}</span>
+                  <span className="text-2xl font-display font-black text-[#d4d4d4]">{totalPilots}</span>
                   <span className="text-[10px] text-emerald-500 font-bold font-mono">+{activePilotsCount} active</span>
                 </div>
-                <p className="text-[9px] text-slate-400 mt-1">Multi-tenant active databases</p>
+                <p className="text-[9px] text-[#9d9d9d] mt-1">Multi-tenant active databases</p>
               </div>
 
               {/* Card 2 */}
-              <div className="bg-white dark:bg-zinc-900 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm relative overflow-hidden">
+              <div className="bg-[#2d2d2d] p-5 rounded-xl border border-[#3c3c3c] shadow-sm relative overflow-hidden">
                 <div className="flex justify-between items-start">
-                  <span className="text-[10px] font-mono text-slate-400 font-bold uppercase block">Analyzed Assets</span>
-                  <FileCheck className="w-4 h-4 text-indigo-500" />
+                  <span className="text-[10px] font-mono text-[#9d9d9d] font-bold uppercase block">Analyzed Assets</span>
+                  <FileCheck className="w-4 h-4 text-[#3794ff]" />
                 </div>
                 <div className="mt-2 flex items-baseline gap-2">
-                  <span className="text-2xl font-display font-black text-slate-800 dark:text-zinc-50">{totalAnalyzedAssets}</span>
+                  <span className="text-2xl font-display font-black text-[#d4d4d4]">{totalAnalyzedAssets}</span>
                   <span className="text-[10px] text-emerald-500 font-bold font-mono">100% Sealed</span>
                 </div>
-                <p className="text-[9px] text-slate-400 mt-1">SBOM component nodes parsed</p>
+                <p className="text-[9px] text-[#9d9d9d] mt-1">SBOM component nodes parsed</p>
               </div>
 
               {/* Card 3 */}
-              <div className="bg-white dark:bg-zinc-900 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm relative overflow-hidden">
+              <div className="bg-[#2d2d2d] p-5 rounded-xl border border-[#3c3c3c] shadow-sm relative overflow-hidden">
                 <div className="flex justify-between items-start">
-                  <span className="text-[10px] font-mono text-slate-400 font-bold uppercase block">Risks Solved</span>
-                  <ShieldCheck className="w-4 h-4 text-indigo-500" />
+                  <span className="text-[10px] font-mono text-[#9d9d9d] font-bold uppercase block">Risks Solved</span>
+                  <ShieldCheck className="w-4 h-4 text-[#3794ff]" />
                 </div>
                 <div className="mt-2 flex items-baseline gap-2">
-                  <span className="text-2xl font-display font-black text-slate-800 dark:text-zinc-50">{totalDiscoverdRisks}</span>
-                  <span className="text-[10px] text-rose-500 font-bold font-mono">Criticals Patching</span>
+                  <span className="text-2xl font-display font-black text-[#d4d4d4]">{totalDiscoverdRisks}</span>
+                  <span className="text-[10px] text-[#f14c4c] font-bold font-mono">Criticals Patching</span>
                 </div>
-                <p className="text-[9px] text-slate-400 mt-1">CVE vulnerabilities neutralized</p>
+                <p className="text-[9px] text-[#9d9d9d] mt-1">CVE vulnerabilities neutralized</p>
               </div>
 
               {/* Card 4 */}
-              <div className="bg-white dark:bg-zinc-900 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm relative overflow-hidden">
+              <div className="bg-[#2d2d2d] p-5 rounded-xl border border-[#3c3c3c] shadow-sm relative overflow-hidden">
                 <div className="flex justify-between items-start">
-                  <span className="text-[10px] font-mono text-slate-400 font-bold uppercase block">Conversion Rate</span>
-                  <TrendingUp className="w-4 h-4 text-indigo-500" />
+                  <span className="text-[10px] font-mono text-[#9d9d9d] font-bold uppercase block">Conversion Rate</span>
+                  <TrendingUp className="w-4 h-4 text-[#3794ff]" />
                 </div>
                 <div className="mt-2 flex items-baseline gap-2">
-                  <span className="text-2xl font-display font-black text-slate-800 dark:text-zinc-50">{conversionRate}%</span>
-                  <span className="text-[10px] text-indigo-600 font-bold font-mono">Avg Score: {avgEngagement}</span>
+                  <span className="text-2xl font-display font-black text-[#d4d4d4]">{conversionRate}%</span>
+                  <span className="text-[10px] text-[#3794ff] font-bold font-mono">Avg Score: {avgEngagement}</span>
                 </div>
-                <p className="text-[9px] text-slate-400 mt-1">Commercial paid conversion trend</p>
+                <p className="text-[9px] text-[#9d9d9d] mt-1">Commercial paid conversion trend</p>
               </div>
             </div>
           </div>
 
           {/* Problem / Solution bento columns */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-white dark:bg-zinc-900 p-6 rounded-xl border border-slate-200 dark:border-zinc-800 space-y-3 shadow-sm">
-              <div className="flex items-center gap-2 text-rose-500 font-bold">
+            <div className="bg-[#2d2d2d] p-6 rounded-xl border border-[#3c3c3c] space-y-3 shadow-sm">
+              <div className="flex items-center gap-2 text-[#f14c4c] font-bold">
                 <AlertTriangle className="w-5 h-5" />
-                <h4 className="font-display text-sm font-bold text-slate-900 dark:text-zinc-100">The Problem: Software Blindspots</h4>
+                <h4 className="font-display text-sm font-bold text-[#d4d4d4]">The Problem: Software Blindspots</h4>
               </div>
-              <p className="text-xs text-slate-500 dark:text-zinc-400 leading-relaxed font-sans">
+              <p className="text-xs text-[#9d9d9d] leading-relaxed font-sans">
                 Organizations fail to assess nested transitive open-source dependencies, leading to vulnerable pipelines. Commercial audits take weeks, manual SBOM checks miss zero-days, and third-party SaaS integrations remain opaque.
               </p>
-              <div className="text-[11px] font-mono text-slate-400 space-y-1.5 pt-2">
+              <div className="text-[11px] font-mono text-[#9d9d9d] space-y-1.5 pt-2">
                 <div>• Opaque software dependencies leading to supply chain compromises.</div>
                 <div>• Manual, error-prone compliance evidence mapping.</div>
                 <div>• No cryptographically sealed proof of original binary identity.</div>
               </div>
             </div>
 
-            <div className="bg-white dark:bg-zinc-900 p-6 rounded-xl border border-slate-200 dark:border-zinc-800 space-y-3 shadow-sm">
+            <div className="bg-[#2d2d2d] p-6 rounded-xl border border-[#3c3c3c] space-y-3 shadow-sm">
               <div className="flex items-center gap-2 text-emerald-500 font-bold">
                 <ShieldCheck className="w-5 h-5" />
-                <h4 className="font-display text-sm font-bold text-slate-900 dark:text-zinc-100">The SPR Solution: Cryptographic Passports</h4>
+                <h4 className="font-display text-sm font-bold text-[#d4d4d4]">The SPR Solution: Cryptographic Passports</h4>
               </div>
-              <p className="text-xs text-slate-500 dark:text-zinc-400 leading-relaxed font-sans">
+              <p className="text-xs text-[#9d9d9d] leading-relaxed font-sans">
                 Software Passport Registry delivers certified, immutable Software Passports. Integrating deep SBOM analysis, live vulnerability tracking, and compliance mapping engines (NIST, SOC 2, HIPAA) to guarantee dynamic software security postures.
               </p>
-              <div className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 space-y-1.5 pt-2">
+              <div className="text-[11px] font-mono text-emerald-600 space-y-1.5 pt-2">
                 <div>✓ Live catalog of parsed dependencies and publisher hashes.</div>
                 <div>✓ Cryptographic evidence locked in multi-tenant vaults.</div>
                 <div>✓ Streamlined, CISO-approved compliance reports with zero effort.</div>
@@ -905,10 +905,10 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
 
       {/* --- SUB-VIEW 2: APPLY FORM --- */}
       {localSubTab === 'apply' && (
-        <div className="max-w-2xl mx-auto bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl shadow-md p-6 animate-fade-in" id="apply-view">
-          <div className="border-b border-slate-100 dark:border-zinc-800 pb-4 mb-5">
-            <h2 className="text-sm font-display font-bold text-slate-900 dark:text-zinc-100">Lodge Founding Pilot Application</h2>
-            <p className="text-xs text-slate-500 dark:text-zinc-400 font-sans mt-1">
+        <div className="max-w-2xl mx-auto bg-[#2d2d2d] border border-[#3c3c3c] rounded-xl shadow-md p-6 animate-fade-in" id="apply-view">
+          <div className="border-b border-[#3c3c3c] pb-4 mb-5">
+            <h2 className="text-sm font-display font-bold text-[#d4d4d4]">Lodge Founding Pilot Application</h2>
+            <p className="text-xs text-[#9d9d9d] font-sans mt-1">
               Submit your company's technology metrics to request automated pilot deployment.
             </p>
           </div>
@@ -916,36 +916,36 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
           <form onSubmit={handleCreatePilotSubmit} className="space-y-4 text-xs font-sans">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="font-bold text-slate-700 dark:text-zinc-300">Company / Organization Name *</label>
+                <label className="font-bold text-[#6f6f6f]">Company / Organization Name *</label>
                 <input
                   type="text"
                   required
                   value={newOrgName}
                   onChange={(e) => setNewOrgName(e.target.value)}
                   placeholder="e.g. MedVanguard Health"
-                  className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-250 dark:border-zinc-800 rounded-lg p-2.5 outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 transition-colors text-slate-800 dark:text-zinc-100 font-semibold"
+                  className="w-full bg-[#2d2d2d] border border-[#3c3c3c] rounded-lg p-2.5 outline-none focus:border-[#3794ff]/40 focus:bg-[#2d2d2d] transition-colors text-[#d4d4d4] font-semibold"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="font-bold text-slate-700 dark:text-zinc-300">Company Website</label>
+                <label className="font-bold text-[#6f6f6f]">Company Website</label>
                 <input
                   type="url"
                   value={newOrgWebsite}
                   onChange={(e) => setNewOrgWebsite(e.target.value)}
                   placeholder="https://example.com"
-                  className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-250 dark:border-zinc-800 rounded-lg p-2.5 outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 transition-colors font-mono text-slate-800 dark:text-zinc-100"
+                  className="w-full bg-[#2d2d2d] border border-[#3c3c3c] rounded-lg p-2.5 outline-none focus:border-[#3794ff]/40 focus:bg-[#2d2d2d] transition-colors font-mono text-[#d4d4d4]"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-1">
-                <label className="font-bold text-slate-700 dark:text-zinc-300">Industry Sector</label>
+                <label className="font-bold text-[#6f6f6f]">Industry Sector</label>
                 <select
                   value={newOrgIndustry}
                   onChange={(e) => setNewOrgIndustry(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-250 dark:border-zinc-800 rounded-lg p-2.5 outline-none focus:border-indigo-500 font-bold"
+                  className="w-full bg-[#2d2d2d] border border-[#3c3c3c] rounded-lg p-2.5 outline-none focus:border-[#3794ff]/40 font-bold"
                 >
                   <option>Managed Service Provider</option>
                   <option>Healthcare & Pharma</option>
@@ -956,11 +956,11 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
               </div>
 
               <div className="space-y-1">
-                <label className="font-bold text-slate-700 dark:text-zinc-300">Company Size</label>
+                <label className="font-bold text-[#6f6f6f]">Company Size</label>
                 <select
                   value={newOrgSize}
                   onChange={(e) => setNewOrgSize(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-250 dark:border-zinc-800 rounded-lg p-2.5 outline-none focus:border-indigo-500 font-bold"
+                  className="w-full bg-[#2d2d2d] border border-[#3c3c3c] rounded-lg p-2.5 outline-none focus:border-[#3794ff]/40 font-bold"
                 >
                   <option>1-50 employees</option>
                   <option>50-200 employees</option>
@@ -970,11 +970,11 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
               </div>
 
               <div className="space-y-1">
-                <label className="font-bold text-slate-700 dark:text-zinc-300">Tenant Workspace Type</label>
+                <label className="font-bold text-[#6f6f6f]">Tenant Workspace Type</label>
                 <select
                   value={newPilotType}
                   onChange={(e) => setNewPilotType(e.target.value as any)}
-                  className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-250 dark:border-zinc-800 rounded-lg p-2.5 outline-none focus:border-indigo-500 font-bold text-indigo-600 dark:text-indigo-400"
+                  className="w-full bg-[#2d2d2d] border border-[#3c3c3c] rounded-lg p-2.5 outline-none focus:border-[#3794ff]/40 font-bold text-[#3794ff]"
                 >
                   <option value="MSP partner">MSP Partner Workspace</option>
                   <option value="Software company">Software Company Workspace</option>
@@ -983,70 +983,70 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t border-slate-100 dark:border-zinc-800 pt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t border-[#3c3c3c] pt-4">
               <div className="space-y-1">
-                <label className="font-bold text-slate-700 dark:text-zinc-300">Main Contact Name *</label>
+                <label className="font-bold text-[#6f6f6f]">Main Contact Name *</label>
                 <input
                   type="text"
                   required
                   value={newContactName}
                   onChange={(e) => setNewContactName(e.target.value)}
                   placeholder="David Chen"
-                  className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-250 dark:border-zinc-800 rounded-lg p-2.5 outline-none"
+                  className="w-full bg-[#2d2d2d] border border-[#3c3c3c] rounded-lg p-2.5 outline-none"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="font-bold text-slate-700 dark:text-zinc-300">Contact Email *</label>
+                <label className="font-bold text-[#6f6f6f]">Contact Email *</label>
                 <input
                   type="email"
                   required
                   value={newContactEmail}
                   onChange={(e) => setNewContactEmail(e.target.value)}
                   placeholder="dchen@medvanguard.com"
-                  className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-250 dark:border-zinc-800 rounded-lg p-2.5 outline-none font-mono"
+                  className="w-full bg-[#2d2d2d] border border-[#3c3c3c] rounded-lg p-2.5 outline-none font-mono"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="font-bold text-slate-700 dark:text-zinc-300">Role / Title</label>
+                <label className="font-bold text-[#6f6f6f]">Role / Title</label>
                 <input
                   type="text"
                   value={newContactRole}
                   onChange={(e) => setNewContactRole(e.target.value)}
                   placeholder="Chief Information Security Officer"
-                  className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-250 dark:border-zinc-800 rounded-lg p-2.5 outline-none"
+                  className="w-full bg-[#2d2d2d] border border-[#3c3c3c] rounded-lg p-2.5 outline-none"
                 />
               </div>
             </div>
 
-            <div className="space-y-2 border-t border-slate-100 dark:border-zinc-800 pt-4">
+            <div className="space-y-2 border-t border-[#3c3c3c] pt-4">
               <div className="space-y-1">
-                <label className="font-bold text-slate-700 dark:text-zinc-300">Primary Software Trust & License Challenges</label>
+                <label className="font-bold text-[#6f6f6f]">Primary Software Trust & License Challenges</label>
                 <textarea
                   value={newChallenges}
                   onChange={(e) => setNewChallenges(e.target.value)}
                   placeholder="Describe your primary supply chain visibility, nested dependencies CVE scans, or regulatory auditing blockers."
                   rows={3}
-                  className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-250 dark:border-zinc-800 rounded-lg p-2.5 outline-none"
+                  className="w-full bg-[#2d2d2d] border border-[#3c3c3c] rounded-lg p-2.5 outline-none"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="font-bold text-slate-700 dark:text-zinc-300">Current Software Auditing Tools Used</label>
+                <label className="font-bold text-[#6f6f6f]">Current Software Auditing Tools Used</label>
                 <input
                   type="text"
                   value={newTools}
                   onChange={(e) => setNewTools(e.target.value)}
                   placeholder="Snyk, BlackDuck, Dependabot, Excel spreadsheets"
-                  className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-250 dark:border-zinc-800 rounded-lg p-2.5 outline-none"
+                  className="w-full bg-[#2d2d2d] border border-[#3c3c3c] rounded-lg p-2.5 outline-none"
                 />
               </div>
             </div>
 
             <button
               type="submit"
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-sans font-bold text-xs py-3 rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+              className="w-full bg-[#094771] hover:bg-[#094771] text-[#d4d4d4] font-sans font-bold text-xs py-3 rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
             >
               <Send className="w-4 h-4" />
               <span>Submit Pilot Application & Reserve Pilot Slot</span>
@@ -1058,41 +1058,41 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
       {/* --- SUB-VIEW 3: PILOT PARTNERS PIPELINE & LIFECYCLE --- */}
       {localSubTab === 'partners' && (
         <div className="space-y-6 animate-fade-in" id="partners-view">
-          <div className="bg-white dark:bg-zinc-900 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm">
-            <h3 className="text-sm font-display font-bold text-slate-900 dark:text-zinc-50">Active Partnership Onboarding Pipeline</h3>
-            <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
+          <div className="bg-[#2d2d2d] p-5 rounded-xl border border-[#3c3c3c] shadow-sm">
+            <h3 className="text-sm font-display font-bold text-[#d4d4d4]">Active Partnership Onboarding Pipeline</h3>
+            <p className="text-xs text-[#9d9d9d] mt-1">
               Visualize onboarding milestones from prospective identification down to paid commercial software license conversions.
             </p>
 
             {/* Structured Funnel Flow */}
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 mt-4 text-center text-[10px] font-mono">
               {[
-                { stage: 'Prospect', desc: 'Identified leads', count: organizations.filter(o => o.status === 'Prospect').length, bg: 'bg-slate-50 dark:bg-zinc-950/40 border-slate-200' },
-                { stage: 'Applied', desc: 'Submit application', count: organizations.filter(o => o.status === 'Applied').length, bg: 'bg-blue-50/50 dark:bg-blue-950/10 border-blue-200' },
-                { stage: 'Under Review', desc: 'SLA verification', count: organizations.filter(o => o.status === 'Under Review').length, bg: 'bg-amber-50/50 dark:bg-amber-950/10 border-amber-200' },
-                { stage: 'Approved', desc: 'Secure clearance', count: organizations.filter(o => o.status === 'Approved').length, bg: 'bg-indigo-50/50 dark:bg-indigo-950/10 border-indigo-200' },
-                { stage: 'Active Pilot', desc: 'Pilot runs', count: organizations.filter(o => o.status === 'Active Pilot').length, bg: 'bg-purple-50/50 dark:bg-purple-950/10 border-purple-200' },
-                { stage: 'Completed', desc: 'Report audits', count: organizations.filter(o => o.status === 'Completed').length, bg: 'bg-teal-50/50 dark:bg-teal-950/10 border-teal-200' },
-                { stage: 'Converted', desc: 'Paid customer', count: conversions.length, bg: 'bg-emerald-50 dark:bg-emerald-950/10 border-emerald-200 text-emerald-700 dark:text-emerald-400' },
-                { stage: 'Declined', desc: 'No SLA align', count: organizations.filter(o => o.status === 'Declined').length, bg: 'bg-rose-50/50 dark:bg-rose-950/10 border-rose-200' }
+                { stage: 'Prospect', desc: 'Identified leads', count: organizations.filter(o => o.status === 'Prospect').length, bg: 'bg-[#2d2d2d] border-[#3c3c3c]' },
+                { stage: 'Applied', desc: 'Submit application', count: organizations.filter(o => o.status === 'Applied').length, bg: 'bg-blue-50/50 border-blue-200' },
+                { stage: 'Under Review', desc: 'SLA verification', count: organizations.filter(o => o.status === 'Under Review').length, bg: 'bg-amber-50/50 border-amber-200' },
+                { stage: 'Approved', desc: 'Secure clearance', count: organizations.filter(o => o.status === 'Approved').length, bg: 'bg-[#094771] border-[#3794ff]/40' },
+                { stage: 'Active Pilot', desc: 'Pilot runs', count: organizations.filter(o => o.status === 'Active Pilot').length, bg: 'bg-[#c586c0]/15 border-[#c586c0]/40' },
+                { stage: 'Completed', desc: 'Report audits', count: organizations.filter(o => o.status === 'Completed').length, bg: 'bg-[#4ec9b0]/15 border-[#4ec9b0]/40' },
+                { stage: 'Converted', desc: 'Paid customer', count: conversions.length, bg: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
+                { stage: 'Declined', desc: 'No SLA align', count: organizations.filter(o => o.status === 'Declined').length, bg: 'bg-[#f14c4c]/15 border-[#f14c4c]/40' }
               ].map(st => (
                 <div key={st.stage} className={`p-3 rounded-xl border ${st.bg} space-y-1`}>
                   <div className="font-bold truncate">{st.stage}</div>
                   <div className="text-lg font-black">{st.count}</div>
-                  <div className="text-[8px] text-slate-400 font-sans leading-tight">{st.desc}</div>
+                  <div className="text-[8px] text-[#9d9d9d] font-sans leading-tight">{st.desc}</div>
                 </div>
               ))}
             </div>
           </div>
 
           {/* Active Partner Listings */}
-          <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl shadow-sm p-6 space-y-4">
-            <h4 className="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider">Pilot Organizations & Funnel States</h4>
+          <div className="bg-[#2d2d2d] border border-[#3c3c3c] rounded-xl shadow-sm p-6 space-y-4">
+            <h4 className="text-xs font-mono font-bold text-[#9d9d9d] uppercase tracking-wider">Pilot Organizations & Funnel States</h4>
 
             <div className="overflow-x-auto text-xs font-sans">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-slate-200 dark:border-zinc-800 text-slate-400 font-mono text-[10px]">
+                  <tr className="border-b border-[#3c3c3c] text-[#9d9d9d] font-mono text-[10px]">
                     <th className="pb-2">Company Name</th>
                     <th className="pb-2">Industry / Web</th>
                     <th className="pb-2 text-center">Lifecycle Status</th>
@@ -1101,46 +1101,46 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                     <th className="pb-2 text-right">PoC Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-zinc-800">
+                <tbody className="divide-y divide-[#3c3c3c]">
                   {organizations.map(org => {
                     const orgContact = contacts.find(c => c.orgId === org.id);
                     return (
-                      <tr key={org.id} className="hover:bg-slate-50/50 dark:hover:bg-zinc-800/20">
+                      <tr key={org.id} className="hover:bg-[#2d2d2d]/50">
                         <td className="py-3.5">
-                          <span className="font-bold text-slate-800 dark:text-zinc-100">{org.name}</span>
-                          <span className="block text-[10px] text-slate-400">Contact: {orgContact?.name || 'Unassigned'} ({orgContact?.roleTitle})</span>
+                          <span className="font-bold text-[#d4d4d4]">{org.name}</span>
+                          <span className="block text-[10px] text-[#9d9d9d]">Contact: {orgContact?.name || 'Unassigned'} ({orgContact?.roleTitle})</span>
                         </td>
                         <td className="py-3.5">
-                          <span className="font-semibold text-slate-600 dark:text-zinc-300">{org.industry}</span>
-                          <a href={org.website} target="_blank" rel="noreferrer" className="block text-[10px] text-indigo-500 hover:underline">{org.website}</a>
+                          <span className="font-semibold text-[#6f6f6f]">{org.industry}</span>
+                          <a href={org.website} target="_blank" rel="noreferrer" className="block text-[10px] text-[#3794ff] hover:underline">{org.website}</a>
                         </td>
                         <td className="py-3.5 text-center">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            org.status === 'Active Pilot' ? 'bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400 border border-purple-100 dark:border-purple-900/50' :
-                            org.status === 'Converted' ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/50' :
-                            org.status === 'Applied' ? 'bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/50' :
-                            org.status === 'Under Review' ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-900/50' :
-                            'bg-slate-50 dark:bg-zinc-950 text-slate-500'
+                            org.status === 'Active Pilot' ? 'bg-[#c586c0]/15 text-[#c586c0] border border-[#c586c0]/40' :
+                            org.status === 'Converted' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
+                            org.status === 'Applied' ? 'bg-blue-50 text-blue-600 border border-blue-100' :
+                            org.status === 'Under Review' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
+                            'bg-[#2d2d2d] text-[#9d9d9d]'
                           }`}>
                             {org.status}
                           </span>
                         </td>
                         <td className="py-3.5 text-center">
                           <div className="flex items-center justify-center gap-1.5">
-                            <div className="w-12 bg-slate-100 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden">
-                              <div className="bg-indigo-500 h-1.5 rounded-full" style={{ width: `${org.engagementScore}%` }}></div>
+                            <div className="w-12 bg-[#2d2d2d] h-1.5 rounded-full overflow-hidden">
+                              <div className="bg-[#094771] h-1.5 rounded-full" style={{ width: `${org.engagementScore}%` }}></div>
                             </div>
-                            <span className="font-mono font-bold text-slate-700 dark:text-zinc-300">{org.engagementScore}%</span>
+                            <span className="font-mono font-bold text-[#6f6f6f]">{org.engagementScore}%</span>
                           </div>
                         </td>
-                        <td className="py-3.5 text-center font-mono font-bold text-slate-700 dark:text-zinc-300">
+                        <td className="py-3.5 text-center font-mono font-bold text-[#6f6f6f]">
                           {org.conversionProbability}%
                         </td>
                         <td className="py-3.5 text-right space-x-1.5">
                           {org.status === 'Applied' && (
                             <button
                               onClick={() => handleApprovePilot(org.id)}
-                              className="bg-indigo-600 hover:bg-indigo-700 text-white font-sans text-[10px] py-1 px-2.5 rounded-lg cursor-pointer transition-colors"
+                              className="bg-[#094771] hover:bg-[#094771] text-[#d4d4d4] font-sans text-[10px] py-1 px-2.5 rounded-lg cursor-pointer transition-colors"
                             >
                               Approve Pilot
                             </button>
@@ -1148,7 +1148,7 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                           {org.status === 'Active Pilot' && (
                             <button
                               onClick={() => handleConvertPilot(org.id)}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-sans text-[10px] py-1 px-2.5 rounded-lg cursor-pointer transition-colors"
+                              className="bg-emerald-600 hover:bg-emerald-700 text-[#d4d4d4] font-sans text-[10px] py-1 px-2.5 rounded-lg cursor-pointer transition-colors"
                             >
                               Convert to Paid
                             </button>
@@ -1158,7 +1158,7 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                               setSelectedWorkspaceOrgId(org.id);
                               handleSubTabChange('workspace');
                             }}
-                            className="text-slate-500 hover:text-slate-700 dark:hover:text-zinc-100 text-[10px] border border-slate-200 dark:border-zinc-800 rounded py-1 px-2 font-mono"
+                            className="text-[#9d9d9d] hover:text-[#6f6f6f] text-[10px] border border-[#3c3c3c] rounded py-1 px-2 font-mono"
                           >
                             Open Workspace
                           </button>
@@ -1177,26 +1177,26 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
       {localSubTab === 'workspace' && (
         <div className="space-y-6 animate-fade-in" id="workspace-view">
           {/* Active Client Scope Header switcher */}
-          <div className="bg-slate-900 text-white p-5 rounded-2xl border border-slate-800 flex flex-col md:flex-row justify-between md:items-center gap-4 shadow-md">
+          <div className="bg-[#252526] text-[#d4d4d4] p-5 rounded-md border border-[#3c3c3c] flex flex-col md:flex-row justify-between md:items-center gap-4 shadow-md">
             <div>
-              <span className="text-[10px] font-mono text-indigo-400 font-bold uppercase tracking-wider block">ISOLATED SECURE TENANT WORKSPACE</span>
+              <span className="text-[10px] font-mono text-[#3794ff] font-bold uppercase tracking-wider block">ISOLATED SECURE TENANT WORKSPACE</span>
               <div className="flex items-center gap-2 mt-1">
                 <h3 className="text-base font-display font-black">{activeWorkspaceOrg?.name}</h3>
-                <span className="bg-indigo-500/20 text-indigo-300 font-mono font-bold px-2 py-0.5 rounded text-[9px] border border-indigo-500/30">
+                <span className="bg-[#094771] text-[#3794ff] font-mono font-bold px-2 py-0.5 rounded text-[9px] border border-[#3794ff]/40">
                   {activeWorkspaceOrg?.industry}
                 </span>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-400 font-semibold">Select Tenant Workspace:</span>
+              <span className="text-xs text-[#9d9d9d] font-semibold">Select Tenant Workspace:</span>
               <select
                 value={selectedWorkspaceOrgId}
                 onChange={(e) => {
                   setSelectedWorkspaceOrgId(e.target.value);
                   triggerBanner(`Switched to secure isolation context: ${organizations.find(o => o.id === e.target.value)?.name}`);
                 }}
-                className="bg-slate-800 text-slate-200 border border-slate-700 rounded-lg py-1.5 px-3 text-xs font-bold outline-none focus:border-indigo-500"
+                className="bg-[#2d2d2d] text-[#d4d4d4] border border-[#3c3c3c] rounded-lg py-1.5 px-3 text-xs font-bold outline-none focus:border-[#3794ff]/40"
               >
                 {organizations.map(org => (
                   <option key={org.id} value={org.id}>{org.name}</option>
@@ -1207,7 +1207,7 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* Left 3cols: Inner Workspace Menu */}
-            <div className="lg:col-span-3 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-3 rounded-xl shadow-sm space-y-1 self-start">
+            <div className="lg:col-span-3 bg-[#2d2d2d] border border-[#3c3c3c] p-3 rounded-xl shadow-sm space-y-1 self-start">
               {[
                 { id: 'profile', label: 'Company Profile', count: null },
                 { id: 'software', label: 'Software Inventory', count: activeWorkspaceAssets.length },
@@ -1223,14 +1223,14 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                   onClick={() => setWorkspaceSubTab(sub.id as any)}
                   className={`w-full text-left text-xs font-semibold p-2.5 rounded-lg flex justify-between items-center cursor-pointer transition-all ${
                     workspaceSubTab === sub.id
-                      ? 'bg-indigo-600 text-white font-bold'
-                      : 'hover:bg-slate-50 dark:hover:bg-zinc-800/50 text-slate-600 dark:text-zinc-400'
+                      ? 'bg-[#094771] text-[#d4d4d4] font-bold'
+                      : 'hover:bg-[#2d2d2d] text-[#6f6f6f]'
                   }`}
                 >
                   <span>{sub.label}</span>
                   {sub.count !== null && (
                     <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full ${
-                      workspaceSubTab === sub.id ? 'bg-indigo-700 text-white' : 'bg-slate-100 dark:bg-zinc-800 text-slate-500'
+                      workspaceSubTab === sub.id ? 'bg-[#094771] text-[#d4d4d4]' : 'bg-[#2d2d2d] text-[#9d9d9d]'
                     }`}>
                       {sub.count}
                     </span>
@@ -1240,41 +1240,41 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
             </div>
 
             {/* Right 9cols: Selected Workspace frame */}
-            <div className="lg:col-span-9 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl shadow-sm p-6 min-h-[400px] flex flex-col justify-between">
+            <div className="lg:col-span-9 bg-[#2d2d2d] border border-[#3c3c3c] rounded-xl shadow-sm p-6 min-h-[400px] flex flex-col justify-between">
               <div>
                 {/* Profile */}
                 {workspaceSubTab === 'profile' && (
                   <div className="space-y-4 animate-fade-in">
-                    <h4 className="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-zinc-800 pb-2">
+                    <h4 className="text-xs font-mono font-bold text-[#9d9d9d] uppercase tracking-wider border-b border-[#3c3c3c] pb-2">
                       Company Profile Summary
                     </h4>
 
                     <div className="grid grid-cols-2 gap-4 text-xs">
-                      <div className="p-4 bg-slate-50 dark:bg-zinc-950/40 rounded-xl">
-                        <span className="text-[10px] font-mono text-slate-400 font-bold block">Company Name</span>
-                        <span className="text-sm font-bold text-slate-800 dark:text-zinc-200 mt-1 block">{activeWorkspaceOrg.name}</span>
+                      <div className="p-4 bg-[#2d2d2d] rounded-xl">
+                        <span className="text-[10px] font-mono text-[#9d9d9d] font-bold block">Company Name</span>
+                        <span className="text-sm font-bold text-[#d4d4d4] mt-1 block">{activeWorkspaceOrg.name}</span>
                       </div>
-                      <div className="p-4 bg-slate-50 dark:bg-zinc-950/40 rounded-xl">
-                        <span className="text-[10px] font-mono text-slate-400 font-bold block">Website</span>
-                        <a href={activeWorkspaceOrg.website} target="_blank" rel="noreferrer" className="text-sm font-bold text-indigo-500 mt-1 block hover:underline">
+                      <div className="p-4 bg-[#2d2d2d] rounded-xl">
+                        <span className="text-[10px] font-mono text-[#9d9d9d] font-bold block">Website</span>
+                        <a href={activeWorkspaceOrg.website} target="_blank" rel="noreferrer" className="text-sm font-bold text-[#3794ff] mt-1 block hover:underline">
                           {activeWorkspaceOrg.website}
                         </a>
                       </div>
-                      <div className="p-4 bg-slate-50 dark:bg-zinc-950/40 rounded-xl">
-                        <span className="text-[10px] font-mono text-slate-400 font-bold block">Industry</span>
-                        <span className="text-sm font-bold text-slate-800 dark:text-zinc-200 mt-1 block">{activeWorkspaceOrg.industry}</span>
+                      <div className="p-4 bg-[#2d2d2d] rounded-xl">
+                        <span className="text-[10px] font-mono text-[#9d9d9d] font-bold block">Industry</span>
+                        <span className="text-sm font-bold text-[#d4d4d4] mt-1 block">{activeWorkspaceOrg.industry}</span>
                       </div>
-                      <div className="p-4 bg-slate-50 dark:bg-zinc-950/40 rounded-xl">
-                        <span className="text-[10px] font-mono text-slate-400 font-bold block">Evaluation Stage</span>
-                        <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400 mt-1 block">{activeWorkspaceOrg.status}</span>
+                      <div className="p-4 bg-[#2d2d2d] rounded-xl">
+                        <span className="text-[10px] font-mono text-[#9d9d9d] font-bold block">Evaluation Stage</span>
+                        <span className="text-sm font-bold text-[#3794ff] mt-1 block">{activeWorkspaceOrg.status}</span>
                       </div>
                     </div>
 
-                    <div className="p-4 bg-indigo-50/20 rounded-xl border border-indigo-100 dark:border-indigo-900/50 space-y-1">
-                      <h5 className="text-xs font-bold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
-                        <Info className="w-4 h-4 text-indigo-500" /> Secure Isolated Tenant Clearance
+                    <div className="p-4 bg-[#094771] rounded-xl border border-[#3794ff]/40 space-y-1">
+                      <h5 className="text-xs font-bold text-[#d4d4d4] flex items-center gap-1.5">
+                        <Info className="w-4 h-4 text-[#3794ff]" /> Secure Isolated Tenant Clearance
                       </h5>
-                      <p className="text-[11px] text-slate-500 dark:text-zinc-400 leading-relaxed font-sans">
+                      <p className="text-[11px] text-[#9d9d9d] leading-relaxed font-sans">
                         This workspace is restricted to authorized credentials in the {activeWorkspaceOrg.name} group. High-touch multi-tenant security guarantees absolute data isolation.
                       </p>
                     </div>
@@ -1284,17 +1284,17 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                 {/* Software Inventory */}
                 {workspaceSubTab === 'software' && (
                   <div className="space-y-4 animate-fade-in">
-                    <div className="flex justify-between items-center border-b border-slate-100 dark:border-zinc-800 pb-2">
-                      <h4 className="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider">
+                    <div className="flex justify-between items-center border-b border-[#3c3c3c] pb-2">
+                      <h4 className="text-xs font-mono font-bold text-[#9d9d9d] uppercase tracking-wider">
                         Software Assets Inventory
                       </h4>
-                      <span className="text-[10px] font-mono text-slate-400">{activeWorkspaceAssets.length} packages cataloged</span>
+                      <span className="text-[10px] font-mono text-[#9d9d9d]">{activeWorkspaceAssets.length} packages cataloged</span>
                     </div>
 
                     <div className="overflow-x-auto text-xs">
                       <table className="w-full text-left">
                         <thead>
-                          <tr className="border-b border-slate-100 dark:border-zinc-800 text-slate-400 font-mono text-[9px] uppercase">
+                          <tr className="border-b border-[#3c3c3c] text-[#9d9d9d] font-mono text-[9px] uppercase">
                             <th className="pb-2">Application Name</th>
                             <th className="pb-2">Publisher</th>
                             <th className="pb-2">Version</th>
@@ -1302,16 +1302,16 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                             <th className="pb-2 text-center">Risk Level</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-zinc-800 font-sans">
+                        <tbody className="divide-y divide-[#3c3c3c] font-sans">
                           {activeWorkspaceAssets.map(sa => (
                             <tr key={sa.id}>
-                              <td className="py-2.5 font-bold text-slate-800 dark:text-zinc-200">{sa.name}</td>
-                              <td className="py-2.5 text-slate-500">{sa.vendor}</td>
-                              <td className="py-2.5 font-mono text-slate-500">{sa.version}</td>
-                              <td className="py-2.5 text-center font-mono font-bold text-slate-600">{sa.dependenciesCount}</td>
+                              <td className="py-2.5 font-bold text-[#d4d4d4]">{sa.name}</td>
+                              <td className="py-2.5 text-[#9d9d9d]">{sa.vendor}</td>
+                              <td className="py-2.5 font-mono text-[#9d9d9d]">{sa.version}</td>
+                              <td className="py-2.5 text-center font-mono font-bold text-[#6f6f6f]">{sa.dependenciesCount}</td>
                               <td className="py-2.5 text-center">
                                 <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold ${
-                                  sa.riskLevel === 'Critical' ? 'bg-rose-100 text-rose-700' :
+                                  sa.riskLevel === 'Critical' ? 'bg-[#f14c4c]/15 text-[#f14c4c]' :
                                   sa.riskLevel === 'High' ? 'bg-amber-100 text-amber-700' :
                                   'bg-emerald-100 text-emerald-700'
                                 }`}>
@@ -1326,9 +1326,9 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
 
                     {/* Add software asset form - only if canEdit is active */}
                     {canEdit && (
-                      <form onSubmit={handleAddAsset} className="bg-slate-50 dark:bg-zinc-950 p-4 rounded-xl border border-slate-200 dark:border-zinc-800 text-xs space-y-3 mt-4">
-                        <h5 className="font-bold text-slate-800 dark:text-zinc-200 flex items-center gap-1">
-                          <Plus className="w-4 h-4 text-indigo-500" /> Register Software Asset
+                      <form onSubmit={handleAddAsset} className="bg-[#2d2d2d] p-4 rounded-xl border border-[#3c3c3c] text-xs space-y-3 mt-4">
+                        <h5 className="font-bold text-[#d4d4d4] flex items-center gap-1">
+                          <Plus className="w-4 h-4 text-[#3794ff]" /> Register Software Asset
                         </h5>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                           <input
@@ -1337,7 +1337,7 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                             placeholder="e.g. Postgres DB"
                             value={addAssetName}
                             onChange={(e) => setAddAssetName(e.target.value)}
-                            className="bg-white dark:bg-zinc-900 border border-slate-250 dark:border-zinc-800 rounded p-2"
+                            className="bg-[#2d2d2d] border border-[#3c3c3c] rounded p-2"
                           />
                           <input
                             type="text"
@@ -1345,7 +1345,7 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                             placeholder="e.g. Postgres Core"
                             value={addAssetVendor}
                             onChange={(e) => setAddAssetVendor(e.target.value)}
-                            className="bg-white dark:bg-zinc-900 border border-slate-250 dark:border-zinc-800 rounded p-2"
+                            className="bg-[#2d2d2d] border border-[#3c3c3c] rounded p-2"
                           />
                           <input
                             type="text"
@@ -1353,12 +1353,12 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                             placeholder="e.g. v15.4"
                             value={addAssetVersion}
                             onChange={(e) => setAddAssetVersion(e.target.value)}
-                            className="bg-white dark:bg-zinc-900 border border-slate-250 dark:border-zinc-800 rounded p-2 font-mono"
+                            className="bg-[#2d2d2d] border border-[#3c3c3c] rounded p-2 font-mono"
                           />
                           <select
                             value={addAssetRisk}
                             onChange={(e) => setAddAssetRisk(e.target.value as any)}
-                            className="bg-white dark:bg-zinc-900 border border-slate-250 dark:border-zinc-800 rounded p-2 font-bold"
+                            className="bg-[#2d2d2d] border border-[#3c3c3c] rounded p-2 font-bold"
                           >
                             <option value="Low">Low Risk</option>
                             <option value="Medium">Medium Risk</option>
@@ -1366,7 +1366,7 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                             <option value="Critical">Critical Risk</option>
                           </select>
                         </div>
-                        <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded cursor-pointer transition-all">
+                        <button type="submit" className="bg-[#094771] hover:bg-[#094771] text-[#d4d4d4] font-bold py-2 px-4 rounded cursor-pointer transition-all">
                           Inject Asset & Generate Passport
                         </button>
                       </form>
@@ -1377,31 +1377,31 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                 {/* Assessments */}
                 {workspaceSubTab === 'assessments' && (
                   <div className="space-y-4 animate-fade-in">
-                    <h4 className="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-zinc-800 pb-2">
+                    <h4 className="text-xs font-mono font-bold text-[#9d9d9d] uppercase tracking-wider border-b border-[#3c3c3c] pb-2">
                       Active Software Passport Security Ratings
                     </h4>
 
-                    <p className="text-xs text-slate-500">Each registered asset undergoes cryptographic analysis to evaluate dependency hygiene.</p>
+                    <p className="text-xs text-[#9d9d9d]">Each registered asset undergoes cryptographic analysis to evaluate dependency hygiene.</p>
 
                     <div className="space-y-3 text-xs">
                       {activeWorkspaceAssets.map(sa => (
-                        <div key={sa.id} className="p-3.5 bg-slate-50 dark:bg-zinc-950/40 rounded-xl border border-slate-150 dark:border-zinc-800/60 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+                        <div key={sa.id} className="p-3.5 bg-[#2d2d2d] rounded-xl border border-[#3c3c3c] flex flex-col sm:flex-row justify-between sm:items-center gap-3">
                           <div>
-                            <span className="font-bold text-slate-800 dark:text-zinc-200 text-xs block">{sa.name}</span>
-                            <span className="text-[10px] text-slate-400 block font-mono">ID: {sa.id} | Publisher: {sa.vendor}</span>
+                            <span className="font-bold text-[#d4d4d4] text-xs block">{sa.name}</span>
+                            <span className="text-[10px] text-[#9d9d9d] block font-mono">ID: {sa.id} | Publisher: {sa.vendor}</span>
                           </div>
 
                           <div className="flex items-center gap-4">
                             <div className="text-right">
-                              <span className="text-[9px] font-mono text-slate-400 uppercase block">Trust Score</span>
+                              <span className="text-[9px] font-mono text-[#9d9d9d] uppercase block">Trust Score</span>
                               <span className={`text-sm font-mono font-black ${
-                                sa.trustScore > 80 ? 'text-emerald-500' : sa.trustScore > 60 ? 'text-amber-500' : 'text-rose-500'
+                                sa.trustScore > 80 ? 'text-emerald-500' : sa.trustScore > 60 ? 'text-amber-500' : 'text-[#f14c4c]'
                               }`}>
                                 {sa.trustScore} / 100
                               </span>
                             </div>
 
-                            <span className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/60 text-emerald-600 dark:text-emerald-400 font-mono font-bold px-2 py-1 rounded text-[9px]">
+                            <span className="bg-emerald-50 border border-emerald-100 text-emerald-600 font-mono font-bold px-2 py-1 rounded text-[9px]">
                               Signed ✓
                             </span>
                           </div>
@@ -1414,28 +1414,28 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                 {/* Risk findings */}
                 {workspaceSubTab === 'findings' && (
                   <div className="space-y-4 animate-fade-in">
-                    <h4 className="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-zinc-800 pb-2">
+                    <h4 className="text-xs font-mono font-bold text-[#9d9d9d] uppercase tracking-wider border-b border-[#3c3c3c] pb-2">
                       Vulnerability & Supply Chain Risk Findings
                     </h4>
 
                     {activeWorkspaceAssets.filter(sa => sa.riskLevel === 'Critical' || sa.riskLevel === 'High').length === 0 ? (
-                      <div className="p-8 text-center bg-slate-50 dark:bg-zinc-950/30 rounded-xl border border-slate-100 dark:border-zinc-800 text-slate-400">
+                      <div className="p-8 text-center bg-[#2d2d2d] rounded-xl border border-[#3c3c3c] text-[#9d9d9d]">
                         <ShieldCheck className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
                         <span className="text-xs font-semibold block">Absolute Clean Bill of Health!</span>
-                        <span className="text-[10px] text-slate-500 mt-1 block">No high or critical CVE dependencies parsed inside catalog.</span>
+                        <span className="text-[10px] text-[#9d9d9d] mt-1 block">No high or critical CVE dependencies parsed inside catalog.</span>
                       </div>
                     ) : (
                       <div className="space-y-3 text-xs">
                         {activeWorkspaceAssets.filter(sa => sa.riskLevel === 'Critical' || sa.riskLevel === 'High').map(sa => (
-                          <div key={sa.id} className="p-4 bg-rose-50/40 dark:bg-rose-950/10 rounded-xl border border-rose-100 dark:border-rose-900/40 space-y-2">
-                            <div className="flex items-center gap-2 text-rose-700 dark:text-rose-400 font-bold">
+                          <div key={sa.id} className="p-4 bg-[#f14c4c]/15 rounded-xl border border-[#f14c4c]/40 space-y-2">
+                            <div className="flex items-center gap-2 text-[#f14c4c] font-bold">
                               <AlertTriangle className="w-4 h-4" />
                               <span>Critical Vulnerability Found inside "{sa.name}"</span>
                             </div>
-                            <p className="text-slate-600 dark:text-zinc-300">
+                            <p className="text-[#6f6f6f]">
                               Dependency trees exhibit standard Log4j zero-day vulnerability (CVE-2021-44228) leading to potential Arbitrary Code Execution hazard on remote systems.
                             </p>
-                            <div className="bg-white dark:bg-zinc-900 p-2.5 rounded border border-rose-150 font-mono text-[10px] text-rose-800 dark:text-rose-400">
+                            <div className="bg-[#2d2d2d] p-2.5 rounded border border-[#f14c4c]/40 font-mono text-[10px] text-[#f14c4c]">
                               <strong>Recommended Mitigation:</strong> Update declaration manifest node to pull <code>log4j-core v2.17.1</code> immediately. Seal the software passport.
                             </div>
                           </div>
@@ -1448,23 +1448,23 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                 {/* Reports */}
                 {workspaceSubTab === 'reports' && (
                   <div className="space-y-4 animate-fade-in">
-                    <h4 className="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-zinc-800 pb-2">
+                    <h4 className="text-xs font-mono font-bold text-[#9d9d9d] uppercase tracking-wider border-b border-[#3c3c3c] pb-2">
                       Sealed Compliance & Passport PDF Reports
                     </h4>
 
                     <div className="space-y-2 text-xs font-sans">
                       {activeWorkspaceReports.map(rep => (
-                        <div key={rep.id} className="p-3 bg-slate-50 dark:bg-zinc-950/40 border border-slate-100 dark:border-zinc-800 rounded-xl flex justify-between items-center">
+                        <div key={rep.id} className="p-3 bg-[#2d2d2d] border border-[#3c3c3c] rounded-xl flex justify-between items-center">
                           <div className="flex items-center gap-2">
-                            <FileText className="w-4.5 h-4.5 text-indigo-500" />
+                            <FileText className="w-4.5 h-4.5 text-[#3794ff]" />
                             <div>
-                              <span className="font-bold text-slate-800 dark:text-zinc-200 block">{rep.reportType} Alignment Certificate</span>
-                              <span className="text-[10px] text-slate-400 font-mono">Compiled: {rep.generatedAt} | Path: {rep.reportPath}</span>
+                              <span className="font-bold text-[#d4d4d4] block">{rep.reportType} Alignment Certificate</span>
+                              <span className="text-[10px] text-[#9d9d9d] font-mono">Compiled: {rep.generatedAt} | Path: {rep.reportPath}</span>
                             </div>
                           </div>
                           <button
                             onClick={() => triggerBanner(`Downloading pilot report: ${rep.reportType}`)}
-                            className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-850 p-1.5 rounded-lg text-slate-600 dark:text-zinc-300 cursor-pointer"
+                            className="bg-[#2d2d2d] border border-[#3c3c3c] hover:bg-[#2d2d2d] p-1.5 rounded-lg text-[#6f6f6f] cursor-pointer"
                           >
                             <Download className="w-4 h-4" />
                           </button>
@@ -1477,19 +1477,19 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                 {/* Timeline */}
                 {workspaceSubTab === 'timeline' && (
                   <div className="space-y-4 animate-fade-in">
-                    <h4 className="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-zinc-800 pb-2">
+                    <h4 className="text-xs font-mono font-bold text-[#9d9d9d] uppercase tracking-wider border-b border-[#3c3c3c] pb-2">
                       Pilot Timeline & Key PoC Projects
                     </h4>
 
                     <div className="space-y-4">
                       {activeWorkspaceProjects.map(p => (
-                        <div key={p.id} className="border-l-2 border-indigo-500 pl-4 space-y-1 relative text-xs">
-                          <div className="absolute w-2 h-2 rounded-full bg-indigo-600 -left-[5px] top-1"></div>
+                        <div key={p.id} className="border-l-2 border-[#3794ff]/40 pl-4 space-y-1 relative text-xs">
+                          <div className="absolute w-2 h-2 rounded-full bg-[#094771] -left-[5px] top-1"></div>
                           <div className="flex justify-between font-mono font-bold">
-                            <span className="text-slate-800 dark:text-zinc-100 text-xs">{p.name}</span>
-                            <span className="text-indigo-600 dark:text-indigo-400 text-[10px]">{p.startDate} to {p.endDate}</span>
+                            <span className="text-[#d4d4d4] text-xs">{p.name}</span>
+                            <span className="text-[#3794ff] text-[10px]">{p.startDate} to {p.endDate}</span>
                           </div>
-                          <div className="text-slate-500">Status: <strong className="text-slate-700 dark:text-zinc-300">{p.status}</strong></div>
+                          <div className="text-[#9d9d9d]">Status: <strong className="text-[#6f6f6f]">{p.status}</strong></div>
                         </div>
                       ))}
                     </div>
@@ -1499,18 +1499,18 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                 {/* Team */}
                 {workspaceSubTab === 'team' && (
                   <div className="space-y-4 animate-fade-in">
-                    <h4 className="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-zinc-800 pb-2">
+                    <h4 className="text-xs font-mono font-bold text-[#9d9d9d] uppercase tracking-wider border-b border-[#3c3c3c] pb-2">
                       Active Onboarding Group & Contact Points
                     </h4>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-sans">
                       {activeWorkspaceContacts.map(con => (
-                        <div key={con.id} className="p-4 bg-slate-50 dark:bg-zinc-950/40 rounded-xl border border-slate-150 dark:border-zinc-800">
-                          <div className="font-bold text-slate-800 dark:text-zinc-200 block text-xs">{con.name}</div>
-                          <div className="text-slate-500 block text-[10px] mt-0.5">{con.roleTitle}</div>
-                          <div className="border-t border-slate-100 dark:border-zinc-800/40 my-2"></div>
-                          <div className="font-mono text-[10px] text-indigo-500">{con.email}</div>
-                          <div className="font-mono text-[10px] text-slate-400 mt-0.5">{con.phone}</div>
+                        <div key={con.id} className="p-4 bg-[#2d2d2d] rounded-xl border border-[#3c3c3c]">
+                          <div className="font-bold text-[#d4d4d4] block text-xs">{con.name}</div>
+                          <div className="text-[#9d9d9d] block text-[10px] mt-0.5">{con.roleTitle}</div>
+                          <div className="border-t border-[#3c3c3c] my-2"></div>
+                          <div className="font-mono text-[10px] text-[#3794ff]">{con.email}</div>
+                          <div className="font-mono text-[10px] text-[#9d9d9d] mt-0.5">{con.phone}</div>
                         </div>
                       ))}
                     </div>
@@ -1520,35 +1520,35 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                 {/* Feedback portal */}
                 {workspaceSubTab === 'feedback' && (
                   <div className="space-y-4 animate-fade-in">
-                    <h4 className="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-zinc-800 pb-2">
+                    <h4 className="text-xs font-mono font-bold text-[#9d9d9d] uppercase tracking-wider border-b border-[#3c3c3c] pb-2">
                       Interactive Partner Feedback & Feature Portal
                     </h4>
 
                     {/* Features list */}
                     <div className="space-y-3">
-                      <h5 className="text-[10px] font-mono text-slate-400 uppercase font-bold tracking-wider">Requested Custom Features</h5>
+                      <h5 className="text-[10px] font-mono text-[#9d9d9d] uppercase font-bold tracking-wider">Requested Custom Features</h5>
                       {activeWorkspaceFeatures.length === 0 ? (
-                        <p className="text-xs text-slate-400 font-sans">No unique feature requests logged for this tenant workspace yet.</p>
+                        <p className="text-xs text-[#9d9d9d] font-sans">No unique feature requests logged for this tenant workspace yet.</p>
                       ) : (
                         activeWorkspaceFeatures.map(f => (
-                          <div key={f.id} className="p-3 bg-slate-50 dark:bg-zinc-950/40 border border-slate-100 dark:border-zinc-800 rounded-xl text-xs space-y-1">
-                            <div className="flex justify-between items-center font-bold text-slate-800 dark:text-zinc-200">
+                          <div key={f.id} className="p-3 bg-[#2d2d2d] border border-[#3c3c3c] rounded-xl text-xs space-y-1">
+                            <div className="flex justify-between items-center font-bold text-[#d4d4d4]">
                               <span>{f.title}</span>
-                              <span className="bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded text-[9px]">{f.status}</span>
+                              <span className="bg-[#094771] text-[#3794ff] px-1.5 py-0.5 rounded text-[9px]">{f.status}</span>
                             </div>
-                            <p className="text-slate-500 text-[11px] leading-relaxed font-sans">{f.description}</p>
+                            <p className="text-[#9d9d9d] text-[11px] leading-relaxed font-sans">{f.description}</p>
                           </div>
                         ))
                       )}
                     </div>
 
                     {/* Feedback portal list */}
-                    <div className="space-y-3 pt-3 border-t border-slate-100 dark:border-zinc-800/60">
-                      <h5 className="text-[10px] font-mono text-slate-400 uppercase font-bold tracking-wider">Logged Evaluation Comments</h5>
+                    <div className="space-y-3 pt-3 border-t border-[#3c3c3c]">
+                      <h5 className="text-[10px] font-mono text-[#9d9d9d] uppercase font-bold tracking-wider">Logged Evaluation Comments</h5>
                       {activeWorkspaceFeedback.map(f => (
-                        <div key={f.id} className="p-3 bg-slate-50 dark:bg-zinc-950/40 border-l-2 border-emerald-500 rounded-r-xl text-xs">
-                          <p className="text-slate-600 dark:text-zinc-300 font-sans italic">"{f.comment}"</p>
-                          <div className="mt-2 text-[10px] font-mono text-slate-400">By {f.contactName} on {f.submittedAt}</div>
+                        <div key={f.id} className="p-3 bg-[#2d2d2d] border-l-2 border-emerald-500 rounded-r-xl text-xs">
+                          <p className="text-[#6f6f6f] font-sans italic">"{f.comment}"</p>
+                          <div className="mt-2 text-[10px] font-mono text-[#9d9d9d]">By {f.contactName} on {f.submittedAt}</div>
                         </div>
                       ))}
                     </div>
@@ -1557,7 +1557,7 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
               </div>
 
               {/* Secure isolation stamp */}
-              <div className="border-t border-slate-100 dark:border-zinc-800 pt-3 flex flex-col sm:flex-row justify-between items-center text-[9px] text-slate-400 font-mono gap-2 mt-5">
+              <div className="border-t border-[#3c3c3c] pt-3 flex flex-col sm:flex-row justify-between items-center text-[9px] text-[#9d9d9d] font-mono gap-2 mt-5">
                 <span>TENANT KEY ISOLATION: {activeWorkspaceOrg?.id?.toUpperCase()}</span>
                 <span>Active Region: us-east1 (Google Cloud Run Containers)</span>
               </div>
@@ -1570,21 +1570,21 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
       {localSubTab === 'demo' && (
         <div className="space-y-6 animate-fade-in" id="demo-view">
           {/* Main Top Header Banner */}
-          <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative overflow-hidden text-left">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none"></div>
+          <div className="bg-[#252526] border border-[#3c3c3c] p-6 rounded-md shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative overflow-hidden text-left">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-[#094771] rounded-full blur-3xl pointer-events-none"></div>
             <div className="relative z-10 space-y-1">
               <div className="flex items-center gap-2">
-                <span className="bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider">
+                <span className="bg-[#094771] text-[#3794ff] border border-[#3794ff]/40 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider">
                   Interactive Evaluation Playbook
                 </span>
                 <span className="bg-amber-600/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider animate-pulse">
                   LIVE EVALUATION ACTIVE
                 </span>
               </div>
-              <h3 className="text-base font-display font-black text-slate-100">
+              <h3 className="text-base font-display font-black text-[#d4d4d4]">
                 SPR End-to-End Lifecycle Evaluation
               </h3>
-              <p className="text-xs text-slate-400 max-w-2xl font-sans">
+              <p className="text-xs text-[#9d9d9d] max-w-2xl font-sans">
                 Experience the SPR evaluation playbook from initial onboarding to automated scanning, risk propagation, trust rating scoring, and official passport issuance.
               </p>
             </div>
@@ -1600,7 +1600,7 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                 setPassportSigned(false);
                 triggerBanner('Restart evaluation playbook at Step 1.');
               }}
-              className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-300 border border-slate-700 hover:border-slate-600 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm relative z-10 flex items-center gap-1.5"
+              className="px-3.5 py-1.5 bg-[#2d2d2d] hover:bg-[#2d2d2d] text-[#d4d4d4] border border-[#3c3c3c] hover:border-[#3c3c3c] rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm relative z-10 flex items-center gap-1.5"
             >
               <Sliders className="w-3.5 h-3.5" />
               <span>Reset Playbook</span>
@@ -1608,7 +1608,7 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
           </div>
 
           {/* Visually outstanding 9-Step horizontal progress pipeline indicator */}
-          <div className="bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-900 rounded-2xl p-4 shadow-sm overflow-x-auto scrollbar-none">
+          <div className="bg-[#2d2d2d] border border-[#3c3c3c] rounded-md p-4 shadow-sm overflow-x-auto scrollbar-none">
             <div className="flex items-center justify-between min-w-[980px] px-2">
               {[
                 { step: 1, name: 'Onboarding', desc: 'Signup & Role RBAC' },
@@ -1634,22 +1634,22 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                     >
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center font-mono font-black text-xs transition-all border ${
                         isActive
-                          ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-600/20 ring-4 ring-indigo-600/10 scale-105'
+                          ? 'bg-[#094771] border-[#3794ff]/40 text-[#d4d4d4] shadow-md shadow- ring-4 ring- scale-105'
                           : isCompleted
-                            ? 'bg-emerald-500 border-emerald-500 text-white'
-                            : 'bg-slate-50 dark:bg-zinc-900 border-slate-250 dark:border-zinc-850 text-slate-500'
+                            ? 'bg-emerald-500 border-emerald-500 text-[#d4d4d4]'
+                            : 'bg-[#2d2d2d] border-[#3c3c3c] text-[#9d9d9d]'
                       }`}>
                         {isCompleted ? '✓' : item.step}
                       </div>
                       <div className="max-w-[100px]">
-                        <p className={`text-[11px] font-black leading-none ${isActive ? 'text-indigo-600 dark:text-indigo-400' : isCompleted ? 'text-emerald-600' : 'text-slate-600 dark:text-zinc-400'}`}>
+                        <p className={`text-[11px] font-black leading-none ${isActive ? 'text-[#3794ff]' : isCompleted ? 'text-emerald-600' : 'text-[#6f6f6f]'}`}>
                           {item.name}
                         </p>
-                        <span className="text-[9px] text-slate-400 font-sans block mt-0.5 truncate">{item.desc}</span>
+                        <span className="text-[9px] text-[#9d9d9d] font-sans block mt-0.5 truncate">{item.desc}</span>
                       </div>
                     </button>
                     {index < arr.length - 1 && (
-                      <div className={`h-0.5 w-6 shrink-0 transition-colors ${activePlaybookStep > item.step ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-zinc-800'}`}></div>
+                      <div className={`h-0.5 w-6 shrink-0 transition-colors ${activePlaybookStep > item.step ? 'bg-emerald-500' : 'bg-[#3c3c3c]'}`}></div>
                     )}
                   </React.Fragment>
                 );
@@ -1660,35 +1660,35 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
           {/* STAGE CONTAINER CARDS */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start text-xs text-left">
             {/* Left Main Interactive Viewport (8 Columns) */}
-            <div className="lg:col-span-8 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-6 shadow-sm min-h-[500px] flex flex-col justify-between">
+            <div className="lg:col-span-8 bg-[#2d2d2d] border border-[#3c3c3c] rounded-md p-6 shadow-sm min-h-[500px] flex flex-col justify-between">
               
               {/* STAGE 1: ONBOARDING */}
               {activePlaybookStep === 1 && (
                 <div className="space-y-6 animate-fade-in">
                   <div>
-                    <h4 className="text-sm font-display font-black text-slate-800 dark:text-zinc-100 flex items-center gap-1.5">
-                      <Users className="w-4 h-4 text-indigo-500" />
+                    <h4 className="text-sm font-display font-black text-[#d4d4d4] flex items-center gap-1.5">
+                      <Users className="w-4 h-4 text-[#3794ff]" />
                       <span>Stage 1: Sign up, Establish Workspace & Delegate Roles</span>
                     </h4>
-                    <p className="text-xs text-slate-500 dark:text-zinc-400 font-sans mt-1">
+                    <p className="text-xs text-[#9d9d9d] font-sans mt-1">
                       Begin by registering your corporate workspace and selecting your compliance persona (MSP or Enterprise). Real RBAC controls are enforced instantly.
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 dark:bg-zinc-950/40 p-4 rounded-xl border border-slate-100 dark:border-zinc-850">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-[#2d2d2d] p-4 rounded-xl border border-[#3c3c3c]">
                     <div className="space-y-3.5">
                       <div>
-                        <label className="text-[10px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase">Workspace Name</label>
+                        <label className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase">Workspace Name</label>
                         <input
                           type="text"
                           value={obWorkspaceName}
                           onChange={(e) => setObWorkspaceName(e.target.value)}
-                          className="w-full mt-1 bg-white dark:bg-zinc-900 border border-slate-250 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-semibold focus:border-indigo-500 focus:outline-none dark:text-zinc-100"
+                          className="w-full mt-1 bg-[#2d2d2d] border border-[#3c3c3c] rounded-xl px-3 py-2 text-xs font-semibold focus:border-[#3794ff]/40 focus:outline-none"
                         />
                       </div>
 
                       <div>
-                        <label className="text-[10px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase block mb-1">Select Persona Archetype</label>
+                        <label className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase block mb-1">Select Persona Archetype</label>
                         <div className="grid grid-cols-2 gap-2">
                           {[
                             { id: 'MSP', label: 'MSP Partner', desc: 'Resell & co-brand' },
@@ -1702,12 +1702,12 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                               }}
                               className={`p-2.5 rounded-xl text-left border cursor-pointer transition-all ${
                                 obRole === opt.id
-                                  ? 'bg-indigo-600/10 border-indigo-500 text-indigo-600 dark:text-indigo-400 font-bold'
-                                  : 'bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:bg-slate-50 dark:hover:bg-zinc-800/50'
+                                  ? 'bg-[#094771] border-[#3794ff]/40 text-[#3794ff] font-bold'
+                                  : 'bg-[#2d2d2d] border-[#3c3c3c] text-[#6f6f6f] hover:bg-[#2d2d2d]'
                               }`}
                             >
                               <p className="font-bold">{opt.label}</p>
-                              <span className="text-[9px] text-slate-400 font-normal">{opt.desc}</span>
+                              <span className="text-[9px] text-[#9d9d9d] font-normal">{opt.desc}</span>
                             </button>
                           ))}
                         </div>
@@ -1715,21 +1715,21 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                     </div>
 
                     <div className="space-y-3.5">
-                      <div className="border-b border-slate-100 dark:border-zinc-800 pb-1.5 flex justify-between items-center">
-                        <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase">Workspace Team (RBAC)</span>
-                        <span className="bg-slate-200 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold">
+                      <div className="border-b border-[#3c3c3c] pb-1.5 flex justify-between items-center">
+                        <span className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase">Workspace Team (RBAC)</span>
+                        <span className="bg-[#3c3c3c] text-[#6f6f6f] px-1.5 py-0.5 rounded text-[9px] font-mono font-bold">
                           {obTeam.length} active
                         </span>
                       </div>
 
                       <div className="space-y-1.5 max-h-36 overflow-y-auto">
                         {obTeam.map((m, idx) => (
-                          <div key={idx} className="flex justify-between items-center bg-white dark:bg-zinc-900 px-2.5 py-1.5 rounded-lg border border-slate-100 dark:border-zinc-850">
+                          <div key={idx} className="flex justify-between items-center bg-[#2d2d2d] px-2.5 py-1.5 rounded-lg border border-[#3c3c3c]">
                             <div>
-                              <p className="font-semibold text-slate-700 dark:text-zinc-200">{m.email}</p>
-                              <span className="text-[9px] text-indigo-500 font-mono font-bold">{m.role}</span>
+                              <p className="font-semibold text-[#6f6f6f]">{m.email}</p>
+                              <span className="text-[9px] text-[#3794ff] font-mono font-bold">{m.role}</span>
                             </div>
-                            <span className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 text-[8px] font-mono font-bold px-1.5 py-0.5 rounded border border-emerald-100 dark:border-emerald-900/60">
+                            <span className="bg-emerald-50 text-emerald-600 text-[8px] font-mono font-bold px-1.5 py-0.5 rounded border border-emerald-100">
                               Active
                             </span>
                           </div>
@@ -1743,7 +1743,7 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                           placeholder="invite-colleague@company.com"
                           value={obNewEmail}
                           onChange={(e) => setObNewEmail(e.target.value)}
-                          className="flex-1 bg-white dark:bg-zinc-900 border border-slate-250 dark:border-zinc-800 rounded-lg px-2 py-1 text-xs focus:outline-none dark:text-zinc-100"
+                          className="flex-1 bg-[#2d2d2d] border border-[#3c3c3c] rounded-lg px-2 py-1 text-xs focus:outline-none"
                         />
                         <button
                           onClick={() => {
@@ -1755,7 +1755,7 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                             setObNewEmail('');
                             triggerBanner(`Sent workspace invitation to ${obNewEmail}!`);
                           }}
-                          className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-2.5 py-1 rounded-lg cursor-pointer transition-all"
+                          className="bg-[#094771] hover:bg-[#094771] text-[#d4d4d4] font-bold px-2.5 py-1 rounded-lg cursor-pointer transition-all"
                         >
                           Invite
                         </button>
@@ -1769,18 +1769,18 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
               {activePlaybookStep === 2 && (
                 <div className="space-y-6 animate-fade-in">
                   <div>
-                    <h4 className="text-sm font-display font-black text-slate-800 dark:text-zinc-100 flex items-center gap-1.5">
-                      <Briefcase className="w-4 h-4 text-indigo-500" />
+                    <h4 className="text-sm font-display font-black text-[#d4d4d4] flex items-center gap-1.5">
+                      <Briefcase className="w-4 h-4 text-[#3794ff]" />
                       <span>Stage 2: Create Vendor Projects & Connect Software Data Sources</span>
                     </h4>
-                    <p className="text-xs text-slate-500 dark:text-zinc-400 font-sans mt-1">
+                    <p className="text-xs text-[#9d9d9d] font-sans mt-1">
                       Set up isolated evaluation profiles for each of your critical third-party vendors, then connect raw files or pipelines for SBOM crawling.
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-6 bg-slate-50 dark:bg-zinc-950/40 p-4 rounded-xl border border-slate-100 dark:border-zinc-850">
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-6 bg-[#2d2d2d] p-4 rounded-xl border border-[#3c3c3c]">
                     <div className="md:col-span-4 space-y-3">
-                      <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase block">Active Projects/Vendors</span>
+                      <span className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase block">Active Projects/Vendors</span>
                       <div className="space-y-1.5">
                         {obVendors.map(v => (
                           <button
@@ -1791,8 +1791,8 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                             }}
                             className={`w-full text-left p-2 rounded-xl border text-xs font-semibold cursor-pointer transition-all ${
                               selectedVendorProj === v
-                                ? 'bg-indigo-600 border-indigo-600 text-white font-bold shadow-sm'
-                                : 'bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-850/60'
+                                ? 'bg-[#094771] border-[#3794ff]/40 text-[#d4d4d4] font-bold shadow-sm'
+                                : 'bg-[#2d2d2d] border-[#3c3c3c] text-[#6f6f6f] hover:bg-[#2d2d2d]'
                             }`}
                           >
                             {v}
@@ -1806,7 +1806,7 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                           placeholder="New Vendor Project"
                           value={newVendorName}
                           onChange={(e) => setNewVendorName(e.target.value)}
-                          className="w-full bg-white dark:bg-zinc-900 border border-slate-250 dark:border-zinc-800 rounded-lg px-2 py-1 text-xs focus:outline-none dark:text-zinc-100"
+                          className="w-full bg-[#2d2d2d] border border-[#3c3c3c] rounded-lg px-2 py-1 text-xs focus:outline-none"
                         />
                         <button
                           onClick={() => {
@@ -1816,7 +1816,7 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                             setNewVendorName('');
                             triggerBanner(`Created isolated evaluation project folder for: ${newVendorName}`);
                           }}
-                          className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-2 py-1 rounded-lg shrink-0 cursor-pointer"
+                          className="bg-[#094771] hover:bg-[#094771] text-[#d4d4d4] font-bold px-2 py-1 rounded-lg shrink-0 cursor-pointer"
                         >
                           + Add
                         </button>
@@ -1824,10 +1824,10 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                     </div>
 
                     <div className="md:col-span-8 space-y-4">
-                      <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase block">Connect Trust Data Inputs</span>
+                      <span className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase block">Connect Trust Data Inputs</span>
                       
                       {/* Sub-tabs for input types */}
-                      <div className="flex bg-white dark:bg-zinc-900 p-1 border border-slate-200 dark:border-zinc-800 rounded-xl gap-1">
+                      <div className="flex bg-[#2d2d2d] p-1 border border-[#3c3c3c] rounded-xl gap-1">
                         {[
                           { id: 'SBOM Upload', label: 'Upload SBOM File' },
                           { id: 'Repo Link', label: 'GitHub/GitLab Link' },
@@ -1838,8 +1838,8 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                             onClick={() => setConnType(t.id as any)}
                             className={`flex-1 py-1.5 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
                               connType === t.id
-                                ? 'bg-indigo-600 text-white shadow-sm'
-                                : 'text-slate-600 dark:text-zinc-400 hover:bg-slate-50 dark:hover:bg-zinc-800/50'
+                                ? 'bg-[#094771] text-[#d4d4d4] shadow-sm'
+                                : 'text-[#6f6f6f] hover:bg-[#2d2d2d]'
                             }`}
                           >
                             {t.label}
@@ -1848,36 +1848,36 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                       </div>
 
                       {/* Input type configuration panels */}
-                      <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-850 p-4 rounded-xl space-y-3.5">
+                      <div className="bg-[#2d2d2d] border border-[#3c3c3c] p-4 rounded-xl space-y-3.5">
                         {connType === 'SBOM Upload' && (
                           <div className="space-y-2.5">
-                            <p className="text-[11px] text-slate-500 dark:text-zinc-400 font-sans leading-relaxed">
+                            <p className="text-[11px] text-[#9d9d9d] font-sans leading-relaxed">
                               SPR accepts standard formats such as CycloneDX (JSON/XML) or SPDX. Upload raw bills-of-materials to initiate automated graph extraction.
                             </p>
-                            <div className="border-2 border-dashed border-slate-200 dark:border-zinc-800 hover:border-indigo-400 rounded-xl p-6 text-center cursor-pointer transition-all bg-slate-50/45 dark:bg-zinc-950/20">
-                              <FileCheck className="w-8 h-8 text-indigo-500 mx-auto mb-2" />
-                              <span className="font-bold text-slate-700 dark:text-zinc-300 block text-xs">Drag and drop SBOM payload here</span>
-                              <span className="text-[10px] text-slate-400 mt-1 block">Or click to select files from explorer</span>
+                            <div className="border-2 border-dashed border-[#3c3c3c] hover:border-[#3794ff]/40 rounded-xl p-6 text-center cursor-pointer transition-all bg-[#2d2d2d]/45">
+                              <FileCheck className="w-8 h-8 text-[#3794ff] mx-auto mb-2" />
+                              <span className="font-bold text-[#6f6f6f] block text-xs">Drag and drop SBOM payload here</span>
+                              <span className="text-[10px] text-[#9d9d9d] mt-1 block">Or click to select files from explorer</span>
                             </div>
-                            <div className="flex justify-between items-center bg-slate-50 dark:bg-zinc-950/30 p-2.5 rounded-lg border border-slate-150 dark:border-zinc-850 font-mono text-[10px]">
-                              <span className="text-slate-400">Target File Reference:</span>
-                              <span className="font-bold text-indigo-600 dark:text-indigo-400">{connectedSbomFile}</span>
+                            <div className="flex justify-between items-center bg-[#2d2d2d] p-2.5 rounded-lg border border-[#3c3c3c] font-mono text-[10px]">
+                              <span className="text-[#9d9d9d]">Target File Reference:</span>
+                              <span className="font-bold text-[#3794ff]">{connectedSbomFile}</span>
                             </div>
                           </div>
                         )}
 
                         {connType === 'Repo Link' && (
                           <div className="space-y-3">
-                            <p className="text-[11px] text-slate-500 dark:text-zinc-400 font-sans leading-relaxed">
+                            <p className="text-[11px] text-[#9d9d9d] font-sans leading-relaxed">
                               Connect code repositories directly. SPR continuously listens to releases, compiling updated Software Passports on every branch push.
                             </p>
                             <div>
-                              <label className="text-[9px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase">Git Repository URL</label>
+                              <label className="text-[9px] font-mono font-bold text-[#9d9d9d] uppercase">Git Repository URL</label>
                               <input
                                 type="text"
                                 value={connectedRepoUrl}
                                 onChange={(e) => setConnectedRepoUrl(e.target.value)}
-                                className="w-full mt-1 bg-white dark:bg-zinc-900 border border-slate-250 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none dark:text-zinc-100 font-mono"
+                                className="w-full mt-1 bg-[#2d2d2d] border border-[#3c3c3c] rounded-lg px-2.5 py-1.5 text-xs focus:outline-none font-mono"
                               />
                             </div>
                           </div>
@@ -1885,16 +1885,16 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
 
                         {connType === 'API Connection' && (
                           <div className="space-y-3">
-                            <p className="text-[11px] text-slate-500 dark:text-zinc-400 font-sans leading-relaxed">
+                            <p className="text-[11px] text-[#9d9d9d] font-sans leading-relaxed">
                               Integrate with your CI/CD pipelines (GitHub Actions, GitLab CI, Jenkins) or artifact registries to sync SBOM data dynamically via REST.
                             </p>
                             <div>
-                              <label className="text-[9px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase">Target Ingestion Webhook URL</label>
+                              <label className="text-[9px] font-mono font-bold text-[#9d9d9d] uppercase">Target Ingestion Webhook URL</label>
                               <input
                                 type="text"
                                 value={connectedApiEndpoint}
                                 onChange={(e) => setConnectedApiEndpoint(e.target.value)}
-                                className="w-full mt-1 bg-white dark:bg-zinc-900 border border-slate-250 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none dark:text-zinc-100 font-mono"
+                                className="w-full mt-1 bg-[#2d2d2d] border border-[#3c3c3c] rounded-lg px-2.5 py-1.5 text-xs focus:outline-none font-mono"
                               />
                             </div>
                           </div>
@@ -1904,7 +1904,7 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                           onClick={() => {
                             triggerBanner(`Source credentials saved for "${selectedVendorProj}"! Ready for cryptographic crawling.`);
                           }}
-                          className="w-full bg-slate-900 dark:bg-zinc-950 text-white font-bold p-2 rounded-lg cursor-pointer hover:bg-slate-800 dark:hover:bg-zinc-900 transition-colors"
+                          className="w-full bg-[#252526] text-[#d4d4d4] font-bold p-2 rounded-lg cursor-pointer hover:bg-[#2d2d2d] transition-colors"
                         >
                           Save Data Source Credentials
                         </button>
@@ -1918,29 +1918,29 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
               {activePlaybookStep === 3 && (
                 <div className="space-y-6 animate-fade-in">
                   <div>
-                    <h4 className="text-sm font-display font-black text-slate-800 dark:text-zinc-100 flex items-center gap-1.5">
-                      <Radar className="w-4 h-4 text-indigo-500" />
+                    <h4 className="text-sm font-display font-black text-[#d4d4d4] flex items-center gap-1.5">
+                      <Radar className="w-4 h-4 text-[#3794ff]" />
                       <span>Stage 3: Run Scanning Pipeline & Capture Sealed Evidence Artifacts</span>
                     </h4>
-                    <p className="text-xs text-slate-500 dark:text-zinc-400 font-sans mt-1">
+                    <p className="text-xs text-[#9d9d9d] font-sans mt-1">
                       Execute the crawler. Our analysis engine will dissect the connected sources, evaluate license liability, check for CVEs, and commit evidence to the ledger.
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 dark:bg-zinc-950/40 p-4 rounded-xl border border-slate-100 dark:border-zinc-850">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-[#2d2d2d] p-4 rounded-xl border border-[#3c3c3c]">
                     <div className="space-y-4">
-                      <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase block">Analysis Control Hub</span>
+                      <span className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase block">Analysis Control Hub</span>
                       
-                      <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-850 p-4 rounded-xl space-y-4 text-center">
+                      <div className="bg-[#2d2d2d] border border-[#3c3c3c] p-4 rounded-xl space-y-4 text-center">
                         <div className="space-y-1">
-                          <span className="text-slate-500 block text-[10px]">Target Project Selected</span>
-                          <span className="font-display font-black text-sm text-slate-800 dark:text-zinc-100">{selectedVendorProj}</span>
+                          <span className="text-[#9d9d9d] block text-[10px]">Target Project Selected</span>
+                          <span className="font-display font-black text-sm text-[#d4d4d4]">{selectedVendorProj}</span>
                         </div>
 
                         {scanStatus === 'idle' && (
                           <button
                             onClick={startPlaybookScan}
-                            className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition-all cursor-pointer shadow-md inline-flex items-center gap-1.5 animate-pulse"
+                            className="px-5 py-2.5 bg-[#094771] hover:bg-[#094771] text-[#d4d4d4] font-bold text-xs rounded-xl transition-all cursor-pointer shadow-md inline-flex items-center gap-1.5 animate-pulse"
                           >
                             <Play className="w-3.5 h-3.5 fill-current" />
                             <span>Run Cryptographic Crawl</span>
@@ -1949,22 +1949,22 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
 
                         {scanStatus === 'scanning' && (
                           <div className="space-y-2">
-                            <div className="flex justify-between text-[10px] font-mono font-bold text-indigo-600">
+                            <div className="flex justify-between text-[10px] font-mono font-bold text-[#3794ff]">
                               <span>PROCESSING SBOM...</span>
                               <span>{scanProgress}%</span>
                             </div>
-                            <div className="w-full bg-slate-100 dark:bg-zinc-950 rounded-full h-1.5 overflow-hidden">
-                              <div className="bg-indigo-600 h-1.5 transition-all duration-75" style={{ width: `${scanProgress}%` }}></div>
+                            <div className="w-full bg-[#2d2d2d] rounded-full h-1.5 overflow-hidden">
+                              <div className="bg-[#094771] h-1.5 transition-all duration-75" style={{ width: `${scanProgress}%` }}></div>
                             </div>
                           </div>
                         )}
 
                         {scanStatus === 'complete' && (
                           <div className="space-y-3">
-                            <span className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 border border-emerald-100 dark:border-emerald-900/60 font-mono font-bold px-3 py-1 rounded-xl text-[11px] inline-block">
+                            <span className="bg-emerald-50 text-emerald-600 border border-emerald-100 font-mono font-bold px-3 py-1 rounded-xl text-[11px] inline-block">
                               ✓ SCAN COMPLETED & SEALED
                             </span>
-                            <p className="text-[10px] text-slate-400">All parsed nodes and dependency coordinates registered in immutable artifact registry.</p>
+                            <p className="text-[10px] text-[#9d9d9d]">All parsed nodes and dependency coordinates registered in immutable artifact registry.</p>
                             <button
                               onClick={() => {
                                 setScanStatus('idle');
@@ -1972,7 +1972,7 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                                 setScanLogs([]);
                                 setExtractedSbomInfo(null);
                               }}
-                              className="text-[10px] font-bold text-slate-400 hover:text-indigo-600 cursor-pointer block mx-auto underline mt-2"
+                              className="text-[10px] font-bold text-[#9d9d9d] hover:text-[#3794ff] cursor-pointer block mx-auto underline mt-2"
                             >
                               Restart Scan
                             </button>
@@ -1981,7 +1981,7 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                       </div>
 
                       {/* Stage 2/3 Warning banner */}
-                      <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-700 dark:text-amber-400 font-sans leading-relaxed">
+                      <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-700 font-sans leading-relaxed">
                         <span className="font-bold flex items-center gap-1 mb-0.5">
                           <Info className="w-3.5 h-3.5 shrink-0 text-amber-500" /> Stage 2/3 Roadmap Integration
                         </span>
@@ -1990,18 +1990,18 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                     </div>
 
                     <div className="space-y-2.5">
-                      <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase block">Live Parser Console Logs</span>
+                      <span className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase block">Live Parser Console Logs</span>
                       
-                      <div className="bg-slate-950 text-slate-100 p-3.5 rounded-xl font-mono text-[9px] h-64 overflow-y-auto space-y-1 border border-slate-800 flex flex-col justify-start">
+                      <div className="bg-[#1e1e1e] text-[#d4d4d4] p-3.5 rounded-xl font-mono text-[9px] h-64 overflow-y-auto space-y-1 border border-[#3c3c3c] flex flex-col justify-start">
                         {scanLogs.length === 0 ? (
-                          <div className="text-slate-500 text-center my-auto">
+                          <div className="text-[#9d9d9d] text-center my-auto">
                             <span>[SYSTEM IDLE] Press the indigo button above to launch security scan.</span>
                           </div>
                         ) : (
                           scanLogs.map((log, idx) => (
                             <div key={idx} className="leading-normal">
                               {log.startsWith('[SUCCESS]') && <span className="text-emerald-400 font-bold">{log}</span>}
-                              {log.startsWith('[VULN]') && <span className="text-rose-400 font-bold">{log}</span>}
+                              {log.startsWith('[VULN]') && <span className="text-[#f14c4c] font-bold">{log}</span>}
                               {!log.startsWith('[SUCCESS]') && !log.startsWith('[VULN]') && <span>{log}</span>}
                             </div>
                           ))
@@ -2016,49 +2016,49 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
               {activePlaybookStep === 4 && (
                 <div className="space-y-6 animate-fade-in">
                   <div>
-                    <h4 className="text-sm font-display font-black text-slate-800 dark:text-zinc-100 flex items-center gap-1.5">
-                      <Layers className="w-4 h-4 text-indigo-500" />
+                    <h4 className="text-sm font-display font-black text-[#d4d4d4] flex items-center gap-1.5">
+                      <Layers className="w-4 h-4 text-[#3794ff]" />
                       <span>Stage 4: Inter-dependency Risk Propagation & Hop-Decay Graph</span>
                     </h4>
-                    <p className="text-xs text-slate-500 dark:text-zinc-400 font-sans mt-1">
+                    <p className="text-xs text-[#9d9d9d] font-sans mt-1">
                       Vulnerabilities in deep transitive libraries leak upwards to infect high-level software. Experience how SPR uses an algorithm to compute hop-decay scoring.
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 dark:bg-zinc-950/40 p-4 rounded-xl border border-slate-100 dark:border-zinc-850">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-[#2d2d2d] p-4 rounded-xl border border-[#3c3c3c]">
                     <div className="space-y-4">
-                      <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase block">Trust Graph Node Explorer</span>
+                      <span className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase block">Trust Graph Node Explorer</span>
                       
                       <div className="space-y-3.5">
                         {graphRiskNodes.map(node => (
                           <div
                             key={node.id}
-                            className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-850 p-3.5 rounded-xl flex justify-between items-center relative overflow-hidden"
+                            className="bg-[#2d2d2d] border border-[#3c3c3c] p-3.5 rounded-xl flex justify-between items-center relative overflow-hidden"
                           >
                             <div className="space-y-1">
                               <div className="flex items-center gap-1.5">
                                 <span className={`w-2 h-2 rounded-full ${
-                                  node.risk === 'High' ? 'bg-rose-500 animate-pulse' : node.risk === 'Medium' ? 'bg-amber-500' : 'bg-emerald-500'
+                                  node.risk === 'High' ? 'bg-[#f14c4c]/15 animate-pulse' : node.risk === 'Medium' ? 'bg-amber-500' : 'bg-emerald-500'
                                 }`}></span>
-                                <span className="font-bold text-slate-800 dark:text-zinc-100">{node.name}</span>
-                                <span className="bg-slate-100 dark:bg-zinc-800 text-slate-500 text-[8px] font-mono font-bold px-1 rounded">
+                                <span className="font-bold text-[#d4d4d4]">{node.name}</span>
+                                <span className="bg-[#2d2d2d] text-[#9d9d9d] text-[8px] font-mono font-bold px-1 rounded">
                                   Layer {node.depth}
                                 </span>
                               </div>
-                              <p className="text-[10px] text-slate-400">{node.description}</p>
+                              <p className="text-[10px] text-[#9d9d9d]">{node.description}</p>
                             </div>
 
                             <div className="flex items-center gap-3">
                               <div className="text-right">
-                                <span className="text-[9px] text-slate-400 uppercase block font-mono">Risk Profile</span>
+                                <span className="text-[9px] text-[#9d9d9d] uppercase block font-mono">Risk Profile</span>
                                 <button
                                   onClick={() => toggleNodeRisk(node.id)}
                                   className={`px-2 py-0.5 rounded text-[10px] font-mono font-black border cursor-pointer transition-all ${
                                     node.risk === 'High'
-                                      ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border-rose-200'
+                                      ? 'bg-[#f14c4c]/15 text-[#f14c4c] border-[#f14c4c]/40'
                                       : node.risk === 'Medium'
-                                        ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border-amber-200'
-                                        : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border-emerald-200'
+                                        ? 'bg-amber-50 text-amber-600 border-amber-200'
+                                        : 'bg-emerald-50 text-emerald-600 border-emerald-200'
                                   }`}
                                 >
                                   {node.risk} (Toggle)
@@ -2071,24 +2071,24 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                     </div>
 
                     <div className="space-y-4">
-                      <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase block">Risk Decay Analysis</span>
+                      <span className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase block">Risk Decay Analysis</span>
                       
-                      <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-850 p-4 rounded-xl space-y-4">
-                        <div className="flex justify-between items-center pb-2.5 border-b border-slate-100 dark:border-zinc-850">
-                          <span className="font-semibold text-slate-600 dark:text-zinc-400">Decayed Target Score</span>
-                          <span className="text-indigo-600 dark:text-indigo-400 font-mono font-black text-base">{computedUpstreamRisk}/100</span>
+                      <div className="bg-[#2d2d2d] border border-[#3c3c3c] p-4 rounded-xl space-y-4">
+                        <div className="flex justify-between items-center pb-2.5 border-b border-[#3c3c3c]">
+                          <span className="font-semibold text-[#6f6f6f]">Decayed Target Score</span>
+                          <span className="text-[#3794ff] font-mono font-black text-base">{computedUpstreamRisk}/100</span>
                         </div>
 
-                        <div className="space-y-2 text-[11px] text-slate-500 dark:text-zinc-400 leading-relaxed font-sans">
+                        <div className="space-y-2 text-[11px] text-[#9d9d9d] leading-relaxed font-sans">
                           <p>
-                            We apply a <strong className="text-indigo-500">hop-decay coefficient of 0.85</strong>.
+                            We apply a <strong className="text-[#3794ff]">hop-decay coefficient of 0.85</strong>.
                           </p>
-                          <ul className="list-disc pl-4 space-y-1 font-mono text-[10px] text-slate-400">
+                          <ul className="list-disc pl-4 space-y-1 font-mono text-[10px] text-[#9d9d9d]">
                             <li>Layer 3 (OpenSSL) has risk penalty of 40. dec_penalty = 40 * (0.85^2) = 28.9.</li>
                             <li>Layer 2 (Auth Gateway) risk: {graphRiskNodes.find(n => n.id === 'midstream-node')?.risk}.</li>
                             <li>Upstream dependency propagation decreases core application rating from base score of 98 to <strong>{computedUpstreamRisk}</strong>.</li>
                           </ul>
-                          <p className="text-[10px] text-amber-600 bg-amber-50 dark:bg-amber-950/30 p-2 rounded-lg border border-amber-100 dark:border-amber-900/40">
+                          <p className="text-[10px] text-amber-600 bg-amber-50 p-2 rounded-lg border border-amber-100">
                             <strong>Significance:</strong> Deep dependencies are scored authoritatively. A simple patch upstream immediately heals ratings globally!
                           </p>
                         </div>
@@ -2102,22 +2102,22 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
               {activePlaybookStep === 5 && (
                 <div className="space-y-6 animate-fade-in">
                   <div>
-                    <h4 className="text-sm font-display font-black text-slate-800 dark:text-zinc-100 flex items-center gap-1.5">
-                      <Brain className="w-4 h-4 text-indigo-500" />
+                    <h4 className="text-sm font-display font-black text-[#d4d4d4] flex items-center gap-1.5">
+                      <Brain className="w-4 h-4 text-[#3794ff]" />
                       <span>Stage 5: Dynamic Scoring Engine & Penalty Configuration Weights</span>
                     </h4>
-                    <p className="text-xs text-slate-500 dark:text-zinc-400 font-sans mt-1">
+                    <p className="text-xs text-[#9d9d9d] font-sans mt-1">
                       Ratings are computed based on clear weighting logic. Fine-tune your corporate compliance threshold metrics to see how scores respond in real-time.
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 dark:bg-zinc-950/40 p-4 rounded-xl border border-slate-100 dark:border-zinc-850">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-[#2d2d2d] p-4 rounded-xl border border-[#3c3c3c]">
                     <div className="space-y-3.5">
-                      <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase block">Custom Weight Tuning</span>
+                      <span className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase block">Custom Weight Tuning</span>
                       
                       <div className="space-y-3 font-sans">
                         <div className="space-y-1">
-                          <div className="flex justify-between font-bold text-slate-700 dark:text-zinc-300">
+                          <div className="flex justify-between font-bold text-[#6f6f6f]">
                             <span>Vulnerability CVE Penalty Weight</span>
                             <span>{cveWeight}%</span>
                           </div>
@@ -2127,12 +2127,12 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                             max="50"
                             value={cveWeight}
                             onChange={(e) => setCveWeight(parseInt(e.target.value))}
-                            className="w-full accent-indigo-600 cursor-pointer"
+                            className="w-full accent-[#3794ff] cursor-pointer"
                           />
                         </div>
 
                         <div className="space-y-1">
-                          <div className="flex justify-between font-bold text-slate-700 dark:text-zinc-300">
+                          <div className="flex justify-between font-bold text-[#6f6f6f]">
                             <span>License Non-Compliance Penalty</span>
                             <span>{licenseWeight}%</span>
                           </div>
@@ -2142,12 +2142,12 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                             max="30"
                             value={licenseWeight}
                             onChange={(e) => setLicenseWeight(parseInt(e.target.value))}
-                            className="w-full accent-indigo-600 cursor-pointer"
+                            className="w-full accent-[#3794ff] cursor-pointer"
                           />
                         </div>
 
                         <div className="space-y-1">
-                          <div className="flex justify-between font-bold text-slate-700 dark:text-zinc-300">
+                          <div className="flex justify-between font-bold text-[#6f6f6f]">
                             <span>NIST SP 800-161 Alignment Modifier</span>
                             <span>{nistWeight}%</span>
                           </div>
@@ -2157,12 +2157,12 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                             max="40"
                             value={nistWeight}
                             onChange={(e) => setNistWeight(parseInt(e.target.value))}
-                            className="w-full accent-indigo-600 cursor-pointer"
+                            className="w-full accent-[#3794ff] cursor-pointer"
                           />
                         </div>
 
                         <div className="space-y-1">
-                          <div className="flex justify-between font-bold text-slate-700 dark:text-zinc-300">
+                          <div className="flex justify-between font-bold text-[#6f6f6f]">
                             <span>Upstream Dependency Depth Limit</span>
                             <span>{depthWeight}%</span>
                           </div>
@@ -2172,32 +2172,32 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                             max="25"
                             value={depthWeight}
                             onChange={(e) => setDepthWeight(parseInt(e.target.value))}
-                            className="w-full accent-indigo-600 cursor-pointer"
+                            className="w-full accent-[#3794ff] cursor-pointer"
                           />
                         </div>
                       </div>
                     </div>
 
                     <div className="space-y-4">
-                      <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase block">Automated Algorithmic Output</span>
+                      <span className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase block">Automated Algorithmic Output</span>
                       
-                      <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-850 p-5 rounded-2xl text-center space-y-4">
+                      <div className="bg-[#2d2d2d] border border-[#3c3c3c] p-5 rounded-md text-center space-y-4">
                         <div>
-                          <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">Computed Software Trust Rating</span>
-                          <span className="text-3xl font-display font-black text-indigo-600 dark:text-indigo-400 mt-1 block">
+                          <span className="text-[10px] font-mono text-[#9d9d9d] uppercase tracking-wider block">Computed Software Trust Rating</span>
+                          <span className="text-3xl font-display font-black text-[#3794ff] mt-1 block">
                             {88 + Math.round((nistWeight - 20)/2) - Math.round((cveWeight - 25)/3)}%
                           </span>
                         </div>
 
-                        <div className="bg-slate-50 dark:bg-zinc-950 p-3 rounded-xl border border-slate-150 dark:border-zinc-850 font-mono text-[9px] text-left space-y-1.5 text-slate-500 dark:text-zinc-400">
-                          <div className="flex justify-between"><span>Base Score:</span><span className="font-bold text-slate-700 dark:text-zinc-200">100.0</span></div>
-                          <div className="flex justify-between"><span>Vulnerability deduction:</span><span className="font-bold text-rose-500">-{Math.round(cveWeight / 3)}</span></div>
-                          <div className="flex justify-between"><span>Non-compliant license audit:</span><span className="font-bold text-rose-500">-{Math.round(licenseWeight / 4)}</span></div>
+                        <div className="bg-[#2d2d2d] p-3 rounded-xl border border-[#3c3c3c] font-mono text-[9px] text-left space-y-1.5 text-[#9d9d9d]">
+                          <div className="flex justify-between"><span>Base Score:</span><span className="font-bold text-[#6f6f6f]">100.0</span></div>
+                          <div className="flex justify-between"><span>Vulnerability deduction:</span><span className="font-bold text-[#f14c4c]">-{Math.round(cveWeight / 3)}</span></div>
+                          <div className="flex justify-between"><span>Non-compliant license audit:</span><span className="font-bold text-[#f14c4c]">-{Math.round(licenseWeight / 4)}</span></div>
                           <div className="flex justify-between"><span>NIST SP 800-161 Bonus:</span><span className="font-bold text-emerald-500">+{Math.round(nistWeight / 2)}</span></div>
-                          <div className="flex justify-between"><span>Transitive dependency penalty:</span><span className="font-bold text-rose-400">-{Math.round(depthWeight / 3)}</span></div>
+                          <div className="flex justify-between"><span>Transitive dependency penalty:</span><span className="font-bold text-[#f14c4c]">-{Math.round(depthWeight / 3)}</span></div>
                         </div>
 
-                        <p className="text-[10px] text-slate-400 font-sans">
+                        <p className="text-[10px] text-[#9d9d9d] font-sans">
                           This dynamic trust logic is continuously computed per-artifact, matching modern compliance-by-design standards.
                         </p>
                       </div>
@@ -2210,26 +2210,26 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
               {activePlaybookStep === 6 && (
                 <div className="space-y-6 animate-fade-in">
                   <div>
-                    <h4 className="text-sm font-display font-black text-slate-800 dark:text-zinc-100 flex items-center gap-1.5">
-                      <FileCheck className="w-4 h-4 text-indigo-500" />
+                    <h4 className="text-sm font-display font-black text-[#d4d4d4] flex items-center gap-1.5">
+                      <FileCheck className="w-4 h-4 text-[#3794ff]" />
                       <span>Stage 6: Sign & Issue Cryptographically Sealed Software Passports</span>
                     </h4>
-                    <p className="text-xs text-slate-500 dark:text-zinc-400 font-sans mt-1">
+                    <p className="text-xs text-[#9d9d9d] font-sans mt-1">
                       The golden moment. Transform crawler evidence outputs into an official, signed, hash-chained Software Passport ready for vendor distribution.
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 dark:bg-zinc-950/40 p-4 rounded-xl border border-slate-100 dark:border-zinc-850">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-[#2d2d2d] p-4 rounded-xl border border-[#3c3c3c]">
                     <div className="flex justify-center items-center">
                       
                       {/* LUXURY PASSPORT CARD */}
-                      <div className="w-full max-w-sm bg-gradient-to-br from-slate-900 to-indigo-950 text-white rounded-2xl p-5 shadow-2xl border border-indigo-500/30 relative overflow-hidden text-left space-y-4">
-                        <div className="absolute -top-12 -right-12 w-32 h-32 bg-indigo-500/10 rounded-full blur-2xl"></div>
-                        <div className="absolute bottom-0 left-0 w-full h-1.5 bg-gradient-to-r from-emerald-500 via-indigo-500 to-purple-500"></div>
+                      <div className="w-full max-w-sm bg-[#181818] text-[#d4d4d4] rounded-md p-5 shadow-2xl border border-[#3794ff]/40 relative overflow-hidden text-left space-y-4">
+                        <div className="absolute -top-12 -right-12 w-32 h-32 bg-[#094771] rounded-full blur-2xl"></div>
+                        <div className="absolute bottom-0 left-0 w-full h-1.5 bg-[#3794ff]"></div>
                         
-                        <div className="flex justify-between items-start border-b border-indigo-900/60 pb-3">
+                        <div className="flex justify-between items-start border-b border-[#3794ff]/40 pb-3">
                           <div>
-                            <span className="text-[8px] font-mono text-indigo-400 uppercase tracking-widest font-bold block leading-none">SOFTWARE COMPLIANCE LEDGER</span>
+                            <span className="text-[8px] font-mono text-[#3794ff] uppercase tracking-widest font-bold block leading-none">SOFTWARE COMPLIANCE LEDGER</span>
                             <h5 className="text-xs font-display font-black tracking-wider mt-1">OFFICIAL TRUST PASSPORT</h5>
                           </div>
                           <span className={`px-2 py-0.5 rounded text-[8px] font-mono font-bold uppercase tracking-wider ${
@@ -2241,16 +2241,16 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                           </span>
                         </div>
 
-                        <div className="space-y-2 font-mono text-[9px] text-indigo-200">
-                          <div className="flex justify-between"><span>Subject Asset:</span><span className="font-bold text-white">{selectedVendorProj}</span></div>
-                          <div className="flex justify-between"><span>Serial ID:</span><span className="font-bold text-white">{passportSerial}</span></div>
+                        <div className="space-y-2 font-mono text-[9px] text-[#3794ff]">
+                          <div className="flex justify-between"><span>Subject Asset:</span><span className="font-bold text-[#d4d4d4]">{selectedVendorProj}</span></div>
+                          <div className="flex justify-between"><span>Serial ID:</span><span className="font-bold text-[#d4d4d4]">{passportSerial}</span></div>
                           <div className="flex justify-between"><span>Security Rating:</span><span className="font-bold text-emerald-400">88% (Investment Grade)</span></div>
-                          <div className="flex justify-between"><span>Validation Window:</span><span className="font-bold text-white">365 Days</span></div>
-                          <div className="flex justify-between"><span>Registry Root:</span><span className="font-bold text-white">0xfa918b...99e4</span></div>
+                          <div className="flex justify-between"><span>Validation Window:</span><span className="font-bold text-[#d4d4d4]">365 Days</span></div>
+                          <div className="flex justify-between"><span>Registry Root:</span><span className="font-bold text-[#d4d4d4]">0xfa918b...99e4</span></div>
                         </div>
 
-                        <div className="bg-slate-950/60 p-2 rounded-lg border border-indigo-950 font-mono text-[8px] text-slate-400 truncate">
-                          <span className="block text-indigo-500 font-bold mb-0.5 uppercase text-[7px]">CHALLENGE SIGNATURE SEAL</span>
+                        <div className="bg-[#1e1e1e]/60 p-2 rounded-lg border border-[#3794ff]/40 font-mono text-[8px] text-[#9d9d9d] truncate">
+                          <span className="block text-[#3794ff] font-bold mb-0.5 uppercase text-[7px]">CHALLENGE SIGNATURE SEAL</span>
                           {passportSigned ? passportHash : 'PENDING CORPORATE PRIVATE KEY SIGNATURE...'}
                         </div>
                       </div>
@@ -2258,10 +2258,10 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                     </div>
 
                     <div className="space-y-4">
-                      <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase block">Issuance Commands</span>
+                      <span className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase block">Issuance Commands</span>
                       
-                      <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-850 p-4 rounded-xl space-y-3.5">
-                        <p className="text-[11px] text-slate-500 dark:text-zinc-400 font-sans leading-relaxed">
+                      <div className="bg-[#2d2d2d] border border-[#3c3c3c] p-4 rounded-xl space-y-3.5">
+                        <p className="text-[11px] text-[#9d9d9d] font-sans leading-relaxed">
                           Signing a Passport commits your organization's key signature to the immutable ledger metadata, cementing software compliance validity.
                         </p>
 
@@ -2271,7 +2271,7 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                               setPassportSigned(true);
                               triggerBanner('Passport signing request queued. Backend signing service must be available to finalize it.');
                             }}
-                            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold p-2.5 rounded-xl transition-all cursor-pointer shadow-sm text-center"
+                            className="w-full bg-[#094771] hover:bg-[#094771] text-[#d4d4d4] font-bold p-2.5 rounded-xl transition-all cursor-pointer shadow-sm text-center"
                           >
                             Sign & Seal Passport
                           </button>
@@ -2284,7 +2284,7 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                               onClick={() => {
                                 setPassportSigned(false);
                               }}
-                              className="w-full bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 font-bold p-2 rounded-xl text-center text-[10px] hover:bg-slate-200 cursor-pointer"
+                              className="w-full bg-[#2d2d2d] text-[#6f6f6f] font-bold p-2 rounded-xl text-center text-[10px] hover:bg-[#383838] cursor-pointer"
                             >
                               Revoke Signature (Reset)
                             </button>
@@ -2300,21 +2300,21 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
               {activePlaybookStep === 7 && (
                 <div className="space-y-6 animate-fade-in">
                   <div>
-                    <h4 className="text-sm font-display font-black text-slate-800 dark:text-zinc-100 flex items-center gap-1.5">
-                      <Activity className="w-4 h-4 text-indigo-500" />
+                    <h4 className="text-sm font-display font-black text-[#d4d4d4] flex items-center gap-1.5">
+                      <Activity className="w-4 h-4 text-[#3794ff]" />
                       <span>Stage 7: Continuous Monitoring & Real-time Threat Alerting</span>
                     </h4>
-                    <p className="text-xs text-slate-500 dark:text-zinc-400 font-sans mt-1">
+                    <p className="text-xs text-[#9d9d9d] font-sans mt-1">
                       Cyber threats never pause. Configure periodic daemon intervals, and simulate how SPR alerts teams instantly upon detecting zero-day vulnerabilities.
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 dark:bg-zinc-950/40 p-4 rounded-xl border border-slate-100 dark:border-zinc-850">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-[#2d2d2d] p-4 rounded-xl border border-[#3c3c3c]">
                     <div className="space-y-4">
-                      <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase block">Scheduler Configuration</span>
+                      <span className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase block">Scheduler Configuration</span>
                       
-                      <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-850 p-4 rounded-xl space-y-3">
-                        <label className="text-[10px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase block">Scan Recurrence Interval</label>
+                      <div className="bg-[#2d2d2d] border border-[#3c3c3c] p-4 rounded-xl space-y-3">
+                        <label className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase block">Scan Recurrence Interval</label>
                         <div className="grid grid-cols-3 gap-2">
                           {[
                             { id: 'daily', label: 'Daily Crawler' },
@@ -2329,8 +2329,8 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                               }}
                               className={`p-2 rounded-xl text-center border cursor-pointer text-xs font-semibold transition-all ${
                                 monitoringSchedule === opt.id
-                                  ? 'bg-indigo-600 border-indigo-600 text-white font-bold'
-                                  : 'bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:bg-slate-50'
+                                  ? 'bg-[#094771] border-[#3794ff]/40 text-[#d4d4d4] font-bold'
+                                  : 'bg-[#2d2d2d] border-[#3c3c3c] text-[#6f6f6f] hover:bg-[#2d2d2d]'
                               }`}
                             >
                               {opt.label}
@@ -2350,7 +2350,7 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                               setMonitoringAlerts([newAlert, ...monitoringAlerts]);
                               triggerNotification('CRITICAL VULNERABILITY ALERT DISPATCHED', 'error');
                             }}
-                            className="w-full bg-rose-600 hover:bg-rose-750 text-white font-bold p-2.5 rounded-xl cursor-pointer transition-colors text-center inline-flex justify-center items-center gap-1.5 shadow"
+                            className="w-full bg-[#f14c4c]/15 hover:bg-[#f14c4c]/15 text-[#d4d4d4] font-bold p-2.5 rounded-xl cursor-pointer transition-colors text-center inline-flex justify-center items-center gap-1.5 shadow"
                           >
                             <ShieldAlert className="w-3.5 h-3.5" />
                             <span>Trigger Incident Event</span>
@@ -2360,22 +2360,22 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                     </div>
 
                     <div className="space-y-4">
-                      <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase block">Live Alerts Router</span>
+                      <span className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase block">Live Alerts Router</span>
                       
-                      <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-850 p-4 rounded-xl h-56 overflow-y-auto space-y-2">
+                      <div className="bg-[#2d2d2d] border border-[#3c3c3c] p-4 rounded-xl h-56 overflow-y-auto space-y-2">
                         {monitoringAlerts.map(alert => (
                           <div
                             key={alert.id}
                             className={`p-3 rounded-xl border flex items-start gap-2.5 text-[11px] leading-relaxed ${
                               alert.severity === 'critical'
-                                ? 'bg-rose-50 dark:bg-rose-950/20 text-rose-700 dark:text-rose-400 border-rose-100 dark:border-rose-900/40'
-                                : 'bg-slate-50 dark:bg-zinc-950/30 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-850'
+                                ? 'bg-[#f14c4c]/15 text-[#f14c4c] border-[#f14c4c]/40'
+                                : 'bg-[#2d2d2d] text-[#6f6f6f] border-[#3c3c3c]'
                             }`}
                           >
-                            <ShieldAlert className={`w-4 h-4 shrink-0 mt-0.5 ${alert.severity === 'critical' ? 'text-rose-600' : 'text-slate-400'}`} />
+                            <ShieldAlert className={`w-4 h-4 shrink-0 mt-0.5 ${alert.severity === 'critical' ? 'text-[#f14c4c]' : 'text-[#9d9d9d]'}`} />
                             <div className="space-y-0.5">
                               <p className="font-semibold">{alert.msg}</p>
-                              <span className="text-[9px] text-slate-400 font-mono block">{alert.date}</span>
+                              <span className="text-[9px] text-[#9d9d9d] font-mono block">{alert.date}</span>
                             </div>
                           </div>
                         ))}
@@ -2389,34 +2389,34 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
               {activePlaybookStep === 8 && (
                 <div className="space-y-6 animate-fade-in">
                   <div>
-                    <h4 className="text-sm font-display font-black text-slate-800 dark:text-zinc-100 flex items-center gap-1.5">
-                      <Globe className="w-4 h-4 text-indigo-500" />
+                    <h4 className="text-sm font-display font-black text-[#d4d4d4] flex items-center gap-1.5">
+                      <Globe className="w-4 h-4 text-[#3794ff]" />
                       <span>Stage 8: Distribution Paths, Multi-Tenant Reselling & White-Labeling</span>
                     </h4>
-                    <p className="text-xs text-slate-500 dark:text-zinc-400 font-sans mt-1">
+                    <p className="text-xs text-[#9d9d9d] font-sans mt-1">
                       MSP partners can repackage the platform, adding custom branding and reselling trust passport analytics directly to their corporate list under their own banner.
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 dark:bg-zinc-950/40 p-4 rounded-xl border border-slate-100 dark:border-zinc-850">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-[#2d2d2d] p-4 rounded-xl border border-[#3c3c3c]">
                     <div className="space-y-4">
-                      <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase block">MSP Partner Branding Studio</span>
+                      <span className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase block">MSP Partner Branding Studio</span>
                       
-                      <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-850 p-4 rounded-xl space-y-3.5">
+                      <div className="bg-[#2d2d2d] border border-[#3c3c3c] p-4 rounded-xl space-y-3.5">
                         <div>
-                          <label className="text-[10px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase">Reseller Logo Title</label>
+                          <label className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase">Reseller Logo Title</label>
                           <input
                             type="text"
                             value={mspBrandingName}
                             onChange={(e) => setMspBrandingName(e.target.value)}
-                            className="w-full mt-1 bg-white dark:bg-zinc-900 border border-slate-250 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none dark:text-zinc-100"
+                            className="w-full mt-1 bg-[#2d2d2d] border border-[#3c3c3c] rounded-lg px-2.5 py-1.5 text-xs focus:outline-none"
                           />
                         </div>
 
                         <div>
-                          <div className="flex justify-between font-bold text-slate-700 dark:text-zinc-300">
+                          <div className="flex justify-between font-bold text-[#6f6f6f]">
                             <span>Reseller Price Markup</span>
-                            <span className="text-indigo-600 font-mono">+{mspResellerMarkup}%</span>
+                            <span className="text-[#3794ff] font-mono">+{mspResellerMarkup}%</span>
                           </div>
                           <input
                             type="range"
@@ -2424,12 +2424,12 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                             max="50"
                             value={mspResellerMarkup}
                             onChange={(e) => setMspResellerMarkup(parseInt(e.target.value))}
-                            className="w-full accent-indigo-600 cursor-pointer"
+                            className="w-full accent-[#3794ff] cursor-pointer"
                           />
                         </div>
 
                         <div>
-                          <label className="text-[10px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase block mb-1">Accent Theme Preset</label>
+                          <label className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase block mb-1">Accent Theme Preset</label>
                           <div className="flex gap-2">
                             {['#4f46e5', '#059669', '#dc2626', '#d97706'].map(col => (
                               <button
@@ -2448,21 +2448,21 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                     </div>
 
                     <div className="space-y-4">
-                      <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase block">Client-Facing Portal Live Preview</span>
+                      <span className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase block">Client-Facing Portal Live Preview</span>
                       
-                      <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-850 rounded-2xl shadow-md overflow-hidden flex flex-col justify-between h-56">
+                      <div className="bg-[#2d2d2d] border border-[#3c3c3c] rounded-md shadow-md overflow-hidden flex flex-col justify-between h-56">
                         {/* Branded header with custom color */}
-                        <div className="px-4 py-3 text-white flex justify-between items-center transition-all" style={{ backgroundColor: mspCustomColor }}>
+                        <div className="px-4 py-3 text-[#d4d4d4] flex justify-between items-center transition-all" style={{ backgroundColor: mspCustomColor }}>
                           <span className="font-display font-black text-[11px] tracking-wider uppercase">{mspBrandingName}</span>
-                          <span className="text-[9px] bg-white/20 px-2 py-0.5 rounded uppercase font-bold">CLIENT PORTAL</span>
+                          <span className="text-[9px] bg-[#252526] px-2 py-0.5 rounded uppercase font-bold">CLIENT PORTAL</span>
                         </div>
 
                         <div className="p-4 flex-1 flex flex-col justify-center text-center space-y-2">
-                          <h6 className="text-[11px] font-bold text-slate-700 dark:text-zinc-200">Continuous Software Passports Portal</h6>
-                          <p className="text-[10px] text-slate-400 max-w-xs mx-auto leading-relaxed">
+                          <h6 className="text-[11px] font-bold text-[#6f6f6f]">Continuous Software Passports Portal</h6>
+                          <p className="text-[10px] text-[#9d9d9d] max-w-xs mx-auto leading-relaxed">
                             Customer contract details are populated from the live pilot workspace record. Subscription list price is generated from configured billing terms.
                           </p>
-                          <span className="text-[9px] text-slate-400 font-mono">SECURED VIA DECENTRALIZED SPR TRUST ANCHOR PROTOCOL</span>
+                          <span className="text-[9px] text-[#9d9d9d] font-mono">SECURED VIA DECENTRALIZED SPR TRUST ANCHOR PROTOCOL</span>
                         </div>
                       </div>
                     </div>
@@ -2474,21 +2474,21 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
               {activePlaybookStep === 9 && (
                 <div className="space-y-6 animate-fade-in text-left">
                   <div>
-                    <h4 className="text-sm font-display font-black text-slate-800 dark:text-zinc-100 flex items-center gap-1.5">
-                      <Award className="w-4 h-4 text-indigo-500" />
+                    <h4 className="text-sm font-display font-black text-[#d4d4d4] flex items-center gap-1.5">
+                      <Award className="w-4 h-4 text-[#3794ff]" />
                       <span>Stage 9: Export Auditable Passports & Compliance Proofs</span>
                     </h4>
-                    <p className="text-xs text-slate-500 dark:text-zinc-400 font-sans mt-1">
+                    <p className="text-xs text-[#9d9d9d] font-sans mt-1">
                       Deliver verifiable evidence logs to compliance auditors, customer security reviews, or enterprise procurement departments instantly.
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 dark:bg-zinc-950/40 p-4 rounded-xl border border-slate-100 dark:border-zinc-850">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-[#2d2d2d] p-4 rounded-xl border border-[#3c3c3c]">
                     <div className="space-y-4">
-                      <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase block">Audit Artifact Hand-off</span>
+                      <span className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase block">Audit Artifact Hand-off</span>
                       
-                      <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-850 p-4 rounded-xl space-y-3 text-center">
-                        <p className="text-[11px] text-slate-500 dark:text-zinc-400 font-sans leading-relaxed">
+                      <div className="bg-[#2d2d2d] border border-[#3c3c3c] p-4 rounded-xl space-y-3 text-center">
+                        <p className="text-[11px] text-[#9d9d9d] font-sans leading-relaxed">
                           Export complete Software Passports locally as a structured, cryptographically signed JSON file or high-fidelity printable compliance briefing.
                         </p>
 
@@ -2498,9 +2498,9 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                               // Standard browser anchor download flow
                               triggerBanner('Export is unavailable. Configure the backend attestation export service first.');
                             }}
-                            className="w-full bg-slate-900 dark:bg-zinc-950 hover:bg-slate-850 text-white font-bold p-2.5 rounded-xl cursor-pointer transition-colors inline-flex justify-center items-center gap-2 text-xs"
+                            className="w-full bg-[#252526] hover:bg-[#383838] text-[#d4d4d4] font-bold p-2.5 rounded-xl cursor-pointer transition-colors inline-flex justify-center items-center gap-2 text-xs"
                           >
-                            <Download className="w-4 h-4 text-white" />
+                            <Download className="w-4 h-4 text-[#d4d4d4]" />
                             <span>Download Signed JSON Attestation</span>
                           </button>
 
@@ -2508,9 +2508,9 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                             onClick={() => {
                               triggerBanner('Print export is unavailable. Configure the backend print service first.');
                             }}
-                            className="w-full bg-white hover:bg-slate-50 text-slate-800 dark:bg-zinc-900 dark:hover:bg-zinc-850 dark:text-zinc-100 font-bold p-2.5 rounded-xl border border-slate-200 dark:border-zinc-800 transition-colors inline-flex justify-center items-center gap-2 text-xs cursor-pointer"
+                            className="w-full bg-[#2d2d2d] hover:bg-[#2d2d2d] text-[#d4d4d4] font-bold p-2.5 rounded-xl border border-[#3c3c3c] transition-colors inline-flex justify-center items-center gap-2 text-xs cursor-pointer"
                           >
-                            <ClipboardCheck className="w-4 h-4 text-indigo-500" />
+                            <ClipboardCheck className="w-4 h-4 text-[#3794ff]" />
                             <span>Print Executive Audit Brief</span>
                           </button>
                         </div>
@@ -2518,22 +2518,22 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                     </div>
 
                     <div className="space-y-4">
-                      <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase block">Attestation Proof Summary</span>
+                      <span className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase block">Attestation Proof Summary</span>
                       
-                      <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-850 p-4 rounded-xl space-y-3 font-mono text-[10px]">
-                        <div className="flex justify-between border-b border-slate-100 dark:border-zinc-850 pb-2">
-                          <span className="text-slate-400">Verifiably Signed:</span>
+                      <div className="bg-[#2d2d2d] border border-[#3c3c3c] p-4 rounded-xl space-y-3 font-mono text-[10px]">
+                        <div className="flex justify-between border-b border-[#3c3c3c] pb-2">
+                          <span className="text-[#9d9d9d]">Verifiably Signed:</span>
                           <span className="text-emerald-600 font-bold">YES (HMAC-SHA256)</span>
                         </div>
-                        <div className="flex justify-between border-b border-slate-100 dark:border-zinc-850 pb-2">
-                          <span className="text-slate-400">Upstream Provenance:</span>
+                        <div className="flex justify-between border-b border-[#3c3c3c] pb-2">
+                          <span className="text-[#9d9d9d]">Upstream Provenance:</span>
                           <span className="text-emerald-600 font-bold">VERIFIED</span>
                         </div>
-                        <div className="flex justify-between border-b border-slate-100 dark:border-zinc-850 pb-2">
-                          <span className="text-slate-400">NIST SP 800-161 Rank:</span>
-                          <span className="font-bold text-indigo-600 dark:text-indigo-400">Level 4 Certified</span>
+                        <div className="flex justify-between border-b border-[#3c3c3c] pb-2">
+                          <span className="text-[#9d9d9d]">NIST SP 800-161 Rank:</span>
+                          <span className="font-bold text-[#3794ff]">Level 4 Certified</span>
                         </div>
-                        <div className="p-2 bg-indigo-50/20 border border-indigo-100 rounded-lg text-[9px] text-slate-500 font-sans leading-relaxed text-left">
+                        <div className="p-2 bg-[#094771] border border-[#3794ff]/40 rounded-lg text-[9px] text-[#9d9d9d] font-sans leading-relaxed text-left">
                           "This software payload represents clean investment-grade identity artifacts. Evaluators can ingest this attestation ledger file into modern procurement frameworks to pass internal compliance checks instantly."
                         </div>
                       </div>
@@ -2543,21 +2543,21 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
               )}
 
               {/* FOOTER CONTROLS TO STEP THROUGH STAGES */}
-              <div className="flex justify-between items-center border-t border-slate-150 dark:border-zinc-800 pt-4 mt-6">
+              <div className="flex justify-between items-center border-t border-[#3c3c3c] pt-4 mt-6">
                 <button
                   disabled={activePlaybookStep === 1}
                   onClick={() => {
                     setActivePlaybookStep(prev => Math.max(1, prev - 1));
                     triggerBanner(`Back to Step ${activePlaybookStep - 1}`);
                   }}
-                  className={`px-4 py-2 bg-slate-50 border border-slate-200 dark:bg-zinc-800 dark:border-zinc-700 text-slate-600 dark:text-zinc-300 rounded-xl text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 ${
-                    activePlaybookStep === 1 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-slate-100 dark:hover:bg-zinc-750'
+                  className={`px-4 py-2 bg-[#2d2d2d] border border-[#3c3c3c] text-[#6f6f6f] rounded-xl text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 ${
+                    activePlaybookStep === 1 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-[#2d2d2d]'
                   }`}
                 >
                   <span>← Back Step</span>
                 </button>
 
-                <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">
+                <span className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase tracking-wider">
                   STAGE {activePlaybookStep} OF 9
                 </span>
 
@@ -2567,7 +2567,7 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                       setActivePlaybookStep(prev => Math.min(9, prev + 1));
                       triggerBanner(`Proceeded to Step ${activePlaybookStep + 1}`);
                     }}
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm inline-flex items-center gap-1.5"
+                    className="px-4 py-2 bg-[#094771] hover:bg-[#094771] text-[#d4d4d4] rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm inline-flex items-center gap-1.5"
                   >
                     <span>Next Stage →</span>
                   </button>
@@ -2577,7 +2577,7 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                       setActivePlaybookStep(1);
                       triggerBanner('Playbook completed! Restarted tour.');
                     }}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm inline-flex items-center gap-1.5"
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-[#d4d4d4] rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm inline-flex items-center gap-1.5"
                   >
                     <span>Restart Tour ↺</span>
                   </button>
@@ -2587,16 +2587,16 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
             </div>
 
             {/* Right Side Info Box / Cheat-Sheet (4 Columns) */}
-            <div className="lg:col-span-4 bg-slate-50 dark:bg-zinc-950 p-5 border border-slate-250 dark:border-zinc-850 rounded-2xl space-y-4">
-              <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-mono font-bold uppercase text-[10px]">
-                <Info className="w-4 h-4 text-indigo-500 shrink-0" />
+            <div className="lg:col-span-4 bg-[#2d2d2d] p-5 border border-[#3c3c3c] rounded-md space-y-4">
+              <div className="flex items-center gap-2 text-[#3794ff] font-mono font-bold uppercase text-[10px]">
+                <Info className="w-4 h-4 text-[#3794ff] shrink-0" />
                 <span>Evaluation Quick Reference</span>
               </div>
 
               <div className="space-y-4">
                 <div className="space-y-1.5">
-                  <h5 className="font-display font-black text-slate-800 dark:text-zinc-100 text-xs">Stage Context</h5>
-                  <p className="text-[11px] text-slate-500 dark:text-zinc-400 leading-relaxed font-sans">
+                  <h5 className="font-display font-black text-[#d4d4d4] text-xs">Stage Context</h5>
+                  <p className="text-[11px] text-[#9d9d9d] leading-relaxed font-sans">
                     {activePlaybookStep === 1 && "This setup captures company profiles and teams. By specifying administrative roles, teams secure keys under sovereign tenant accounts."}
                     {activePlaybookStep === 2 && "A project organizes files, Git branches, and repository endpoints. Connecting inputs triggers the parsing engine to ingest code artifacts."}
                     {activePlaybookStep === 3 && "The crawler parses raw CycloneDX files. We audit dependency coordinates, scan CVE references, and capture immutable cryptographic verification hashes."}
@@ -2609,15 +2609,15 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                   </p>
                 </div>
 
-                <div className="pt-3 border-t border-slate-200 dark:border-zinc-800 space-y-2">
-                  <h6 className="text-[10px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider">Value Proposition</h6>
-                  <div className="space-y-2 font-sans text-[11px] text-slate-500 dark:text-zinc-400">
+                <div className="pt-3 border-t border-[#3c3c3c] space-y-2">
+                  <h6 className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase tracking-wider">Value Proposition</h6>
+                  <div className="space-y-2 font-sans text-[11px] text-[#9d9d9d]">
                     <div className="flex gap-2">
-                      <span className="text-indigo-500 font-bold shrink-0">✔</span>
+                      <span className="text-[#3794ff] font-bold shrink-0">✔</span>
                       <span><strong>Continuous compliance:</strong> Passports refresh continuously, removing slow static manual audits.</span>
                     </div>
                     <div className="flex gap-2">
-                      <span className="text-indigo-500 font-bold shrink-0">✔</span>
+                      <span className="text-[#3794ff] font-bold shrink-0">✔</span>
                       <span><strong>Sovereign isolation:</strong> All evidence logs are cryptographically sealed.</span>
                     </div>
                   </div>
@@ -2633,10 +2633,10 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-fade-in" id="comm-view">
           {/* Left Column: Invitation Generator */}
           <div className="space-y-6">
-            <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl p-5 shadow-sm space-y-4">
-              <div className="border-b border-slate-100 dark:border-zinc-800 pb-2 flex items-center gap-1.5">
-                <Mail className="w-4 h-4 text-indigo-500" />
-                <h4 className="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider">
+            <div className="bg-[#2d2d2d] border border-[#3c3c3c] rounded-xl p-5 shadow-sm space-y-4">
+              <div className="border-b border-[#3c3c3c] pb-2 flex items-center gap-1.5">
+                <Mail className="w-4 h-4 text-[#3794ff]" />
+                <h4 className="text-xs font-mono font-bold text-[#9d9d9d] uppercase tracking-wider">
                   Pilot Invitation Mail Compiler
                 </h4>
               </div>
@@ -2644,42 +2644,42 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
               <div className="space-y-3 text-xs">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <label className="font-bold text-slate-700 dark:text-zinc-300">Contact Name</label>
+                    <label className="font-bold text-[#6f6f6f]">Contact Name</label>
                     <input
                       type="text"
                       value={inviteContactName}
                       onChange={(e) => setInviteContactName(e.target.value)}
-                      className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-250 dark:border-zinc-800 rounded p-2 focus:outline-none focus:border-indigo-500 font-bold text-slate-800 dark:text-zinc-100"
+                      className="w-full bg-[#2d2d2d] border border-[#3c3c3c] rounded p-2 focus:outline-none focus:border-[#3794ff]/40 font-bold text-[#d4d4d4]"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="font-bold text-slate-700 dark:text-zinc-300">Company Name</label>
+                    <label className="font-bold text-[#6f6f6f]">Company Name</label>
                     <input
                       type="text"
                       value={inviteCompanyName}
                       onChange={(e) => setInviteCompanyName(e.target.value)}
-                      className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-250 dark:border-zinc-800 rounded p-2 focus:outline-none focus:border-indigo-500 font-bold text-slate-800 dark:text-zinc-100"
+                      className="w-full bg-[#2d2d2d] border border-[#3c3c3c] rounded p-2 focus:outline-none focus:border-[#3794ff]/40 font-bold text-[#d4d4d4]"
                     />
                   </div>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="font-bold text-slate-700 dark:text-zinc-300">Pilot Terms & Scope Allocation</label>
+                  <label className="font-bold text-[#6f6f6f]">Pilot Terms & Scope Allocation</label>
                   <input
                     type="text"
                     value={inviteTerms}
                     onChange={(e) => setInviteTerms(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-250 dark:border-zinc-800 rounded p-2 focus:outline-none focus:border-indigo-500 font-bold text-slate-800 dark:text-zinc-100"
+                    className="w-full bg-[#2d2d2d] border border-[#3c3c3c] rounded p-2 focus:outline-none focus:border-[#3794ff]/40 font-bold text-[#d4d4d4]"
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="font-bold text-slate-700 dark:text-zinc-300">Compiled Invitation Text</label>
+                  <label className="font-bold text-[#6f6f6f]">Compiled Invitation Text</label>
                   <textarea
                     readOnly
                     value={generatedInviteMail}
                     rows={8}
-                    className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-250 dark:border-zinc-800 rounded p-2 font-mono text-[10px]"
+                    className="w-full bg-[#2d2d2d] border border-[#3c3c3c] rounded p-2 font-mono text-[10px]"
                   />
                 </div>
 
@@ -2688,7 +2688,7 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                     navigator.clipboard.writeText(generatedInviteMail);
                     triggerBanner('Invitation email copied to clipboard! Ready to paste into Gmail or Outlook.');
                   }}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg cursor-pointer transition-all flex items-center gap-1.5"
+                  className="bg-[#094771] hover:bg-[#094771] text-[#d4d4d4] font-bold py-2 px-4 rounded-lg cursor-pointer transition-all flex items-center gap-1.5"
                 >
                   <Send className="w-3.5 h-3.5" /> Copy Email Text
                 </button>
@@ -2696,24 +2696,24 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
             </div>
 
             {/* Partnership Proposal Template & Sales Script */}
-            <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl p-5 shadow-sm space-y-4">
-              <h4 className="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-zinc-800 pb-2">
+            <div className="bg-[#2d2d2d] border border-[#3c3c3c] rounded-xl p-5 shadow-sm space-y-4">
+              <h4 className="text-xs font-mono font-bold text-[#9d9d9d] uppercase tracking-wider border-b border-[#3c3c3c] pb-2">
                 Proposal Outline & Sales Script
               </h4>
 
               <div className="space-y-3 text-xs leading-relaxed font-sans">
                 {/* Proposal */}
-                <div className="p-3 bg-slate-50 dark:bg-zinc-950/40 rounded-xl space-y-1">
-                  <span className="font-bold text-slate-800 dark:text-zinc-200 block text-xs">Partnership Proposal PoC Outline</span>
-                  <p className="text-slate-500 text-[11px]">
+                <div className="p-3 bg-[#2d2d2d] rounded-xl space-y-1">
+                  <span className="font-bold text-[#d4d4d4] block text-xs">Partnership Proposal PoC Outline</span>
+                  <p className="text-[#9d9d9d] text-[11px]">
                     Standard framework agreement structure: 30-Day trial, 5 custom tenant licenses, automated integration webhook setup, and full-stack API access with absolute database context isolation.
                   </p>
                 </div>
 
                 {/* Sales Talk Script */}
-                <div className="p-3 bg-slate-50 dark:bg-zinc-950/40 rounded-xl space-y-1">
-                  <span className="font-bold text-slate-800 dark:text-zinc-200 block text-xs">CISO Pitch Script</span>
-                  <p className="text-slate-500 text-[11px] italic">
+                <div className="p-3 bg-[#2d2d2d] rounded-xl space-y-1">
+                  <span className="font-bold text-[#d4d4d4] block text-xs">CISO Pitch Script</span>
+                  <p className="text-[#9d9d9d] text-[11px] italic">
                     "Mr. CISO, you are scanning code but blind to the sealed origin of third-party dependencies running in your active containers. SPR seals your supply chain cryptographically so you can verify compliance metrics in real-time."
                   </p>
                 </div>
@@ -2724,10 +2724,10 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
           {/* Right Column: ROI Calculator & Checklist */}
           <div className="space-y-6">
             {/* ROI Calculator */}
-            <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl p-5 shadow-sm space-y-4">
-              <div className="border-b border-slate-100 dark:border-zinc-800 pb-2 flex items-center gap-1.5">
-                <DollarSign className="w-4.5 h-4.5 text-indigo-500" />
-                <h4 className="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider">
+            <div className="bg-[#2d2d2d] border border-[#3c3c3c] rounded-xl p-5 shadow-sm space-y-4">
+              <div className="border-b border-[#3c3c3c] pb-2 flex items-center gap-1.5">
+                <DollarSign className="w-4.5 h-4.5 text-[#3794ff]" />
+                <h4 className="text-xs font-mono font-bold text-[#9d9d9d] uppercase tracking-wider">
                   Partnership ROI Calculator
                 </h4>
               </div>
@@ -2735,50 +2735,50 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
               <div className="space-y-4 text-xs font-sans">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <label className="font-bold text-slate-700 dark:text-zinc-300">Software Assets Count</label>
+                    <label className="font-bold text-[#6f6f6f]">Software Assets Count</label>
                     <input
                       type="number"
                       value={calcAssetsCount}
                       onChange={(e) => setCalcAssetsCount(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-250 dark:border-zinc-800 rounded p-2 text-slate-800 dark:text-zinc-100 font-bold"
+                      className="w-full bg-[#2d2d2d] border border-[#3c3c3c] rounded p-2 text-[#d4d4d4] font-bold"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="font-bold text-slate-700 dark:text-zinc-300">Turnaround Hours Saved / Asset</label>
+                    <label className="font-bold text-[#6f6f6f]">Turnaround Hours Saved / Asset</label>
                     <input
                       type="number"
                       value={calcHrsSaved}
                       onChange={(e) => setCalcHrsSaved(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-250 dark:border-zinc-800 rounded p-2 text-slate-800 dark:text-zinc-100 font-bold"
+                      className="w-full bg-[#2d2d2d] border border-[#3c3c3c] rounded p-2 text-[#d4d4d4] font-bold"
                     />
                   </div>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="font-bold text-slate-700 dark:text-zinc-300">CISO Evaluation Liability Mitigated (0-100)</label>
+                  <label className="font-bold text-[#6f6f6f]">CISO Evaluation Liability Mitigated (0-100)</label>
                   <input
                     type="range"
                     min="10"
                     max="100"
                     value={calcRiskScore}
                     onChange={(e) => setCalcRiskScore(parseInt(e.target.value))}
-                    className="w-full accent-indigo-600 cursor-pointer"
+                    className="w-full accent-[#3794ff] cursor-pointer"
                   />
                 </div>
 
                 {/* Calculator Output */}
-                <div className="grid grid-cols-3 gap-3 text-center border-t border-slate-100 dark:border-zinc-800 pt-3">
-                  <div className="p-2 bg-slate-50 dark:bg-zinc-950 rounded-xl">
-                    <span className="text-[9px] text-slate-400 font-mono block">Labor Saved/yr</span>
-                    <strong className="text-sm font-mono text-indigo-600 dark:text-indigo-400">${roiResult.laborSavings.toLocaleString()}</strong>
+                <div className="grid grid-cols-3 gap-3 text-center border-t border-[#3c3c3c] pt-3">
+                  <div className="p-2 bg-[#2d2d2d] rounded-xl">
+                    <span className="text-[9px] text-[#9d9d9d] font-mono block">Labor Saved/yr</span>
+                    <strong className="text-sm font-mono text-[#3794ff]">${roiResult.laborSavings.toLocaleString()}</strong>
                   </div>
-                  <div className="p-2 bg-slate-50 dark:bg-zinc-950 rounded-xl">
-                    <span className="text-[9px] text-slate-400 font-mono block">Risk Mitigated</span>
-                    <strong className="text-sm font-mono text-indigo-600 dark:text-indigo-400">${roiResult.liabilityMitigatedValue.toLocaleString()}</strong>
+                  <div className="p-2 bg-[#2d2d2d] rounded-xl">
+                    <span className="text-[9px] text-[#9d9d9d] font-mono block">Risk Mitigated</span>
+                    <strong className="text-sm font-mono text-[#3794ff]">${roiResult.liabilityMitigatedValue.toLocaleString()}</strong>
                   </div>
-                  <div className="p-2 bg-indigo-600 rounded-xl text-white">
-                    <span className="text-[9px] text-indigo-200 font-mono block">Total SPR Savings</span>
+                  <div className="p-2 bg-[#094771] rounded-xl text-[#d4d4d4]">
+                    <span className="text-[9px] text-[#3794ff] font-mono block">Total SPR Savings</span>
                     <strong className="text-sm font-mono block">${roiResult.totalROI.toLocaleString()}</strong>
                   </div>
                 </div>
@@ -2786,9 +2786,9 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
             </div>
 
             {/* Success Onboarding Checklist */}
-            <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl p-5 shadow-sm space-y-4">
-              <div className="border-b border-slate-100 dark:border-zinc-800 pb-2 flex justify-between items-center">
-                <h4 className="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider">
+            <div className="bg-[#2d2d2d] border border-[#3c3c3c] rounded-xl p-5 shadow-sm space-y-4">
+              <div className="border-b border-[#3c3c3c] pb-2 flex justify-between items-center">
+                <h4 className="text-xs font-mono font-bold text-[#9d9d9d] uppercase tracking-wider">
                   Pilot Customer Success Checklist
                 </h4>
                 <span className="text-[9px] font-mono text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded font-bold">
@@ -2798,14 +2798,14 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
 
               <div className="space-y-2 text-xs font-sans">
                 {onboardChecklist.map(item => (
-                  <label key={item.id} className="flex items-center gap-2.5 p-2 bg-slate-50 dark:bg-zinc-950/40 border border-slate-100 dark:border-zinc-800 rounded-xl cursor-pointer">
+                  <label key={item.id} className="flex items-center gap-2.5 p-2 bg-[#2d2d2d] border border-[#3c3c3c] rounded-xl cursor-pointer">
                     <input
                       type="checkbox"
                       checked={item.done}
                       onChange={() => toggleOnboardCheck(item.id)}
-                      className="text-indigo-600"
+                      className="text-[#3794ff]"
                     />
-                    <span className={`font-semibold ${item.done ? 'line-through text-slate-400' : 'text-slate-800 dark:text-zinc-200'}`}>
+                    <span className={`font-semibold ${item.done ? 'line-through text-[#9d9d9d]' : 'text-[#d4d4d4]'}`}>
                       {item.text}
                     </span>
                   </label>
@@ -2818,11 +2818,11 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
 
       {/* --- SUB-VIEW 7: ADMIN CONSOLE DATABASE LOGS --- */}
       {localSubTab === 'admin' && (
-        <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl shadow-sm p-6 space-y-6 animate-fade-in" id="admin-view">
-          <div className="border-b border-slate-100 dark:border-zinc-800 pb-3 flex justify-between items-center">
+        <div className="bg-[#2d2d2d] border border-[#3c3c3c] rounded-xl shadow-sm p-6 space-y-6 animate-fade-in" id="admin-view">
+          <div className="border-b border-[#3c3c3c] pb-3 flex justify-between items-center">
             <div>
-              <h3 className="text-sm font-display font-bold text-slate-900 dark:text-zinc-50">Central Pilot Program Database Control</h3>
-              <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+              <h3 className="text-sm font-display font-bold text-[#d4d4d4]">Central Pilot Program Database Control</h3>
+              <p className="text-xs text-[#9d9d9d] mt-0.5">
                 Inspect raw backend records mapped in your Drizzle PostgreSQL schema. Check active RBAC security contexts.
               </p>
             </div>
@@ -2833,7 +2833,7 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
                 localStorage.removeItem('spr_pilot_assets');
                 triggerBanner('Local overrides cleared. Reload the page to resync from the backend.');
               }}
-              className="bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 border border-rose-200 hover:bg-rose-100 p-2 text-xs font-bold rounded-lg cursor-pointer"
+              className="bg-[#f14c4c]/15 text-[#f14c4c] border border-[#f14c4c]/40 hover:bg-[#f14c4c]/15 p-2 text-xs font-bold rounded-lg cursor-pointer"
             >
               Reset Database Cache
             </button>
@@ -2841,36 +2841,36 @@ Trust OS & Software Passport Registry (SPR) Core Team`;
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs leading-relaxed">
             {/* Left: Active Organization Records */}
-            <div className="p-4 bg-slate-50 dark:bg-zinc-950/30 border border-slate-150 dark:border-zinc-800 rounded-xl space-y-3">
-              <h5 className="font-bold text-slate-800 dark:text-zinc-200 font-mono text-[11px] uppercase tracking-wider block">
+            <div className="p-4 bg-[#2d2d2d] border border-[#3c3c3c] rounded-xl space-y-3">
+              <h5 className="font-bold text-[#d4d4d4] font-mono text-[11px] uppercase tracking-wider block">
                 Active Organization Records ({organizations.length})
               </h5>
               <div className="space-y-2 font-mono text-[10px]">
                 {organizations.map(o => (
-                  <div key={o.id} className="p-2.5 bg-white dark:bg-zinc-900 rounded border border-slate-150 flex justify-between items-center">
+                  <div key={o.id} className="p-2.5 bg-[#2d2d2d] rounded border border-[#3c3c3c] flex justify-between items-center">
                     <div>
-                      <strong className="text-slate-800 dark:text-zinc-200">{o.name}</strong>
-                      <span className="block text-slate-400 text-[9px]">ID: {o.id} | Joined: {o.joinedDate}</span>
+                      <strong className="text-[#d4d4d4]">{o.name}</strong>
+                      <span className="block text-[#9d9d9d] text-[9px]">ID: {o.id} | Joined: {o.joinedDate}</span>
                     </div>
-                    <span className="bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 font-bold px-1.5 py-0.5 rounded uppercase">{o.status}</span>
+                    <span className="bg-[#094771] text-[#3794ff] font-bold px-1.5 py-0.5 rounded uppercase">{o.status}</span>
                   </div>
                 ))}
               </div>
             </div>
 
             {/* Right: Contact Mappings */}
-            <div className="p-4 bg-slate-50 dark:bg-zinc-950/30 border border-slate-150 dark:border-zinc-800 rounded-xl space-y-3">
-              <h5 className="font-bold text-slate-800 dark:text-zinc-200 font-mono text-[11px] uppercase tracking-wider block">
+            <div className="p-4 bg-[#2d2d2d] border border-[#3c3c3c] rounded-xl space-y-3">
+              <h5 className="font-bold text-[#d4d4d4] font-mono text-[11px] uppercase tracking-wider block">
                 Active Contact Mappings ({contacts.length})
               </h5>
               <div className="space-y-2 font-mono text-[10px]">
                 {contacts.map(c => (
-                  <div key={c.id} className="p-2.5 bg-white dark:bg-zinc-900 rounded border border-slate-150 flex justify-between items-center">
+                  <div key={c.id} className="p-2.5 bg-[#2d2d2d] rounded border border-[#3c3c3c] flex justify-between items-center">
                     <div>
-                      <strong className="text-slate-800 dark:text-zinc-200">{c.name}</strong>
-                      <span className="block text-slate-400 text-[9px]">{c.roleTitle} | {c.email}</span>
+                      <strong className="text-[#d4d4d4]">{c.name}</strong>
+                      <span className="block text-[#9d9d9d] text-[9px]">{c.roleTitle} | {c.email}</span>
                     </div>
-                    <span className="text-slate-500 font-bold">Mapped ✓</span>
+                    <span className="text-[#9d9d9d] font-bold">Mapped ✓</span>
                   </div>
                 ))}
               </div>

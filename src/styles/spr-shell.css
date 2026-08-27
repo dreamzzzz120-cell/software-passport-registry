@@ -1,56 +1,48 @@
-/* SPR premium shell — global chrome layer. */
-:root{--spr-bg:#050914;--spr-panel:rgba(12,18,35,.62);--spr-panel-strong:rgba(10,16,31,.84);--spr-line:rgba(255,255,255,.09);--spr-cyan:#67e8f9;--spr-indigo:#818cf8;--spr-text:#e6eefc;}
+/* SPR shell — global chrome layer. Flat VS Code Dark+ theme, no blur/gradient/glow. */
+:root{--spr-bg:#1e1e1e;--spr-panel:#252526;--spr-panel-strong:#252526;--spr-line:#3c3c3c;--spr-cyan:#3794ff;--spr-indigo:#3794ff;--spr-text:#d4d4d4;}
 *{box-sizing:border-box}
 html{background:var(--spr-bg)}
 body{min-height:100vh;background:var(--spr-bg);color:var(--spr-text)}
 button,input,select,textarea{font:inherit}
-.spr-shell-header{position:sticky;top:0;z-index:40;border-bottom:1px solid var(--spr-line);background:rgba(5,9,20,.68);backdrop-filter:blur(24px) saturate(150%);-webkit-backdrop-filter:blur(24px) saturate(150%);box-shadow:0 10px 40px rgba(0,0,0,.22)}
-.spr-brand-mark{display:inline-flex;align-items:center;gap:.65rem}.spr-brand-dot{width:.62rem;height:.62rem;border-radius:999px;background:var(--spr-cyan);box-shadow:0 0 18px rgba(34,211,238,.9)}
+.spr-shell-header{position:sticky;top:0;z-index:40;border-bottom:1px solid var(--spr-line);background:var(--spr-panel)}
+.spr-brand-mark{display:inline-flex;align-items:center;gap:.65rem}.spr-brand-dot{width:.62rem;height:.62rem;border-radius:999px;background:var(--spr-cyan)}
 .spr-shell-content{position:relative;z-index:1}.spr-section-label{font-size:.68rem;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--spr-cyan)}
 
 /* Authenticated command-center chrome. */
-body:has(aside){background:radial-gradient(circle at 12% -10%,rgba(34,211,238,.10),transparent 30%),radial-gradient(circle at 92% 8%,rgba(99,102,241,.10),transparent 32%),var(--spr-bg)}
-body:has(aside) header{background:rgba(5,9,20,.68)!important;border-color:var(--spr-line)!important;backdrop-filter:blur(24px) saturate(150%);-webkit-backdrop-filter:blur(24px) saturate(150%);box-shadow:0 10px 40px rgba(0,0,0,.22)}
-body:has(aside) header button:first-child{position:relative;transition:transform .2s ease,filter .2s ease}body:has(aside) header button:first-child:hover{transform:translateY(-1px);filter:brightness(1.12)}
-body:has(aside) aside{background:linear-gradient(180deg,rgba(5,9,20,.72),rgba(5,9,20,.42));border-color:var(--spr-line)!important;backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px);position:relative}
-body:has(aside) aside:after{content:"";position:absolute;right:-1px;top:8%;width:1px;height:84%;background:linear-gradient(transparent,rgba(103,232,249,.25),transparent);pointer-events:none}
+body:has(aside){background:var(--spr-bg)}
+body:has(aside) header{background:var(--spr-panel)!important;border-color:var(--spr-line)!important}
+body:has(aside) header button:first-child{position:relative;transition:transform .15s ease}body:has(aside) header button:first-child:hover{transform:translateY(-1px)}
+body:has(aside) aside{background:var(--spr-panel);border-color:var(--spr-line)!important;position:relative}
 body:has(aside) aside nav{display:flex;flex-direction:column;gap:.28rem;padding:.3rem}
-body:has(aside) aside nav button{position:relative;border:1px solid transparent;transition:transform .18s ease,background .18s ease,color .18s ease,box-shadow .18s ease,border-color .18s ease;overflow:hidden}
-body:has(aside) aside nav button:before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(103,232,249,.08),transparent 70%);opacity:0;transition:opacity .18s ease;pointer-events:none}
-body:has(aside) aside nav button:hover{transform:translateX(3px);background:rgba(255,255,255,.055)!important;border-color:rgba(255,255,255,.07)}
-body:has(aside) aside nav button:hover:before{opacity:1}
-body:has(aside) aside nav button[class*="bg-cyan"]{background:linear-gradient(100deg,rgba(34,211,238,.17),rgba(99,102,241,.09))!important;color:#cffafe!important;border-color:rgba(34,211,238,.14);box-shadow:inset 3px 0 0 var(--spr-cyan),0 0 30px rgba(34,211,238,.07)}
+body:has(aside) aside nav button{position:relative;border:1px solid transparent;transition:background .12s ease,color .12s ease,border-color .12s ease}
+body:has(aside) aside nav button:hover{background:#383838!important;border-color:var(--spr-line)}
 body:has(aside) main{position:relative;min-height:calc(100vh - 73px)}
-body:has(aside) main:before{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 8% 0%,rgba(34,211,238,.075),transparent 30%),radial-gradient(circle at 92% 16%,rgba(99,102,241,.075),transparent 30%)}
-body:has(aside) main>*{position:relative;z-index:1;animation:spr-page-enter .28s ease-out both}
-body:has(aside) main [class*="rounded-xl"],body:has(aside) main [class*="rounded-2xl"]{border-color:rgba(255,255,255,.085)}
-body:has(aside) main [class*="shadow"]{box-shadow:0 18px 70px rgba(0,0,0,.22)}
-body:has(aside) main .bg-white,body:has(aside) main .bg-slate-50{background:linear-gradient(145deg,rgba(15,23,42,.76),rgba(15,23,42,.52))!important}
-body:has(aside) main .dark\:bg-zinc-900,body:has(aside) main .dark\:bg-zinc-800{background:linear-gradient(145deg,rgba(12,18,35,.78),rgba(12,18,35,.52))!important}
+body:has(aside) main>*{position:relative;z-index:1}
+body:has(aside) main .bg-white,body:has(aside) main .bg-slate-50{background:var(--spr-panel)!important}
 
 /* Dashboard command-center controls. */
 #msp-dashboard-view{isolation:isolate}
-#msp-dashboard-view button{transition:transform .18s ease,box-shadow .18s ease,background .18s ease,border-color .18s ease}
+#msp-dashboard-view button{transition:transform .15s ease,background .15s ease,border-color .15s ease}
 #msp-dashboard-view button:hover:not(:disabled){transform:translateY(-1px)}
-#msp-dashboard-view [class*="rounded-2xl"],#msp-dashboard-view [class*="rounded-xl"]{backdrop-filter:blur(18px) saturate(130%);-webkit-backdrop-filter:blur(18px) saturate(130%)}
-#msp-dashboard-view > div:first-child{position:sticky;top:5.4rem;z-index:15;background:rgba(8,13,27,.72)!important;border:1px solid rgba(255,255,255,.09)!important;box-shadow:0 16px 45px rgba(0,0,0,.24),0 0 35px rgba(34,211,238,.04);backdrop-filter:blur(24px) saturate(145%);-webkit-backdrop-filter:blur(24px) saturate(145%)}
+#msp-dashboard-view > div:first-child{position:sticky;top:5.4rem;z-index:15;background:var(--spr-panel)!important;border:1px solid var(--spr-line)!important}
 
-/* Public cover surface. */
-body:has(> div form),body:has(form){background:radial-gradient(circle at 20% 15%,rgba(34,211,238,.15),transparent 30%),radial-gradient(circle at 82% 72%,rgba(99,102,241,.16),transparent 34%),var(--spr-bg)}
-body:has(form) form{padding:2rem;border:1px solid var(--spr-line);border-radius:1.5rem;background:linear-gradient(145deg,rgba(15,23,42,.80),rgba(15,23,42,.46));box-shadow:0 30px 100px rgba(0,0,0,.42),0 0 70px rgba(34,211,238,.07);backdrop-filter:blur(28px) saturate(145%);-webkit-backdrop-filter:blur(28px) saturate(145%)}
-body:has(form) form input{width:100%;border:1px solid rgba(255,255,255,.1);border-radius:.8rem;background:rgba(255,255,255,.045);color:#f8fafc;padding:.8rem .9rem;outline:none;transition:border-color .18s,box-shadow .18s,background .18s}
-body:has(form) form input:focus{border-color:rgba(103,232,249,.55);box-shadow:0 0 0 3px rgba(34,211,238,.1),0 0 30px rgba(34,211,238,.08);background:rgba(255,255,255,.065)}
-body:has(form) form button{border-radius:.8rem;border:1px solid rgba(255,255,255,.1);padding:.75rem 1rem;color:#e2e8f0;background:rgba(255,255,255,.045);transition:transform .18s,background .18s,border-color .18s,box-shadow .18s}
-body:has(form) form button:hover:not(:disabled){transform:translateY(-1px);background:rgba(255,255,255,.08);border-color:rgba(103,232,249,.25);box-shadow:0 8px 30px rgba(0,0,0,.2)}
-body:has(form) form button[type="submit"]{background:linear-gradient(135deg,#67e8f9,#818cf8);color:#06101d;border:0;font-weight:800;box-shadow:0 10px 35px rgba(34,211,238,.18)}
-body:has(form) form [role="alert"],body:has(form) form [role="status"]{border-radius:.75rem;padding:.75rem;background:rgba(255,255,255,.05);border:1px solid var(--spr-line)}
+/* Public cover surface (login / signup forms). */
+body:has(> div form),body:has(form){background:var(--spr-bg)}
+body:has(form) form{padding:2rem;border:1px solid var(--spr-line);border-radius:.5rem;background:var(--spr-panel)}
+body:has(form) form input{width:100%;border:1px solid var(--spr-line);border-radius:.4rem;background:#2d2d2d;color:var(--spr-text);padding:.8rem .9rem;outline:none;transition:border-color .15s,background .15s}
+body:has(form) form input:focus{border-color:var(--spr-cyan);background:#2d2d2d}
+body:has(form) form button{border-radius:.4rem;border:1px solid var(--spr-line);padding:.75rem 1rem;color:var(--spr-text);background:#2d2d2d;transition:background .15s,border-color .15s}
+body:has(form) form button:hover:not(:disabled){background:#383838;border-color:var(--spr-line)}
+body:has(form) form button[type="submit"]{background:#0e639c;color:#fff;border:0;font-weight:700}
+body:has(form) form button[type="submit"]:hover:not(:disabled){background:#1177bb}
+body:has(form) form [role="alert"],body:has(form) form [role="status"]{border-radius:.4rem;padding:.75rem;background:#2d2d2d;border:1px solid var(--spr-line)}
 
-@keyframes spr-page-enter{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
 @media(max-width:767px){body:has(aside) aside{border-right:0!important;border-bottom:1px solid var(--spr-line)!important}body:has(aside) aside nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));max-height:15rem;overflow:auto}#msp-dashboard-view>div:first-child{position:relative;top:auto}}
 
-/* Shared treatment for the older workflow surfaces. Keep the data models and
-   actions intact while bringing every authenticated route into the same OS. */
+/* Safety net for the older workflow surfaces in case any literal light-theme
+   utility class slips through on a data-driven code path. Keeps them on the
+   same flat dark surface as the rest of the app. */
 body:has(aside) #msp-integrations-view,
 body:has(aside) #msp-clients-index,
 body:has(aside) #msp-vendors-view-dashboard,
@@ -63,7 +55,7 @@ body:has(aside) #msp-clients-index .bg-white,
 body:has(aside) #msp-clients-index .bg-slate-50,
 body:has(aside) #msp-vendors-view-dashboard .bg-white,
 body:has(aside) #msp-vendors-view-dashboard .bg-slate-50 {
-  background: linear-gradient(145deg, rgba(15,23,42,.76), rgba(15,23,42,.48)) !important;
+  background: var(--spr-panel) !important;
   border-color: var(--spr-line) !important;
 }
 body:has(aside) #msp-integrations-view .text-slate-900,
@@ -72,7 +64,7 @@ body:has(aside) #msp-clients-index .text-slate-900,
 body:has(aside) #msp-clients-index .text-slate-800,
 body:has(aside) #msp-vendors-view-dashboard .text-slate-900,
 body:has(aside) #msp-vendors-view-dashboard .text-slate-800 {
-  color: #f8fafc !important;
+  color: var(--spr-text) !important;
 }
 body:has(aside) #msp-integrations-view .text-slate-700,
 body:has(aside) #msp-integrations-view .text-slate-600,
@@ -80,7 +72,7 @@ body:has(aside) #msp-clients-index .text-slate-700,
 body:has(aside) #msp-clients-index .text-slate-600,
 body:has(aside) #msp-vendors-view-dashboard .text-slate-700,
 body:has(aside) #msp-vendors-view-dashboard .text-slate-600 {
-  color: #cbd5e1 !important;
+  color: #9d9d9d !important;
 }
 body:has(aside) #msp-integrations-view input,
 body:has(aside) #msp-integrations-view select,
@@ -88,8 +80,8 @@ body:has(aside) #msp-clients-index input,
 body:has(aside) #msp-clients-index select,
 body:has(aside) #msp-vendors-view-dashboard input,
 body:has(aside) #msp-vendors-view-dashboard select {
-  color: #e2e8f0;
-  background-color: rgba(2,6,23,.45);
+  color: var(--spr-text);
+  background-color: #2d2d2d;
   border-color: var(--spr-line);
 }
 body:has(aside) #msp-integrations-view .border-slate-100,
@@ -101,5 +93,5 @@ body:has(aside) #msp-vendors-view-dashboard .border-slate-200 {
   border-color: var(--spr-line) !important;
 }
 body:has(aside) #msp-integrations-view .bg-slate-900 {
-  background: linear-gradient(145deg, rgba(10,16,31,.92), rgba(15,23,42,.72)) !important;
+  background: var(--spr-panel) !important;
 }

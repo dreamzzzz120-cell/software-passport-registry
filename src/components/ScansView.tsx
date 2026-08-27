@@ -432,8 +432,8 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
       {/* Page Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-xl font-display font-bold text-slate-900">SBOM Scanning & Attestation</h1>
-          <p className="text-xs text-slate-500 font-sans mt-1">
+          <h1 className="text-xl font-display font-bold text-[#d4d4d4]">SBOM Scanning & Attestation</h1>
+          <p className="text-xs text-[#9d9d9d] font-sans mt-1">
             Analyze JSON software manifests to compile trust indexes, and manage automated scanning schedules for critical production assets.
           </p>
         </div>
@@ -441,7 +441,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
         {activeSubTab === 'schedules' && (
           <button
             onClick={() => setShowAddSchedule(!showAddSchedule)}
-            className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm cursor-pointer ml-auto md:ml-0"
+            className="px-3.5 py-2 bg-[#094771] hover:bg-[#094771] text-[#d4d4d4] rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm cursor-pointer ml-auto md:ml-0"
             id="btn-toggle-add-schedule"
           >
             {showAddSchedule ? <Sliders className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
@@ -451,13 +451,13 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
       </div>
 
       {/* Tab Switcher */}
-      <div className="flex border-b border-slate-200 gap-1" id="scans-view-tabs">
+      <div className="flex border-b border-[#3c3c3c] gap-1" id="scans-view-tabs">
         <button
           onClick={() => setActiveSubTab('scanner')}
           className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer ${
             activeSubTab === 'scanner'
-              ? 'border-indigo-600 text-indigo-600 bg-indigo-50/10'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
+              ? 'border-[#3794ff]/40 text-[#3794ff] bg-[#094771]'
+              : 'border-transparent text-[#9d9d9d] hover:text-[#d4d4d4]'
           }`}
           id="btn-subtab-scanner"
         >
@@ -470,15 +470,15 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
           onClick={() => setActiveSubTab('schedules')}
           className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer ${
             activeSubTab === 'schedules'
-              ? 'border-indigo-600 text-indigo-600 bg-indigo-50/10'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
+              ? 'border-[#3794ff]/40 text-[#3794ff] bg-[#094771]'
+              : 'border-transparent text-[#9d9d9d] hover:text-[#d4d4d4]'
           }`}
           id="btn-subtab-schedules"
         >
           <div className="flex items-center gap-1.5">
             <Calendar className="w-3.5 h-3.5" />
             <span>Automated Scanning Schedules</span>
-            <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold font-mono bg-indigo-100 text-indigo-800">
+            <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold font-mono bg-[#094771] text-[#3794ff]">
               {schedules.length}
             </span>
           </div>
@@ -497,7 +497,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
                 onDrop={handleDrop}
                 onClick={() => fileInputRef.current?.click()}
                 className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all ${
-                  isDragging ? 'border-indigo-600 bg-indigo-50/55' : 'border-slate-300 hover:border-indigo-400 bg-white'
+                  isDragging ? 'border-[#3794ff]/40 bg-[#094771]' : 'border-[#3c3c3c] hover:border-[#3794ff]/40 bg-[#2d2d2d]'
                 }`}
                 id="drag-drop-uploader-widget"
               >
@@ -508,22 +508,22 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
                   accept=".json,.xml,.spdx"
                   className="hidden"
                 />
-                <Upload className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-                <h3 className="text-sm font-bold text-slate-800">Drag & Drop SBOM Manifest File Here</h3>
-                <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1">
-                  Supports CycloneDX JSON, SPDX, or digital binary attestations. Or <span className="text-indigo-600 font-semibold underline">click to browse</span>.
+                <Upload className="w-12 h-12 text-[#9d9d9d] mx-auto mb-4" />
+                <h3 className="text-sm font-bold text-[#d4d4d4]">Drag & Drop SBOM Manifest File Here</h3>
+                <p className="text-xs text-[#9d9d9d] max-w-sm mx-auto mt-1">
+                  Supports CycloneDX JSON, SPDX, or digital binary attestations. Or <span className="text-[#3794ff] font-semibold underline">click to browse</span>.
                 </p>
               </div>
 
               {/* Universal Generic Scanner Panel */}
-              <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-4">
-                <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-                  <div className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg">
+              <div className="bg-[#2d2d2d] rounded-xl border border-[#3c3c3c] p-5 shadow-sm space-y-4">
+                <div className="flex items-center gap-2 border-b border-[#3c3c3c] pb-3">
+                  <div className="p-1.5 bg-[#094771] text-[#3794ff] rounded-lg">
                     <Radar className="w-4 h-4" />
                   </div>
                   <div>
-                    <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider font-mono">Universal Software Trust Agent Scanner</h3>
-                    <p className="text-[10px] text-slate-500 font-sans">Trigger the 8-engine AI Security pipeline and compile cryptographic evidence logs persistently in the database.</p>
+                    <h3 className="text-xs font-bold text-[#d4d4d4] uppercase tracking-wider font-mono">Universal Software Trust Agent Scanner</h3>
+                    <p className="text-[10px] text-[#9d9d9d] font-sans">Trigger the 8-engine AI Security pipeline and compile cryptographic evidence logs persistently in the database.</p>
                   </div>
                 </div>
 
@@ -531,11 +531,11 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Software Passport Selector */}
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase font-mono">Software Passport Target</label>
+                      <label className="text-[10px] font-bold text-[#9d9d9d] uppercase font-mono">Software Passport Target</label>
                       <select
                         value={selectedPassportId}
                         onChange={(e) => setSelectedPassportId(e.target.value)}
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none transition-all font-sans font-bold text-slate-700"
+                        className="w-full px-3 py-2 bg-[#2d2d2d] border border-[#3c3c3c] rounded-lg text-xs focus:ring-1 focus:ring-[#3794ff] focus:outline-none transition-all font-sans font-bold text-[#6f6f6f]"
                       >
                         {(passports || []).map(p => (
                           <option key={p.id} value={p.id}>{p.name} (v{p.version}) • {p.publisher}</option>
@@ -545,11 +545,11 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
 
                     {/* Tenant Client Target */}
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase font-mono">Client (Tenant Context)</label>
+                      <label className="text-[10px] font-bold text-[#9d9d9d] uppercase font-mono">Client (Tenant Context)</label>
                       <select
                         value={chosenClientName}
                         onChange={(e) => setChosenClientName(e.target.value)}
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none transition-all font-sans font-semibold text-slate-700"
+                        className="w-full px-3 py-2 bg-[#2d2d2d] border border-[#3c3c3c] rounded-lg text-xs focus:ring-1 focus:ring-[#3794ff] focus:outline-none transition-all font-sans font-semibold text-[#6f6f6f]"
                       >
                         {clients && clients.length > 0 ? (
                           clients.map(c => (
@@ -572,14 +572,14 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
                     const activeP = (passports || []).find(p => p.id === selectedPassportId);
                     if (!activeP) return null;
                     return (
-                      <div className="p-3 bg-indigo-50/30 rounded-lg border border-indigo-100 text-xs flex items-center justify-between">
+                      <div className="p-3 bg-[#094771] rounded-lg border border-[#3794ff]/40 text-xs flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <Shield className="w-4 h-4 text-indigo-600" />
-                          <span className="font-medium text-slate-600">Selected: <strong className="text-slate-800">{activeP.name}</strong> (v{activeP.version})</span>
+                          <Shield className="w-4 h-4 text-[#3794ff]" />
+                          <span className="font-medium text-[#6f6f6f]">Selected: <strong className="text-[#d4d4d4]">{activeP.name}</strong> (v{activeP.version})</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-mono text-slate-500">License: {activeP.licenseType}</span>
-                          <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-800 text-[9px] font-bold font-mono">Verified Passport</span>
+                          <span className="text-[10px] font-mono text-[#9d9d9d]">License: {activeP.licenseType}</span>
+                          <span className="px-2 py-0.5 rounded bg-[#094771] text-[#3794ff] text-[9px] font-bold font-mono">Verified Passport</span>
                         </div>
                       </div>
                     );
@@ -589,10 +589,10 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
                   <button
                     type="submit"
                     disabled={isScanning || !selectedPassportId}
-                    className={`w-full py-2 px-4 rounded-lg text-xs font-bold text-white transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    className={`w-full py-2 px-4 rounded-lg text-xs font-bold text-[#d4d4d4] transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                       isScanning || !selectedPassportId
-                        ? 'bg-slate-300 cursor-not-allowed'
-                        : 'bg-indigo-600 hover:bg-indigo-700 shadow-sm'
+                        ? 'bg-[#3c3c3c] cursor-not-allowed'
+                        : 'bg-[#094771] hover:bg-[#094771] shadow-sm'
                     }`}
                   >
                     <Play className="w-3.5 h-3.5" />
@@ -606,63 +606,63 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
             <div className="space-y-6 animate-in fade-in duration-200">
               {/* Stats Banner Grid */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex items-center gap-3">
-                  <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-lg">
+                <div className="bg-[#2d2d2d] rounded-xl border border-[#3c3c3c] p-4 shadow-sm flex items-center gap-3">
+                  <div className="p-2.5 bg-[#094771] text-[#3794ff] rounded-lg">
                     <Activity className="w-5 h-5" />
                   </div>
                   <div>
-                    <div className="text-xs font-mono font-bold text-slate-400 uppercase">Active Pipelines</div>
-                    <div className="text-lg font-bold text-slate-800">
+                    <div className="text-xs font-mono font-bold text-[#9d9d9d] uppercase">Active Pipelines</div>
+                    <div className="text-lg font-bold text-[#d4d4d4]">
                       {schedules.filter(s => s.status === 'Active').length} / {schedules.length}
                     </div>
-                    <div className="text-[9px] text-slate-500">Continuous background sweeps</div>
+                    <div className="text-[9px] text-[#9d9d9d]">Continuous background sweeps</div>
                   </div>
                 </div>
 
-                <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex items-center gap-3">
+                <div className="bg-[#2d2d2d] rounded-xl border border-[#3c3c3c] p-4 shadow-sm flex items-center gap-3">
                   <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-lg">
                     <ShieldCheck className="w-5 h-5" />
                   </div>
                   <div>
-                    <div className="text-xs font-mono font-bold text-slate-400 uppercase">Asset Coverage</div>
-                    <div className="text-lg font-bold text-slate-800">
+                    <div className="text-xs font-mono font-bold text-[#9d9d9d] uppercase">Asset Coverage</div>
+                    <div className="text-lg font-bold text-[#d4d4d4]">
                       {(() => {
                         const uniqueProtected = new Set(schedules.filter(s => s.status === 'Active').map(s => s.assetHostName)).size;
                         return `${uniqueProtected} / ${prodAssets.length}`;
                       })()}
                     </div>
-                    <div className="text-[9px] text-slate-500">Critical Production nodes covered</div>
+                    <div className="text-[9px] text-[#9d9d9d]">Critical Production nodes covered</div>
                   </div>
                 </div>
 
-                <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex items-center gap-3">
+                <div className="bg-[#2d2d2d] rounded-xl border border-[#3c3c3c] p-4 shadow-sm flex items-center gap-3">
                   <div className="p-2.5 bg-amber-50 text-amber-600 rounded-lg">
                     <TrendingUp className="w-5 h-5" />
                   </div>
                   <div>
-                    <div className="text-xs font-mono font-bold text-slate-400 uppercase">Coverage Ratio</div>
-                    <div className="text-lg font-bold text-slate-800">
+                    <div className="text-xs font-mono font-bold text-[#9d9d9d] uppercase">Coverage Ratio</div>
+                    <div className="text-lg font-bold text-[#d4d4d4]">
                       {(() => {
                         const uniqueProtected = new Set(schedules.filter(s => s.status === 'Active').map(s => s.assetHostName)).size;
                         const pct = Math.round((uniqueProtected / prodAssets.length) * 100) || 0;
                         return `${pct}%`;
                       })()}
                     </div>
-                    <div className="text-[9px] text-slate-500">Automated recurring security trust</div>
+                    <div className="text-[9px] text-[#9d9d9d]">Automated recurring security trust</div>
                   </div>
                 </div>
               </div>
 
               {/* Configure New Scan Schedule Form */}
               {showAddSchedule && (
-                <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-md space-y-4 animate-in slide-in-from-top duration-200" id="scan-schedule-creator-panel">
-                  <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-                    <div className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg">
+                <div className="bg-[#2d2d2d] rounded-xl border border-[#3c3c3c] p-5 shadow-md space-y-4 animate-in slide-in-from-top duration-200" id="scan-schedule-creator-panel">
+                  <div className="flex items-center gap-2 border-b border-[#3c3c3c] pb-3">
+                    <div className="p-1.5 bg-[#094771] text-[#3794ff] rounded-lg">
                       <Sliders className="w-4 h-4" />
                     </div>
                     <div>
-                      <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider font-mono">Configure Automated Scan Pipeline</h3>
-                      <p className="text-[10px] text-slate-500 font-sans">Set up automated continuous SBOM scanning for critical tenant software endpoints.</p>
+                      <h3 className="text-xs font-bold text-[#d4d4d4] uppercase tracking-wider font-mono">Configure Automated Scan Pipeline</h3>
+                      <p className="text-[10px] text-[#9d9d9d] font-sans">Set up automated continuous SBOM scanning for critical tenant software endpoints.</p>
                     </div>
                   </div>
 
@@ -670,11 +670,11 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {/* Asset Select */}
                       <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase font-mono">Target Production Asset</label>
+                        <label className="text-[10px] font-bold text-[#9d9d9d] uppercase font-mono">Target Production Asset</label>
                         <select
                           value={newScheduleAssetId}
                           onChange={(e) => setNewScheduleAssetId(e.target.value)}
-                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none font-sans text-slate-700 font-medium"
+                          className="w-full px-3 py-2 bg-[#2d2d2d] border border-[#3c3c3c] rounded-lg text-xs focus:ring-1 focus:ring-[#3794ff] focus:outline-none font-sans text-[#6f6f6f] font-medium"
                         >
                           {prodAssets.map(a => (
                             <option key={a.id} value={a.id}>
@@ -686,11 +686,11 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
 
                       {/* Recurrence Frequency */}
                       <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase font-mono">Scan Recurrence / Frequency</label>
+                        <label className="text-[10px] font-bold text-[#9d9d9d] uppercase font-mono">Scan Recurrence / Frequency</label>
                         <select
                           value={newScheduleFrequency}
                           onChange={(e) => setNewScheduleFrequency(e.target.value)}
-                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none font-sans text-slate-700 font-medium"
+                          className="w-full px-3 py-2 bg-[#2d2d2d] border border-[#3c3c3c] rounded-lg text-xs focus:ring-1 focus:ring-[#3794ff] focus:outline-none font-sans text-[#6f6f6f] font-medium"
                         >
                           <option value="Hourly">Hourly (Continuous validation)</option>
                           <option value="Every 12 Hours">Every 12 Hours (High frequency)</option>
@@ -702,11 +702,11 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
 
                       {/* Scanning Policy Rule */}
                       <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase font-mono">Scanning Policy / Rule</label>
+                        <label className="text-[10px] font-bold text-[#9d9d9d] uppercase font-mono">Scanning Policy / Rule</label>
                         <select
                           value={newScheduleScanType}
                           onChange={(e) => setNewScheduleScanType(e.target.value)}
-                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none font-sans text-slate-700 font-medium"
+                          className="w-full px-3 py-2 bg-[#2d2d2d] border border-[#3c3c3c] rounded-lg text-xs focus:ring-1 focus:ring-[#3794ff] focus:outline-none font-sans text-[#6f6f6f] font-medium"
                         >
                           <option value="SBOM Deep Verify">SBOM Deep Verify (CycloneDX analysis)</option>
                           <option value="Vulnerability Signature Sweep">Vulnerability Signature Sweep (Snyk matching)</option>
@@ -717,13 +717,13 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
 
                       {/* Target Run Time */}
                       <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase font-mono">Preferred Run Window (Local Time)</label>
+                        <label className="text-[10px] font-bold text-[#9d9d9d] uppercase font-mono">Preferred Run Window (Local Time)</label>
                         <input
                           type="text"
                           value={newScheduleStartTime}
                           onChange={(e) => setNewScheduleStartTime(e.target.value)}
                           placeholder="e.g. 02:00 AM, 11:30 PM"
-                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none font-sans text-slate-700 font-bold"
+                          className="w-full px-3 py-2 bg-[#2d2d2d] border border-[#3c3c3c] rounded-lg text-xs focus:ring-1 focus:ring-[#3794ff] focus:outline-none font-sans text-[#6f6f6f] font-bold"
                         />
                       </div>
                     </div>
@@ -732,7 +732,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
                       <button
                         type="button"
                         onClick={() => setShowAddSchedule(false)}
-                        className="px-3.5 py-2 border border-slate-200 text-slate-500 font-semibold rounded-lg text-xs hover:bg-slate-50 cursor-pointer"
+                        className="px-3.5 py-2 border border-[#3c3c3c] text-[#9d9d9d] font-semibold rounded-lg text-xs hover:bg-[#2d2d2d] cursor-pointer"
                       >
                         Cancel
                       </button>
@@ -740,7 +740,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
                         type="submit"
                         disabled={!canManageSchedules}
                         title={!canManageSchedules ? `Your ${role} role cannot create schedules.` : undefined}
-                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs shadow-sm cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                        className="px-4 py-2 bg-[#094771] hover:bg-[#094771] text-[#d4d4d4] font-bold rounded-lg text-xs shadow-sm cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         Save Schedule Pipeline
                       </button>
@@ -753,14 +753,14 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
               <div className="space-y-3">
                 {loadingSchedules ? (
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <div className="h-40 animate-pulse rounded-xl border border-slate-200 bg-slate-100" />
-                    <div className="h-40 animate-pulse rounded-xl border border-slate-200 bg-slate-100" />
+                    <div className="h-40 animate-pulse rounded-xl border border-[#3c3c3c] bg-[#2d2d2d]" />
+                    <div className="h-40 animate-pulse rounded-xl border border-[#3c3c3c] bg-[#2d2d2d]" />
                   </div>
                 ) : schedules.length === 0 ? (
-                  <div className="text-center p-12 bg-white border border-slate-200 rounded-xl space-y-3">
-                    <Calendar className="w-10 h-10 text-slate-300 mx-auto" />
-                    <h3 className="text-sm font-bold text-slate-700">No Scanning Schedules Configured</h3>
-                    <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                  <div className="text-center p-12 bg-[#2d2d2d] border border-[#3c3c3c] rounded-xl space-y-3">
+                    <Calendar className="w-10 h-10 text-[#d4d4d4] mx-auto" />
+                    <h3 className="text-sm font-bold text-[#6f6f6f]">No Scanning Schedules Configured</h3>
+                    <p className="text-xs text-[#9d9d9d] max-w-sm mx-auto">
                       Automate continuous software passport and vulnerability attestation audits on your clients' production nodes. Click "Configure Scan Schedule" above to begin.
                     </p>
                   </div>
@@ -771,60 +771,60 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
                       return (
                         <div
                           key={schedule.id}
-                          className={`p-5 bg-white border rounded-xl shadow-sm hover:shadow transition-all space-y-4 flex flex-col justify-between ${
-                            isActive ? 'border-slate-200' : 'border-slate-150 opacity-75'
+                          className={`p-5 bg-[#2d2d2d] border rounded-xl shadow-sm hover:shadow transition-all space-y-4 flex flex-col justify-between ${
+                            isActive ? 'border-[#3c3c3c]' : 'border-[#3c3c3c] opacity-75'
                           }`}
                         >
                           <div className="space-y-2.5">
                             <div className="flex items-start justify-between">
                               <div className="space-y-0.5">
-                                <h4 className="font-bold text-slate-800 text-xs font-mono tracking-tight flex items-center gap-1.5">
-                                  <Shield className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                                <h4 className="font-bold text-[#d4d4d4] text-xs font-mono tracking-tight flex items-center gap-1.5">
+                                  <Shield className="w-3.5 h-3.5 text-[#3794ff] shrink-0" />
                                   <span className="truncate max-w-[160px]" title={schedule.assetHostName}>
                                     {schedule.assetHostName}
                                   </span>
                                 </h4>
-                                <p className="text-[10px] text-slate-400 font-sans">
-                                  Client: <strong className="text-slate-600">{schedule.clientName}</strong>
+                                <p className="text-[10px] text-[#9d9d9d] font-sans">
+                                  Client: <strong className="text-[#6f6f6f]">{schedule.clientName}</strong>
                                 </p>
                               </div>
                               <span className={`px-2 py-0.5 rounded-full text-[8px] font-bold uppercase font-mono ${
-                                isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'
+                                isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-[#2d2d2d] text-[#6f6f6f]'
                               }`}>
                                 {schedule.status}
                               </span>
                             </div>
 
-                            <div className="p-2.5 bg-slate-50 border border-slate-150/70 rounded-lg space-y-1.5 text-xs">
+                            <div className="p-2.5 bg-[#2d2d2d] border border-[#3c3c3c]/70 rounded-lg space-y-1.5 text-xs">
                               <div className="flex justify-between items-center text-[10px]">
-                                <span className="text-slate-400 font-mono">Scanning Policy:</span>
-                                <span className="font-bold text-slate-700 font-mono">{schedule.scanType}</span>
+                                <span className="text-[#9d9d9d] font-mono">Scanning Policy:</span>
+                                <span className="font-bold text-[#6f6f6f] font-mono">{schedule.scanType}</span>
                               </div>
                               <div className="flex justify-between items-center text-[10px]">
-                                <span className="text-slate-400 font-mono">Interval:</span>
-                                <span className="font-semibold text-indigo-600 font-mono">{schedule.frequency}</span>
+                                <span className="text-[#9d9d9d] font-mono">Interval:</span>
+                                <span className="font-semibold text-[#3794ff] font-mono">{schedule.frequency}</span>
                               </div>
                             </div>
 
-                            <div className="flex justify-between items-center text-[10px] text-slate-500 font-mono border-t border-dashed border-slate-100 pt-2.5">
+                            <div className="flex justify-between items-center text-[10px] text-[#9d9d9d] font-mono border-t border-dashed border-[#3c3c3c] pt-2.5">
                               <div className="flex items-center gap-1">
-                                <Clock className="w-3 h-3 text-slate-400" />
-                                <span>Last run: <strong className="text-slate-600">{formatRunTime(schedule.lastRunAt)}</strong></span>
+                                <Clock className="w-3 h-3 text-[#9d9d9d]" />
+                                <span>Last run: <strong className="text-[#6f6f6f]">{formatRunTime(schedule.lastRunAt)}</strong></span>
                               </div>
                               <div className="flex items-center gap-1">
-                                <Calendar className="w-3 h-3 text-slate-400" />
-                                <span>Next: <strong className="text-slate-600">{formatRunTime(schedule.nextRunAt)}</strong></span>
+                                <Calendar className="w-3 h-3 text-[#9d9d9d]" />
+                                <span>Next: <strong className="text-[#6f6f6f]">{formatRunTime(schedule.nextRunAt)}</strong></span>
                               </div>
                             </div>
                           </div>
 
-                          <div className="flex gap-2 pt-3 border-t border-slate-100 mt-2">
+                          <div className="flex gap-2 pt-3 border-t border-[#3c3c3c] mt-2">
                             {/* Run Now Trigger */}
                             <button
                               onClick={() => handleRunScheduleNow(schedule)}
                               disabled={!canManageSchedules || !isActive}
-                              className={`flex-1 py-1.5 px-3 rounded-lg text-[10px] font-bold text-white transition-all flex items-center justify-center gap-1 cursor-pointer ${
-                                canManageSchedules && isActive ? 'bg-indigo-600 hover:bg-indigo-700 shadow-sm' : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                              className={`flex-1 py-1.5 px-3 rounded-lg text-[10px] font-bold text-[#d4d4d4] transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                                canManageSchedules && isActive ? 'bg-[#094771] hover:bg-[#094771] shadow-sm' : 'bg-[#3c3c3c] text-[#9d9d9d] cursor-not-allowed'
                               }`}
                               title={!canManageSchedules ? `Your ${role} role cannot run schedules.` : 'Trigger scanning routine immediately on this production target'}
                             >
@@ -836,7 +836,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
                             <button
                               onClick={() => handleToggleScheduleStatus(schedule.id)}
                               disabled={!canManageSchedules}
-                              className="px-3 py-1.5 border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-all text-[10px] font-semibold cursor-pointer flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-50"
+                              className="px-3 py-1.5 border border-[#3c3c3c] text-[#6f6f6f] rounded-lg hover:bg-[#2d2d2d] transition-all text-[10px] font-semibold cursor-pointer flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-50"
                               title={!canManageSchedules ? `Your ${role} role cannot change schedules.` : isActive ? 'Pause automated recurrences' : 'Resume automated recurrences'}
                             >
                               {isActive ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
@@ -847,7 +847,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
                             <button
                               onClick={() => handleDeleteSchedule(schedule.id)}
                               disabled={!canManageSchedules}
-                              className="p-1.5 border border-slate-200 hover:border-rose-200 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                              className="p-1.5 border border-[#3c3c3c] hover:border-[#f14c4c]/40 text-[#9d9d9d] hover:text-[#f14c4c] rounded-lg hover:bg-[#f14c4c]/15 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                               title={!canManageSchedules ? `Your ${role} role cannot delete schedules.` : 'Delete this schedule pipeline'}
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -864,21 +864,21 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
 
           {/* Scanner Console / Progress indicator */}
           {(isScanning || scanCompleted) && (
-            <div className="bg-slate-950 rounded-xl p-5 border border-slate-850 shadow-md font-mono text-xs text-slate-300">
-              <div className="flex justify-between items-center pb-3 border-b border-slate-800/80 mb-4">
-                <span className="text-slate-400 font-bold text-[10px] uppercase">Compilation Terminal Console</span>
-                <span className="text-indigo-400 text-[10px] font-bold">PROVENANCE PORT v1.0</span>
+            <div className="bg-[#1e1e1e] rounded-xl p-5 border border-[#3c3c3c] shadow-md font-mono text-xs text-[#d4d4d4]">
+              <div className="flex justify-between items-center pb-3 border-b border-[#3c3c3c]/80 mb-4">
+                <span className="text-[#9d9d9d] font-bold text-[10px] uppercase">Compilation Terminal Console</span>
+                <span className="text-[#3794ff] text-[10px] font-bold">PROVENANCE PORT v1.0</span>
               </div>
 
               {/* Progress Bar */}
               {isScanning && (
                 <div className="space-y-1.5 mb-4">
-                  <div className="flex justify-between text-[10px] text-slate-400">
+                  <div className="flex justify-between text-[10px] text-[#9d9d9d]">
                     <span>Attesting SBOM payload integrity...</span>
                     <span>{scanProgress}%</span>
                   </div>
-                  <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                    <div className="bg-indigo-500 h-full transition-all duration-100" style={{ width: `${scanProgress}%` }}></div>
+                  <div className="w-full bg-[#2d2d2d] h-1.5 rounded-full overflow-hidden">
+                    <div className="bg-[#094771] h-full transition-all duration-100" style={{ width: `${scanProgress}%` }}></div>
                   </div>
                 </div>
               )}
@@ -890,7 +890,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
                     key={index}
                     className={
                       log.includes('[SUCCESS]') ? 'text-emerald-400 font-semibold' :
-                      log.includes('[INFO]') ? 'text-slate-300' : 'text-slate-400'
+                      log.includes('[INFO]') ? 'text-[#d4d4d4]' : 'text-[#9d9d9d]'
                     }
                   >
                     {log}
@@ -899,7 +899,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
               </div>
 
               {scanCompleted && (
-                <div className="mt-5 pt-3 border-t border-slate-800/80 flex items-center justify-between text-emerald-400 font-bold">
+                <div className="mt-5 pt-3 border-t border-[#3c3c3c]/80 flex items-center justify-between text-emerald-400 font-bold">
                   <span className="flex items-center gap-1">
                     <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                     <span>Dossier compiled successfully!</span>
@@ -910,7 +910,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
                       setScanCompleted(false);
                       setScanProgress(0);
                     }}
-                    className="bg-indigo-600 text-white font-sans font-semibold text-[10px] uppercase px-3 py-1.5 rounded cursor-pointer hover:bg-indigo-700 transition-all"
+                    className="bg-[#094771] text-[#d4d4d4] font-sans font-semibold text-[10px] uppercase px-3 py-1.5 rounded cursor-pointer hover:bg-[#094771] transition-all"
                   >
                     Clear Console
                   </button>
@@ -921,11 +921,11 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
         </div>
 
         {/* Right Column: Scan History List */}
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex flex-col h-[520px]">
-          <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100">
+        <div className="bg-[#2d2d2d] rounded-xl border border-[#3c3c3c] p-5 shadow-sm flex flex-col h-[520px]">
+          <div className="flex items-center justify-between mb-4 pb-2 border-b border-[#3c3c3c]">
             <div>
-              <h3 className="text-xs font-bold text-slate-800 font-display">MSP Global Scan Logs</h3>
-              <p className="text-[9px] text-slate-500 font-sans mt-0.5">Audit trail of system attestations</p>
+              <h3 className="text-xs font-bold text-[#d4d4d4] font-display">MSP Global Scan Logs</h3>
+              <p className="text-[9px] text-[#9d9d9d] font-sans mt-0.5">Audit trail of system attestations</p>
             </div>
             {unclassifiedScans.length > 0 && (
               <button
@@ -934,7 +934,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
                 className={`px-2 py-1 rounded text-[9px] font-bold font-mono border transition-all cursor-pointer ${
                   allUnclassifiedSelected
                     ? 'bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200'
-                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                    : 'bg-[#2d2d2d] text-[#6f6f6f] border-[#3c3c3c] hover:bg-[#2d2d2d]'
                 }`}
               >
                 {allUnclassifiedSelected ? 'Deselect All Unclassified' : 'Select All Unclassified'}
@@ -944,9 +944,9 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
 
           <div className="flex-1 space-y-3.5 overflow-y-auto pr-1">
             {scans.length === 0 && (
-              <div className="rounded-lg border border-dashed border-slate-200 px-4 py-10 text-center">
-                <p className="text-xs font-semibold text-slate-500">No scans recorded yet</p>
-                <p className="mt-1 text-[10px] text-slate-400">Scan logs will appear here once a scan or scheduled run completes.</p>
+              <div className="rounded-lg border border-dashed border-[#3c3c3c] px-4 py-10 text-center">
+                <p className="text-xs font-semibold text-[#9d9d9d]">No scans recorded yet</p>
+                <p className="mt-1 text-[10px] text-[#9d9d9d]">Scan logs will appear here once a scan or scheduled run completes.</p>
               </div>
             )}
             {scans.map((s) => {
@@ -955,8 +955,8 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
               return (
                 <div
                   key={s.id}
-                  className={`p-3 bg-slate-50 border rounded-lg text-xs flex gap-3 items-center transition-all ${
-                    isSelected ? 'border-indigo-400 bg-indigo-50/25' : 'border-slate-150'
+                  className={`p-3 bg-[#2d2d2d] border rounded-lg text-xs flex gap-3 items-center transition-all ${
+                    isSelected ? 'border-[#3794ff]/40 bg-[#094771]' : 'border-[#3c3c3c]'
                   }`}
                 >
                   {isUnclassified && (
@@ -964,23 +964,23 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
                       type="checkbox"
                       checked={isSelected}
                       onChange={() => toggleSelectScan(s.id)}
-                      className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer shrink-0"
+                      className="h-3.5 w-3.5 rounded border-[#3c3c3c] text-[#3794ff] focus:ring-[#3794ff] cursor-pointer shrink-0"
                     />
                   )}
                   <div className="flex-1 min-w-0 flex justify-between gap-2 items-start">
                     <div className="min-w-0">
-                      <h4 className="font-bold text-slate-700 leading-snug truncate" title={s.targetName}>
+                      <h4 className="font-bold text-[#6f6f6f] leading-snug truncate" title={s.targetName}>
                         {s.targetName}
                       </h4>
-                      <p className="text-[9px] text-slate-400 font-mono mt-0.5 truncate">
-                        Type: <span className={isUnclassified ? "text-amber-600 font-bold" : "text-slate-500 font-medium"}>{s.scanType}</span> • Owner: {s.clientName}
+                      <p className="text-[9px] text-[#9d9d9d] font-mono mt-0.5 truncate">
+                        Type: <span className={isUnclassified ? "text-amber-600 font-bold" : "text-[#9d9d9d] font-medium"}>{s.scanType}</span> • Owner: {s.clientName}
                       </p>
                     </div>
                     <div className="text-right shrink-0">
-                      <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-bold font-mono ${s.status === 'Success' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                      <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-bold font-mono ${s.status === 'Success' ? 'bg-emerald-100 text-emerald-800' : 'bg-[#f14c4c]/15 text-[#f14c4c]'}`}>
                         {s.status}
                       </span>
-                      <p className="text-[8px] font-mono text-slate-400 mt-1">{s.durationMs}ms</p>
+                      <p className="text-[8px] font-mono text-[#9d9d9d] mt-1">{s.durationMs}ms</p>
                     </div>
                   </div>
                 </div>
@@ -990,15 +990,15 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
 
           {/* Batch-tag action footer */}
           {selectedScanIds.length > 0 && (
-            <div className="mt-4 pt-3 border-t border-slate-150 bg-indigo-50/40 p-3 rounded-lg border border-indigo-100/70 space-y-2 shrink-0">
+            <div className="mt-4 pt-3 border-t border-[#3c3c3c] bg-[#094771] p-3 rounded-lg border border-[#3794ff]/40 space-y-2 shrink-0">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-indigo-900 uppercase font-mono tracking-wider">
+                <span className="text-[10px] font-bold text-[#3794ff] uppercase font-mono tracking-wider">
                   Batch Tag {selectedScanIds.length} {selectedScanIds.length === 1 ? 'Record' : 'Records'} Selected
                 </span>
                 <button
                   type="button"
                   onClick={() => setSelectedScanIds([])}
-                  className="text-[9px] text-slate-500 hover:text-slate-800 underline cursor-pointer font-sans"
+                  className="text-[9px] text-[#9d9d9d] hover:text-[#d4d4d4] underline cursor-pointer font-sans"
                 >
                   Clear Selection
                 </button>
@@ -1009,22 +1009,22 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
                   placeholder="Custom Category name..."
                   value={batchCategory}
                   onChange={(e) => setBatchCategory(e.target.value)}
-                  className="flex-1 px-2.5 py-1.5 bg-white border border-slate-200 rounded text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none font-sans font-medium text-slate-700"
+                  className="flex-1 px-2.5 py-1.5 bg-[#2d2d2d] border border-[#3c3c3c] rounded text-xs focus:ring-1 focus:ring-[#3794ff] focus:outline-none font-sans font-medium text-[#6f6f6f]"
                 />
                 <button
                   type="button"
                   onClick={handleApplyBatchTag}
                   disabled={!batchCategory.trim()}
-                  className={`px-3 py-1.5 rounded text-xs font-bold text-white transition-all cursor-pointer shrink-0 ${
+                  className={`px-3 py-1.5 rounded text-xs font-bold text-[#d4d4d4] transition-all cursor-pointer shrink-0 ${
                     batchCategory.trim()
-                      ? 'bg-indigo-600 hover:bg-indigo-700 shadow-sm'
-                      : 'bg-slate-300 cursor-not-allowed'
+                      ? 'bg-[#094771] hover:bg-[#094771] shadow-sm'
+                      : 'bg-[#3c3c3c] cursor-not-allowed'
                   }`}
                 >
                   Apply & Sync
                 </button>
               </div>
-              <p className="text-[9px] text-slate-500 font-sans leading-tight">
+              <p className="text-[9px] text-[#9d9d9d] font-sans leading-tight">
                 This will tag the selected records and trigger a bulk update to synchronize custom categories in the Assets inventory.
               </p>
             </div>

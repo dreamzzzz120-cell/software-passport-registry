@@ -1,46 +1,49 @@
 @import "tailwindcss";
 
 :root {
-  color-scheme: light;
+  color-scheme: dark;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: #ffffff;
-  color: #201f1e;
+  background: #1e1e1e;
+  color: #d4d4d4;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --spr-accent: #0f6cbd;
-  --spr-accent-hover: #0c5aa0;
-  --spr-accent-soft: #eef6fc;
-  --spr-border: #e1dfdd;
-  --spr-surface: #ffffff;
-  --spr-surface-alt: #faf9f8;
-  --spr-surface-sunken: #f3f2f1;
-  --spr-text: #201f1e;
-  --spr-text-muted: #605e5c;
-  --spr-text-faint: #8a8886;
-  --spr-radius: 6px;
-  --spr-green: #107c10;
-  --spr-amber: #986f0b;
-  --spr-red: #d13438;
-  --spr-blue: #0f6cbd;
-  --spr-gray: #8a8886;
+  --spr-mono: "Cascadia Code", "Consolas", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --spr-accent: #0e639c;
+  --spr-accent-hover: #1177bb;
+  --spr-accent-soft: #094771;
+  --spr-highlight: #3794ff;
+  --spr-border: #3c3c3c;
+  --spr-surface: #1e1e1e;
+  --spr-surface-alt: #252526;
+  --spr-surface-sunken: #2d2d2d;
+  --spr-surface-hover: #383838;
+  --spr-text: #d4d4d4;
+  --spr-text-muted: #9d9d9d;
+  --spr-text-faint: #6f6f6f;
+  --spr-radius: 3px;
+  --spr-green: #89d185;
+  --spr-amber: #cca700;
+  --spr-red: #f14c4c;
+  --spr-blue: #3794ff;
+  --spr-gray: #858585;
 }
 
 * { box-sizing: border-box; }
 html, body, #root { min-height: 100%; margin: 0; }
-body { min-width: 320px; background: #ffffff; }
+body { min-width: 320px; background: #1e1e1e; }
 button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 
-.spr-app-bg { position: relative; min-height: 100vh; background: var(--spr-surface-alt); }
+.spr-app-bg { position: relative; min-height: 100vh; background: var(--spr-surface); }
 
 /* Flat neutral surface — replaces .spr-glass. No blur, no gradient. */
-.spr-panel { background: var(--spr-surface); border: 1px solid var(--spr-border); border-radius: var(--spr-radius); }
-.spr-panel-alt { background: var(--spr-surface-alt); border: 1px solid var(--spr-border); border-radius: var(--spr-radius); }
+.spr-panel { background: var(--spr-surface-alt); border: 1px solid var(--spr-border); border-radius: var(--spr-radius); }
+.spr-panel-alt { background: var(--spr-surface); border: 1px solid var(--spr-border); border-radius: var(--spr-radius); }
 
-.spr-nav { background: var(--spr-surface); border-right: 1px solid var(--spr-border); }
+.spr-nav { background: var(--spr-surface-alt); border-right: 1px solid var(--spr-border); }
 .spr-nav-item { transition: background .12s ease, color .12s ease; border-radius: var(--spr-radius); }
-.spr-nav-item:hover { background: var(--spr-surface-sunken); }
-.spr-nav-item[data-active="true"] { background: var(--spr-accent-soft); color: var(--spr-accent); box-shadow: inset 2px 0 0 var(--spr-accent); }
+.spr-nav-item:hover { background: var(--spr-surface-hover); }
+.spr-nav-item[data-active="true"] { background: var(--spr-accent-soft); color: #ffffff; box-shadow: inset 2px 0 0 var(--spr-blue); }
 
 /* Status dot — replaces glowing status pills everywhere */
 .spr-status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 999px; flex-shrink: 0; }
@@ -64,16 +67,16 @@ button { cursor: pointer; }
 
 /* Real data table */
 .spr-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.spr-table th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--spr-text-faint); padding: 8px 12px; border-bottom: 1px solid var(--spr-border); background: var(--spr-surface-alt); }
+.spr-table th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--spr-text-faint); padding: 8px 12px; border-bottom: 1px solid var(--spr-border); background: var(--spr-surface-sunken); }
 .spr-table td { padding: 8px 12px; border-bottom: 1px solid var(--spr-border); color: var(--spr-text); vertical-align: middle; }
-.spr-table tbody tr:hover { background: var(--spr-surface-alt); }
+.spr-table tbody tr:hover { background: var(--spr-surface-hover); }
 
 /* Primary/secondary buttons */
 .spr-btn { border-radius: var(--spr-radius); font-size: 13px; font-weight: 600; padding: 7px 14px; transition: background .12s ease, border-color .12s ease; }
 .spr-btn-primary { background: var(--spr-accent); color: #fff; border: 1px solid var(--spr-accent); }
 .spr-btn-primary:hover { background: var(--spr-accent-hover); }
-.spr-btn-secondary { background: var(--spr-surface); color: var(--spr-text); border: 1px solid var(--spr-border); }
-.spr-btn-secondary:hover { background: var(--spr-surface-sunken); }
+.spr-btn-secondary { background: var(--spr-surface-sunken); color: var(--spr-text); border: 1px solid var(--spr-border); }
+.spr-btn-secondary:hover { background: var(--spr-surface-hover); }
 
 /* Collapsible "What is this? · How it works" panel */
 .spr-help-panel { border: 1px solid var(--spr-border); border-radius: var(--spr-radius); background: var(--spr-surface-alt); margin-bottom: 16px; }

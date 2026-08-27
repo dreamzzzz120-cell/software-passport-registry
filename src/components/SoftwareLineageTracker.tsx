@@ -185,37 +185,37 @@ export default function SoftwareLineageTracker({ passports, clients, assets }: S
       {/* Visual Identity Section */}
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <div>
-          <span className="bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400 border border-indigo-500/20 px-2.5 py-0.5 rounded-full text-[9px] font-mono font-bold uppercase tracking-wider mb-2 inline-block">
+          <span className="bg-[#094771] text-[#3794ff] border border-[#3794ff] px-2.5 py-0.5 rounded-full text-[9px] font-mono font-bold uppercase tracking-wider mb-2 inline-block">
             🌐 The Google Maps of your Software World
           </span>
-          <h1 className="text-xl font-display font-black text-slate-900 dark:text-zinc-50 flex items-center gap-2">
-            <Compass className="w-5.5 h-5.5 text-indigo-500 animate-spin" style={{ animationDuration: '8s' }} />
+          <h1 className="text-xl font-display font-black text-[#d4d4d4] flex items-center gap-2">
+            <Compass className="w-5.5 h-5.5 text-[#3794ff] animate-spin" style={{ animationDuration: '8s' }} />
             <span>Interactive Software Lineage Map</span>
           </h1>
-          <p className="text-xs text-slate-500 dark:text-zinc-400 font-sans mt-1">
+          <p className="text-xs text-[#9d9d9d] font-sans mt-1">
             Explore your digital DNA. Trace any software asset from source code commits up to production cloud runtimes.
           </p>
         </div>
 
         {/* Global Lineage Summary Badges */}
         <div className="flex flex-wrap gap-3">
-          <div className="bg-white dark:bg-zinc-900 px-3.5 py-2 border border-slate-200 dark:border-zinc-800 rounded-2xl flex items-center gap-2.5 shadow-xs text-xs">
-            <div className="bg-indigo-50 dark:bg-indigo-950/40 p-1.5 rounded-lg text-indigo-600 dark:text-indigo-400">
+          <div className="bg-[#252526] px-3.5 py-2 border border-[#3c3c3c] rounded-md flex items-center gap-2.5 text-xs">
+            <div className="bg-[#094771] p-1.5 rounded-md text-[#3794ff] ">
               <GitFork className="w-4 h-4" />
             </div>
             <div>
-              <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 dark:text-zinc-500 leading-none">Mapped Lines</p>
-              <p className="font-extrabold text-slate-800 dark:text-zinc-200 mt-1 leading-none">{passports.length} Systems</p>
+              <p className="text-[9px] uppercase font-bold tracking-wider text-[#9d9d9d] leading-none">Mapped Lines</p>
+              <p className="font-extrabold text-[#d4d4d4] mt-1 leading-none">{passports.length} Systems</p>
             </div>
           </div>
 
-          <div className="bg-white dark:bg-zinc-900 px-3.5 py-2 border border-slate-200 dark:border-zinc-800 rounded-2xl flex items-center gap-2.5 shadow-xs text-xs">
-            <div className="bg-emerald-50 dark:bg-emerald-950/40 p-1.5 rounded-lg text-emerald-600 dark:text-emerald-400">
+          <div className="bg-[#252526] px-3.5 py-2 border border-[#3c3c3c] rounded-md flex items-center gap-2.5 text-xs">
+            <div className="bg-[#89d185]/15 p-1.5 rounded-md text-[#89d185] ">
               <ShieldCheck className="w-4 h-4" />
             </div>
             <div>
-              <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 dark:text-zinc-500 leading-none">SBOM Packages</p>
-              <p className="font-extrabold text-slate-800 dark:text-zinc-200 mt-1 leading-none">{totalUniqueDependencies} Nodes</p>
+              <p className="text-[9px] uppercase font-bold tracking-wider text-[#9d9d9d] leading-none">SBOM Packages</p>
+              <p className="font-extrabold text-[#d4d4d4] mt-1 leading-none">{totalUniqueDependencies} Nodes</p>
             </div>
           </div>
         </div>
@@ -226,10 +226,10 @@ export default function SoftwareLineageTracker({ passports, clients, assets }: S
         
         {/* Left Column: Software Passport Selector & Provenance Parameters */}
         <div className="lg:col-span-1 space-y-5">
-          <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-slate-200 dark:border-zinc-800 p-5 shadow-xs flex flex-col gap-4">
+          <div className="bg-[#252526] rounded-md border border-[#3c3c3c] p-5 flex flex-col gap-4">
             <div>
-              <h3 className="text-xs font-black text-slate-800 dark:text-zinc-100 font-display uppercase tracking-wider">Select Active System</h3>
-              <p className="text-[9px] text-slate-400 dark:text-zinc-500 font-sans mt-0.5">Click to lock tracking camera on target</p>
+              <h3 className="text-xs font-black text-[#d4d4d4] font-display uppercase tracking-wider">Select Active System</h3>
+              <p className="text-[9px] text-[#9d9d9d] font-sans mt-0.5">Click to lock tracking camera on target</p>
             </div>
 
             <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
@@ -239,17 +239,17 @@ export default function SoftwareLineageTracker({ passports, clients, assets }: S
                   <button
                     key={p.id}
                     onClick={() => setSelectedPassportId(p.id)}
-                    className={`w-full flex items-center justify-between p-3 rounded-xl text-left text-xs transition-all border cursor-pointer ${
+                    className={`w-full flex items-center justify-between p-3 rounded-md text-left text-xs transition-all border cursor-pointer ${
                       isSelected
-                        ? 'bg-indigo-50 border-indigo-300 dark:bg-indigo-950/30 dark:border-indigo-800/80 text-indigo-900 dark:text-indigo-200 font-bold'
-                        : 'bg-slate-50 border-slate-100 hover:bg-slate-100/70 dark:bg-zinc-950/30 dark:border-zinc-850 hover:dark:bg-zinc-900/50 text-slate-700 dark:text-zinc-300'
+                        ? 'bg-[#094771] border-[#3794ff] text-[#3794ff] font-bold'
+                        : 'bg-[#2d2d2d] border-[#3c3c3c] hover:bg-[#383838] text-[#6f6f6f] '
                     }`}
                   >
                     <div className="min-w-0">
                       <p className="truncate font-sans leading-tight">{p.name}</p>
-                      <span className="text-[8px] font-mono text-slate-400 dark:text-zinc-500 mt-1 block">v{p.version} • {p.publisher}</span>
+                      <span className="text-[8px] font-mono text-[#9d9d9d] mt-1 block">v{p.version} • {p.publisher}</span>
                     </div>
-                    <ChevronRight className={`w-3.5 h-3.5 shrink-0 ml-2 ${isSelected ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-zinc-600'}`} />
+                    <ChevronRight className={`w-3.5 h-3.5 shrink-0 ml-2 ${isSelected ? 'text-[#3794ff] ' : 'text-[#9d9d9d] '}`} />
                   </button>
                 );
               })}
@@ -258,33 +258,33 @@ export default function SoftwareLineageTracker({ passports, clients, assets }: S
 
           {/* Active Passport General Info */}
           {activePassport && (
-            <div className="bg-slate-900 dark:bg-zinc-950 text-slate-300 rounded-3xl border border-slate-800 dark:border-zinc-900 p-5 shadow-xs space-y-4">
-              <div className="flex justify-between items-start border-b border-slate-800 pb-2.5">
+            <div className="bg-[#1e1e1e] text-[#d4d4d4] rounded-md border border-[#3c3c3c] p-5 space-y-4">
+              <div className="flex justify-between items-start border-b border-[#3c3c3c] pb-2.5">
                 <div>
-                  <span className="text-[8px] font-mono font-black text-indigo-400 uppercase tracking-widest">CAMERA FOCUS</span>
-                  <h4 className="text-sm font-black text-white mt-1 leading-snug">{activePassport.name}</h4>
+                  <span className="text-[8px] font-mono font-black text-[#3794ff] uppercase tracking-widest">CAMERA FOCUS</span>
+                  <h4 className="text-sm font-black text-[#d4d4d4] mt-1 leading-snug">{activePassport.name}</h4>
                 </div>
-                <span className="bg-indigo-950/60 border border-indigo-900/40 text-indigo-300 text-[8px] font-mono font-semibold px-2 py-0.5 rounded-lg uppercase shrink-0">
+                <span className="bg-[#094771] border border-[#3794ff] text-[#3794ff] text-[8px] font-mono font-semibold px-2 py-0.5 rounded-md uppercase shrink-0">
                   {activePassport.category}
                 </span>
               </div>
 
               <div className="space-y-2.5 text-[10px] font-mono">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">RELEASE DATE:</span>
-                  <span className="text-slate-200 font-medium">{activePassport.releaseDate}</span>
+                  <span className="text-[#9d9d9d]">RELEASE DATE:</span>
+                  <span className="text-[#d4d4d4] font-medium">{activePassport.releaseDate}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">LICENSE:</span>
-                  <span className="text-slate-200 font-medium">{activePassport.licenseType}</span>
+                  <span className="text-[#9d9d9d]">LICENSE:</span>
+                  <span className="text-[#d4d4d4] font-medium">{activePassport.licenseType}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">TRUST SCORE:</span>
-                  <span className="text-emerald-400 font-bold">{activePassport.overallScore}/100</span>
+                  <span className="text-[#9d9d9d]">TRUST SCORE:</span>
+                  <span className="text-[#89d185] font-bold">{activePassport.overallScore}/100</span>
                 </div>
-                <div className="flex flex-col gap-1 pt-2 border-t border-slate-800">
-                  <span className="text-slate-500 uppercase text-[8px]">DIGITAL FILE HASH:</span>
-                  <span className="text-slate-400 break-all bg-slate-950 p-2 rounded-lg border border-slate-850 select-all font-mono text-[8px] leading-tight">
+                <div className="flex flex-col gap-1 pt-2 border-t border-[#3c3c3c]">
+                  <span className="text-[#9d9d9d] uppercase text-[8px]">DIGITAL FILE HASH:</span>
+                  <span className="text-[#9d9d9d] break-all bg-[#1e1e1e] p-2 rounded-md border border-[#3c3c3c] select-all font-mono text-[8px] leading-tight">
                     {activePassport.fileHash}
                   </span>
                 </div>
@@ -293,9 +293,9 @@ export default function SoftwareLineageTracker({ passports, clients, assets }: S
               {/* CEO "Why Exist" preview quick panel */}
               <button
                 onClick={() => setIsExplanationOpen(true)}
-                className="w-full bg-zinc-800 hover:bg-zinc-700 dark:bg-zinc-900 dark:hover:bg-zinc-850 text-white border border-zinc-700 dark:border-zinc-800 font-bold py-2.5 rounded-xl text-[11px] transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                className="w-full bg-[#252526] hover:bg-[#2d2d2d] text-[#d4d4d4] border border-[#3c3c3c] font-bold py-2.5 rounded-md text-[11px] transition-all flex items-center justify-center gap-1.5 cursor-pointer"
               >
-                <HelpCircle className="w-4 h-4 text-indigo-400" />
+                <HelpCircle className="w-4 h-4 text-[#3794ff]" />
                 <span>Explain this system</span>
               </button>
             </div>
@@ -306,16 +306,16 @@ export default function SoftwareLineageTracker({ passports, clients, assets }: S
         <div className="lg:col-span-3 space-y-6">
           
           {/* Unified 3-tier mapping visualizer */}
-          <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-slate-200 dark:border-zinc-800 p-5 shadow-xs space-y-5">
+          <div className="bg-[#252526] rounded-md border border-[#3c3c3c] p-5 space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h3 className="text-xs font-black text-slate-800 dark:text-zinc-100 font-display uppercase tracking-wider">Active Lineage Pathway</h3>
-                <p className="text-[10px] text-slate-400 dark:text-zinc-500 font-sans">Pedigree stream traced from build variables down to active servers</p>
+                <h3 className="text-xs font-black text-[#d4d4d4] font-display uppercase tracking-wider">Active Lineage Pathway</h3>
+                <p className="text-[10px] text-[#9d9d9d] font-sans">Pedigree stream traced from build variables down to active servers</p>
               </div>
 
               {/* Pulsing state indicator */}
-              <div className="flex items-center gap-1.5 text-[9px] font-mono font-bold bg-indigo-50/80 text-indigo-600 dark:bg-indigo-950/20 dark:text-indigo-400 border border-indigo-150 dark:border-indigo-900/30 px-2 py-0.5 rounded-lg">
-                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
+              <div className="flex items-center gap-1.5 text-[9px] font-mono font-bold bg-[#094771] text-[#3794ff] border border-[#3794ff] px-2 py-0.5 rounded-md">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#0e639c] animate-pulse"></span>
                 <span>LIVE FEED STATE</span>
               </div>
             </div>
@@ -324,92 +324,92 @@ export default function SoftwareLineageTracker({ passports, clients, assets }: S
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5 pt-2 relative">
               
               {/* Connector lines overlays using CSS (visible on desktop) */}
-              <div className="hidden md:block absolute top-[45%] left-[28%] right-[32%] border-b border-dashed border-slate-200 dark:border-zinc-800 z-0 pointer-events-none"></div>
+              <div className="hidden md:block absolute top-[45%] left-[28%] right-[32%] border-b border-dashed border-[#3c3c3c] z-0 pointer-events-none"></div>
 
               {/* TIER 1: Upstream Provenance Origin */}
-              <div className="bg-slate-50 dark:bg-zinc-950/30 border border-slate-200/80 dark:border-zinc-850 rounded-2xl p-4 flex flex-col gap-3.5 z-10 relative">
-                <div className="flex items-center gap-2 text-xs font-black text-slate-800 dark:text-zinc-200 border-b border-slate-200/60 dark:border-zinc-850 pb-2">
-                  <GitFork className="w-4 h-4 text-indigo-500" />
+              <div className="bg-[#2d2d2d] border border-[#3c3c3c] rounded-md p-4 flex flex-col gap-3.5 z-10 relative">
+                <div className="flex items-center gap-2 text-xs font-black text-[#d4d4d4] border-b border-[#3c3c3c] pb-2">
+                  <GitFork className="w-4 h-4 text-[#3794ff]" />
                   <span>1. Code Provenance</span>
                 </div>
 
                 {provenanceDetails && (
                   <div className="space-y-3 font-sans">
-                    <div className="p-2.5 bg-white dark:bg-zinc-900 border border-slate-150 dark:border-zinc-800/80 rounded-xl text-xs space-y-1">
-                      <p className="text-[8px] font-mono uppercase font-bold tracking-wider text-slate-400 dark:text-zinc-500">Source Repository</p>
+                    <div className="p-2.5 bg-[#252526] border border-[#3c3c3c] rounded-md text-xs space-y-1">
+                      <p className="text-[8px] font-mono uppercase font-bold tracking-wider text-[#9d9d9d] ">Source Repository</p>
                       <a
                         href={provenanceDetails.repoUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-indigo-600 dark:text-indigo-400 hover:underline font-semibold truncate block flex items-center gap-1 max-w-[190px]"
+                        className="text-[#3794ff] hover:underline font-semibold truncate block flex items-center gap-1 max-w-[190px]"
                       >
                         <span className="truncate">{provenanceDetails.repoUrl.replace('https://', '')}</span>
                         <ExternalLink className="w-2.5 h-2.5 shrink-0" />
                       </a>
-                      <p className="text-[8px] font-mono text-slate-400 dark:text-zinc-500 mt-1">Branch: <span className="text-slate-600 dark:text-zinc-300 font-semibold">{provenanceDetails.branch}</span></p>
+                      <p className="text-[8px] font-mono text-[#9d9d9d] mt-1">Branch: <span className="text-[#6f6f6f] font-semibold">{provenanceDetails.branch}</span></p>
                     </div>
 
-                    <div className="p-2.5 bg-white dark:bg-zinc-900 border border-slate-150 dark:border-zinc-800/80 rounded-xl text-xs space-y-1">
-                      <p className="text-[8px] font-mono uppercase font-bold tracking-wider text-slate-400 dark:text-zinc-500">CI/CD Pipeline</p>
-                      <p className="font-bold text-slate-700 dark:text-zinc-300 text-[11px]">{provenanceDetails.ciProvider}</p>
-                      <p className="text-[8px] font-mono text-slate-400 dark:text-zinc-500 truncate" title={provenanceDetails.buildId}>ID: {provenanceDetails.buildId}</p>
+                    <div className="p-2.5 bg-[#252526] border border-[#3c3c3c] rounded-md text-xs space-y-1">
+                      <p className="text-[8px] font-mono uppercase font-bold tracking-wider text-[#9d9d9d] ">CI/CD Pipeline</p>
+                      <p className="font-bold text-[#6f6f6f] text-[11px]">{provenanceDetails.ciProvider}</p>
+                      <p className="text-[8px] font-mono text-[#9d9d9d] truncate" title={provenanceDetails.buildId}>ID: {provenanceDetails.buildId}</p>
                     </div>
 
-                    <div className="p-2.5 bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-150 dark:border-indigo-900/30 rounded-xl text-xs space-y-1">
-                      <p className="text-[8px] font-mono uppercase font-bold tracking-wider text-indigo-500 dark:text-indigo-400">Cryptographic Proof</p>
-                      <div className="flex items-center gap-1 text-[11px] font-bold text-indigo-950 dark:text-indigo-200">
-                        <FileSignature className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                    <div className="p-2.5 bg-[#094771] border border-[#3794ff] rounded-md text-xs space-y-1">
+                      <p className="text-[8px] font-mono uppercase font-bold tracking-wider text-[#3794ff] ">Cryptographic Proof</p>
+                      <div className="flex items-center gap-1 text-[11px] font-bold text-[#3794ff] ">
+                        <FileSignature className="w-3.5 h-3.5 text-[#3794ff] shrink-0" />
                         <span>SLSA Level 4 Verified</span>
                       </div>
-                      <p className="text-[8px] font-mono text-indigo-400 dark:text-indigo-400/80 leading-tight">Authority: {provenanceDetails.signingAuthority}</p>
+                      <p className="text-[8px] font-mono text-[#3794ff] leading-tight">Authority: {provenanceDetails.signingAuthority}</p>
                     </div>
                   </div>
                 )}
               </div>
 
               {/* TIER 2: Central SBOM Component Lineage */}
-              <div className="bg-slate-50 dark:bg-zinc-950/30 border border-slate-200/80 dark:border-zinc-850 rounded-2xl p-4 flex flex-col gap-3.5 z-10 relative">
-                <div className="flex items-center gap-2 text-xs font-black text-slate-800 dark:text-zinc-200 border-b border-slate-200/60 dark:border-zinc-850 pb-2">
-                  <Layers className="w-4 h-4 text-indigo-500" />
+              <div className="bg-[#2d2d2d] border border-[#3c3c3c] rounded-md p-4 flex flex-col gap-3.5 z-10 relative">
+                <div className="flex items-center gap-2 text-xs font-black text-[#d4d4d4] border-b border-[#3c3c3c] pb-2">
+                  <Layers className="w-4 h-4 text-[#3794ff]" />
                   <span>2. Core Packages (SBOM)</span>
                 </div>
 
-                <div className="flex items-center gap-1.5 px-2 py-1 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg">
-                  <Search className="w-3.5 h-3.5 text-slate-400 dark:text-zinc-600" />
+                <div className="flex items-center gap-1.5 px-2 py-1 bg-[#252526] border border-[#3c3c3c] rounded-md">
+                  <Search className="w-3.5 h-3.5 text-[#9d9d9d] " />
                   <input
                     type="text"
                     placeholder="Filter dependencies..."
                     value={dependencySearchQuery}
                     onChange={(e) => setDependencySearchQuery(e.target.value)}
-                    className="w-full bg-transparent focus:outline-none text-[10px] font-semibold text-slate-700 dark:text-zinc-300"
+                    className="w-full bg-transparent focus:outline-none text-[10px] font-semibold text-[#6f6f6f] "
                   />
                 </div>
 
                 <div className="flex-1 space-y-2 max-h-[260px] overflow-y-auto pr-1">
                   {filteredSbom.length === 0 ? (
-                    <div className="text-center py-8 text-slate-400 dark:text-zinc-600 text-[10px]">
+                    <div className="text-center py-8 text-[#9d9d9d] text-[10px]">
                       No components found matching search.
                     </div>
                   ) : (
                     filteredSbom.map((comp, idx) => (
                       <div
                         key={idx}
-                        className="p-2 bg-white dark:bg-zinc-900 border border-slate-150 dark:border-zinc-800/80 hover:border-slate-300 dark:hover:border-zinc-700 rounded-lg flex items-center justify-between text-[11px] shadow-xs"
+                        className="p-2 bg-[#252526] border border-[#3c3c3c] hover:border-[#3c3c3c] rounded-md flex items-center justify-between text-[11px] "
                       >
                         <div className="min-w-0">
-                          <p className="font-bold text-slate-700 dark:text-zinc-200 truncate" title={comp.name}>{comp.name}</p>
+                          <p className="font-bold text-[#6f6f6f] truncate" title={comp.name}>{comp.name}</p>
                           <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="text-[8px] font-mono text-slate-400 dark:text-zinc-500 font-semibold">v{comp.version}</span>
-                            <span className="text-[8px] font-mono bg-slate-100 dark:bg-zinc-950 text-slate-500 px-1 py-0.2 rounded font-black uppercase">
+                            <span className="text-[8px] font-mono text-[#9d9d9d] font-semibold">v{comp.version}</span>
+                            <span className="text-[8px] font-mono bg-[#383838] text-[#9d9d9d] px-1 py-0.2 rounded font-black uppercase">
                               {comp.dependencyType}
                             </span>
                           </div>
                         </div>
 
                         <span className={`px-1.5 rounded text-[8px] font-bold font-mono shrink-0 ml-1.5 border ${
-                          comp.trustLevel === 'Trusted' ? 'bg-emerald-50/50 text-emerald-600 border-emerald-100 dark:bg-emerald-950/20 dark:border-emerald-900/40 dark:text-emerald-400' :
-                          comp.trustLevel === 'Review Required' ? 'bg-amber-50/50 text-amber-600 border-amber-100 dark:bg-amber-950/20 dark:border-amber-900/40 dark:text-amber-400' :
-                          'bg-rose-50/50 text-rose-600 border-rose-100 dark:bg-rose-950/20 dark:border-rose-900/40 dark:text-rose-400'
+                          comp.trustLevel === 'Trusted' ? 'bg-[#89d185]/15 text-[#89d185] border-[#89d185] ' :
+                          comp.trustLevel === 'Review Required' ? 'bg-[#cca700]/15 text-[#cca700] border-[#cca700] ' :
+                          'bg-[#f14c4c]/15 text-[#f14c4c] border-[#f14c4c] '
                         }`}>
                           {comp.trustLevel === 'Trusted' ? 'OK' : 'AUDIT'}
                         </span>
@@ -420,18 +420,18 @@ export default function SoftwareLineageTracker({ passports, clients, assets }: S
               </div>
 
               {/* TIER 3: Downstream Active Deployments */}
-              <div className="bg-slate-50 dark:bg-zinc-950/30 border border-slate-200/80 dark:border-zinc-850 rounded-2xl p-4 flex flex-col gap-3.5 z-10 relative">
-                <div className="flex items-center gap-2 text-xs font-black text-slate-800 dark:text-zinc-200 border-b border-slate-200/60 dark:border-zinc-850 pb-2">
-                  <Server className="w-4 h-4 text-indigo-500" />
+              <div className="bg-[#2d2d2d] border border-[#3c3c3c] rounded-md p-4 flex flex-col gap-3.5 z-10 relative">
+                <div className="flex items-center gap-2 text-xs font-black text-[#d4d4d4] border-b border-[#3c3c3c] pb-2">
+                  <Server className="w-4 h-4 text-[#3794ff]" />
                   <span>3. Downstream Runtimes</span>
                 </div>
 
                 <div className="flex-1 space-y-3 max-h-[300px] overflow-y-auto pr-1">
                   {deployedAssets.length === 0 ? (
-                    <div className="text-center py-12 text-slate-400 space-y-2">
-                      <HelpCircle className="w-6 h-6 text-slate-300 mx-auto" />
-                      <p className="text-[10px] font-semibold text-slate-600">No Active Hosting Hosts</p>
-                      <p className="text-[9px] text-slate-500 leading-normal px-2">
+                    <div className="text-center py-12 text-[#9d9d9d] space-y-2">
+                      <HelpCircle className="w-6 h-6 text-[#d4d4d4] mx-auto" />
+                      <p className="text-[10px] font-semibold text-[#6f6f6f]">No Active Hosting Hosts</p>
+                      <p className="text-[9px] text-[#9d9d9d] leading-normal px-2">
                         This passport is registered but has no current asset mappings running on servers or pods.
                       </p>
                     </div>
@@ -439,24 +439,24 @@ export default function SoftwareLineageTracker({ passports, clients, assets }: S
                     deployedAssets.map((asset) => (
                       <div
                         key={asset.id}
-                        className="p-3 bg-white dark:bg-zinc-900 border border-slate-150 dark:border-zinc-800/80 rounded-xl text-xs space-y-2 shadow-xs"
+                        className="p-3 bg-[#252526] border border-[#3c3c3c] rounded-md text-xs space-y-2 "
                       >
                         <div className="flex justify-between items-start">
                           <div>
-                            <h5 className="font-bold text-slate-800 dark:text-zinc-100 font-mono text-[10px] truncate max-w-[130px]" title={asset.hostName}>
+                            <h5 className="font-bold text-[#d4d4d4] font-mono text-[10px] truncate max-w-[130px]" title={asset.hostName}>
                               {asset.hostName}
                             </h5>
-                            <p className="text-[8px] font-mono text-slate-400 dark:text-zinc-500 mt-0.5">{asset.type} • {asset.OS}</p>
+                            <p className="text-[8px] font-mono text-[#9d9d9d] mt-0.5">{asset.type} • {asset.OS}</p>
                           </div>
                           <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold font-mono uppercase ${
-                            asset.health === 'Compliant' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                            asset.health === 'Compliant' ? 'bg-[#89d185]/15 text-[#89d185]' : 'bg-[#f14c4c]/15 text-[#f14c4c]'
                           }`}>
                             {asset.health}
                           </span>
                         </div>
 
-                        <div className="pt-2 border-t border-slate-100/70 dark:border-zinc-850 flex items-center gap-1.5 text-[9px] text-slate-500 dark:text-zinc-400 font-mono">
-                          <Building2 className="w-3.5 h-3.5 text-slate-400 dark:text-zinc-600 shrink-0" />
+                        <div className="pt-2 border-t border-[#3c3c3c] flex items-center gap-1.5 text-[9px] text-[#9d9d9d] font-mono">
+                          <Building2 className="w-3.5 h-3.5 text-[#9d9d9d] shrink-0" />
                           <span className="truncate font-semibold">{asset.clientName}</span>
                         </div>
                       </div>
@@ -469,35 +469,35 @@ export default function SoftwareLineageTracker({ passports, clients, assets }: S
           </div>
 
           {/* VULNERABILITY BLAST RADIUS TRACER utility */}
-          <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-slate-200 dark:border-zinc-800 p-5 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-150 dark:border-zinc-800 pb-3">
+          <div className="bg-[#252526] rounded-md border border-[#3c3c3c] p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-[#3c3c3c] pb-3">
               <div>
-                <h3 className="text-xs font-black text-slate-800 dark:text-zinc-100 font-display flex items-center gap-1.5 uppercase tracking-wider">
-                  <Zap className="w-4.5 h-4.5 text-amber-500 animate-bounce" />
+                <h3 className="text-xs font-black text-[#d4d4d4] font-display flex items-center gap-1.5 uppercase tracking-wider">
+                  <Zap className="w-4.5 h-4.5 text-[#cca700] animate-bounce" />
                   <span>Transitive Vulnerability Blast Radius Tracer</span>
                 </h3>
-                <p className="text-[10px] text-slate-400 dark:text-zinc-500 font-sans mt-0.5">
+                <p className="text-[10px] text-[#9d9d9d] font-sans mt-0.5">
                   Input sub-dependency name (e.g. "log4j", "openssl", "redis") to trace all host servers dependent on it.
                 </p>
               </div>
             </div>
 
             <div className="flex gap-2">
-              <div className="flex-1 flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-zinc-950/40 border border-slate-200 dark:border-zinc-850 rounded-xl">
-                <Search className="w-4 h-4 text-slate-400" />
+              <div className="flex-1 flex items-center gap-2 px-3 py-2 bg-[#2d2d2d] border border-[#3c3c3c] rounded-md">
+                <Search className="w-4 h-4 text-[#9d9d9d]" />
                 <input
                   type="text"
                   placeholder="Type package name to scan impact (e.g. openssl, redis)..."
                   value={traceSearchQuery}
                   onChange={(e) => setTraceSearchQuery(e.target.value)}
-                  className="w-full bg-transparent focus:outline-none text-xs font-medium text-slate-700 dark:text-zinc-200"
+                  className="w-full bg-transparent focus:outline-none text-xs font-medium text-[#6f6f6f] "
                 />
               </div>
               {traceSearchQuery && (
                 <button
                   type="button"
                   onClick={() => setTraceSearchQuery('')}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-600 dark:text-zinc-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                  className="px-4 py-2 bg-[#383838] hover:bg-[#383838] text-[#6f6f6f] rounded-md text-xs font-bold transition-all cursor-pointer"
                 >
                   Clear Trace
                 </button>
@@ -507,12 +507,12 @@ export default function SoftwareLineageTracker({ passports, clients, assets }: S
             {/* Traced impact results list */}
             {traceSearchQuery.trim() ? (
               <div className="space-y-3 pt-1">
-                <h4 className="text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider font-mono">
+                <h4 className="text-[10px] font-bold text-[#9d9d9d] uppercase tracking-wider font-mono">
                   Impact mapping for "{traceSearchQuery}" ({tracedImpact.length} Pipelines found)
                 </h4>
 
                 {tracedImpact.length === 0 ? (
-                  <div className="p-5 bg-slate-50 dark:bg-zinc-950/30 border border-slate-150 dark:border-zinc-850 rounded-xl text-center text-xs text-slate-500 dark:text-zinc-400">
+                  <div className="p-5 bg-[#2d2d2d] border border-[#3c3c3c] rounded-md text-center text-xs text-[#9d9d9d] ">
                     No active software passports or dependency chains are running components matching "{traceSearchQuery}".
                   </div>
                 ) : (
@@ -520,34 +520,34 @@ export default function SoftwareLineageTracker({ passports, clients, assets }: S
                     {tracedImpact.map((item, idx) => (
                       <div
                         key={idx}
-                        className="p-4 bg-slate-50 dark:bg-zinc-950/30 border border-slate-200 dark:border-zinc-850 rounded-2xl space-y-3"
+                        className="p-4 bg-[#2d2d2d] border border-[#3c3c3c] rounded-md space-y-3"
                       >
                         <div className="flex justify-between items-start">
                           <div>
-                            <span className="text-[8px] font-mono font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-150 dark:border-indigo-900/40">
+                            <span className="text-[8px] font-mono font-bold bg-[#094771] text-[#3794ff] px-1.5 py-0.5 rounded border border-[#3794ff] ">
                               Dependency Node Found
                             </span>
-                            <h5 className="font-bold text-slate-800 dark:text-zinc-200 text-xs mt-1.5">
-                              {item.component.name} <span className="text-slate-400 dark:text-zinc-500 font-normal">v{item.component.version}</span>
+                            <h5 className="font-bold text-[#d4d4d4] text-xs mt-1.5">
+                              {item.component.name} <span className="text-[#9d9d9d] font-normal">v{item.component.version}</span>
                             </h5>
-                            <p className="text-[9px] text-slate-400 dark:text-zinc-500 font-mono mt-0.5">Purl: {item.component.purl}</p>
+                            <p className="text-[9px] text-[#9d9d9d] font-mono mt-0.5">Purl: {item.component.purl}</p>
                           </div>
                           
                           <div className="text-right">
-                            <span className="text-[9px] text-slate-400 dark:text-zinc-500 block font-mono">Contained In:</span>
-                            <span className="font-extrabold text-slate-700 dark:text-zinc-300 text-xs block mt-0.5">{item.passport.name}</span>
+                            <span className="text-[9px] text-[#9d9d9d] block font-mono">Contained In:</span>
+                            <span className="font-extrabold text-[#6f6f6f] text-xs block mt-0.5">{item.passport.name}</span>
                           </div>
                         </div>
 
                         {/* Blast list of host targets */}
-                        <div className="pt-2.5 border-t border-slate-200/60 dark:border-zinc-850 space-y-2">
-                          <p className="text-[9px] font-bold text-indigo-900 dark:text-indigo-400 uppercase font-mono tracking-wider flex items-center gap-1">
-                            <Server className="w-3 h-3 text-indigo-500" />
+                        <div className="pt-2.5 border-t border-[#3c3c3c] space-y-2">
+                          <p className="text-[9px] font-bold text-[#3794ff] uppercase font-mono tracking-wider flex items-center gap-1">
+                            <Server className="w-3 h-3 text-[#3794ff]" />
                             <span>Vulnerable Deployment Blast Target Hosts ({item.hosts.length})</span>
                           </p>
 
                           {item.hosts.length === 0 ? (
-                            <p className="text-[9px] text-slate-500 dark:text-zinc-400 font-sans italic bg-white dark:bg-zinc-900 p-2.5 rounded-xl border border-slate-150 dark:border-zinc-800">
+                            <p className="text-[9px] text-[#9d9d9d] font-sans italic bg-[#252526] p-2.5 rounded-md border border-[#3c3c3c] ">
                               Component is listed in the SBOM but currently has zero active deployment hosts. Threat exposure is minimal.
                             </p>
                           ) : (
@@ -555,14 +555,14 @@ export default function SoftwareLineageTracker({ passports, clients, assets }: S
                               {item.hosts.map((host) => (
                                 <div
                                   key={host.id}
-                                  className="p-2 bg-white dark:bg-zinc-900 border border-slate-150 dark:border-zinc-800 rounded-lg text-[10px] flex items-center justify-between shadow-inner"
+                                  className="p-2 bg-[#252526] border border-[#3c3c3c] rounded-md text-[10px] flex items-center justify-between "
                                 >
                                   <div>
-                                    <p className="font-bold text-slate-700 dark:text-zinc-200 font-mono truncate max-w-[140px]">{host.hostName}</p>
-                                    <p className="text-[8px] text-slate-400 dark:text-zinc-500 font-mono mt-0.5">{host.clientName} • {host.environment}</p>
+                                    <p className="font-bold text-[#6f6f6f] font-mono truncate max-w-[140px]">{host.hostName}</p>
+                                    <p className="text-[8px] text-[#9d9d9d] font-mono mt-0.5">{host.clientName} • {host.environment}</p>
                                   </div>
                                   <span className={`px-1 py-0.2 rounded text-[7px] font-mono font-bold uppercase ${
-                                    host.health === 'Compliant' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-rose-50 text-rose-700 border border-rose-100'
+                                    host.health === 'Compliant' ? 'bg-[#89d185]/15 text-[#89d185] border border-[#89d185]' : 'bg-[#f14c4c]/15 text-[#f14c4c] border border-[#f14c4c]'
                                   }`}>
                                     {host.health}
                                   </span>
@@ -577,10 +577,10 @@ export default function SoftwareLineageTracker({ passports, clients, assets }: S
                 )}
               </div>
             ) : (
-              <div className="p-4 bg-slate-50/50 dark:bg-zinc-950/20 border border-dashed border-slate-200 dark:border-zinc-800 rounded-2xl text-center text-xs text-slate-500 flex items-center gap-3">
-                <Info className="w-4.5 h-4.5 text-slate-400 shrink-0" />
-                <p className="text-[10px] text-slate-500 dark:text-zinc-400 leading-snug text-left">
-                  Trace utilities query transitively mapped software bill-of-materials elements recursively. For example, search <code className="bg-slate-150 dark:bg-zinc-900 px-1 py-0.5 rounded font-mono font-bold text-indigo-700 dark:text-indigo-400">openssl</code> to identify its downstream footprint or <code className="bg-slate-150 dark:bg-zinc-900 px-1 py-0.5 rounded font-mono font-bold text-indigo-700 dark:text-indigo-400">postgres</code> to check running nodes.
+              <div className="p-4 bg-[#2d2d2d] border border-dashed border-[#3c3c3c] rounded-md text-center text-xs text-[#9d9d9d] flex items-center gap-3">
+                <Info className="w-4.5 h-4.5 text-[#9d9d9d] shrink-0" />
+                <p className="text-[10px] text-[#9d9d9d] leading-snug text-left">
+                  Trace utilities query transitively mapped software bill-of-materials elements recursively. For example, search <code className="bg-[#383838] px-1 py-0.5 rounded font-mono font-bold text-[#3794ff] ">openssl</code> to identify its downstream footprint or <code className="bg-[#383838] px-1 py-0.5 rounded font-mono font-bold text-[#3794ff] ">postgres</code> to check running nodes.
                 </p>
               </div>
             )}
@@ -600,7 +600,7 @@ export default function SoftwareLineageTracker({ passports, clients, assets }: S
               animate={{ opacity: 0.6 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsExplanationOpen(false)}
-              className="absolute inset-0 bg-black/80 backdrop-blur-xs"
+              className="absolute inset-0 bg-black/80 "
             />
             
             {/* Explainer Modal container */}
@@ -608,24 +608,24 @@ export default function SoftwareLineageTracker({ passports, clients, assets }: S
               initial={{ scale: 0.95, y: 15, opacity: 0 }}
               animate={{ scale: 1, y: 0, opacity: 1 }}
               exit={{ scale: 0.95, y: 15, opacity: 0 }}
-              className="relative w-full max-w-lg bg-white dark:bg-zinc-900 border border-slate-150 dark:border-zinc-800 rounded-3xl p-6 shadow-2xl overflow-hidden text-left z-10"
+              className="relative w-full max-w-lg bg-[#252526] border border-[#3c3c3c] rounded-md p-6 overflow-hidden text-left z-10"
             >
               {/* Decorative top ribbon */}
-              <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-indigo-500 to-indigo-600"></div>
+              <div className="absolute top-0 inset-x-0 h-1.5 bg-[#0e639c]"></div>
 
               <div className="flex items-start justify-between mb-4 mt-2">
                 <div className="space-y-1">
-                  <span className="text-[9px] font-mono font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest block">
+                  <span className="text-[9px] font-mono font-black text-[#3794ff] uppercase tracking-widest block">
                     SPR INTELLIGENCE SYSTEM • WHY IT EXISTS
                   </span>
-                  <h3 className="text-lg font-display font-black text-slate-900 dark:text-white flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-indigo-500" />
+                  <h3 className="text-lg font-display font-black text-[#d4d4d4] flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-[#3794ff]" />
                     <span>Explain {activePassport.name}</span>
                   </h3>
                 </div>
                 <button
                   onClick={() => setIsExplanationOpen(false)}
-                  className="p-1.5 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 cursor-pointer transition-colors"
+                  className="p-1.5 hover:bg-[#383838] rounded-md text-[#9d9d9d] hover:text-[#6f6f6f] cursor-pointer transition-colors"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -634,32 +634,32 @@ export default function SoftwareLineageTracker({ passports, clients, assets }: S
               {/* Explainer Body */}
               <div className="space-y-5">
                 {/* Structured Software Card Details */}
-                <div className="p-4 bg-slate-50 dark:bg-zinc-950/40 border border-slate-150 dark:border-zinc-850 rounded-2xl space-y-4">
+                <div className="p-4 bg-[#2d2d2d] border border-[#3c3c3c] rounded-md space-y-4">
                   <div>
-                    <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase block mb-1">What it does</span>
-                    <p className="text-xs text-slate-700 dark:text-zinc-300 font-bold leading-relaxed">
+                    <span className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase block mb-1">What it does</span>
+                    <p className="text-xs text-[#6f6f6f] font-bold leading-relaxed">
                       {activeMnemonic.whatItDoes}
                     </p>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 pt-1">
                     <div>
-                      <span className="text-[9px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase block mb-0.5">Who uses it</span>
-                      <span className="text-xs font-bold text-slate-800 dark:text-zinc-200">
+                      <span className="text-[9px] font-mono font-bold text-[#9d9d9d] uppercase block mb-0.5">Who uses it</span>
+                      <span className="text-xs font-bold text-[#d4d4d4] ">
                         {activeMnemonic.whoUsesit}
                       </span>
                     </div>
                     <div>
-                      <span className="text-[9px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase block mb-0.5">Business Importance</span>
-                      <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                      <span className="text-[9px] font-mono font-bold text-[#9d9d9d] uppercase block mb-0.5">Business Importance</span>
+                      <span className="text-xs font-bold text-[#3794ff] ">
                         ⭐ {activeMnemonic.businessImportance}
                       </span>
                     </div>
                   </div>
 
-                  <div className="pt-2 border-t border-slate-200/60 dark:border-zinc-850">
-                    <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase block mb-1">Connected systems</span>
-                    <p className="text-xs text-slate-600 dark:text-zinc-400 font-medium">
+                  <div className="pt-2 border-t border-[#3c3c3c] ">
+                    <span className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase block mb-1">Connected systems</span>
+                    <p className="text-xs text-[#6f6f6f] font-medium">
                       {activeMnemonic.connections}
                     </p>
                   </div>
@@ -667,29 +667,29 @@ export default function SoftwareLineageTracker({ passports, clients, assets }: S
 
                 {/* The Magic Narrative */}
                 <div className="space-y-2">
-                  <span className="text-[10px] font-mono font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-wider block">
+                  <span className="text-[10px] font-mono font-black text-[#3794ff] uppercase tracking-wider block">
                     SPR ADVISOR DIRECT NARRATIVE:
                   </span>
-                  <div className="bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100/50 dark:border-indigo-900/30 p-4 rounded-2xl text-xs text-indigo-950 dark:text-indigo-200 font-medium leading-relaxed font-sans">
+                  <div className="bg-[#094771] border border-[#3794ff] p-4 rounded-md text-xs text-[#3794ff] font-medium leading-relaxed font-sans">
                     “{activeMnemonic.explanation}”
                   </div>
                 </div>
 
                 {/* Recommendation */}
-                <div className="flex items-center justify-between text-xs border-t border-slate-100 dark:border-zinc-800 pt-3">
-                  <span className="text-slate-400">Recommendation:</span>
-                  <span className="font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-100 dark:bg-emerald-950/20 dark:border-emerald-900/40 dark:text-emerald-400 px-2.5 py-0.5 rounded-lg">
+                <div className="flex items-center justify-between text-xs border-t border-[#3c3c3c] pt-3">
+                  <span className="text-[#9d9d9d]">Recommendation:</span>
+                  <span className="font-mono font-bold bg-[#89d185]/15 text-[#89d185] border border-[#89d185] px-2.5 py-0.5 rounded-md">
                     Keep — Important Business System
                   </span>
                 </div>
               </div>
 
               {/* Close footer button */}
-              <div className="mt-5 pt-3 border-t border-slate-100 dark:border-zinc-800 text-right">
+              <div className="mt-5 pt-3 border-t border-[#3c3c3c] text-right">
                 <button
                   type="button"
                   onClick={() => setIsExplanationOpen(false)}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2 rounded-xl text-xs cursor-pointer transition-colors"
+                  className="bg-[#0e639c] hover:bg-[#0e639c] text-[#d4d4d4] font-bold px-4 py-2 rounded-md text-xs cursor-pointer transition-colors"
                 >
                   Got it, close
                 </button>

@@ -47,7 +47,7 @@ function NavGroup({ group, activePath, onNavigate, defaultOpen }: { group: Group
     <div className="mb-1">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-[.06em] text-[#8a8886] hover:text-[#201f1e]"
+        className="flex w-full items-center justify-between px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-[.06em] text-[#6f6f6f] hover:text-[#d4d4d4]"
       >
         <span>{group.label}</span>
         <span className="text-[9px]">{open ? '▾' : '▸'}</span>
@@ -64,7 +64,7 @@ function NavGroup({ group, activePath, onNavigate, defaultOpen }: { group: Group
                 className="spr-nav-item flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[13px]"
                 style={active ? undefined : { color: 'var(--spr-text)' }}
               >
-                <span className="grid h-5 w-5 shrink-0 place-items-center text-[10px] text-[#8a8886]">{item.icon}</span>
+                <span className="grid h-5 w-5 shrink-0 place-items-center text-[10px] text-[#6f6f6f]">{item.icon}</span>
                 <span className="flex-1 truncate">{item.label}</span>
               </button>
             );
@@ -84,7 +84,7 @@ function ExtensionButton({ extension, active, onNavigate }: ExtensionButtonProps
       className="spr-nav-item flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[13px]"
       style={active ? undefined : { color: 'var(--spr-text)' }}
     >
-      <span className="grid h-5 w-5 shrink-0 place-items-center rounded-sm border border-[#e1dfdd] text-[8px] font-bold text-[#605e5c]">EX</span>
+      <span className="grid h-5 w-5 shrink-0 place-items-center rounded-sm border border-[#3c3c3c] text-[8px] font-bold text-[#9d9d9d]">EX</span>
       <span className="min-w-0 flex-1 truncate">{extension.shortName}</span>
     </button>
   );
@@ -100,33 +100,33 @@ export default function CommandCenter({ children, path, userEmail, role, onNavig
   const currentLabel = extensionActive ? 'Extension workflow' : currentItem?.label || 'Trust workspace';
 
   return (
-    <div className="min-h-screen bg-white text-[#201f1e]">
+    <div className="min-h-screen bg-[#1e1e1e] text-[#d4d4d4]">
       <div className="flex min-h-screen">
         <aside className="spr-nav hidden h-screen w-[240px] shrink-0 overflow-y-auto p-2.5 lg:sticky lg:top-0 lg:flex lg:flex-col">
           <button
             onClick={() => onNavigate('/dashboard')}
             aria-label="Open Overview"
-            className="mb-3 flex items-center gap-2.5 rounded-md border border-[#e1dfdd] p-2 text-left hover:bg-[#faf9f8] focus:outline-none focus:ring-2 focus:ring-[#0f6cbd]/40"
+            className="mb-3 flex items-center gap-2.5 rounded-md border border-[#3c3c3c] p-2 text-left hover:bg-[#252526] focus:outline-none focus:ring-2 focus:ring-[#3794ff]/40"
           >
-            <span className="grid h-8 w-8 place-items-center rounded-md border border-[#e1dfdd] bg-[#eef6fc] text-[10px] font-bold text-[#0f6cbd]">SPR</span>
+            <span className="grid h-8 w-8 place-items-center rounded-md border border-[#3c3c3c] bg-[#094771] text-[10px] font-bold text-[#3794ff]">SPR</span>
             <span className="min-w-0">
               <span className="block text-[13px] font-semibold leading-tight">Software Passport Registry</span>
-              <span className="block text-[10px] leading-tight text-[#8a8886]">Software Trust OS</span>
+              <span className="block text-[10px] leading-tight text-[#6f6f6f]">Software Trust OS</span>
             </span>
           </button>
           <NavGroup group={{ label: 'Core workflow', items: CORE }} activePath={active} onNavigate={onNavigate} defaultOpen />
           <NavGroup group={{ label: 'Governance', items: GOVERNANCE }} activePath={active} onNavigate={onNavigate} defaultOpen />
           <NavGroup group={{ label: 'Executive', items: executiveItems }} activePath={active} onNavigate={onNavigate} defaultOpen={false} />
-          <div className="mb-1 mt-2 flex items-center justify-between px-2 py-1.5 text-[11px] font-semibold uppercase tracking-[.06em] text-[#8a8886]">
+          <div className="mb-1 mt-2 flex items-center justify-between px-2 py-1.5 text-[11px] font-semibold uppercase tracking-[.06em] text-[#6f6f6f]">
             <span>Extensions</span>
-            <span className="rounded-sm border border-[#e1dfdd] px-1.5 text-[9px] text-[#605e5c]">{EXTENSIONS.length}</span>
+            <span className="rounded-sm border border-[#3c3c3c] px-1.5 text-[9px] text-[#9d9d9d]">{EXTENSIONS.length}</span>
           </div>
           <nav className="space-y-0.5">
             {EXTENSIONS.map((extension) => (
               <ExtensionButton key={extension.id} extension={extension} active={extensionActive && path === extension.entryPath} onNavigate={onNavigate} />
             ))}
           </nav>
-          <div className="mt-auto space-y-0.5 border-t border-[#e1dfdd] pt-2">
+          <div className="mt-auto space-y-0.5 border-t border-[#3c3c3c] pt-2">
             {SYSTEM.map((item) => (
               <button
                 key={item.id}
@@ -135,7 +135,7 @@ export default function CommandCenter({ children, path, userEmail, role, onNavig
                 className="spr-nav-item flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[13px]"
                 style={active(item.path) ? undefined : { color: 'var(--spr-text)' }}
               >
-                <span className="grid h-5 w-5 shrink-0 place-items-center text-[10px] text-[#8a8886]">{item.icon}</span>
+                <span className="grid h-5 w-5 shrink-0 place-items-center text-[10px] text-[#6f6f6f]">{item.icon}</span>
                 <span className="flex-1 truncate">{item.label}</span>
               </button>
             ))}
@@ -143,27 +143,27 @@ export default function CommandCenter({ children, path, userEmail, role, onNavig
         </aside>
 
         <main className="min-w-0 flex-1">
-          <header className="sticky top-0 z-30 h-12 border-b border-[#e1dfdd] bg-white/95 px-4 backdrop-blur-none md:px-6">
+          <header className="sticky top-0 z-30 h-12 border-b border-[#3c3c3c] bg-[#1e1e1e]/95 px-4 backdrop-blur-none md:px-6">
             <div className="flex h-12 items-center gap-3">
               <button
                 onClick={() => onNavigate('/dashboard')}
                 aria-label="Open Overview"
-                className="grid h-7 w-7 place-items-center rounded-md border border-[#e1dfdd] bg-[#eef6fc] text-[9px] font-bold text-[#0f6cbd] focus:outline-none focus:ring-2 focus:ring-[#0f6cbd]/40 lg:hidden"
+                className="grid h-7 w-7 place-items-center rounded-md border border-[#3c3c3c] bg-[#094771] text-[9px] font-bold text-[#3794ff] focus:outline-none focus:ring-2 focus:ring-[#3794ff]/40 lg:hidden"
               >
                 SPR
               </button>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5 text-[11px] text-[#8a8886]">
+                <div className="flex items-center gap-1.5 text-[11px] text-[#6f6f6f]">
                   <span>Workspace</span>
                   <span>/</span>
-                  <span className="font-medium text-[#201f1e]">{currentLabel}</span>
+                  <span className="font-medium text-[#d4d4d4]">{currentLabel}</span>
                 </div>
               </div>
-              <span className="hidden items-center gap-1.5 rounded-sm border border-[#e1dfdd] px-2 py-0.5 text-[11px] text-[#605e5c] md:flex">
+              <span className="hidden items-center gap-1.5 rounded-sm border border-[#3c3c3c] px-2 py-0.5 text-[11px] text-[#9d9d9d] md:flex">
                 <span className="spr-status-dot spr-status-dot--green" /> Live
               </span>
-              <span className="hidden rounded-sm border border-[#e1dfdd] px-2 py-0.5 text-[11px] text-[#605e5c] md:inline">{role}</span>
-              <span className="hidden max-w-[180px] truncate text-[11px] text-[#8a8886] xl:inline">{userEmail || 'Authenticated user'}</span>
+              <span className="hidden rounded-sm border border-[#3c3c3c] px-2 py-0.5 text-[11px] text-[#9d9d9d] md:inline">{role}</span>
+              <span className="hidden max-w-[180px] truncate text-[11px] text-[#6f6f6f] xl:inline">{userEmail || 'Authenticated user'}</span>
               <button
                 onClick={() => setMobileMenuOpen((open) => !open)}
                 aria-expanded={mobileMenuOpen}
@@ -176,14 +176,14 @@ export default function CommandCenter({ children, path, userEmail, role, onNavig
             </div>
           </header>
 
-          <div className="border-b border-[#e1dfdd] bg-[#faf9f8] px-2 py-1.5 lg:hidden">
+          <div className="border-b border-[#3c3c3c] bg-[#252526] px-2 py-1.5 lg:hidden">
             <div className="flex gap-1.5 overflow-x-auto pb-0.5">
               {mobileItems.slice(0, 8).map((item) => (
                 <button
                   key={item.id}
                   onClick={() => { onNavigate(item.path); setMobileMenuOpen(false); }}
                   data-active={active(item.path)}
-                  className="spr-nav-item shrink-0 border border-[#e1dfdd] px-2.5 py-1.5 text-[11px]"
+                  className="spr-nav-item shrink-0 border border-[#3c3c3c] px-2.5 py-1.5 text-[11px]"
                 >
                   {item.label}
                 </button>
@@ -193,13 +193,13 @@ export default function CommandCenter({ children, path, userEmail, role, onNavig
               </button>
             </div>
             {mobileMenuOpen && (
-              <div className="mt-1.5 grid max-h-64 grid-cols-2 gap-1.5 overflow-y-auto border-t border-[#e1dfdd] pt-1.5">
+              <div className="mt-1.5 grid max-h-64 grid-cols-2 gap-1.5 overflow-y-auto border-t border-[#3c3c3c] pt-1.5">
                 {mobileItems.slice(8).map((item) => (
                   <button
                     key={item.id}
                     onClick={() => { onNavigate(item.path); setMobileMenuOpen(false); }}
                     data-active={active(item.path)}
-                    className="spr-nav-item border border-[#e1dfdd] px-2.5 py-2 text-left text-[11px]"
+                    className="spr-nav-item border border-[#3c3c3c] px-2.5 py-2 text-left text-[11px]"
                   >
                     {item.label}
                   </button>
