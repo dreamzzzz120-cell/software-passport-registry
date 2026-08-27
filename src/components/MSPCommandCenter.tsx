@@ -126,7 +126,7 @@ export default function MSPCommandCenter({ clients, alerts, role = 'Viewer', onS
   return <div className="mx-auto max-w-6xl space-y-8 pb-10" id="msp-command-center">
     <section className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
       <div>
-        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-[#3794ff]">MSP command center</p>
+        <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-[#c586c0]"><Building2 className="h-4 w-4" /> MSP command center</div>
         <h1 className="text-3xl font-bold tracking-tight text-[#d4d4d4] md:text-4xl">Who needs you today?</h1>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-[#9d9d9d]">Prioritized work from the evidence and findings SPR currently has on record. A closed task is not a verified fix.</p>
       </div>

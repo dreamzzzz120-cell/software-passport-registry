@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type MouseEvent, type WheelEvent } from 'react';
-import { CircleHelp, Filter, Maximize2, Search, X, ZoomIn, ZoomOut } from 'lucide-react';
+import { CircleHelp, Filter, Maximize2, Search, Share2, X, ZoomIn, ZoomOut } from 'lucide-react';
 import type { Client, SoftwarePassport } from '../types';
 
 type GraphAsset = { id: string; name?: string; hostName?: string; type?: string; clientId?: string; clientName?: string; version?: string };
@@ -187,7 +187,7 @@ export default function TrustGraphView({ clients = [], passports = [], assets = 
       <header className="spr-panel p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <div className="text-[11px] font-semibold uppercase tracking-[.06em] text-[#6f6f6f]">Trust graph</div>
+            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[.06em] text-[#9cdcfe]"><Share2 className="h-4 w-4" /> Trust graph</div>
             <h1 id="trust-graph-title" className="mt-2 text-3xl font-semibold tracking-tight">Observed relationships</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-[#9d9d9d]">Relationships are drawn only when a field on one loaded record matches another. Click a node for its record, or click a relationship line for why it was drawn.</p>
           </div>

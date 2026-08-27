@@ -111,7 +111,7 @@ export default function AITrustCenterView({ role = 'Viewer' }: { role?: string }
       <header className="spr-panel p-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[.06em] text-[#6f6f6f]"><Bot className="h-4 w-4" /> AI Trust Center</div>
+            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[.06em] text-[#3794ff]"><Bot className="h-4 w-4" /> AI Trust Center</div>
             <h1 id="ai-trust-title" className="mt-2 text-3xl font-semibold tracking-tight">Your AI systems, declared and tracked</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-[#9d9d9d]">This is a self-reported registry. SPR has no mechanism to auto-discover AI agents or model usage — every field here is what your team declared, not an independently observed fact.</p>
           </div>

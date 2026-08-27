@@ -61,7 +61,7 @@ export default function SecurityCenterView({ clients, passports }: SecurityCente
       <header className="rounded-[28px] border border-[#3c3c3c] bg-[#252526] p-6 md:p-8">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.22em] text-[#3794ff]">
+            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.22em] text-[#f14c4c]">
               <ShieldCheck className="h-4 w-4" /> Security evidence
             </div>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight text-[#d4d4d4]">Security posture ledger</h1>

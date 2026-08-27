@@ -60,7 +60,7 @@ export default function EvidenceExplorerView({ passports = [] }: Props) {
   return (
     <section className="space-y-6" aria-labelledby="evidence-explorer-title">
       <header className="rounded-md border border-[#3c3c3c] bg-[#252526] p-6">
-        <div className="text-[10px] font-bold uppercase tracking-[.22em] text-[#3794ff]">Evidence explorer</div>
+        <div className="text-[10px] font-bold uppercase tracking-[.22em] text-[#4ec9b0]">Evidence explorer</div>
         <h1 id="evidence-explorer-title" className="mt-2 text-3xl font-semibold tracking-tight">Every claim, traced to its evidence</h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-[#9d9d9d]">{ledger?.trace || 'Claim → Evidence → Source → Timestamp → Hash → History. Select a finding to see exactly what backs it.'}</p>
         <div className="mt-5">

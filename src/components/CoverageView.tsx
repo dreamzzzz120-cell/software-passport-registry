@@ -68,7 +68,7 @@ export default function CoverageView({ clients, scans, passports, onNavigateTab 
       <section className="spr-panel p-7 md:p-9">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
-            <div className="text-[11px] font-semibold uppercase tracking-[.06em] text-[#6f6f6f]">01 · Coverage</div>
+            <div className="text-[11px] font-semibold uppercase tracking-[.06em] text-[#89d185]">01 · Coverage</div>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight text-[#d4d4d4] md:text-4xl">Know exactly what was observed.</h1>
             <p className="mt-4 text-sm leading-6 text-[#9d9d9d]">Coverage is calculated from records currently loaded from the tenant backend. Missing evidence is shown as missing; it is never treated as a positive security or trust signal.</p>
           </div>

@@ -166,8 +166,8 @@ export default function AuditLogView() {
     <section className="space-y-6" aria-labelledby="audit-log-title">
       <div className="flex flex-col gap-4 border-b border-[#3c3c3c] pb-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[.06em] text-[#6f6f6f]">Governance ledger</div>
-          <h1 id="audit-log-title" className="mt-2 flex items-center gap-2 text-3xl font-semibold tracking-tight"><FileClock className="h-6 w-6 text-[#3794ff]" />Audit log</h1>
+          <div className="text-[11px] font-semibold uppercase tracking-[.06em] text-[#ce9178]">Governance ledger</div>
+          <h1 id="audit-log-title" className="mt-2 flex items-center gap-2 text-3xl font-semibold tracking-tight"><FileClock className="h-6 w-6 text-[#ce9178]" />Audit log</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[#9d9d9d]">Tenant-scoped administrative events from the persisted hash-chained audit trail. No events are synthesized in this view.</p>
         </div>
         <div className="flex flex-wrap gap-2">

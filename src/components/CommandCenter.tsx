@@ -1,19 +1,13 @@
 import { useState, type Key, type ReactNode } from 'react';
 import { EXTENSIONS, type ExtensionDefinition } from '../workflows/extensionRegistry';
+import { AMBER, BLUE, CYAN, GREEN, ORANGE, PURPLE, RED, TEAL } from '../workflows/featureColors';
 
 type NavItem = { id: string; label: string; icon: string; path: string; color: string; desc: string };
 
 // A distinct accent per feature so the sidebar reads at a glance instead of
-// as a wall of identically-gray glyphs. Colors are drawn from the same VS
-// Code Dark+ token palette used everywhere else (src/index.css --spr-*).
-const BLUE = '#3794ff';
-const CYAN = '#9cdcfe';
-const TEAL = '#4ec9b0';
-const GREEN = '#89d185';
-const AMBER = '#cca700';
-const RED = '#f14c4c';
-const PURPLE = '#c586c0';
-const ORANGE = '#ce9178';
+// as a wall of identically-gray glyphs — see workflows/featureColors.ts,
+// which is also used by each feature's own page header so the same feature
+// reads as the same color everywhere it appears.
 
 const CORE: NavItem[] = [
   { id: 'dashboard', label: 'Overview', icon: '⌂', path: '/dashboard', color: BLUE, desc: 'Workspace summary — key metrics across passports, evidence, and alerts at a glance.' },

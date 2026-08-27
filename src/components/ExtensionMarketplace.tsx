@@ -75,9 +75,9 @@ export default function ExtensionMarketplace({ onNavigateTab, role = 'Viewer' }:
   return <section className="space-y-6" id="extension-marketplace-view">
     <header className="rounded-md border border-[#3c3c3c] bg-[#252526] p-6 ">
       <div className="flex items-start gap-3">
-        <div className="grid h-10 w-10 place-items-center rounded-xl border border-[#3794ff]/40 bg-[#094771] text-[#3794ff]"><Shield size={18} /></div>
+        <div className="grid h-10 w-10 place-items-center rounded-xl border border-[#c586c0]/40 bg-[#094771] text-[#c586c0]"><Shield size={18} /></div>
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-[.2em] text-[#3794ff]">Extension system</div>
+          <div className="text-[10px] font-bold uppercase tracking-[.2em] text-[#c586c0]">Extension system</div>
           <h1 className="mt-1 text-2xl font-semibold">Capability Marketplace</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-[#9d9d9d]">The catalog describes capabilities and workflow definitions. Installation state is tenant-scoped and persisted through the authenticated backend. It does not present synthetic popularity, activity, deployment, certification, or provider-health claims.</p>
         </div>

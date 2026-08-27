@@ -227,7 +227,8 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
     <div className="space-y-6" id="msp-vendors-view-dashboard">
       {/* Page Header */}
       <div>
-        <h1 className="text-xl font-display font-bold text-[#d4d4d4] flex items-center gap-2">
+        <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.22em] text-[#c586c0]"><Factory className="h-4 w-4" /> Supply chain trust</div>
+        <h1 className="mt-1 text-xl font-display font-bold text-[#d4d4d4] flex items-center gap-2">
           <Factory className="w-5 h-5 text-[#3794ff]" />
           <span>Vendor Trust Registry</span>
         </h1>

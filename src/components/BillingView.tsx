@@ -84,6 +84,7 @@ export default function BillingView() {
  {/* Page Header */}
  <div className="flex justify-between items-center">
  <div>
+ <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.22em] text-[#cca700]"><CreditCard className="h-4 w-4" /> Billing</div>
  <h1 className="text-xl font-display font-bold text-[#d4d4d4]">Tenant Billing & Subscriptions</h1>
  <p className="text-xs text-[#9d9d9d] font-sans mt-1">
  Monitor contract licenses, active software passport quotas, and billing invoices across your MSP account.

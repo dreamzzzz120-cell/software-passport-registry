@@ -545,8 +545,9 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-[#3c3c3c] pb-4">
         <div>
-          <h1 className="text-xl font-bold text-[#d4d4d4] flex items-center gap-2">
-            <Settings className="w-5 h-5 text-[#3794ff]" />
+          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.22em] text-[#9cdcfe]"><Sliders className="h-4 w-4" /> Platform configuration</div>
+          <h1 className="mt-2 text-xl font-bold text-[#d4d4d4] flex items-center gap-2">
+            <Settings className="w-5 h-5 text-[#9cdcfe]" />
             <span>Platform Settings & Compliance Bible</span>
           </h1>
           <p className="text-xs text-[#9d9d9d] font-sans mt-1">

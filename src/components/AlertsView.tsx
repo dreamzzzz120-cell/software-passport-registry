@@ -57,7 +57,7 @@ export default function AlertsView({ alerts, onAlertAction }: AlertsViewProps) {
       <header className="rounded-[28px] border border-[#3c3c3c] bg-[#252526] p-6 md:p-8">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.22em] text-[#3794ff]"><Bell className="h-4 w-4" /> Attention queue</div>
+            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.22em] text-[#f14c4c]"><Bell className="h-4 w-4" /> Attention queue</div>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight text-[#d4d4d4]">Alerts that need a decision</h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-[#9d9d9d]">Acknowledge, assign, escalate, or resolve server-backed trust findings. Every action updates the same remediation work item shown elsewhere in SPR.</p>
           </div>

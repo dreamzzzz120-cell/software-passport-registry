@@ -432,7 +432,8 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
       {/* Page Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-xl font-display font-bold text-[#d4d4d4]">SBOM Scanning & Attestation</h1>
+          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.22em] text-[#ce9178]"><Radar className="h-4 w-4" /> Continuous scanning</div>
+          <h1 className="mt-3 text-xl font-display font-bold text-[#d4d4d4]">SBOM Scanning & Attestation</h1>
           <p className="text-xs text-[#9d9d9d] font-sans mt-1">
             Analyze JSON software manifests to compile trust indexes, and manage automated scanning schedules for critical production assets.
           </p>

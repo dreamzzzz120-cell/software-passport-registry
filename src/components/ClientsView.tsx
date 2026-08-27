@@ -121,7 +121,8 @@ export default function ClientsView({
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <div>
-          <h1 className="text-xl font-display font-extrabold text-[#d4d4d4] ">Client Tenant Directory</h1>
+          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.22em] text-[#c586c0]"><Building2 className="h-4 w-4" /> Tenant directory</div>
+          <h1 className="text-xl font-display font-extrabold text-[#d4d4d4] mt-1">Client Tenant Directory</h1>
           <p className="text-xs text-[#9d9d9d] font-sans mt-1">
             Browse and manage software trust state across {clients.length} active workspace tenants. Click a card to open.
           </p>

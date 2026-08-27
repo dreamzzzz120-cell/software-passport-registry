@@ -101,7 +101,7 @@ export default function FounderDashboardView({ userRole }: FounderDashboardViewP
       <div className="rounded-md border border-[#3c3c3c] bg-[#1e1e1e] p-8">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
           <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 rounded-full bg-[#89d185]/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#89d185]">
+            <div className="inline-flex items-center gap-2 rounded-full bg-[#f14c4c]/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#f14c4c]">
               <Sparkles className="w-4 h-4" /> SPR Sovereign Control Center
             </div>
             <h1 className="text-2xl font-display font-bold text-[#d4d4d4]">Founder / Owner Command Center</h1>

@@ -172,7 +172,8 @@ export default function IntegrationsView({ passports = [], onNavigateTab }: Inte
     <div className="space-y-6" id="msp-integrations-view">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-xl font-display font-bold text-[#d4d4d4]">Integrations</h1>
+          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.22em] text-[#4ec9b0]"><Plug className="h-4 w-4" /> Connected evidence</div>
+          <h1 className="mt-1 text-xl font-display font-bold text-[#d4d4d4]">Integrations</h1>
           <p className="text-xs text-[#9d9d9d] font-sans mt-1">Every connector below makes a real authenticated request and writes hashed evidence to the trust graph — nothing here is a UI-only toggle.</p>
         </div>
         {catalogLoading && <RefreshCw className="h-4 w-4 animate-spin text-[#6f6f6f]" />}

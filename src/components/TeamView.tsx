@@ -238,8 +238,8 @@ export default function TeamView({ role }: { role: string }) {
     <section className="space-y-6" aria-labelledby="team-title">
       <div className="flex flex-col gap-4 border-b border-[#3c3c3c] pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[.06em] text-[#3794ff]">Workspace administration</div>
-          <h1 id="team-title" className="mt-2 flex items-center gap-2 text-3xl font-semibold tracking-tight"><Users className="h-6 w-6 text-[#3794ff]" />Team</h1>
+          <div className="text-[11px] font-semibold uppercase tracking-[.06em] text-[#4ec9b0]">Workspace administration</div>
+          <h1 id="team-title" className="mt-2 flex items-center gap-2 text-3xl font-semibold tracking-tight"><Users className="h-6 w-6 text-[#4ec9b0]" />Team</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[#9d9d9d]">Manage provisioned workspace members and their RBAC roles. Changes apply to the authenticated tenant only.</p>
         </div>
         <button type="button" onClick={() => { void loadMembers(); void loadSessions(); void loadHistory(); }} disabled={loading || working} className="spr-btn spr-btn-secondary inline-flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-50" aria-label="Refresh team data">
