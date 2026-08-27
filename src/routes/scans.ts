@@ -46,7 +46,12 @@ function nextRunAt(frequency: string, from = new Date()) {
 
 export function createScansRouter() {
   const router = Router();
-  router.use(requireAuth);
+  // Scoped to this router's own paths, not a blanket `router.use(requireAuth)` —
+  // this router is mounted at bare '/api', so an unscoped auth check here would
+  // swallow every unmatched '/api/*' request as a 401 before it ever reaches the
+  // real 404 handler in server.ts.
+  router.use('/scans', requireAuth);
+  router.use('/agent-jobs', requireAuth);
 
   router.get('/scans', async (req: AuthenticatedRequest, res, next) => {
     try {
