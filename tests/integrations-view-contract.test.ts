@@ -9,7 +9,12 @@ const read = (relative: string) => fs.readFileSync(path.join(root, relative), 'u
 describe('SPR integrations UI contracts', () => {
   it('drives Connect/Sync from the real live-integration endpoints instead of the removed dead /toggle and /sync routes', () => {
     const view = read('src/components/IntegrationsView.tsx');
-    expect(view).toContain("apiFetch('/api/integrations-live/')");
+    // No trailing slash -- Vercel's /api/:path* rewrite does not match one
+    // and silently falls through to the SPA shell instead of proxying to
+    // Railway (production regression: the catalog rendered as a silent
+    // empty grid, response.ok was true and response.json() failed on HTML).
+    expect(view).toContain("apiFetch('/api/integrations-live')");
+    expect(view).not.toContain("apiFetch('/api/integrations-live/')");
     expect(view).toContain('/api/integrations-live/${encodeURIComponent(provider)}/credentials');
     expect(view).toContain('/api/integrations-live/${encodeURIComponent(provider)}/test');
     const app = read('src/App.tsx');

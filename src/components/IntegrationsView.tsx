@@ -107,7 +107,13 @@ export default function IntegrationsView({ passports = [], clients = [], onNavig
 
   const loadCatalog = () => {
     setCatalogLoading(true);
-    apiFetch('/api/integrations-live/').then(async (r) => { const data = await r.json().catch(() => []); if (Array.isArray(data)) setCatalog(data); }).finally(() => setCatalogLoading(false));
+    // No trailing slash: Vercel's /api/:path* rewrite does not match a
+    // trailing-slash path (it falls through to the SPA's catch-all and
+    // returns index.html instead of proxying to Railway), which silently
+    // emptied this catalog in production -- response.ok was true (200) and
+    // response.json() failed on HTML, so the .catch(() => []) below hid the
+    // failure completely instead of surfacing an error.
+    apiFetch('/api/integrations-live').then(async (r) => { const data = await r.json().catch(() => []); if (Array.isArray(data)) setCatalog(data); }).finally(() => setCatalogLoading(false));
   };
   const loadWebhooks = () => {
     setWebhooksLoading(true);
