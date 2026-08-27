@@ -9,7 +9,7 @@ function routeParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] || '' : value || '';
 }
 import {
-  alertSubscriptions, collectorJobs, inAppNotifications, monitoringConfigurations,
+  alertSubscriptions, clients, collectorJobs, inAppNotifications, monitoringConfigurations,
   passports,
 } from '../db/schema.ts';
 import { AuthenticatedRequest, requireAuth, requireRole } from '../middleware/security.ts';
@@ -71,6 +71,16 @@ async function ownedPassport(db: ScopedDb, tenantId: string, passportId: string)
   )).then(rows => rows[0] || null);
 }
 
+async function ownedClient(db: ScopedDb, tenantId: string, clientId: string) {
+  return db.select({ id: clients.id }).from(clients).where(and(
+    eq(clients.id, clientId), eq(clients.tenantId, tenantId),
+  )).then(rows => rows[0] || null);
+}
+
+function clientScopeOf(req: AuthenticatedRequest) {
+  return req.user!.role === 'Client' ? req.user!.clientId : null;
+}
+
 function publicConfiguration(row: typeof monitoringConfigurations.$inferSelect) {
   return {
     ...row,
@@ -113,18 +123,23 @@ export function createMonitoringRouter() {
 
   router.get('/monitoring-configurations', async (req: AuthenticatedRequest, res) => {
     const db = req.db!;
-    const rows = await db.select().from(monitoringConfigurations).where(
-      eq(monitoringConfigurations.tenantId, req.user!.tenantId),
-    ).orderBy(desc(monitoringConfigurations.updatedAt));
+    const clientScope = clientScopeOf(req);
+    const conditions = [eq(monitoringConfigurations.tenantId, req.user!.tenantId)];
+    if (clientScope) conditions.push(eq(monitoringConfigurations.clientId, clientScope));
+    const rows = await db.select().from(monitoringConfigurations).where(and(...conditions))
+      .orderBy(desc(monitoringConfigurations.updatedAt));
     res.json(rows.map(publicConfiguration));
   });
 
   router.get('/monitoring-configurations/:id', async (req: AuthenticatedRequest, res) => {
     const db = req.db!;
-    const row = await db.select().from(monitoringConfigurations).where(and(
+    const clientScope = clientScopeOf(req);
+    const conditions = [
       eq(monitoringConfigurations.id, routeParam(req.params.id)),
       eq(monitoringConfigurations.tenantId, req.user!.tenantId),
-    )).then(rows => rows[0]);
+    ];
+    if (clientScope) conditions.push(eq(monitoringConfigurations.clientId, clientScope));
+    const row = await db.select().from(monitoringConfigurations).where(and(...conditions)).then(rows => rows[0]);
     if (!row) return res.status(404).json({ error: 'MONITORING_CONFIGURATION_NOT_FOUND' });
     res.json(publicConfiguration(row));
   });
@@ -142,6 +157,9 @@ export function createMonitoringRouter() {
     }
     if (!await ownedPassport(db, req.user!.tenantId, body.passportId)) {
       return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
+    }
+    if (!await ownedClient(db, req.user!.tenantId, body.clientId)) {
+      return res.status(404).json({ error: 'CLIENT_NOT_FOUND' });
     }
     const now = new Date();
     const row: typeof monitoringConfigurations.$inferInsert = {
@@ -230,35 +248,45 @@ export function createMonitoringRouter() {
 
   router.get('/collector-jobs', async (req: AuthenticatedRequest, res) => {
     const db = req.db!;
-    const rows = await db.select().from(collectorJobs).where(
-      eq(collectorJobs.tenantId, req.user!.tenantId),
-    ).orderBy(desc(collectorJobs.createdAt)).limit(200);
+    const clientScope = clientScopeOf(req);
+    const conditions = [eq(collectorJobs.tenantId, req.user!.tenantId)];
+    if (clientScope) conditions.push(eq(collectorJobs.clientId, clientScope));
+    const rows = await db.select().from(collectorJobs).where(and(...conditions))
+      .orderBy(desc(collectorJobs.createdAt)).limit(200);
     res.json(rows);
   });
 
   router.get('/collector-jobs/:id', async (req: AuthenticatedRequest, res) => {
     const db = req.db!;
-    const row = await db.select().from(collectorJobs).where(and(
-      eq(collectorJobs.id, routeParam(req.params.id)), eq(collectorJobs.tenantId, req.user!.tenantId),
-    )).then(rows => rows[0]);
+    const clientScope = clientScopeOf(req);
+    const conditions = [eq(collectorJobs.id, routeParam(req.params.id)), eq(collectorJobs.tenantId, req.user!.tenantId)];
+    if (clientScope) conditions.push(eq(collectorJobs.clientId, clientScope));
+    const row = await db.select().from(collectorJobs).where(and(...conditions)).then(rows => rows[0]);
     if (!row) return res.status(404).json({ error: 'COLLECTOR_JOB_NOT_FOUND' });
     res.json(row);
   });
 
   router.get('/alert-subscriptions', async (req: AuthenticatedRequest, res) => {
     const db = req.db!;
-    const rows = await db.select().from(alertSubscriptions).where(
-      eq(alertSubscriptions.tenantId, req.user!.tenantId),
-    ).orderBy(desc(alertSubscriptions.updatedAt));
+    const clientScope = clientScopeOf(req);
+    const conditions = [eq(alertSubscriptions.tenantId, req.user!.tenantId)];
+    // Subscriptions with no clientId are tenant-wide/MSP-internal routing
+    // rules -- a 'Client'-role user only ever sees ones scoped to them.
+    if (clientScope) conditions.push(eq(alertSubscriptions.clientId, clientScope));
+    const rows = await db.select().from(alertSubscriptions).where(and(...conditions))
+      .orderBy(desc(alertSubscriptions.updatedAt));
     res.json(rows.map(row => ({ ...row, alertTypes: JSON.parse(row.alertTypes), enabled: row.enabled === 1 })));
   });
 
   router.get('/alert-subscriptions/:id', async (req: AuthenticatedRequest, res) => {
     const db = req.db!;
-    const row = await db.select().from(alertSubscriptions).where(and(
+    const clientScope = clientScopeOf(req);
+    const conditions = [
       eq(alertSubscriptions.id, routeParam(req.params.id)),
       eq(alertSubscriptions.tenantId, req.user!.tenantId),
-    )).then(rows => rows[0]);
+    ];
+    if (clientScope) conditions.push(eq(alertSubscriptions.clientId, clientScope));
+    const row = await db.select().from(alertSubscriptions).where(and(...conditions)).then(rows => rows[0]);
     if (!row) return res.status(404).json({ error: 'ALERT_SUBSCRIPTION_NOT_FOUND' });
     res.json({ ...row, alertTypes: JSON.parse(row.alertTypes), enabled: row.enabled === 1 });
   });
@@ -269,6 +297,9 @@ export function createMonitoringRouter() {
     if (!body) return;
     if (body.passportId && !await ownedPassport(db, req.user!.tenantId, body.passportId)) {
       return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
+    }
+    if (body.clientId && !await ownedClient(db, req.user!.tenantId, body.clientId)) {
+      return res.status(404).json({ error: 'CLIENT_NOT_FOUND' });
     }
     const now = new Date().toISOString();
     const [created] = await db.insert(alertSubscriptions).values({
@@ -287,6 +318,9 @@ export function createMonitoringRouter() {
     const db = req.db!;
     const body = parse(subscriptionPatchSchema, req.body, res);
     if (!body) return;
+    if (body.clientId && !await ownedClient(db, req.user!.tenantId, body.clientId)) {
+      return res.status(404).json({ error: 'CLIENT_NOT_FOUND' });
+    }
     const update: Partial<typeof alertSubscriptions.$inferInsert> = {
       ...(body.clientId === undefined ? {} : { clientId: body.clientId }),
       ...(body.assetId === undefined ? {} : { assetId: body.assetId }),

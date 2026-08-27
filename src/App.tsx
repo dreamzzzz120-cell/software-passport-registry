@@ -320,7 +320,7 @@ export default function App() {
     case '/clients': view = <ClientsView clients={clients} selectedClientId={selectedClientId} setSelectedClientId={setSelectedClientId} passports={passports} onNavigateTab={onNavigateTab} searchQuery="" role={role} onClientCreated={(client) => { setClients((current) => [client, ...current]); setSelectedClientId(client.id); }} />; break;
     case '/vendors': view = <VendorsView vendors={vendors} searchQuery="" />; break;
     case '/integrations': view = <IntegrationsView passports={passports} clients={clients} onNavigateTab={onNavigateTab} />; break;
-    case '/monitoring': view = <MonitoringView role={role} />; break;
+    case '/monitoring': view = <MonitoringView role={role} passports={passports} clients={clients} />; break;
     case '/security': view = <SecurityCenterView clients={clients} passports={passports} />; break;
     case '/compliance': view = <ComplianceView clients={clients} role={role} />; break;
     case '/msp': view = <MSPCommandCenter clients={clients} alerts={alerts} passports={passports} role={role} onSelectClient={setSelectedClientId} onNavigate={navigate} />; break;

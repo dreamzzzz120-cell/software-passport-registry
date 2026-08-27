@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { db } from '../db/index.ts';
 import { calculateAndPersistPassportScore } from './scoring-engine.ts';
+import { classifyCanonicalChange, compareCanonicalObservations } from '../utils/observation-history.ts';
 
 export type ControlStatus = 'PASS' | 'FAIL' | 'UNKNOWN';
 export type Severity = 'informational' | 'low' | 'medium' | 'high' | 'critical';
@@ -97,8 +98,41 @@ export async function persistTrustLoop(input:{tenantId:string;passportId:string;
   // so it's converted once here rather than changing that external contract.
   const confidence=canonicalResult.confidenceScore==null?null:Math.round(canonicalResult.confidenceScore*100);
 
-  const previous=await db.execute(sql`SELECT id,observation_version,canonical_payload_hash FROM trust_observations WHERE tenant_id=${input.tenantId} AND passport_id=${input.passportId} ORDER BY observation_version DESC LIMIT 1`),previousRow=(previous as any).rows?.[0],version=Number(previousRow?.observation_version??0)+1,payload={schemaVersion:'spr.passport.v2',scoreVersion:SCORE_VERSION,confidenceVersion:CONFIDENCE_VERSION,generatedAt:now,evidenceIds,findingIds:findings.map(f=>f.id).sort(),completenessBasisPoints:completeness,confidenceBasisPoints:confidence,score,open:open.length,unknown,limitations:input.observations.filter(o=>o.limitation).map(o=>({controlId:o.controlId,limitation:o.limitation}))},canonicalPayloadHash=sha256({previousHash:previousRow?.canonical_payload_hash??null,payload}),observationId=newId('trustobs');
+  const previous=await db.execute(sql`SELECT id,observation_version,canonical_payload_hash,confidence_basis_points,completeness_basis_points,finding_ids,immutable_payload FROM trust_observations WHERE tenant_id=${input.tenantId} AND passport_id=${input.passportId} ORDER BY observation_version DESC LIMIT 1`),previousRow=(previous as any).rows?.[0],version=Number(previousRow?.observation_version??0)+1,payload={schemaVersion:'spr.passport.v2',scoreVersion:SCORE_VERSION,confidenceVersion:CONFIDENCE_VERSION,generatedAt:now,evidenceIds,findingIds:findings.map(f=>f.id).sort(),completenessBasisPoints:completeness,confidenceBasisPoints:confidence,score,open:open.length,unknown,limitations:input.observations.filter(o=>o.limitation).map(o=>({controlId:o.controlId,limitation:o.limitation}))},canonicalPayloadHash=sha256({previousHash:previousRow?.canonical_payload_hash??null,payload}),observationId=newId('trustobs');
   await db.execute(sql`INSERT INTO trust_observations (id,tenant_id,passport_id,client_id,asset_id,schema_version,observation_version,generated_at,previous_observation_id,evidence_ids,finding_ids,scoring_policy_version,confidence_policy_version,completeness_basis_points,confidence_basis_points,known_dimension_count,unknown_dimension_count,stale_dimension_count,expired_dimension_count,canonical_payload_hash,immutable_payload,generation_reason,generated_by_actor_type,collector_version_map,partially_known_dimension_count,unavailable_dimension_count,open_finding_count,persisted_finding_count,idempotency_key,created_at) VALUES (${observationId},${input.tenantId},${input.passportId},${input.clientId},${input.assetId},'spr.passport.v2',${version},${now},${previousRow?.id??null},${JSON.stringify(evidenceIds)},${JSON.stringify(findings.map(f=>f.id))},${SCORE_VERSION},${CONFIDENCE_VERSION},${completeness},${confidence},${known},${unknown},0,0,${canonicalPayloadHash},${JSON.stringify(payload)},${input.generationReason??'evidence_change'},${input.actorType??'worker'},${JSON.stringify(input.collectorVersionMap??{})},0,${unknown},${open.length},${findings.length},${`${input.tenantId}:${input.passportId}:${canonicalPayloadHash}`},${now}) ON CONFLICT (tenant_id,passport_id,idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`);
+
+  // Real change detection: compares this observation against the immediately
+  // prior one for the same passport (compareCanonicalObservations,
+  // src/utils/observation-history.ts) -- there is nothing to compare against
+  // on a passport's first-ever observation (previousRow is null), so no
+  // alert is ever raised for an initial observation. Only alert-worthy
+  // regressions (classifyCanonicalChange) become a real trust_alerts row;
+  // improvements are real detected changes but never page anyone.
+  if(previousRow){
+    let previousPayload:any=null;
+    try{previousPayload=JSON.parse(previousRow.immutable_payload);}catch{previousPayload=null;}
+    const previousComparable={score:previousPayload?.score??null,confidence:previousRow.confidence_basis_points??null,completenessBasisPoints:Number(previousRow.completeness_basis_points),findingIds:(()=>{try{return JSON.parse(previousRow.finding_ids??'[]');}catch{return[];}})()};
+    const currentComparable={score,confidence,completenessBasisPoints:completeness,findingIds:payload.findingIds};
+    const changes=compareCanonicalObservations(previousComparable,currentComparable);
+    for(const change of changes){
+      const materiality=classifyCanonicalChange(change);
+      if(!materiality.alertWorthy)continue;
+      const findingForAlert=change.type==='finding_created'&&change.subject?findings.find(f=>f.id===change.subject):undefined;
+      const fingerprint=sha256({passportId:input.passportId,type:change.type,subject:change.subject??null,before:change.before,after:change.after});
+      const alertId=newId('alert');
+      const message=change.type==='score_decreased'?`Trust score dropped from ${change.before} to ${change.after}.`
+        :change.type==='score_became_ineligible'?`Trust score is no longer computable (was ${change.before}); evidence regressed to unknown.`
+        :change.type==='completeness_decreased'?`Evidence completeness dropped from ${(Number(change.before)/100).toFixed(1)}% to ${(Number(change.after)/100).toFixed(1)}%.`
+        :change.type==='confidence_decreased'?`Confidence dropped from ${(Number(change.before)/100).toFixed(1)}% to ${(Number(change.after)/100).toFixed(1)}%.`
+        :change.type==='finding_created'?`New finding: ${findingForAlert?.title??change.subject}.`
+        :`${change.type} detected.`;
+      await db.execute(sql`
+        INSERT INTO trust_alerts (id,tenant_id,passport_id,provider,finding_id,alert_type,severity,status,fingerprint,message,evidence_ids,created_at,updated_at)
+        VALUES (${alertId},${input.tenantId},${input.passportId},${input.observations[0]?.provider??null},${change.type==='finding_created'?change.subject:null},${change.type},${materiality.severity==='high'?'high':materiality.severity==='medium'?'medium':'informational'},'OPEN',${fingerprint},${message},${JSON.stringify(findingForAlert?.evidenceIds??evidenceIds)},${now},${now})
+        ON CONFLICT (tenant_id,fingerprint) DO NOTHING
+      `);
+    }
+  }
   const passportRows=await db.execute(sql`SELECT timeline FROM passports WHERE id=${input.passportId} AND tenant_id=${input.tenantId} LIMIT 1`),passport=(passportRows as any).rows?.[0];
   let timeline:unknown[]=[];
   try{timeline=Array.isArray(passport?.timeline)?passport.timeline:JSON.parse(passport?.timeline??'[]');}catch{timeline=[];}

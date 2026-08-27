@@ -22,6 +22,7 @@ const remediationSchema = z.object({
 }).strict();
 const remediationUpdateSchema = z.object({ status: z.enum(['OPEN', 'IN_PROGRESS', 'BLOCKED', 'READY_FOR_VERIFICATION', 'VERIFIED', 'CLOSED', 'CANCELLED']), ownerId: z.string().max(255).optional(), ownerDisplay: z.string().max(255).optional(), slaDueAt: z.string().datetime().nullable().optional() }).strict();
 const verifySchema = z.object({ findingId: z.string().trim().min(1), observationIds: z.array(z.string().min(1)).max(50), evidenceIds: z.array(z.string().min(1)).max(200) }).strict();
+const alertUpdateSchema = z.object({ status: z.enum(['ACKNOWLEDGED', 'RESOLVED', 'SUPPRESSED']) }).strict();
 const reportTypes = z.enum(['executive', 'technical', 'msp', 'customer', 'compliance', 'vendor', 'auditor', 'evidence-ledger']);
 function id(prefix: string) { return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`; }
 function parseJson(value: unknown, fallback: unknown = []) { try { return value ? JSON.parse(String(value)) : fallback; } catch { return fallback; } }
@@ -193,9 +194,29 @@ export function createTrustLoopRouter() {
       const db = req.db!;
       const tenantId = req.user!.tenantId;
       const passportId = typeof req.query.passportId === 'string' ? req.query.passportId : null;
+      // trust_alerts has no client_id column, so a 'Client'-role user's scope
+      // is enforced by joining to the passport it was raised against, same
+      // isolation rule as GET /trust-loop/findings.
+      const clientScope = req.user!.role === 'Client' ? req.user!.clientId : null;
       const rows = passportId ? await db.execute(sql`SELECT * FROM trust_monitoring_state WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY provider`) : await db.execute(sql`SELECT * FROM trust_monitoring_state WHERE tenant_id=${tenantId} ORDER BY passport_id,provider`);
-      const alerts = passportId ? await db.execute(sql`SELECT * FROM trust_alerts WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY created_at DESC`) : await db.execute(sql`SELECT * FROM trust_alerts WHERE tenant_id=${tenantId} ORDER BY created_at DESC`);
+      const alerts = passportId
+        ? await db.execute(sql`SELECT a.* FROM trust_alerts a JOIN passports p ON p.id=a.passport_id AND p.tenant_id=a.tenant_id WHERE a.tenant_id=${tenantId} AND a.passport_id=${passportId} AND (${clientScope}::text IS NULL OR p.client_id = ${clientScope}) ORDER BY a.created_at DESC`)
+        : await db.execute(sql`SELECT a.* FROM trust_alerts a JOIN passports p ON p.id=a.passport_id AND p.tenant_id=a.tenant_id WHERE a.tenant_id=${tenantId} AND (${clientScope}::text IS NULL OR p.client_id = ${clientScope}) ORDER BY a.created_at DESC`);
       return res.json({ monitoring: (rows as any).rows || [], alerts: (alerts as any).rows || [] });
+    } catch (error) { return next(error); }
+  });
+
+  router.patch('/alerts/:id', async (req: AuthenticatedRequest, res, next) => {
+    const parsed = alertUpdateSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'INVALID_PAYLOAD', details: parsed.error.flatten() });
+    try {
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const now = new Date().toISOString();
+      const rows = await db.execute(sql`UPDATE trust_alerts SET status=${parsed.data.status}, updated_at=${now} WHERE id=${req.params.id} AND tenant_id=${tenantId} RETURNING *`);
+      const row = (rows as any).rows?.[0];
+      if (!row) return res.status(404).json({ error: 'ALERT_NOT_FOUND' });
+      return res.json(row);
     } catch (error) { return next(error); }
   });
 

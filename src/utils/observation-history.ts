@@ -83,6 +83,66 @@ export function changeDeduplicationKey(passportId: string, change: ObservationCh
   return observationHash({ passportId, type: change.type, subject: change.subject, after: change.after });
 }
 
+// compareObservationPayloads above expects a {vector, unknownLayer, findings}
+// shape that nothing in this codebase actually produces -- it was never wired
+// into persistTrustLoop (src/trust/trust-loop.ts), which is the one real
+// function that persists every trust_observations row (manual collection,
+// the GitHub connector, and the monitoring worker all go through it). This
+// is the same change-detection concept adapted to what persistTrustLoop's
+// immutable_payload actually contains: score/confidence/completeness/open
+// finding count/finding id set.
+export type CanonicalObservationChange = { type: 'score_increased' | 'score_decreased' | 'score_became_eligible' | 'score_became_ineligible' | 'confidence_increased' | 'confidence_decreased' | 'completeness_increased' | 'completeness_decreased' | 'finding_created' | 'finding_resolved'; before: unknown; after: unknown; subject?: string };
+
+export function compareCanonicalObservations(
+  previous: { score: number | null; confidence: number | null; completenessBasisPoints: number; findingIds: string[] } | null,
+  current: { score: number | null; confidence: number | null; completenessBasisPoints: number; findingIds: string[] },
+): CanonicalObservationChange[] {
+  if (!previous) return [];
+  const changes: CanonicalObservationChange[] = [];
+  if (previous.score === null && current.score !== null) changes.push({ type: 'score_became_eligible', before: null, after: current.score });
+  else if (previous.score !== null && current.score === null) changes.push({ type: 'score_became_ineligible', before: previous.score, after: null });
+  else if (previous.score !== null && current.score !== null && previous.score !== current.score) {
+    changes.push({ type: current.score > previous.score ? 'score_increased' : 'score_decreased', before: previous.score, after: current.score });
+  }
+  if (previous.confidence !== null && current.confidence !== null && previous.confidence !== current.confidence) {
+    changes.push({ type: current.confidence > previous.confidence ? 'confidence_increased' : 'confidence_decreased', before: previous.confidence, after: current.confidence });
+  }
+  if (previous.completenessBasisPoints !== current.completenessBasisPoints) {
+    changes.push({ type: current.completenessBasisPoints > previous.completenessBasisPoints ? 'completeness_increased' : 'completeness_decreased', before: previous.completenessBasisPoints, after: current.completenessBasisPoints });
+  }
+  const previousFindings = new Set(previous.findingIds);
+  const currentFindings = new Set(current.findingIds);
+  for (const id of currentFindings) if (!previousFindings.has(id)) changes.push({ type: 'finding_created', subject: id, before: null, after: id });
+  for (const id of previousFindings) if (!currentFindings.has(id)) changes.push({ type: 'finding_resolved', subject: id, before: id, after: null });
+  return changes;
+}
+
+// Mirrors classifyMateriality's spirit for the shape above: only regressions
+// (a score/confidence/completeness drop, a score becoming un-computable, or
+// a newly-created open finding) are alert-worthy. Improvements are real
+// detected changes but not alerts -- nobody needs to be paged because things
+// got better.
+export function classifyCanonicalChange(change: CanonicalObservationChange): { alertWorthy: boolean; severity: 'informational' | 'medium' | 'high' } {
+  switch (change.type) {
+    case 'score_became_ineligible':
+      return { alertWorthy: true, severity: 'high' };
+    case 'score_decreased': {
+      const drop = Number(change.before) - Number(change.after);
+      return { alertWorthy: true, severity: drop >= 15 ? 'high' : 'medium' };
+    }
+    case 'completeness_decreased': {
+      const drop = Number(change.before) - Number(change.after);
+      return { alertWorthy: drop >= 1000, severity: drop >= 2000 ? 'high' : 'medium' };
+    }
+    case 'confidence_decreased':
+      return { alertWorthy: Number(change.before) - Number(change.after) >= 1500, severity: 'medium' };
+    case 'finding_created':
+      return { alertWorthy: true, severity: 'medium' };
+    default:
+      return { alertWorthy: false, severity: 'informational' };
+  }
+}
+
 export const MATERIALITY_POLICY_VERSION = 'spr.materiality.v1';
 
 export function classifyMateriality(change: ObservationChange) {
