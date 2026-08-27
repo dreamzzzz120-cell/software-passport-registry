@@ -282,8 +282,8 @@ export const createRepositoryScanSchema = z.object({
 
 export const createTrustObservationSchema = z.object({
   generationReason: z.enum([
-    'manual', 'scheduled_refresh', 'evidence_change',
-    'finding_change', 'collector_recovery', 'system'
+    'manual', 'scheduled_refresh', 'evidence_change', 'finding_change',
+    'collector_recovery', 'system', 'provider_collection', 'scheduled_collection'
   ]).optional().default('manual')
 }).strict();
 
