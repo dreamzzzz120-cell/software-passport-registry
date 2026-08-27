@@ -232,7 +232,7 @@ export default function SoftwareSectorsPanel({
   const sectorMetrics = useMemo(() => {
     const metrics: Record<string, {
       count: number;
-      avgTrust: number;
+      avgTrust: number | null;
       totalCves: number;
       totalSboms: number;
       matchedPassports: SoftwarePassport[];
@@ -243,9 +243,13 @@ export default function SoftwareSectorsPanel({
       const matched = passports.filter(p => p.category.toLowerCase().trim() === sector.name.toLowerCase().trim());
       
       const count = matched.length;
-      const avgTrust = count > 0 
-        ? Math.round(matched.reduce((acc, p) => acc + p.overallScore, 0) / count)
-        : 0;
+      // Only passports with a real score contribute to the average -- an
+      // unverified passport (null) isn't a trust score of 0 and must not
+      // drag the average down as if it were.
+      const scored = matched.filter((p): p is typeof p & { overallScore: number } => p.overallScore != null);
+      const avgTrust = scored.length > 0
+        ? Math.round(scored.reduce((acc, p) => acc + p.overallScore, 0) / scored.length)
+        : null;
       const totalCves = matched.reduce((acc, p) => acc + p.vulnerabilities.length, 0);
       const totalSboms = matched.reduce((acc, p) => acc + p.sbom.length, 0);
 
@@ -276,9 +280,10 @@ export default function SoftwareSectorsPanel({
     const totalTrackedPassports = passports.length;
     const sectorsWithActivePassports = (Object.values(sectorMetrics) as { count: number }[]).filter(m => m.count > 0).length;
     const totalCvesAcrossSectors = passports.reduce((acc, p) => acc + p.vulnerabilities.length, 0);
-    const overallEcosystemTrust = passports.length > 0
-      ? Math.round(passports.reduce((acc, p) => acc + p.overallScore, 0) / passports.length)
-      : 90;
+    const scoredPassports = passports.filter((p): p is typeof p & { overallScore: number } => p.overallScore != null);
+    const overallEcosystemTrust = scoredPassports.length > 0
+      ? Math.round(scoredPassports.reduce((acc, p) => acc + p.overallScore, 0) / scoredPassports.length)
+      : null;
 
     return {
       totalTrackedPassports,
@@ -342,7 +347,7 @@ export default function SoftwareSectorsPanel({
         <div className="studio-card p-4.5 flex flex-col justify-between">
           <div>
             <span className="text-[9px] font-mono font-bold text-[#9d9d9d] uppercase tracking-wider block">Ecosystem Health</span>
-            <span className="text-xl font-bold text-[#89d185] font-mono mt-1 block">{aggregateStats.overallEcosystemTrust}/100</span>
+            <span className="text-xl font-bold text-[#89d185] font-mono mt-1 block">{aggregateStats.overallEcosystemTrust == null ? 'Not verified' : `${aggregateStats.overallEcosystemTrust}/100`}</span>
           </div>
           <p className="text-[10px] text-[#9d9d9d] mt-2 font-sans">
             Average cryptographic trust rating across all active verified passports.
@@ -425,11 +430,12 @@ export default function SoftwareSectorsPanel({
                     {/* Sector Passport Trust Index pill */}
                     {metrics.count > 0 ? (
                       <span className={`text-[9px] font-mono font-bold px-2 py-0.8 rounded-full border ${
+                        metrics.avgTrust == null ? 'bg-[#3c3c3c]/30 text-[#9d9d9d] border-[#3c3c3c]' :
                         metrics.avgTrust >= 90 ? 'bg-[#89d185]/15 text-[#89d185] border-[#89d185]' :
                         metrics.avgTrust >= 80 ? 'bg-[#cca700]/15 text-[#cca700] border-[#cca700]' :
                         'bg-[#f14c4c]/15 text-[#f14c4c] border-[#f14c4c]'
                       }`}>
-                        {metrics.avgTrust}% Avg Trust
+                        {metrics.avgTrust == null ? 'Not verified' : `${metrics.avgTrust}% Avg Trust`}
                       </span>
                     ) : (
                       <span className="text-[8px] font-mono font-bold text-[#9d9d9d] uppercase bg-[#383838] border border-[#3c3c3c] px-2 py-0.8 rounded-full">
@@ -558,10 +564,10 @@ export default function SoftwareSectorsPanel({
                         <span className="text-[10px] font-mono text-[#9d9d9d] mt-0.5 block">Version: {p.version} | {p.publisher}</span>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        <span className={`w-8 h-8 rounded-full border flex items-center justify-center font-mono text-[10px] font-bold ${
-                          p.overallScore >= 90 ? 'bg-[#89d185]/15 text-[#89d185] border-[#89d185]' : 'bg-[#cca700]/15 text-[#cca700] border-[#cca700]'
+                        <span className={`w-8 h-8 rounded-full border flex items-center justify-center font-mono text-[9px] font-bold ${
+                          p.overallScore == null ? 'bg-[#3c3c3c]/30 text-[#9d9d9d] border-[#3c3c3c]' : p.overallScore >= 90 ? 'bg-[#89d185]/15 text-[#89d185] border-[#89d185]' : 'bg-[#cca700]/15 text-[#cca700] border-[#cca700]'
                         }`}>
-                          {p.overallScore}
+                          {p.overallScore ?? '—'}
                         </span>
                         <ChevronRight className="w-4 h-4 text-[#9d9d9d]" />
                       </div>

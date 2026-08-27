@@ -57,10 +57,17 @@ export const passports = pgTable('passports', {
   version: text('version').notNull(),
   publisher: text('publisher').notNull(),
   category: text('category').notNull(),
-  overallScore: integer('overall_score').notNull().default(0),
-  securityScore: integer('security_score').notNull().default(0),
-  complianceScore: integer('compliance_score').notNull().default(0),
-  vendorReputationScore: integer('vendor_reputation_score').notNull().default(0),
+  // Nullable: null means no legitimate score has been calculated yet (no
+  // evidence to base one on), not "0/failing" -- see migrations/0023 and
+  // src/trust/scoring-engine.ts, the single authoritative writer of these
+  // four columns plus confidenceScore/evidenceCompleteness/verificationStatus.
+  overallScore: integer('overall_score'),
+  securityScore: integer('security_score'),
+  complianceScore: integer('compliance_score'),
+  vendorReputationScore: integer('vendor_reputation_score'),
+  confidenceScore: integer('confidence_score'),
+  evidenceCompleteness: integer('evidence_completeness'),
+  verificationStatus: text('verification_status').notNull().default('unverified'),
   releaseDate: text('release_date').notNull(),
   fileHash: text('file_hash').notNull(),
   licenseType: text('license_type').notNull(),

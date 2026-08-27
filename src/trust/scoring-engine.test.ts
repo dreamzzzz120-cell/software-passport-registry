@@ -1,0 +1,104 @@
+import { describe, expect, it } from 'vitest';
+import { calculateCanonicalScores, type CanonicalScoreInput, VERIFIED_COMPLETENESS_THRESHOLD } from './scoring-engine.ts';
+
+const noEvidence: CanonicalScoreInput = { findings: [], evidence: { totalUnits: 0, knownUnits: 0 } };
+
+describe('calculateCanonicalScores', () => {
+  // Test A / B: a passport with zero evidence must not be scored 100 (looks
+  // perfect) or 0 (looks like a confirmed failure) -- both fabricate a
+  // conclusion nothing was actually checked to support.
+  it('assigns null scores and unverified status when there is no evidence at all', () => {
+    const result = calculateCanonicalScores(noEvidence);
+    expect(result.overallScore).toBeNull();
+    expect(result.securityScore).toBeNull();
+    expect(result.complianceScore).toBeNull();
+    expect(result.vendorReputationScore).toBeNull();
+    expect(result.confidenceScore).toBeNull();
+    expect(result.evidenceCompleteness).toBe(0);
+    expect(result.verificationStatus).toBe('unverified');
+  });
+
+  it('also treats evidence that exists but was never resolved (all UNKNOWN) as unverified', () => {
+    const result = calculateCanonicalScores({ findings: [], evidence: { totalUnits: 10, knownUnits: 0 } });
+    expect(result.overallScore).toBeNull();
+    expect(result.verificationStatus).toBe('unverified');
+  });
+
+  // Test C: sparse evidence must not falsely read as a clean 100, and must
+  // carry a visible confidence/completeness figure with a provisional status.
+  it('does not report a perfect score from sparse evidence, and marks it partial', () => {
+    const result = calculateCanonicalScores({ findings: [], evidence: { totalUnits: 20, knownUnits: 2, freshness: 1 } });
+    expect(result.overallScore).not.toBeNull();
+    expect(result.evidenceCompleteness).toBe(10);
+    expect(result.confidenceScore).toBe(10);
+    expect(result.verificationStatus).toBe('partial');
+  });
+
+  it('reaches verified status once completeness meets the threshold', () => {
+    const atThreshold = calculateCanonicalScores({ findings: [], evidence: { totalUnits: 100, knownUnits: VERIFIED_COMPLETENESS_THRESHOLD, freshness: 1 } });
+    expect(atThreshold.verificationStatus).toBe('verified');
+    const justBelow = calculateCanonicalScores({ findings: [], evidence: { totalUnits: 100, knownUnits: VERIFIED_COMPLETENESS_THRESHOLD - 1, freshness: 1 } });
+    expect(justBelow.verificationStatus).toBe('partial');
+  });
+
+  // Test D: security and compliance must come from their own findings, not
+  // both mirror one generic penalty (the original trust-loop.ts bug).
+  it('scores security and compliance independently from their own findings', () => {
+    const clean = { hasValidSignature: true, hasAuditReport: true };
+    const securityOnly = calculateCanonicalScores({
+      findings: [{ severity: 'critical', category: 'security', open: true }],
+      evidence: { totalUnits: 10, knownUnits: 10, ...clean },
+    });
+    expect(securityOnly.securityScore).toBeLessThan(100);
+    expect(securityOnly.complianceScore).toBe(100);
+    expect(securityOnly.securityScore).not.toBe(securityOnly.complianceScore);
+
+    const complianceOnly = calculateCanonicalScores({
+      findings: [{ severity: 'critical', category: 'compliance', open: true }],
+      evidence: { totalUnits: 10, knownUnits: 10, ...clean },
+    });
+    expect(complianceOnly.complianceScore).toBeLessThan(100);
+    expect(complianceOnly.securityScore).toBe(100);
+  });
+
+  // Test F: identical input must always produce identical output.
+  it('is deterministic for identical evidence', () => {
+    const input: CanonicalScoreInput = {
+      findings: [{ severity: 'high', category: 'security', open: true }, { severity: 'medium', category: 'compliance', open: true }],
+      evidence: { totalUnits: 15, knownUnits: 12, freshness: 0.9, hasValidSignature: true, hasAuditReport: false },
+    };
+    const first = calculateCanonicalScores(input);
+    const second = calculateCanonicalScores(structuredClone(input));
+    expect(second).toEqual(first);
+  });
+
+  // Test G: evidence must be able to move the score, and "no open findings"
+  // is only a real 100 when there was enough evidence to justify it.
+  it('lowers the score when a new open finding is added, and only reports 100 when evidence actually supports it', () => {
+    const cleanEvidence = { totalUnits: 10, knownUnits: 10, hasValidSignature: true, hasAuditReport: true };
+    const clean = calculateCanonicalScores({ findings: [], evidence: cleanEvidence });
+    expect(clean.securityScore).toBe(100);
+    expect(clean.verificationStatus).toBe('verified');
+
+    const withFinding = calculateCanonicalScores({
+      findings: [{ severity: 'high', category: 'security', open: true }],
+      evidence: cleanEvidence,
+    });
+    expect(withFinding.securityScore).toBeLessThan(clean.securityScore!);
+
+    const resolved = calculateCanonicalScores({
+      findings: [{ severity: 'high', category: 'security', open: false }],
+      evidence: cleanEvidence,
+    });
+    expect(resolved.securityScore).toBe(100);
+  });
+
+  it('clamps every dimension score to the 0-100 range', () => {
+    const result = calculateCanonicalScores({
+      findings: Array.from({ length: 10 }, () => ({ severity: 'critical' as const, category: 'security' as const, open: true })),
+      evidence: { totalUnits: 5, knownUnits: 5 },
+    });
+    expect(result.securityScore).toBe(0);
+    expect(result.securityScore).toBeGreaterThanOrEqual(0);
+  });
+});

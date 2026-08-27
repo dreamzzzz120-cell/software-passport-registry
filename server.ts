@@ -37,14 +37,18 @@ async function ensureInitialSelfPassport() {
     console.warn('[SPR] Initial self-passport skipped: no Owner tenant exists yet.');
     return;
   }
+  // Scores are NULL/'unverified', not a fabricated 0 -- evidence collection
+  // is pending, not "confirmed untrustworthy". The canonical scorer
+  // (src/trust/scoring-engine.ts) is the only place that assigns a real score.
   await db.execute(sql`
     INSERT INTO passports (
       id, tenant_id, name, version, publisher, category, overall_score,
-      security_score, compliance_score, vendor_reputation_score, release_date,
+      security_score, compliance_score, vendor_reputation_score,
+      verification_status, release_date,
       file_hash, license_type, ai_summary, sbom, evidence, vulnerabilities, timeline
     ) VALUES (
       'passport_spr_self', ${owner.tenantId}, 'Software Passport Registry', '1.0.0',
-      'SPR', 'Platform', 0, 0, 0, 0, CURRENT_DATE::text, 'not-observed',
+      'SPR', 'Platform', NULL, NULL, NULL, NULL, 'unverified', CURRENT_DATE::text, 'not-observed',
       'Unknown', 'Initial SPR self-passport. Evidence collection is pending.',
       '[]', '[]', '[]', '[]'
     )

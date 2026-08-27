@@ -13,7 +13,13 @@ export interface Vulnerability { id: string; title: string; severity: Severity; 
 export type EvidenceStatus = 'VERIFIED' | 'PARTIALLY_VERIFIED' | 'DECLARED' | 'CONFIGURED' | 'OBSERVED' | 'FAILED' | 'UNKNOWN' | 'STALE' | 'SOURCE_DISCONNECTED' | 'NOT_APPLICABLE';
 export interface EvidenceChainOfCustodyStep { step: string; actor: string; timestamp: string; }
 export interface EvidenceItem { id: string; name: string; type: 'Signature' | 'Audit Report' | 'Build Log' | 'Security Scan' | 'Attestation'; status: EvidenceStatus; signer: string; timestamp: string; hash: string; checksum?: string; chainOfCustody?: EvidenceChainOfCustodyStep[]; verifierEngineId?: string; verifiedAt?: string; failureReason?: string; }
-export interface SoftwarePassport { id: string; name: string; version: string; publisher: string; category: string; overallScore: number; securityScore: number; complianceScore: number; vendorReputationScore: number; releaseDate: string; fileHash: string; licenseType: string; aiSummary: string; sbom: SoftwareComponent[]; evidence: EvidenceItem[]; vulnerabilities: Vulnerability[]; timeline: { date: string; event: string; user: string; details: string; }[]; }
+export type VerificationStatus = 'unverified' | 'partial' | 'verified';
+// Scores are null when no legitimate measurement exists yet (no evidence to
+// base one on) -- never a fabricated 0 or an optimistic 100. See
+// src/trust/scoring-engine.ts, the single authoritative writer of these six
+// fields, and verificationStatus, which makes the state explicit instead of
+// leaving callers to guess what a null or a low score means.
+export interface SoftwarePassport { id: string; name: string; version: string; publisher: string; category: string; overallScore: number | null; securityScore: number | null; complianceScore: number | null; vendorReputationScore: number | null; confidenceScore: number | null; evidenceCompleteness: number | null; verificationStatus: VerificationStatus; releaseDate: string; fileHash: string; licenseType: string; aiSummary: string; sbom: SoftwareComponent[]; evidence: EvidenceItem[]; vulnerabilities: Vulnerability[]; timeline: { date: string; event: string; user: string; details: string; }[]; }
 export interface ComplianceStandard { id: string; name: string; code: 'SOC2' | 'ISO27001' | 'HIPAA' | 'NIST' | 'CIS'; progress: number; compliantControls: number; totalControls: number; status: 'Compliant' | 'In Progress' | 'Attention Required'; }
 export interface TeamMember { name: string; role: string; email: string; avatar: string; }
 export interface ActivityLog { id: string; timestamp: string; eventType: 'Passport Created' | 'Vulnerability Discovered' | 'Scan Completed' | 'Compliance Approved' | 'Client Onboarded' | 'Integration Synced'; description: string; user: string; severity: Severity | 'Info'; }

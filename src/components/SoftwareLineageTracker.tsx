@@ -280,7 +280,7 @@ export default function SoftwareLineageTracker({ passports, clients, assets }: S
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[#9d9d9d]">TRUST SCORE:</span>
-                  <span className="text-[#89d185] font-bold">{activePassport.overallScore}/100</span>
+                  <span className={activePassport.overallScore == null ? 'text-[#9d9d9d] font-bold' : 'text-[#89d185] font-bold'}>{activePassport.overallScore == null ? 'Not verified' : `${activePassport.overallScore}/100`}</span>
                 </div>
                 <div className="flex flex-col gap-1 pt-2 border-t border-[#3c3c3c]">
                   <span className="text-[#9d9d9d] uppercase text-[8px]">DIGITAL FILE HASH:</span>

@@ -478,7 +478,7 @@ export default function ClientsView({
                           </div>
 
                           <div className="flex justify-between items-center text-[10px] font-mono text-[#9d9d9d] pt-2 border-t border-[#3c3c3c] ">
-                            <span>Compliance: {p.complianceScore}%</span>
+                            <span>Compliance: {p.complianceScore == null ? 'Not verified' : `${p.complianceScore}%`}</span>
                             <span className="text-[#3794ff] font-bold flex items-center gap-0.5">
                               Open Passport <ChevronRight className="w-3 h-3" />
                             </span>

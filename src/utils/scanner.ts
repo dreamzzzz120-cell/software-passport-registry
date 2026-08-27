@@ -19,17 +19,7 @@ import crypto from 'crypto';
 import { GoogleGenAI, Type } from '@google/genai';
 import { verifyEvidenceIntegrity } from './evidence-integrity.ts';
 import { config } from '../config.ts';
-
-// Weight parameters for the Trust Score Engine
-const CRITICAL_WEIGHT = 25;
-const HIGH_WEIGHT = 15;
-const MEDIUM_WEIGHT = 10;
-const LOW_WEIGHT = 5;
-
-const SIGNATURE_BONUS = 5;
-const AUDIT_BONUS = 5;
-const INVALID_SIGNATURE_PENALTY = 15;
-const MISSING_AUDIT_PENALTY = 5;
+import { calculateAndPersistPassportScore, type CanonicalFinding } from '../trust/scoring-engine.ts';
 
 // Helper to write a cryptographic audit log into the Postgres blockchain
 export async function addPostgresAuditLog(tenantId: string, action: string, actor: string, payload: any) {
@@ -80,11 +70,12 @@ async function logJobStep(jobId: string, agentId: string, message: string, level
 }
 
 /**
- * Mathematically derives the Trust Score and category-specific scores based on database-stored evidence and findings.
- * Clamped strictly between 0 and 100.
+ * Derives and persists this passport's trust score via the single canonical
+ * scoring engine (src/trust/scoring-engine.ts) -- this function's own job is
+ * only to normalize this pipeline's evidence_items/scan_findings rows into
+ * the engine's shared input shape, not to calculate a score itself.
  */
 export async function calculateAndStoreTrustScore(assetId: string, tenantId: string) {
-  // 1. Fetch active findings
   const findings = await db.select()
     .from(scanFindings)
     .where(and(
@@ -93,7 +84,6 @@ export async function calculateAndStoreTrustScore(assetId: string, tenantId: str
       eq(scanFindings.status, 'Open')
     ));
 
-  // 2. Fetch evidence
   const evidenceList = await db.select()
     .from(evidenceItems)
     .where(and(
@@ -101,99 +91,48 @@ export async function calculateAndStoreTrustScore(assetId: string, tenantId: str
       eq(evidenceItems.tenantId, tenantId)
     ));
 
-  // Base Scores
-  let securityScore = 100;
-  let complianceScore = 100;
-  let vendorScore = 100;
-
-  // Apply reductions for Open Findings
+  const canonicalFindings: CanonicalFinding[] = [];
   for (const f of findings) {
-    let weight = MEDIUM_WEIGHT;
-    if (f.severity === 'Critical') weight = CRITICAL_WEIGHT;
-    else if (f.severity === 'High') weight = HIGH_WEIGHT;
-    else if (f.severity === 'Medium') weight = MEDIUM_WEIGHT;
-    else if (f.severity === 'Low') weight = LOW_WEIGHT;
-
+    const severity = (f.severity || 'Medium').toLowerCase() as CanonicalFinding['severity'];
     if (f.category === 'Vulnerability') {
-      securityScore -= weight;
+      canonicalFindings.push({ severity, category: 'security', open: true });
     } else if (f.category === 'Compliance Gap' || f.category === 'Policy Violation') {
-      complianceScore -= weight;
+      canonicalFindings.push({ severity, category: 'compliance', open: true });
     } else if (f.category === 'Signature Failure') {
-      securityScore -= weight * 1.2; // Extra weight on security for signature failures
-      complianceScore -= weight;
+      // Signature failures penalize security harder than compliance, and hit both dimensions.
+      canonicalFindings.push({ severity, category: 'security', open: true, weightMultiplier: 1.2 });
+      canonicalFindings.push({ severity, category: 'compliance', open: true });
+    }
+    if (f.engineId === 'vendor-ai' && f.severity === 'Critical') {
+      canonicalFindings.push({ severity: 'critical', category: 'vendor', open: true });
     }
   }
 
-  // Adjust scores with Evidence Modifiers
   const hasValidSignature = evidenceList.some(e => e.type === 'Signature' && e.verified === 1);
   const hasInvalidSignature = evidenceList.some(e => e.type === 'Signature' && e.verified === 0);
   const hasAuditReport = evidenceList.some(e => e.type === 'Audit Report' && e.verified === 1);
-
-  // Security score modifier
-  if (hasValidSignature) {
-    securityScore += SIGNATURE_BONUS;
-  } else if (hasInvalidSignature) {
-    securityScore -= INVALID_SIGNATURE_PENALTY;
-  } else {
-    // Missing signature entirely
-    securityScore -= 5;
-  }
-
-  // Compliance score modifier
-  if (hasAuditReport) {
-    complianceScore += AUDIT_BONUS;
-  } else {
-    complianceScore -= MISSING_AUDIT_PENALTY;
-  }
-
-  // Vendor reputation is based on vendor-specific audits and incidents
   const vendorAudits = evidenceList.filter(e => e.engineId === 'vendor-ai');
   const vendorPassCount = vendorAudits.filter(e => e.verified === 1).length;
   const vendorFailCount = vendorAudits.filter(e => e.verified === 0).length;
+  const knownUnits = evidenceList.filter(e => e.status !== 'UNKNOWN').length;
 
-  vendorScore = 100 - (vendorFailCount * 20) + (vendorPassCount * 3);
-  if (findings.some(f => f.engineId === 'vendor-ai' && f.severity === 'Critical')) {
-    vendorScore -= 30;
-  }
-
-  // Clamp category scores
-  securityScore = Math.max(0, Math.min(100, Math.round(securityScore)));
-  complianceScore = Math.max(0, Math.min(100, Math.round(complianceScore)));
-  vendorScore = Math.max(0, Math.min(100, Math.round(vendorScore)));
-
-  // Mathematically derived Overall Trust Score
-  const overallScore = Math.max(0, Math.min(100, Math.round(
-    (securityScore * 0.4) + (complianceScore * 0.4) + (vendorScore * 0.2)
-  )));
-
-  // Write scores back to Software Passport record
-  await db.update(passports)
-    .set({
-      overallScore,
-      securityScore,
-      complianceScore,
-      vendorReputationScore: vendorScore,
-    })
-    .where(and(
-      eq(passports.id, assetId),
-      eq(passports.tenantId, tenantId)
-    ));
+  const result = await calculateAndPersistPassportScore(tenantId, assetId, {
+    findings: canonicalFindings,
+    evidence: { totalUnits: evidenceList.length, knownUnits, hasValidSignature, hasInvalidSignature, hasAuditReport, vendorPassCount, vendorFailCount },
+  });
 
   await addPostgresAuditLog(tenantId, 'TRUST_SCORE_CALCULATED', 'TrustScoreEngine', {
     assetId,
-    overallScore,
-    securityScore,
-    complianceScore,
-    vendorScore,
+    ...result,
     evidenceCount: evidenceList.length,
     findingsCount: findings.length
   });
 
   return {
-    overallScore,
-    securityScore,
-    complianceScore,
-    vendorScore
+    overallScore: result.overallScore,
+    securityScore: result.securityScore,
+    complianceScore: result.complianceScore,
+    vendorScore: result.vendorReputationScore
   };
 }
 
