@@ -17,10 +17,18 @@ describe('SPR integrations UI contracts', () => {
     expect(app).not.toContain('/api/integrations/${encodeURIComponent(id)}/sync');
   });
 
-  it('routes GitHub to the real repository-scan flow instead of the generic credential adapter that explicitly rejects it', () => {
+  it('gives GitHub its own credential/test/discovery/scan flow instead of the generic credential adapter that explicitly rejects it', () => {
     const view = read('src/components/IntegrationsView.tsx');
-    expect(view).toContain("isGithub ?");
-    expect(view).toContain("onNavigateTab?.('/scans')");
+    // Credential storage is shared with every other provider (it's provider-agnostic).
+    expect(view).toContain("apiFetch('/api/integrations-live/github/repositories')");
+    // Testing and scanning are NOT routed through the generic single-observation
+    // adapter (POST /api/integrations-live/:provider/test) -- GitHub's deep
+    // collector returns many ControlObservations, a different shape.
+    expect(view).toContain("apiFetch('/api/trust-loop/collect'");
+    expect(view).toContain("apiFetch('/api/integrations/github/repository-scan'");
+    const liveRoutes = read('src/routes/integrations-live.ts');
+    expect(liveRoutes).toContain("credentialProviderFromParam(routeParam(req.params.provider))");
+    expect(liveRoutes).toContain("router.get('/github/repositories'");
   });
 
   it('adds first-party webhook management gated the same way as the rest of tenant administration', () => {

@@ -97,12 +97,18 @@ export function createTrustLoopRouter() {
       const result = await persistTrustLoop({ tenantId, passportId, clientId: passport.client_id || passport.id, assetId: passport.id, observations, generationReason: 'provider_collection', actorType: 'worker', collectorVersionMap: { [provider]: 'deep-v2' } });
       const completedAt = new Date().toISOString();
       await db.execute(sql`UPDATE trust_collection_runs SET completed_at=${completedAt},status='SUCCEEDED',observation_count=${observations.length},evidence_count=${result.evidenceIds.length},failure_count=${observations.filter((o) => o.status === 'FAIL').length},collector_version='deep-v2' WHERE id=${runId} AND tenant_id=${tenantId}`);
+      // A real, completed collection run is the only thing that may move a
+      // credential's status to LIVE -- saving a credential (PUT .../credentials)
+      // never does, matching the same CONFIGURED -> LIVE contract the generic
+      // adapter's /test route already enforces (routes/integrations-live.ts).
+      await db.execute(sql`UPDATE integration_credentials SET status='LIVE', last_tested_at=${completedAt}, updated_at=${completedAt} WHERE tenant_id=${tenantId} AND provider=${provider}`);
       await db.execute(sql`INSERT INTO trust_monitoring_state (id,tenant_id,passport_id,provider,next_run_at,last_run_at,last_success_at,last_evidence_hash,consecutive_failures,status,updated_at) VALUES (${id('monitor')},${tenantId},${passportId},${provider},${new Date(Date.now()+3600000).toISOString()},${completedAt},${completedAt},${result.payloadHash},0,'HEALTHY',${completedAt}) ON CONFLICT (tenant_id,passport_id,provider) DO UPDATE SET next_run_at=EXCLUDED.next_run_at,last_run_at=EXCLUDED.last_run_at,last_success_at=EXCLUDED.last_success_at,last_evidence_hash=EXCLUDED.last_evidence_hash,consecutive_failures=0,status='HEALTHY',updated_at=EXCLUDED.updated_at`);
       return res.json({ runId, provider, observationCount: observations.length, ...result });
     } catch (error) {
       const completedAt = new Date().toISOString();
       await db.execute(sql`UPDATE trust_collection_runs SET completed_at=${completedAt},status='FAILED',error_code='COLLECTION_FAILED',error_message=${error instanceof Error ? error.message.slice(0,1000) : 'COLLECTION_FAILED'} WHERE id=${runId} AND tenant_id=${tenantId}`).catch(() => undefined);
       await db.execute(sql`UPDATE trust_monitoring_state SET last_run_at=${completedAt},last_failure_at=${completedAt},consecutive_failures=consecutive_failures+1,status=CASE WHEN consecutive_failures+1 >= 5 THEN 'FAILED' ELSE 'DEGRADED' END,updated_at=${completedAt} WHERE tenant_id=${tenantId} AND passport_id=${passportId} AND provider=${provider}`).catch(() => undefined);
+      await db.execute(sql`UPDATE integration_credentials SET status='ERROR', updated_at=${completedAt} WHERE tenant_id=${tenantId} AND provider=${provider}`).catch(() => undefined);
       return next(error);
     }
   });

@@ -24,8 +24,9 @@ type ProviderCustomer = { id: string; external_customer_id: string; external_cus
 
 type LiveCatalogItem = {
   id: string; name: string; category: string; icon: string; description: string; provider: string;
-  capability: 'live' | 'planned'; adapter: string; credentialStatus: 'NOT_CONFIGURED' | 'CONFIGURED' | 'LIVE'; lastTestedAt: string | null;
+  capability: 'live' | 'planned'; adapter: string; credentialStatus: 'NOT_CONFIGURED' | 'CONFIGURED' | 'LIVE' | 'ERROR'; lastTestedAt: string | null;
 };
+type GitHubRepository = { fullName: string; private: boolean; defaultBranch: string; htmlUrl: string };
 
 type DashboardWebhook = { id: string; url: string; events: string; active: boolean; consecutive_failure_count: number; disabled_at: string | null; created_at: string };
 
@@ -64,9 +65,10 @@ const STATUS_STYLES: Record<LiveCatalogItem['credentialStatus'], string> = {
   NOT_CONFIGURED: 'bg-[#2d2d2d] border-[#3c3c3c] text-[#9d9d9d]',
   CONFIGURED: 'bg-[#3a2f05] border-[#cca700]/30 text-[#cca700]',
   LIVE: 'bg-[#0e3b2a] border-[#89d185]/30 text-[#89d185]',
+  ERROR: 'bg-[#3a1f1f] border-[#f14c4c]/30 text-[#f14c4c]',
 };
 const STATUS_LABEL: Record<LiveCatalogItem['credentialStatus'], string> = {
-  NOT_CONFIGURED: 'Not connected', CONFIGURED: 'Saved, untested', LIVE: 'Live',
+  NOT_CONFIGURED: 'Not connected', CONFIGURED: 'Saved, untested', LIVE: 'Live', ERROR: 'Last test failed',
 };
 
 function responseError(data: any, fallback: string) {
@@ -84,6 +86,11 @@ export default function IntegrationsView({ passports = [], clients = [], onNavig
   const [disconnectingProvider, setDisconnectingProvider] = useState<string | null>(null);
   const [testMessage, setTestMessage] = useState<Record<string, string>>({});
   const [selectedPassportId, setSelectedPassportId] = useState(passports[0]?.id || '');
+
+  const [githubRepositories, setGithubRepositories] = useState<GitHubRepository[]>([]);
+  const [discoveringRepositories, setDiscoveringRepositories] = useState(false);
+  const [selectedRepository, setSelectedRepository] = useState('');
+  const [scanningRepository, setScanningRepository] = useState(false);
 
   const [providerCustomers, setProviderCustomers] = useState<Record<string, ProviderCustomer[]>>({});
   const [discoveringProvider, setDiscoveringProvider] = useState<string | null>(null);
@@ -153,6 +160,73 @@ export default function IntegrationsView({ passports = [], clients = [], onNavig
       setTestMessage((current) => ({ ...current, [provider]: error instanceof Error ? error.message : 'Live test failed.' }));
     } finally {
       setTestingProvider(null);
+    }
+  };
+
+  // GitHub's deep collector (collectGitHubDeepEvidence) returns many
+  // ControlObservations, not the single observation the generic /test route
+  // expects, so it is tested through the real trust-loop collection route
+  // instead -- the same route the trust-loop backend audit exercised. A
+  // credential only becomes LIVE here because POST /collect actually
+  // succeeded against the real GitHub API (routes/trust-loop.ts sets
+  // integration_credentials.status itself; loadCatalog() below just refetches it).
+  const testGithub = async () => {
+    if (!selectedPassportId) { setTestMessage((current) => ({ ...current, github: 'Select a passport to test against first.' })); return; }
+    setTestingProvider('github');
+    setTestMessage((current) => ({ ...current, github: '' }));
+    try {
+      const response = await apiFetch('/api/trust-loop/collect', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ passportId: selectedPassportId, provider: 'github' }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(responseError(data, 'Live GitHub test failed.'));
+      const evidenceCount = Array.isArray(data.evidenceIds) ? data.evidenceIds.length : 0;
+      setTestMessage((current) => ({ ...current, github: `Live evidence collected: ${data.observationCount ?? 0} observation${data.observationCount === 1 ? '' : 's'}, ${evidenceCount} evidence item${evidenceCount === 1 ? '' : 's'} persisted.` }));
+      loadCatalog();
+    } catch (error) {
+      setTestMessage((current) => ({ ...current, github: error instanceof Error ? error.message : 'Live GitHub test failed.' }));
+    } finally {
+      setTestingProvider(null);
+    }
+  };
+
+  const discoverGithubRepositories = async () => {
+    setDiscoveringRepositories(true);
+    setTestMessage((current) => ({ ...current, github: '' }));
+    try {
+      const response = await apiFetch('/api/integrations-live/github/repositories');
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(responseError(data, 'Unable to list repositories.'));
+      setGithubRepositories(Array.isArray(data) ? data : []);
+      if (Array.isArray(data) && data.length && !selectedRepository) setSelectedRepository(data[0].fullName);
+    } catch (error) {
+      setTestMessage((current) => ({ ...current, github: error instanceof Error ? error.message : 'Unable to list repositories.' }));
+    } finally {
+      setDiscoveringRepositories(false);
+    }
+  };
+
+  // Reuses the existing, already-verified public repository-scan pipeline
+  // (POST /api/integrations/github/repository-scan -- real git clone, real
+  // Syft SBOM, real OSV lookup); this is not a second scanner, just the
+  // existing one wired to a repository actually chosen from the account
+  // instead of a hand-typed URL.
+  const runGithubScan = async () => {
+    if (!selectedPassportId || !selectedRepository) return;
+    setScanningRepository(true);
+    setTestMessage((current) => ({ ...current, github: '' }));
+    try {
+      const response = await apiFetch('/api/integrations/github/repository-scan', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ passportId: selectedPassportId, repositoryUrl: `https://github.com/${selectedRepository}` }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(responseError(data, 'Unable to queue scan.'));
+      setTestMessage((current) => ({ ...current, github: `Scan queued (job ${data.jobId}) for ${data.repository}. Check the Scans tab for results.` }));
+    } catch (error) {
+      setTestMessage((current) => ({ ...current, github: error instanceof Error ? error.message : 'Unable to queue scan.' }));
+    } finally {
+      setScanningRepository(false);
     }
   };
 
@@ -274,26 +348,50 @@ export default function IntegrationsView({ passports = [], clients = [], onNavig
               </div>
               {item.lastTestedAt && <p className="text-[10px] text-[#6f6f6f]">Last live evidence: {new Date(item.lastTestedAt).toLocaleString()}</p>}
 
+              <button onClick={() => toggleExpanded(item.provider)} className="inline-flex items-center justify-center gap-1.5 rounded-md border border-[#0e639c]/40 bg-[#094771] px-3 py-2 text-xs font-bold text-[#3794ff] hover:bg-[#0e639c]/40">
+                <KeyRound className="w-3.5 h-3.5" /> {expanded ? 'Hide credentials' : item.credentialStatus === 'NOT_CONFIGURED' ? 'Connect' : 'Update credentials'}
+              </button>
+              {expanded && (
+                <div className="space-y-2 spr-panel-alt p-3">
+                  {fields.map((field) => (
+                    <div key={field.key}>
+                      <label className="text-[10px] font-bold text-[#9d9d9d]">{field.label}{field.required ? ' *' : ''}</label>
+                      <input type={field.type} placeholder={field.placeholder} value={credentialValues[field.key] || ''} onChange={(e) => setCredentialValues((current) => ({ ...current, [field.key]: e.target.value }))} className="mt-0.5 w-full rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-2.5 py-1.5 text-xs text-[#d4d4d4]" />
+                    </div>
+                  ))}
+                  <button onClick={() => void saveCredentials(item.provider)} disabled={savingProvider === item.provider || fields.some((f) => f.required && !credentialValues[f.key]?.trim())} className="w-full spr-btn spr-btn-primary disabled:opacity-40">{savingProvider === item.provider ? 'Saving…' : 'Save credentials'}</button>
+                </div>
+              )}
               {isGithub ? (
-                <button onClick={() => onNavigateTab?.('/scans')} className="mt-1 spr-btn spr-btn-secondary inline-flex items-center justify-center gap-1.5">
-                  <RefreshCw className="w-3.5 h-3.5" /> Run from Scans (repository-scoped scan)
-                </button>
+                item.credentialStatus !== 'NOT_CONFIGURED' && (
+                  <>
+                    <div className="flex gap-2">
+                      <button onClick={() => void testGithub()} disabled={testingProvider === 'github' || !selectedPassportId} className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md border border-[#89d185]/30 bg-[#89d185]/10 px-3 py-2 text-xs font-bold text-[#89d185] hover:bg-[#89d185]/20 disabled:opacity-40">
+                        <RefreshCw className={`w-3.5 h-3.5 ${testingProvider === 'github' ? 'animate-spin' : ''}`} /> {testingProvider === 'github' ? 'Testing…' : 'Test connection'}
+                      </button>
+                      <button onClick={() => void disconnectProvider('github')} disabled={disconnectingProvider === 'github'} aria-label="Disconnect GitHub" className="inline-flex items-center justify-center gap-1.5 rounded-md border border-[#f14c4c]/30 bg-[#f14c4c]/10 px-3 py-2 text-xs font-bold text-[#f14c4c] hover:bg-[#f14c4c]/20 disabled:opacity-40">
+                        <XCircle className="w-3.5 h-3.5" /> {disconnectingProvider === 'github' ? '…' : 'Disconnect'}
+                      </button>
+                    </div>
+                    <div className="space-y-2 spr-panel-alt p-3">
+                      <button onClick={() => void discoverGithubRepositories()} disabled={discoveringRepositories} className="w-full spr-btn spr-btn-secondary disabled:opacity-40 inline-flex items-center justify-center gap-1.5">
+                        <RefreshCw className={`w-3.5 h-3.5 ${discoveringRepositories ? 'animate-spin' : ''}`} /> {discoveringRepositories ? 'Loading repositories…' : 'Discover repositories'}
+                      </button>
+                      {githubRepositories.length > 0 && (
+                        <>
+                          <select value={selectedRepository} onChange={(e) => setSelectedRepository(e.target.value)} className="w-full rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-2.5 py-1.5 text-xs text-[#d4d4d4]">
+                            {githubRepositories.map((repo) => <option key={repo.fullName} value={repo.fullName}>{repo.fullName}{repo.private ? ' (private)' : ''}</option>)}
+                          </select>
+                          <button onClick={() => void runGithubScan()} disabled={scanningRepository || !selectedRepository || !selectedPassportId} className="w-full spr-btn spr-btn-primary disabled:opacity-40 inline-flex items-center justify-center gap-1.5">
+                            {scanningRepository ? 'Queuing scan…' : 'Run software scan'}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </>
+                )
               ) : (
                 <>
-                  <button onClick={() => toggleExpanded(item.provider)} className="inline-flex items-center justify-center gap-1.5 rounded-md border border-[#0e639c]/40 bg-[#094771] px-3 py-2 text-xs font-bold text-[#3794ff] hover:bg-[#0e639c]/40">
-                    <KeyRound className="w-3.5 h-3.5" /> {expanded ? 'Hide credentials' : item.credentialStatus === 'NOT_CONFIGURED' ? 'Connect' : 'Update credentials'}
-                  </button>
-                  {expanded && (
-                    <div className="space-y-2 spr-panel-alt p-3">
-                      {fields.map((field) => (
-                        <div key={field.key}>
-                          <label className="text-[10px] font-bold text-[#9d9d9d]">{field.label}{field.required ? ' *' : ''}</label>
-                          <input type={field.type} placeholder={field.placeholder} value={credentialValues[field.key] || ''} onChange={(e) => setCredentialValues((current) => ({ ...current, [field.key]: e.target.value }))} className="mt-0.5 w-full rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-2.5 py-1.5 text-xs text-[#d4d4d4]" />
-                        </div>
-                      ))}
-                      <button onClick={() => void saveCredentials(item.provider)} disabled={savingProvider === item.provider || fields.some((f) => f.required && !credentialValues[f.key]?.trim())} className="w-full spr-btn spr-btn-primary disabled:opacity-40">{savingProvider === item.provider ? 'Saving…' : 'Save credentials'}</button>
-                    </div>
-                  )}
                   {item.credentialStatus !== 'NOT_CONFIGURED' && (
                     <div className="flex gap-2">
                       <button onClick={() => void testProvider(item.provider)} disabled={testingProvider === item.provider || !selectedPassportId} className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md border border-[#89d185]/30 bg-[#89d185]/10 px-3 py-2 text-xs font-bold text-[#89d185] hover:bg-[#89d185]/20 disabled:opacity-40">

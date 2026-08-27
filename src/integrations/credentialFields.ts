@@ -1,14 +1,23 @@
 /**
- * Credential fields required by each provider's real, authenticated collector in
- * src/integrations/adapters.ts (collectProviderEvidence). Kept in lockstep with
- * that file's `credentials.xyz` reads — if a field is added there, add it here too,
- * or the connect form will silently fail the live test with CREDENTIAL_MISSING.
- * GitHub is intentionally absent: it uses a separate repository-scan flow, not
- * this generic credential-based adapter.
+ * Credential fields required by each provider's real, authenticated collector.
+ * Every provider here except `github` is read by collectProviderEvidence in
+ * src/integrations/adapters.ts, tested via POST /api/integrations-live/:provider/test,
+ * and kept in lockstep with that file's `credentials.xyz` reads — if a field
+ * is added there, add it here too, or the connect form will silently fail the
+ * live test with CREDENTIAL_MISSING.
+ *
+ * `github` is read by the separate deep collector, collectGitHubDeepEvidence
+ * (src/integrations/github-deep.ts), and tested via POST /api/trust-loop/collect
+ * instead — its evidence shape (many ControlObservations) doesn't fit the
+ * generic adapter's single-observation contract, so it is intentionally not
+ * routed through /api/integrations-live/:provider/test.
  */
 export type CredentialField = { key: string; label: string; type: 'text' | 'password'; required: boolean; placeholder?: string };
 
 export const CREDENTIAL_FIELDS: Record<string, CredentialField[]> = {
+  github: [
+    { key: 'accessToken', label: 'Personal access token', type: 'password', required: true, placeholder: 'ghp_...' },
+  ],
   gitlab: [
     { key: 'accessToken', label: 'Personal access token', type: 'password', required: true },
     { key: 'baseUrl', label: 'Base URL (self-hosted only)', type: 'text', required: false, placeholder: 'https://gitlab.com' },

@@ -14,7 +14,14 @@ const testSchema = z.object({ passportId: z.string().trim().min(1).max(255) }).s
 const mappingSchema = z.object({ clientId: z.string().trim().min(1).max(255).nullable() }).strict();
 function id(prefix: string) { return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`; }
 function routeParam(value: string | string[] | undefined): string { return Array.isArray(value) ? value[0] || '' : value || ''; }
-function providerFromParam(value: string): Provider { if (!PROVIDERS.has(value) || value === 'github') throw new Error('PROVIDER_NOT_SUPPORTED_BY_GENERIC_ADAPTER'); return value as Provider; }
+export function providerFromParam(value: string): Provider { if (!PROVIDERS.has(value) || value === 'github') throw new Error('PROVIDER_NOT_SUPPORTED_BY_GENERIC_ADAPTER'); return value as Provider; }
+// Credential storage is provider-agnostic (encryptCredentials doesn't care what
+// it's encrypting), unlike collectProviderEvidence/the generic /test route,
+// which assumes a single-observation shape GitHub's deep collector does not
+// return. GitHub credentials are stored through this same endpoint, then
+// tested through /api/trust-loop/collect (collectGitHubDeepEvidence), never
+// through the generic /test route.
+export function credentialProviderFromParam(value: string): string { if (!PROVIDERS.has(value)) throw new Error('PROVIDER_NOT_SUPPORTED_BY_GENERIC_ADAPTER'); return value; }
 function customerDiscoveryProviderFromParam(value: string): CustomerDiscoveryProvider { if (!supportsCustomerDiscovery(value)) throw new Error('PROVIDER_DOES_NOT_SUPPORT_CUSTOMER_DISCOVERY'); return value; }
 function integrationId(tenantId: string, provider: string) { return `int_${crypto.createHash('sha256').update(`${tenantId}:${provider}`).digest('hex').slice(0, 32)}`; }
 
@@ -33,7 +40,7 @@ export function createLiveIntegrationsRouter() {
 
   router.put('/:provider/credentials', requireAuth, requireRole(['Owner', 'Admin']), async (req: AuthenticatedRequest, res, next) => {
     try {
-      const provider = providerFromParam(routeParam(req.params.provider));
+      const provider = credentialProviderFromParam(routeParam(req.params.provider));
       const parsed = credentialSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid credentials payload', details: parsed.error.flatten() });
       const db = req.db!;
@@ -49,7 +56,7 @@ export function createLiveIntegrationsRouter() {
 
   router.delete('/:provider/credentials', requireAuth, requireRole(['Owner', 'Admin']), async (req: AuthenticatedRequest, res, next) => {
     try {
-      const provider = providerFromParam(routeParam(req.params.provider));
+      const provider = credentialProviderFromParam(routeParam(req.params.provider));
       const db = req.db!;
       const tenantId = req.user!.tenantId;
       await db.transaction(async tx => {
@@ -61,6 +68,32 @@ export function createLiveIntegrationsRouter() {
       if (/PROVIDER_NOT_SUPPORTED/.test(error?.message || '')) return res.status(503).json({ error: error.message });
       return next(error);
     }
+  });
+
+  // Real, authenticated repository listing for the stored GitHub credential --
+  // the UI must let the user pick from their actual repositories rather than
+  // requiring them to type a URL blind. Same authenticated request shape as
+  // collectGitHubDeepEvidence (src/integrations/github-deep.ts); only
+  // non-secret fields needed to build a https://github.com/{owner}/{repo} URL
+  // are returned.
+  router.get('/github/repositories', requireAuth, requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const stored = await db.execute(sql`SELECT encrypted_payload FROM integration_credentials WHERE tenant_id = ${tenantId} AND provider = 'github' LIMIT 1`);
+      const payload = (stored as any).rows?.[0]?.encrypted_payload;
+      if (!payload) return res.status(409).json({ error: 'CREDENTIAL_NOT_CONFIGURED' });
+      const credentials = decryptCredentials(payload) as Record<string, string>;
+      const token = credentials.accessToken || credentials.token;
+      if (!token) return res.status(409).json({ error: 'CREDENTIAL_MISSING_ACCESS_TOKEN' });
+      const response = await fetch('https://api.github.com/user/repos?per_page=100&affiliation=owner,collaborator,organization_member&sort=updated', {
+        headers: { accept: 'application/vnd.github+json', authorization: `Bearer ${token}`, 'x-github-api-version': '2026-03-10' },
+      });
+      if (!response.ok) return res.status(502).json({ error: `GITHUB_HTTP_${response.status}` });
+      const repos = await response.json();
+      if (!Array.isArray(repos)) return res.status(502).json({ error: 'GITHUB_UNEXPECTED_RESPONSE' });
+      return res.json(repos.map((repo: any) => ({ fullName: repo.full_name, private: Boolean(repo.private), defaultBranch: repo.default_branch || 'main', htmlUrl: repo.html_url })));
+    } catch (error) { return next(error); }
   });
 
   router.post('/:provider/test', requireAuth, requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
