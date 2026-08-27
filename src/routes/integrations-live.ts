@@ -6,13 +6,16 @@ import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/se
 import { INTEGRATION_CATALOG } from '../integrations/catalog.ts';
 import { collectProviderEvidence, Provider, ProviderCredentials } from '../integrations/adapters.ts';
 import { decryptCredentials, encryptCredentials } from '../integrations/credential-vault.ts';
+import { discoverProviderCustomers, supportsCustomerDiscovery, type CustomerDiscoveryProvider } from '../integrations/customer-discovery.ts';
 
 const PROVIDERS = new Set(INTEGRATION_CATALOG.map(item => item.provider));
 const credentialSchema = z.record(z.string().min(1).max(128), z.string().max(4096)).refine(v => Object.keys(v).length > 0, 'Credentials cannot be empty');
 const testSchema = z.object({ passportId: z.string().trim().min(1).max(255) }).strict();
+const mappingSchema = z.object({ clientId: z.string().trim().min(1).max(255).nullable() }).strict();
 function id(prefix: string) { return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`; }
 function routeParam(value: string | string[] | undefined): string { return Array.isArray(value) ? value[0] || '' : value || ''; }
 function providerFromParam(value: string): Provider { if (!PROVIDERS.has(value) || value === 'github') throw new Error('PROVIDER_NOT_SUPPORTED_BY_GENERIC_ADAPTER'); return value as Provider; }
+function customerDiscoveryProviderFromParam(value: string): CustomerDiscoveryProvider { if (!supportsCustomerDiscovery(value)) throw new Error('PROVIDER_DOES_NOT_SUPPORT_CUSTOMER_DISCOVERY'); return value; }
 function integrationId(tenantId: string, provider: string) { return `int_${crypto.createHash('sha256').update(`${tenantId}:${provider}`).digest('hex').slice(0, 32)}`; }
 
 export function createLiveIntegrationsRouter() {
@@ -44,6 +47,22 @@ export function createLiveIntegrationsRouter() {
     }
   });
 
+  router.delete('/:provider/credentials', requireAuth, requireRole(['Owner', 'Admin']), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const provider = providerFromParam(routeParam(req.params.provider));
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      await db.transaction(async tx => {
+        await tx.execute(sql`DELETE FROM integration_credentials WHERE tenant_id = ${tenantId} AND provider = ${provider}`);
+        await tx.execute(sql`UPDATE integrations SET connected = 0 WHERE id = ${integrationId(tenantId, provider)} AND tenant_id = ${tenantId}`);
+      });
+      return res.status(204).send();
+    } catch (error: any) {
+      if (/PROVIDER_NOT_SUPPORTED/.test(error?.message || '')) return res.status(503).json({ error: error.message });
+      return next(error);
+    }
+  });
+
   router.post('/:provider/test', requireAuth, requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
     try {
       const provider = providerFromParam(routeParam(req.params.provider));
@@ -68,6 +87,83 @@ export function createLiveIntegrationsRouter() {
     } catch (error: any) {
       const message = error instanceof Error ? error.message : String(error);
       if (/CREDENTIAL_|PROVIDER_|UNSUPPORTED_|HTTP_/.test(message)) return res.status(502).json({ error: message });
+      return next(error);
+    }
+  });
+
+  // MSP customer/tenant mapping: for providers with a real multi-customer
+  // concept (ConnectWise, Autotask, NinjaOne, Hudu), discover their actual
+  // customer/company/organization list and let it be mapped to an SPR
+  // Client. Discovery never touches evidence or scores -- it only records
+  // who the provider says its customers are; see migrations/0025.
+  router.post('/:provider/customers/discover', requireAuth, requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const provider = customerDiscoveryProviderFromParam(routeParam(req.params.provider));
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const stored = await db.execute(sql`SELECT encrypted_payload FROM integration_credentials WHERE tenant_id = ${tenantId} AND provider = ${provider} LIMIT 1`);
+      const payload = (stored as any).rows?.[0]?.encrypted_payload;
+      if (!payload) return res.status(409).json({ error: 'CREDENTIAL_NOT_CONFIGURED' });
+      const discovered = await discoverProviderCustomers(provider, decryptCredentials(payload) as ProviderCredentials);
+      const now = new Date().toISOString();
+      await db.transaction(async tx => {
+        for (const customer of discovered) {
+          await tx.execute(sql`
+            INSERT INTO provider_customers (id, tenant_id, provider, external_customer_id, external_customer_name, raw_metadata, discovered_at, last_synced_at)
+            VALUES (${id('provcust')}, ${tenantId}, ${provider}, ${customer.externalId}, ${customer.name}, ${JSON.stringify(customer.raw)}, ${now}, ${now})
+            ON CONFLICT (tenant_id, provider, external_customer_id) DO UPDATE SET external_customer_name = EXCLUDED.external_customer_name, raw_metadata = EXCLUDED.raw_metadata, last_synced_at = EXCLUDED.last_synced_at
+          `);
+        }
+      });
+      return res.json({ provider, discoveredCount: discovered.length, syncedAt: now });
+    } catch (error: any) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/CREDENTIAL_|PROVIDER_|UNSUPPORTED_|HTTP_/.test(message)) return res.status(502).json({ error: message });
+      return next(error);
+    }
+  });
+
+  router.get('/:provider/customers', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const provider = customerDiscoveryProviderFromParam(routeParam(req.params.provider));
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const rows = await db.execute(sql`
+        SELECT pc.id, pc.external_customer_id, pc.external_customer_name, pc.client_id, pc.discovered_at, pc.last_synced_at, pc.mapped_at, c.name AS client_name
+        FROM provider_customers pc
+        LEFT JOIN clients c ON c.id = pc.client_id AND c.tenant_id = pc.tenant_id
+        WHERE pc.tenant_id = ${tenantId} AND pc.provider = ${provider}
+        ORDER BY pc.external_customer_name ASC
+      `);
+      return res.json((rows as any).rows ?? []);
+    } catch (error: any) {
+      if (/PROVIDER_/.test(error?.message || '')) return res.status(400).json({ error: error.message });
+      return next(error);
+    }
+  });
+
+  router.put('/:provider/customers/:externalId/mapping', requireAuth, requireRole(['Owner', 'Admin']), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const provider = customerDiscoveryProviderFromParam(routeParam(req.params.provider));
+      const externalId = routeParam(req.params.externalId);
+      const parsed = mappingSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const existing = await db.execute(sql`SELECT id FROM provider_customers WHERE tenant_id = ${tenantId} AND provider = ${provider} AND external_customer_id = ${externalId} LIMIT 1`);
+      if (!((existing as any).rows?.length)) return res.status(404).json({ error: 'Discovered customer not found for this tenant. Run discovery first.' });
+      if (parsed.data.clientId) {
+        // Tenant ownership check on the target client is mandatory here --
+        // without it, one tenant could map a provider customer to a
+        // client_id belonging to a different tenant (a BOLA/IDOR class bug).
+        const client = await db.execute(sql`SELECT id FROM clients WHERE id = ${parsed.data.clientId} AND tenant_id = ${tenantId} LIMIT 1`);
+        if (!((client as any).rows?.length)) return res.status(404).json({ error: 'Client not found for this tenant.' });
+      }
+      const now = new Date().toISOString();
+      await db.execute(sql`UPDATE provider_customers SET client_id = ${parsed.data.clientId}, mapped_at = ${parsed.data.clientId ? now : null}, mapped_by = ${parsed.data.clientId ? req.user!.uid : null} WHERE tenant_id = ${tenantId} AND provider = ${provider} AND external_customer_id = ${externalId}`);
+      return res.status(204).send();
+    } catch (error: any) {
+      if (/PROVIDER_/.test(error?.message || '')) return res.status(400).json({ error: error.message });
       return next(error);
     }
   });

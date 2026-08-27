@@ -9,14 +9,18 @@ import {
   Slack, Github, Monitor, Briefcase, FileText, Key,
   ShieldCheck, Ticket, BookOpen, CloudLightning, Copy, Send, Trash2, Webhook, XCircle,
 } from 'lucide-react';
-import type { SoftwarePassport } from '../types';
+import type { Client, SoftwarePassport } from '../types';
 import { apiFetch } from '../utils/apiClient';
 import { CREDENTIAL_FIELDS, WEBHOOK_EVENT_TYPES } from '../integrations/credentialFields';
 
 interface IntegrationsViewProps {
   passports?: SoftwarePassport[];
+  clients?: Client[];
   onNavigateTab?: (tab: string) => void;
 }
+
+const CUSTOMER_DISCOVERY_PROVIDERS = new Set(['connectwise', 'autotask', 'ninjaone', 'hudu']);
+type ProviderCustomer = { id: string; external_customer_id: string; external_customer_name: string; client_id: string | null; client_name: string | null; discovered_at: string; last_synced_at: string; mapped_at: string | null };
 
 type LiveCatalogItem = {
   id: string; name: string; category: string; icon: string; description: string; provider: string;
@@ -70,15 +74,21 @@ function responseError(data: any, fallback: string) {
   return fallback;
 }
 
-export default function IntegrationsView({ passports = [], onNavigateTab }: IntegrationsViewProps) {
+export default function IntegrationsView({ passports = [], clients = [], onNavigateTab }: IntegrationsViewProps) {
   const [catalog, setCatalog] = useState<LiveCatalogItem[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [expandedProvider, setExpandedProvider] = useState<string | null>(null);
   const [credentialValues, setCredentialValues] = useState<Record<string, string>>({});
   const [savingProvider, setSavingProvider] = useState<string | null>(null);
   const [testingProvider, setTestingProvider] = useState<string | null>(null);
+  const [disconnectingProvider, setDisconnectingProvider] = useState<string | null>(null);
   const [testMessage, setTestMessage] = useState<Record<string, string>>({});
   const [selectedPassportId, setSelectedPassportId] = useState(passports[0]?.id || '');
+
+  const [providerCustomers, setProviderCustomers] = useState<Record<string, ProviderCustomer[]>>({});
+  const [discoveringProvider, setDiscoveringProvider] = useState<string | null>(null);
+  const [mappingBusyId, setMappingBusyId] = useState<string | null>(null);
+  const [customerMessage, setCustomerMessage] = useState<Record<string, string>>({});
 
   const [webhooks, setWebhooks] = useState<DashboardWebhook[]>([]);
   const [webhooksLoading, setWebhooksLoading] = useState(true);
@@ -98,6 +108,12 @@ export default function IntegrationsView({ passports = [], onNavigateTab }: Inte
   };
   useEffect(() => { loadCatalog(); loadWebhooks(); }, []);
   useEffect(() => { if (!passports.some((p) => p.id === selectedPassportId)) setSelectedPassportId(passports[0]?.id || ''); }, [passports, selectedPassportId]);
+  useEffect(() => {
+    for (const item of catalog) {
+      if (item.credentialStatus === 'LIVE' && CUSTOMER_DISCOVERY_PROVIDERS.has(item.provider) && !providerCustomers[item.provider]) void loadProviderCustomers(item.provider);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catalog]);
 
   const toggleExpanded = (provider: string) => {
     setExpandedProvider((current) => (current === provider ? null : provider));
@@ -137,6 +153,58 @@ export default function IntegrationsView({ passports = [], onNavigateTab }: Inte
       setTestMessage((current) => ({ ...current, [provider]: error instanceof Error ? error.message : 'Live test failed.' }));
     } finally {
       setTestingProvider(null);
+    }
+  };
+
+  const disconnectProvider = async (provider: string) => {
+    if (!window.confirm(`Disconnect ${provider}? SPR will delete the stored credential; discovered customer mappings are kept.`)) return;
+    setDisconnectingProvider(provider);
+    try {
+      const response = await apiFetch(`/api/integrations-live/${encodeURIComponent(provider)}/credentials`, { method: 'DELETE' });
+      if (!response.ok) { const data = await response.json().catch(() => null); throw new Error(responseError(data, 'Unable to disconnect.')); }
+      setTestMessage((current) => ({ ...current, [provider]: 'Disconnected. Credentials removed.' }));
+      loadCatalog();
+    } catch (error) {
+      setTestMessage((current) => ({ ...current, [provider]: error instanceof Error ? error.message : 'Unable to disconnect.' }));
+    } finally {
+      setDisconnectingProvider(null);
+    }
+  };
+
+  const loadProviderCustomers = async (provider: string) => {
+    const response = await apiFetch(`/api/integrations-live/${encodeURIComponent(provider)}/customers`);
+    const data = await response.json().catch(() => []);
+    if (response.ok && Array.isArray(data)) setProviderCustomers((current) => ({ ...current, [provider]: data }));
+  };
+
+  const discoverCustomers = async (provider: string) => {
+    setDiscoveringProvider(provider);
+    setCustomerMessage((current) => ({ ...current, [provider]: '' }));
+    try {
+      const response = await apiFetch(`/api/integrations-live/${encodeURIComponent(provider)}/customers/discover`, { method: 'POST' });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(responseError(data, 'Discovery failed.'));
+      setCustomerMessage((current) => ({ ...current, [provider]: `Discovered ${data.discoveredCount} customer${data.discoveredCount === 1 ? '' : 's'}.` }));
+      await loadProviderCustomers(provider);
+    } catch (error) {
+      setCustomerMessage((current) => ({ ...current, [provider]: error instanceof Error ? error.message : 'Discovery failed.' }));
+    } finally {
+      setDiscoveringProvider(null);
+    }
+  };
+
+  const mapCustomer = async (provider: string, externalCustomerId: string, clientId: string | null) => {
+    setMappingBusyId(`${provider}:${externalCustomerId}`);
+    try {
+      const response = await apiFetch(`/api/integrations-live/${encodeURIComponent(provider)}/customers/${encodeURIComponent(externalCustomerId)}/mapping`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId }),
+      });
+      if (!response.ok) { const data = await response.json().catch(() => null); throw new Error(responseError(data, 'Unable to update mapping.')); }
+      await loadProviderCustomers(provider);
+    } catch (error) {
+      setCustomerMessage((current) => ({ ...current, [provider]: error instanceof Error ? error.message : 'Unable to update mapping.' }));
+    } finally {
+      setMappingBusyId(null);
     }
   };
 
@@ -227,9 +295,27 @@ export default function IntegrationsView({ passports = [], onNavigateTab }: Inte
                     </div>
                   )}
                   {item.credentialStatus !== 'NOT_CONFIGURED' && (
-                    <button onClick={() => void testProvider(item.provider)} disabled={testingProvider === item.provider || !selectedPassportId} className="inline-flex items-center justify-center gap-1.5 rounded-md border border-[#89d185]/30 bg-[#89d185]/10 px-3 py-2 text-xs font-bold text-[#89d185] hover:bg-[#89d185]/20 disabled:opacity-40">
-                      <RefreshCw className={`w-3.5 h-3.5 ${testingProvider === item.provider ? 'animate-spin' : ''}`} /> {testingProvider === item.provider ? 'Testing…' : 'Run live test'}
-                    </button>
+                    <div className="flex gap-2">
+                      <button onClick={() => void testProvider(item.provider)} disabled={testingProvider === item.provider || !selectedPassportId} className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md border border-[#89d185]/30 bg-[#89d185]/10 px-3 py-2 text-xs font-bold text-[#89d185] hover:bg-[#89d185]/20 disabled:opacity-40">
+                        <RefreshCw className={`w-3.5 h-3.5 ${testingProvider === item.provider ? 'animate-spin' : ''}`} /> {testingProvider === item.provider ? 'Testing…' : 'Run live test'}
+                      </button>
+                      <button onClick={() => void disconnectProvider(item.provider)} disabled={disconnectingProvider === item.provider} aria-label={`Disconnect ${item.name}`} className="inline-flex items-center justify-center gap-1.5 rounded-md border border-[#f14c4c]/30 bg-[#f14c4c]/10 px-3 py-2 text-xs font-bold text-[#f14c4c] hover:bg-[#f14c4c]/20 disabled:opacity-40">
+                        <XCircle className="w-3.5 h-3.5" /> {disconnectingProvider === item.provider ? '…' : 'Disconnect'}
+                      </button>
+                    </div>
+                  )}
+                  {item.credentialStatus === 'LIVE' && CUSTOMER_DISCOVERY_PROVIDERS.has(item.provider) && (
+                    <ProviderCustomerMapping
+                      provider={item.provider}
+                      clients={clients}
+                      customers={providerCustomers[item.provider] || []}
+                      discovering={discoveringProvider === item.provider}
+                      message={customerMessage[item.provider]}
+                      mappingBusyId={mappingBusyId}
+                      onDiscover={() => void discoverCustomers(item.provider)}
+                      onLoad={() => void loadProviderCustomers(item.provider)}
+                      onMap={(externalId, clientId) => void mapCustomer(item.provider, externalId, clientId)}
+                    />
                   )}
                 </>
               )}
@@ -303,6 +389,44 @@ export default function IntegrationsView({ passports = [], onNavigateTab }: Inte
           Direct native ticket-creation in Jira/ConnectWise/Autotask, SIEM ingestion, and identity-provider connectors are not built — this signed webhook is the only outbound event mechanism SPR currently ships. Use it to relay events into those systems yourself.
         </div>
       </div>
+    </div>
+  );
+}
+
+function ProviderCustomerMapping({ provider, clients, customers, discovering, message, mappingBusyId, onDiscover, onLoad, onMap }: {
+  provider: string; clients: Client[]; customers: ProviderCustomer[]; discovering: boolean; message?: string; mappingBusyId: string | null;
+  onDiscover: () => void; onLoad: () => void; onMap: (externalCustomerId: string, clientId: string | null) => void;
+}) {
+  const mappedCount = customers.filter((c) => c.client_id).length;
+  return (
+    <div className="spr-panel-alt p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-[#9d9d9d]">MSP customers {customers.length > 0 && `(${mappedCount}/${customers.length} mapped)`}</span>
+        <div className="flex gap-1">
+          <button onClick={onLoad} aria-label="Refresh discovered customers" className="rounded-md border border-[#3c3c3c] p-1 text-[#9d9d9d] hover:text-[#d4d4d4]"><RefreshCw className="w-3 h-3" /></button>
+          <button onClick={onDiscover} disabled={discovering} className="rounded-md border border-[#0e639c]/40 bg-[#094771] px-2 py-1 text-[10px] font-bold text-[#3794ff] disabled:opacity-40">{discovering ? 'Discovering…' : 'Discover customers'}</button>
+        </div>
+      </div>
+      {customers.length === 0 && <p className="text-[10px] text-[#6f6f6f]">No customers discovered yet from {provider}. Click "Discover customers" to fetch the real list from the provider.</p>}
+      {customers.length > 0 && (
+        <ul className="space-y-1.5 max-h-40 overflow-auto pr-1">
+          {customers.map((customer) => (
+            <li key={customer.id} className="flex items-center justify-between gap-2 rounded border border-[#3c3c3c] bg-[#2d2d2d] px-2 py-1.5">
+              <span className="truncate text-[11px] text-[#d4d4d4]">{customer.external_customer_name}</span>
+              <select
+                value={customer.client_id || ''}
+                disabled={mappingBusyId === `${provider}:${customer.external_customer_id}`}
+                onChange={(e) => onMap(customer.external_customer_id, e.target.value || null)}
+                className="shrink-0 max-w-[45%] rounded border border-[#3c3c3c] bg-[#1e1e1e] px-1.5 py-1 text-[10px] text-[#d4d4d4]"
+              >
+                <option value="">Unmapped</option>
+                {clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
+              </select>
+            </li>
+          ))}
+        </ul>
+      )}
+      {message && <p className="text-[10px] text-[#9d9d9d]">{message}</p>}
     </div>
   );
 }
