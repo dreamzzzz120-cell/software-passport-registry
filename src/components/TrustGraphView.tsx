@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { CircleHelp, Filter, Search, X } from 'lucide-react';
+import { useMemo, useRef, useState, type MouseEvent, type WheelEvent } from 'react';
+import { CircleHelp, Filter, Maximize2, Search, X, ZoomIn, ZoomOut } from 'lucide-react';
 import type { Client, SoftwarePassport } from '../types';
 
 type GraphAsset = { id: string; name?: string; hostName?: string; type?: string; clientId?: string; clientName?: string; version?: string };
@@ -56,6 +56,10 @@ export default function TrustGraphView({ clients = [], passports = [], assets = 
   const [kindFilter, setKindFilter] = useState<'all' | GraphKind>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeKey, setSelectedEdgeKey] = useState<string | null>(null);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [view, setView] = useState({ x: 0, y: 0, k: 1 });
+  const dragRef = useRef<{ x: number; y: number } | null>(null);
+  const draggedRef = useRef(false);
 
   const { nodes, edges } = useMemo(() => {
     const graphNodes: GraphNode[] = [];
@@ -152,6 +156,32 @@ export default function TrustGraphView({ clients = [], passports = [], assets = 
   const selectNode = (id: string) => { setSelectedId(id); setSelectedEdgeKey(null); };
   const selectEdge = (edge: GraphEdge) => { setSelectedEdgeKey(`${edge.source}-${edge.target}-${edge.label}`); setSelectedId(null); };
 
+  // Hovering (or selecting) a node highlights it plus its direct relationships
+  // and dims everything else, so the graph reads as an explorable web of
+  // connections instead of a static diagram.
+  const activeId = hoveredId || selectedId;
+  const activeNeighbors = useMemo(() => {
+    if (!activeId) return null;
+    const set = new Set<string>([activeId]);
+    visibleEdges.forEach((edge) => { if (edge.source === activeId) set.add(edge.target); if (edge.target === activeId) set.add(edge.source); });
+    return set;
+  }, [activeId, visibleEdges]);
+  const connectedEdges = selected ? visibleEdges.filter((edge) => edge.source === selected.id || edge.target === selected.id) : [];
+
+  const clampZoom = (k: number) => Math.min(2.5, Math.max(0.5, k));
+  const zoomBy = (factor: number) => setView((v) => ({ ...v, k: clampZoom(v.k * factor) }));
+  const resetView = () => setView({ x: 0, y: 0, k: 1 });
+  const onWheel = (event: WheelEvent<SVGSVGElement>) => { event.preventDefault(); zoomBy(event.deltaY > 0 ? 0.9 : 1.1); };
+  const onPointerDown = (event: MouseEvent<SVGSVGElement>) => { dragRef.current = { x: event.clientX, y: event.clientY }; draggedRef.current = false; };
+  const onPointerMove = (event: MouseEvent<SVGSVGElement>) => {
+    if (!dragRef.current) return;
+    const dx = event.clientX - dragRef.current.x; const dy = event.clientY - dragRef.current.y;
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) draggedRef.current = true;
+    dragRef.current = { x: event.clientX, y: event.clientY };
+    setView((v) => ({ ...v, x: v.x + dx, y: v.y + dy }));
+  };
+  const onPointerUp = () => { dragRef.current = null; };
+
   return (
     <section className="space-y-6" aria-labelledby="trust-graph-title">
       <header className="spr-panel p-6">
@@ -169,30 +199,121 @@ export default function TrustGraphView({ clients = [], passports = [], assets = 
         </div>
       </header>
 
-      <div className="overflow-hidden spr-panel">
+      <div className="overflow-hidden spr-panel relative">
+        <div className="absolute right-3 top-3 z-10 flex gap-1" title="Scroll to zoom, drag to pan">
+          <button onClick={() => zoomBy(1.2)} aria-label="Zoom in" title="Zoom in" className="grid h-7 w-7 place-items-center rounded-md border border-[#3c3c3c] bg-[#252526] text-[#9d9d9d] hover:text-[#d4d4d4]"><ZoomIn size={14} /></button>
+          <button onClick={() => zoomBy(1 / 1.2)} aria-label="Zoom out" title="Zoom out" className="grid h-7 w-7 place-items-center rounded-md border border-[#3c3c3c] bg-[#252526] text-[#9d9d9d] hover:text-[#d4d4d4]"><ZoomOut size={14} /></button>
+          <button onClick={resetView} aria-label="Reset view" title="Reset zoom and pan" className="grid h-7 w-7 place-items-center rounded-md border border-[#3c3c3c] bg-[#252526] text-[#9d9d9d] hover:text-[#d4d4d4]"><Maximize2 size={13} /></button>
+        </div>
         <div className="overflow-x-auto">
-          <svg viewBox="0 0 1400 680" role="img" aria-label="Trust graph of loaded tenant records" className="h-[560px] min-w-[1200px] w-full">
+          <svg
+            viewBox="0 0 1400 680"
+            role="img"
+            aria-label="Trust graph of loaded tenant records"
+            className="h-[560px] min-w-[1200px] w-full cursor-grab active:cursor-grabbing"
+            onWheel={onWheel}
+            onMouseDown={onPointerDown}
+            onMouseMove={onPointerMove}
+            onMouseUp={onPointerUp}
+            onMouseLeave={onPointerUp}
+          >
             <defs><pattern id="graph-grid" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M 32 0 L 0 0 0 32" fill="none" stroke="#ffffff" strokeOpacity=".035" /></pattern></defs>
             <rect width="1400" height="680" fill="url(#graph-grid)" />
+            <g transform={`translate(${view.x} ${view.y}) scale(${view.k})`}>
             {visibleEdges.map((edge) => {
               const source = nodeById.get(edge.source); const target = nodeById.get(edge.target); if (!source || !target) return null;
               const key = `${edge.source}-${edge.target}-${edge.label}`;
               const isSelected = selectedEdgeKey === key;
+              const touchesActive = activeId ? (edge.source === activeId || edge.target === activeId) : false;
+              const dimmed = activeId ? !touchesActive : false;
               return (
-                <g key={key} role="button" tabIndex={0} onClick={() => selectEdge(edge)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') selectEdge(edge); }} className="cursor-pointer">
-                  <line x1={source.x} y1={source.y} x2={target.x} y2={target.y} stroke={isSelected ? '#3794ff' : '#858585'} strokeOpacity={isSelected ? '.7' : '.25'} strokeWidth={isSelected ? 2 : 1} />
-                  <text x={(source.x + target.x) / 2} y={(source.y + target.y) / 2 - 5} fill={isSelected ? '#3794ff' : '#6f6f6f'} fontSize="9" textAnchor="middle">{edge.label}</text>
+                <g key={key} role="button" tabIndex={0} onClick={() => { if (!draggedRef.current) selectEdge(edge); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') selectEdge(edge); }} className="cursor-pointer">
+                  <title>{`${source.label} — ${edge.label} → ${target.label}`}</title>
+                  <line x1={source.x} y1={source.y} x2={target.x} y2={target.y} stroke={isSelected || touchesActive ? '#3794ff' : '#858585'} strokeOpacity={dimmed ? 0.08 : isSelected || touchesActive ? 0.85 : 0.25} strokeWidth={isSelected || touchesActive ? 2 : 1} />
+                  <text x={(source.x + target.x) / 2} y={(source.y + target.y) / 2 - 5} fill={isSelected || touchesActive ? '#3794ff' : '#6f6f6f'} fillOpacity={dimmed ? 0.15 : 1} fontSize="9" textAnchor="middle">{edge.label}</text>
                 </g>
               );
             })}
-            {visibleNodes.map((node) => <g key={node.id} role="button" tabIndex={0} onClick={() => selectNode(node.id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') selectNode(node.id); }} className="cursor-pointer"><circle cx={node.x} cy={node.y} r={selectedId === node.id ? 23 : 18} fill={COLORS[node.kind]} fillOpacity=".18" stroke={COLORS[node.kind]} strokeWidth={selectedId === node.id ? 3 : 1.5} /><text x={node.x} y={node.y + 3} fill={COLORS[node.kind]} fontSize="9" textAnchor="middle" fontWeight="700">{node.kind.slice(0, 4).toUpperCase()}</text><text x={node.x} y={node.y + 34} fill="#d4d4d4" fontSize="11" textAnchor="middle">{node.label}</text></g>)}
+            {visibleNodes.map((node) => {
+              const isActive = activeId === node.id;
+              const isNeighbor = activeNeighbors ? activeNeighbors.has(node.id) : true;
+              const dimmed = activeId ? !isNeighbor : false;
+              return (
+                <g
+                  key={node.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => { if (!draggedRef.current) selectNode(node.id); }}
+                  onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') selectNode(node.id); }}
+                  onMouseEnter={() => setHoveredId(node.id)}
+                  onMouseLeave={() => setHoveredId(null)}
+                  className="cursor-pointer"
+                  opacity={dimmed ? 0.2 : 1}
+                >
+                  <title>{`${node.kind}: ${node.label} — ${node.detail}`}</title>
+                  <circle cx={node.x} cy={node.y} r={selectedId === node.id ? 23 : isActive ? 21 : 18} fill={COLORS[node.kind]} fillOpacity={isActive ? 0.3 : 0.18} stroke={COLORS[node.kind]} strokeWidth={selectedId === node.id || isActive ? 3 : 1.5} />
+                  <text x={node.x} y={node.y + 3} fill={COLORS[node.kind]} fontSize="9" textAnchor="middle" fontWeight="700">{node.kind.slice(0, 4).toUpperCase()}</text>
+                  <text x={node.x} y={node.y + 34} fill="#d4d4d4" fontSize="11" textAnchor="middle">{node.label}</text>
+                </g>
+              );
+            })}
             {!visibleNodes.length && <text x="700" y="340" fill="#9d9d9d" fontSize="15" textAnchor="middle">No loaded records match this filter.</text>}
+            </g>
           </svg>
         </div>
-        <div className="flex flex-wrap gap-4 border-t border-[#3c3c3c] px-5 py-4 text-xs text-[#9d9d9d]">{KIND_ORDER.map((kind) => <span key={kind} className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: COLORS[kind] }} />{kind}</span>)}<span className="ml-auto inline-flex items-center gap-1 text-[#9d9d9d]"><CircleHelp size={14} /> click a node or line for details</span></div>
+        <div className="flex flex-wrap items-center gap-2 border-t border-[#3c3c3c] px-5 py-4 text-xs text-[#9d9d9d]">
+          {KIND_ORDER.map((kind) => {
+            const count = nodes.filter((n) => n.kind === kind).length;
+            const isActive = kindFilter === kind;
+            return (
+              <button
+                key={kind}
+                onClick={() => setKindFilter(isActive ? 'all' : kind)}
+                title={`${count} ${kind} node${count === 1 ? '' : 's'} — click to ${isActive ? 'clear this' : 'show only this'} filter`}
+                className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 transition-colors"
+                style={{ borderColor: isActive ? COLORS[kind] : '#3c3c3c', backgroundColor: isActive ? `${COLORS[kind]}22` : 'transparent', color: isActive ? COLORS[kind] : '#9d9d9d' }}
+              >
+                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: COLORS[kind] }} />{kind}<span className="text-[#6f6f6f]">{count}</span>
+              </button>
+            );
+          })}
+          <span className="ml-auto inline-flex items-center gap-1 text-[#9d9d9d]" title="Hover a node to see its direct relationships highlighted; click for full details."><CircleHelp size={14} /> hover to trace connections, click for details</span>
+        </div>
       </div>
 
-      {selected && <aside className="rounded-md border border-[#0e639c] bg-[#094771] p-5" aria-label="Selected graph record"><div className="flex items-start justify-between gap-4"><div><div className="text-[10px] font-bold uppercase tracking-[.2em]" style={{ color: COLORS[selected.kind] }}>{selected.kind}</div><h2 className="mt-1 text-lg font-semibold text-[#d4d4d4]">{selected.label}</h2><p className="mt-2 text-sm text-[#d4d4d4]">{selected.detail}</p>{selected.meta && <p className="mt-2 text-xs leading-5 text-[#9d9d9d]">{selected.meta}</p>}</div><button onClick={() => setSelectedId(null)} aria-label="Close selected record" className="rounded-lg p-1 text-[#9d9d9d] hover:text-[#d4d4d4]"><X size={16} /></button></div><div className="mt-4 text-xs text-[#9d9d9d]">Record ID: <code className="text-[#9d9d9d]">{selected.id.split(':').slice(1).join(':')}</code></div></aside>}
+      {selected && (
+        <aside className="rounded-md border border-[#0e639c] bg-[#094771] p-5" aria-label="Selected graph record">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-[.2em]" style={{ color: COLORS[selected.kind] }}>{selected.kind}</div>
+              <h2 className="mt-1 text-lg font-semibold text-[#d4d4d4]">{selected.label}</h2>
+              <p className="mt-2 text-sm text-[#d4d4d4]">{selected.detail}</p>
+              {selected.meta && <p className="mt-2 text-xs leading-5 text-[#9d9d9d]">{selected.meta}</p>}
+            </div>
+            <button onClick={() => setSelectedId(null)} aria-label="Close selected record" className="rounded-lg p-1 text-[#9d9d9d] hover:text-[#d4d4d4]"><X size={16} /></button>
+          </div>
+          <div className="mt-4 text-xs text-[#9d9d9d]">Record ID: <code className="text-[#9d9d9d]">{selected.id.split(':').slice(1).join(':')}</code></div>
+          {connectedEdges.length > 0 && (
+            <div className="mt-4 border-t border-[#0e639c] pt-4">
+              <div className="text-[10px] font-semibold uppercase tracking-[.06em] text-[#9d9d9d]">{connectedEdges.length} connected record{connectedEdges.length === 1 ? '' : 's'}</div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {connectedEdges.map((edge) => {
+                  const otherId = edge.source === selected.id ? edge.target : edge.source;
+                  const other = nodeById.get(otherId); if (!other) return null;
+                  const direction = edge.source === selected.id ? '→' : '←';
+                  return (
+                    <button key={`${edge.source}-${edge.target}-${edge.label}`} onClick={() => selectNode(other.id)} title={`${edge.label}: jump to ${other.label}`} className="inline-flex items-center gap-1.5 rounded-md border border-[#3c3c3c] bg-[#181818] px-2 py-1 text-xs hover:border-[#3794ff]/40">
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: COLORS[other.kind] }} />
+                      <span className="text-[#6f6f6f]">{direction} {edge.label}</span>
+                      <span className="text-[#d4d4d4]">{other.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </aside>
+      )}
 
       {selectedEdge && (() => {
         const source = nodeById.get(selectedEdge.source); const target = nodeById.get(selectedEdge.target); if (!source || !target) return null;
