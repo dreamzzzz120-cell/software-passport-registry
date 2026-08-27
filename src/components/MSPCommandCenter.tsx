@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ArrowRight, Building2, CheckCircle2, Clock3, FileSearch, ShieldAlert, User, X } from 'lucide-react';
-import { Alert, Client } from '../types';
+import { AlertTriangle, ArrowRight, Building2, CheckCircle2, Clock3, FileSearch, ShieldAlert, ShieldQuestion, User, X } from 'lucide-react';
+import { Alert, Client, SoftwarePassport } from '../types';
 import { apiFetch } from '../utils/apiClient';
 
 interface Props {
   clients: Client[];
   alerts: Alert[];
+  passports: SoftwarePassport[];
   role?: string;
   onSelectClient: (id: string) => void;
   onNavigate: (tab: string) => void;
@@ -19,11 +20,17 @@ const severityClass = (severity: Alert['severity']) => severity === 'Critical'
   : severity === 'High' ? 'bg-[#cca700]/10 text-[#cca700] border-[#cca700]/30'
   : 'bg-[#0e639c]/20 text-[#3794ff] border-[#3794ff]/30';
 
-export default function MSPCommandCenter({ clients, alerts, role = 'Viewer', onSelectClient, onNavigate }: Props) {
+// Evidence older than this is not treated as fresh for the coverage metric below.
+// This does not change any stored evidence or score — it only affects how the
+// Command Center summarizes freshness for a human reading the dashboard.
+const EVIDENCE_FRESHNESS_WINDOW_DAYS = 30;
+
+export default function MSPCommandCenter({ clients, alerts, passports, role = 'Viewer', onSelectClient, onNavigate }: Props) {
   const [selected, setSelected] = useState<Alert | null>(null);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [assigningClientId, setAssigningClientId] = useState<string | null>(null);
+  const [clientSwitcherOpen, setClientSwitcherOpen] = useState(false);
   const canAssign = role === 'Owner' || role === 'Admin';
 
   const loadAssignments = () => { apiFetch('/api/msp/assignments').then((r) => r.ok ? r.json() : null).then((data) => { if (Array.isArray(data?.assignments)) setAssignments(data.assignments); }).catch(() => {}); };
@@ -60,6 +67,40 @@ export default function MSPCommandCenter({ clients, alerts, role = 'Viewer', onS
   }), [alerts]);
   const criticalClients = new Set(attention.filter(item => item.severity === 'Critical').map(item => item.clientName)).size;
   const attentionClients = new Set(attention.filter(item => item.severity !== 'Critical').map(item => item.clientName)).size;
+
+  // Real software-verification rollup from passport records already loaded by the
+  // app — nothing here is fabricated or defaulted to 0/100/VERIFIED. A passport
+  // with no recorded verificationStatus is counted as unknown, not coerced.
+  const softwareVerification = useMemo(() => {
+    let verified = 0;
+    let unknown = 0;
+    let freshEvidence = 0;
+    let staleOrMissingEvidence = 0;
+    const now = Date.now();
+    for (const passport of passports) {
+      if (passport.verificationStatus === 'verified') verified += 1;
+      else unknown += 1;
+
+      const evidenceTimestamps = (passport.evidence || [])
+        .map((item) => (item?.timestamp ? Date.parse(item.timestamp) : NaN))
+        .filter((value) => !Number.isNaN(value));
+      if (evidenceTimestamps.length === 0) {
+        staleOrMissingEvidence += 1;
+        continue;
+      }
+      const mostRecent = Math.max(...evidenceTimestamps);
+      const ageDays = (now - mostRecent) / (1000 * 60 * 60 * 24);
+      if (ageDays <= EVIDENCE_FRESHNESS_WINDOW_DAYS) freshEvidence += 1;
+      else staleOrMissingEvidence += 1;
+    }
+    const total = passports.length;
+    // Coverage is left undefined (not 0%) when there is nothing to measure yet,
+    // so an empty portfolio never renders as "0% verified".
+    const coveragePct = total > 0 ? Math.round((verified / total) * 100) : null;
+    const freshnessPct = total > 0 ? Math.round((freshEvidence / total) * 100) : null;
+    return { total, verified, unknown, freshEvidence, staleOrMissingEvidence, coveragePct, freshnessPct };
+  }, [passports]);
+
   useEffect(() => {
     if (!selected) { setFinding(null); setFindingError(null); setTask(null); setTaskError(null); return; }
     let cancelled = false;
@@ -130,9 +171,25 @@ export default function MSPCommandCenter({ clients, alerts, role = 'Viewer', onS
         <h1 className="text-3xl font-bold tracking-tight text-[#d4d4d4] md:text-4xl">Who needs you today?</h1>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-[#9d9d9d]">Prioritized work from the evidence and findings SPR currently has on record. A closed task is not a verified fix.</p>
       </div>
-      <button onClick={() => onNavigate('clients')} className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#3c3c3c] bg-[#2d2d2d] px-4 py-2.5 text-sm font-semibold text-[#d4d4d4] transition hover:border-[#6f6f6f] hover:bg-[#383838]">
-        View all clients <ArrowRight className="h-4 w-4" />
-      </button>
+      <div className="flex items-center gap-2">
+        <div className="relative">
+          <button onClick={() => setClientSwitcherOpen((open) => !open)} disabled={clients.length === 0} className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#3c3c3c] bg-[#2d2d2d] px-4 py-2.5 text-sm font-semibold text-[#d4d4d4] transition hover:border-[#6f6f6f] hover:bg-[#383838] disabled:opacity-50">
+            <User className="h-4 w-4" /> Switch client
+          </button>
+          {clientSwitcherOpen && clients.length > 0 && (
+            <div className="absolute right-0 z-10 mt-2 max-h-72 w-64 overflow-y-auto rounded-xl border border-[#3c3c3c] bg-[#252526] p-1 shadow-2xl" role="menu">
+              {clients.map((client) => (
+                <button key={client.id} role="menuitem" onClick={() => { onSelectClient(client.id); onNavigate('clients'); setClientSwitcherOpen(false); }} className="block w-full rounded-lg px-3 py-2 text-left text-sm text-[#d4d4d4] hover:bg-[#383838]">
+                  {client.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <button onClick={() => onNavigate('clients')} className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#3c3c3c] bg-[#2d2d2d] px-4 py-2.5 text-sm font-semibold text-[#d4d4d4] transition hover:border-[#6f6f6f] hover:bg-[#383838]">
+          View all clients <ArrowRight className="h-4 w-4" />
+        </button>
+      </div>
     </section>
 
     <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -140,6 +197,13 @@ export default function MSPCommandCenter({ clients, alerts, role = 'Viewer', onS
       <Metric label="Healthy" value={Math.max(0, clients.length - criticalClients - attentionClients)} icon={<CheckCircle2 />} tone="text-[#89d185]" />
       <Metric label="Need attention" value={attentionClients} icon={<AlertTriangle />} tone="text-[#cca700]" />
       <Metric label="Critical" value={criticalClients} icon={<ShieldAlert />} tone="text-[#f14c4c]" />
+    </section>
+
+    <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <Metric label="Verified software" value={softwareVerification.verified} icon={<CheckCircle2 />} tone="text-[#89d185]" />
+      <Metric label="Unknown / unverified" value={softwareVerification.unknown} icon={<ShieldQuestion />} tone="text-[#cca700]" />
+      <MetricPct label="Verification coverage" pct={softwareVerification.coveragePct} icon={<ShieldAlert />} tone="text-[#3794ff]" />
+      <MetricPct label={`Evidence fresh (≤30d)`} pct={softwareVerification.freshnessPct} icon={<Clock3 />} tone="text-[#3794ff]" />
     </section>
 
     <section className="rounded-md border border-[#3c3c3c] bg-[#252526]">
@@ -217,6 +281,9 @@ export default function MSPCommandCenter({ clients, alerts, role = 'Viewer', onS
 }
 
 function Metric({ label, value, icon, tone }: { label: string; value: number; icon: React.ReactNode; tone: string }) { return <div className="rounded-md border border-[#3c3c3c] bg-[#252526] p-5"><div className={`mb-4 h-5 w-5 ${tone}`}>{icon}</div><p className="text-3xl font-bold text-[#d4d4d4]">{value}</p><p className="mt-1 text-sm text-[#9d9d9d]">{label}</p></div>; }
+// Renders "Not yet measured" instead of "0%" when there is no software on record —
+// an empty portfolio must never read as a 0% verification score.
+function MetricPct({ label, pct, icon, tone }: { label: string; pct: number | null; icon: React.ReactNode; tone: string }) { return <div className="rounded-md border border-[#3c3c3c] bg-[#252526] p-5"><div className={`mb-4 h-5 w-5 ${tone}`}>{icon}</div><p className="text-3xl font-bold text-[#d4d4d4]">{pct === null ? '—' : `${pct}%`}</p><p className="mt-1 text-sm text-[#9d9d9d]">{pct === null ? `${label} (not yet measured)` : label}</p></div>; }
 function Detail({ label, value }: { label: string; value: string }) { return <div className="rounded-xl border border-[#3c3c3c] bg-[#181818] p-4"><p className="text-xs font-semibold uppercase tracking-wider text-[#9d9d9d]">{label}</p><p className="mt-2 text-sm leading-5 text-[#d4d4d4]">{value}</p></div>; }
 function formatStoredTime(value?: string | null) { return value ? new Date(value).toLocaleString() : 'Not observed'; }
 function evidenceList(value?: string | null) { try { const parsed = JSON.parse(value || '[]'); return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : []; } catch { return []; } }

@@ -30,6 +30,7 @@ import AuditLogView from './components/AuditLogView';
 import MonitoringView from './components/MonitoringView';
 import SecurityCenterView from './components/SecurityCenterView';
 import MSPCommandCenter from './components/MSPCommandCenter';
+import MspPricingView from './components/MspPricingView';
 import ReportsView from './components/ReportsView';
 import TrustGraphView from './components/TrustGraphView';
 import { EXTENSIONS } from './workflows/extensionRegistry';
@@ -301,7 +302,7 @@ export default function App() {
   if (path === '/') return <CoverPage />;
   if (path === '/login') return <LoginView onLoginSuccess={() => navigate('/dashboard')} />;
   if (!user && path === '/free-review') return <PublicPage title="Free software review" description="Start an evidence-first review from the public entry point." action="Sign in to continue" onAction={() => navigate('/login')} />;
-  if (!user && path === '/pricing') return <PublicPage title="SPR plans" description="Account and billing capabilities are available inside the authenticated workspace." action="Enter SPR" onAction={() => navigate('/login')} />;
+  if (!user && path === '/pricing') return <MspPricingView isAuthenticated={false} onPrimaryAction={() => navigate('/login')} />;
   if (!user) return <AuthLoading />;
 
   let view: ReactNode;
@@ -322,13 +323,14 @@ export default function App() {
     case '/monitoring': view = <MonitoringView role={role} />; break;
     case '/security': view = <SecurityCenterView clients={clients} passports={passports} />; break;
     case '/compliance': view = <ComplianceView clients={clients} role={role} />; break;
-    case '/msp': view = <MSPCommandCenter clients={clients} alerts={alerts} role={role} onSelectClient={setSelectedClientId} onNavigate={navigate} />; break;
+    case '/msp': view = <MSPCommandCenter clients={clients} alerts={alerts} passports={passports} role={role} onSelectClient={setSelectedClientId} onNavigate={navigate} />; break;
     case '/agent-trust': view = <AgentTrustView />; break;
     case '/ai-trust-center': view = <AITrustCenterView role={role} />; break;
     case '/enterprise-readiness': view = <EnterpriseReadinessView clients={clients} />; break;
     case '/investor': view = <InvestorHomeView passports={passports} clients={clients} alerts={alerts} onShowTelemetry={() => navigate('/scans')} onNavigateTab={onNavigateTab} />; break;
     case '/founder': view = <FounderDashboardView userRole={role} />; break;
     case '/billing': view = <BillingView />; break;
+    case '/pricing': view = <MspPricingView isAuthenticated={true} onPrimaryAction={() => navigate('/billing')} />; break;
     case '/settings': view = <SettingsView theme={theme} onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} />; break;
     case '/team': view = <TeamView role={role} />; break;
     case '/audit-log': view = <AuditLogView />; break;
