@@ -9,7 +9,7 @@ type ReportPayload = {
   reportType?: string;
   generatedAt?: string;
   passport?: { id?: string; name?: string };
-  risk?: { overall?: number | null; security?: number | null; compliance?: number | null };
+  risk?: { overall?: number | null; security?: number | null; compliance?: number | null; verificationStatus?: 'unverified' | 'partial' | 'verified' };
   evidenceQuality?: { completenessBasisPoints?: number; unknownDimensions?: number; latestObservationAt?: string | null };
   findings?: unknown[];
   evidence?: unknown[];
@@ -27,7 +27,8 @@ type ReportSnapshot = {
   id: string;
   report_type: string;
   generated_at: string;
-  score: number;
+  score: number | null;
+  verification_status?: 'unverified' | 'partial' | 'verified';
   completeness_basis_points: number;
   canonical_payload_hash: string;
 };
@@ -336,7 +337,7 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
                     <button onClick={() => void loadSnapshot(snapshot.id)} className="w-full rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2 text-left text-xs text-[#d4d4d4] hover:border-[#0e639c]/50 hover:text-[#d4d4d4]">
                       <div className="flex items-center justify-between gap-2">
                         <span>{new Date(snapshot.generated_at).toLocaleString()}</span>
-                        <span className="text-[#9d9d9d]">score {snapshot.score}</span>
+                        <span className="text-[#9d9d9d]">{snapshot.score == null ? 'unverified' : `score ${snapshot.score}`}</span>
                       </div>
                       <div className="mt-1 truncate font-mono text-[10px] text-[#9d9d9d]">{snapshot.canonical_payload_hash}</div>
                     </button>

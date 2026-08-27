@@ -28,6 +28,24 @@ function parseJson(value: unknown, fallback: unknown = []) { try { return value 
 
 const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low'];
 
+export type ReportPassportRow = { overall_score: number | null; security_score: number | null; compliance_score: number | null; verification_status: string | null; confidence_score: number | null; evidence_completeness: number | null };
+export type ReportRiskFields = { canonicalScore: number | null; verificationStatus: string; confidenceBasisPoints: number; completenessBasisPoints: number };
+
+// A trust_report_snapshots row is a permanent historical record. It must
+// never claim a measurement exists when the passport has none: this is the
+// single place buildAndPersistReport derives score/confidence/completeness/
+// status from the canonical passport row, so the same rule (null score
+// stays null, never coalesced to 0) applies whether the report is built now
+// or from any future call site.
+export function deriveReportRiskFields(passport: ReportPassportRow): ReportRiskFields {
+  return {
+    canonicalScore: passport.overall_score == null ? null : Number(passport.overall_score),
+    verificationStatus: passport.verification_status ?? 'unverified',
+    confidenceBasisPoints: Math.round(Number(passport.confidence_score ?? 0) * 100),
+    completenessBasisPoints: Math.round(Number(passport.evidence_completeness ?? 0) * 100),
+  };
+}
+
 function buildReportTypeExtras(reportType: string, passport: any, findings: any[]) {
   if (reportType === 'sbom') {
     const components = parseJson(passport.sbom, []) as any[];
@@ -193,8 +211,8 @@ export function createTrustLoopRouter() {
       const typeFilter = typeof req.query.type === 'string' ? reportTypes.safeParse(req.query.type) : null;
       if (typeFilter && !typeFilter.success) return res.status(400).json({ error: 'INVALID_REPORT_TYPE' });
       const rows = typeFilter?.success
-        ? await db.execute(sql`SELECT id,report_type,generated_at,score,confidence_basis_points,completeness_basis_points,canonical_payload_hash FROM trust_report_snapshots WHERE tenant_id=${tenantId} AND passport_id=${passportId} AND report_type=${typeFilter.data} ORDER BY generated_at DESC LIMIT 50`)
-        : await db.execute(sql`SELECT id,report_type,generated_at,score,confidence_basis_points,completeness_basis_points,canonical_payload_hash FROM trust_report_snapshots WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY generated_at DESC LIMIT 50`);
+        ? await db.execute(sql`SELECT id,report_type,generated_at,score,verification_status,confidence_basis_points,completeness_basis_points,canonical_payload_hash FROM trust_report_snapshots WHERE tenant_id=${tenantId} AND passport_id=${passportId} AND report_type=${typeFilter.data} ORDER BY generated_at DESC LIMIT 50`)
+        : await db.execute(sql`SELECT id,report_type,generated_at,score,verification_status,confidence_basis_points,completeness_basis_points,canonical_payload_hash FROM trust_report_snapshots WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY generated_at DESC LIMIT 50`);
       return res.json({ snapshots: (rows as any).rows || [] });
     } catch (error) { return next(error); }
   });
@@ -229,7 +247,7 @@ export function createTrustLoopRouter() {
 // null if the passport doesn't exist for this tenant; the caller decides
 // how to surface that (404 vs. skip-and-continue for a multi-passport run).
 export async function buildAndPersistReport(db: any, tenantId: string, passportId: string, reportType: string) {
-  const passport = (await db.execute(sql`SELECT id,name,overall_score,security_score,compliance_score,sbom,evidence,vulnerabilities,timeline FROM passports WHERE id=${passportId} AND tenant_id=${tenantId} LIMIT 1`) as any).rows?.[0];
+  const passport = (await db.execute(sql`SELECT id,name,overall_score,security_score,compliance_score,verification_status,confidence_score,evidence_completeness,sbom,evidence,vulnerabilities,timeline FROM passports WHERE id=${passportId} AND tenant_id=${tenantId} LIMIT 1`) as any).rows?.[0];
   if (!passport) return null;
   const findings = (await db.execute(sql`SELECT id,control_id,title,severity,status,description,remediation,evidence_ids,updated_at,resolved_at FROM trust_findings WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY CASE severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 WHEN 'low' THEN 4 ELSE 5 END,updated_at DESC`) as any).rows || [];
   const evidence = (await db.execute(sql`SELECT id,provider,control_id,subject,source_url,observed_at,verification_method,status,severity,evidence_hash,limitation FROM evidence_ledger WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY observed_at DESC`) as any).rows || [];
@@ -237,10 +255,17 @@ export async function buildAndPersistReport(db: any, tenantId: string, passportI
   const remediation = (await db.execute(sql`SELECT * FROM trust_remediation_work_items WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY updated_at DESC`) as any).rows || [];
   const verification = (await db.execute(sql`SELECT * FROM remediation_verification_ledger WHERE tenant_id=${tenantId} AND finding_id IN (SELECT id FROM trust_findings WHERE tenant_id=${tenantId} AND passport_id=${passportId}) ORDER BY created_at DESC`) as any).rows || [];
   const latest = observations[0];
+  // Score/confidence/completeness/status all come from the passport row --
+  // i.e. from calculateCanonicalScores (src/trust/scoring-engine.ts), the
+  // single authoritative scoring engine. This report never calculates its
+  // own score, and never coalesces an unverified passport's null score into
+  // a fabricated 0: a report is a permanent historical record, and it must
+  // not claim a measurement was made when it wasn't.
+  const { canonicalScore, verificationStatus, confidenceBasisPoints, completenessBasisPoints } = deriveReportRiskFields(passport);
   const report = {
     schemaVersion: 'spr.report.v2', reportType, generatedAt: new Date().toISOString(), passport: { id: passport.id, name: passport.name },
-    risk: { overall: passport.overall_score, security: passport.security_score, compliance: passport.compliance_score },
-    evidenceQuality: { completenessBasisPoints: latest?.completeness_basis_points ?? 0, unknownDimensions: latest?.unknown_dimension_count ?? 0, latestObservationAt: latest?.generated_at ?? null },
+    risk: { overall: canonicalScore, security: passport.security_score, compliance: passport.compliance_score, verificationStatus },
+    evidenceQuality: { completenessBasisPoints, unknownDimensions: latest?.unknown_dimension_count ?? 0, latestObservationAt: latest?.generated_at ?? null },
     findings, evidence, observations, remediation, verification,
     traceability: 'Report -> Passport -> Risk -> Finding -> Observation -> Provider -> Source -> Timestamp -> Hash',
     resolutionTraceability: 'Finding -> remediation -> new observation -> independent verification',
@@ -249,6 +274,6 @@ export async function buildAndPersistReport(db: any, tenantId: string, passportI
   };
   const canonicalPayload = JSON.stringify(report);
   const reportHash = crypto.createHash('sha256').update(canonicalPayload).digest('hex');
-  await db.execute(sql`INSERT INTO trust_report_snapshots (id,tenant_id,passport_id,report_type,generated_at,score,confidence_basis_points,completeness_basis_points,evidence_ids,finding_ids,observation_id,canonical_payload_hash,payload,created_at) VALUES (${id('report')},${tenantId},${passportId},${reportType},${report.generatedAt},${Number(passport.overall_score ?? 0)},${Number(latest?.confidence_basis_points ?? 0)},${Number(latest?.completeness_basis_points ?? 0)},${JSON.stringify(evidence.map((item: any) => item.id))},${JSON.stringify(findings.map((item: any) => item.id))},${latest?.id ?? null},${reportHash},${canonicalPayload},${report.generatedAt}) ON CONFLICT (tenant_id,passport_id,report_type,canonical_payload_hash) DO NOTHING`);
+  await db.execute(sql`INSERT INTO trust_report_snapshots (id,tenant_id,passport_id,report_type,generated_at,score,verification_status,confidence_basis_points,completeness_basis_points,evidence_ids,finding_ids,observation_id,canonical_payload_hash,payload,created_at) VALUES (${id('report')},${tenantId},${passportId},${reportType},${report.generatedAt},${canonicalScore},${verificationStatus},${confidenceBasisPoints},${completenessBasisPoints},${JSON.stringify(evidence.map((item: any) => item.id))},${JSON.stringify(findings.map((item: any) => item.id))},${latest?.id ?? null},${reportHash},${canonicalPayload},${report.generatedAt}) ON CONFLICT (tenant_id,passport_id,report_type,canonical_payload_hash) DO NOTHING`);
   return { ...report, reportHash };
 }
