@@ -79,11 +79,16 @@ export async function persistTrustLoop(input:{tenantId:string;passportId:string;
     findings:open.map(f=>({severity:f.severity,category:'security',open:true})),
     evidence:{totalUnits:input.observations.length,knownUnits:known,freshness:freshEvidence},
   });
-  const score=canonicalResult.overallScore??0;
+  // score/confidence stay null (never coalesced to 0) when the canonical
+  // engine reports no known evidence units -- trust_observations is an
+  // immutable audit ledger and the source for monitoring/change detection,
+  // so a fabricated 0 here could later read as a real measured drop or
+  // improvement. See migrations/0026_trust_observation_confidence_integrity.
+  const score=canonicalResult.overallScore;
   // trust_observations/timeline/webhooks have always expressed confidence in
   // basis points (0-10000); the canonical engine returns a 0-100 percentage,
   // so it's converted once here rather than changing that external contract.
-  const confidence=Math.round((canonicalResult.confidenceScore??0)*100);
+  const confidence=canonicalResult.confidenceScore==null?null:Math.round(canonicalResult.confidenceScore*100);
 
   const previous=await db.execute(sql`SELECT id,observation_version,canonical_payload_hash FROM trust_observations WHERE tenant_id=${input.tenantId} AND passport_id=${input.passportId} ORDER BY observation_version DESC LIMIT 1`),previousRow=(previous as any).rows?.[0],version=Number(previousRow?.observation_version??0)+1,payload={schemaVersion:'spr.passport.v2',scoreVersion:SCORE_VERSION,confidenceVersion:CONFIDENCE_VERSION,generatedAt:now,evidenceIds,findingIds:findings.map(f=>f.id).sort(),completenessBasisPoints:completeness,confidenceBasisPoints:confidence,score,open:open.length,unknown,limitations:input.observations.filter(o=>o.limitation).map(o=>({controlId:o.controlId,limitation:o.limitation}))},canonicalPayloadHash=sha256({previousHash:previousRow?.canonical_payload_hash??null,payload}),observationId=newId('trustobs');
   await db.execute(sql`INSERT INTO trust_observations (id,tenant_id,passport_id,client_id,asset_id,schema_version,observation_version,generated_at,previous_observation_id,evidence_ids,finding_ids,scoring_policy_version,confidence_policy_version,completeness_basis_points,confidence_basis_points,known_dimension_count,unknown_dimension_count,stale_dimension_count,expired_dimension_count,canonical_payload_hash,immutable_payload,generation_reason,generated_by_actor_type,collector_version_map,partially_known_dimension_count,unavailable_dimension_count,open_finding_count,persisted_finding_count,idempotency_key,created_at) VALUES (${observationId},${input.tenantId},${input.passportId},${input.clientId},${input.assetId},'spr.passport.v2',${version},${now},${previousRow?.id??null},${JSON.stringify(evidenceIds)},${JSON.stringify(findings.map(f=>f.id))},${SCORE_VERSION},${CONFIDENCE_VERSION},${completeness},${confidence},${known},${unknown},0,0,${canonicalPayloadHash},${JSON.stringify(payload)},${input.generationReason??'evidence_change'},${input.actorType??'worker'},${JSON.stringify(input.collectorVersionMap??{})},0,${unknown},${open.length},${findings.length},${`${input.tenantId}:${input.passportId}:${canonicalPayloadHash}`},${now}) ON CONFLICT (tenant_id,idempotency_key) DO NOTHING`);

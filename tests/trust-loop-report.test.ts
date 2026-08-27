@@ -11,12 +11,14 @@ function passport(overrides: Partial<ReportPassportRow> = {}): ReportPassportRow
 }
 
 describe('deriveReportRiskFields', () => {
-  it('keeps an unverified passport score as null, never 0, in a generated report', () => {
+  it('keeps an unverified passport score, confidence, and completeness as null, never 0, in a generated report', () => {
     const fields = deriveReportRiskFields(passport({ verification_status: 'unverified' }));
     expect(fields.canonicalScore).toBeNull();
     expect(fields.canonicalScore).not.toBe(0);
     expect(fields.verificationStatus).toBe('unverified');
-    expect(fields.completenessBasisPoints).toBe(0);
+    expect(fields.confidenceBasisPoints).toBeNull();
+    expect(fields.completenessBasisPoints).toBeNull();
+    expect(fields.completenessBasisPoints).not.toBe(0);
   });
 
   it('defaults to unverified when verification_status was never set (legacy row)', () => {

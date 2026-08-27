@@ -29,20 +29,20 @@ function parseJson(value: unknown, fallback: unknown = []) { try { return value 
 const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low'];
 
 export type ReportPassportRow = { overall_score: number | null; security_score: number | null; compliance_score: number | null; verification_status: string | null; confidence_score: number | null; evidence_completeness: number | null };
-export type ReportRiskFields = { canonicalScore: number | null; verificationStatus: string; confidenceBasisPoints: number; completenessBasisPoints: number };
+export type ReportRiskFields = { canonicalScore: number | null; verificationStatus: string; confidenceBasisPoints: number | null; completenessBasisPoints: number | null };
 
 // A trust_report_snapshots row is a permanent historical record. It must
 // never claim a measurement exists when the passport has none: this is the
 // single place buildAndPersistReport derives score/confidence/completeness/
-// status from the canonical passport row, so the same rule (null score
-// stays null, never coalesced to 0) applies whether the report is built now
-// or from any future call site.
+// status from the canonical passport row, so the same rule (null stays
+// null, never coalesced to 0) applies to every field here, whether the
+// report is built now or from any future call site.
 export function deriveReportRiskFields(passport: ReportPassportRow): ReportRiskFields {
   return {
     canonicalScore: passport.overall_score == null ? null : Number(passport.overall_score),
     verificationStatus: passport.verification_status ?? 'unverified',
-    confidenceBasisPoints: Math.round(Number(passport.confidence_score ?? 0) * 100),
-    completenessBasisPoints: Math.round(Number(passport.evidence_completeness ?? 0) * 100),
+    confidenceBasisPoints: passport.confidence_score == null ? null : Math.round(Number(passport.confidence_score) * 100),
+    completenessBasisPoints: passport.evidence_completeness == null ? null : Math.round(Number(passport.evidence_completeness) * 100),
   };
 }
 

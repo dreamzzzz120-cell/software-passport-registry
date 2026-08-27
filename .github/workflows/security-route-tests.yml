@@ -5,7 +5,7 @@ on:
     paths:
       - 'src/**'
       - 'server.ts'
-      - 'tests/security/**'
+      - 'tests/**'
       - 'migrations/**'
       - '.github/workflows/security-route-tests.yml'
   workflow_dispatch:
@@ -51,6 +51,32 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --ignore-scripts
+      - name: Run available static security contracts
+        run: >
+          npx vitest run src/security
+          tests/auth-rbac-contract.test.ts
+          tests/compliance-schedules-contract.test.ts
+          tests/msp-ai-trust-contract.test.ts
+          tests/security-contract.test.ts
+          tests/ux-audit-fixes-contract.test.ts
+      - name: Require live route-security fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -d tests/security ]]; then
+            echo 'Required live route-security fixture directory is missing: tests/security'
+            exit 1
+          fi
+          if [[ ! -f tests/security/seed-authz-fixtures.sql ]]; then
+            echo 'Required live route-security fixture is missing: tests/security/seed-authz-fixtures.sql'
+            exit 1
+          fi
+          shopt -s nullglob
+          live_tests=(tests/security/*.test.ts)
+          if (( ${#live_tests[@]} == 0 )); then
+            echo 'Required live route-security tests are missing: tests/security/*.test.ts'
+            exit 1
+          fi
       - name: Install Firebase CLI
         run: npm install --global firebase-tools@latest
       - name: Start Firebase Auth emulator
@@ -94,4 +120,9 @@ jobs:
           echo 'SPR_TEST_TENANT_A_RESOURCE_ID=security-passport-a' >> "$GITHUB_ENV"
           echo 'SPR_TEST_TENANT_B_RESOURCE_ID=security-passport-b' >> "$GITHUB_ENV"
       - name: Run route security tests
-        run: npx vitest run tests/security/route-authz.test.ts tests/security/fixture-contract.test.ts tests/security/http-hardening.test.ts
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          live_tests=(tests/security/*.test.ts)
+          npx vitest run "${live_tests[@]}"

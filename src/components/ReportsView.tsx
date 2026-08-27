@@ -10,7 +10,7 @@ type ReportPayload = {
   generatedAt?: string;
   passport?: { id?: string; name?: string };
   risk?: { overall?: number | null; security?: number | null; compliance?: number | null; verificationStatus?: 'unverified' | 'partial' | 'verified' };
-  evidenceQuality?: { completenessBasisPoints?: number; unknownDimensions?: number; latestObservationAt?: string | null };
+  evidenceQuality?: { completenessBasisPoints?: number | null; unknownDimensions?: number; latestObservationAt?: string | null };
   findings?: unknown[];
   evidence?: unknown[];
   observations?: unknown[];
