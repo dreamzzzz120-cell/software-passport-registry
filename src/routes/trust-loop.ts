@@ -160,7 +160,19 @@ export function createTrustLoopRouter() {
       const now = new Date().toISOString();
       const workId = id('remed');
       await db.execute(sql`INSERT INTO trust_remediation_work_items (id,tenant_id,passport_id,finding_id,client_id,external_system,external_ticket_id,owner_id,owner_display,sla_due_at,status,remediation_plan,created_at,updated_at) VALUES (${workId},${tenantId},${finding.passport_id},${finding.id},${finding.client_id},${p.externalSystem},${p.externalTicketId ?? null},${p.assigneeId ?? null},${p.assigneeDisplay ?? null},${p.slaDueAt ?? null},'OPEN',${p.description || finding.description},${now},${now})`);
-      await db.execute(sql`INSERT INTO remediation_tasks (id,tenant_id,client_id,alert_id,title,description,priority,status,assignee_id,created_by,created_at,updated_at) VALUES (${workId},${tenantId},${finding.client_id},${finding.id},${p.title},${p.description || finding.description},${p.priority},'OPEN',${p.assigneeId ?? null},${req.user!.uid},${now},${now})`);
+      // Real production defect, found live: this route also used to write a
+      // parallel row into remediation_tasks, whose integrity trigger
+      // (migration 0009) requires alert_id to reference the `alerts` table
+      // -- a table nothing in this codebase has ever inserted into (dead
+      // since before this session; the live worker is
+      // trust-monitoring-worker.ts, not the unreferenced
+      // src/workers/monitoring-worker.ts that still touches
+      // remediation_tasks). That meant this INSERT, and therefore this
+      // entire route, unconditionally failed with a 500 for every finding,
+      // every tenant, always. trust_remediation_work_items above is the
+      // real, actively-read table (GET/PATCH /remediations, POST /verify,
+      // AlertsView all use it) -- removing the dead write is what actually
+      // makes remediation creation work, not a regression.
       return res.status(201).json({ id: workId, findingId: finding.id, status: 'OPEN', slaDueAt: p.slaDueAt ?? null });
     } catch (error) { return next(error); }
   });
