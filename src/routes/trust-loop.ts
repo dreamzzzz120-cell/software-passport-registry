@@ -185,7 +185,13 @@ export function createTrustLoopRouter() {
       const tenantId = req.user!.tenantId;
       const p = parsed.data;
       const now = new Date().toISOString();
-      const rows = await db.execute(sql`UPDATE trust_remediation_work_items SET status=${p.status},owner_id=COALESCE(${p.ownerId ?? null},owner_id),owner_display=COALESCE(${p.ownerDisplay ?? null},owner_display),sla_due_at=CASE WHEN ${p.slaDueAt === undefined} THEN sla_due_at ELSE ${p.slaDueAt} END,updated_at=${now},closed_at=CASE WHEN ${p.status} IN ('CLOSED','VERIFIED') THEN ${now} ELSE closed_at END WHERE id=${req.params.id} AND tenant_id=${tenantId} RETURNING *`);
+      // p.slaDueAt is optional (undefined when the caller omits it entirely,
+      // vs null to explicitly clear it) -- even though the CASE's ELSE
+      // branch is logically unreachable when it's undefined, Postgres still
+      // needs a valid bind value for every placeholder in the prepared
+      // statement, and undefined isn't one (confirmed live: PATCHing a
+      // remediation's status without also sending slaDueAt always 500'd).
+      const rows = await db.execute(sql`UPDATE trust_remediation_work_items SET status=${p.status},owner_id=COALESCE(${p.ownerId ?? null},owner_id),owner_display=COALESCE(${p.ownerDisplay ?? null},owner_display),sla_due_at=CASE WHEN ${p.slaDueAt === undefined} THEN sla_due_at ELSE ${p.slaDueAt ?? null} END,updated_at=${now},closed_at=CASE WHEN ${p.status} IN ('CLOSED','VERIFIED') THEN ${now} ELSE closed_at END WHERE id=${req.params.id} AND tenant_id=${tenantId} RETURNING *`);
       const row = (rows as any).rows?.[0];
       if (!row) return res.status(404).json({ error: 'REMEDIATION_NOT_FOUND' });
       return res.json(row);

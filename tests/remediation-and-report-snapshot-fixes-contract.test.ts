@@ -24,6 +24,13 @@ describe('POST /trust-loop/remediations no longer writes to the dead remediation
   });
 });
 
+describe('PATCH /trust-loop/remediations/:id status-only update no longer 500s', () => {
+  it('binds null instead of undefined for the unreachable ELSE branch when slaDueAt is omitted', () => {
+    const s = read('src/routes/trust-loop.ts');
+    expect(s).toContain('ELSE ${p.slaDueAt ?? null} END');
+  });
+});
+
 describe('trust_report_snapshots allows a legitimately null score/confidence', () => {
   it('drops the NOT NULL constraint on score and confidence_basis_points, matching trust_observations', () => {
     const migration = read('migrations/0038_report_snapshot_null_score.sql');
