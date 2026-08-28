@@ -178,7 +178,9 @@ export function createMonitoringRouter() {
       const [created] = await db.insert(monitoringConfigurations).values(row).returning();
       res.status(201).json(publicConfiguration(created));
     } catch (error: any) {
-      if (error?.code === '23505') return res.status(409).json({ error: 'MONITORING_CONFIGURATION_EXISTS' });
+      // db.insert(...) wraps the real pg error in a DrizzleQueryError --
+      // the actual code lives at error.cause.code, not error.code.
+      if (error?.code === '23505' || error?.cause?.code === '23505') return res.status(409).json({ error: 'MONITORING_CONFIGURATION_EXISTS' });
       throw error;
     }
   });
@@ -238,7 +240,7 @@ export function createMonitoringRouter() {
       const [created] = await db.insert(collectorJobs).values(row).returning();
       res.status(202).json({ jobId: created.id, state: created.state, accepted: true });
     } catch (error: any) {
-      if (error?.code !== '23505') throw error;
+      if (error?.code !== '23505' && error?.cause?.code !== '23505') throw error;
       const existing = await db.select().from(collectorJobs).where(and(
         eq(collectorJobs.tenantId, req.user!.tenantId), eq(collectorJobs.idempotencyKey, key),
       )).then(rows => rows[0]);

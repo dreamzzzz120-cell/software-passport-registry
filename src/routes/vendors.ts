@@ -103,7 +103,12 @@ export function createVendorsRouter() {
       `) as any).rows?.[0];
       res.status(201).json({ ...publicVendor(row), auditHistory: [] });
     } catch (error: any) {
-      if (error?.code === '23505') return res.status(409).json({ error: 'VENDOR_NAME_ALREADY_EXISTS' });
+      // db.execute wraps the real pg error in a DrizzleQueryError -- the
+      // actual code lives at error.cause.code, not error.code (confirmed
+      // live: this check never matched, so duplicate names 500'd instead
+      // of 409ing). Checking both keeps this correct for any raw pg error
+      // that might reach here too.
+      if (error?.code === '23505' || error?.cause?.code === '23505') return res.status(409).json({ error: 'VENDOR_NAME_ALREADY_EXISTS' });
       next(error);
     }
   });

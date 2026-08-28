@@ -33,7 +33,7 @@ describe('POST /api/user/clients', () => {
 
   it('handles duplicate domains with a real database constraint, not just an app-level check', () => {
     const s = source();
-    expect(s).toContain("if (error?.code === '23505') return res.status(409)");
+    expect(s).toContain("if (error?.code === '23505' || error?.cause?.code === '23505') return res.status(409)");
     const migration = read('migrations/0032_client_creation_and_scoping.sql');
     expect(migration).toContain('ADD CONSTRAINT clients_tenant_domain_unique UNIQUE (tenant_id, domain)');
   });

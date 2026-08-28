@@ -468,8 +468,11 @@ export function createAuthRouter() {
       } catch (error: any) {
         // Real unique constraint (migration 0032), not just an app-level
         // pre-check -- closes the race where two concurrent creates for the
-        // same domain could otherwise both succeed.
-        if (error?.code === '23505') return res.status(409).json({ error: 'A client with this domain already exists in your workspace.' });
+        // same domain could otherwise both succeed. db.execute wraps the
+        // real pg error in a DrizzleQueryError, so the actual code lives at
+        // error.cause.code, not error.code -- this check never matched
+        // (confirmed live: a duplicate domain 500'd instead of 409ing).
+        if (error?.code === '23505' || error?.cause?.code === '23505') return res.status(409).json({ error: 'A client with this domain already exists in your workspace.' });
         throw error;
       }
       const row = (inserted as any).rows?.[0];
