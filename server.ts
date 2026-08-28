@@ -127,7 +127,10 @@ app.post('/api/ai/analyze-passport', requireAuth, async (req: AuthenticatedReque
 });
 app.use('/api/integrations', createIntegrationsRouter());
 app.use('/api/integrations-live', createLiveIntegrationsRouter());
-const requireTrustMutationRole = (req: Request, res: Response, next: NextFunction) => { if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next(); return requireRole(['Owner', 'Admin', 'Operator', 'Technician'])(req as AuthenticatedRequest, res, next); };
+// A 'Client'-role user may only sign off on remediation work already
+// verified by staff (POST /remediations/:id/approve) -- every other
+// mutation under this router still requires an internal staff role.
+const requireTrustMutationRole = (req: Request, res: Response, next: NextFunction) => { if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next(); if (req.method === 'POST' && /\/remediations\/[^/]+\/approve$/.test(req.path)) return requireRole(['Owner', 'Admin', 'Operator', 'Technician', 'Client'])(req as AuthenticatedRequest, res, next); return requireRole(['Owner', 'Admin', 'Operator', 'Technician'])(req as AuthenticatedRequest, res, next); };
 app.use('/api/trust-loop', requireAuth, requireTrustMutationRole);
 app.use('/api/trust-loop', createTrustLoopRouter());
 app.use('/api/integration-monitoring', createIntegrationMonitoringRouter());

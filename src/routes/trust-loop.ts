@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { sql } from 'drizzle-orm';
 import crypto from 'node:crypto';
 import { z } from 'zod';
-import { AuthenticatedRequest } from '../middleware/security.ts';
+import { AuthenticatedRequest, requireRole } from '../middleware/security.ts';
 import { decryptCredentials } from '../integrations/credential-vault.ts';
 import { collectDeepProviderEvidence } from '../integrations/deep-collectors.ts';
 import { collectGitHubDeepEvidence } from '../integrations/github-deep.ts';
@@ -23,6 +23,7 @@ const remediationSchema = z.object({
 const remediationUpdateSchema = z.object({ status: z.enum(['OPEN', 'IN_PROGRESS', 'BLOCKED', 'READY_FOR_VERIFICATION', 'VERIFIED', 'CLOSED', 'CANCELLED']), ownerId: z.string().max(255).optional(), ownerDisplay: z.string().max(255).optional(), slaDueAt: z.string().datetime().nullable().optional() }).strict();
 const verifySchema = z.object({ findingId: z.string().trim().min(1), observationIds: z.array(z.string().min(1)).max(50), evidenceIds: z.array(z.string().min(1)).max(200) }).strict();
 const alertUpdateSchema = z.object({ status: z.enum(['ACKNOWLEDGED', 'RESOLVED', 'SUPPRESSED']) }).strict();
+const remediationNoteSchema = z.object({ body: z.string().trim().min(1).max(4000) }).strict();
 const reportTypes = z.enum(['executive', 'technical', 'msp', 'customer', 'compliance', 'vendor', 'auditor', 'evidence-ledger']);
 function id(prefix: string) { return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`; }
 function parseJson(value: unknown, fallback: unknown = []) { try { return value ? JSON.parse(String(value)) : fallback; } catch { return fallback; } }
@@ -157,7 +158,7 @@ export function createTrustLoopRouter() {
       if (!finding) return res.status(404).json({ error: 'FINDING_NOT_FOUND' });
       const now = new Date().toISOString();
       const workId = id('remed');
-      await db.execute(sql`INSERT INTO trust_remediation_work_items (id,tenant_id,passport_id,finding_id,external_system,external_ticket_id,owner_id,owner_display,sla_due_at,status,remediation_plan,created_at,updated_at) VALUES (${workId},${tenantId},${finding.passport_id},${finding.id},${p.externalSystem},${p.externalTicketId ?? null},${p.assigneeId ?? null},${p.assigneeDisplay ?? null},${p.slaDueAt ?? null},'OPEN',${p.description || finding.description},${now},${now})`);
+      await db.execute(sql`INSERT INTO trust_remediation_work_items (id,tenant_id,passport_id,finding_id,client_id,external_system,external_ticket_id,owner_id,owner_display,sla_due_at,status,remediation_plan,created_at,updated_at) VALUES (${workId},${tenantId},${finding.passport_id},${finding.id},${finding.client_id},${p.externalSystem},${p.externalTicketId ?? null},${p.assigneeId ?? null},${p.assigneeDisplay ?? null},${p.slaDueAt ?? null},'OPEN',${p.description || finding.description},${now},${now})`);
       await db.execute(sql`INSERT INTO remediation_tasks (id,tenant_id,client_id,alert_id,title,description,priority,status,assignee_id,created_by,created_at,updated_at) VALUES (${workId},${tenantId},${finding.client_id},${finding.id},${p.title},${p.description || finding.description},${p.priority},'OPEN',${p.assigneeId ?? null},${req.user!.uid},${now},${now})`);
       return res.status(201).json({ id: workId, findingId: finding.id, status: 'OPEN', slaDueAt: p.slaDueAt ?? null });
     } catch (error) { return next(error); }
@@ -174,6 +175,89 @@ export function createTrustLoopRouter() {
       const rows = await db.execute(sql`UPDATE trust_remediation_work_items SET status=${p.status},owner_id=COALESCE(${p.ownerId ?? null},owner_id),owner_display=COALESCE(${p.ownerDisplay ?? null},owner_display),sla_due_at=CASE WHEN ${p.slaDueAt === undefined} THEN sla_due_at ELSE ${p.slaDueAt} END,updated_at=${now},closed_at=CASE WHEN ${p.status} IN ('CLOSED','VERIFIED') THEN ${now} ELSE closed_at END WHERE id=${req.params.id} AND tenant_id=${tenantId} RETURNING *`);
       const row = (rows as any).rows?.[0];
       if (!row) return res.status(404).json({ error: 'REMEDIATION_NOT_FOUND' });
+      return res.json(row);
+    } catch (error) { return next(error); }
+  });
+
+  // ClientOps queue: previously there was no way to see "all open
+  // remediation tasks" at all, only fetch or patch one by id.
+  router.get('/remediations', async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const clientScope = req.user!.role === 'Client' ? req.user!.clientId : null;
+      const status = typeof req.query.status === 'string' ? req.query.status : null;
+      const rows = (await db.execute(sql`
+        SELECT * FROM trust_remediation_work_items
+        WHERE tenant_id=${tenantId}
+          AND (${clientScope}::text IS NULL OR client_id = ${clientScope})
+          AND (${status}::text IS NULL OR status = ${status})
+        ORDER BY CASE status WHEN 'OPEN' THEN 1 WHEN 'IN_PROGRESS' THEN 2 WHEN 'READY_FOR_VERIFICATION' THEN 3 WHEN 'BLOCKED' THEN 4 ELSE 5 END, updated_at DESC
+      `) as any).rows ?? [];
+      return res.json({ remediations: rows });
+    } catch (error) { return next(error); }
+  });
+
+  router.get('/remediations/:id', async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const clientScope = req.user!.role === 'Client' ? req.user!.clientId : null;
+      const remediation = (await db.execute(sql`
+        SELECT id, status, owner_id AS "ownerId", owner_display AS "ownerDisplay", sla_due_at AS "slaDueAt",
+          client_approved_at AS "clientApprovedAt", client_approved_by AS "clientApprovedBy",
+          created_at AS "createdAt", updated_at AS "updatedAt", closed_at AS "closedAt"
+        FROM trust_remediation_work_items WHERE id=${req.params.id} AND tenant_id=${tenantId} AND (${clientScope}::text IS NULL OR client_id = ${clientScope})
+      `) as any).rows?.[0];
+      if (!remediation) return res.status(404).json({ error: 'REMEDIATION_NOT_FOUND' });
+      const notes = (await db.execute(sql`
+        SELECT id, author_display AS "authorDisplay", body, created_at AS "createdAt" FROM remediation_notes
+        WHERE tenant_id=${tenantId} AND remediation_id=${req.params.id} ORDER BY created_at
+      `) as any).rows ?? [];
+      return res.json({ ...remediation, notes });
+    } catch (error) { return next(error); }
+  });
+
+  router.post('/remediations/:id/notes', async (req: AuthenticatedRequest, res, next) => {
+    const parsed = remediationNoteSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'INVALID_PAYLOAD', details: parsed.error.flatten() });
+    try {
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const clientScope = req.user!.role === 'Client' ? req.user!.clientId : null;
+      const remediation = (await db.execute(sql`
+        SELECT id FROM trust_remediation_work_items WHERE id=${req.params.id} AND tenant_id=${tenantId} AND (${clientScope}::text IS NULL OR client_id = ${clientScope})
+      `) as any).rows?.[0];
+      if (!remediation) return res.status(404).json({ error: 'REMEDIATION_NOT_FOUND' });
+      const noteId = id('remnote');
+      const now = new Date().toISOString();
+      await db.execute(sql`
+        INSERT INTO remediation_notes (id, tenant_id, remediation_id, author_uid, author_display, body, created_at)
+        VALUES (${noteId}, ${tenantId}, ${req.params.id}, ${req.user!.uid}, ${req.user!.email}, ${parsed.data.body}, ${now})
+      `);
+      return res.status(201).json({ id: noteId, authorDisplay: req.user!.email, body: parsed.data.body, createdAt: now });
+    } catch (error) { return next(error); }
+  });
+
+  // A client's own sign-off on remediation work already verified by staff --
+  // additive to the internal status machine, not a replacement for it: a
+  // Client-role user can only approve work that's already
+  // READY_FOR_VERIFICATION or VERIFIED, and approving never itself changes
+  // `status` (staff still control CLOSED via PATCH).
+  router.post('/remediations/:id/approve', requireRole(['Client']), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const clientScope = req.user!.clientId;
+      const now = new Date().toISOString();
+      const rows = await db.execute(sql`
+        UPDATE trust_remediation_work_items SET client_approved_at=${now}, client_approved_by=${req.user!.uid}
+        WHERE id=${req.params.id} AND tenant_id=${tenantId} AND client_id=${clientScope}
+          AND status IN ('READY_FOR_VERIFICATION','VERIFIED')
+        RETURNING *
+      `);
+      const row = (rows as any).rows?.[0];
+      if (!row) return res.status(404).json({ error: 'REMEDIATION_NOT_FOUND_OR_NOT_READY' });
       return res.json(row);
     } catch (error) { return next(error); }
   });

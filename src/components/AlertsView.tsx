@@ -1,12 +1,16 @@
-import { useMemo, useState, type ReactNode } from 'react';
-import { AlertTriangle, ArrowUpCircle, Bell, CheckCircle2, Clock3, Filter, Search, ShieldAlert, ShieldCheck, User, X } from 'lucide-react';
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { AlertTriangle, ArrowUpCircle, Bell, CheckCircle2, Clock3, Filter, Loader2, MessageSquare, Search, Send, ShieldAlert, ShieldCheck, User, X } from 'lucide-react';
+import { apiFetch } from '../utils/apiClient';
 import type { Alert, AlertStatus } from '../types';
 
 type AlertAction = 'acknowledge' | 'assign' | 'resolve' | 'escalate' | 'snooze' | 'reopen';
+type RemediationNote = { id: string; authorDisplay: string; body: string; createdAt: string };
+type RemediationDetail = { status: string; clientApprovedAt: string | null; notes: RemediationNote[] };
 
 interface AlertsViewProps {
   alerts: Alert[];
   onAlertAction: (alert: Alert, action: AlertAction, assigneeDisplay?: string) => Promise<void>;
+  role?: string;
 }
 
 const severityStyles: Record<string, string> = {
@@ -29,7 +33,7 @@ function isEscalated(alert: Alert) {
   return new Date(alert.slaDueAt).getTime() - Date.now() < 4 * 3600 * 1000;
 }
 
-export default function AlertsView({ alerts, onAlertAction }: AlertsViewProps) {
+export default function AlertsView({ alerts, onAlertAction, role = 'Viewer' }: AlertsViewProps) {
   const [severityFilter, setSeverityFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -86,7 +90,7 @@ export default function AlertsView({ alerts, onAlertAction }: AlertsViewProps) {
         </div>
       </section>
 
-      {selectedAlert && <AlertDrawer alert={selectedAlert} onClose={() => setSelectedAlertId(null)} onAlertAction={onAlertAction} />}
+      {selectedAlert && <AlertDrawer alert={selectedAlert} onClose={() => setSelectedAlertId(null)} onAlertAction={onAlertAction} role={role} />}
     </section>
   );
 }
@@ -100,7 +104,7 @@ function Metric({ icon, label, value, tone }: { icon: ReactNode; label: string; 
   return <div className={`rounded-md border p-4 ${styles[tone]}`}><div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.14em] text-[#9d9d9d]"><span className="h-4 w-4 text-[#9d9d9d]">{icon}</span>{label}</div><div className="mt-3 text-2xl font-semibold text-[#d4d4d4]">{value}</div></div>;
 }
 
-function AlertDrawer({ alert, onClose, onAlertAction }: { alert: Alert; onClose: () => void; onAlertAction: (alert: Alert, action: AlertAction, assigneeDisplay?: string) => Promise<void> }) {
+function AlertDrawer({ alert, onClose, onAlertAction, role }: { alert: Alert; onClose: () => void; onAlertAction: (alert: Alert, action: AlertAction, assigneeDisplay?: string) => Promise<void>; role: string }) {
   const [working, setWorking] = useState(false);
   const [assignee, setAssignee] = useState(alert.ownerDisplay || '');
   const [showAssign, setShowAssign] = useState(false);
@@ -108,6 +112,63 @@ function AlertDrawer({ alert, onClose, onAlertAction }: { alert: Alert; onClose:
   const run = async (action: AlertAction, extra?: string) => {
     setWorking(true);
     try { await onAlertAction(alert, action, extra); setShowAssign(false); } finally { setWorking(false); }
+  };
+
+  // Remediation notes + client sign-off: loaded lazily from the real
+  // remediation record (not derivable from the findings-shaped Alert
+  // object itself), only once a remediation work item actually exists for
+  // this finding.
+  const [remediation, setRemediation] = useState<RemediationDetail | null>(null);
+  const [loadingRemediation, setLoadingRemediation] = useState(false);
+  const [newNote, setNewNote] = useState('');
+  const [postingNote, setPostingNote] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const [remediationError, setRemediationError] = useState('');
+
+  const loadRemediation = async () => {
+    if (!alert.remediationId) return;
+    setLoadingRemediation(true);
+    try {
+      const response = await apiFetch(`/api/trust-loop/remediations/${encodeURIComponent(alert.remediationId)}`);
+      if (response.ok) setRemediation(await response.json());
+    } finally {
+      setLoadingRemediation(false);
+    }
+  };
+  useEffect(() => { void loadRemediation(); }, [alert.remediationId]);
+
+  const submitNote = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!alert.remediationId || !newNote.trim() || postingNote) return;
+    setPostingNote(true); setRemediationError('');
+    try {
+      const response = await apiFetch(`/api/trust-loop/remediations/${encodeURIComponent(alert.remediationId)}/notes`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body: newNote.trim() }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || 'Unable to post this note.');
+      setRemediation((current) => current ? { ...current, notes: [...current.notes, data] } : current);
+      setNewNote('');
+    } catch (error: any) {
+      setRemediationError(error?.message || 'Unable to post this note.');
+    } finally {
+      setPostingNote(false);
+    }
+  };
+
+  const approveRemediation = async () => {
+    if (!alert.remediationId || approving) return;
+    setApproving(true); setRemediationError('');
+    try {
+      const response = await apiFetch(`/api/trust-loop/remediations/${encodeURIComponent(alert.remediationId)}/approve`, { method: 'POST' });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error === 'REMEDIATION_NOT_FOUND_OR_NOT_READY' ? 'This remediation is not yet ready for approval.' : (data?.error || 'Unable to approve this remediation.'));
+      await loadRemediation();
+    } catch (error: any) {
+      setRemediationError(error?.message || 'Unable to approve this remediation.');
+    } finally {
+      setApproving(false);
+    }
   };
 
   return <div className="fixed inset-0 z-[70] flex justify-end bg-black/60 backdrop-blur-sm" onMouseDown={onClose}>
@@ -142,6 +203,38 @@ function AlertDrawer({ alert, onClose, onAlertAction }: { alert: Alert; onClose:
           </div>
         )}
       </div>
+
+      {alert.remediationId && (
+        <div className="mt-6 rounded-md border border-[#3c3c3c] bg-[#252526] p-5">
+          <div className="flex items-center gap-2 text-xs font-semibold text-[#d4d4d4]"><MessageSquare className="h-4 w-4 text-[#9d9d9d]" /> Remediation notes</div>
+          {remediationError && <div role="alert" className="mt-3 rounded-md border border-[#f14c4c]/40 bg-[#f14c4c]/10 px-3 py-2 text-xs text-[#f14c4c]">{remediationError}</div>}
+          {loadingRemediation ? (
+            <div className="mt-4 flex items-center gap-2 text-xs text-[#9d9d9d]"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</div>
+          ) : (
+            <>
+              {remediation?.clientApprovedAt && (
+                <div className="mt-3 flex items-center gap-2 rounded-md border border-[#89d185]/40 bg-[#89d185]/10 px-3 py-2 text-xs text-[#89d185]"><ShieldCheck className="h-4 w-4" /> Approved by the client on {new Date(remediation.clientApprovedAt).toLocaleString()}</div>
+              )}
+              <div className="mt-3 max-h-48 space-y-2 overflow-y-auto pr-1">
+                {(remediation?.notes || []).length === 0 && <p className="text-xs text-[#6f6f6f]">No notes yet.</p>}
+                {(remediation?.notes || []).map((note) => (
+                  <div key={note.id} className="rounded-md border border-[#3c3c3c] bg-[#181818] p-3">
+                    <div className="flex items-center justify-between text-[10px] text-[#6f6f6f]"><span>{note.authorDisplay}</span><span>{new Date(note.createdAt).toLocaleString()}</span></div>
+                    <p className="mt-1.5 text-xs text-[#d4d4d4]">{note.body}</p>
+                  </div>
+                ))}
+              </div>
+              <form onSubmit={submitNote} className="mt-4 flex items-center gap-2">
+                <input value={newNote} onChange={(event) => setNewNote(event.target.value)} placeholder="Add a note…" className="min-w-0 flex-1 rounded-lg border border-[#3c3c3c] bg-[#181818] px-3 py-2 text-xs text-[#d4d4d4] outline-none placeholder:text-[#6f6f6f]" />
+                <button type="submit" disabled={postingNote || !newNote.trim()} className="rounded-lg bg-[#0e639c] px-3 py-2 text-xs font-bold text-white disabled:opacity-40">{postingNote ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}</button>
+              </form>
+              {role === 'Client' && !remediation?.clientApprovedAt && (remediation?.status === 'READY_FOR_VERIFICATION' || remediation?.status === 'VERIFIED') && (
+                <button onClick={() => void approveRemediation()} disabled={approving} className="mt-4 w-full rounded-xl bg-emerald-400 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">{approving ? 'Approving…' : 'Approve this remediation'}</button>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </aside>
   </div>;
 }
