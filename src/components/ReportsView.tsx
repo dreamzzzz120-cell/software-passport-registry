@@ -3,6 +3,7 @@ import { Copy, Download, FileJson, FileText, History, Package, Printer, RefreshC
 import type { Alert, Client, Scan, SoftwarePassport } from '../types';
 import { apiFetch } from '../utils/apiClient';
 import { generateCoBrandedTrustReport, generatePassportEvidenceReport } from '../utils/pdfGenerator';
+import PlainEnglishReport from './PlainEnglishReport';
 
 type ReportPayload = {
   schemaVersion?: string;
@@ -355,6 +356,16 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
             </div>
             {message && <p className="mt-3 text-xs text-[#9d9d9d]" role="status">{message}</p>}
           </div>
+
+          {report && selectedPassport && (
+            <div className="mt-6 border-t border-[#3c3c3c] pt-5">
+              <div className="flex items-center gap-2"><FileText size={16} className="text-[#9d9d9d]" /><h3 className="text-sm font-semibold text-[#d4d4d4]">Plain-English summary</h3></div>
+              <p className="mt-1 text-xs leading-5 text-[#9d9d9d]">The same evidence and score as the technical report above, explained in plain language. Both come from the exact same underlying data.</p>
+              <div className="mt-4">
+                <PlainEnglishReport passportId={selectedPassport.id} reportType={reportType} />
+              </div>
+            </div>
+          )}
 
           <div className="mt-6 border-t border-[#3c3c3c] pt-5">
             <div className="flex items-center gap-2"><History size={16} className="text-[#9d9d9d]" /><h3 className="text-sm font-semibold text-[#d4d4d4]">Changes since last report</h3></div>

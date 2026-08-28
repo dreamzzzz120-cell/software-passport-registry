@@ -8,6 +8,7 @@ import { collectDeepProviderEvidence } from '../integrations/deep-collectors.ts'
 import { collectGitHubDeepEvidence } from '../integrations/github-deep.ts';
 import { persistTrustLoop, verifyRemediation } from '../trust/trust-loop.ts';
 import { classifyCanonicalChange, compareCanonicalObservations } from '../utils/observation-history.ts';
+import { explainChange, toPlainEnglish, type CanonicalReport } from '../trust/plain-english-report.ts';
 
 const collectSchema = z.object({ passportId: z.string().trim().min(1).max(255), provider: z.string().trim().min(1).max(64) }).strict();
 const remediationSchema = z.object({
@@ -399,9 +400,59 @@ export function createTrustLoopRouter() {
     try {
       const parsed = reportTypes.safeParse(req.query.type || 'executive');
       if (!parsed.success) return res.status(400).json({ error: 'INVALID_REPORT_TYPE' });
+      const clientScope = req.user!.role === 'Client' ? req.user!.clientId : null;
+      if (clientScope) {
+        const owned = (await req.db!.execute(sql`SELECT id FROM passports WHERE id=${req.params.passportId} AND tenant_id=${req.user!.tenantId} AND client_id=${clientScope}`) as any).rows?.length;
+        if (!owned) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
+      }
       const report = await buildAndPersistReport(req.db!, req.user!.tenantId, String(req.params.passportId), parsed.data);
       if (!report) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
       return res.json(report);
+    } catch (error) { return next(error); }
+  });
+
+  // Plain-English reporting: a pure translation of the exact same
+  // buildAndPersistReport() output the technical report above returns --
+  // never a second scoring/evidence path. 'detailed' includes the full
+  // canonical report alongside the plain-English explanation so a
+  // technical reader can drill into every claim; 'executive' returns only
+  // the plain-English layer. Both come from calling buildAndPersistReport
+  // exactly once, so they can never disagree about the underlying facts.
+  router.get('/reports/:passportId/plain-english', async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const parsed = reportTypes.safeParse(req.query.type || 'executive');
+      if (!parsed.success) return res.status(400).json({ error: 'INVALID_REPORT_TYPE' });
+      const clientScope = req.user!.role === 'Client' ? req.user!.clientId : null;
+      if (clientScope) {
+        const owned = (await req.db!.execute(sql`SELECT id FROM passports WHERE id=${req.params.passportId} AND tenant_id=${req.user!.tenantId} AND client_id=${clientScope}`) as any).rows?.length;
+        if (!owned) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
+      }
+      const report = await buildAndPersistReport(req.db!, req.user!.tenantId, String(req.params.passportId), parsed.data);
+      if (!report) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
+      const plainEnglish = toPlainEnglish(report as unknown as CanonicalReport);
+      const level = req.query.level === 'detailed' ? 'detailed' : 'executive';
+      return res.json(level === 'detailed' ? { ...plainEnglish, technicalReport: report } : plainEnglish);
+    } catch (error) { return next(error); }
+  });
+
+  router.get('/reports/:passportId/changes/plain-english', async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const tenantId = req.user!.tenantId;
+      const passportId = req.params.passportId;
+      const clientScope = req.user!.role === 'Client' ? req.user!.clientId : null;
+      const scope = (await req.db!.execute(sql`SELECT id FROM passports WHERE id=${passportId} AND tenant_id=${tenantId} AND (${clientScope}::text IS NULL OR client_id = ${clientScope}) LIMIT 1`) as any).rows;
+      if (!scope?.length) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
+      const typeFilter = typeof req.query.type === 'string' ? reportTypes.safeParse(req.query.type) : null;
+      if (typeFilter && !typeFilter.success) return res.status(400).json({ error: 'INVALID_REPORT_TYPE' });
+      const snapshotsResult = typeFilter?.success
+        ? await req.db!.execute(sql`SELECT id,generated_at AS "generatedAt",score,confidence_basis_points AS confidence,completeness_basis_points AS "completenessBasisPoints",finding_ids AS "findingIds" FROM trust_report_snapshots WHERE tenant_id=${tenantId} AND passport_id=${passportId} AND report_type=${typeFilter.data} ORDER BY generated_at DESC LIMIT 2`)
+        : await req.db!.execute(sql`SELECT id,generated_at AS "generatedAt",score,confidence_basis_points AS confidence,completeness_basis_points AS "completenessBasisPoints",finding_ids AS "findingIds" FROM trust_report_snapshots WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY generated_at DESC LIMIT 2`);
+      const snapshots = (snapshotsResult as any).rows ?? [];
+      const comparable = (row: any) => row ? { score: row.score, confidence: row.confidence, completenessBasisPoints: Number(row.completenessBasisPoints), findingIds: parseJson(row.findingIds, []) as string[] } : null;
+      const [current, previous] = snapshots;
+      if (!current || !previous) return res.json({ insufficientData: true, changes: [] });
+      const changes = compareCanonicalObservations(comparable(previous), comparable(current)!);
+      return res.json({ insufficientData: false, changes: changes.map((change) => ({ ...change, ...classifyCanonicalChange(change), plainEnglish: explainChange(change) })) });
     } catch (error) { return next(error); }
   });
 
