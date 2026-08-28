@@ -7,3 +7,5 @@ preDeployCommand = ["node dist/migrate.cjs"]
 healthcheckPath = "/health"
 healthcheckTimeout = 120
 restartPolicyType = "ALWAYS"
+checkSuites = false
+
