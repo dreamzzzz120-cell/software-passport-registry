@@ -22,6 +22,7 @@ import { createAgentApiRouter } from './src/routes/agent-api.ts';
 import { createMspRouter } from './src/routes/msp.ts';
 import { createAiTrustRouter } from './src/routes/ai-trust.ts';
 import { createBillingRouter, stripeWebhookHandler } from './src/routes/billing.ts';
+import { createVendorsRouter } from './src/routes/vendors.ts';
 import { createMcpTransport } from './src/mcp/transport.ts';
 import { executePublicMcpTool } from './src/mcp/execute.ts';
 
@@ -134,6 +135,7 @@ app.use('/api/monitoring', createMonitoringRouter());
 app.use('/api/agent/v1', createAgentApiRouter());
 app.use('/api/msp', requireAuth, createMspRouter());
 app.use('/api/billing', createBillingRouter());
+app.use('/api/vendors', createVendorsRouter());
 app.use('/api/ai-trust', requireAuth, createAiTrustRouter());
 
 const mcpBearer = process.env.SPR_MCP_BEARER_TOKEN;

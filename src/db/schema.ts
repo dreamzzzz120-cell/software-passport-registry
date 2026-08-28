@@ -315,6 +315,38 @@ export const inAppNotifications = pgTable('in_app_notifications', {
   readAt: text('read_at'),
 });
 
+export const vendors = pgTable('vendors', {
+  id: text('id').primaryKey(),
+  tenantId: text('tenant_id').notNull(),
+  name: text('name').notNull(),
+  category: text('category').notNull().default('Software Publisher'),
+  website: text('website').notNull().default(''),
+  locations: text('locations').notNull().default(''),
+  reviewStatus: text('review_status').notNull().default('Under Review'),
+  riskTier: text('risk_tier').notNull().default('Medium'),
+  reputationScore: integer('reputation_score').notNull().default(70),
+  overallTrustScore: integer('overall_trust_score').notNull().default(70),
+  activePassportsCount: integer('active_passports_count').notNull().default(0),
+  securityIncidentsCount: integer('security_incidents_count').notNull().default(0),
+  lastAuditDate: text('last_audit_date'),
+  createdBy: text('created_by').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const vendorAudits = pgTable('vendor_audits', {
+  id: text('id').primaryKey(),
+  tenantId: text('tenant_id').notNull(),
+  vendorId: text('vendor_id').notNull(),
+  auditType: text('audit_type').notNull(),
+  status: text('status').notNull(),
+  details: text('details').notNull().default(''),
+  auditor: text('auditor').notNull(),
+  referenceHash: text('reference_hash').notNull().default(''),
+  createdBy: text('created_by').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
 export const credentialReferences = pgTable('credential_references', {
   id: text('id').primaryKey(),
   tenantId: text('tenant_id').notNull(),

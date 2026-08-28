@@ -5,6 +5,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { fuzzyMatch, filterData } from '../utils/filter';
+import { apiFetch } from '../utils/apiClient';
 import {
   Factory,
   ShieldCheck,
@@ -27,19 +28,64 @@ import {
   FileText,
   Check,
   Lock,
-  ArrowUpDown
+  ArrowUpDown,
+  Loader2,
 } from 'lucide-react';
 import { Vendor, VendorAudit, RiskLevel } from '../types';
 
 interface VendorsViewProps {
   vendors: Vendor[];
   searchQuery: string;
+  role?: string;
+  onVendorsChange?: (vendors: Vendor[]) => void;
 }
 
-export default function VendorsView({ vendors: initialVendors, searchQuery: globalSearchQuery }: VendorsViewProps) {
-  // Live local state for vendor records (to support manual attestation submissions)
-  const [vendors, setVendors] = useState<Vendor[]>(initialVendors);
-  
+export default function VendorsView({ vendors: initialVendors, searchQuery: globalSearchQuery, role = 'Viewer', onVendorsChange }: VendorsViewProps) {
+  const canManageVendors = role === 'Owner' || role === 'Admin';
+  const canLodgeAudit = role === 'Owner' || role === 'Admin' || role === 'Technician';
+  // Mirrors the vendors prop (real data from GET /api/vendors, fetched in
+  // App.tsx) so this view can optimistically update after a real API call
+  // without waiting for a full parent refetch.
+  const [vendors, setVendorsState] = useState<Vendor[]>(initialVendors);
+  React.useEffect(() => { setVendorsState(initialVendors); }, [initialVendors]);
+  const setVendors = (updater: Vendor[] | ((current: Vendor[]) => Vendor[])) => {
+    setVendorsState((current) => {
+      const next = typeof updater === 'function' ? (updater as (c: Vendor[]) => Vendor[])(current) : updater;
+      onVendorsChange?.(next);
+      return next;
+    });
+  };
+
+  const [showAddVendor, setShowAddVendor] = useState(false);
+  const [newVendorName, setNewVendorName] = useState('');
+  const [newVendorCategory, setNewVendorCategory] = useState('Software Publisher');
+  const [newVendorWebsite, setNewVendorWebsite] = useState('');
+  const [newVendorLocations, setNewVendorLocations] = useState('');
+  const [addingVendor, setAddingVendor] = useState(false);
+  const [addVendorError, setAddVendorError] = useState('');
+
+  const handleAddVendor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newVendorName.trim() || addingVendor) return;
+    setAddingVendor(true); setAddVendorError('');
+    try {
+      const response = await apiFetch('/api/vendors', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newVendorName.trim(), category: newVendorCategory.trim() || 'Software Publisher', website: newVendorWebsite.trim(), locations: newVendorLocations.trim() }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error === 'VENDOR_NAME_ALREADY_EXISTS' ? 'A vendor with this name already exists.' : (data?.error?.message || data?.error || 'Unable to add this vendor.'));
+      setVendors((current) => [data as Vendor, ...current]);
+      setSelectedVendorId(data.id);
+      setShowAddVendor(false);
+      setNewVendorName(''); setNewVendorCategory('Software Publisher'); setNewVendorWebsite(''); setNewVendorLocations('');
+    } catch (error: any) {
+      setAddVendorError(error?.message || 'Unable to add this vendor.');
+    } finally {
+      setAddingVendor(false);
+    }
+  };
+
   // Local filter states
   const [localSearch, setLocalSearch] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -64,6 +110,8 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
   // Copy-to-clipboard state
   const [copiedAuditId, setCopiedAuditId] = useState<string | null>(null);
+  const [lodgingAudit, setLodgingAudit] = useState(false);
+  const [lodgeAuditError, setLodgeAuditError] = useState('');
 
   // Active Selected Vendor
   const selectedVendor = useMemo(() => {
@@ -147,65 +195,39 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
     return result;
   }, [vendors, activeSearchQuery, statusFilter, riskFilter, reputationFilter, auditStatusFilter, sortBy, sortOrder]);
 
-  // Handle lodging new audit event
-  // This only updates local component state — there is no vendor-audit
-  // persistence endpoint anywhere in the backend (no vendors table exists
-  // at all yet). Currently unreachable in practice since `vendors` is
-  // always empty upstream (App.tsx has no vendor data source either), but
-  // if that ever changes, this form will silently lose every submitted
-  // audit on refresh/navigation unless a real API call is added here first.
-  const handleAddAuditAttestation = (e: React.FormEvent) => {
+  // Lodges a real audit attestation via POST /api/vendors/:id/audits, which
+  // persists it to the append-only vendor_audits ledger and recalculates
+  // the vendor's reputation/trust/risk tier server-side (the authoritative
+  // source now, matching the delta rule this form used to only apply
+  // locally: Passed +3, Failed -10, clamped 0-100).
+  const handleAddAuditAttestation = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedVendor) return;
-
-    const auditId = `aud-submitted-${Date.now()}`;
-    const timestamp = new Date().toISOString().split('T')[0];
-    // No fabricated hash: if the operator didn't paste a real reference hash for
-    // this attestation, the field stays empty rather than inventing one that would
-    // look like a real cryptographic proof.
-    const hash = newAuditHash.trim();
-
-    const newAudit: VendorAudit = {
-      id: auditId,
-      date: timestamp,
-      auditType: newAuditType,
-      status: newAuditStatus,
-      details: newAuditDetails || 'Manual attestation lodged by system operator through secure MSP console.',
-      auditor: newAuditor || 'Authorized MSP Assessor',
-      referenceHash: hash
-    };
-
-    // Calculate updated trust score based on audit submission (Passed audit increases score, Failed decreases)
-    let scoreDelta = 0;
-    if (newAuditStatus === 'Passed') scoreDelta = 3;
-    if (newAuditStatus === 'Failed') scoreDelta = -10;
-
-    const oldScore = selectedVendor.reputationScore ?? selectedVendor.overallTrustScore;
-    const newScore = Math.min(100, Math.max(0, oldScore + scoreDelta));
-
-    // Update vendors array
-    const updatedVendors = vendors.map(v => {
-      if (v.id === selectedVendor.id) {
-        const history = v.auditHistory || [];
-        return {
-          ...v,
-          overallTrustScore: newScore,
-          reputationScore: newScore,
-          lastAuditDate: timestamp,
-          riskTier: (newScore >= 88 ? 'Low' : newScore >= 75 ? 'Medium' : 'High') as RiskLevel,
-          auditHistory: [newAudit, ...history]
-        };
-      }
-      return v;
-    });
-
-    setVendors(updatedVendors);
-
-    // Reset Form
-    setIsAddingAudit(false);
-    setNewAuditor('');
-    setNewAuditDetails('');
-    setNewAuditHash('');
+    if (!selectedVendor || lodgingAudit) return;
+    setLodgingAudit(true); setLodgeAuditError('');
+    try {
+      const response = await apiFetch(`/api/vendors/${encodeURIComponent(selectedVendor.id)}/audits`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          auditType: newAuditType, status: newAuditStatus,
+          details: newAuditDetails || 'Manual attestation lodged by system operator through secure MSP console.',
+          auditor: newAuditor || 'Authorized MSP Assessor',
+          // No fabricated hash: if the operator didn't paste a real reference
+          // hash for this attestation, the field stays empty rather than
+          // inventing one that would look like a real cryptographic proof.
+          referenceHash: newAuditHash.trim(),
+        }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error?.message || data?.error || 'Unable to lodge this attestation.');
+      const { vendor: updatedVendor, audit } = data as { vendor: Vendor; audit: VendorAudit };
+      setVendors((current) => current.map((v) => v.id === selectedVendor.id ? { ...updatedVendor, auditHistory: [audit, ...(v.auditHistory || [])] } : v));
+      setIsAddingAudit(false);
+      setNewAuditor(''); setNewAuditDetails(''); setNewAuditHash('');
+    } catch (error: any) {
+      setLodgeAuditError(error?.message || 'Unable to lodge this attestation.');
+    } finally {
+      setLodgingAudit(false);
+    }
   };
 
   const copyToClipboard = (text: string, id: string) => {
@@ -226,16 +248,60 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
   return (
     <div className="space-y-6" id="msp-vendors-view-dashboard">
       {/* Page Header */}
-      <div>
-        <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.22em] text-[#c586c0]"><Factory className="h-4 w-4" /> Supply chain trust</div>
-        <h1 className="mt-1 text-xl font-display font-bold text-[#d4d4d4] flex items-center gap-2">
-          <Factory className="w-5 h-5 text-[#3794ff]" />
-          <span>Vendor Trust Registry</span>
-        </h1>
-        <p className="text-xs text-[#9d9d9d] font-sans mt-1">
-          Trace supply chain vulnerability vectors, query validated publisher reputation indices, and inspect continuous compliance audit records.
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.22em] text-[#c586c0]"><Factory className="h-4 w-4" /> Supply chain trust</div>
+          <h1 className="mt-1 text-xl font-display font-bold text-[#d4d4d4] flex items-center gap-2">
+            <Factory className="w-5 h-5 text-[#3794ff]" />
+            <span>Vendor Trust Registry</span>
+          </h1>
+          <p className="text-xs text-[#9d9d9d] font-sans mt-1">
+            Trace supply chain vulnerability vectors, query validated publisher reputation indices, and inspect continuous compliance audit records.
+          </p>
+        </div>
+        {canManageVendors && (
+          <button onClick={() => setShowAddVendor(true)} className="spr-btn spr-btn-primary inline-flex items-center justify-center gap-2 shrink-0">
+            <Plus className="h-4 w-4" /> Add vendor
+          </button>
+        )}
       </div>
+
+      {showAddVendor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-labelledby="add-vendor-title">
+          <div className="w-full max-w-md rounded-md border border-[#3c3c3c] bg-[#252526] p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <h2 id="add-vendor-title" className="text-lg font-bold text-[#d4d4d4]">Add vendor</h2>
+              <button onClick={() => setShowAddVendor(false)} aria-label="Close" className="rounded-md p-1.5 text-[#9d9d9d] hover:bg-[#383838] hover:text-[#d4d4d4]"><X className="h-4 w-4" /></button>
+            </div>
+            <form onSubmit={handleAddVendor} className="mt-5 space-y-3.5">
+              {addVendorError && <div role="alert" className="rounded-md border border-[#f14c4c]/40 bg-[#f14c4c]/10 px-3 py-2.5 text-xs text-[#f14c4c] flex items-center gap-2"><AlertCircle className="w-4 h-4 shrink-0" /> {addVendorError}</div>}
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold text-[#9d9d9d]">Vendor name *</label>
+                <input required value={newVendorName} onChange={(e) => setNewVendorName(e.target.value)} placeholder="e.g. Acme Cloud Backup" className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2 text-xs text-[#d4d4d4]" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold text-[#9d9d9d]">Category</label>
+                <input value={newVendorCategory} onChange={(e) => setNewVendorCategory(e.target.value)} placeholder="Software Publisher" className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2 text-xs text-[#d4d4d4]" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold text-[#9d9d9d]">Website</label>
+                <input value={newVendorWebsite} onChange={(e) => setNewVendorWebsite(e.target.value)} placeholder="https://example.com" className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2 text-xs text-[#d4d4d4]" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold text-[#9d9d9d]">Location(s)</label>
+                <input value={newVendorLocations} onChange={(e) => setNewVendorLocations(e.target.value)} placeholder="e.g. United States" className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2 text-xs text-[#d4d4d4]" />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setShowAddVendor(false)} className="rounded-md border border-[#3c3c3c] px-3.5 py-2 text-xs font-semibold text-[#9d9d9d] hover:bg-[#383838]">Cancel</button>
+                <button type="submit" disabled={addingVendor || !newVendorName.trim()} className="inline-flex items-center gap-1.5 rounded-md bg-[#0e639c] px-3.5 py-2 text-xs font-bold text-white hover:bg-[#1177bb] disabled:opacity-40">
+                  {addingVendor ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                  {addingVendor ? 'Adding…' : 'Add vendor'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Control Panel: Search & Filter Grid */}
       <div className="spr-panel p-4 space-y-3">
@@ -449,8 +515,13 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                 <AlertCircle className="w-8 h-8 text-[#6f6f6f] mx-auto" />
                 {vendors.length === 0 ? (
                   <>
-                    <p className="text-xs font-semibold">No vendor records loaded for this tenant.</p>
-                    <p className="text-[10px]">SPR has no vendor data source configured yet — this view has nothing to show, not a filter mismatch.</p>
+                    <p className="text-xs font-semibold">No vendors recorded for this tenant yet.</p>
+                    <p className="text-[10px]">{canManageVendors ? 'Add your first supply-chain vendor to start tracking reputation and audit evidence.' : 'Ask an Owner or Admin to add a vendor.'}</p>
+                    {canManageVendors && (
+                      <button onClick={() => setShowAddVendor(true)} className="spr-btn spr-btn-primary mt-2 inline-flex items-center gap-2">
+                        <Plus className="h-4 w-4" /> Add vendor
+                      </button>
+                    )}
                   </>
                 ) : (
                   <>
@@ -584,18 +655,21 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                   </div>
 
                   {/* Add attestation action */}
-                  <button
-                    onClick={() => setIsAddingAudit(!isAddingAudit)}
-                    className="text-[10px] font-sans font-bold bg-[#0e639c] hover:bg-[#1177bb] text-white px-2 py-1 rounded-md flex items-center gap-0.5 transition-all cursor-pointer"
-                  >
-                    {isAddingAudit ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-                    <span>{isAddingAudit ? 'Cancel' : 'Lodge Proof'}</span>
-                  </button>
+                  {canLodgeAudit && (
+                    <button
+                      onClick={() => { setIsAddingAudit(!isAddingAudit); setLodgeAuditError(''); }}
+                      className="text-[10px] font-sans font-bold bg-[#0e639c] hover:bg-[#1177bb] text-white px-2 py-1 rounded-md flex items-center gap-0.5 transition-all cursor-pointer"
+                    >
+                      {isAddingAudit ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+                      <span>{isAddingAudit ? 'Cancel' : 'Lodge Proof'}</span>
+                    </button>
+                  )}
                 </div>
 
                 {/* Lodge Attestation Panel Form */}
-                {isAddingAudit && (
+                {isAddingAudit && canLodgeAudit && (
                   <form onSubmit={handleAddAuditAttestation} className="p-3.5 spr-panel-alt text-[#d4d4d4] space-y-3">
+                    {lodgeAuditError && <div role="alert" className="rounded-md border border-[#f14c4c]/40 bg-[#f14c4c]/10 px-3 py-2.5 text-xs text-[#f14c4c] flex items-center gap-2"><AlertCircle className="w-4 h-4 shrink-0" /> {lodgeAuditError}</div>}
                     <div className="flex justify-between items-center border-b border-[#3c3c3c] pb-1.5">
                       <span className="text-[10px] font-mono font-bold text-[#3794ff] flex items-center gap-1">
                         <Lock className="w-3 h-3" /> Lock Attestation Proof
@@ -673,10 +747,11 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
                       <button
                         type="submit"
-                        className="w-full bg-[#0e639c] hover:bg-[#1177bb] text-white font-sans font-bold py-1.5 rounded transition-colors flex justify-center items-center gap-1 cursor-pointer mt-1"
+                        disabled={lodgingAudit}
+                        className="w-full bg-[#0e639c] hover:bg-[#1177bb] text-white font-sans font-bold py-1.5 rounded transition-colors flex justify-center items-center gap-1 cursor-pointer mt-1 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        <Check className="w-3.5 h-3.5" />
-                        <span>Lock into Ledger</span>
+                        {lodgingAudit ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                        <span>{lodgingAudit ? 'Locking…' : 'Lock into Ledger'}</span>
                       </button>
                     </div>
                   </form>
