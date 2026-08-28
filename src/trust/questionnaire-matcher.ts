@@ -61,6 +61,14 @@ export function matchQuestionToEvidence(questionText: string, findings: Question
 
   const open = matching.filter((finding) => finding.status === 'OPEN');
   const resolved = matching.filter((finding) => finding.status === 'RESOLVED');
+  // A finding whose own status is UNKNOWN (real, common state -- e.g. a
+  // GitHub control the connected token lacks permission to check) is
+  // neither a pass nor a gap. Falling through to the ANSWERED branch below
+  // with resolved.length === 0 would draft "this requirement is satisfied"
+  // backed by zero actually-verified controls -- exactly the fabrication
+  // this module exists to prevent. Topic-matched but unresolvable evidence
+  // must stay UNKNOWN, not become a manufactured pass.
+  if (!open.length && !resolved.length) return { category: topic, draftAnswer: null, confidenceBasisPoints: 0, status: 'UNKNOWN', evidenceIds: [] };
   const evidenceIds = [...new Set(matching.flatMap((finding) => finding.evidenceIds))];
   const mostRecent = matching.reduce((latest, finding) => new Date(finding.updatedAt) > new Date(latest.updatedAt) ? finding : latest, matching[0]);
   const confidenceBasisPoints = Math.round(8000 * freshnessMultiplier(mostRecent.updatedAt));

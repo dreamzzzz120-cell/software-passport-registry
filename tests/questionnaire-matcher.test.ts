@@ -53,6 +53,18 @@ describe('matchQuestionToEvidence', () => {
     expect(result.status).toBe('NEEDS_REVIEW');
   });
 
+  // Real bug found during live verification: a topic-matched finding whose
+  // OWN status is UNKNOWN (neither OPEN nor RESOLVED -- a real, common
+  // state, e.g. a GitHub control the connected token lacks permission to
+  // check) fell through to the ANSWERED branch with zero resolved
+  // controls, drafting "this requirement is satisfied" backed by nothing.
+  it('never claims satisfaction when every matching finding is itself UNKNOWN', () => {
+    const result = matchQuestionToEvidence('Do you have vulnerability alerts enabled?', [finding({ controlId: 'github-vulnerability-alerts', title: 'Repository dependency vulnerability alerts', status: 'UNKNOWN' })]);
+    expect(result.status).toBe('UNKNOWN');
+    expect(result.draftAnswer).toBeNull();
+    expect(result.confidenceBasisPoints).toBe(0);
+  });
+
   it('decays confidence for stale evidence', () => {
     const fresh = matchQuestionToEvidence('Do you require MFA?', [finding({ updatedAt: new Date().toISOString() })]);
     const stale = matchQuestionToEvidence('Do you require MFA?', [finding({ updatedAt: new Date(Date.now() - 60 * 24 * 3600 * 1000).toISOString() })]);
