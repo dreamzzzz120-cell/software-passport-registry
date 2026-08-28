@@ -562,5 +562,77 @@ export function createGovernanceRouter() {
     }
   });
 
+  // ---- Findings (read-only view into the existing, unchanged evidence-
+  // derived finding model, for linking into Governance) --------------------
+  router.get('/findings', requireAuth, requireRole(NOT_CLIENT_ROLE), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const tenantId = req.user!.tenantId;
+      const statusFilter = typeof req.query.status === 'string' ? req.query.status : null;
+      const search = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+      const rows = (await req.db!.execute(sql`
+        SELECT f.id, f.control_id AS "controlId", f.title, f.severity, f.status, f.evidence_ids AS "evidenceIds",
+          f.updated_at AS "updatedAt", f.resolved_at AS "resolvedAt", f.passport_id AS "passportId", p.name AS "passportName"
+        FROM trust_findings f
+        LEFT JOIN passports p ON p.id = f.passport_id AND p.tenant_id = f.tenant_id
+        WHERE f.tenant_id = ${tenantId}
+          AND (${statusFilter}::text IS NULL OR f.status = ${statusFilter})
+          AND (${search}::text = '' OR f.title ILIKE ${'%' + search + '%'} OR f.control_id ILIKE ${'%' + search + '%'})
+        ORDER BY CASE f.severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 WHEN 'low' THEN 4 ELSE 5 END, f.updated_at DESC
+        LIMIT 200
+      `) as any).rows ?? [];
+      res.json(rows.map((r: any) => ({ ...r, evidenceIds: JSON.parse(r.evidenceIds || '[]') })));
+    } catch (error) { next(error); }
+  });
+
+  // ---- WHY / provenance: the real evidence chain behind a conclusion ------
+  async function evidenceChain(db: any, tenantId: string, evidenceIds: string[]) {
+    if (!evidenceIds.length) return { evidence: [], missingIds: [] as string[] };
+    const rows = (await db.execute(sql`
+      SELECT id, provider, control_id AS "controlId", source_url AS "sourceUrl", observed_at AS "observedAt",
+        verification_method AS "verificationMethod", status, severity, evidence_hash AS "evidenceHash", limitation,
+        evidence_type AS "evidenceType", confidence_basis_points AS "confidenceBasisPoints", review_at AS "reviewAt"
+      FROM evidence_ledger WHERE tenant_id = ${tenantId} AND id = ANY(${evidenceIds})
+    `) as any).rows ?? [];
+    const found = new Set(rows.map((r: any) => r.id));
+    return { evidence: rows, missingIds: evidenceIds.filter((id) => !found.has(id)) };
+  }
+
+  router.get('/why/finding/:id', requireAuth, requireRole(NOT_CLIENT_ROLE), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const db = req.db!, tenantId = req.user!.tenantId;
+      const finding = (await db.execute(sql`SELECT id, control_id AS "controlId", title, status, evidence_ids AS "evidenceIds" FROM trust_findings WHERE id = ${req.params.id} AND tenant_id = ${tenantId}`) as any).rows?.[0];
+      if (!finding) return res.status(404).json({ error: 'FINDING_NOT_FOUND' });
+      const evidenceIds = JSON.parse(finding.evidenceIds || '[]');
+      const { evidence, missingIds } = await evidenceChain(db, tenantId, evidenceIds);
+      const missing: string[] = [];
+      if (!evidenceIds.length) missing.push('This finding has no evidence IDs attached, so no provenance chain can be shown.');
+      for (const id of missingIds) missing.push(`Evidence ID ${id} is referenced but no longer exists in the evidence ledger.`);
+      if (finding.status === 'UNKNOWN') missing.push('This finding\'s evidence-derived status is UNKNOWN -- no verification conclusion has been reached yet.');
+      res.json({ conclusion: { type: 'finding', id: finding.id, title: finding.title, status: finding.status }, control: { id: finding.controlId }, evidence, chainComplete: missing.length === 0, missing });
+    } catch (error) { next(error); }
+  });
+
+  router.get('/why/control/:id', requireAuth, requireRole(NOT_CLIENT_ROLE), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const db = req.db!, tenantId = req.user!.tenantId;
+      const control = (await db.execute(sql`SELECT id, name, implementation_status AS "implementationStatus" FROM controls WHERE id = ${req.params.id} AND tenant_id = ${tenantId}`) as any).rows?.[0];
+      if (!control) return res.status(404).json({ error: 'CONTROL_NOT_FOUND' });
+      const latestTest = (await db.execute(sql`
+        SELECT id, result, tested_at AS "testedAt", tester_name AS "testerName", methodology, evidence_ids AS "evidenceIds"
+        FROM control_tests WHERE tenant_id = ${tenantId} AND control_id = ${req.params.id} ORDER BY tested_at DESC LIMIT 1
+      `) as any).rows?.[0];
+      const missing: string[] = [];
+      if (!latestTest) {
+        missing.push('No control test has been recorded for this control yet -- its implementation status is not backed by any test result.');
+        return res.json({ conclusion: { type: 'control', id: control.id, title: control.name, status: control.implementationStatus }, latestTest: null, evidence: [], chainComplete: false, missing });
+      }
+      const evidenceIds = JSON.parse(latestTest.evidenceIds || '[]');
+      const { evidence, missingIds } = await evidenceChain(db, tenantId, evidenceIds);
+      if (!evidenceIds.length) missing.push('The most recent test recorded no supporting evidence IDs.');
+      for (const id of missingIds) missing.push(`Evidence ID ${id} is referenced by the latest test but no longer exists in the evidence ledger.`);
+      res.json({ conclusion: { type: 'control', id: control.id, title: control.name, status: control.implementationStatus }, latestTest, evidence, chainComplete: missing.length === 0, missing });
+    } catch (error) { next(error); }
+  });
+
   return router;
 }

@@ -27,6 +27,7 @@ const GOVERNANCE: NavItem[] = [
   { id: 'audit-log', label: 'Audit Log', icon: '▥', path: '/audit-log', color: ORANGE, desc: 'A chronological record of actions taken in this workspace.' },
   { id: 'vendors', label: 'Vendors', icon: '◫', path: '/vendors', color: PURPLE, desc: 'Third-party vendors and suppliers whose software you assess.' },
   { id: 'questionnaires', label: 'Trust Response', icon: '?', path: '/questionnaires', color: BLUE, desc: 'Draft answers to security questionnaires from real, matched evidence.' },
+  { id: 'governance', label: 'Governance', icon: '⚖', path: '/governance', color: AMBER, desc: 'Policies, controls, framework requirements, and risk decisions, backed by real evidence and audit records.' },
   { id: 'integrations', label: 'Integrations', icon: '↔', path: '/integrations', color: TEAL, desc: 'Connected tools and data sources feeding evidence into SPR.' },
   { id: 'reports', label: 'Reports Center', icon: '▤', path: '/reports', color: BLUE, desc: 'Generated reports summarizing trust, compliance, and evidence.' },
 ];

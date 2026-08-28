@@ -134,6 +134,56 @@ describe('every mutation is scoped by tenant_id in its WHERE clause', () => {
   });
 });
 
+describe('GET /governance/findings is real, tenant-scoped, and server-side filterable', () => {
+  it('joins the real trust_findings/passports tables, never a mock list', () => {
+    const s = source();
+    const start = s.indexOf("router.get('/findings'");
+    const body = s.slice(start, start + 1400);
+    expect(body).toContain('FROM trust_findings f');
+    expect(body).toContain('LEFT JOIN passports p');
+    expect(body).toContain('WHERE f.tenant_id = ${tenantId}');
+  });
+
+  it('status and search filters are applied in SQL, not faked client-side', () => {
+    const s = source();
+    const start = s.indexOf("router.get('/findings'");
+    const body = s.slice(start, start + 1400);
+    expect(body).toContain('f.status = ${statusFilter}');
+    expect(body).toContain('f.title ILIKE');
+  });
+});
+
+describe('WHY / provenance routes trace the real evidence chain, never invent an explanation', () => {
+  it('why/finding reuses the finding\'s real evidence_ids, never a separate computation', () => {
+    const s = source();
+    const start = s.indexOf("router.get('/why/finding/:id'");
+    const body = s.slice(start, start + 1400);
+    expect(body).toContain('FROM trust_findings WHERE id = ${req.params.id} AND tenant_id = ${tenantId}');
+    expect(body).toContain('evidenceChain(db, tenantId, evidenceIds)');
+  });
+
+  it('why/control reuses the latest real control_tests row, never a separate computation', () => {
+    const s = source();
+    const start = s.indexOf("router.get('/why/control/:id'");
+    const body = s.slice(start, start + 1600);
+    expect(body).toContain('FROM control_tests WHERE tenant_id = ${tenantId} AND control_id = ${req.params.id} ORDER BY tested_at DESC LIMIT 1');
+  });
+
+  it('reports exactly which referenced evidence IDs are missing, rather than silently omitting them', () => {
+    const s = source();
+    expect(s).toContain('missingIds: evidenceIds.filter((id) => !found.has(id))');
+    expect(s).toContain('is referenced by the latest test but no longer exists in the evidence ledger');
+  });
+
+  it('a control with no test at all is reported as incomplete, never defaulted to complete', () => {
+    const s = source();
+    const start = s.indexOf("router.get('/why/control/:id'");
+    const body = s.slice(start, start + 1200);
+    expect(body).toContain('No control test has been recorded for this control yet');
+    expect(body).toContain('chainComplete: false');
+  });
+});
+
 describe('migration 0041 creates the governance schema with tenant RLS and honest defaults', () => {
   it('every tenant-scoped governance table gets RLS + spr_tenant_isolation', () => {
     const s = read('migrations/0041_governance_schema.sql');
