@@ -146,7 +146,7 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#1e1e1e] p-6 text-[#d4d4d4]">
       <form onSubmit={submit} className="w-full max-w-md space-y-5 rounded-md border border-[#3c3c3c] bg-[#252526] p-7 shadow-2xl" noValidate>
-        <div className="text-center"><div className="text-xs font-bold uppercase tracking-[.25em] text-[#3794ff]">Software Passport Registry</div><h1 className="mt-3 text-3xl font-semibold">Sign in to SPR</h1><p className="mt-2 text-sm text-[#9d9d9d]">Use your work email or continue with Google.</p></div>
+        <div className="text-center"><img src="/brand/spr-badge.jpg" alt="SPR" className="mx-auto h-20 w-auto rounded-lg" /><div className="mt-4 text-xs font-bold uppercase tracking-[.25em] text-[#3794ff]">Software Passport Registry</div><h1 className="mt-3 text-3xl font-semibold">Sign in to SPR</h1><p className="mt-2 text-sm text-[#9d9d9d]">Use your work email or continue with Google.</p></div>
         {error && <div role="alert" className="rounded-xl border border-red-400/20 bg-red-400/10 p-3 text-sm text-red-200"><AlertCircle className="mr-2 inline h-4 w-4" />{error}</div>}
         {notice && <div role="status" className="rounded-xl border border-[#3794ff]/40 bg-[#094771] p-3 text-sm text-cyan-100"><CheckCircle2 className="mr-2 inline h-4 w-4" />{notice}</div>}
         <label className="block text-sm font-semibold text-[#d4d4d4]">Email<input className="mt-2 w-full rounded-xl border border-[#3c3c3c] bg-[#181818] px-4 py-3 text-[#d4d4d4] outline-none focus:border-[#3794ff]/40" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
