@@ -78,12 +78,24 @@ describe('safeNetworkFetch SSRF short-circuit', () => {
     await expect(safeNetworkFetch('http://localhost:5432/', { resolver: resolverFor([{ address: '8.8.8.8', family: 4 }]) })).rejects.toThrow('TARGET_HOST_BLOCKED');
   });
 
-  // Not covered here: proving the pinned undici Agent actually connects to
-  // the exact validated address rather than letting fetch() re-resolve DNS
-  // (the DNS-rebinding fix this file's Agent/connect.lookup change closes).
-  // That would require a real listener bound to a non-loopback address
-  // reachable from this test's resolver output, which isn't something a
-  // sandboxed/offline test run can do deterministically. The blocking
-  // behavior above is what's actually reachable from an attacker's
-  // perspective and is fully covered.
+  // Real regression, found via live production testing (not caught by the
+  // blocking-path tests above, since those never let a request actually
+  // complete): the DNS-pinning Agent's connect.lookup used the single-value
+  // dns.lookup callback shape (err, address, family), but undici's own
+  // connector calls it with options.all=true and expects the array shape
+  // (err, [{address, family}]) -- every real request through this dispatcher
+  // failed with "fetch failed" / "Invalid IP address: undefined", silently
+  // turning every uptime/tls/domain_dns collector run into a false UNKNOWN
+  // result instead of ever reaching the target. Skips gracefully (does not
+  // fail the suite) if this environment has no outbound network access,
+  // since that's a property of the sandbox, not of the code under test --
+  // but runs for real whenever network access is available, which is
+  // exactly the gap that let the original bug ship.
+  it('actually completes a real request end-to-end through the DNS-pinned dispatcher', async () => {
+    let reachable = true;
+    try { await fetch('https://example.com/', { signal: AbortSignal.timeout(5000) }); } catch { reachable = false; }
+    if (!reachable) return; // no outbound network in this environment; nothing to prove either way
+    const result = await safeNetworkFetch('https://example.com/', { timeoutMs: 10000 });
+    expect(result.response.status).toBe(200);
+  }, 15000);
 });
