@@ -18,6 +18,7 @@ import AlertsView from './components/AlertsView';
 import ClientsView from './components/ClientsView';
 import VendorsView from './components/VendorsView';
 import QuestionnairesView from './components/QuestionnairesView';
+import SavingsView from './components/SavingsView';
 import IntegrationsView from './components/IntegrationsView';
 import BillingView from './components/BillingView';
 import ComplianceView from './components/ComplianceView';
@@ -323,6 +324,7 @@ export default function App() {
     case '/clients': view = <ClientsView clients={clients} selectedClientId={selectedClientId} setSelectedClientId={setSelectedClientId} passports={passports} onNavigateTab={onNavigateTab} searchQuery="" role={role} onClientCreated={(client) => { setClients((current) => [client, ...current]); setSelectedClientId(client.id); }} />; break;
     case '/vendors': view = <VendorsView vendors={vendors} searchQuery="" role={role} onVendorsChange={setVendors} />; break;
     case '/questionnaires': view = <QuestionnairesView role={role} clients={clients} passports={passports} />; break;
+    case '/savings': view = <SavingsView role={role} />; break;
     case '/integrations': view = <IntegrationsView passports={passports} clients={clients} onNavigateTab={onNavigateTab} />; break;
     case '/monitoring': view = <MonitoringView role={role} passports={passports} clients={clients} />; break;
     case '/security': view = <SecurityCenterView clients={clients} passports={passports} />; break;

@@ -24,6 +24,7 @@ import { createAiTrustRouter } from './src/routes/ai-trust.ts';
 import { createBillingRouter, stripeWebhookHandler } from './src/routes/billing.ts';
 import { createVendorsRouter } from './src/routes/vendors.ts';
 import { createQuestionnairesRouter } from './src/routes/questionnaires.ts';
+import { createSavingsRouter } from './src/routes/savings.ts';
 import { createMcpTransport } from './src/mcp/transport.ts';
 import { executePublicMcpTool } from './src/mcp/execute.ts';
 
@@ -141,6 +142,7 @@ app.use('/api/msp', requireAuth, createMspRouter());
 app.use('/api/billing', createBillingRouter());
 app.use('/api/vendors', createVendorsRouter());
 app.use('/api/questionnaires', createQuestionnairesRouter());
+app.use('/api/savings', createSavingsRouter());
 app.use('/api/ai-trust', requireAuth, createAiTrustRouter());
 
 const mcpBearer = process.env.SPR_MCP_BEARER_TOKEN;

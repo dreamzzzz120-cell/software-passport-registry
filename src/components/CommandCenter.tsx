@@ -32,6 +32,7 @@ const GOVERNANCE: NavItem[] = [
 ];
 const EXECUTIVE: NavItem[] = [
   { id: 'msp', label: 'MSP Command', icon: '▦', path: '/msp', color: PURPLE, desc: 'Cross-client oversight for managed service providers.' },
+  { id: 'savings', label: 'Time & Savings', icon: '$', path: '/savings', color: GREEN, desc: 'Estimated time and cost savings from SPR activity, from a baseline you provide.' },
   { id: 'agent-trust', label: 'AI Agent Trust', icon: 'AI', path: '/agent-trust', color: CYAN, desc: 'Trust posture for AI agents operating in your environment.' },
   { id: 'ai-trust-center', label: 'AI Trust Center', icon: 'AI', path: '/ai-trust-center', color: BLUE, desc: 'Centralized view of AI-related trust and governance signals.' },
   { id: 'enterprise-readiness', label: 'Enterprise Readiness', icon: 'ER', path: '/enterprise-readiness', color: AMBER, desc: 'Readiness checklist for enterprise buyers and procurement.' },
