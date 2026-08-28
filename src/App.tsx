@@ -17,6 +17,7 @@ import ScansView from './components/ScansView';
 import AlertsView from './components/AlertsView';
 import ClientsView from './components/ClientsView';
 import VendorsView from './components/VendorsView';
+import QuestionnairesView from './components/QuestionnairesView';
 import IntegrationsView from './components/IntegrationsView';
 import BillingView from './components/BillingView';
 import ComplianceView from './components/ComplianceView';
@@ -321,6 +322,7 @@ export default function App() {
     case '/trust-graph': view = <TrustGraphView clients={clients} passports={passports} assets={assets} findings={findings} />; break;
     case '/clients': view = <ClientsView clients={clients} selectedClientId={selectedClientId} setSelectedClientId={setSelectedClientId} passports={passports} onNavigateTab={onNavigateTab} searchQuery="" role={role} onClientCreated={(client) => { setClients((current) => [client, ...current]); setSelectedClientId(client.id); }} />; break;
     case '/vendors': view = <VendorsView vendors={vendors} searchQuery="" role={role} onVendorsChange={setVendors} />; break;
+    case '/questionnaires': view = <QuestionnairesView role={role} clients={clients} passports={passports} />; break;
     case '/integrations': view = <IntegrationsView passports={passports} clients={clients} onNavigateTab={onNavigateTab} />; break;
     case '/monitoring': view = <MonitoringView role={role} passports={passports} clients={clients} />; break;
     case '/security': view = <SecurityCenterView clients={clients} passports={passports} />; break;
