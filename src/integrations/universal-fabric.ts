@@ -37,7 +37,7 @@ export const UNIVERSAL_CONNECTORS: readonly UniversalConnector[] = [
   { id: 'railway', name: 'Railway', domain: 'cloud', state: 'planned', auth: 'token', capabilities: ['identity','inventory','deployments','runtime'] },
   { id: 'kubernetes', name: 'Kubernetes', domain: 'cloud', state: 'planned', auth: 'service-account', capabilities: ['identity','inventory','runtime','policies'] },
   // Identity / enterprise
-  { id: 'microsoft-365', name: 'Microsoft 365', domain: 'identity', state: 'live', auth: 'oauth2', capabilities: ['identity','users','policies'] },
+  { id: 'microsoft-365', name: 'Microsoft 365', domain: 'identity', state: 'live', auth: 'oauth2', capabilities: ['identity','users','policies','alerts'] },
   { id: 'google-workspace', name: 'Google Workspace', domain: 'identity', state: 'planned', auth: 'oauth2', capabilities: ['identity','users','policies'] },
   { id: 'okta', name: 'Okta', domain: 'identity', state: 'planned', auth: 'oauth2', capabilities: ['identity','users','policies'] },
   { id: 'entra-id', name: 'Microsoft Entra ID', domain: 'identity', state: 'planned', auth: 'oauth2', capabilities: ['identity','users','policies'] },

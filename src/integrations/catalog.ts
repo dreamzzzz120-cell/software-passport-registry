@@ -21,7 +21,7 @@ export const INTEGRATION_CATALOG: IntegrationCatalogItem[] = [
   { id: 'jira', name: 'Jira', category: 'ISSUE TRACKER', icon: 'ticket', provider: 'jira', capability: 'live', description: 'Authenticated user and project/work-item evidence for remediation traceability.' },
   { id: 'confluence', name: 'Confluence', category: 'DOCUMENTATION', icon: 'book-open', provider: 'confluence', capability: 'live', description: 'Authenticated user, space and documentation inventory evidence.' },
   { id: 'slack', name: 'Slack', category: 'CHAT', icon: 'slack', provider: 'slack', capability: 'live', description: 'Authenticated workspace identity and operational metadata evidence.' },
-  { id: 'microsoft-365', name: 'Microsoft 365', category: 'WORKSPACE', icon: 'shield-check', provider: 'microsoft-365', capability: 'live', description: 'Microsoft Graph tenant, user and directory evidence.' },
+  { id: 'microsoft-365', name: 'Microsoft 365', category: 'WORKSPACE', icon: 'shield-check', provider: 'microsoft-365', capability: 'live', description: 'Microsoft Graph tenant, user, directory, and Defender security-alert/secure-score evidence.' },
   { id: 'aws', name: 'AWS', category: 'CLOUD', icon: 'cloud-lightning', provider: 'aws', capability: 'live', description: 'Signed AWS identity and account evidence; cloud collection foundation.' },
   { id: 'azure', name: 'Microsoft Azure', category: 'CLOUD', icon: 'cloud-lightning', provider: 'azure', capability: 'live', description: 'Authenticated subscription and resource-group inventory evidence.' },
   { id: 'google-cloud', name: 'Google Cloud', category: 'CLOUD', icon: 'cloud-lightning', provider: 'google-cloud', capability: 'live', description: 'Authenticated accessible-project inventory evidence.' },

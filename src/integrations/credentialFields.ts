@@ -44,7 +44,7 @@ export const CREDENTIAL_FIELDS: Record<string, CredentialField[]> = {
     { key: 'accessToken', label: 'Bot token', type: 'password', required: true, placeholder: 'xoxb-...' },
   ],
   'microsoft-365': [
-    { key: 'accessToken', label: 'Microsoft Graph access token', type: 'password', required: true },
+    { key: 'accessToken', label: 'Microsoft Graph access token', type: 'password', required: true, placeholder: 'Grant SecurityEvents.Read.All too, for Defender alerts/secure score' },
   ],
   aws: [
     { key: 'accessKeyId', label: 'Access key ID', type: 'text', required: true },
