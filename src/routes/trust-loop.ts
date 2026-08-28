@@ -7,6 +7,7 @@ import { decryptCredentials } from '../integrations/credential-vault.ts';
 import { collectDeepProviderEvidence } from '../integrations/deep-collectors.ts';
 import { collectGitHubDeepEvidence } from '../integrations/github-deep.ts';
 import { persistTrustLoop, verifyRemediation } from '../trust/trust-loop.ts';
+import { classifyCanonicalChange, compareCanonicalObservations } from '../utils/observation-history.ts';
 
 const collectSchema = z.object({ passportId: z.string().trim().min(1).max(255), provider: z.string().trim().min(1).max(64) }).strict();
 const remediationSchema = z.object({
@@ -342,6 +343,37 @@ export function createTrustLoopRouter() {
       if (!row) return res.status(404).json({ error: 'REPORT_SNAPSHOT_NOT_FOUND' });
       const payload = parseJson(row.payload, {});
       return res.json({ ...(payload as object), reportHash: row.canonical_payload_hash });
+    } catch (error) { return next(error); }
+  });
+
+  // Executive/Client Portal: "changes since last report" -- reuses the
+  // exact compareCanonicalObservations/classifyCanonicalChange machinery
+  // built for monitoring's change detection, applied between the two most
+  // recent trust_report_snapshots rows instead of two trust_observations
+  // rows. Both store the identical shape (score, confidence basis points,
+  // completeness basis points, finding ids), so no new comparison logic
+  // is needed -- only a new pair of things to compare.
+  router.get('/reports/:passportId/changes', async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const passportId = req.params.passportId;
+      const clientScope = req.user!.role === 'Client' ? req.user!.clientId : null;
+      const typeFilter = typeof req.query.type === 'string' ? reportTypes.safeParse(req.query.type) : null;
+      if (typeFilter && !typeFilter.success) return res.status(400).json({ error: 'INVALID_REPORT_TYPE' });
+      const scope = (await db.execute(sql`SELECT id FROM passports WHERE id=${passportId} AND tenant_id=${tenantId} AND (${clientScope}::text IS NULL OR client_id = ${clientScope}) LIMIT 1`) as any).rows;
+      if (!scope?.length) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
+      const snapshotsResult = typeFilter?.success
+        ? await db.execute(sql`SELECT id,report_type AS "reportType",generated_at AS "generatedAt",score,confidence_basis_points AS confidence,completeness_basis_points AS "completenessBasisPoints",finding_ids AS "findingIds" FROM trust_report_snapshots WHERE tenant_id=${tenantId} AND passport_id=${passportId} AND report_type=${typeFilter.data} ORDER BY generated_at DESC LIMIT 2`)
+        : await db.execute(sql`SELECT id,report_type AS "reportType",generated_at AS "generatedAt",score,confidence_basis_points AS confidence,completeness_basis_points AS "completenessBasisPoints",finding_ids AS "findingIds" FROM trust_report_snapshots WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY generated_at DESC LIMIT 2`);
+      const snapshots = (snapshotsResult as any).rows ?? [];
+      const comparable = (row: any) => row ? { score: row.score, confidence: row.confidence, completenessBasisPoints: Number(row.completenessBasisPoints), findingIds: parseJson(row.findingIds, []) as string[] } : null;
+      const [current, previous] = snapshots;
+      if (!current) return res.json({ insufficientData: true, current: null, previous: null, changes: [] });
+      if (!previous) return res.json({ insufficientData: true, current, previous: null, changes: [] });
+      const changes = compareCanonicalObservations(comparable(previous), comparable(current)!)
+        .map((change) => ({ ...change, ...classifyCanonicalChange(change) }));
+      return res.json({ insufficientData: false, current, previous, changes });
     } catch (error) { return next(error); }
   });
 

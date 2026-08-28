@@ -33,6 +33,9 @@ type ReportSnapshot = {
   canonical_payload_hash: string;
 };
 
+type ReportChange = { type: string; before: unknown; after: unknown; subject?: string; alertWorthy: boolean; severity: 'informational' | 'medium' | 'high' };
+type ChangesSinceLastReport = { insufficientData: boolean; current: { generatedAt: string } | null; previous: { generatedAt: string } | null; changes: ReportChange[] };
+
 type ShareInfo = { shareUrl: string; expiresAt: string; reportType: string };
 
 const REPORT_TYPES: Array<{ value: string; label: string }> = [
@@ -86,6 +89,8 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
   const [message, setMessage] = useState('');
   const [history, setHistory] = useState<ReportSnapshot[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [changes, setChanges] = useState<ChangesSinceLastReport | null>(null);
+  const [changesLoading, setChangesLoading] = useState(false);
   const [shareInfo, setShareInfo] = useState<ShareInfo | null>(null);
   const [sharing, setSharing] = useState(false);
   const [shareMessage, setShareMessage] = useState('');
@@ -131,6 +136,8 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
     setShareInfo(null);
     setShareMessage('');
     setMessage('');
+    setChanges(null);
+    if (selectedPassportId) { void loadHistory(selectedPassportId); void loadChanges(selectedPassportId); }
   }, [selectedPassportId, reportType]);
 
   const selectedPassport = passports.find((passport) => passport.id === selectedPassportId);
@@ -149,6 +156,17 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
     }
   };
 
+  const loadChanges = async (passportId: string) => {
+    setChangesLoading(true);
+    try {
+      const response = await apiFetch(`/api/trust-loop/reports/${encodeURIComponent(passportId)}/changes?type=${encodeURIComponent(reportType)}`);
+      const payload = await response.json().catch(() => null);
+      if (response.ok) setChanges(payload as ChangesSinceLastReport);
+    } finally {
+      setChangesLoading(false);
+    }
+  };
+
   const loadReport = async () => {
     if (!selectedPassport) return;
     setLoading(true);
@@ -160,6 +178,7 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
       setReport(payload as ReportPayload);
       setMessage('Authoritative report loaded from the tenant-scoped trust report endpoint.');
       void loadHistory(selectedPassport.id);
+      void loadChanges(selectedPassport.id);
     } catch (error) {
       setReport(null);
       setMessage(error instanceof Error ? error.message : 'Unable to load the report.');
@@ -335,6 +354,25 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
               <button onClick={() => void loadReport()} disabled={!selectedPassport || loading} className="inline-flex items-center justify-center gap-2 rounded-md border border-[#0e639c]/50 bg-[#094771] px-4 py-2.5 text-sm font-semibold text-[#3794ff] disabled:opacity-40"><RefreshCw size={16} className={loading ? 'animate-spin' : ''} /> {loading ? 'Loading…' : 'Load report'}</button>
             </div>
             {message && <p className="mt-3 text-xs text-[#9d9d9d]" role="status">{message}</p>}
+          </div>
+
+          <div className="mt-6 border-t border-[#3c3c3c] pt-5">
+            <div className="flex items-center gap-2"><History size={16} className="text-[#9d9d9d]" /><h3 className="text-sm font-semibold text-[#d4d4d4]">Changes since last report</h3></div>
+            {changesLoading && <p className="mt-3 text-xs text-[#9d9d9d]">Checking for changes…</p>}
+            {!changesLoading && changes?.insufficientData && <p className="mt-3 text-xs text-[#9d9d9d]">{changes.current ? 'Only one report snapshot exists for this passport and type — generate another later to compare.' : 'No report snapshots exist yet for this passport and type.'}</p>}
+            {!changesLoading && changes && !changes.insufficientData && changes.changes.length === 0 && (
+              <p className="mt-3 flex items-center gap-1.5 text-xs text-[#89d185]"><ShieldCheck size={14} /> No change since the last report ({changes.previous && new Date(changes.previous.generatedAt).toLocaleString()}).</p>
+            )}
+            {!changesLoading && changes && !changes.insufficientData && changes.changes.length > 0 && (
+              <ul className="mt-3 space-y-1.5">
+                {changes.changes.map((change, index) => (
+                  <li key={index} className={`flex items-start gap-2 rounded-md border px-3 py-2 text-xs ${change.severity === 'high' ? 'border-[#f14c4c]/40 bg-[#f14c4c]/10 text-[#f14c4c]' : change.severity === 'medium' ? 'border-[#cca700]/40 bg-[#cca700]/10 text-[#cca700]' : 'border-[#3c3c3c] bg-[#2d2d2d] text-[#9d9d9d]'}`}>
+                    <span className="font-semibold">{change.type.replaceAll('_', ' ')}</span>
+                    <span className="text-[#6f6f6f]">{String(change.before ?? '—')} → {String(change.after ?? '—')}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           <div className="mt-6 border-t border-[#3c3c3c] pt-5">
