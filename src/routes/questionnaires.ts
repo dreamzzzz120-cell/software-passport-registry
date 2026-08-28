@@ -32,7 +32,7 @@ const itemUpdateSchema = z.object({
 }).strict().refine((body) => Object.keys(body).length > 0);
 
 function publicQuestionnaire(row: any) {
-  return { id: row.id, name: row.name, clientId: row.clientId, status: row.status, createdAt: row.createdAt, updatedAt: row.updatedAt };
+  return { id: row.id, name: row.name, clientId: row.clientId, passportId: row.passportId, status: row.status, createdAt: row.createdAt, updatedAt: row.updatedAt };
 }
 function publicItem(row: any) {
   return {
@@ -51,7 +51,7 @@ export function createQuestionnairesRouter() {
       const tenantId = req.user!.tenantId;
       const clientScope = req.user!.role === 'Client' ? req.user!.clientId : null;
       const rows = (await db.execute(sql`
-        SELECT id, name, client_id AS "clientId", status, created_at AS "createdAt", updated_at AS "updatedAt"
+        SELECT id, name, client_id AS "clientId", passport_id AS "passportId", status, created_at AS "createdAt", updated_at AS "updatedAt"
         FROM questionnaires WHERE tenant_id=${tenantId} AND (${clientScope}::text IS NULL OR client_id = ${clientScope})
         ORDER BY updated_at DESC
       `) as any).rows ?? [];
@@ -76,8 +76,8 @@ export function createQuestionnairesRouter() {
       const questionnaireId = newId('questionnaire');
       const now = new Date().toISOString();
       await db.execute(sql`
-        INSERT INTO questionnaires (id, tenant_id, client_id, name, status, created_by, created_at, updated_at)
-        VALUES (${questionnaireId}, ${tenantId}, ${parsed.data.clientId ?? passport.client_id ?? null}, ${parsed.data.name}, 'DRAFT', ${req.user!.uid}, ${now}, ${now})
+        INSERT INTO questionnaires (id, tenant_id, client_id, passport_id, name, status, created_by, created_at, updated_at)
+        VALUES (${questionnaireId}, ${tenantId}, ${parsed.data.clientId ?? passport.client_id ?? null}, ${passport.id}, ${parsed.data.name}, 'DRAFT', ${req.user!.uid}, ${now}, ${now})
       `);
       for (let i = 0; i < questions.length; i += 1) {
         await db.execute(sql`
@@ -95,7 +95,7 @@ export function createQuestionnairesRouter() {
       const tenantId = req.user!.tenantId;
       const clientScope = req.user!.role === 'Client' ? req.user!.clientId : null;
       const questionnaire = (await db.execute(sql`
-        SELECT id, name, client_id AS "clientId", status, created_at AS "createdAt", updated_at AS "updatedAt"
+        SELECT id, name, client_id AS "clientId", passport_id AS "passportId", status, created_at AS "createdAt", updated_at AS "updatedAt"
         FROM questionnaires WHERE id=${req.params.id} AND tenant_id=${tenantId} AND (${clientScope}::text IS NULL OR client_id = ${clientScope})
       `) as any).rows?.[0];
       if (!questionnaire) return res.status(404).json({ error: 'QUESTIONNAIRE_NOT_FOUND' });
@@ -117,14 +117,18 @@ export function createQuestionnairesRouter() {
       const tenantId = req.user!.tenantId;
       const clientScope = req.user!.role === 'Client' ? req.user!.clientId : null;
       const questionnaire = (await db.execute(sql`
-        SELECT q.id, q.client_id AS "clientId" FROM questionnaires q
+        SELECT q.id, q.client_id AS "clientId", q.passport_id AS "passportId" FROM questionnaires q
         WHERE q.id=${req.params.id} AND q.tenant_id=${tenantId} AND (${clientScope}::text IS NULL OR q.client_id = ${clientScope})
       `) as any).rows?.[0];
       if (!questionnaire) return res.status(404).json({ error: 'QUESTIONNAIRE_NOT_FOUND' });
 
+      // Scoped to the questionnaire's own passport, not just its client --
+      // a client can have more than one passport, and matching against
+      // every one of them would draft an answer sourced from the wrong
+      // software's evidence entirely.
       const findingRows = (await db.execute(sql`
         SELECT id, control_id AS "controlId", title, description, status, severity, evidence_ids AS "evidenceIds", updated_at AS "updatedAt"
-        FROM trust_findings WHERE tenant_id=${tenantId} AND (${questionnaire.clientId}::text IS NULL OR client_id = ${questionnaire.clientId})
+        FROM trust_findings WHERE tenant_id=${tenantId} AND (${questionnaire.passportId}::text IS NULL OR passport_id = ${questionnaire.passportId})
       `) as any).rows ?? [];
       const findings: QuestionnaireFinding[] = findingRows.map((row: any) => ({ ...row, evidenceIds: JSON.parse(row.evidenceIds ?? '[]') }));
 

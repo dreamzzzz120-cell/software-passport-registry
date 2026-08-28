@@ -36,8 +36,17 @@ describe('questionnaire matching never fabricates an answer (routes wiring)', ()
     expect(source()).toContain("if (item.status === 'APPROVED') continue;");
   });
 
-  it('scopes findings to the questionnaire\'s own client when it has one', () => {
-    expect(source()).toContain('AND (${questionnaire.clientId}::text IS NULL OR client_id = ${questionnaire.clientId})');
+  // Real defect, found via live adversarial testing: questionnaires
+  // required and validated a passportId at creation but never persisted
+  // it, so generate-drafts matched against every trust_findings row for
+  // the questionnaire's client across every passport that client has, not
+  // just the one the questionnaire was actually created for.
+  it('persists the passport a questionnaire was created for', () => {
+    expect(source()).toContain('INSERT INTO questionnaires (id, tenant_id, client_id, passport_id, name, status, created_by, created_at, updated_at)');
+  });
+
+  it('scopes findings to the questionnaire\'s own passport, not just its client', () => {
+    expect(source()).toContain('AND (${questionnaire.passportId}::text IS NULL OR passport_id = ${questionnaire.passportId})');
   });
 
   it('verifies the passport and client belong to the caller\'s tenant before creating a questionnaire', () => {
