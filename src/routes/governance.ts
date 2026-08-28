@@ -591,7 +591,7 @@ export function createGovernanceRouter() {
       SELECT id, provider, control_id AS "controlId", source_url AS "sourceUrl", observed_at AS "observedAt",
         verification_method AS "verificationMethod", status, severity, evidence_hash AS "evidenceHash", limitation,
         evidence_type AS "evidenceType", confidence_basis_points AS "confidenceBasisPoints", review_at AS "reviewAt"
-      FROM evidence_ledger WHERE tenant_id = ${tenantId} AND id = ANY(${evidenceIds})
+      FROM evidence_ledger WHERE tenant_id = ${tenantId} AND id IN ${evidenceIds}
     `) as any).rows ?? [];
     const found = new Set(rows.map((r: any) => r.id));
     return { evidence: rows, missingIds: evidenceIds.filter((id) => !found.has(id)) };
