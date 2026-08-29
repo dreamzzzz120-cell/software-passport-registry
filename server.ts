@@ -14,6 +14,7 @@ import { createIntegrationsRouter } from './src/routes/integrations.ts';
 import { createLiveIntegrationsRouter } from './src/routes/integrations-live.ts';
 import { createMonitoringRouter } from './src/routes/monitoring.ts';
 import { createPublicConnectRouter } from './src/routes/public-connect.ts';
+import { createFreeReviewRouter } from './src/routes/free-review.ts';
 import { createScansRouter } from './src/routes/scans.ts';
 import { createComplianceRouter } from './src/routes/compliance.ts';
 import { createTrustLoopRouter } from './src/routes/trust-loop.ts';
@@ -106,6 +107,7 @@ app.get('/api/health', async (_req, res) => { const database = await checkDataba
 app.use('/api', rateLimiter);
 app.use('/api', createAuthRouter());
 app.use('/api', createPublicConnectRouter());
+app.use('/api', createFreeReviewRouter());
 const connectRouter = createConnectRouter();
 app.use('/api', connectRouter);
 app.use('/api/connect', connectRouter);

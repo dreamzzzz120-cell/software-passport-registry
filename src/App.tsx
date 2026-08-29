@@ -38,6 +38,7 @@ import MSPCommandCenter from './components/MSPCommandCenter';
 import MspPricingView from './components/MspPricingView';
 import MspLandingView from './components/MspLandingView';
 import HomePage from './components/HomePage';
+import FreeReviewView from './components/FreeReviewView';
 import TermsView from './components/legal/TermsView';
 import PrivacyPolicyView from './components/legal/PrivacyPolicyView';
 import ReportsView from './components/ReportsView';
@@ -85,10 +86,6 @@ function AuthLoading() {
   return <div className="grid min-h-screen place-items-center bg-[#1e1e1e] text-[#d4d4d4]"><div className="text-center"><img src="/brand/spr-icon.png" alt="SPR" className="mx-auto h-14 w-14 rounded-md border border-[#3c3c3c] bg-white object-contain p-1.5" /><div className="mt-4 text-xs font-semibold uppercase tracking-[.15em] text-[#9d9d9d]">Securing workspace</div><div className="mt-1 text-sm text-[#6f6f6f]">Checking authenticated session…</div></div></div>;
 }
 
-
-function PublicPage({ title, description, action, onAction }: { title: string; description: string; action: string; onAction: () => void }) {
-  return <div className="grid min-h-screen place-items-center bg-[#1e1e1e] px-6 text-[#d4d4d4]"><div className="max-w-lg spr-panel p-8 text-center"><div className="text-[10px] font-semibold uppercase tracking-[.15em] text-[#3794ff]">Software Passport Registry</div><h1 className="mt-3 text-2xl font-semibold">{title}</h1><p className="mt-3 text-sm leading-6 text-[#9d9d9d]">{description}</p><button onClick={onAction} className="spr-btn spr-btn-primary mt-6">{action}</button></div></div>;
-}
 
 function WorkflowBoundary({ title, description, extensionId, onNavigate }: { title: string; description: string; extensionId?: string; onNavigate: (path: string) => void }) {
   const extension = extensionId ? EXTENSIONS.find((item) => item.id === extensionId) : undefined;
@@ -234,7 +231,7 @@ export default function App() {
   // the unrelated internal Privacy Governance tool and must not be replaced.
   if (path === '/terms') return <TermsView />;
   if (!user && path === '/privacy') return <PrivacyPolicyView />;
-  if (!user && path === '/free-review') return <PublicPage title="Free software review" description="Start an evidence-first review from the public entry point." action="Sign in to continue" onAction={() => navigate('/login')} />;
+  if (!user && path === '/free-review') return <FreeReviewView onSignUp={() => navigate('/login')} />;
   if (!user && path === '/pricing') return <MspPricingView isAuthenticated={false} onPrimaryAction={() => navigate('/login')} />;
   if (!user && path === '/msp') return <MspLandingView onEnter={() => navigate('/login')} onViewPricing={() => navigate('/pricing')} />;
   if (!user) return <AuthLoading />;
