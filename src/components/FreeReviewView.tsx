@@ -30,6 +30,26 @@ function normalizeRepositoryInput(value: string): string {
   }
 }
 
+function normalizeOwnerInput(value: string): string {
+  const input = value.trim();
+  if (!input) return '';
+  try {
+    const url = new URL(input);
+    if (url.hostname.toLowerCase() !== 'github.com') return input;
+    return url.pathname.split('/').filter(Boolean)[0] || '';
+  } catch {
+    return input.replace(/^https?:\/\/github\.com\//i, '').split('/')[0];
+  }
+}
+
+function displayRepository(owner: string, repository: string): string {
+  const normalizedOwner = normalizeOwnerInput(owner);
+  const normalizedRepository = normalizeRepositoryInput(repository);
+  return normalizedOwner && normalizedRepository
+    ? `${normalizedOwner}/${normalizedRepository}`
+    : normalizedRepository || normalizedOwner || repository.trim();
+}
+
 export default function FreeReviewView({ onSignUp }: { onSignUp: () => void }) {
   const [owner, setOwner] = useState('');
   const [repository, setRepository] = useState('');
@@ -42,36 +62,72 @@ export default function FreeReviewView({ onSignUp }: { onSignUp: () => void }) {
   useEffect(() => {
     if (!statusUrl || result?.scanStatus === 'complete' || result?.scanStatus === 'partial') return;
     let cancelled = false;
+    let timer: number | undefined;
+
     const poll = async () => {
       try {
-        const response = await apiFetch(statusUrl);
-        if (cancelled) return;
-        if (!response.ok) { setError('Could not check the review status. It may have expired.'); return; }
-        const data = await response.json();
-        setResult(data);
-        if (data.scanStatus === 'scanning') {
-          pollAttempt.current += 1;
-          const delay = POLL_BASE_MS + Math.min(pollAttempt.current * 1000, 10_000) + Math.random() * 1000;
-          window.setTimeout(() => { if (!cancelled) void poll(); }, delay);
+        // Free Review status links are signed, anonymous bearer URLs. Keep
+        // this public read same-origin and deliberately bypass the
+        // authenticated API client so Firebase credentials are never involved
+        // in the anonymous polling path.
+        const resolvedStatusUrl = new URL(statusUrl, window.location.origin);
+        if (resolvedStatusUrl.origin !== window.location.origin || !resolvedStatusUrl.pathname.startsWith('/api/free-review/scan/')) {
+          throw new Error('Invalid Free Review status URL');
         }
+        const response = await fetch(resolvedStatusUrl, {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+          credentials: 'same-origin',
+          cache: 'no-store',
+        });
+        if (cancelled) return;
+        if (!response.ok) {
+          // Keep polling transient gateway/upstream failures instead of
+          // converting a temporary production routing failure into a dead
+          // review. A real 401/404 is surfaced only after retries are exhausted.
+          pollAttempt.current += 1;
+          if (pollAttempt.current >= 6 && response.status !== 408 && response.status !== 429 && response.status < 500) {
+            setError('Could not check the review status. The status link may have expired.');
+            return;
+          }
+        } else {
+          const data = await response.json() as FreeReviewStatus;
+          setResult(data);
+          if (data.scanStatus === 'complete' || data.scanStatus === 'partial') return;
+          pollAttempt.current += 1;
+        }
+        const delay = POLL_BASE_MS + Math.min(pollAttempt.current * 1000, 10_000) + Math.random() * 1000;
+        timer = window.setTimeout(() => { if (!cancelled) void poll(); }, delay);
       } catch {
-        if (!cancelled) setError('Network error while checking the review status.');
+        if (cancelled) return;
+        pollAttempt.current += 1;
+        if (pollAttempt.current >= 6) setError('Network error while checking the review status. Retrying...');
+        const delay = POLL_BASE_MS + Math.min(pollAttempt.current * 1000, 10_000) + Math.random() * 1000;
+        timer = window.setTimeout(() => { if (!cancelled) void poll(); }, delay);
       }
     };
+
     void poll();
-    return () => { cancelled = true; };
-  }, [statusUrl]);
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [statusUrl, result?.scanStatus]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (submitting) return;
-    setSubmitting(true); setError(''); setResult(null); pollAttempt.current = 0;
+    setSubmitting(true); setError(''); setResult(null); setStatusUrl(''); pollAttempt.current = 0;
     try {
-      const normalizedOwner = owner.trim().replace(/^https?:\/\/github\.com\//i, '').split('/')[0];
+      const normalizedOwner = normalizeOwnerInput(owner);
       const normalizedRepository = normalizeRepositoryInput(repository);
       const response = await apiFetch('/api/free-review/scan', { method: 'POST', body: JSON.stringify({ owner: normalizedOwner, repository: normalizedRepository }) });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) { setError(data?.error || 'Could not start the review.'); return; }
+      if (typeof data?.statusUrl !== 'string' || !data.statusUrl.startsWith('/api/free-review/scan/')) {
+        setError('The review started, but the status link was invalid.');
+        return;
+      }
       setStatusUrl(data.statusUrl);
     } catch {
       setError('Network error while starting the review.');
@@ -79,6 +135,8 @@ export default function FreeReviewView({ onSignUp }: { onSignUp: () => void }) {
       setSubmitting(false);
     }
   };
+
+  const displayName = displayRepository(owner, repository);
 
   return (
     <div className="min-h-screen bg-[#1e1e1e] px-6 py-16 text-[#d4d4d4]">
@@ -107,7 +165,7 @@ export default function FreeReviewView({ onSignUp }: { onSignUp: () => void }) {
         {statusUrl && (
           <div className="mt-8 space-y-4 rounded-md border border-[#3c3c3c] bg-[#252526] p-6">
             {error && <div role="alert" className="rounded-xl border border-red-400/20 bg-red-400/10 p-3 text-sm text-red-200"><AlertCircle className="mr-2 inline h-4 w-4" />{error}</div>}
-            {(!result || result.scanStatus === 'scanning') && (<div className="flex items-center gap-3 text-sm text-[#9d9d9d]"><Loader className="h-5 w-5 animate-spin" /> Scanning {owner}/{repository}... this usually takes under a minute.</div>)}
+            {(!result || result.scanStatus === 'scanning') && (<div className="flex items-center gap-3 text-sm text-[#9d9d9d]"><Loader className="h-5 w-5 animate-spin" /> Scanning {displayName}... this usually takes under a minute.</div>)}
             {result && result.scanStatus !== 'scanning' && (
               <div>
                 <div className="flex items-center gap-2 text-sm font-semibold"><CheckCircle2 className="h-5 w-5 text-[#3794ff]" /> Review complete{result.scanStatus === 'partial' ? ' (one scan engine did not finish)' : ''}</div>
