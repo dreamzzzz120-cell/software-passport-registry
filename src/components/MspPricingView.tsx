@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { Check, ShieldCheck } from 'lucide-react';
+import LegalFooterLinks from './legal/LegalFooterLinks';
 
 interface Props {
   isAuthenticated: boolean;
@@ -121,6 +122,8 @@ export default function MspPricingView({ isAuthenticated, onPrimaryAction }: Pro
           automated checkout.
         </p>
       </div>
+
+      <LegalFooterLinks className="mx-auto mt-8 max-w-2xl justify-center" />
     </div>
   );
 }

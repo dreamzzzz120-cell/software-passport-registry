@@ -5,6 +5,7 @@
 
 import type { ReactNode } from 'react';
 import { ArrowRight, ClipboardList, DollarSign, Eye, Radio, ScanSearch, Scale, ShieldCheck, Users } from 'lucide-react';
+import LegalFooterLinks from './legal/LegalFooterLinks';
 
 interface Props {
   onEnter: () => void;
@@ -67,6 +68,8 @@ export default function MspLandingView({ onEnter, onViewPricing }: Props) {
           <p className="flex-1 text-sm text-[#d4d4d4]">Not sure where to start? The Pilot plan lets you evaluate SPR on a small, bounded set of clients before committing.</p>
           <button onClick={onViewPricing} className="shrink-0 rounded-[3px] border border-[#3794ff]/40 px-4 py-2 text-xs font-semibold text-[#3794ff] hover:bg-[#3794ff]/10">See Pilot details</button>
         </div>
+
+        <LegalFooterLinks className="mt-10 border-t border-[#3c3c3c] pt-6" />
       </div>
     </div>
   );

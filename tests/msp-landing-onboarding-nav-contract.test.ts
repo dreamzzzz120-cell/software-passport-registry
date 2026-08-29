@@ -17,7 +17,7 @@ describe('public /msp landing page reuses existing pricing and billing, without 
 
   it('App.tsx serves MspLandingView at /msp for unauthenticated visitors without touching the authenticated /msp route', () => {
     const s = read('src/App.tsx');
-    expect(s).toContain("PUBLIC_PATHS = new Set(['/','/login','/free-review','/pricing','/msp'])");
+    expect(s).toContain("PUBLIC_PATHS = new Set(['/','/login','/free-review','/pricing','/msp','/terms','/privacy'])");
     expect(s).toContain("if (!user && path === '/msp') return <MspLandingView onEnter={() => navigate('/login')} onViewPricing={() => navigate('/pricing')} />;");
     expect(s).toContain("case '/msp': view = <MSPCommandCenter clients={clients} alerts={alerts} passports={passports} role={role} onSelectClient={setSelectedClientId} onNavigate={navigate} />; break;");
   });

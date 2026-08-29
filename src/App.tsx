@@ -36,11 +36,14 @@ import SecurityCenterView from './components/SecurityCenterView';
 import MSPCommandCenter from './components/MSPCommandCenter';
 import MspPricingView from './components/MspPricingView';
 import MspLandingView from './components/MspLandingView';
+import TermsView from './components/legal/TermsView';
+import PrivacyPolicyView from './components/legal/PrivacyPolicyView';
+import LegalFooterLinks from './components/legal/LegalFooterLinks';
 import ReportsView from './components/ReportsView';
 import TrustGraphView from './components/TrustGraphView';
 import { EXTENSIONS } from './workflows/extensionRegistry';
 
-const PUBLIC_PATHS = new Set(['/','/login','/free-review','/pricing','/msp']);
+const PUBLIC_PATHS = new Set(['/','/login','/free-review','/pricing','/msp','/terms','/privacy']);
 const EMPTY_CLIENTS: Client[] = [];
 const EMPTY_PASSPORTS: SoftwarePassport[] = [];
 const EMPTY_VENDORS: Vendor[] = [];
@@ -118,6 +121,7 @@ function CoverPage() {
             <button onClick={() => navigate('/login')} className="rounded-[3px] bg-[#0e639c] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#1177bb]">Enter SPR</button>
             <button onClick={() => navigate('/free-review')} className="rounded-[3px] border border-[#3c3c3c] bg-[#2d2d2d] px-6 py-3 text-sm font-semibold text-[#cccccc] transition-colors hover:bg-[#383838]">Free review</button>
           </div>
+          <LegalFooterLinks className="mt-8" />
         </div>
         <div className="hidden w-full flex-1 lg:block">
           <div className="mx-auto max-w-xl overflow-hidden rounded-lg border border-[#3c3c3c] bg-[#1e1e1e] shadow-2xl">
@@ -308,6 +312,13 @@ export default function App() {
   if (!authReady) return <AuthLoading />;
   if (path === '/') return <CoverPage />;
   if (path === '/login') return <LoginView onLoginSuccess={() => navigate('/dashboard')} />;
+  // Public legal documents -- always reachable regardless of auth state,
+  // since /terms has no existing authenticated route to preserve. /privacy
+  // is intentionally only handled here for signed-out visitors: the existing
+  // authenticated '/privacy' route (below, in the CommandCenter switch) is
+  // the unrelated internal Privacy Governance tool and must not be replaced.
+  if (path === '/terms') return <TermsView />;
+  if (!user && path === '/privacy') return <PrivacyPolicyView />;
   if (!user && path === '/free-review') return <PublicPage title="Free software review" description="Start an evidence-first review from the public entry point." action="Sign in to continue" onAction={() => navigate('/login')} />;
   if (!user && path === '/pricing') return <MspPricingView isAuthenticated={false} onPrimaryAction={() => navigate('/login')} />;
   if (!user && path === '/msp') return <MspLandingView onEnter={() => navigate('/login')} onViewPricing={() => navigate('/pricing')} />;

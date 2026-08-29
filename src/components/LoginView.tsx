@@ -155,6 +155,7 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
         <button type="button" disabled={busy} onClick={register} className="w-full rounded-xl border border-[#3c3c3c] bg-[#252526] px-4 py-3 font-semibold text-[#d4d4d4] disabled:opacity-50"><ShieldCheck className="mr-2 inline h-4 w-4" />Create account</button>
         <button type="button" disabled={busy} onClick={google} className="w-full rounded-xl border border-[#3c3c3c] bg-[#2d2d2d] px-4 py-3 font-semibold text-[#d4d4d4] disabled:opacity-50">{googleLoading ? <Loader className="mx-auto h-5 w-5 animate-spin" /> : 'Continue with Google'}</button>
         <div className="flex justify-between text-xs"><button type="button" disabled={busy} onClick={reset} className="text-[#3794ff] hover:text-[#3794ff]">Forgot password?</button><button type="button" disabled={busy} onClick={resendVerification} className="text-[#9d9d9d] hover:text-[#d4d4d4]">Resend verification</button></div>
+        <div className="flex justify-center gap-4 border-t border-[#3c3c3c] pt-4 text-[11px] text-[#6f6f6f]"><a href="/terms" className="hover:text-[#3794ff] hover:underline">Terms of Service</a><a href="/privacy" className="hover:text-[#3794ff] hover:underline">Privacy Policy</a></div>
       </form>
     </div>
   );
