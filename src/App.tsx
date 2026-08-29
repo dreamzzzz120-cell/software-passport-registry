@@ -35,11 +35,12 @@ import MonitoringView from './components/MonitoringView';
 import SecurityCenterView from './components/SecurityCenterView';
 import MSPCommandCenter from './components/MSPCommandCenter';
 import MspPricingView from './components/MspPricingView';
+import MspLandingView from './components/MspLandingView';
 import ReportsView from './components/ReportsView';
 import TrustGraphView from './components/TrustGraphView';
 import { EXTENSIONS } from './workflows/extensionRegistry';
 
-const PUBLIC_PATHS = new Set(['/','/login','/free-review','/pricing']);
+const PUBLIC_PATHS = new Set(['/','/login','/free-review','/pricing','/msp']);
 const EMPTY_CLIENTS: Client[] = [];
 const EMPTY_PASSPORTS: SoftwarePassport[] = [];
 const EMPTY_VENDORS: Vendor[] = [];
@@ -309,6 +310,7 @@ export default function App() {
   if (path === '/login') return <LoginView onLoginSuccess={() => navigate('/dashboard')} />;
   if (!user && path === '/free-review') return <PublicPage title="Free software review" description="Start an evidence-first review from the public entry point." action="Sign in to continue" onAction={() => navigate('/login')} />;
   if (!user && path === '/pricing') return <MspPricingView isAuthenticated={false} onPrimaryAction={() => navigate('/login')} />;
+  if (!user && path === '/msp') return <MspLandingView onEnter={() => navigate('/login')} onViewPricing={() => navigate('/pricing')} />;
   if (!user) return <AuthLoading />;
 
   let view: ReactNode;

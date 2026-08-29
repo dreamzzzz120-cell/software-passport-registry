@@ -10,6 +10,7 @@ type NavItem = { id: string; label: string; icon: string; path: string; color: s
 // reads as the same color everywhere it appears.
 
 const CORE: NavItem[] = [
+  { id: 'msp', label: 'MSP Command', icon: '▦', path: '/msp', color: PURPLE, desc: 'Cross-client oversight for managed service providers — your primary entry point.' },
   { id: 'dashboard', label: 'Overview', icon: '⌂', path: '/dashboard', color: BLUE, desc: 'Workspace summary — key metrics across passports, evidence, and alerts at a glance.' },
   { id: 'assets', label: 'Assets', icon: '◈', path: '/assets', color: CYAN, desc: 'The software assets you track — services, applications, and components under management.' },
   { id: 'passports', label: 'Passports', icon: '◇', path: '/passports', color: AMBER, desc: 'Software Passports — structured records combining identity, security, and evidence for a piece of software.' },
@@ -33,7 +34,6 @@ const GOVERNANCE: NavItem[] = [
   { id: 'reports', label: 'Reports Center', icon: '▤', path: '/reports', color: BLUE, desc: 'Generated reports summarizing trust, compliance, and evidence.' },
 ];
 const EXECUTIVE: NavItem[] = [
-  { id: 'msp', label: 'MSP Command', icon: '▦', path: '/msp', color: PURPLE, desc: 'Cross-client oversight for managed service providers.' },
   { id: 'savings', label: 'Time & Savings', icon: '$', path: '/savings', color: GREEN, desc: 'Estimated time and cost savings from SPR activity, from a baseline you provide.' },
   { id: 'agent-trust', label: 'AI Agent Trust', icon: 'AI', path: '/agent-trust', color: CYAN, desc: 'Trust posture for AI agents operating in your environment.' },
   { id: 'ai-trust-center', label: 'AI Trust Center', icon: 'AI', path: '/ai-trust-center', color: BLUE, desc: 'Centralized view of AI-related trust and governance signals.' },
