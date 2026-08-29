@@ -77,7 +77,7 @@ function usePath() {
 }
 
 function AuthLoading() {
-  return <div className="grid min-h-screen place-items-center bg-[#1e1e1e] text-[#d4d4d4]"><div className="text-center"><img src="/brand/spr-badge.jpg" alt="SPR" className="mx-auto h-14 w-14 rounded-md border border-[#3c3c3c] object-cover" /><div className="mt-4 text-xs font-semibold uppercase tracking-[.15em] text-[#9d9d9d]">Securing workspace</div><div className="mt-1 text-sm text-[#6f6f6f]">Checking authenticated session…</div></div></div>;
+  return <div className="grid min-h-screen place-items-center bg-[#1e1e1e] text-[#d4d4d4]"><div className="text-center"><img src="/brand/spr-icon.png" alt="SPR" className="mx-auto h-14 w-14 rounded-md border border-[#3c3c3c] bg-white object-contain p-1.5" /><div className="mt-4 text-xs font-semibold uppercase tracking-[.15em] text-[#9d9d9d]">Securing workspace</div><div className="mt-1 text-sm text-[#6f6f6f]">Checking authenticated session…</div></div></div>;
 }
 
 type CodeToken = { t: string; c?: string };
@@ -107,7 +107,7 @@ function CoverPage() {
     <div className="relative min-h-screen overflow-hidden bg-[#1e1e1e] text-[#cccccc]">
       <div className="mx-auto flex min-h-screen max-w-7xl flex-col items-center gap-12 px-6 py-16 lg:flex-row lg:items-center">
         <div className="max-w-2xl">
-          <img src="/brand/spr-badge.jpg" alt="SPR" className="mb-6 h-16 w-auto rounded-lg" />
+          <img src="/brand/spr-logo.jpg" alt="Software Passport Registry" className="mb-6 h-10 w-auto" />
           <div className="mb-6 font-mono text-[11px] text-[#6a9955]">// Evidence-first software trust</div>
           <h1 className="text-4xl font-semibold tracking-[-.02em] text-[#d4d4d4] md:text-5xl">
             Software trust,<br /><span className="text-[#3794ff]">operated as a system.</span>
