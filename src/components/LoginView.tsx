@@ -13,6 +13,7 @@ import {
 } from 'firebase/auth';
 import { AlertCircle, ArrowRight, CheckCircle2, Eye, EyeOff, Loader, ShieldCheck } from 'lucide-react';
 import { auth, googleAuthProvider, firebaseConfigured } from '../lib/firebase';
+import { consumeAuthNotice } from '../lib/authNotice';
 
 interface LoginViewProps {
   onLoginSuccess: (user: { uid: string; email: string | null; displayName: string; token: string; emailVerified: boolean; onboarded: 0 }) => void;
@@ -63,6 +64,13 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
   };
 
   useEffect(() => {
+    // Survives the sign-out + navigate remount that happens when App.tsx or
+    // apiClient.ts detects an auth failure while the authenticated shell was
+    // mounted - see src/lib/authNotice.ts for why a live event alone isn't
+    // enough to reach this fresh instance.
+    const pendingNotice = consumeAuthNotice();
+    if (pendingNotice) setError(pendingNotice);
+
     if (!auth) {
       setNotice('Authentication is temporarily unavailable. The frontend loaded, but Firebase browser configuration is missing from this deployment.');
       return;

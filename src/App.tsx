@@ -3,6 +3,7 @@ import { getRedirectResult, onAuthStateChanged, signOut, type User } from 'fireb
 import type { Alert, Client, Integration, Scan, SoftwarePassport, Vendor } from './types';
 import { apiFetch } from './utils/apiClient';
 import { auth } from './lib/firebase';
+import { setAuthNotice } from './lib/authNotice';
 import CommandCenter from './components/CommandCenter';
 import ExtensionWorkflow from './components/ExtensionWorkflow';
 import ExtensionMarketplace from './components/ExtensionMarketplace';
@@ -158,7 +159,13 @@ export default function App() {
       const responses = await Promise.all([
         apiFetch('/api/user/me'), apiFetch('/api/scans'), apiFetch('/api/trust-loop/findings'), apiFetch('/api/user/passports'), apiFetch('/api/user/clients'), apiFetch('/api/integrations'), apiFetch('/api/vendors'),
       ]);
-      if (responses.some((response) => response.status === 401)) { setUser(null); await signOut(auth); navigate('/login'); return; }
+      if (responses.some((response) => response.status === 401)) {
+        setUser(null);
+        setAuthNotice('Your session could not be verified. Please sign in again.');
+        await signOut(auth);
+        navigate('/login');
+        return;
+      }
       const [me, scansResponse, findingsResponse, passportsResponse, clientsResponse, integrationsResponse, vendorsResponse] = responses;
       if (me.ok) { const data = await me.json().catch(() => null); if (!cancelled) setRole(String(data?.role || 'Viewer')); }
       if (scansResponse.ok) { const data = await scansResponse.json().catch(() => []); if (!cancelled && Array.isArray(data)) setScans(data); }

@@ -4,6 +4,7 @@
  */
 
 import { auth } from '../lib/firebase';
+import { setAuthNotice } from '../lib/authNotice';
 
 interface FetchOptions extends RequestInit {
   timeout?: number;
@@ -59,6 +60,7 @@ export const apiFetch = async (
         // A valid Firebase identity without a persisted SPR user record is
         // authenticated but not authorized for the workspace. Do not render
         // a partially initialized dashboard or silently fall back to Viewer.
+        setAuthNotice('Your Firebase account is valid, but SPR has not provisioned this account in its workspace yet.');
         window.dispatchEvent(new CustomEvent('auth-provisioning-failed'));
         await auth.signOut().catch(() => undefined);
       }
