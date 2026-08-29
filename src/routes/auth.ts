@@ -4,6 +4,7 @@
  */
 
 import { Router } from 'express';
+import crypto from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
@@ -14,6 +15,8 @@ import { appendAuditEntry, verifyAuditChain } from '../security/audit-log.ts';
 import { describeUserAgent, sessionFingerprint } from '../security/session-tracking.ts';
 import { offboardTenantData } from '../db/sync.ts';
 import { canCreateClient, PLAN_CONFIG } from './billing.ts';
+import { verifySlsaProvenance } from '../utils/slsa-verification.ts';
+import { calculateAndStoreTrustScore } from '../utils/scanner.ts';
 
 const INVITABLE_ROLES = ['Admin', 'Technician', 'Viewer', 'Client'] as const;
 // A 'Client'-role invite must name the one client it scopes to; every other
@@ -33,6 +36,16 @@ const profileUpdateSchema = z.object({
   companyName: z.string().trim().max(200).optional(),
 }).strict();
 const revokeSessionSchema = z.object({ sessionId: z.string().trim().min(1).max(200) }).strict();
+// The raw in-toto/SLSA statement text and the digest the submitter claims for
+// it. hash is independently recomputed and compared server-side
+// (verifySlsaProvenance) -- it is never trusted on its own, matching the
+// self-report + independent re-verification pattern already used for
+// repository-integrity and signature evidence in src/utils/scanner.ts.
+const slsaProvenanceSchema = z.object({
+  statement: z.string().trim().min(1).max(2_000_000),
+  hash: z.string().trim().min(1).max(200),
+  signer: z.string().trim().max(200).optional(),
+}).strict();
 // 300KB base64 comfortably fits a small compressed logo (PNG/JPEG at
 // reasonable dimensions) while keeping a single UPDATE well under any
 // practical row-size or request-body concern.
@@ -517,8 +530,66 @@ export function createAuthRouter() {
       // Mirrors GET /user/clients: a 'Client'-role user only sees passports
       // belonging to their own client, not the MSP's whole portfolio.
       const clientScope = req.user!.role === 'Client' ? req.user!.clientId : null;
-      const result = await db.execute(sql`SELECT p.id, p.client_id AS "clientId", p.name, p.version, p.publisher, p.category, p.release_date AS "releaseDate", p.license_type AS "licenseType", p.sbom, COALESCE((SELECT json_agg(json_build_object('id', e.id, 'name', e.name, 'type', e.type, 'verified', e.verified, 'status', e.status, 'signer', e.signer, 'timestamp', e.timestamp, 'hash', e.hash, 'engineId', e.engine_id, 'verificationFailureReason', e.verification_failure_reason) ORDER BY e.timestamp DESC) FROM evidence_items e WHERE e.tenant_id=p.tenant_id AND e.asset_id=p.id), '[]'::json) AS evidence, COALESCE((SELECT json_agg(json_build_object('id', f.id, 'findingId', f.id, 'severity', f.severity, 'category', f.category, 'title', f.title, 'description', f.description, 'component', f.component, 'fixedVersion', f.fixed_version, 'status', f.status, 'detectedAt', f.detected_at, 'engineId', f.engine_id) ORDER BY f.detected_at DESC) FROM scan_findings f WHERE f.tenant_id=p.tenant_id AND f.asset_id=p.id), '[]'::json) AS vulnerabilities, p.timeline, NULL AS scores, 'not_authoritatively_scored' AS "scoreStatus" FROM passports p WHERE p.tenant_id=${req.user!.tenantId} AND (${clientScope}::text IS NULL OR p.client_id = ${clientScope}) ORDER BY p.name ASC`);
+      const result = await db.execute(sql`SELECT p.id, p.client_id AS "clientId", p.name, p.version, p.publisher, p.category, p.release_date AS "releaseDate", p.license_type AS "licenseType", p.sbom, COALESCE((SELECT json_agg(json_build_object('id', e.id, 'name', e.name, 'type', e.type, 'verified', e.verified, 'status', e.status, 'signer', e.signer, 'timestamp', e.timestamp, 'hash', e.hash, 'engineId', e.engine_id, 'verificationFailureReason', e.verification_failure_reason, 'failureReason', e.verification_failure_reason, 'rawContent', e.raw_content) ORDER BY e.timestamp DESC) FROM evidence_items e WHERE e.tenant_id=p.tenant_id AND e.asset_id=p.id), '[]'::json) AS evidence, COALESCE((SELECT json_agg(json_build_object('id', f.id, 'findingId', f.id, 'severity', f.severity, 'category', f.category, 'title', f.title, 'description', f.description, 'component', f.component, 'fixedVersion', f.fixed_version, 'status', f.status, 'detectedAt', f.detected_at, 'engineId', f.engine_id) ORDER BY f.detected_at DESC) FROM scan_findings f WHERE f.tenant_id=p.tenant_id AND f.asset_id=p.id), '[]'::json) AS vulnerabilities, p.timeline, NULL AS scores, 'not_authoritatively_scored' AS "scoreStatus" FROM passports p WHERE p.tenant_id=${req.user!.tenantId} AND (${clientScope}::text IS NULL OR p.client_id = ${clientScope}) ORDER BY p.name ASC`);
       return res.json((result as any).rows || []);
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  // Accepts a self-reported SLSA/in-toto provenance statement and
+  // independently re-verifies it before recording anything -- this route
+  // never trusts the caller's own claim about the statement's validity.
+  // A prior VERIFIED/FAILED SLSA Provenance Attestation row for this passport
+  // is replaced (not accumulated) so the passport always carries at most one
+  // current result for this evidence slot. Recomputes the passport's trust
+  // score afterward through the single canonical scoring engine, the same
+  // one the real scan pipeline uses, so this evidence genuinely affects the
+  // Trust Vector rather than being purely decorative.
+  router.post('/passports/:id/evidence/slsa-provenance', requireAuth, requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const parsed = slsaProvenanceSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const passportId = String(req.params.id);
+      const passport = (await db.execute(sql`SELECT id FROM passports WHERE id=${passportId} AND tenant_id=${tenantId} LIMIT 1`)).rows?.[0];
+      if (!passport) return res.status(404).json({ error: 'Passport not found' });
+
+      const result = verifySlsaProvenance(parsed.data.statement, parsed.data.hash);
+      const evidenceId = `ev_slsa_${crypto.randomUUID().replace(/-/g, '')}`;
+      const timestamp = new Date().toISOString();
+      const normalizedHash = parsed.data.hash.trim().toLowerCase().replace(/^sha256:/, '');
+      const rawContent = JSON.stringify({
+        predicateType: result.predicateType,
+        builderId: result.builderId,
+        buildType: result.buildType,
+        subjectName: result.subjectName,
+        subjectDigestSha256: result.subjectDigestSha256,
+        note: 'SPR independently verified this statement\'s content against its declared hash and confirmed it is a well-formed in-toto/SLSA provenance statement. SPR does not independently verify the Sigstore/DSSE signature chain.',
+      });
+
+      await db.execute(sql`DELETE FROM evidence_items WHERE tenant_id=${tenantId} AND asset_id=${passportId} AND type='Attestation' AND name='SLSA Provenance Attestation'`);
+      await db.execute(sql`
+        INSERT INTO evidence_items (id, tenant_id, asset_id, name, type, verified, status, signer, timestamp, hash, raw_content, engine_id, verification_failure_reason)
+        VALUES (${evidenceId}, ${tenantId}, ${passportId}, 'SLSA Provenance Attestation', 'Attestation', ${result.outcome === 'VERIFIED' ? 1 : 0}, ${result.outcome}, ${parsed.data.signer || result.builderId || 'self-reported'}, ${timestamp}, ${`sha256:${normalizedHash}`}, ${rawContent}, 'provenance-verifier', ${result.failureReason})
+      `);
+
+      await appendAuditEntry(db, {
+        tenantId,
+        action: result.outcome === 'VERIFIED' ? 'evidence.slsa_provenance.verified' : 'evidence.slsa_provenance.failed',
+        actor: req.user!.email,
+        payload: { passportId, evidenceId, predicateType: result.predicateType, builderId: result.builderId, failureReason: result.failureReason },
+      });
+
+      await calculateAndStoreTrustScore(passportId, tenantId);
+
+      const evidenceRows = (await db.execute(sql`
+        SELECT id, name, type, verified, status, signer, timestamp, hash, engine_id AS "engineId", verification_failure_reason AS "verificationFailureReason", verification_failure_reason AS "failureReason", raw_content AS "rawContent"
+        FROM evidence_items WHERE tenant_id=${tenantId} AND asset_id=${passportId} ORDER BY timestamp DESC
+      `)).rows;
+
+      return res.status(201).json({ evidence: evidenceRows, verification: result });
     } catch (error) {
       return next(error);
     }

@@ -31,19 +31,25 @@ import {
   Lock,
   ArrowRight
 } from 'lucide-react';
+import { apiFetch } from '../utils/apiClient';
 import { SoftwarePassport, Client } from '../types';
 
 interface SoftwareLineageTrackerProps {
   passports: SoftwarePassport[];
   clients: Client[];
   assets: any[];
+  onUpdatePassport?: (updatedPassport: SoftwarePassport) => void;
 }
 
-export default function SoftwareLineageTracker({ passports, clients, assets }: SoftwareLineageTrackerProps) {
+export default function SoftwareLineageTracker({ passports, clients, assets, onUpdatePassport }: SoftwareLineageTrackerProps) {
   const [selectedPassportId, setSelectedPassportId] = useState<string>(passports[0]?.id || '');
   const [dependencySearchQuery, setDependencySearchQuery] = useState<string>('');
   const [traceSearchQuery, setTraceSearchQuery] = useState<string>('');
   const [isExplanationOpen, setIsExplanationOpen] = useState(false);
+  const [slsaModalOpen, setSlsaModalOpen] = useState(false);
+  const [slsaStatementText, setSlsaStatementText] = useState('');
+  const [slsaSubmitting, setSlsaSubmitting] = useState(false);
+  const [slsaSubmitError, setSlsaSubmitError] = useState<string | null>(null);
 
   // 1. Get currently selected passport
   const activePassport = useMemo(() => {
@@ -65,22 +71,47 @@ export default function SoftwareLineageTracker({ passports, clients, assets }: S
     });
   }, [assets, activePassport]);
 
-  // Illustrative upstream topology. It is labeled in the UI and is not provenance evidence.
-  const provenanceDetails = useMemo(() => {
+  // Real SLSA/in-toto provenance evidence for the active passport, if any was
+  // ever submitted and independently re-verified by the server
+  // (verifySlsaProvenance). Nothing here is generated client-side -- when no
+  // matching evidence item exists, the UI says so honestly rather than
+  // fabricating a repo URL, commit hash, or SLSA level.
+  const slsaEvidence = useMemo(() => {
     if (!activePassport) return null;
-    const cleanName = activePassport.name.toLowerCase().replace(/\s+/g, '-');
-    return {
-      repoUrl: `https://github.com/enterprise-registry/${cleanName}`,
-      branch: 'main',
-      commitHash: 'f4b3c2a1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5',
-      ciProvider: 'GitHub Actions Cloud Build',
-      buildId: `run-98421-prod-${cleanName}`,
-      slsaLevel: 'SLSA Level 4 Compliant',
-      compiler: 'GCC 12.2 / Node compiler (v18.16.0)',
-      signingAuthority: 'Cosign Sigstore Root CA',
-      signatureAlgorithm: 'ECDSA-P256-SHA256'
-    };
+    return (activePassport.evidence || []).find((item) => item.type === 'Attestation' && /slsa/i.test(item.name)) || null;
   }, [activePassport]);
+
+  const slsaDetails = useMemo(() => {
+    if (!slsaEvidence?.rawContent) return null;
+    try { return JSON.parse(slsaEvidence.rawContent); } catch { return null; }
+  }, [slsaEvidence]);
+
+  async function submitSlsaProvenance() {
+    if (!activePassport) return;
+    setSlsaSubmitting(true);
+    setSlsaSubmitError(null);
+    try {
+      const digestBuffer = await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(slsaStatementText));
+      const hash = Array.from(new Uint8Array(digestBuffer)).map((b) => b.toString(16).padStart(2, '0')).join('');
+      const response = await apiFetch(`/api/passports/${activePassport.id}/evidence/slsa-provenance`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ statement: slsaStatementText, hash }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        setSlsaSubmitError(data?.details?.fieldErrors ? Object.values(data.details.fieldErrors).flat()[0] as string : (data?.error || 'Submission was rejected.'));
+        return;
+      }
+      if (onUpdatePassport && Array.isArray(data?.evidence)) onUpdatePassport({ ...activePassport, evidence: data.evidence });
+      setSlsaModalOpen(false);
+      setSlsaStatementText('');
+    } catch {
+      setSlsaSubmitError('Submission failed. Check your connection and try again.');
+    } finally {
+      setSlsaSubmitting(false);
+    }
+  }
 
   // 3. Compute overall inventory dependency stats for summary badges
   const totalUniqueDependencies = useMemo(() => {
@@ -326,43 +357,64 @@ export default function SoftwareLineageTracker({ passports, clients, assets }: S
               {/* Connector lines overlays using CSS (visible on desktop) */}
               <div className="hidden md:block absolute top-[45%] left-[28%] right-[32%] border-b border-dashed border-[#3c3c3c] z-0 pointer-events-none"></div>
 
-              {/* TIER 1: Upstream Provenance Origin */}
+              {/* TIER 1: Build Provenance (SLSA) -- driven entirely by real evidence */}
               <div className="bg-[#2d2d2d] border border-[#3c3c3c] rounded-md p-4 flex flex-col gap-3.5 z-10 relative">
                 <div className="flex items-center gap-2 text-xs font-black text-[#d4d4d4] border-b border-[#3c3c3c] pb-2">
                   <GitFork className="w-4 h-4 text-[#3794ff]" />
-                  <span>1. Code Provenance</span>
+                  <span>1. Build Provenance (SLSA)</span>
                 </div>
 
-                {provenanceDetails && (
+                {!slsaEvidence && (
                   <div className="space-y-3 font-sans">
-                    <div className="p-2.5 bg-[#252526] border border-[#3c3c3c] rounded-md text-xs space-y-1">
-                      <p className="text-[8px] font-mono uppercase font-bold tracking-wider text-[#9d9d9d] ">Source Repository</p>
-                      <a
-                        href={provenanceDetails.repoUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-[#3794ff] hover:underline font-semibold truncate block flex items-center gap-1 max-w-[190px]"
-                      >
-                        <span className="truncate">{provenanceDetails.repoUrl.replace('https://', '')}</span>
-                        <ExternalLink className="w-2.5 h-2.5 shrink-0" />
-                      </a>
-                      <p className="text-[8px] font-mono text-[#9d9d9d] mt-1">Branch: <span className="text-[#6f6f6f] font-semibold">{provenanceDetails.branch}</span></p>
+                    <div className="p-2.5 bg-[#252526] border border-dashed border-[#3c3c3c] rounded-md text-xs space-y-1.5">
+                      <p className="text-[8px] font-mono uppercase font-bold tracking-wider text-[#9d9d9d]">SLSA Provenance</p>
+                      <p className="text-[10px] text-[#9d9d9d] leading-relaxed">Evidence Not Available. No SLSA/in-toto provenance attestation has been submitted for this software.</p>
                     </div>
+                    <button type="button" onClick={() => setSlsaModalOpen(true)} className="w-full bg-[#252526] hover:bg-[#383838] text-[#3794ff] border border-[#3c3c3c] font-bold py-2 rounded-md text-[10px] transition-all cursor-pointer">
+                      Submit provenance attestation
+                    </button>
+                  </div>
+                )}
 
-                    <div className="p-2.5 bg-[#252526] border border-[#3c3c3c] rounded-md text-xs space-y-1">
-                      <p className="text-[8px] font-mono uppercase font-bold tracking-wider text-[#9d9d9d] ">CI/CD Pipeline</p>
-                      <p className="font-bold text-[#6f6f6f] text-[11px]">{provenanceDetails.ciProvider}</p>
-                      <p className="text-[8px] font-mono text-[#9d9d9d] truncate" title={provenanceDetails.buildId}>ID: {provenanceDetails.buildId}</p>
-                    </div>
-
+                {slsaEvidence && slsaEvidence.status === 'VERIFIED' && (
+                  <div className="space-y-3 font-sans">
                     <div className="p-2.5 bg-[#094771] border border-[#3794ff] rounded-md text-xs space-y-1">
-                      <p className="text-[8px] font-mono uppercase font-bold tracking-wider text-[#3794ff] ">Cryptographic Proof</p>
-                      <div className="flex items-center gap-1 text-[11px] font-bold text-[#3794ff] ">
-                        <FileSignature className="w-3.5 h-3.5 text-[#3794ff] shrink-0" />
-                        <span>SLSA Level 4 Verified</span>
+                      <div className="flex items-center gap-1 text-[11px] font-bold text-[#3794ff]">
+                        <FileSignature className="w-3.5 h-3.5 shrink-0" />
+                        <span>SLSA Provenance — Verified</span>
                       </div>
-                      <p className="text-[8px] font-mono text-[#3794ff] leading-tight">Authority: {provenanceDetails.signingAuthority}</p>
+                      <p className="text-[8px] font-mono text-[#3794ff] leading-tight">Structurally valid, hash-verified in-toto provenance statement</p>
                     </div>
+                    <div className="p-2.5 bg-[#252526] border border-[#3c3c3c] rounded-md text-xs space-y-1">
+                      <p className="text-[8px] font-mono uppercase font-bold tracking-wider text-[#9d9d9d]">Builder</p>
+                      <p className="text-[10px] text-[#d4d4d4] break-all">{slsaDetails?.builderId || 'unknown'}</p>
+                    </div>
+                    <div className="p-2.5 bg-[#252526] border border-[#3c3c3c] rounded-md text-xs space-y-1">
+                      <p className="text-[8px] font-mono uppercase font-bold tracking-wider text-[#9d9d9d]">Predicate type</p>
+                      <p className="text-[9px] text-[#9d9d9d] break-all">{slsaDetails?.predicateType || 'unknown'}</p>
+                    </div>
+                    <p className="text-[8px] text-[#6f6f6f] leading-relaxed">SPR does not independently verify the attestation's Sigstore/DSSE signature chain.</p>
+                  </div>
+                )}
+
+                {slsaEvidence && slsaEvidence.status === 'FAILED' && (
+                  <div className="space-y-3 font-sans">
+                    <div className="p-2.5 bg-[#f14c4c]/10 border border-[#f14c4c] rounded-md text-xs space-y-1">
+                      <div className="flex items-center gap-1 text-[11px] font-bold text-[#f14c4c]">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                        <span>SLSA Provenance — Verification Failed</span>
+                      </div>
+                      <p className="text-[8px] font-mono text-[#f14c4c] leading-tight break-all">{slsaEvidence.failureReason || 'Unknown failure'}</p>
+                    </div>
+                    <button type="button" onClick={() => setSlsaModalOpen(true)} className="w-full bg-[#252526] hover:bg-[#383838] text-[#3794ff] border border-[#3c3c3c] font-bold py-2 rounded-md text-[10px] transition-all cursor-pointer">
+                      Resubmit provenance attestation
+                    </button>
+                  </div>
+                )}
+
+                {slsaEvidence && slsaEvidence.status !== 'VERIFIED' && slsaEvidence.status !== 'FAILED' && (
+                  <div className="p-2.5 bg-[#2d2d2d] border border-[#cca700] rounded-md text-xs space-y-1">
+                    <p className="text-[10px] font-bold text-[#cca700]">SLSA Provenance — Detected, Not Yet Verified</p>
                   </div>
                 )}
               </div>
@@ -698,6 +750,35 @@ export default function SoftwareLineageTracker({ passports, clients, assets }: S
           </div>
         )}
       </AnimatePresence>
+
+      {/* SLSA provenance submission modal -- SPR independently re-verifies
+          whatever is pasted here (hash-integrity + structural in-toto/SLSA
+          checks) before ever marking it Verified; nothing is trusted on submission alone. */}
+      {slsaModalOpen && activePassport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/80" onClick={() => !slsaSubmitting && setSlsaModalOpen(false)} />
+          <div className="relative w-full max-w-lg bg-[#252526] border border-[#3c3c3c] rounded-md p-6 z-10 space-y-4">
+            <h3 className="text-sm font-bold text-[#d4d4d4]">Submit SLSA provenance attestation for {activePassport.name}</h3>
+            <p className="text-[11px] text-[#9d9d9d] leading-relaxed">
+              Paste the raw in-toto/SLSA provenance statement JSON (e.g. produced by slsa-github-generator or <code className="bg-[#383838] px-1 rounded font-mono">cosign attest</code>). SPR independently checks it is well-formed and hash-consistent before marking it Verified — it does not fabricate a result.
+            </p>
+            <textarea
+              value={slsaStatementText}
+              onChange={(e) => setSlsaStatementText(e.target.value)}
+              rows={10}
+              placeholder='{"_type":"https://in-toto.io/Statement/v1","predicateType":"https://slsa.dev/provenance/v1",...}'
+              className="w-full rounded-md border border-[#3c3c3c] bg-[#1e1e1e] p-3 text-[10px] font-mono text-[#d4d4d4] outline-none focus:border-[#3794ff]"
+            />
+            {slsaSubmitError && <p className="text-[11px] text-[#f14c4c]">{slsaSubmitError}</p>}
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setSlsaModalOpen(false)} disabled={slsaSubmitting} className="rounded-md border border-[#3c3c3c] px-4 py-2 text-xs text-[#9d9d9d] cursor-pointer disabled:opacity-50">Cancel</button>
+              <button type="button" onClick={() => void submitSlsaProvenance()} disabled={slsaSubmitting || !slsaStatementText.trim()} className="bg-[#0e639c] hover:bg-[#1177bb] disabled:opacity-40 text-white font-bold px-4 py-2 rounded-md text-xs cursor-pointer transition-colors">
+                {slsaSubmitting ? 'Verifying…' : 'Verify & submit'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

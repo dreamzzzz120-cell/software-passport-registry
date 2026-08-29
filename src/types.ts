@@ -12,7 +12,7 @@ export interface SoftwareComponent { name: string; version: string; license: str
 export interface Vulnerability { id: string; title: string; severity: Severity; cvss: number; component: string; fixedVersion: string; publishedDate: string; status: 'Open' | 'Mitigated' | 'Resolved' | 'Snoozed'; description: string; mitigationPlan?: string; mitigationOwner?: string; mitigationTargetDate?: string; }
 export type EvidenceStatus = 'VERIFIED' | 'PARTIALLY_VERIFIED' | 'DECLARED' | 'CONFIGURED' | 'OBSERVED' | 'FAILED' | 'UNKNOWN' | 'STALE' | 'SOURCE_DISCONNECTED' | 'NOT_APPLICABLE';
 export interface EvidenceChainOfCustodyStep { step: string; actor: string; timestamp: string; }
-export interface EvidenceItem { id: string; name: string; type: 'Signature' | 'Audit Report' | 'Build Log' | 'Security Scan' | 'Attestation'; status: EvidenceStatus; signer: string; timestamp: string; hash: string; checksum?: string; chainOfCustody?: EvidenceChainOfCustodyStep[]; verifierEngineId?: string; verifiedAt?: string; failureReason?: string; }
+export interface EvidenceItem { id: string; name: string; type: 'Signature' | 'Audit Report' | 'Build Log' | 'Security Scan' | 'Attestation'; status: EvidenceStatus; signer: string; timestamp: string; hash: string; checksum?: string; chainOfCustody?: EvidenceChainOfCustodyStep[]; verifierEngineId?: string; verifiedAt?: string; failureReason?: string; rawContent?: string; }
 export type VerificationStatus = 'unverified' | 'partial' | 'verified';
 // Scores are null when no legitimate measurement exists yet (no evidence to
 // base one on) -- never a fabricated 0 or an optimistic 100. See
