@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ArrowRight, Building2, CheckCircle2, Clock3, FileSearch, ShieldAlert, ShieldQuestion, User, X } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Building2, CheckCircle2, Clock3, Database, FileCheck2, FileSearch, Layers, Network, Radio, ShieldAlert, ShieldQuestion, User, X } from 'lucide-react';
 import { Alert, Client, SoftwarePassport } from '../types';
 import { apiFetch } from '../utils/apiClient';
+import TrustNetworkMap, { type NetworkClientNode } from './trust/TrustNetworkMap';
+import { trustStateFromVerification, type TrustState } from './trust/TrustStateBadge';
 
 interface Props {
   clients: Client[];
@@ -22,8 +24,22 @@ const severityClass = (severity: Alert['severity']) => severity === 'Critical'
 
 // Evidence older than this is not treated as fresh for the coverage metric below.
 // This does not change any stored evidence or score — it only affects how the
-// Command Center summarizes freshness for a human reading the dashboard.
+// Trust Network summarizes freshness for a human reading the page.
 const EVIDENCE_FRESHNESS_WINDOW_DAYS = 30;
+const MAX_NETWORK_CLIENTS = 6;
+
+// Quick-jump strip to the real, existing routes that make up the trust
+// network layer. None of these paths are invented — they mirror the exact
+// routes already wired in App.tsx/CommandCenter.tsx.
+const NETWORK_NAV = [
+  { id: 'msp', label: 'Trust Network', path: '/msp' },
+  { id: 'clients', label: 'Clients', path: '/clients' },
+  { id: 'assets', label: 'Software', path: '/assets' },
+  { id: 'passports', label: 'Passports', path: '/passports' },
+  { id: 'evidence-explorer', label: 'Evidence', path: '/evidence-explorer' },
+  { id: 'monitoring', label: 'Monitoring', path: '/monitoring' },
+  { id: 'reports', label: 'Reports', path: '/reports' },
+];
 
 export default function MSPCommandCenter({ clients, alerts, passports, role = 'Viewer', onSelectClient, onNavigate }: Props) {
   const [selected, setSelected] = useState<Alert | null>(null);
@@ -73,12 +89,14 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
   // with no recorded verificationStatus is counted as unknown, not coerced.
   const softwareVerification = useMemo(() => {
     let verified = 0;
+    let needsReview = 0;
     let unknown = 0;
     let freshEvidence = 0;
     let staleOrMissingEvidence = 0;
     const now = Date.now();
     for (const passport of passports) {
       if (passport.verificationStatus === 'verified') verified += 1;
+      else if (passport.verificationStatus === 'partial') needsReview += 1;
       else unknown += 1;
 
       const evidenceTimestamps = (passport.evidence || [])
@@ -98,8 +116,56 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
     // so an empty portfolio never renders as "0% verified".
     const coveragePct = total > 0 ? Math.round((verified / total) * 100) : null;
     const freshnessPct = total > 0 ? Math.round((freshEvidence / total) * 100) : null;
-    return { total, verified, unknown, freshEvidence, staleOrMissingEvidence, coveragePct, freshnessPct };
+    return { total, verified, needsReview, unknown, freshEvidence, staleOrMissingEvidence, coveragePct, freshnessPct };
   }, [passports]);
+
+  // Evidence coverage counts real evidence *items* (not passports): how many
+  // of all recorded evidence entries across the portfolio carry a VERIFIED
+  // status. A portfolio with zero evidence items renders "NO DATA", never a
+  // misleading 0% or 100%.
+  const evidenceCoverage = useMemo(() => {
+    let total = 0;
+    let verified = 0;
+    for (const passport of passports) {
+      for (const item of passport.evidence || []) {
+        total += 1;
+        if (item?.status === 'VERIFIED') verified += 1;
+      }
+    }
+    return { total, verified, pct: total > 0 ? Math.round((verified / total) * 100) : null };
+  }, [passports]);
+
+  // Recent observations come only from each passport's own real timeline
+  // entries. Nothing here is synthesized — a portfolio with no timeline
+  // history simply has nothing to show.
+  const recentObservations = useMemo(() => {
+    const entries: { date: string; event: string; software: string; passportId: string }[] = [];
+    for (const passport of passports) {
+      for (const entry of passport.timeline || []) {
+        if (!entry?.date) continue;
+        entries.push({ date: entry.date, event: entry.event || entry.details || 'Recorded event', software: passport.name, passportId: passport.id });
+      }
+    }
+    return entries.sort((a, b) => Date.parse(b.date) - Date.parse(a.date)).slice(0, 8);
+  }, [passports]);
+
+  // The Trust Network map's Client -> Software layer, built strictly from
+  // each client's own real softwareInventory (server-computed), joined back
+  // to the loaded passport records for their current, real verification
+  // state. If a listed software item's passport can't be resolved, its state
+  // is reported as unknown (insufficient evidence to say otherwise) rather
+  // than guessed from a different field.
+  const passportsById = useMemo(() => new Map(passports.map((p) => [p.id, p])), [passports]);
+  const networkClients: NetworkClientNode[] = useMemo(() => clientRiskRollup.slice(0, MAX_NETWORK_CLIENTS).map(({ client }) => ({
+    id: client.id,
+    name: client.name,
+    software: (client.softwareInventory || []).map((item) => {
+      const passport = passportsById.get(item.passportId);
+      const state: TrustState = passport ? trustStateFromVerification(passport.verificationStatus) : 'EVIDENCE_INCOMPLETE';
+      return { passportId: item.passportId, name: item.name, state };
+    }),
+  })), [clientRiskRollup, passportsById]);
+  const clientsOmittedFromNetwork = Math.max(0, clients.length - networkClients.length);
 
   useEffect(() => {
     if (!selected) { setFinding(null); setFindingError(null); setTask(null); setTaskError(null); return; }
@@ -164,12 +230,23 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
     finally { setTaskLoading(false); }
   };
 
+  const hasClients = clients.length > 0;
+  const hasSoftware = passports.length > 0;
+
   return <div className="mx-auto max-w-6xl space-y-8 pb-10" id="msp-command-center">
+    <nav className="flex flex-wrap gap-1.5 overflow-x-auto" aria-label="Trust network sections">
+      {NETWORK_NAV.map((item) => (
+        <button key={item.id} onClick={() => onNavigate(item.path)} className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${item.id === 'msp' ? 'border-[#3794ff]/50 bg-[#094771]/30 text-[#3794ff]' : 'border-[#3c3c3c] bg-[#252526] text-[#9d9d9d] hover:bg-[#2d2d2d]'}`}>
+          {item.label}
+        </button>
+      ))}
+    </nav>
+
     <section className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
       <div>
-        <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-[#c586c0]"><Building2 className="h-4 w-4" /> MSP command center</div>
-        <h1 className="text-3xl font-bold tracking-tight text-[#d4d4d4] md:text-4xl">Who needs you today?</h1>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-[#9d9d9d]">Prioritized work from the evidence and findings SPR currently has on record. A closed task is not a verified fix.</p>
+        <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-[#c586c0]"><Network className="h-4 w-4" /> MSP control plane</div>
+        <h1 className="text-3xl font-bold tracking-tight text-[#d4d4d4] md:text-4xl">Trust Network</h1>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-[#9d9d9d]">A live view of software trust across your client environment. Observe clients, software, evidence, and trust states from one system.</p>
       </div>
       <div className="flex items-center gap-2">
         <div className="relative">
@@ -192,27 +269,80 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
       </div>
     </section>
 
-    <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-      <Metric label="Clients" value={clients.length} icon={<Building2 />} tone="text-[#3794ff]" />
-      <Metric label="Healthy" value={Math.max(0, clients.length - criticalClients - attentionClients)} icon={<CheckCircle2 />} tone="text-[#89d185]" />
-      <Metric label="Need attention" value={attentionClients} icon={<AlertTriangle />} tone="text-[#cca700]" />
-      <Metric label="Critical" value={criticalClients} icon={<ShieldAlert />} tone="text-[#f14c4c]" />
+    {!hasClients ? (
+      <section className="rounded-md border border-dashed border-[#3c3c3c] bg-[#181818] py-20 text-center">
+        <Network className="mx-auto h-9 w-9 text-[#6f6f6f]" />
+        <h2 className="mt-4 text-xl font-bold text-[#d4d4d4]">Build your trust network</h2>
+        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#9d9d9d]">Add your first client to begin observing software trust across their environment.</p>
+        <button onClick={() => onNavigate('clients')} className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[#0e639c] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#1177bb]">Add client <ArrowRight className="h-4 w-4" /></button>
+      </section>
+    ) : !hasSoftware ? (
+      <section className="rounded-md border border-dashed border-[#3c3c3c] bg-[#181818] py-20 text-center">
+        <Layers className="mx-auto h-9 w-9 text-[#6f6f6f]" />
+        <h2 className="mt-4 text-xl font-bold text-[#d4d4d4]">Client trust environment ready</h2>
+        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#9d9d9d]">Add software to establish your first Software Passport.</p>
+        <button onClick={() => onNavigate('passports')} className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[#0e639c] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#1177bb]">Add software <ArrowRight className="h-4 w-4" /></button>
+      </section>
+    ) : <>
+
+    <section>
+      <h2 className="mb-3 text-xs font-bold uppercase tracking-[.14em] text-[#6f6f6f]">Current trust state</h2>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Metric label="Verified" value={softwareVerification.verified} icon={<CheckCircle2 />} tone="text-[#89d185]" sub="Software passports" />
+        <Metric label="Needs review" value={softwareVerification.needsReview} icon={<ShieldAlert />} tone="text-[#cca700]" sub="Software passports" />
+        <Metric label="Unknown" value={softwareVerification.unknown} icon={<ShieldQuestion />} tone="text-[#6f6f6f]" sub="Software passports" />
+        <Metric label="Critical" value={criticalClients} icon={<AlertTriangle />} tone="text-[#f14c4c]" sub="Clients with an active critical finding" />
+      </div>
+      <p className="mt-2.5 flex items-start gap-1.5 text-xs leading-5 text-[#6f6f6f]"><ShieldQuestion className="mt-0.5 h-3.5 w-3.5 shrink-0" /> Unknown means evidence unavailable or insufficient — SPR does not infer a pass when authoritative evidence is unavailable. Unknown is not the same as Critical.</p>
     </section>
 
-    <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-      <Metric label="Verified software" value={softwareVerification.verified} icon={<CheckCircle2 />} tone="text-[#89d185]" />
-      <Metric label="Unknown / unverified" value={softwareVerification.unknown} icon={<ShieldQuestion />} tone="text-[#cca700]" />
-      <MetricPct label="Verification coverage" pct={softwareVerification.coveragePct} icon={<ShieldAlert />} tone="text-[#3794ff]" />
-      <MetricPct label={`Evidence fresh (≤30d)`} pct={softwareVerification.freshnessPct} icon={<Clock3 />} tone="text-[#3794ff]" />
+    <section>
+      <h2 className="mb-3 text-xs font-bold uppercase tracking-[.14em] text-[#6f6f6f]">Trust inventory</h2>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <Metric label="Clients" value={clients.length} icon={<Building2 />} tone="text-[#3794ff]" />
+        <Metric label="Software" value={passports.length} icon={<Database />} tone="text-[#3794ff]" />
+        <Metric label="Passports" value={passports.length} icon={<Layers />} tone="text-[#3794ff]" />
+        <Metric label="Evidence" value={evidenceCoverage.total} icon={<FileCheck2 />} tone="text-[#3794ff]" />
+        <Metric label="Open observations" value={attention.length} icon={<Radio />} tone="text-[#3794ff]" />
+      </div>
+    </section>
+
+    <section className="rounded-md border border-[#3c3c3c] bg-[#252526] p-5">
+      <div className="mb-4"><h2 className="text-lg font-bold text-[#d4d4d4]">Trust network</h2><p className="mt-1 text-sm text-[#9d9d9d]">Client → Software → Trust state, built from your actual portfolio.</p></div>
+      <TrustNetworkMap clients={networkClients} clientsOmitted={clientsOmittedFromNetwork} onSelectClient={(id) => { onSelectClient(id); onNavigate('clients'); }} onSelectSoftware={() => onNavigate('passports')} />
     </section>
 
     <section className="rounded-md border border-[#3c3c3c] bg-[#252526]">
       <div className="flex flex-col gap-3 border-b border-[#3c3c3c] px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
-        <div><h2 className="text-lg font-bold text-[#d4d4d4]">Cross-client risk</h2><p className="mt-1 text-sm text-[#9d9d9d]">Every client ranked by active critical and high findings, with technician assignment.</p></div>
+        <div><h2 className="text-lg font-bold text-[#d4d4d4]">Attention required</h2><p className="mt-1 text-sm text-[#9d9d9d]">Active observations currently recorded by SPR.</p></div>
+        <span className="w-fit rounded-full border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-1 text-xs font-medium text-[#d4d4d4]">{attention.length} active findings</span>
+      </div>
+      {attention.length ? <div className="divide-y divide-[#3c3c3c]">
+        {attention.map(alert => {
+          const client = clients.find(item => item.name === alert.clientName);
+          return <article key={alert.id} className="grid gap-4 px-5 py-5 lg:grid-cols-[minmax(180px,0.8fr)_minmax(260px,1.5fr)_auto] lg:items-center">
+            <div>
+              <p className="font-semibold text-[#d4d4d4]">{alert.clientName}</p>
+              <p className="mt-1 text-xs text-[#9d9d9d]">Observed {alert.timestamp}</p>
+              <p className="mt-1 text-[11px] text-[#6f6f6f]">Not linked to a specific software passport</p>
+            </div>
+            <div>
+              <div className="mb-2 flex flex-wrap gap-2"><span className={`rounded-md border px-2 py-0.5 text-[11px] font-bold ${severityClass(alert.severity)}`}>{alert.severity}</span><span className="rounded-md bg-[#383838] px-2 py-0.5 text-[11px] text-[#d4d4d4]">{alert.category}</span></div>
+              <p className="font-medium text-[#d4d4d4]">{alert.title}</p><p className="mt-1 text-sm leading-5 text-[#9d9d9d]">{alert.description}</p>
+            </div>
+            <div className="flex gap-2 lg:flex-col"><button onClick={() => setSelected(alert)} className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#0e639c] px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-[#1177bb]">Investigate <ArrowRight className="h-4 w-4" /></button>{client && <button onClick={() => onSelectClient(client.id)} className="rounded-lg border border-[#3c3c3c] px-3.5 py-2 text-sm font-medium text-[#d4d4d4] transition hover:bg-[#383838]">Client</button>}</div>
+          </article>;
+        })}
+      </div> : <div className="px-6 py-14 text-center"><CheckCircle2 className="mx-auto h-8 w-8 text-[#89d185]" /><h3 className="mt-3 font-semibold text-[#d4d4d4]">No clients need attention</h3><p className="mt-1 text-sm text-[#9d9d9d]">Your monitored clients currently have no active recorded findings requiring action.</p></div>}
+    </section>
+
+    <section className="rounded-md border border-[#3c3c3c] bg-[#252526]">
+      <div className="flex flex-col gap-3 border-b border-[#3c3c3c] px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
+        <div><h2 className="text-lg font-bold text-[#d4d4d4]">Cross-client trust risk</h2><p className="mt-1 text-sm text-[#9d9d9d]">Every client ranked by active critical and high findings, with technician assignment.</p></div>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[640px] text-left text-sm">
-          <thead className="border-b border-[#3c3c3c] text-[10px] uppercase tracking-[.14em] text-[#6f6f6f]"><tr><th className="px-5 py-3">Client</th><th className="px-5 py-3">Critical</th><th className="px-5 py-3">High</th><th className="px-5 py-3">Active findings</th><th className="px-5 py-3">Assigned technician</th></tr></thead>
+        <table className="w-full min-w-[720px] text-left text-sm">
+          <thead className="border-b border-[#3c3c3c] text-[10px] uppercase tracking-[.14em] text-[#6f6f6f]"><tr><th className="px-5 py-3">Client</th><th className="px-5 py-3">Critical</th><th className="px-5 py-3">High</th><th className="px-5 py-3">Active observations</th><th className="px-5 py-3">Trust state</th><th className="px-5 py-3">Assigned technician</th></tr></thead>
           <tbody className="divide-y divide-[#3c3c3c]">
             {clientRiskRollup.map(({ client, activeCount, critical, high, assignment }) => (
               <tr key={client.id}>
@@ -220,6 +350,7 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
                 <td className="px-5 py-3">{critical > 0 ? <span className="rounded-md border border-[#f14c4c]/30 bg-[#f14c4c]/10 px-2 py-0.5 text-xs font-bold text-[#f14c4c]">{critical}</span> : <span className="text-[#6f6f6f]">0</span>}</td>
                 <td className="px-5 py-3">{high > 0 ? <span className="rounded-md border border-[#cca700]/30 bg-[#cca700]/10 px-2 py-0.5 text-xs font-bold text-[#cca700]">{high}</span> : <span className="text-[#6f6f6f]">0</span>}</td>
                 <td className="px-5 py-3 text-[#d4d4d4]">{activeCount}</td>
+                <td className="px-5 py-3 text-xs text-[#9d9d9d]">{client.riskLevel || 'Unknown'}</td>
                 <td className="px-5 py-3">
                   {assigningClientId === client.id ? (
                     <select autoFocus onBlur={() => setAssigningClientId(null)} onChange={(e) => { const member = team.find((m) => String(m.id) === e.target.value); if (member) void assignTechnician(client.id, member); }} className="rounded-lg border border-[#3c3c3c] bg-[#2d2d2d] px-2 py-1.5 text-xs text-[#d4d4d4]">
@@ -242,28 +373,43 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
       </div>
     </section>
 
-    <section className="rounded-md border border-[#3c3c3c] bg-[#252526]">
-      <div className="flex flex-col gap-3 border-b border-[#3c3c3c] px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
-        <div><h2 className="text-lg font-bold text-[#d4d4d4]">Clients needing action</h2><p className="mt-1 text-sm text-[#9d9d9d]">Most urgent first, based on active recorded findings.</p></div>
-        <span className="w-fit rounded-full border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-1 text-xs font-medium text-[#d4d4d4]">{attention.length} active findings</span>
+    <section className="grid gap-4 md:grid-cols-2">
+      <div className="rounded-md border border-[#3c3c3c] bg-[#252526] p-5">
+        <h2 className="text-sm font-bold uppercase tracking-[.1em] text-[#6f6f6f]">Evidence coverage</h2>
+        {evidenceCoverage.total > 0 ? (
+          <>
+            <p className="mt-3 text-3xl font-bold text-[#d4d4d4]">{evidenceCoverage.verified} / {evidenceCoverage.total}</p>
+            <p className="mt-1 text-sm text-[#9d9d9d]">{evidenceCoverage.pct}% of recorded evidence is independently verified</p>
+          </>
+        ) : <p className="mt-3 text-sm text-[#6f6f6f]">No data — no evidence has been recorded yet.</p>}
       </div>
-      {attention.length ? <div className="divide-y divide-[#3c3c3c]">
-        {attention.map(alert => {
-          const client = clients.find(item => item.name === alert.clientName);
-          return <article key={alert.id} className="grid gap-4 px-5 py-5 lg:grid-cols-[minmax(180px,0.8fr)_minmax(260px,1.5fr)_auto] lg:items-center">
-            <div>
-              <p className="font-semibold text-[#d4d4d4]">{alert.clientName}</p>
-              <p className="mt-1 text-xs text-[#9d9d9d]">Observed {alert.timestamp}</p>
-            </div>
-            <div>
-              <div className="mb-2 flex flex-wrap gap-2"><span className={`rounded-md border px-2 py-0.5 text-[11px] font-bold ${severityClass(alert.severity)}`}>{alert.severity}</span><span className="rounded-md bg-[#383838] px-2 py-0.5 text-[11px] text-[#d4d4d4]">{alert.category}</span></div>
-              <p className="font-medium text-[#d4d4d4]">{alert.title}</p><p className="mt-1 text-sm leading-5 text-[#9d9d9d]">{alert.description}</p>
-            </div>
-            <div className="flex gap-2 lg:flex-col"><button onClick={() => setSelected(alert)} className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#0e639c] px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-[#1177bb]">Investigate <ArrowRight className="h-4 w-4" /></button>{client && <button onClick={() => onSelectClient(client.id)} className="rounded-lg border border-[#3c3c3c] px-3.5 py-2 text-sm font-medium text-[#d4d4d4] transition hover:bg-[#383838]">Client</button>}</div>
-          </article>;
-        })}
-      </div> : <div className="px-6 py-14 text-center"><CheckCircle2 className="mx-auto h-8 w-8 text-[#89d185]" /><h3 className="mt-3 font-semibold text-[#d4d4d4]">No clients need attention</h3><p className="mt-1 text-sm text-[#9d9d9d]">Your monitored clients currently have no active recorded findings requiring action.</p></div>}
+      <div className="rounded-md border border-[#3c3c3c] bg-[#252526] p-5">
+        <h2 className="text-sm font-bold uppercase tracking-[.1em] text-[#6f6f6f]">Verification coverage</h2>
+        {softwareVerification.total > 0 ? (
+          <>
+            <p className="mt-3 text-3xl font-bold text-[#d4d4d4]">{softwareVerification.verified} / {softwareVerification.total}</p>
+            <p className="mt-1 text-sm text-[#9d9d9d]">{softwareVerification.coveragePct}% of software assets · evidence fresh (≤30d) for {softwareVerification.freshnessPct ?? '—'}%</p>
+          </>
+        ) : <p className="mt-3 text-sm text-[#6f6f6f]">No software assets on record yet.</p>}
+      </div>
     </section>
+
+    <section className="rounded-md border border-[#3c3c3c] bg-[#252526] p-5">
+      <h2 className="text-lg font-bold text-[#d4d4d4]">Recent observations</h2>
+      <p className="mt-1 text-sm text-[#9d9d9d]">Real, recorded timeline events from your software passports.</p>
+      {recentObservations.length > 0 ? (
+        <ul className="mt-4 space-y-2.5">
+          {recentObservations.map((entry, index) => (
+            <li key={`${entry.passportId}-${index}`} className="flex flex-col gap-1 rounded-md border border-[#3c3c3c] bg-[#1e1e1e] px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-sm text-[#d4d4d4]">{entry.event}</span>
+              <span className="flex shrink-0 items-center gap-3 text-xs text-[#9d9d9d]"><span className="font-mono text-[#6f6f6f]">{entry.date}</span><span>{entry.software}</span></span>
+            </li>
+          ))}
+        </ul>
+      ) : <p className="mt-4 text-sm text-[#6f6f6f]">No recorded observations yet.</p>}
+    </section>
+
+    </>}
 
     {selected && <div className="fixed inset-0 z-50 flex items-end bg-black/60 p-0 md:items-center md:justify-center md:p-6" role="dialog" aria-modal="true" aria-labelledby="finding-title">
       <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-t-2xl border border-[#3c3c3c] bg-[#252526] p-6 shadow-2xl md:rounded-md"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#3794ff]">Finding detail · Explain this</p><h2 id="finding-title" className="mt-2 text-xl font-bold text-[#d4d4d4]">{selected.title}</h2></div><button onClick={() => setSelected(null)} aria-label="Close finding" className="rounded-lg p-2 text-[#9d9d9d] hover:bg-[#383838] hover:text-[#d4d4d4]"><X className="h-5 w-5" /></button></div>
@@ -280,10 +426,7 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
   </div>;
 }
 
-function Metric({ label, value, icon, tone }: { label: string; value: number; icon: React.ReactNode; tone: string }) { return <div className="rounded-md border border-[#3c3c3c] bg-[#252526] p-5"><div className={`mb-4 h-5 w-5 ${tone}`}>{icon}</div><p className="text-3xl font-bold text-[#d4d4d4]">{value}</p><p className="mt-1 text-sm text-[#9d9d9d]">{label}</p></div>; }
-// Renders "Not yet measured" instead of "0%" when there is no software on record —
-// an empty portfolio must never read as a 0% verification score.
-function MetricPct({ label, pct, icon, tone }: { label: string; pct: number | null; icon: React.ReactNode; tone: string }) { return <div className="rounded-md border border-[#3c3c3c] bg-[#252526] p-5"><div className={`mb-4 h-5 w-5 ${tone}`}>{icon}</div><p className="text-3xl font-bold text-[#d4d4d4]">{pct === null ? '—' : `${pct}%`}</p><p className="mt-1 text-sm text-[#9d9d9d]">{pct === null ? `${label} (not yet measured)` : label}</p></div>; }
+function Metric({ label, value, icon, tone, sub }: { label: string; value: number; icon: React.ReactNode; tone: string; sub?: string }) { return <div className="rounded-md border border-[#3c3c3c] bg-[#252526] p-5"><div className={`mb-4 h-5 w-5 ${tone}`}>{icon}</div><p className="text-3xl font-bold text-[#d4d4d4]">{value}</p><p className="mt-1 text-sm text-[#9d9d9d]">{label}</p>{sub && <p className="mt-0.5 text-[10px] text-[#6f6f6f]">{sub}</p>}</div>; }
 function Detail({ label, value }: { label: string; value: string }) { return <div className="rounded-xl border border-[#3c3c3c] bg-[#181818] p-4"><p className="text-xs font-semibold uppercase tracking-wider text-[#9d9d9d]">{label}</p><p className="mt-2 text-sm leading-5 text-[#d4d4d4]">{value}</p></div>; }
 function formatStoredTime(value?: string | null) { return value ? new Date(value).toLocaleString() : 'Not observed'; }
 function evidenceList(value?: string | null) { try { const parsed = JSON.parse(value || '[]'); return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : []; } catch { return []; } }

@@ -25,8 +25,10 @@ describe('SPR MSP Command Center — software verification metrics', () => {
     const s = source();
     expect(s).toContain('const coveragePct = total > 0 ? Math.round((verified / total) * 100) : null;');
     expect(s).toContain('const freshnessPct = total > 0 ? Math.round((freshEvidence / total) * 100) : null;');
-    expect(s).toContain("pct === null ? '—' :");
-    expect(s).toContain('not yet measured');
+    expect(s).toContain('softwareVerification.total > 0 ? (');
+    expect(s).toContain('No software assets on record yet.');
+    expect(s).toContain('evidenceCoverage.total > 0 ? (');
+    expect(s).toContain('No data — no evidence has been recorded yet.');
   });
 
   it('derives evidence freshness from real evidence timestamps, not a hardcoded window', () => {
