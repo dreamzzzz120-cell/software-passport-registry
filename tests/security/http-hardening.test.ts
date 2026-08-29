@@ -84,7 +84,8 @@ suite('HTTP hardening', () => {
   it('returns deterministic JSON for missing API routes', async () => {
     const response = await fetch(`${baseUrl}/api/security-test-not-found`);
     expect(response.status).toBe(404);
-    const body = await response.json() as { error?: { code?: string } };
-    expect(body.error?.code).toBe('NOT_FOUND');
+    const body = await response.json() as { error?: string; code?: string };
+    expect(typeof body.error).toBe('string');
+    expect(body.code).toBe('NOT_FOUND');
   });
 });
