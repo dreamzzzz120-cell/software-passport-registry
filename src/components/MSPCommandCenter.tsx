@@ -11,6 +11,7 @@ interface Props {
   passports: SoftwarePassport[];
   role?: string;
   onSelectClient: (id: string) => void;
+  onSelectPassport?: (id: string) => void;
   onNavigate: (tab: string) => void;
 }
 
@@ -41,7 +42,7 @@ const NETWORK_NAV = [
   { id: 'reports', label: 'Reports', path: '/reports' },
 ];
 
-export default function MSPCommandCenter({ clients, alerts, passports, role = 'Viewer', onSelectClient, onNavigate }: Props) {
+export default function MSPCommandCenter({ clients, alerts, passports, role = 'Viewer', onSelectClient, onSelectPassport, onNavigate }: Props) {
   const [selected, setSelected] = useState<Alert | null>(null);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [team, setTeam] = useState<TeamMember[]>([]);
@@ -309,7 +310,7 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
 
     <section className="rounded-md border border-[#3c3c3c] bg-[#252526] p-5">
       <div className="mb-4"><h2 className="text-lg font-bold text-[#d4d4d4]">Trust network</h2><p className="mt-1 text-sm text-[#9d9d9d]">Client → Software → Trust state, built from your actual portfolio.</p></div>
-      <TrustNetworkMap clients={networkClients} clientsOmitted={clientsOmittedFromNetwork} onSelectClient={(id) => { onSelectClient(id); onNavigate('clients'); }} onSelectSoftware={() => onNavigate('passports')} />
+      <TrustNetworkMap clients={networkClients} clientsOmitted={clientsOmittedFromNetwork} onSelectClient={(id) => { onSelectClient(id); onNavigate('clients'); }} onSelectSoftware={(passportId) => { onSelectPassport?.(passportId); onNavigate('passports'); }} />
     </section>
 
     <section className="rounded-md border border-[#3c3c3c] bg-[#252526]">

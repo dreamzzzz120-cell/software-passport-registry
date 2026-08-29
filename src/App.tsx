@@ -254,7 +254,7 @@ export default function App() {
     case '/monitoring': view = <MonitoringView role={role} passports={passports} clients={clients} />; break;
     case '/security': view = <SecurityCenterView clients={clients} passports={passports} />; break;
     case '/compliance': view = <ComplianceView clients={clients} role={role} />; break;
-    case '/msp': view = <MSPCommandCenter clients={clients} alerts={alerts} passports={passports} role={role} onSelectClient={setSelectedClientId} onNavigate={navigate} />; break;
+    case '/msp': view = <MSPCommandCenter clients={clients} alerts={alerts} passports={passports} role={role} onSelectClient={setSelectedClientId} onSelectPassport={setSelectedPassportId} onNavigate={navigate} />; break;
     case '/agent-trust': view = <AgentTrustView />; break;
     case '/ai-trust-center': view = <AITrustCenterView role={role} />; break;
     case '/enterprise-readiness': view = <EnterpriseReadinessView clients={clients} />; break;
