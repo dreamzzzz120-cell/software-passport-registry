@@ -85,7 +85,7 @@ export const allExtensions: Extension[] = [
       { id: 'repo-identity', label: 'Repository Identity', desc: 'Signed repository metadata, branch locks and webhooks.' },
       { id: 'org-identity', label: 'Organization Identity', desc: 'Multi-tenant organization cryptographic key anchors.' },
       { id: 'digital-certs', label: 'Digital Certificates', desc: 'X.509 security cert verification pipeline.' },
-      { id: 'crypto-signatures', label: 'Cryptographic Signatures', desc: 'SLSA Level 4 digital signatures for passports.' },
+      { id: 'crypto-signatures', label: 'Cryptographic Signatures', desc: 'SLSA/in-toto provenance signature checks for passports -- Verified only when qualifying evidence is submitted and independently checked.' },
       { id: 'software-dna', label: 'Software DNA', desc: 'Hierarchical binary hashing and component fingerprinting.' },
       { id: 'ownership-history', label: 'Ownership History', desc: 'Immutable ledger trace of registry owners.' }
     ]
