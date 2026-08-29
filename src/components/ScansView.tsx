@@ -278,22 +278,6 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
     }
   };
 
-  // Real-time Regex/Signature Matching Helper
-  const getLiveMatch = (name: string) => {
-    if (!name.trim()) return null;
-    const targetLower = name.toLowerCase();
-    const signatures = [
-      { regex: /postgres|postgresql|psql|db|mysql|sqlite|oracle|mongo|database/i, category: 'Database & Persistent Store', badge: 'Database Signature' },
-      { regex: /k8s|kubernetes|kube|docker|container|runc/i, category: 'Kubernetes Cluster Daemon', badge: 'Container Signature' },
-      { regex: /nginx|apache|httpd|iis|express|haproxy|web/i, category: 'Nginx Edge Proxy', badge: 'Web Server Signature' },
-      { regex: /redis|memcached|cache/i, category: 'Redis In-Memory Store', badge: 'In-Memory Cache Signature' },
-      { regex: /log4j|logging|logger/i, category: 'Apache Log4j Core', badge: 'Log/Snyk Signature' },
-      { regex: /billing|payment|stripe|invoice|checkout/i, category: 'Legacy Billing Connector', badge: 'Financial/Snyk Signature' }
-    ];
-    const matched = signatures.find(s => s.regex.test(targetLower));
-    return matched || { category: 'Custom/Generic Asset Bucket', badge: 'Custom/Generic (Unclassified)' };
-  };
-
   const handleCustomScanSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedPassportId) {
@@ -306,7 +290,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
   };
 
   // Executing actual backend AI Agent scanner with real-time logs polling
-  const runActualScan = async (targetName: string, chosenClient: string = 'Vanguard Grid Operators', sbomFile?: File) => {
+  const runActualScan = async (targetName: string, chosenClient: string = '', sbomFile?: File) => {
     setIsScanning(true);
     setScanCompleted(false);
     setScanProgress(0);
@@ -326,8 +310,8 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
 
     setScanLogs(l => [
       ...l, 
-      `[INFO] Target matched to verified Passport: ${matchedPassport.name} (v${matchedPassport.version})`,
-      `[INFO] Initiating comprehensive full-stack 8-engine scan queue...`
+      `[INFO] Target matched to Passport record: ${matchedPassport.name} (v${matchedPassport.version})`,
+      `[INFO] Submitting scan job to the background queue...`
     ]);
 
     try {
@@ -557,12 +541,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
                             <option key={c.id} value={c.name}>{c.name}</option>
                           ))
                         ) : (
-                          <>
-                            <option value="Vanguard Grid Operators">Vanguard Grid Operators</option>
-                            <option value="Apex Financial Portfolio">Apex Financial Portfolio</option>
-                            <option value="Nexus Healthcare Systems">Nexus Healthcare Systems</option>
-                            <option value="Acme Corporate Technologies">Acme Corporate Technologies</option>
-                          </>
+                          <option value="" disabled>No clients configured yet</option>
                         )}
                       </select>
                     </div>
@@ -616,7 +595,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
                     <div className="text-lg font-bold text-[#d4d4d4]">
                       {schedules.filter(s => s.status === 'Active').length} / {schedules.length}
                     </div>
-                    <div className="text-[9px] text-[#9d9d9d]">Continuous background sweeps</div>
+                    <div className="text-[9px] text-[#9d9d9d]">Configured background scan schedules</div>
                   </div>
                 </div>
 
@@ -632,7 +611,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
                         return `${uniqueProtected} / ${prodAssets.length}`;
                       })()}
                     </div>
-                    <div className="text-[9px] text-[#9d9d9d]">Critical Production nodes covered</div>
+                    <div className="text-[9px] text-[#9d9d9d]">Registered production assets covered</div>
                   </div>
                 </div>
 
