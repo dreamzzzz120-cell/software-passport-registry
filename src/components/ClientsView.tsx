@@ -701,11 +701,12 @@ export default function ClientsView({
 
       {showAddClient && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-labelledby="add-client-title">
-          <div className="w-full max-w-md rounded-md border border-[#3c3c3c] bg-[#252526] p-6 shadow-2xl">
+          <div className="w-full max-w-lg rounded-md border border-[#3c3c3c] bg-[#252526] p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.18em] text-[#c586c0]"><Building2 className="h-4 w-4" /> New client</div>
-                <h2 id="add-client-title" className="mt-1 text-lg font-bold text-[#d4d4d4]">Add Client</h2>
+                <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.18em] text-[#c586c0]"><Building2 className="h-4 w-4" /> New client trust environment</div>
+                <h2 id="add-client-title" className="mt-1 text-lg font-bold text-[#d4d4d4]">Establish a client trust environment</h2>
+                <p className="mt-1 text-xs leading-5 text-[#9d9d9d]">Create the foundation for monitoring the software, vendors, and technology this client depends on.</p>
               </div>
               <button onClick={() => setShowAddClient(false)} aria-label="Close" className="rounded-md p-1.5 text-[#9d9d9d] hover:bg-[#383838] hover:text-[#d4d4d4]"><X className="h-4 w-4" /></button>
             </div>
@@ -722,22 +723,34 @@ export default function ClientsView({
                 </div>
               )}
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold text-[#9d9d9d]">Client name *</label>
+                <label className="text-[10px] font-bold text-[#9d9d9d]">Client / Organization name *</label>
                 <input required value={newClientName} onChange={(e) => setNewClientName(e.target.value)} placeholder="Acme Manufacturing" className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2 text-xs text-[#d4d4d4]" />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold text-[#9d9d9d]">Domain *</label>
+                <label className="text-[10px] font-bold text-[#9d9d9d]">Primary domain *</label>
                 <input required value={newClientDomain} onChange={(e) => setNewClientDomain(e.target.value)} placeholder="acme.com" className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2 text-xs text-[#d4d4d4]" />
               </div>
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] font-bold text-[#9d9d9d]">Industry *</label>
                 <input required value={newClientIndustry} onChange={(e) => setNewClientIndustry(e.target.value)} placeholder="Manufacturing" className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2 text-xs text-[#d4d4d4]" />
               </div>
+
+              <div className="rounded-md border border-[#3c3c3c] bg-[#1e1e1e] p-3.5">
+                <div className="text-[10px] font-bold uppercase tracking-[.14em] text-[#6f6f6f]">After creation, this environment will track</div>
+                <div className="mt-2.5 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  <div className="flex items-center gap-1.5 text-[11px] text-[#9d9d9d]"><Globe className="h-3.5 w-3.5 text-[#3794ff]" /> Software</div>
+                  <div className="flex items-center gap-1.5 text-[11px] text-[#9d9d9d]"><Users className="h-3.5 w-3.5 text-[#3794ff]" /> Vendors</div>
+                  <div className="flex items-center gap-1.5 text-[11px] text-[#9d9d9d]"><FileCheck className="h-3.5 w-3.5 text-[#3794ff]" /> Passports</div>
+                  <div className="flex items-center gap-1.5 text-[11px] text-[#9d9d9d]"><FileText className="h-3.5 w-3.5 text-[#3794ff]" /> Evidence</div>
+                  <div className="flex items-center gap-1.5 text-[11px] text-[#9d9d9d]"><Activity className="h-3.5 w-3.5 text-[#3794ff]" /> Monitoring</div>
+                </div>
+              </div>
+
               <div className="flex justify-end gap-2 pt-2">
                 <button type="button" onClick={() => setShowAddClient(false)} className="rounded-md border border-[#3c3c3c] px-3.5 py-2 text-xs font-semibold text-[#9d9d9d] hover:bg-[#383838]">Cancel</button>
                 <button type="submit" disabled={creatingClient || !newClientName.trim() || !newClientDomain.trim() || !newClientIndustry.trim()} className="inline-flex items-center gap-1.5 rounded-md bg-[#0e639c] px-3.5 py-2 text-xs font-bold text-white hover:bg-[#1177bb] disabled:opacity-40">
                   {creatingClient ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                  {creatingClient ? 'Creating…' : 'Create client'}
+                  {creatingClient ? 'Establishing…' : 'Establish Trust Environment'}
                 </button>
               </div>
             </form>

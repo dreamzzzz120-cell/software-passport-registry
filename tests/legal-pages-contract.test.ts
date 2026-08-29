@@ -73,7 +73,7 @@ describe('legal pages do not fabricate certifications, guarantees, or compliance
 
 describe('legal footer links are present on the real public entry points', () => {
   it('CoverPage, LoginView, MspLandingView, and MspPricingView all link to /terms and /privacy', () => {
-    expect(read('src/App.tsx')).toContain('<LegalFooterLinks className="mt-8" />');
+    expect(read('src/components/HomePage.tsx')).toContain('<LegalFooterLinks className="mt-8" />');
     expect(read('src/components/LoginView.tsx')).toContain('href="/terms"');
     expect(read('src/components/LoginView.tsx')).toContain('href="/privacy"');
     expect(read('src/components/MspLandingView.tsx')).toContain('<LegalFooterLinks');

@@ -36,9 +36,9 @@ import SecurityCenterView from './components/SecurityCenterView';
 import MSPCommandCenter from './components/MSPCommandCenter';
 import MspPricingView from './components/MspPricingView';
 import MspLandingView from './components/MspLandingView';
+import HomePage from './components/HomePage';
 import TermsView from './components/legal/TermsView';
 import PrivacyPolicyView from './components/legal/PrivacyPolicyView';
-import LegalFooterLinks from './components/legal/LegalFooterLinks';
 import ReportsView from './components/ReportsView';
 import TrustGraphView from './components/TrustGraphView';
 import { EXTENSIONS } from './workflows/extensionRegistry';
@@ -84,98 +84,6 @@ function AuthLoading() {
   return <div className="grid min-h-screen place-items-center bg-[#1e1e1e] text-[#d4d4d4]"><div className="text-center"><img src="/brand/spr-icon.png" alt="SPR" className="mx-auto h-14 w-14 rounded-md border border-[#3c3c3c] bg-white object-contain p-1.5" /><div className="mt-4 text-xs font-semibold uppercase tracking-[.15em] text-[#9d9d9d]">Securing workspace</div><div className="mt-1 text-sm text-[#6f6f6f]">Checking authenticated session…</div></div></div>;
 }
 
-type CodeToken = { t: string; c?: string };
-const VSC_COMMENT = '#6a9955';
-const VSC_KEYWORD = '#569cd6';
-const VSC_TYPE = '#4ec9b0';
-const VSC_STRING = '#ce9178';
-const VSC_PROP = '#9cdcfe';
-const VSC_NUM = '#b5cea8';
-
-const COVER_CODE: { n: number; tokens: CodeToken[] }[] = [
-  { n: 1, tokens: [{ t: 'import', c: VSC_KEYWORD }, { t: ' type ' }, { t: '{ ' }, { t: 'SoftwarePassport', c: VSC_TYPE }, { t: ' } ' }, { t: 'from', c: VSC_KEYWORD }, { t: ' ' }, { t: '"./types"', c: VSC_STRING }, { t: ';' }] },
-  { n: 2, tokens: [] },
-  { n: 3, tokens: [{ t: '// Evidence-backed, not self-attested', c: VSC_COMMENT }] },
-  { n: 4, tokens: [{ t: 'export', c: VSC_KEYWORD }, { t: ' ' }, { t: 'const', c: VSC_KEYWORD }, { t: ' passport', c: VSC_PROP }, { t: ': ' }, { t: 'SoftwarePassport', c: VSC_TYPE }, { t: ' = {' }] },
-  { n: 5, tokens: [{ t: '  id', c: VSC_PROP }, { t: ': ' }, { t: '"spr_8f2a1c9e"', c: VSC_STRING }, { t: ',' }] },
-  { n: 6, tokens: [{ t: '  name', c: VSC_PROP }, { t: ': ' }, { t: '"billing-service"', c: VSC_STRING }, { t: ',' }] },
-  { n: 7, tokens: [{ t: '  version', c: VSC_PROP }, { t: ': ' }, { t: '"4.2.0"', c: VSC_STRING }, { t: ',' }] },
-  { n: 8, tokens: [{ t: '  overallScore', c: VSC_PROP }, { t: ': ' }, { t: '94', c: VSC_NUM }, { t: ',' }] },
-  { n: 9, tokens: [{ t: '  evidence', c: VSC_PROP }, { t: ': ' }, { t: '24', c: VSC_NUM }, { t: ',' }] },
-  { n: 10, tokens: [{ t: '  aiSummary', c: VSC_PROP }, { t: ': ' }, { t: '"No critical findings"', c: VSC_STRING }, { t: ',' }] },
-  { n: 11, tokens: [{ t: '};' }] },
-];
-
-function CoverPage() {
-  return (
-    <div className="relative min-h-screen overflow-hidden bg-[#1e1e1e] text-[#cccccc]">
-      <div className="mx-auto flex min-h-screen max-w-7xl flex-col items-center gap-12 px-6 py-16 lg:flex-row lg:items-center">
-        <div className="max-w-2xl">
-          <img src="/brand/spr-logo.jpg" alt="Software Passport Registry" className="mb-6 h-10 w-auto" />
-          <div className="mb-6 font-mono text-[11px] text-[#6a9955]">// Evidence-first software trust</div>
-          <h1 className="text-4xl font-semibold tracking-[-.02em] text-[#d4d4d4] md:text-5xl">
-            Software trust,<br /><span className="text-[#3794ff]">operated as a system.</span>
-          </h1>
-          <p className="mt-6 max-w-2xl text-base leading-7 text-[#9d9d9d]">Software Passport Registry turns software identity, security, provenance, reliability, compliance, and evidence into repeatable workflows for teams, buyers, and managed service providers.</p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <button onClick={() => navigate('/login')} className="rounded-[3px] bg-[#0e639c] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#1177bb]">Enter SPR</button>
-            <button onClick={() => navigate('/free-review')} className="rounded-[3px] border border-[#3c3c3c] bg-[#2d2d2d] px-6 py-3 text-sm font-semibold text-[#cccccc] transition-colors hover:bg-[#383838]">Free review</button>
-          </div>
-          <LegalFooterLinks className="mt-8" />
-        </div>
-        <div className="hidden w-full flex-1 lg:block">
-          <div className="mx-auto max-w-xl overflow-hidden rounded-lg border border-[#3c3c3c] bg-[#1e1e1e] shadow-2xl">
-            <div className="flex h-9 items-center gap-2 bg-[#323233] px-3">
-              <span className="h-3 w-3 rounded-full bg-[#ff5f56]" />
-              <span className="h-3 w-3 rounded-full bg-[#ffbd2e]" />
-              <span className="h-3 w-3 rounded-full bg-[#27c93f]" />
-              <span className="ml-2 truncate text-[11px] text-[#969696]">software-passport.ts — Software Passport Registry</span>
-            </div>
-            <div className="flex h-[380px]">
-              <div className="flex w-11 flex-col items-center gap-4 border-r border-[#1e1e1e] bg-[#333333] py-3 text-[#858585]">
-                <span className="border-l-2 border-[#3794ff] pl-[9px] text-white">▤</span>
-                <span>⌕</span>
-                <span>⎇</span>
-                <span>▦</span>
-              </div>
-              <div className="w-44 shrink-0 border-r border-[#1e1e1e] bg-[#252526] p-2 text-[11px] text-[#cccccc]">
-                <div className="px-1 pb-2 font-semibold uppercase tracking-[.06em] text-[#bbbbbb]">Explorer</div>
-                <div className="px-1 text-[#cccccc]">software-passport-registry</div>
-                <div className="pl-3 pt-1 text-[#cccccc]">src/</div>
-                <div className="pl-6 text-[#cccccc]">evidence/</div>
-                <div className="rounded-sm bg-[#37373d] pl-9 pr-1 text-white">software-passport.ts</div>
-                <div className="pl-9 text-[#cccccc]">sbom.ts</div>
-                <div className="pl-9 text-[#cccccc]">attestations.ts</div>
-                <div className="pl-3 text-[#cccccc]">types.ts</div>
-                <div className="pl-3 text-[#cccccc]">README.md</div>
-              </div>
-              <div className="flex flex-1 flex-col bg-[#1e1e1e]">
-                <div className="flex h-9 items-center border-b border-[#1e1e1e] bg-[#252526] text-[11px] text-[#969696]">
-                  <span className="flex h-full items-center border-t-2 border-[#3794ff] bg-[#1e1e1e] px-3 text-white">software-passport.ts</span>
-                  <span className="flex h-full items-center px-3">sbom.ts</span>
-                </div>
-                <div className="flex-1 overflow-hidden p-3 font-mono text-[12px] leading-6">
-                  {COVER_CODE.map((line) => (
-                    <div key={line.n} className="flex">
-                      <span className="w-6 shrink-0 select-none pr-3 text-right text-[#858585]">{line.n}</span>
-                      <span className="whitespace-pre text-[#d4d4d4]">
-                        {line.tokens.map((token, i) => <span key={i} style={token.c ? { color: token.c } : undefined}>{token.t}</span>)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <div className="flex h-6 items-center justify-between bg-[#007acc] px-3 text-[10px] text-white">
-              <span>⎇ main</span>
-              <span>Evidence verified · TypeScript · UTF-8</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function PublicPage({ title, description, action, onAction }: { title: string; description: string; action: string; onAction: () => void }) {
   return <div className="grid min-h-screen place-items-center bg-[#1e1e1e] px-6 text-[#d4d4d4]"><div className="max-w-lg spr-panel p-8 text-center"><div className="text-[10px] font-semibold uppercase tracking-[.15em] text-[#3794ff]">Software Passport Registry</div><h1 className="mt-3 text-2xl font-semibold">{title}</h1><p className="mt-3 text-sm leading-6 text-[#9d9d9d]">{description}</p><button onClick={onAction} className="spr-btn spr-btn-primary mt-6">{action}</button></div></div>;
@@ -310,7 +218,7 @@ export default function App() {
   const signOutUser = async () => { await signOut(auth); navigate('/login'); };
 
   if (!authReady) return <AuthLoading />;
-  if (path === '/') return <CoverPage />;
+  if (path === '/') return <HomePage onCreatePassport={() => navigate('/login')} onExploreTrustNetwork={() => navigate('/free-review')} />;
   if (path === '/login') return <LoginView onLoginSuccess={() => navigate('/dashboard')} />;
   // Public legal documents -- always reachable regardless of auth state,
   // since /terms has no existing authenticated route to preserve. /privacy

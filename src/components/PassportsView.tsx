@@ -3,6 +3,8 @@ import { CheckCircle2, FileCheck2, Search, ShieldCheck, TriangleAlert } from 'lu
 import { apiFetch } from '../utils/apiClient';
 import SoftwareLineageTracker from './SoftwareLineageTracker';
 import SoftwareSectorsPanel from './SoftwareSectorsPanel';
+import TrustField from './trust/TrustField';
+import { trustStateFromVerification } from './trust/TrustStateBadge';
 import type { Client, SoftwarePassport, VerificationStatus } from '../types';
 
 // A score is never shown without its verification state -- unverified means
@@ -114,6 +116,25 @@ export default function PassportsView({ passports, selectedPassportId, setSelect
 
         {selected && <div className="spr-panel p-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between"><div><h2 className="text-xl font-semibold text-[#d4d4d4]">{selected.name}</h2><p className="mt-1 text-sm text-[#9d9d9d]">{selected.version || 'Version not observed'} · {selected.publisher || 'Publisher not observed'}</p></div><div className={`rounded-md border px-3 py-2 text-xs ${verificationBadge(selected.verificationStatus).className}`}>Overall: {selected.overallScore == null ? '—' : selected.overallScore} · {verificationBadge(selected.verificationStatus).label}</div></div>
+
+          {/* Trust Field: the real dimensions this passport's own evidence
+              actually supports (security/compliance/vendor reputation/
+              confidence). No dimension is shown with an invented value --
+              anything the scoring engine hasn't computed renders "N/A". */}
+          <div className="mt-6 flex justify-center border-b border-[#3c3c3c] pb-6">
+            <TrustField
+              state={trustStateFromVerification(selected.verificationStatus)}
+              centerLabel={selected.name?.slice(0, 12).toUpperCase() || 'PASSPORT'}
+              size={300}
+              dimensions={[
+                { key: 'security', label: 'Security', value: selected.securityScore ?? null },
+                { key: 'compliance', label: 'Compliance', value: selected.complianceScore ?? null },
+                { key: 'vendor', label: 'Vendor Rep.', value: selected.vendorReputationScore ?? null },
+                { key: 'confidence', label: 'Confidence', value: selected.confidenceScore ?? null },
+              ]}
+            />
+          </div>
+
           <div className="mt-6 grid gap-4 md:grid-cols-3"><div className="spr-panel-alt p-4"><div className="text-[11px] uppercase tracking-[.06em] text-[#6f6f6f]">Evidence</div><div className="mt-2 text-2xl font-semibold text-[#d4d4d4]">{selected.evidence?.length ?? 0}</div><div className="mt-1 text-xs text-[#9d9d9d]">Recorded entries · {selected.evidenceCompleteness == null ? 'not yet resolved' : `${selected.evidenceCompleteness}% resolved`}</div></div><div className="spr-panel-alt p-4"><div className="text-[11px] uppercase tracking-[.06em] text-[#6f6f6f]">Findings</div><div className="mt-2 text-2xl font-semibold text-[#d4d4d4]">{selected.vulnerabilities?.length ?? 0}</div><div className="mt-1 text-xs text-[#9d9d9d]">Observed or reported findings</div></div><div className="spr-panel-alt p-4"><div className="text-[11px] uppercase tracking-[.06em] text-[#6f6f6f]">Score status</div><div className={`mt-2 text-lg font-semibold ${verificationBadge(selected.verificationStatus).textClassName}`}>{verificationBadge(selected.verificationStatus).label}</div><div className="mt-1 text-xs text-[#9d9d9d]">{selected.confidenceScore == null ? 'No confidence figure without resolved evidence' : `${selected.confidenceScore}% confidence`}</div></div></div>
 
           {selected.evidence?.length > 0 && <div className="mt-6"><div className="mb-3 text-[11px] uppercase tracking-[.06em] text-[#6f6f6f]">Evidence ledger snapshot</div><div className="grid gap-3 md:grid-cols-2">{selected.evidence.map((item: any) => <div key={String(item.id)} className="spr-panel-alt p-4"><div className="text-sm font-semibold text-[#d4d4d4]">{String(item.name || item.type || 'Evidence item')}</div><div className="mt-1 text-xs text-[#9d9d9d]">Status: {String(item.status || 'Not verified')}</div></div>)}</div></div>}
