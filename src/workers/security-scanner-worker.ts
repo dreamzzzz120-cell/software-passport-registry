@@ -6,6 +6,7 @@ import { Pool } from 'pg';
 import { downloadArchive, generateRepositorySbom, runBounded, validateArchiveEntries } from './osv-worker.ts';
 import { createWorkerPool, assertWorkerDatabase } from './worker-db.ts';
 import { runRealRepositoryScanners } from '../scanners/real-repository-scanners.ts';
+import { scanFindingIdentity } from '../security/scan-finding-identity.ts';
 
 const WORKER_ID = `${os.hostname()}:${process.pid}:security`;
 const MAX_ARCHIVE_BYTES = 50 * 1024 * 1024;
@@ -70,7 +71,14 @@ async function processSecurityJob(pool: Pool, job: any) {
     const findings = scanned.findings;
 
     for (const finding of findings) {
-      const findingKey = sha256(`${job.tenant_id}|${job.id}|${finding.engineId}|${finding.category}|${finding.title}|${finding.component || ''}`);
+      const findingKey = sha256(scanFindingIdentity({
+        tenantId: job.tenant_id,
+        passportId: job.passport_id,
+        engineId: finding.engineId,
+        category: finding.category,
+        title: finding.title,
+        component: finding.component,
+      }));
       await pool.query(`INSERT INTO scan_findings (id,tenant_id,asset_id,job_id,severity,category,title,description,component,status,detected_at,engine_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'Open',NOW(),$10) ON CONFLICT DO NOTHING`, [`finding-${findingKey}`, job.tenant_id, job.passport_id, job.id, finding.severity, finding.category, finding.title, finding.description, finding.component || null, finding.engineId]);
     }
 

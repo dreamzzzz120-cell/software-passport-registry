@@ -110,25 +110,11 @@ const connectRouter = createConnectRouter();
 app.use('/api', connectRouter);
 app.use('/api/connect', connectRouter);
 app.use('/api/integrations/connect', connectRouter);
-app.post('/api/ai/analyze-passport', requireAuth, async (req: AuthenticatedRequest, res, next) => {
-  try {
-    const passportId = typeof req.body?.passportId === 'string' ? req.body.passportId.trim() : '';
-    if (!passportId) return res.status(400).json({ error: { code: 'PASSPORT_ID_REQUIRED', message: 'passportId is required.' } });
-    const db = req.db!;
-    const result = await db.execute(sql`
-      SELECT name, version, publisher, overall_score AS "overallScore",
-             jsonb_array_length(COALESCE(NULLIF(evidence, '')::jsonb, '[]'::jsonb)) AS "evidenceCount",
-             jsonb_array_length(COALESCE(NULLIF(vulnerabilities, '')::jsonb, '[]'::jsonb)) AS "findingCount"
-      FROM passports
-      WHERE id = ${passportId} AND tenant_id = ${req.user!.tenantId}
-      LIMIT 1
-    `);
-    const passport = (result.rows?.[0] ?? null) as { name?: string; version?: string; publisher?: string; overallScore?: number | null; evidenceCount?: number; findingCount?: number } | null;
-    if (!passport) return res.status(404).json({ error: { code: 'PASSPORT_NOT_FOUND', message: 'Passport not found.' } });
-    const status = passport.overallScore == null ? 'not verified' : `score ${passport.overallScore}`;
-    return res.json({ passportId, analysis: `${passport.name ?? 'Passport'} ${passport.version ?? ''} by ${passport.publisher ?? 'unknown publisher'} is ${status}. Evidence records: ${passport.evidenceCount ?? 0}. Findings: ${passport.findingCount ?? 0}. Authoritative verification requires durable backend evidence.` });
-  } catch (error) { return next(error); }
-});
+// Note: /api/ai/analyze-passport was removed here - it was a misleadingly
+// named stub (no LLM call, just a templated string from a DB query), had no
+// frontend caller and no test coverage. The real AI explanation endpoint is
+// POST /api/ai-trust/explain-passport below, which actually calls a model
+// and validates its output against the authoritative evidence snapshot.
 app.use('/api/integrations', createIntegrationsRouter());
 app.use('/api/integrations-live', createLiveIntegrationsRouter());
 // A 'Client'-role user may only sign off on remediation work already
