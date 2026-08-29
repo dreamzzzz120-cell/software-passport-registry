@@ -81,7 +81,14 @@ export default function ClientsView({
         body: JSON.stringify({ name: newClientName.trim(), domain: newClientDomain.trim().toLowerCase(), industry: newClientIndustry.trim() }),
       });
       const data = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(data?.error || 'Unable to create client.');
+      if (!response.ok) {
+        // POST /api/user/clients reports Zod validation failures (e.g. an
+        // invalid domain format) as a generic 'Invalid request' with the real
+        // per-field message nested under details.fieldErrors -- surface that
+        // specific message instead of the unhelpful generic one.
+        const fieldMessage = Object.values(data?.details?.fieldErrors || {}).flat()[0] as string | undefined;
+        throw new Error(fieldMessage || data?.details?.formErrors?.[0] || data?.error?.message || data?.error || 'Unable to create client.');
+      }
       const created: Client = {
         id: data.id, name: data.name, domain: data.domain, industry: data.industry,
         trustScore: data.trustScore ?? 0, riskLevel: data.riskLevel ?? 'Unknown', avatarColor: data.avatarColor ?? 'indigo',

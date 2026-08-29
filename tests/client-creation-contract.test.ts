@@ -89,6 +89,20 @@ describe('client-scoped invitation', () => {
   });
 });
 
+describe('client-creation error messages are readable, not "[object Object]"', () => {
+  it('the global 404/error handlers return error as a plain string, matching every route\'s own JSON shape', () => {
+    const s = read('server.ts');
+    expect(s).toContain("res.status(404).json({ error: 'Route not found.', code: 'NOT_FOUND', requestId: res.locals.requestId })");
+    expect(s).toContain("error: status === 500 ? 'An unexpected server error occurred.' : err?.message || 'Request failed.', code: status === 500 ? 'INTERNAL_SERVER_ERROR' : 'REQUEST_FAILED'");
+  });
+
+  it('ClientsView surfaces the real per-field validation message instead of the generic "Invalid request"', () => {
+    const s = read('src/components/ClientsView.tsx');
+    expect(s).toContain('data?.details?.fieldErrors');
+    expect(s).toContain('data?.details?.formErrors?.[0]');
+  });
+});
+
 describe('billing is unaffected by client creation', () => {
   it('client creation never touches Stripe, tenant_subscriptions, or entitlements -- billing stays MSP/tenant-level', () => {
     const authSource = read('src/routes/auth.ts');
