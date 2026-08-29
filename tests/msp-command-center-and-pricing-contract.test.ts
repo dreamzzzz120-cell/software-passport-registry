@@ -46,10 +46,18 @@ describe('SPR MSP Command Center — software verification metrics', () => {
 describe('SPR MSP pricing — packaging separated from live billing', () => {
   const source = () => read('src/components/MspPricingView.tsx');
 
-  it('labels itself explicitly as displayed packaging, not automated billing', () => {
+  it('is honest that checkout runs through Stripe and that client-limits (not every feature) are actually enforced', () => {
     const s = source();
-    expect(s).toContain('Displayed pricing is commercial packaging, not an automated billing plan');
-    expect(s).toContain('no tier above is metered or enforced by the application yet');
+    expect(s).toContain('Actual checkout runs through Stripe inside your authenticated workspace');
+    expect(s).toContain('Client-environment limits shown\n          above are enforced by the application once a plan is active');
+  });
+
+  it('shows the real, specified prices for each tier, matching PLAN_CONFIG', () => {
+    const s = source();
+    expect(s).toContain("priceLabel: '$499/month'");
+    expect(s).toContain("priceLabel: '$1,499/month'");
+    expect(s).toContain("priceLabel: '$2,999/month'");
+    expect(s).toContain("priceLabel: '$5,000+/month (custom)'");
   });
 
   it('does not fabricate a live Stripe price or plan id', () => {

@@ -41,7 +41,7 @@ const envSchema = z.object({
   SQL_POOL_MAX: optionalPositiveIntegerString, SQL_CONNECTION_TIMEOUT_MS: optionalPositiveIntegerString, SQL_IDLE_TIMEOUT_MS: optionalPositiveIntegerString, SQL_QUERY_TIMEOUT_MS: optionalPositiveIntegerString,
   FIREBASE_PROJECT_ID: optionalTrimmedString, FIREBASE_SERVICE_ACCOUNT_KEY: optionalTrimmedString, FIREBASE_SERVICE_ACCOUNT_KEY_B64: optionalTrimmedString, GOOGLE_APPLICATION_CREDENTIALS: optionalTrimmedString,
   STRIPE_SECRET_KEY: optionalTrimmedString, STRIPE_WEBHOOK_SECRET: optionalTrimmedString,
-  STRIPE_PRICE_STARTER: optionalTrimmedString, STRIPE_PRICE_GROWTH: optionalTrimmedString, STRIPE_PRICE_ENTERPRISE: optionalTrimmedString,
+  STRIPE_PRICE_PILOT: optionalTrimmedString, STRIPE_PRICE_STARTER: optionalTrimmedString, STRIPE_PRICE_PROFESSIONAL: optionalTrimmedString, STRIPE_PRICE_GROWTH: optionalTrimmedString, STRIPE_PRICE_ENTERPRISE: optionalTrimmedString,
   GEMINI_API_KEY: optionalTrimmedString, GOOGLE_GENAI_API_KEY: optionalTrimmedString, AI_GATEWAY_API_KEY: optionalTrimmedString,
   SPR_INITIAL_OWNER_EMAIL: z.preprocess((value) => typeof value === 'string' ? (value.trim().toLowerCase() || undefined) : value, z.string().email().optional()),
   SPR_OWNER_BOOTSTRAP_SECRET: optionalTrimmedString,
@@ -93,7 +93,7 @@ export const config = {
     // exists (Products -> Prices) -- SPR never invents a dollar amount or
     // creates Stripe objects on its own; a plan whose env var is unset is
     // simply not offered for checkout yet (see routes/billing.ts).
-    prices: { starter: parsedEnv.STRIPE_PRICE_STARTER, growth: parsedEnv.STRIPE_PRICE_GROWTH, enterprise: parsedEnv.STRIPE_PRICE_ENTERPRISE },
+    prices: { pilot: parsedEnv.STRIPE_PRICE_PILOT, starter: parsedEnv.STRIPE_PRICE_STARTER, professional: parsedEnv.STRIPE_PRICE_PROFESSIONAL, growth: parsedEnv.STRIPE_PRICE_GROWTH, enterprise: parsedEnv.STRIPE_PRICE_ENTERPRISE },
   },
   gemini: { apiKey: parsedEnv.GEMINI_API_KEY ?? parsedEnv.GOOGLE_GENAI_API_KEY }, aiGateway: { apiKey: parsedEnv.AI_GATEWAY_API_KEY },
   ownerBootstrap: { initialOwnerEmail: parsedEnv.SPR_INITIAL_OWNER_EMAIL, secret: parsedEnv.SPR_OWNER_BOOTSTRAP_SECRET, secretSha256: parsedEnv.SPR_OWNER_BOOTSTRAP_SECRET_SHA256 },
@@ -134,6 +134,6 @@ export const configurationCatalog = [
   { name: 'SPR_PUBLIC_PASSPORT_SECRET', category: 'requiredProduction', requiredInProduction: true },
   { name: 'AI_GATEWAY_API_KEY', category: 'featureSpecific', requiredInProduction: false }, { name: 'SPR_OWNER_BOOTSTRAP_SECRET_SHA256', category: 'bootstrap-only', requiredInProduction: false },
   { name: 'STRIPE_SECRET_KEY', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_WEBHOOK_SECRET', category: 'featureSpecific', requiredInProduction: false },
-  { name: 'STRIPE_PRICE_STARTER', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_GROWTH', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_ENTERPRISE', category: 'featureSpecific', requiredInProduction: false },
+  { name: 'STRIPE_PRICE_PILOT', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_STARTER', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_PROFESSIONAL', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_GROWTH', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_ENTERPRISE', category: 'featureSpecific', requiredInProduction: false },
   { name: 'GEMINI_API_KEY', category: 'featureSpecific', requiredInProduction: false }, { name: 'SENTRY_DSN', category: 'optional', requiredInProduction: false },
 ] as const;

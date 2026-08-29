@@ -7,16 +7,17 @@ import React, { useEffect, useState } from 'react';
 import { CreditCard, ShieldCheck, ExternalLink, Loader2, AlertTriangle } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
 
-type PlanId = 'starter' | 'growth' | 'enterprise';
+type PlanId = 'pilot' | 'starter' | 'professional' | 'growth' | 'enterprise';
+type PlanMeta = { id: PlanId; label: string; priceLabel: string; clientLimit: number | null; checkoutAvailable: boolean };
 type BillingStatus = {
   billingConfigured: boolean;
+  plans: PlanMeta[];
   availablePlans: PlanId[];
   subscription: { plan: PlanId | null; status: string; clientLimit: number | null; currentPeriodEnd: string | null } | null;
   clientCount: number;
 };
 
-const PLAN_LABELS: Record<PlanId, string> = { starter: 'Starter', growth: 'Growth', enterprise: 'Enterprise' };
-const PLAN_LIMIT_LABELS: Record<PlanId, string> = { starter: 'Up to 5 clients', growth: 'Up to 25 clients', enterprise: 'Unlimited clients' };
+const limitLabel = (limit: number | null) => limit === null ? 'Unlimited clients' : `Up to ${limit} client${limit === 1 ? '' : 's'}`;
 
 export default function BillingView() {
   const [status, setStatus] = useState<BillingStatus | null>(null);
@@ -103,7 +104,7 @@ export default function BillingView() {
               <div>
                 <p className="text-[10px] font-mono uppercase text-[#9d9d9d]">Current plan</p>
                 <p className="text-lg font-bold text-[#d4d4d4] flex items-center gap-2">
-                  {PLAN_LABELS[status.subscription.plan]}
+                  {status.plans.find((p) => p.id === status.subscription!.plan)?.label ?? status.subscription.plan}
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${status.subscription.status === 'active' ? 'bg-[#89d185]/15 text-[#89d185]' : status.subscription.status === 'past_due' ? 'bg-[#f14c4c]/15 text-[#f14c4c]' : 'bg-[#cca700]/15 text-[#cca700]'}`}>
                     {status.subscription.status}
                   </span>
@@ -120,25 +121,25 @@ export default function BillingView() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {(['starter', 'growth', 'enterprise'] as PlanId[]).map((plan) => {
-              const isCurrent = status.subscription?.plan === plan && status.subscription.status !== 'canceled';
-              const available = status.availablePlans.includes(plan);
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            {status.plans.map((planMeta) => {
+              const isCurrent = status.subscription?.plan === planMeta.id && status.subscription.status !== 'canceled';
               return (
-                <div key={plan} className={`rounded-xl border p-5 space-y-3 ${isCurrent ? 'border-[#3794ff] bg-[#0e639c]/10' : 'border-[#3c3c3c] bg-[#1e1e1e]'}`}>
-                  <h3 className="text-sm font-bold text-[#d4d4d4]">{PLAN_LABELS[plan]}</h3>
-                  <p className="text-xs text-[#9d9d9d]">{PLAN_LIMIT_LABELS[plan]}</p>
+                <div key={planMeta.id} className={`rounded-xl border p-5 space-y-3 ${isCurrent ? 'border-[#3794ff] bg-[#0e639c]/10' : 'border-[#3c3c3c] bg-[#1e1e1e]'}`}>
+                  <h3 className="text-sm font-bold text-[#d4d4d4]">{planMeta.label}</h3>
+                  <p className="text-xs text-[#3794ff] font-semibold">{planMeta.priceLabel}</p>
+                  <p className="text-xs text-[#9d9d9d]">{limitLabel(planMeta.clientLimit)}</p>
                   {isCurrent ? (
                     <div className="flex items-center gap-1.5 text-xs font-bold text-[#89d185]"><ShieldCheck className="w-4 h-4" /> Current plan</div>
                   ) : (
                     <button
-                      onClick={() => handleSubscribe(plan)}
-                      disabled={!available || busyPlan !== null}
-                      title={!available ? 'This plan has no Stripe price configured yet.' : undefined}
+                      onClick={() => handleSubscribe(planMeta.id)}
+                      disabled={!planMeta.checkoutAvailable || busyPlan !== null}
+                      title={!planMeta.checkoutAvailable ? 'This plan has no Stripe price configured yet -- contact us to subscribe.' : undefined}
                       className="w-full inline-flex items-center justify-center gap-1.5 bg-[#0e639c] hover:bg-[#1177bb] disabled:opacity-40 text-white font-bold py-2 rounded-lg text-xs transition cursor-pointer"
                     >
-                      {busyPlan === plan ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                      {available ? 'Subscribe' : 'Not yet available'}
+                      {busyPlan === planMeta.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                      {planMeta.checkoutAvailable ? 'Subscribe' : 'Contact us'}
                     </button>
                   )}
                 </div>

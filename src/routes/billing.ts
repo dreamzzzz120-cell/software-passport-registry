@@ -10,17 +10,46 @@ import { z } from 'zod';
 import { AuthenticatedRequest, requireAuth, requireRole } from '../middleware/security.ts';
 import { config } from '../config.ts';
 import { db } from '../db/index.ts';
+import { appendAuditEntry } from '../security/audit-log.ts';
 
-// Flat monthly tiers matching the packaging already shown on MspPricingView.
-// SPR never invents a dollar amount or creates Stripe Products/Prices on its
-// own -- each plan is only checkout-able once its real Price ID (created in
-// the Stripe Dashboard) is set as the matching env var.
-export const PLAN_CLIENT_LIMITS: Record<string, number | null> = { starter: 5, growth: 25, enterprise: null };
-type PlanId = keyof typeof PLAN_CLIENT_LIMITS;
-const PLAN_IDS = Object.keys(PLAN_CLIENT_LIMITS) as PlanId[];
+// The centralized, configuration-driven plan model. SPR never invents a
+// dollar amount or creates Stripe Products/Prices on its own -- each plan
+// is only checkout-able once its real Price ID (created in the Stripe
+// Dashboard) is set as the matching env var (config.stripe.prices). Limits
+// here are the single source of truth for entitlement enforcement -- no
+// component should hard-code a plan's limit separately from this table.
+export const PLAN_CONFIG = {
+  pilot: { label: 'Pilot', priceLabel: 'Negotiated ($0–$500 one-time)', clientLimit: 2 },
+  starter: { label: 'Starter', priceLabel: '$499/month', clientLimit: 10 },
+  professional: { label: 'Professional', priceLabel: '$1,499/month', clientLimit: 50 },
+  growth: { label: 'Growth', priceLabel: '$2,999/month', clientLimit: 150 },
+  enterprise: { label: 'Enterprise', priceLabel: '$5,000+/month (custom)', clientLimit: null as number | null },
+} as const;
+export type PlanId = keyof typeof PLAN_CONFIG;
+const PLAN_IDS = Object.keys(PLAN_CONFIG) as PlanId[];
+// Flat lookup derived from PLAN_CONFIG (never maintained separately) for the
+// call sites below that only need a plan's client limit.
+export const PLAN_CLIENT_LIMITS: Record<PlanId, number | null> = Object.fromEntries(
+  PLAN_IDS.map((id) => [id, PLAN_CONFIG[id].clientLimit]),
+) as Record<PlanId, number | null>;
 
 function planPriceId(plan: PlanId): string | undefined {
   return config.stripe.prices[plan];
+}
+
+/**
+ * Centralized entitlement read: a tenant with no subscription row, or a
+ * plan with a null limit (Enterprise), is unrestricted. A tenant with a
+ * real recorded plan is limited exactly to that plan's configured value.
+ * See docs/billing-paywall-inventory.md for why an absent subscription
+ * means "unrestricted" rather than "no plan" -- retroactively restricting
+ * every tenant that predates this system (including the real production
+ * tenant) would silently break existing access no one ever agreed to lose.
+ */
+export async function getPlanLimits(tenantId: string, scopedDb: { execute: (query: any) => Promise<any> }): Promise<{ plan: PlanId | null; clientLimit: number | null }> {
+  const subResult = await scopedDb.execute(sql`SELECT plan, client_limit AS "clientLimit" FROM tenant_subscriptions WHERE tenant_id = ${tenantId} LIMIT 1`);
+  const row = (subResult as any).rows?.[0];
+  return { plan: row?.plan ?? null, clientLimit: row?.clientLimit ?? null };
 }
 
 function stripeClient(): Stripe {
@@ -44,6 +73,7 @@ export function createBillingRouter() {
       const clientCountResult = await scopedDb.execute(sql`SELECT count(*)::int AS count FROM clients WHERE tenant_id = ${tenantId}`);
       return res.json({
         billingConfigured: Boolean(config.stripe.secretKey),
+        plans: PLAN_IDS.map((id) => ({ id, ...PLAN_CONFIG[id], checkoutAvailable: Boolean(planPriceId(id)) })),
         availablePlans: PLAN_IDS.filter((plan) => Boolean(planPriceId(plan))),
         subscription: (subResult as any).rows?.[0] ?? null,
         clientCount: (clientCountResult as any).rows?.[0]?.count ?? 0,
@@ -83,6 +113,7 @@ export function createBillingRouter() {
         metadata: { tenantId, plan: parsed.data.plan },
       });
       if (!session.url) throw new Error('STRIPE_CHECKOUT_SESSION_MISSING_URL');
+      await appendAuditEntry(scopedDb, { tenantId, action: 'billing.checkout.initiated', actor: req.user!.uid, payload: { plan: parsed.data.plan, checkoutSessionId: session.id } });
       return res.json({ url: session.url });
     } catch (error) { return next(error); }
   });
@@ -144,6 +175,7 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
                 status = 'active', client_limit = COALESCE(${clientLimit}, client_limit), updated_at = CURRENT_TIMESTAMP
             WHERE tenant_id = ${tenantId}
           `);
+          await appendAuditEntry(db, { tenantId, action: 'billing.subscription.activated', actor: 'stripe-webhook', payload: { plan: plan ?? null, stripeEventId: event.id, stripeSubscriptionId: String(session.subscription) } });
         }
         break;
       }
@@ -153,16 +185,16 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
         const currentPeriodEndSeconds = subscription.items.data[0]?.current_period_end;
         const periodEnd = currentPeriodEndSeconds ? new Date(currentPeriodEndSeconds * 1000).toISOString() : null;
         const tenantId = subscription.metadata?.tenantId;
-        if (tenantId) {
-          await db.execute(sql`UPDATE tenant_subscriptions SET status = ${subscription.status}, current_period_end = ${periodEnd}, updated_at = CURRENT_TIMESTAMP WHERE tenant_id = ${tenantId}`);
-        } else {
-          await db.execute(sql`UPDATE tenant_subscriptions SET status = ${subscription.status}, current_period_end = ${periodEnd}, updated_at = CURRENT_TIMESTAMP WHERE stripe_subscription_id = ${subscription.id}`);
-        }
+        const updated = tenantId
+          ? (await db.execute(sql`UPDATE tenant_subscriptions SET status = ${subscription.status}, current_period_end = ${periodEnd}, updated_at = CURRENT_TIMESTAMP WHERE tenant_id = ${tenantId} RETURNING tenant_id`) as any).rows?.[0]
+          : (await db.execute(sql`UPDATE tenant_subscriptions SET status = ${subscription.status}, current_period_end = ${periodEnd}, updated_at = CURRENT_TIMESTAMP WHERE stripe_subscription_id = ${subscription.id} RETURNING tenant_id`) as any).rows?.[0];
+        if (updated?.tenant_id) await appendAuditEntry(db, { tenantId: updated.tenant_id, action: 'billing.subscription.status_changed', actor: 'stripe-webhook', payload: { status: subscription.status, stripeEventId: event.id } });
         break;
       }
       case 'customer.subscription.deleted': {
         const subscription = event.data.object as Stripe.Subscription;
-        await db.execute(sql`UPDATE tenant_subscriptions SET status = 'canceled', updated_at = CURRENT_TIMESTAMP WHERE stripe_subscription_id = ${subscription.id}`);
+        const canceled = (await db.execute(sql`UPDATE tenant_subscriptions SET status = 'canceled', updated_at = CURRENT_TIMESTAMP WHERE stripe_subscription_id = ${subscription.id} RETURNING tenant_id`) as any).rows?.[0];
+        if (canceled?.tenant_id) await appendAuditEntry(db, { tenantId: canceled.tenant_id, action: 'billing.subscription.canceled', actor: 'stripe-webhook', payload: { stripeEventId: event.id } });
         break;
       }
       case 'invoice.payment_failed': {
@@ -170,7 +202,8 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
         const invoiceSubscription = invoice.parent?.subscription_details?.subscription;
         if (invoiceSubscription) {
           const subscriptionId = typeof invoiceSubscription === 'string' ? invoiceSubscription : invoiceSubscription.id;
-          await db.execute(sql`UPDATE tenant_subscriptions SET status = 'past_due', updated_at = CURRENT_TIMESTAMP WHERE stripe_subscription_id = ${subscriptionId}`);
+          const pastDue = (await db.execute(sql`UPDATE tenant_subscriptions SET status = 'past_due', updated_at = CURRENT_TIMESTAMP WHERE stripe_subscription_id = ${subscriptionId} RETURNING tenant_id`) as any).rows?.[0];
+          if (pastDue?.tenant_id) await appendAuditEntry(db, { tenantId: pastDue.tenant_id, action: 'billing.payment.failed', actor: 'stripe-webhook', payload: { stripeEventId: event.id } });
         }
         break;
       }
@@ -184,15 +217,22 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
   }
 }
 
-// Reusable entitlement check for any future mutation that should respect a
-// tenant's plan limit (e.g. client creation, once that route exists --
-// there is currently no backend route that creates a client at all, so
-// nothing calls this yet; it exists so that route can gate on it from day
-// one instead of shipping without enforcement).
-export async function checkClientLimit(tenantId: string, scopedDb: { execute: (query: any) => Promise<any> }): Promise<{ withinLimit: boolean; clientLimit: number | null; clientCount: number }> {
-  const subResult = await scopedDb.execute(sql`SELECT client_limit AS "clientLimit" FROM tenant_subscriptions WHERE tenant_id = ${tenantId} LIMIT 1`);
-  const clientLimit = (subResult as any).rows?.[0]?.clientLimit ?? null;
+// Centralized entitlement check wired into POST /api/user/clients. The read
+// here (SELECT count, SELECT limit) is advisory/informational only, so the
+// caller can return a clear, structured "limit reached" response before
+// attempting the write -- the actual, concurrency-safe enforcement is the
+// `spr_client_limit_guard` trigger (migration 0043), which re-checks the
+// same limit inside the same transaction as the INSERT under a per-tenant
+// advisory lock. This function existing does not replace that trigger; a
+// caller that skipped this check would still be blocked by the database.
+export async function canCreateClient(tenantId: string, scopedDb: { execute: (query: any) => Promise<any> }): Promise<{
+  allowed: boolean; plan: PlanId | null; clientLimit: number | null; clientCount: number; nextPlan: PlanId | null;
+}> {
+  const { plan, clientLimit } = await getPlanLimits(tenantId, scopedDb);
   const countResult = await scopedDb.execute(sql`SELECT count(*)::int AS count FROM clients WHERE tenant_id = ${tenantId}`);
   const clientCount = (countResult as any).rows?.[0]?.count ?? 0;
-  return { withinLimit: clientLimit === null || clientCount < clientLimit, clientLimit, clientCount };
+  const allowed = clientLimit === null || clientCount < clientLimit;
+  const currentIndex = plan ? PLAN_IDS.indexOf(plan) : -1;
+  const nextPlan = currentIndex >= 0 && currentIndex < PLAN_IDS.length - 1 ? PLAN_IDS[currentIndex + 1] : null;
+  return { allowed, plan, clientLimit, clientCount, nextPlan };
 }

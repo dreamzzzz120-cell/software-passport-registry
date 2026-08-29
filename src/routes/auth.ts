@@ -13,6 +13,7 @@ import { adminAuth, setUserCustomClaims } from '../lib/firebase-admin.ts';
 import { appendAuditEntry, verifyAuditChain } from '../security/audit-log.ts';
 import { describeUserAgent, sessionFingerprint } from '../security/session-tracking.ts';
 import { offboardTenantData } from '../db/sync.ts';
+import { canCreateClient, PLAN_CONFIG } from './billing.ts';
 
 const INVITABLE_ROLES = ['Admin', 'Technician', 'Viewer', 'Client'] as const;
 // A 'Client'-role invite must name the one client it scopes to; every other
@@ -457,6 +458,26 @@ export function createAuthRouter() {
       const parsed = createClientSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
       const tenantId = req.user!.tenantId;
+
+      // Entitlement check: informational/fast-fail only. The real,
+      // concurrency-safe enforcement is the spr_client_limit_guard DB
+      // trigger (migration 0043) on the INSERT below -- this check exists
+      // so a normal single request gets the full, honest "what/limit/
+      // usage/upgrade" response the spec requires instead of a bare 500
+      // from the trigger, not to replace the trigger.
+      const entitlement = await canCreateClient(tenantId, db);
+      if (!entitlement.allowed) {
+        await appendAuditEntry(db, { tenantId, action: 'billing.limit.reached', actor: req.user!.email, payload: { capability: 'client_creation', plan: entitlement.plan, clientLimit: entitlement.clientLimit, clientCount: entitlement.clientCount } });
+        return res.status(402).json({
+          error: 'CLIENT_LIMIT_REACHED',
+          message: `You've reached your ${entitlement.plan ? PLAN_CONFIG[entitlement.plan].label : 'current'} plan's Client limit.`,
+          currentUsage: entitlement.clientCount,
+          limit: entitlement.clientLimit,
+          plan: entitlement.plan,
+          upgradeTo: entitlement.nextPlan ? { id: entitlement.nextPlan, ...PLAN_CONFIG[entitlement.nextPlan] } : null,
+        });
+      }
+
       const newId = `client_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
       let inserted;
       try {
@@ -473,6 +494,13 @@ export function createAuthRouter() {
         // error.cause.code, not error.code -- this check never matched
         // (confirmed live: a duplicate domain 500'd instead of 409ing).
         if (error?.code === '23505' || error?.cause?.code === '23505') return res.status(409).json({ error: 'A client with this domain already exists in your workspace.' });
+        // The spr_client_limit_guard trigger (migration 0043) raises this
+        // exact message when a race lets two concurrent requests both pass
+        // the check above -- the second one is correctly rejected here,
+        // not silently allowed past its plan's real limit.
+        if (error?.message?.includes('CLIENT_LIMIT_REACHED') || error?.cause?.message?.includes('CLIENT_LIMIT_REACHED')) {
+          return res.status(402).json({ error: 'CLIENT_LIMIT_REACHED', message: 'Your plan\'s Client limit was reached by a concurrent request.' });
+        }
         throw error;
       }
       const row = (inserted as any).rows?.[0];
