@@ -30,7 +30,10 @@ export function createWorkerPool(): Pool {
     allowExitOnIdle: false,
   } as const;
 
-  const connectionString = process.env.DATABASE_URL?.trim();
+  // Prefers the least-privileged spr_worker_runtime role (migration 0020) when
+  // an operator has provisioned WORKER_DATABASE_URL; otherwise falls back to
+  // the owner connection, matching appPool's fallback in src/db/index.ts.
+  const connectionString = (process.env.WORKER_DATABASE_URL || process.env.DATABASE_URL)?.trim();
   const pool = connectionString
     ? new Pool({ connectionString, ...base })
     : new Pool({ host: process.env.SQL_HOST, user: process.env.SQL_USER, password: process.env.SQL_PASSWORD, database: process.env.SQL_DB_NAME, ...base });
