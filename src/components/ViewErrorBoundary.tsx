@@ -19,36 +19,27 @@ interface State { error: Error | null }
  *
  * Resetting when routeKey changes means navigating elsewhere clears the
  * error instead of trapping the user on the failed view.
- *
- * Note on the `self` casts: this project has no @types/react installed, so
- * `react` resolves to untyped JavaScript and TypeScript cannot see the
- * inherited `props`/`setState` members of Component. The casts are confined
- * to this one accessor rather than sprinkled through the class.
  */
 export default class ViewErrorBoundary extends Component<Props, State> {
   state: State = { error: null };
-
-  private get self() {
-    return this as unknown as { props: Props; setState(next: State): void };
-  }
 
   static getDerivedStateFromError(error: Error): State {
     return { error };
   }
 
   componentDidUpdate(previous: Props) {
-    if (previous.routeKey !== this.self.props.routeKey && this.state.error) {
-      this.self.setState({ error: null });
+    if (previous.routeKey !== this.props.routeKey && this.state.error) {
+      this.setState({ error: null });
     }
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('[SPR view]', this.self.props.routeKey, error, info?.componentStack);
+    console.error('[SPR view]', this.props.routeKey, error, info?.componentStack);
   }
 
   render() {
     const { error } = this.state;
-    if (!error) return this.self.props.children;
+    if (!error) return this.props.children;
     return (
       <section className="rounded-md border border-[#f14c4c]/40 bg-[#252526] p-6 md:p-8" role="alert">
         <div className="text-[10px] font-semibold uppercase tracking-[.15em] text-[#f14c4c]">View error</div>
