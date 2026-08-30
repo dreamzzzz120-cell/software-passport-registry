@@ -4,6 +4,7 @@ import type { Alert, Client, Integration, Scan, SoftwarePassport, Vendor } from 
 import { apiFetch } from './utils/apiClient';
 import { auth } from './lib/firebase';
 import { setAuthNotice } from './lib/authNotice';
+import { isSignupTransitionActive } from './lib/signupTransition';
 import CommandCenter from './components/CommandCenter';
 import ExtensionWorkflow from './components/ExtensionWorkflow';
 import ExtensionMarketplace from './components/ExtensionMarketplace';
@@ -116,11 +117,20 @@ export default function App() {
     const timeoutId = window.setTimeout(() => {
       if (mounted) setAuthReady(true);
     }, 10_000);
+    // Firebase auto-signs-in a newly created account before SPR has
+    // provisioned or verified it. That transient session must not be
+    // treated as a completed SPR login, or it unmounts LoginView mid-signup
+    // and triggers an authenticated data load that correctly 403s - which
+    // is what made a successful signup render as a provisioning failure.
+    const applyUser = (candidate: User | null) => {
+      if (candidate && isSignupTransitionActive()) return;
+      setUser(candidate);
+    };
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (!mounted) return;
       observedUser = currentUser;
       if (!redirectSettled) return;
-      setUser(currentUser);
+      applyUser(currentUser);
       setAuthReady(true);
       window.clearTimeout(timeoutId);
     }, () => {
@@ -131,13 +141,13 @@ export default function App() {
     });
     void getRedirectResult(auth).then((result) => {
       redirectSettled = true;
-      if (mounted) setUser(result?.user || observedUser);
+      if (mounted) applyUser(result?.user || observedUser);
       if (mounted) setAuthReady(true);
       window.clearTimeout(timeoutId);
     }).catch((error) => {
       redirectSettled = true;
       console.error('[Firebase redirect sign-in error]', error);
-      if (mounted) setUser(observedUser);
+      if (mounted) applyUser(observedUser);
       if (mounted) setAuthReady(true);
       window.clearTimeout(timeoutId);
     });

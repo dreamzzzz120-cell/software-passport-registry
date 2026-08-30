@@ -5,6 +5,7 @@
 
 import { auth } from '../lib/firebase';
 import { setAuthNotice } from '../lib/authNotice';
+import { isSignupTransitionActive } from '../lib/signupTransition';
 
 interface FetchOptions extends RequestInit {
   timeout?: number;
@@ -56,10 +57,16 @@ export const apiFetch = async (
       if (response.status === 401) {
         window.dispatchEvent(new CustomEvent('auth-expired'));
       }
-      if (response.status === 403 && resolvedUrl.pathname === '/api/user/me') {
+      if (response.status === 403 && resolvedUrl.pathname === '/api/user/me' && !isSignupTransitionActive()) {
         // A valid Firebase identity without a persisted SPR user record is
         // authenticated but not authorized for the workspace. Do not render
         // a partially initialized dashboard or silently fall back to Viewer.
+        //
+        // Suppressed only during the signup transition, where a 403 here is
+        // the expected state of an account that was created seconds ago and
+        // is not provisioned yet - reporting it would replace the signup
+        // success message with a misleading failure. Every other 403 still
+        // surfaces normally, and the server's decision is unchanged.
         setAuthNotice('Your Firebase account is valid, but SPR has not provisioned this account in its workspace yet.');
         window.dispatchEvent(new CustomEvent('auth-provisioning-failed'));
         await auth.signOut().catch(() => undefined);

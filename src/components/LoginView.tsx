@@ -14,6 +14,7 @@ import {
 import { AlertCircle, ArrowRight, CheckCircle2, Eye, EyeOff, Loader, ShieldCheck } from 'lucide-react';
 import { auth, googleAuthProvider, firebaseConfigured } from '../lib/firebase';
 import { consumeAuthNotice } from '../lib/authNotice';
+import { beginSignupTransition, endSignupTransition } from '../lib/signupTransition';
 
 interface LoginViewProps {
   onLoginSuccess: (user: { uid: string; email: string | null; displayName: string; token: string; emailVerified: boolean; onboarded: 0 }) => void;
@@ -101,9 +102,20 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
     if (loading || googleLoading) return;
     if (!auth || !firebaseConfigured) { setError('Firebase browser configuration is missing. Add the VITE_FIREBASE_* Production variables in Vercel and redeploy.'); return; }
     setLoading(true); setError(''); setNotice('');
-    try { const result = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), password); await sendEmailVerification(result.user); await signOut(auth); setNotice('Account created. Check your email, verify it, then sign in.'); }
+    // Must be marked BEFORE the account is created: Firebase signs the new
+    // user in as soon as createUserWithEmailAndPassword resolves, and App's
+    // auth listener would otherwise treat that as a real SPR login, unmount
+    // this component, and start an authenticated load that 403s. See
+    // src/lib/signupTransition.ts.
+    beginSignupTransition();
+    try {
+      const result = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
+      await sendEmailVerification(result.user);
+      await signOut(auth);
+      setNotice('Account created. Check your email, verify it, then sign in.');
+    }
     catch (err: any) { setError(authMessage(err, 'Account creation failed.')); }
-    finally { setLoading(false); }
+    finally { endSignupTransition(); setLoading(false); }
   };
 
   const google = async () => {

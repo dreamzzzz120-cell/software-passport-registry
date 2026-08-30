@@ -63,7 +63,7 @@ describe('the notice is actually wired into both failure paths', () => {
     const source = read('src/utils/apiClient.ts');
     const branchStart = source.indexOf("resolvedUrl.pathname === '/api/user/me'");
     expect(branchStart).toBeGreaterThan(-1);
-    const branch = source.slice(branchStart, branchStart + 700);
+    const branch = source.slice(branchStart, branchStart + 1400);
     expect(branch).toContain('setAuthNotice(');
     expect(branch.indexOf('setAuthNotice(')).toBeLessThan(branch.indexOf('auth.signOut('));
   });
