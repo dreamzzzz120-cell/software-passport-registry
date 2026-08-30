@@ -6,7 +6,7 @@
 import { GREEN, AMBER, RED } from '../../workflows/featureColors';
 import type { TrustState } from './TrustStateBadge';
 
-const NEUTRAL = '#6f6f6f';
+const NEUTRAL = 'var(--spr-text-faint)';
 
 const STATE_COLOR: Record<TrustState, string> = {
   VERIFIED: GREEN,
@@ -56,33 +56,33 @@ export default function TrustNetworkMap({ clients, clientsOmitted, onSelectClien
   return (
     <div>
       <div className="flex flex-col items-center">
-        <div className="rounded-md border border-[#3794ff]/50 bg-[#094771]/20 px-4 py-2 text-xs font-bold uppercase tracking-[.14em] text-[#3794ff]">MSP</div>
-        <div className="h-6 w-px bg-[#3c3c3c]" />
+        <div className="rounded-md border border-[var(--spr-highlight)]/50 bg-[var(--spr-accent-soft)]/20 px-4 py-2 text-xs font-bold uppercase tracking-[.14em] text-[var(--spr-highlight)]">MSP</div>
+        <div className="h-6 w-px bg-[var(--spr-border)]" />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {clients.map((client) => (
-          <div key={client.id} className="flex flex-col rounded-md border border-[#3c3c3c] bg-[#1e1e1e]">
+          <div key={client.id} className="flex flex-col rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)]">
             <button
               onClick={() => onSelectClient(client.id)}
-              className="flex items-center justify-between gap-2 border-b border-[#3c3c3c] bg-[#252526] px-4 py-3 text-left transition hover:bg-[#2d2d2d]"
+              className="flex items-center justify-between gap-2 border-b border-[var(--spr-border)] bg-[var(--spr-surface-alt)] px-4 py-3 text-left transition hover:bg-[var(--spr-surface-sunken)]"
               aria-label={`Open ${client.name}`}
             >
-              <span className="truncate text-sm font-semibold text-[#d4d4d4]">{client.name}</span>
-              <span className="shrink-0 text-[10px] uppercase tracking-wide text-[#6f6f6f]">Client</span>
+              <span className="truncate text-sm font-semibold text-[var(--spr-text)]">{client.name}</span>
+              <span className="shrink-0 text-[10px] uppercase tracking-wide text-[var(--spr-text-faint)]">Client</span>
             </button>
             <div className="flex-1 space-y-1.5 p-3">
               {client.software.length === 0 && (
-                <p className="px-1 py-2 text-xs text-[#6f6f6f]">No software registered for this client yet.</p>
+                <p className="px-1 py-2 text-xs text-[var(--spr-text-faint)]">No software registered for this client yet.</p>
               )}
               {client.software.slice(0, MAX_SOFTWARE_PER_CLIENT).map((software) => (
                 <button
                   key={software.passportId}
                   onClick={() => onSelectSoftware(software.passportId)}
-                  className="flex w-full items-center justify-between gap-2 rounded-md border border-[#3c3c3c] bg-[#252526] px-2.5 py-1.5 text-left transition hover:border-[#6f6f6f] hover:bg-[#2d2d2d]"
+                  className="flex w-full items-center justify-between gap-2 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] px-2.5 py-1.5 text-left transition hover:border-[var(--spr-text-faint)] hover:bg-[var(--spr-surface-sunken)]"
                   aria-label={`Open ${software.name}, trust state ${STATE_LABEL[software.state]}`}
                 >
-                  <span className="truncate text-xs text-[#d4d4d4]">{software.name}</span>
+                  <span className="truncate text-xs text-[var(--spr-text)]">{software.name}</span>
                   <span className="flex shrink-0 items-center gap-1.5 text-[10px] font-semibold" style={{ color: STATE_COLOR[software.state] }}>
                     <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: STATE_COLOR[software.state] }} aria-hidden="true" />
                     {STATE_LABEL[software.state]}
@@ -90,7 +90,7 @@ export default function TrustNetworkMap({ clients, clientsOmitted, onSelectClien
                 </button>
               ))}
               {client.software.length > MAX_SOFTWARE_PER_CLIENT && (
-                <p className="px-1 pt-1 text-[10px] text-[#6f6f6f]">+{client.software.length - MAX_SOFTWARE_PER_CLIENT} more software asset{client.software.length - MAX_SOFTWARE_PER_CLIENT === 1 ? '' : 's'}</p>
+                <p className="px-1 pt-1 text-[10px] text-[var(--spr-text-faint)]">+{client.software.length - MAX_SOFTWARE_PER_CLIENT} more software asset{client.software.length - MAX_SOFTWARE_PER_CLIENT === 1 ? '' : 's'}</p>
               )}
             </div>
           </div>
@@ -98,7 +98,7 @@ export default function TrustNetworkMap({ clients, clientsOmitted, onSelectClien
       </div>
 
       {clientsOmitted > 0 && (
-        <p className="mt-4 text-center text-xs text-[#6f6f6f]">+{clientsOmitted} more client{clientsOmitted === 1 ? '' : 's'} not shown here — use Switch Client or View All Clients.</p>
+        <p className="mt-4 text-center text-xs text-[var(--spr-text-faint)]">+{clientsOmitted} more client{clientsOmitted === 1 ? '' : 's'} not shown here — use Switch Client or View All Clients.</p>
       )}
     </div>
   );

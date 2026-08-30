@@ -33,39 +33,39 @@ type DashboardWebhook = { id: string; url: string; events: string; active: boole
 const getIntegrationIcon = (iconName: string) => {
   switch (iconName?.toLowerCase()) {
     case 'slack': return <Slack className="w-5 h-5 text-pink-500" />;
-    case 'github': case 'git': return <Github className="w-5 h-5 text-[#d4d4d4]" />;
-    case 'monitor': return <Monitor className="w-5 h-5 text-[#3794ff]" />;
-    case 'briefcase': return <Briefcase className="w-5 h-5 text-[#3794ff]" />;
+    case 'github': case 'git': return <Github className="w-5 h-5 text-[var(--spr-text)]" />;
+    case 'monitor': return <Monitor className="w-5 h-5 text-[var(--spr-highlight)]" />;
+    case 'briefcase': return <Briefcase className="w-5 h-5 text-[var(--spr-highlight)]" />;
     case 'file-text': return <FileText className="w-5 h-5 text-[#4ec9b0]" />;
-    case 'key': return <Key className="w-5 h-5 text-[#f14c4c]" />;
+    case 'key': return <Key className="w-5 h-5 text-[var(--spr-red)]" />;
     case 'shield-check': return <ShieldCheck className="w-5 h-5 text-red-500" />;
-    case 'ticket': return <Ticket className="w-5 h-5 text-[#3794ff]" />;
+    case 'ticket': return <Ticket className="w-5 h-5 text-[var(--spr-highlight)]" />;
     case 'book-open': return <BookOpen className="w-5 h-5 text-[#4ec9b0]" />;
-    case 'cloud-lightning': return <CloudLightning className="w-5 h-5 text-[#cca700]" />;
-    default: return <Plug className="w-5 h-5 text-[#3794ff]" />;
+    case 'cloud-lightning': return <CloudLightning className="w-5 h-5 text-[var(--spr-amber)]" />;
+    default: return <Plug className="w-5 h-5 text-[var(--spr-highlight)]" />;
   }
 };
 
 const getCategoryStyles = (category: string) => {
   switch (category?.toUpperCase()) {
-    case 'RMM': return 'bg-[#094771] text-[#3794ff] border-[#0e639c]/40';
-    case 'PSA': return 'bg-[#094771] text-[#3794ff] border-[#0e639c]/40';
-    case 'DOCUMENTATION': return 'bg-[#2d2d2d] text-[#9d9d9d] border-[#3c3c3c]';
-    case 'SIEM': return 'bg-[#3a1f1f] text-[#f14c4c] border-[#f14c4c]/30';
-    case 'DEVOPS': return 'bg-[#2d2d2d] text-[#9d9d9d] border-[#3c3c3c]';
-    case 'CHAT': return 'bg-[#2d2d2d] text-[#9d9d9d] border-[#3c3c3c]';
-    case 'ISSUE TRACKER': return 'bg-[#3a2f05] text-[#cca700] border-[#cca700]/30';
-    case 'WORKSPACE': return 'bg-[#094771] text-[#3794ff] border-[#0e639c]/40';
-    case 'CLOUD': return 'bg-[#094771] text-[#3794ff] border-[#0e639c]/40';
-    default: return 'bg-[#2d2d2d] text-[#9d9d9d] border-[#3c3c3c]';
+    case 'RMM': return 'bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] border-[var(--spr-accent)]/40';
+    case 'PSA': return 'bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] border-[var(--spr-accent)]/40';
+    case 'DOCUMENTATION': return 'bg-[var(--spr-surface-sunken)] text-[var(--spr-text-muted)] border-[var(--spr-border)]';
+    case 'SIEM': return 'bg-[#3a1f1f] text-[var(--spr-red)] border-[var(--spr-red)]/30';
+    case 'DEVOPS': return 'bg-[var(--spr-surface-sunken)] text-[var(--spr-text-muted)] border-[var(--spr-border)]';
+    case 'CHAT': return 'bg-[var(--spr-surface-sunken)] text-[var(--spr-text-muted)] border-[var(--spr-border)]';
+    case 'ISSUE TRACKER': return 'bg-[#3a2f05] text-[var(--spr-amber)] border-[var(--spr-amber)]/30';
+    case 'WORKSPACE': return 'bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] border-[var(--spr-accent)]/40';
+    case 'CLOUD': return 'bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] border-[var(--spr-accent)]/40';
+    default: return 'bg-[var(--spr-surface-sunken)] text-[var(--spr-text-muted)] border-[var(--spr-border)]';
   }
 };
 
 const STATUS_STYLES: Record<LiveCatalogItem['credentialStatus'], string> = {
-  NOT_CONFIGURED: 'bg-[#2d2d2d] border-[#3c3c3c] text-[#9d9d9d]',
-  CONFIGURED: 'bg-[#3a2f05] border-[#cca700]/30 text-[#cca700]',
-  LIVE: 'bg-[#0e3b2a] border-[#89d185]/30 text-[#89d185]',
-  ERROR: 'bg-[#3a1f1f] border-[#f14c4c]/30 text-[#f14c4c]',
+  NOT_CONFIGURED: 'bg-[var(--spr-surface-sunken)] border-[var(--spr-border)] text-[var(--spr-text-muted)]',
+  CONFIGURED: 'bg-[#3a2f05] border-[var(--spr-amber)]/30 text-[var(--spr-amber)]',
+  LIVE: 'bg-[#0e3b2a] border-[var(--spr-green)]/30 text-[var(--spr-green)]',
+  ERROR: 'bg-[#3a1f1f] border-[var(--spr-red)]/30 text-[var(--spr-red)]',
 };
 const STATUS_LABEL: Record<LiveCatalogItem['credentialStatus'], string> = {
   NOT_CONFIGURED: 'Not connected', CONFIGURED: 'Saved, untested', LIVE: 'Live', ERROR: 'Last test failed',
@@ -321,15 +321,15 @@ export default function IntegrationsView({ passports = [], clients = [], onNavig
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.22em] text-[#4ec9b0]"><Plug className="h-4 w-4" /> Connected evidence</div>
-          <h1 className="mt-1 text-xl font-display font-bold text-[#d4d4d4]">Integrations</h1>
-          <p className="text-xs text-[#9d9d9d] font-sans mt-1">Every connector below makes a real authenticated request and writes hashed evidence to the trust graph — nothing here is a UI-only toggle.</p>
+          <h1 className="mt-1 text-xl font-display font-bold text-[var(--spr-text)]">Integrations</h1>
+          <p className="text-xs text-[var(--spr-text-muted)] font-sans mt-1">Every connector below makes a real authenticated request and writes hashed evidence to the trust graph — nothing here is a UI-only toggle.</p>
         </div>
-        {catalogLoading && <RefreshCw className="h-4 w-4 animate-spin text-[#6f6f6f]" />}
+        {catalogLoading && <RefreshCw className="h-4 w-4 animate-spin text-[var(--spr-text-faint)]" />}
       </div>
 
       <div className="spr-panel p-4">
-        <label className="text-xs font-bold text-[#9d9d9d]">Test evidence against passport</label>
-        <select value={selectedPassportId} onChange={(e) => setSelectedPassportId(e.target.value)} className="mt-2 w-full max-w-sm rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2 text-xs text-[#d4d4d4]">
+        <label className="text-xs font-bold text-[var(--spr-text-muted)]">Test evidence against passport</label>
+        <select value={selectedPassportId} onChange={(e) => setSelectedPassportId(e.target.value)} className="mt-2 w-full max-w-sm rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]">
           {!passports.length && <option value="">No passports available — register one first</option>}
           {passports.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.version}</option>)}
         </select>
@@ -344,28 +344,28 @@ export default function IntegrationsView({ passports = [], clients = [], onNavig
           return (
             <div key={item.id} className="spr-panel p-5 transition-all flex flex-col gap-4">
               <div className="flex justify-between items-center">
-                <div className="bg-[#2d2d2d] border border-[#3c3c3c] p-2.5 rounded-md shrink-0 flex items-center justify-center">{getIntegrationIcon(item.icon)}</div>
+                <div className="bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] p-2.5 rounded-md shrink-0 flex items-center justify-center">{getIntegrationIcon(item.icon)}</div>
                 <span className={`px-3 py-1 text-xs font-semibold rounded-md border ${STATUS_STYLES[item.credentialStatus]}`}>{STATUS_LABEL[item.credentialStatus]}</span>
               </div>
               <div>
                 <span className={`px-2 py-0.5 rounded text-[8px] font-mono font-bold uppercase tracking-wider border ${getCategoryStyles(item.category)}`}>{item.category}</span>
-                <h3 className="text-sm font-bold text-[#d4d4d4] font-display mt-2">{item.name}</h3>
-                <p className="text-xs text-[#9d9d9d] leading-relaxed mt-2">{item.description}</p>
+                <h3 className="text-sm font-bold text-[var(--spr-text)] font-display mt-2">{item.name}</h3>
+                <p className="text-xs text-[var(--spr-text-muted)] leading-relaxed mt-2">{item.description}</p>
               </div>
-              {item.lastTestedAt && <p className="text-[10px] text-[#6f6f6f]">Last live evidence: {new Date(item.lastTestedAt).toLocaleString()}</p>}
+              {item.lastTestedAt && <p className="text-[10px] text-[var(--spr-text-faint)]">Last live evidence: {new Date(item.lastTestedAt).toLocaleString()}</p>}
 
-              <button onClick={() => toggleExpanded(item.provider)} className="inline-flex items-center justify-center gap-1.5 rounded-md border border-[#0e639c]/40 bg-[#094771] px-3 py-2 text-xs font-bold text-[#3794ff] hover:bg-[#0e639c]/40">
+              <button onClick={() => toggleExpanded(item.provider)} className="inline-flex items-center justify-center gap-1.5 rounded-md border border-[var(--spr-accent)]/40 bg-[var(--spr-accent-soft)] px-3 py-2 text-xs font-bold text-[var(--spr-highlight)] hover:bg-[var(--spr-accent)]/40">
                 <KeyRound className="w-3.5 h-3.5" /> {expanded ? 'Hide credentials' : item.credentialStatus === 'NOT_CONFIGURED' ? 'Connect' : 'Update credentials'}
               </button>
               {expanded && (
                 <div className="space-y-2 spr-panel-alt p-3">
                   {fields.map((field) => (
                     <div key={field.key}>
-                      <label className="text-[10px] font-bold text-[#9d9d9d]">{field.label}{field.required ? ' *' : ''}</label>
+                      <label className="text-[10px] font-bold text-[var(--spr-text-muted)]">{field.label}{field.required ? ' *' : ''}</label>
                       {field.type === 'textarea' ? (
-                        <textarea rows={5} placeholder={field.placeholder} value={credentialValues[field.key] || ''} onChange={(e) => setCredentialValues((current) => ({ ...current, [field.key]: e.target.value }))} className="mt-0.5 w-full rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-2.5 py-1.5 text-xs text-[#d4d4d4] font-mono resize-y" />
+                        <textarea rows={5} placeholder={field.placeholder} value={credentialValues[field.key] || ''} onChange={(e) => setCredentialValues((current) => ({ ...current, [field.key]: e.target.value }))} className="mt-0.5 w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2.5 py-1.5 text-xs text-[var(--spr-text)] font-mono resize-y" />
                       ) : (
-                        <input type={field.type} placeholder={field.placeholder} value={credentialValues[field.key] || ''} onChange={(e) => setCredentialValues((current) => ({ ...current, [field.key]: e.target.value }))} className="mt-0.5 w-full rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-2.5 py-1.5 text-xs text-[#d4d4d4]" />
+                        <input type={field.type} placeholder={field.placeholder} value={credentialValues[field.key] || ''} onChange={(e) => setCredentialValues((current) => ({ ...current, [field.key]: e.target.value }))} className="mt-0.5 w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2.5 py-1.5 text-xs text-[var(--spr-text)]" />
                       )}
                     </div>
                   ))}
@@ -376,10 +376,10 @@ export default function IntegrationsView({ passports = [], clients = [], onNavig
                 item.credentialStatus !== 'NOT_CONFIGURED' && (
                   <>
                     <div className="flex gap-2">
-                      <button onClick={() => void testGithub()} disabled={testingProvider === 'github' || !selectedPassportId} className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md border border-[#89d185]/30 bg-[#89d185]/10 px-3 py-2 text-xs font-bold text-[#89d185] hover:bg-[#89d185]/20 disabled:opacity-40">
+                      <button onClick={() => void testGithub()} disabled={testingProvider === 'github' || !selectedPassportId} className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md border border-[var(--spr-green)]/30 bg-[var(--spr-green)]/10 px-3 py-2 text-xs font-bold text-[var(--spr-green)] hover:bg-[var(--spr-green)]/20 disabled:opacity-40">
                         <RefreshCw className={`w-3.5 h-3.5 ${testingProvider === 'github' ? 'animate-spin' : ''}`} /> {testingProvider === 'github' ? 'Testing…' : 'Test connection'}
                       </button>
-                      <button onClick={() => void disconnectProvider('github')} disabled={disconnectingProvider === 'github'} aria-label="Disconnect GitHub" className="inline-flex items-center justify-center gap-1.5 rounded-md border border-[#f14c4c]/30 bg-[#f14c4c]/10 px-3 py-2 text-xs font-bold text-[#f14c4c] hover:bg-[#f14c4c]/20 disabled:opacity-40">
+                      <button onClick={() => void disconnectProvider('github')} disabled={disconnectingProvider === 'github'} aria-label="Disconnect GitHub" className="inline-flex items-center justify-center gap-1.5 rounded-md border border-[var(--spr-red)]/30 bg-[var(--spr-red)]/10 px-3 py-2 text-xs font-bold text-[var(--spr-red)] hover:bg-[var(--spr-red)]/20 disabled:opacity-40">
                         <XCircle className="w-3.5 h-3.5" /> {disconnectingProvider === 'github' ? '…' : 'Disconnect'}
                       </button>
                     </div>
@@ -389,7 +389,7 @@ export default function IntegrationsView({ passports = [], clients = [], onNavig
                       </button>
                       {githubRepositories.length > 0 && (
                         <>
-                          <select value={selectedRepository} onChange={(e) => setSelectedRepository(e.target.value)} className="w-full rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-2.5 py-1.5 text-xs text-[#d4d4d4]">
+                          <select value={selectedRepository} onChange={(e) => setSelectedRepository(e.target.value)} className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2.5 py-1.5 text-xs text-[var(--spr-text)]">
                             {githubRepositories.map((repo) => <option key={repo.fullName} value={repo.fullName}>{repo.fullName}{repo.private ? ' (private)' : ''}</option>)}
                           </select>
                           <button onClick={() => void runGithubScan()} disabled={scanningRepository || !selectedRepository || !selectedPassportId} className="w-full spr-btn spr-btn-primary disabled:opacity-40 inline-flex items-center justify-center gap-1.5">
@@ -404,10 +404,10 @@ export default function IntegrationsView({ passports = [], clients = [], onNavig
                 <>
                   {item.credentialStatus !== 'NOT_CONFIGURED' && (
                     <div className="flex gap-2">
-                      <button onClick={() => void testProvider(item.provider)} disabled={testingProvider === item.provider || !selectedPassportId} className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md border border-[#89d185]/30 bg-[#89d185]/10 px-3 py-2 text-xs font-bold text-[#89d185] hover:bg-[#89d185]/20 disabled:opacity-40">
+                      <button onClick={() => void testProvider(item.provider)} disabled={testingProvider === item.provider || !selectedPassportId} className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md border border-[var(--spr-green)]/30 bg-[var(--spr-green)]/10 px-3 py-2 text-xs font-bold text-[var(--spr-green)] hover:bg-[var(--spr-green)]/20 disabled:opacity-40">
                         <RefreshCw className={`w-3.5 h-3.5 ${testingProvider === item.provider ? 'animate-spin' : ''}`} /> {testingProvider === item.provider ? 'Testing…' : 'Run live test'}
                       </button>
-                      <button onClick={() => void disconnectProvider(item.provider)} disabled={disconnectingProvider === item.provider} aria-label={`Disconnect ${item.name}`} className="inline-flex items-center justify-center gap-1.5 rounded-md border border-[#f14c4c]/30 bg-[#f14c4c]/10 px-3 py-2 text-xs font-bold text-[#f14c4c] hover:bg-[#f14c4c]/20 disabled:opacity-40">
+                      <button onClick={() => void disconnectProvider(item.provider)} disabled={disconnectingProvider === item.provider} aria-label={`Disconnect ${item.name}`} className="inline-flex items-center justify-center gap-1.5 rounded-md border border-[var(--spr-red)]/30 bg-[var(--spr-red)]/10 px-3 py-2 text-xs font-bold text-[var(--spr-red)] hover:bg-[var(--spr-red)]/20 disabled:opacity-40">
                         <XCircle className="w-3.5 h-3.5" /> {disconnectingProvider === item.provider ? '…' : 'Disconnect'}
                       </button>
                     </div>
@@ -427,72 +427,72 @@ export default function IntegrationsView({ passports = [], clients = [], onNavig
                   )}
                 </>
               )}
-              {message && <p className="text-[10px] leading-4 text-[#9d9d9d]">{message}</p>}
+              {message && <p className="text-[10px] leading-4 text-[var(--spr-text-muted)]">{message}</p>}
             </div>
           );
         })}
       </div>
 
       {plannedProviders.length > 0 && (
-        <div className="rounded-md border border-dashed border-[#3c3c3c] bg-[#252526] p-4">
-          <div className="text-xs font-bold text-[#9d9d9d] mb-2">Cataloged, not yet built</div>
-          <div className="flex flex-wrap gap-2">{plannedProviders.map((item) => <span key={item.id} className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-2.5 py-1 text-[10px] text-[#9d9d9d]">{item.name}</span>)}</div>
+        <div className="rounded-md border border-dashed border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4">
+          <div className="text-xs font-bold text-[var(--spr-text-muted)] mb-2">Cataloged, not yet built</div>
+          <div className="flex flex-wrap gap-2">{plannedProviders.map((item) => <span key={item.id} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2.5 py-1 text-[10px] text-[var(--spr-text-muted)]">{item.name}</span>)}</div>
         </div>
       )}
 
       {/* Real webhook subscriptions — replaces a prior panel whose Save/Test buttons were no-ops against endpoints that did not exist. */}
-      <div className="spr-panel p-6 text-[#d4d4d4] space-y-5">
+      <div className="spr-panel p-6 text-[var(--spr-text)] space-y-5">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-[#094771] border border-[#0e639c]/40 text-[#3794ff] rounded-md"><Webhook className="w-5 h-5" /></div>
+          <div className="p-2.5 bg-[var(--spr-accent-soft)] border border-[var(--spr-accent)]/40 text-[var(--spr-highlight)] rounded-md"><Webhook className="w-5 h-5" /></div>
           <div>
             <h2 className="text-base font-display font-bold">Webhook subscriptions</h2>
-            <p className="text-xs text-[#9d9d9d] mt-0.5">SPR delivers a signed HTTP POST to your URL for the events you pick. Relay it to Slack, Jira, or a PSA with your own automation (e.g. Zapier, a small serverless function) — SPR does not host per-PSA routing rules itself.</p>
+            <p className="text-xs text-[var(--spr-text-muted)] mt-0.5">SPR delivers a signed HTTP POST to your URL for the events you pick. Relay it to Slack, Jira, or a PSA with your own automation (e.g. Zapier, a small serverless function) — SPR does not host per-PSA routing rules itself.</p>
           </div>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="space-y-3">
-            <label className="text-xs font-bold text-[#d4d4d4]">Destination URL (HTTPS only, must resolve to a public address)</label>
-            <input value={webhookUrl} onChange={(e) => setWebhookUrl(e.target.value)} placeholder="https://your-relay.example.com/spr" className="w-full bg-[#2d2d2d] text-xs text-[#d4d4d4] border border-[#3c3c3c] rounded-md px-3.5 py-2.5 font-mono" />
+            <label className="text-xs font-bold text-[var(--spr-text)]">Destination URL (HTTPS only, must resolve to a public address)</label>
+            <input value={webhookUrl} onChange={(e) => setWebhookUrl(e.target.value)} placeholder="https://your-relay.example.com/spr" className="w-full bg-[var(--spr-surface-sunken)] text-xs text-[var(--spr-text)] border border-[var(--spr-border)] rounded-md px-3.5 py-2.5 font-mono" />
             <div className="grid grid-cols-2 gap-2">
               {WEBHOOK_EVENT_TYPES.map((event) => (
-                <label key={event} className="flex items-center gap-2 text-[11px] text-[#d4d4d4]">
-                  <input type="checkbox" checked={webhookEvents.includes(event)} onChange={(e) => setWebhookEvents((current) => e.target.checked ? [...current, event] : current.filter((item) => item !== event))} className="h-3.5 w-3.5 rounded border-[#3c3c3c] bg-[#2d2d2d]" />
+                <label key={event} className="flex items-center gap-2 text-[11px] text-[var(--spr-text)]">
+                  <input type="checkbox" checked={webhookEvents.includes(event)} onChange={(e) => setWebhookEvents((current) => e.target.checked ? [...current, event] : current.filter((item) => item !== event))} className="h-3.5 w-3.5 rounded border-[var(--spr-border)] bg-[var(--spr-surface-sunken)]" />
                   {event}
                 </label>
               ))}
             </div>
             <button onClick={() => void createWebhook()} disabled={creatingWebhook || !webhookUrl.trim() || !webhookEvents.length} className="inline-flex items-center gap-1.5 spr-btn spr-btn-primary disabled:opacity-40"><Send className="w-3.5 h-3.5" /> {creatingWebhook ? 'Creating…' : 'Create webhook'}</button>
-            {webhookError && <p className="text-xs text-[#f14c4c]">{webhookError}</p>}
+            {webhookError && <p className="text-xs text-[var(--spr-red)]">{webhookError}</p>}
             {revealedSecret && (
-              <div className="rounded-md border border-[#89d185]/30 bg-[#89d185]/10 p-3 text-xs">
-                <div className="font-bold text-[#89d185]">Signing secret (shown once — store it now)</div>
-                <div className="mt-1 flex items-center gap-2 font-mono text-[#89d185]"><span className="truncate">{revealedSecret.secret}</span><button onClick={() => navigator.clipboard.writeText(revealedSecret.secret)} aria-label="Copy secret"><Copy className="h-3.5 w-3.5" /></button></div>
-                <p className="mt-1 text-[#89d185]/80">Verify deliveries with HMAC-SHA256 over the `x-spr-signature` header, as documented for SPR Connect webhooks.</p>
+              <div className="rounded-md border border-[var(--spr-green)]/30 bg-[var(--spr-green)]/10 p-3 text-xs">
+                <div className="font-bold text-[var(--spr-green)]">Signing secret (shown once — store it now)</div>
+                <div className="mt-1 flex items-center gap-2 font-mono text-[var(--spr-green)]"><span className="truncate">{revealedSecret.secret}</span><button onClick={() => navigator.clipboard.writeText(revealedSecret.secret)} aria-label="Copy secret"><Copy className="h-3.5 w-3.5" /></button></div>
+                <p className="mt-1 text-[var(--spr-green)]/80">Verify deliveries with HMAC-SHA256 over the `x-spr-signature` header, as documented for SPR Connect webhooks.</p>
               </div>
             )}
           </div>
 
           <div className="space-y-2">
-            <div className="text-xs font-bold text-[#d4d4d4]">Active subscriptions</div>
-            {webhooksLoading && <p className="text-xs text-[#9d9d9d]">Loading…</p>}
-            {!webhooksLoading && webhooks.length === 0 && <p className="text-xs text-[#9d9d9d]">No webhooks configured yet.</p>}
+            <div className="text-xs font-bold text-[var(--spr-text)]">Active subscriptions</div>
+            {webhooksLoading && <p className="text-xs text-[var(--spr-text-muted)]">Loading…</p>}
+            {!webhooksLoading && webhooks.length === 0 && <p className="text-xs text-[var(--spr-text-muted)]">No webhooks configured yet.</p>}
             <ul className="space-y-2 max-h-64 overflow-auto pr-1">
               {webhooks.map((webhook) => (
-                <li key={webhook.id} className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] p-3 text-xs">
+                <li key={webhook.id} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] p-3 text-xs">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate font-mono text-[#d4d4d4]">{webhook.url}</span>
-                    {webhook.active ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[#89d185]" /> : <XCircle className="h-3.5 w-3.5 shrink-0 text-[#6f6f6f]" />}
+                    <span className="truncate font-mono text-[var(--spr-text)]">{webhook.url}</span>
+                    {webhook.active ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[var(--spr-green)]" /> : <XCircle className="h-3.5 w-3.5 shrink-0 text-[var(--spr-text-faint)]" />}
                   </div>
-                  <div className="mt-1 text-[10px] text-[#9d9d9d]">{webhook.consecutive_failure_count > 0 && <span className="text-[#cca700]">{webhook.consecutive_failure_count} recent failures · </span>}Created {new Date(webhook.created_at).toLocaleDateString()}</div>
-                  {webhook.active && <button onClick={() => void deactivateWebhook(webhook.id)} className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-[#f14c4c] hover:text-[#f14c4c]/80"><Trash2 className="h-3 w-3" /> Deactivate</button>}
+                  <div className="mt-1 text-[10px] text-[var(--spr-text-muted)]">{webhook.consecutive_failure_count > 0 && <span className="text-[var(--spr-amber)]">{webhook.consecutive_failure_count} recent failures · </span>}Created {new Date(webhook.created_at).toLocaleDateString()}</div>
+                  {webhook.active && <button onClick={() => void deactivateWebhook(webhook.id)} className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-[var(--spr-red)] hover:text-[var(--spr-red)]/80"><Trash2 className="h-3 w-3" /> Deactivate</button>}
                 </li>
               ))}
             </ul>
           </div>
         </div>
 
-        <div className="rounded-md border border-[#cca700]/30 bg-[#cca700]/[.08] p-3 text-[10px] leading-5 text-[#cca700]/90 flex gap-2">
+        <div className="rounded-md border border-[var(--spr-amber)]/30 bg-[var(--spr-amber)]/[.08] p-3 text-[10px] leading-5 text-[var(--spr-amber)]/90 flex gap-2">
           <AlertCircle className="h-3.5 w-3.5 shrink-0" />
           Direct native ticket-creation in Jira/ConnectWise/Autotask, SIEM ingestion, and identity-provider connectors are not built — this signed webhook is the only outbound event mechanism SPR currently ships. Use it to relay events into those systems yourself.
         </div>
@@ -509,23 +509,23 @@ function ProviderCustomerMapping({ provider, clients, customers, discovering, me
   return (
     <div className="spr-panel-alt p-3 space-y-2">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-[#9d9d9d]">MSP customers {customers.length > 0 && `(${mappedCount}/${customers.length} mapped)`}</span>
+        <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--spr-text-muted)]">MSP customers {customers.length > 0 && `(${mappedCount}/${customers.length} mapped)`}</span>
         <div className="flex gap-1">
-          <button onClick={onLoad} aria-label="Refresh discovered customers" className="rounded-md border border-[#3c3c3c] p-1 text-[#9d9d9d] hover:text-[#d4d4d4]"><RefreshCw className="w-3 h-3" /></button>
-          <button onClick={onDiscover} disabled={discovering} className="rounded-md border border-[#0e639c]/40 bg-[#094771] px-2 py-1 text-[10px] font-bold text-[#3794ff] disabled:opacity-40">{discovering ? 'Discovering…' : 'Discover customers'}</button>
+          <button onClick={onLoad} aria-label="Refresh discovered customers" className="rounded-md border border-[var(--spr-border)] p-1 text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]"><RefreshCw className="w-3 h-3" /></button>
+          <button onClick={onDiscover} disabled={discovering} className="rounded-md border border-[var(--spr-accent)]/40 bg-[var(--spr-accent-soft)] px-2 py-1 text-[10px] font-bold text-[var(--spr-highlight)] disabled:opacity-40">{discovering ? 'Discovering…' : 'Discover customers'}</button>
         </div>
       </div>
-      {customers.length === 0 && <p className="text-[10px] text-[#6f6f6f]">No customers discovered yet from {provider}. Click "Discover customers" to fetch the real list from the provider.</p>}
+      {customers.length === 0 && <p className="text-[10px] text-[var(--spr-text-faint)]">No customers discovered yet from {provider}. Click "Discover customers" to fetch the real list from the provider.</p>}
       {customers.length > 0 && (
         <ul className="space-y-1.5 max-h-40 overflow-auto pr-1">
           {customers.map((customer) => (
-            <li key={customer.id} className="flex items-center justify-between gap-2 rounded border border-[#3c3c3c] bg-[#2d2d2d] px-2 py-1.5">
-              <span className="truncate text-[11px] text-[#d4d4d4]">{customer.external_customer_name}</span>
+            <li key={customer.id} className="flex items-center justify-between gap-2 rounded border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2 py-1.5">
+              <span className="truncate text-[11px] text-[var(--spr-text)]">{customer.external_customer_name}</span>
               <select
                 value={customer.client_id || ''}
                 disabled={mappingBusyId === `${provider}:${customer.external_customer_id}`}
                 onChange={(e) => onMap(customer.external_customer_id, e.target.value || null)}
-                className="shrink-0 max-w-[45%] rounded border border-[#3c3c3c] bg-[#1e1e1e] px-1.5 py-1 text-[10px] text-[#d4d4d4]"
+                className="shrink-0 max-w-[45%] rounded border border-[var(--spr-border)] bg-[var(--spr-surface)] px-1.5 py-1 text-[10px] text-[var(--spr-text)]"
               >
                 <option value="">Unmapped</option>
                 {clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
@@ -534,7 +534,7 @@ function ProviderCustomerMapping({ provider, clients, customers, discovering, me
           ))}
         </ul>
       )}
-      {message && <p className="text-[10px] text-[#9d9d9d]">{message}</p>}
+      {message && <p className="text-[10px] text-[var(--spr-text-muted)]">{message}</p>}
     </div>
   );
 }

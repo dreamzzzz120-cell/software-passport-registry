@@ -82,11 +82,11 @@ const TIERS: { name: string; tagline: string; priceLabel: string; features: stri
 
 export default function MspPricingView({ isAuthenticated, onPrimaryAction }: Props) {
   return (
-    <div className="mx-auto max-w-6xl px-6 py-16 text-[#d4d4d4]">
+    <div className="mx-auto max-w-6xl px-6 py-16 text-[var(--spr-text)]">
       <div className="text-center">
-        <div className="text-[10px] font-semibold uppercase tracking-[.15em] text-[#3794ff]">Software Passport Registry for MSPs</div>
+        <div className="text-[10px] font-semibold uppercase tracking-[.15em] text-[var(--spr-highlight)]">Software Passport Registry for MSPs</div>
         <h1 className="mt-3 text-3xl font-bold tracking-tight md:text-4xl">Pricing built around clients and software, not seats</h1>
-        <p className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-[#9d9d9d]">
+        <p className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-[var(--spr-text-muted)]">
           Packaging shown below reflects how SPR is priced for MSPs. Checkout and invoicing run through your SPR workspace —
           this page does not itself charge a card.
         </p>
@@ -94,15 +94,15 @@ export default function MspPricingView({ isAuthenticated, onPrimaryAction }: Pro
 
       <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-5">
         {TIERS.map((tier) => (
-          <div key={tier.name} className={`rounded-md border p-6 ${tier.highlight ? 'border-[#3794ff] bg-[#0e639c]/10' : 'border-[#3c3c3c] bg-[#252526]'}`}>
-            {tier.highlight && <div className="mb-3 inline-flex items-center gap-1 rounded-full border border-[#3794ff]/40 bg-[#3794ff]/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#3794ff]">Most common</div>}
-            <h2 className="text-xl font-bold text-[#d4d4d4]">{tier.name}</h2>
-            <p className="mt-1 text-sm text-[#9d9d9d]">{tier.tagline}</p>
-            <p className="mt-4 text-2xl font-bold text-[#d4d4d4]">{tier.priceLabel}</p>
+          <div key={tier.name} className={`rounded-md border p-6 ${tier.highlight ? 'border-[var(--spr-highlight)] bg-[var(--spr-accent)]/10' : 'border-[var(--spr-border)] bg-[var(--spr-surface-alt)]'}`}>
+            {tier.highlight && <div className="mb-3 inline-flex items-center gap-1 rounded-full border border-[var(--spr-highlight)]/40 bg-[var(--spr-highlight)]/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--spr-highlight)]">Most common</div>}
+            <h2 className="text-xl font-bold text-[var(--spr-text)]">{tier.name}</h2>
+            <p className="mt-1 text-sm text-[var(--spr-text-muted)]">{tier.tagline}</p>
+            <p className="mt-4 text-2xl font-bold text-[var(--spr-text)]">{tier.priceLabel}</p>
             <ul className="mt-5 space-y-2.5">
               {tier.features.map((feature) => (
-                <li key={feature} className="flex items-start gap-2 text-sm text-[#d4d4d4]">
-                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#89d185]" /> {feature}
+                <li key={feature} className="flex items-start gap-2 text-sm text-[var(--spr-text)]">
+                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-[var(--spr-green)]" /> {feature}
                 </li>
               ))}
             </ul>
@@ -113,8 +113,8 @@ export default function MspPricingView({ isAuthenticated, onPrimaryAction }: Pro
         ))}
       </div>
 
-      <div className="mx-auto mt-10 flex max-w-2xl items-start gap-3 rounded-md border border-[#3c3c3c] bg-[#181818] p-4 text-xs leading-5 text-[#9d9d9d]">
-        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#3794ff]" />
+      <div className="mx-auto mt-10 flex max-w-2xl items-start gap-3 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] p-4 text-xs leading-5 text-[var(--spr-text-muted)]">
+        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[var(--spr-highlight)]" />
         <p>
           Actual checkout runs through Stripe inside your authenticated workspace (Billing). Client-environment limits shown
           above are enforced by the application once a plan is active; other listed features reflect current SPR

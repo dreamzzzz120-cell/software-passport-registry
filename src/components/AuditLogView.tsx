@@ -164,44 +164,44 @@ export default function AuditLogView() {
 
   return (
     <section className="space-y-6" aria-labelledby="audit-log-title">
-      <div className="flex flex-col gap-4 border-b border-[#3c3c3c] pb-5 lg:flex-row lg:items-end lg:justify-between">
+      <div className="flex flex-col gap-4 border-b border-[var(--spr-border)] pb-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-[.06em] text-[#ce9178]">Governance ledger</div>
           <h1 id="audit-log-title" className="mt-2 flex items-center gap-2 text-3xl font-semibold tracking-tight"><FileClock className="h-6 w-6 text-[#ce9178]" />Audit log</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-[#9d9d9d]">Tenant-scoped administrative events from the persisted hash-chained audit trail. No events are synthesized in this view.</p>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--spr-text-muted)]">Tenant-scoped administrative events from the persisted hash-chained audit trail. No events are synthesized in this view.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => void loadEntries()} disabled={loading} className="inline-flex items-center gap-2 rounded-md border border-[#3c3c3c] bg-[#252526] px-3 py-2 text-xs font-semibold text-[#d4d4d4] transition hover:border-[#3794ff]/40 hover:text-[#d4d4d4] disabled:cursor-not-allowed disabled:opacity-50" aria-label="Refresh audit log"><RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />Refresh</button>
-          <button type="button" onClick={exportCsv} disabled={!entries.length} className="inline-flex items-center gap-2 rounded-md border border-[#3c3c3c] bg-[#252526] px-3 py-2 text-xs font-semibold text-[#d4d4d4] transition hover:border-[#3794ff]/40 hover:text-[#d4d4d4] disabled:cursor-not-allowed disabled:opacity-50"><Download className="h-3.5 w-3.5" />Export CSV</button>
+          <button type="button" onClick={() => void loadEntries()} disabled={loading} className="inline-flex items-center gap-2 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] px-3 py-2 text-xs font-semibold text-[var(--spr-text)] transition hover:border-[var(--spr-highlight)]/40 hover:text-[var(--spr-text)] disabled:cursor-not-allowed disabled:opacity-50" aria-label="Refresh audit log"><RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />Refresh</button>
+          <button type="button" onClick={exportCsv} disabled={!entries.length} className="inline-flex items-center gap-2 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] px-3 py-2 text-xs font-semibold text-[var(--spr-text)] transition hover:border-[var(--spr-highlight)]/40 hover:text-[var(--spr-text)] disabled:cursor-not-allowed disabled:opacity-50"><Download className="h-3.5 w-3.5" />Export CSV</button>
           <button type="button" onClick={() => void verifyChain()} disabled={verifying} className="spr-btn spr-btn-primary inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"><ClipboardCheck className="h-3.5 w-3.5" />{verifying ? 'Verifying…' : 'Verify chain'}</button>
         </div>
       </div>
 
-      {error && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[#f14c4c]/30 bg-[#f14c4c]/10 px-4 py-3 text-sm text-[#f14c4c]"><span>{error}</span><button type="button" onClick={() => void loadEntries()} className="rounded-lg border border-[#f14c4c]/25 px-3 py-1.5 text-xs font-semibold hover:bg-[#f14c4c]/10">Try again</button></div>}
-      {verification && <div role="status" className={`flex flex-wrap items-center gap-2 rounded-md border px-4 py-3 text-sm ${verification.isValid ? 'border-[#89d185]/30 bg-[#89d185]/10 text-[#89d185]' : 'border-[#f14c4c]/30 bg-[#f14c4c]/10 text-[#f14c4c]'}`}>{verification.isValid ? <CheckCircle2 className="h-4 w-4" /> : <ShieldAlert className="h-4 w-4" />}<span>{verification.isValid ? `Chain verified across ${verification.totalBlocksVerified} block${verification.totalBlocksVerified === 1 ? '' : 's'}.` : verification.error || 'Audit chain integrity verification failed.'}</span><span className="text-xs opacity-70">Checked {formatDate(verification.verifiedAt)}</span></div>}
+      {error && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--spr-red)]/30 bg-[var(--spr-red)]/10 px-4 py-3 text-sm text-[var(--spr-red)]"><span>{error}</span><button type="button" onClick={() => void loadEntries()} className="rounded-lg border border-[var(--spr-red)]/25 px-3 py-1.5 text-xs font-semibold hover:bg-[var(--spr-red)]/10">Try again</button></div>}
+      {verification && <div role="status" className={`flex flex-wrap items-center gap-2 rounded-md border px-4 py-3 text-sm ${verification.isValid ? 'border-[var(--spr-green)]/30 bg-[var(--spr-green)]/10 text-[var(--spr-green)]' : 'border-[var(--spr-red)]/30 bg-[var(--spr-red)]/10 text-[var(--spr-red)]'}`}>{verification.isValid ? <CheckCircle2 className="h-4 w-4" /> : <ShieldAlert className="h-4 w-4" />}<span>{verification.isValid ? `Chain verified across ${verification.totalBlocksVerified} block${verification.totalBlocksVerified === 1 ? '' : 's'}.` : verification.error || 'Audit chain integrity verification failed.'}</span><span className="text-xs opacity-70">Checked {formatDate(verification.verifiedAt)}</span></div>}
 
       <div className="spr-panel p-5">
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div><h2 className="text-sm font-semibold text-[#d4d4d4]">Persisted events</h2><p className="mt-1 text-xs text-[#9d9d9d]">Showing the latest {entries.length} records returned by the API.</p></div>
-          <div className="relative w-full sm:max-w-xs"><label htmlFor="audit-log-search" className="sr-only">Search audit events</label><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6f6f6f]" /><input id="audit-log-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search actions or actors" className="w-full rounded-md border border-[#3c3c3c] bg-[#2d2d2d] py-2.5 pl-9 pr-3 text-sm text-[#d4d4d4] outline-none placeholder:text-[#6f6f6f] focus:border-[#3794ff] focus:ring-2 focus:ring-[#3794ff]/20" /></div>
+          <div><h2 className="text-sm font-semibold text-[var(--spr-text)]">Persisted events</h2><p className="mt-1 text-xs text-[var(--spr-text-muted)]">Showing the latest {entries.length} records returned by the API.</p></div>
+          <div className="relative w-full sm:max-w-xs"><label htmlFor="audit-log-search" className="sr-only">Search audit events</label><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--spr-text-faint)]" /><input id="audit-log-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search actions or actors" className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] py-2.5 pl-9 pr-3 text-sm text-[var(--spr-text)] outline-none placeholder:text-[var(--spr-text-faint)] focus:border-[var(--spr-highlight)] focus:ring-2 focus:ring-[var(--spr-highlight)]/20" /></div>
         </div>
-        {loading ? <div className="space-y-3" aria-live="polite" aria-label="Loading audit events"><div className="h-16 animate-pulse rounded-md bg-[#252526]" /><div className="h-16 animate-pulse rounded-md bg-[#252526]" /><div className="h-16 animate-pulse rounded-md bg-[#252526]" /></div> : entries.length === 0 ? (
-          <div className="rounded-md border border-dashed border-[#3c3c3c] px-5 py-12 text-center"><FileClock className="mx-auto h-8 w-8 text-[#6f6f6f]" /><p className="mt-3 text-sm font-semibold text-[#d4d4d4]">No audit events recorded</p><p className="mt-1 text-xs text-[#9d9d9d]">Events will appear here after authenticated workspace activity is persisted.</p></div>
+        {loading ? <div className="space-y-3" aria-live="polite" aria-label="Loading audit events"><div className="h-16 animate-pulse rounded-md bg-[var(--spr-surface-alt)]" /><div className="h-16 animate-pulse rounded-md bg-[var(--spr-surface-alt)]" /><div className="h-16 animate-pulse rounded-md bg-[var(--spr-surface-alt)]" /></div> : entries.length === 0 ? (
+          <div className="rounded-md border border-dashed border-[var(--spr-border)] px-5 py-12 text-center"><FileClock className="mx-auto h-8 w-8 text-[var(--spr-text-faint)]" /><p className="mt-3 text-sm font-semibold text-[var(--spr-text)]">No audit events recorded</p><p className="mt-1 text-xs text-[var(--spr-text-muted)]">Events will appear here after authenticated workspace activity is persisted.</p></div>
         ) : filteredEntries.length === 0 ? (
-          <div className="rounded-md border border-dashed border-[#3c3c3c] px-5 py-10 text-center text-sm text-[#9d9d9d]">No events match “{query}”.</div>
+          <div className="rounded-md border border-dashed border-[var(--spr-border)] px-5 py-10 text-center text-sm text-[var(--spr-text-muted)]">No events match “{query}”.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[820px] text-left text-sm">
               <caption className="sr-only">Persisted tenant audit events</caption>
-              <thead className="border-b border-[#3c3c3c] text-[10px] uppercase tracking-[.16em] text-[#6f6f6f]"><tr><th scope="col" className="px-3 py-3">Event</th><th scope="col" className="px-3 py-3">Object affected</th><th scope="col" className="px-3 py-3">Actor</th><th scope="col" className="px-3 py-3">Time</th><th scope="col" className="px-3 py-3">Payload</th><th scope="col" className="px-3 py-3">Chain hash</th></tr></thead>
-              <tbody className="divide-y divide-[#3c3c3c]">
+              <thead className="border-b border-[var(--spr-border)] text-[10px] uppercase tracking-[.16em] text-[var(--spr-text-faint)]"><tr><th scope="col" className="px-3 py-3">Event</th><th scope="col" className="px-3 py-3">Object affected</th><th scope="col" className="px-3 py-3">Actor</th><th scope="col" className="px-3 py-3">Time</th><th scope="col" className="px-3 py-3">Payload</th><th scope="col" className="px-3 py-3">Chain hash</th></tr></thead>
+              <tbody className="divide-y divide-[var(--spr-border)]">
                 {filteredEntries.map((entry) => <tr key={entry.id} className="align-top">
-                  <td className="px-3 py-4"><div className="font-semibold text-[#d4d4d4]">{entry.action}</div><div className="mt-1 text-[10px] text-[#6f6f6f]">Block #{entry.id}</div></td>
-                  <td className="px-3 py-4 text-[#d4d4d4]">{objectAffected(entry)}</td>
-                  <td className="px-3 py-4 text-[#9d9d9d]">{entry.actor || 'Actor unavailable'}</td>
-                  <td className="whitespace-nowrap px-3 py-4 text-xs text-[#9d9d9d]">{formatDate(entry.timestamp)}</td>
-                  <td className="max-w-[300px] px-3 py-4"><code className="block max-h-16 overflow-auto break-words rounded-lg bg-[#181818] p-2 text-[11px] text-[#9d9d9d]">{payloadText(entry.payload)}</code></td>
-                  <td className="px-3 py-4"><div className="max-w-[180px] truncate font-mono text-[10px] text-[#3794ff]/80" title={entry.currentHash}>{entry.currentHash}</div><div className="mt-1 max-w-[180px] truncate font-mono text-[10px] text-[#6f6f6f]" title={entry.previousHash}>prev {entry.previousHash}</div></td>
+                  <td className="px-3 py-4"><div className="font-semibold text-[var(--spr-text)]">{entry.action}</div><div className="mt-1 text-[10px] text-[var(--spr-text-faint)]">Block #{entry.id}</div></td>
+                  <td className="px-3 py-4 text-[var(--spr-text)]">{objectAffected(entry)}</td>
+                  <td className="px-3 py-4 text-[var(--spr-text-muted)]">{entry.actor || 'Actor unavailable'}</td>
+                  <td className="whitespace-nowrap px-3 py-4 text-xs text-[var(--spr-text-muted)]">{formatDate(entry.timestamp)}</td>
+                  <td className="max-w-[300px] px-3 py-4"><code className="block max-h-16 overflow-auto break-words rounded-lg bg-[var(--spr-surface-deep)] p-2 text-[11px] text-[var(--spr-text-muted)]">{payloadText(entry.payload)}</code></td>
+                  <td className="px-3 py-4"><div className="max-w-[180px] truncate font-mono text-[10px] text-[var(--spr-highlight)]/80" title={entry.currentHash}>{entry.currentHash}</div><div className="mt-1 max-w-[180px] truncate font-mono text-[10px] text-[var(--spr-text-faint)]" title={entry.previousHash}>prev {entry.previousHash}</div></td>
                 </tr>)}
               </tbody>
             </table>
@@ -209,7 +209,7 @@ export default function AuditLogView() {
         )}
         {!loading && entries.length > 0 && !query && (
           <div className="mt-5 flex justify-center">
-            <button type="button" onClick={() => void loadMore()} disabled={!hasMore || loadingMore} className="rounded-md border border-[#3c3c3c] bg-[#252526] px-4 py-2 text-xs font-semibold text-[#d4d4d4] transition hover:border-[#3794ff]/40 hover:text-[#d4d4d4] disabled:cursor-not-allowed disabled:opacity-40">
+            <button type="button" onClick={() => void loadMore()} disabled={!hasMore || loadingMore} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] px-4 py-2 text-xs font-semibold text-[var(--spr-text)] transition hover:border-[var(--spr-highlight)]/40 hover:text-[var(--spr-text)] disabled:cursor-not-allowed disabled:opacity-40">
               {loadingMore ? 'Loading…' : hasMore ? 'Load older events' : 'No older events'}
             </button>
           </div>

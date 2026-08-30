@@ -99,7 +99,7 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
 
   const [whiteLabelClientId, setWhiteLabelClientId] = useState(clients[0]?.id || '');
   const [mspName, setMspName] = useState('');
-  const [brandColor, setBrandColor] = useState('#3794ff');
+  const [brandColor, setBrandColor] = useState('var(--spr-highlight)');
   const [reportTitle, setReportTitle] = useState('Software Trust & Compliance Ledger');
   const [executiveSummary, setExecutiveSummary] = useState('');
   const [logoBase64, setLogoBase64] = useState<string | undefined>(undefined);
@@ -238,7 +238,7 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
 
   const downloadPdf = () => {
     if (!selectedPassport) return;
-    generatePassportEvidenceReport(selectedPassport, 'SPR Reports Center', '#3794ff');
+    generatePassportEvidenceReport(selectedPassport, 'SPR Reports Center', 'var(--spr-highlight)');
   };
 
   const exportReportJson = () => {
@@ -301,11 +301,11 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
     <section className="space-y-6" aria-labelledby="reports-title">
       <header className="flex flex-col gap-4 spr-panel p-6 md:flex-row md:items-end md:justify-between">
         <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[.06em] text-[#3794ff]">Reports center</div>
+          <div className="text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--spr-highlight)]">Reports center</div>
           <h1 id="reports-title" className="mt-2 text-3xl font-semibold tracking-tight">Evidence-backed reporting</h1>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-[#9d9d9d]">Exports contain records loaded from this tenant’s existing APIs. No trust score, compliance claim, or finding is inferred in this view.</p>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--spr-text-muted)]">Exports contain records loaded from this tenant’s existing APIs. No trust score, compliance claim, or finding is inferred in this view.</p>
         </div>
-        <button onClick={() => window.print()} className="inline-flex items-center justify-center gap-2 rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-4 py-2.5 text-sm font-semibold text-[#d4d4d4] hover:border-[#0e639c]/50 hover:text-[#d4d4d4]"><Printer size={16} /> Print / save PDF</button>
+        <button onClick={() => window.print()} className="inline-flex items-center justify-center gap-2 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-4 py-2.5 text-sm font-semibold text-[var(--spr-text)] hover:border-[var(--spr-accent)]/50 hover:text-[var(--spr-text)]"><Printer size={16} /> Print / save PDF</button>
       </header>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -316,24 +316,24 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
           ['Findings / vulnerabilities', findingCount + vulnerabilityCount, 'Loaded finding and vulnerability records'],
         ].map(([label, value, detail]) => (
           <div key={String(label)} className="spr-panel p-4">
-            <div className="text-[10px] font-bold uppercase tracking-[.18em] text-[#9d9d9d]">{label}</div>
-            <div className="mt-2 text-2xl font-semibold text-[#d4d4d4]">{value}</div>
-            <div className="mt-1 text-xs text-[#9d9d9d]">{detail}</div>
+            <div className="text-[10px] font-bold uppercase tracking-[.18em] text-[var(--spr-text-muted)]">{label}</div>
+            <div className="mt-2 text-2xl font-semibold text-[var(--spr-text)]">{value}</div>
+            <div className="mt-1 text-xs text-[var(--spr-text-muted)]">{detail}</div>
           </div>
         ))}
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.1fr_.9fr]">
         <div className="spr-panel p-6">
-          <div className="flex items-center gap-2"><ShieldCheck size={18} className="text-[#3794ff]" /><h2 className="text-lg font-semibold">Tenant registry exports</h2></div>
-          <p className="mt-2 text-sm text-[#9d9d9d]">CSV includes the loaded client, passport, evidence, vulnerability, finding, scan, and alert records.</p>
+          <div className="flex items-center gap-2"><ShieldCheck size={18} className="text-[var(--spr-highlight)]" /><h2 className="text-lg font-semibold">Tenant registry exports</h2></div>
+          <p className="mt-2 text-sm text-[var(--spr-text-muted)]">CSV includes the loaded client, passport, evidence, vulnerability, finding, scan, and alert records.</p>
           {clients.length > 0 && (
             <div className="mt-4 flex items-center gap-2">
-              <Users size={14} className="text-[#9d9d9d]" />
-              <span className="text-xs text-[#9d9d9d]">{exportClientIds.size === 0 ? 'All clients' : `${exportClientIds.size} of ${clients.length} clients selected`}</span>
+              <Users size={14} className="text-[var(--spr-text-muted)]" />
+              <span className="text-xs text-[var(--spr-text-muted)]">{exportClientIds.size === 0 ? 'All clients' : `${exportClientIds.size} of ${clients.length} clients selected`}</span>
               <div className="flex flex-wrap gap-1.5">
                 {clients.map((client) => (
-                  <button key={client.id} onClick={() => toggleExportClient(client.id)} className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${exportClientIds.has(client.id) ? 'border-[#0e639c]/50 bg-[#094771] text-[#3794ff]' : 'border-[#3c3c3c] bg-[#2d2d2d] text-[#9d9d9d]'}`}>{client.name}</button>
+                  <button key={client.id} onClick={() => toggleExportClient(client.id)} className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${exportClientIds.has(client.id) ? 'border-[var(--spr-accent)]/50 bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)]' : 'border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-text-muted)]'}`}>{client.name}</button>
                 ))}
               </div>
             </div>
@@ -341,66 +341,66 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
           <div className="mt-5 flex flex-wrap gap-3">
             <button onClick={exportRegistryCsv} disabled={!passports.length && !clients.length} className="inline-flex items-center gap-2 spr-btn spr-btn-primary disabled:cursor-not-allowed disabled:opacity-40"><Download size={16} /> Export registry CSV</button>
           </div>
-          <div className="mt-6 border-t border-[#3c3c3c] pt-5">
-            <h3 className="text-sm font-semibold text-[#d4d4d4]">Server report snapshot</h3>
-            <p className="mt-1 text-xs leading-5 text-[#9d9d9d]">Loads <code>/api/trust-loop/reports/:passportId</code>, which returns persisted findings, evidence, observations, remediation, verification, limitations, and a report hash.</p>
+          <div className="mt-6 border-t border-[var(--spr-border)] pt-5">
+            <h3 className="text-sm font-semibold text-[var(--spr-text)]">Server report snapshot</h3>
+            <p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">Loads <code>/api/trust-loop/reports/:passportId</code>, which returns persisted findings, evidence, observations, remediation, verification, limitations, and a report hash.</p>
             <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-              <select value={selectedPassportId} onChange={(event) => setSelectedPassportId(event.target.value)} className="min-w-0 flex-1 rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2.5 text-sm text-[#d4d4d4]">
+              <select value={selectedPassportId} onChange={(event) => setSelectedPassportId(event.target.value)} className="min-w-0 flex-1 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2.5 text-sm text-[var(--spr-text)]">
                 {!passports.length && <option value="">No passports loaded</option>}
                 {passports.map((passport) => <option key={passport.id} value={passport.id}>{passport.name} · {passport.version}</option>)}
               </select>
-              <select value={reportType} onChange={(event) => setReportType(event.target.value)} className="min-w-0 flex-1 rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2.5 text-sm text-[#d4d4d4]">
+              <select value={reportType} onChange={(event) => setReportType(event.target.value)} className="min-w-0 flex-1 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2.5 text-sm text-[var(--spr-text)]">
                 {REPORT_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
               </select>
-              <button onClick={() => void loadReport()} disabled={!selectedPassport || loading} className="inline-flex items-center justify-center gap-2 rounded-md border border-[#0e639c]/50 bg-[#094771] px-4 py-2.5 text-sm font-semibold text-[#3794ff] disabled:opacity-40"><RefreshCw size={16} className={loading ? 'animate-spin' : ''} /> {loading ? 'Loading…' : 'Load report'}</button>
+              <button onClick={() => void loadReport()} disabled={!selectedPassport || loading} className="inline-flex items-center justify-center gap-2 rounded-md border border-[var(--spr-accent)]/50 bg-[var(--spr-accent-soft)] px-4 py-2.5 text-sm font-semibold text-[var(--spr-highlight)] disabled:opacity-40"><RefreshCw size={16} className={loading ? 'animate-spin' : ''} /> {loading ? 'Loading…' : 'Load report'}</button>
             </div>
-            {message && <p className="mt-3 text-xs text-[#9d9d9d]" role="status">{message}</p>}
+            {message && <p className="mt-3 text-xs text-[var(--spr-text-muted)]" role="status">{message}</p>}
           </div>
 
           {report && selectedPassport && (
-            <div className="mt-6 border-t border-[#3c3c3c] pt-5">
-              <div className="flex items-center gap-2"><FileText size={16} className="text-[#9d9d9d]" /><h3 className="text-sm font-semibold text-[#d4d4d4]">Plain-English summary</h3></div>
-              <p className="mt-1 text-xs leading-5 text-[#9d9d9d]">The same evidence and score as the technical report above, explained in plain language. Both come from the exact same underlying data.</p>
+            <div className="mt-6 border-t border-[var(--spr-border)] pt-5">
+              <div className="flex items-center gap-2"><FileText size={16} className="text-[var(--spr-text-muted)]" /><h3 className="text-sm font-semibold text-[var(--spr-text)]">Plain-English summary</h3></div>
+              <p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">The same evidence and score as the technical report above, explained in plain language. Both come from the exact same underlying data.</p>
               <div className="mt-4">
                 <PlainEnglishReport passportId={selectedPassport.id} reportType={reportType} />
               </div>
             </div>
           )}
 
-          <div className="mt-6 border-t border-[#3c3c3c] pt-5">
-            <div className="flex items-center gap-2"><History size={16} className="text-[#9d9d9d]" /><h3 className="text-sm font-semibold text-[#d4d4d4]">Changes since last report</h3></div>
-            {changesLoading && <p className="mt-3 text-xs text-[#9d9d9d]">Checking for changes…</p>}
-            {!changesLoading && changes?.insufficientData && <p className="mt-3 text-xs text-[#9d9d9d]">{changes.current ? 'Only one report snapshot exists for this passport and type — generate another later to compare.' : 'No report snapshots exist yet for this passport and type.'}</p>}
+          <div className="mt-6 border-t border-[var(--spr-border)] pt-5">
+            <div className="flex items-center gap-2"><History size={16} className="text-[var(--spr-text-muted)]" /><h3 className="text-sm font-semibold text-[var(--spr-text)]">Changes since last report</h3></div>
+            {changesLoading && <p className="mt-3 text-xs text-[var(--spr-text-muted)]">Checking for changes…</p>}
+            {!changesLoading && changes?.insufficientData && <p className="mt-3 text-xs text-[var(--spr-text-muted)]">{changes.current ? 'Only one report snapshot exists for this passport and type — generate another later to compare.' : 'No report snapshots exist yet for this passport and type.'}</p>}
             {!changesLoading && changes && !changes.insufficientData && changes.changes.length === 0 && (
-              <p className="mt-3 flex items-center gap-1.5 text-xs text-[#89d185]"><ShieldCheck size={14} /> No change since the last report ({changes.previous && new Date(changes.previous.generatedAt).toLocaleString()}).</p>
+              <p className="mt-3 flex items-center gap-1.5 text-xs text-[var(--spr-green)]"><ShieldCheck size={14} /> No change since the last report ({changes.previous && new Date(changes.previous.generatedAt).toLocaleString()}).</p>
             )}
             {!changesLoading && changes && !changes.insufficientData && changes.changes.length > 0 && (
               <ul className="mt-3 space-y-1.5">
                 {changes.changes.map((change, index) => (
-                  <li key={index} className={`flex items-start gap-2 rounded-md border px-3 py-2 text-xs ${change.severity === 'high' ? 'border-[#f14c4c]/40 bg-[#f14c4c]/10 text-[#f14c4c]' : change.severity === 'medium' ? 'border-[#cca700]/40 bg-[#cca700]/10 text-[#cca700]' : 'border-[#3c3c3c] bg-[#2d2d2d] text-[#9d9d9d]'}`}>
+                  <li key={index} className={`flex items-start gap-2 rounded-md border px-3 py-2 text-xs ${change.severity === 'high' ? 'border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 text-[var(--spr-red)]' : change.severity === 'medium' ? 'border-[var(--spr-amber)]/40 bg-[var(--spr-amber)]/10 text-[var(--spr-amber)]' : 'border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-text-muted)]'}`}>
                     <span className="font-semibold">{change.type.replaceAll('_', ' ')}</span>
-                    <span className="text-[#6f6f6f]">{String(change.before ?? '—')} → {String(change.after ?? '—')}</span>
+                    <span className="text-[var(--spr-text-faint)]">{String(change.before ?? '—')} → {String(change.after ?? '—')}</span>
                   </li>
                 ))}
               </ul>
             )}
           </div>
 
-          <div className="mt-6 border-t border-[#3c3c3c] pt-5">
-            <div className="flex items-center gap-2"><History size={16} className="text-[#9d9d9d]" /><h3 className="text-sm font-semibold text-[#d4d4d4]">Report history</h3></div>
-            <p className="mt-1 text-xs leading-5 text-[#9d9d9d]">Every generated report is hashed and versioned. Load a passport report above to populate history for the selected type.</p>
-            {historyLoading && <p className="mt-3 text-xs text-[#9d9d9d]">Loading history…</p>}
-            {!historyLoading && history.length === 0 && <p className="mt-3 text-xs text-[#9d9d9d]">No prior snapshots for this passport and report type yet.</p>}
+          <div className="mt-6 border-t border-[var(--spr-border)] pt-5">
+            <div className="flex items-center gap-2"><History size={16} className="text-[var(--spr-text-muted)]" /><h3 className="text-sm font-semibold text-[var(--spr-text)]">Report history</h3></div>
+            <p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">Every generated report is hashed and versioned. Load a passport report above to populate history for the selected type.</p>
+            {historyLoading && <p className="mt-3 text-xs text-[var(--spr-text-muted)]">Loading history…</p>}
+            {!historyLoading && history.length === 0 && <p className="mt-3 text-xs text-[var(--spr-text-muted)]">No prior snapshots for this passport and report type yet.</p>}
             {history.length > 0 && (
               <ul className="mt-3 max-h-48 space-y-2 overflow-auto pr-1">
                 {history.map((snapshot) => (
                   <li key={snapshot.id}>
-                    <button onClick={() => void loadSnapshot(snapshot.id)} className="w-full rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2 text-left text-xs text-[#d4d4d4] hover:border-[#0e639c]/50 hover:text-[#d4d4d4]">
+                    <button onClick={() => void loadSnapshot(snapshot.id)} className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-left text-xs text-[var(--spr-text)] hover:border-[var(--spr-accent)]/50 hover:text-[var(--spr-text)]">
                       <div className="flex items-center justify-between gap-2">
                         <span>{new Date(snapshot.generated_at).toLocaleString()}</span>
-                        <span className="text-[#9d9d9d]">{snapshot.score == null ? 'unverified' : `score ${snapshot.score}`}</span>
+                        <span className="text-[var(--spr-text-muted)]">{snapshot.score == null ? 'unverified' : `score ${snapshot.score}`}</span>
                       </div>
-                      <div className="mt-1 truncate font-mono text-[10px] text-[#9d9d9d]">{snapshot.canonical_payload_hash}</div>
+                      <div className="mt-1 truncate font-mono text-[10px] text-[var(--spr-text-muted)]">{snapshot.canonical_payload_hash}</div>
                     </button>
                   </li>
                 ))}
@@ -411,51 +411,51 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
 
         <div className="spr-panel p-6">
           <h2 className="text-lg font-semibold">Download loaded report</h2>
-          <p className="mt-2 text-sm text-[#9d9d9d]">JSON is the exact server response. PDF is generated client-side from the loaded passport's SBOM, evidence, and timeline.</p>
+          <p className="mt-2 text-sm text-[var(--spr-text-muted)]">JSON is the exact server response. PDF is generated client-side from the loaded passport's SBOM, evidence, and timeline.</p>
           <div className="mt-5 flex flex-wrap gap-3">
-            <button onClick={exportReportJson} disabled={!report} className="inline-flex items-center gap-2 rounded-md border border-[#0e639c]/50 bg-[#094771] px-4 py-2.5 text-sm font-semibold text-[#3794ff] disabled:opacity-40"><FileJson size={16} /> Export JSON</button>
-            <button onClick={downloadPdf} disabled={!selectedPassport} className="inline-flex items-center gap-2 rounded-md border border-[#0e639c]/50 bg-[#094771] px-4 py-2.5 text-sm font-semibold text-[#3794ff] disabled:opacity-40"><FileText size={16} /> Download PDF</button>
+            <button onClick={exportReportJson} disabled={!report} className="inline-flex items-center gap-2 rounded-md border border-[var(--spr-accent)]/50 bg-[var(--spr-accent-soft)] px-4 py-2.5 text-sm font-semibold text-[var(--spr-highlight)] disabled:opacity-40"><FileJson size={16} /> Export JSON</button>
+            <button onClick={downloadPdf} disabled={!selectedPassport} className="inline-flex items-center gap-2 rounded-md border border-[var(--spr-accent)]/50 bg-[var(--spr-accent-soft)] px-4 py-2.5 text-sm font-semibold text-[var(--spr-highlight)] disabled:opacity-40"><FileText size={16} /> Download PDF</button>
           </div>
 
-          <div className="mt-6 border-t border-[#3c3c3c] pt-5">
-            <div className="flex items-center gap-2"><Share2 size={16} className="text-[#9d9d9d]" /><h3 className="text-sm font-semibold text-[#d4d4d4]">Shareable link</h3></div>
-            <p className="mt-1 text-xs leading-5 text-[#9d9d9d]">
+          <div className="mt-6 border-t border-[var(--spr-border)] pt-5">
+            <div className="flex items-center gap-2"><Share2 size={16} className="text-[var(--spr-text-muted)]" /><h3 className="text-sm font-semibold text-[var(--spr-text)]">Shareable link</h3></div>
+            <p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">
               {canShare
                 ? 'Creates a signed, tenant-scoped link that expires in 7 days. Anyone with the link sees a redacted, evidence-backed summary — no internal remediation or verification detail.'
                 : `Your ${role} role cannot create share links. Owner, Admin, or Operator is required.`}
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-3">
-              <button onClick={() => void createShareLink()} disabled={!canShare || !selectedPassport || sharing} className="inline-flex items-center gap-2 rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-4 py-2.5 text-sm font-semibold text-[#d4d4d4] disabled:cursor-not-allowed disabled:opacity-40">
+              <button onClick={() => void createShareLink()} disabled={!canShare || !selectedPassport || sharing} className="inline-flex items-center gap-2 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-4 py-2.5 text-sm font-semibold text-[var(--spr-text)] disabled:cursor-not-allowed disabled:opacity-40">
                 <Share2 size={16} className={sharing ? 'animate-pulse' : ''} /> {sharing ? 'Creating…' : 'Create share link'}
               </button>
               {shareInfo && (
-                <button onClick={() => void copyShareLink()} className="inline-flex items-center gap-2 rounded-md border border-[#0e639c]/50 bg-[#094771] px-3 py-2.5 text-xs font-semibold text-[#3794ff]"><Copy size={14} /> Copy link</button>
+                <button onClick={() => void copyShareLink()} className="inline-flex items-center gap-2 rounded-md border border-[var(--spr-accent)]/50 bg-[var(--spr-accent-soft)] px-3 py-2.5 text-xs font-semibold text-[var(--spr-highlight)]"><Copy size={14} /> Copy link</button>
               )}
             </div>
             {shareInfo && (
-              <div className="mt-3 rounded-md border border-[#3c3c3c] bg-[#2d2d2d] p-3 text-xs text-[#9d9d9d]">
-                <div className="truncate font-mono text-[#d4d4d4]">{shareInfo.shareUrl}</div>
-                <div className="mt-1 text-[#9d9d9d]">Expires {new Date(shareInfo.expiresAt).toLocaleString()}</div>
+              <div className="mt-3 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] p-3 text-xs text-[var(--spr-text-muted)]">
+                <div className="truncate font-mono text-[var(--spr-text)]">{shareInfo.shareUrl}</div>
+                <div className="mt-1 text-[var(--spr-text-muted)]">Expires {new Date(shareInfo.expiresAt).toLocaleString()}</div>
               </div>
             )}
-            {shareMessage && <p className="mt-2 text-xs text-[#9d9d9d]" role="status">{shareMessage}</p>}
+            {shareMessage && <p className="mt-2 text-xs text-[var(--spr-text-muted)]" role="status">{shareMessage}</p>}
           </div>
 
-          <pre className="mt-6 max-h-64 overflow-auto rounded-md border border-[#3c3c3c] bg-[#2d2d2d] p-4 text-xs leading-5 text-[#9d9d9d] whitespace-pre-wrap">{reportText || 'Load a passport report to preview its persisted traceability and limitations.'}</pre>
+          <pre className="mt-6 max-h-64 overflow-auto rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] p-4 text-xs leading-5 text-[var(--spr-text-muted)] whitespace-pre-wrap">{reportText || 'Load a passport report to preview its persisted traceability and limitations.'}</pre>
         </div>
       </div>
 
       {report?.sbom && (
         <div className="spr-panel p-6">
-          <div className="flex items-center gap-2"><Package size={18} className="text-[#3794ff]" /><h2 className="text-lg font-semibold">SBOM components</h2></div>
-          <p className="mt-2 text-sm text-[#9d9d9d]">Each component is cross-referenced against this passport's recorded vulnerabilities by name.</p>
+          <div className="flex items-center gap-2"><Package size={18} className="text-[var(--spr-highlight)]" /><h2 className="text-lg font-semibold">SBOM components</h2></div>
+          <p className="mt-2 text-sm text-[var(--spr-text-muted)]">Each component is cross-referenced against this passport's recorded vulnerabilities by name.</p>
           <div className="mt-4 overflow-auto">
             <table className="w-full min-w-[560px] text-left text-xs">
-              <thead className="text-[#9d9d9d]"><tr><th className="pb-2 pr-4">Component</th><th className="pb-2 pr-4">Version</th><th className="pb-2 pr-4">License</th><th className="pb-2 pr-4">Vulnerabilities</th><th className="pb-2">Critical/High</th></tr></thead>
-              <tbody className="text-[#d4d4d4]">
-                {report.sbom.length === 0 && <tr><td colSpan={5} className="py-3 text-[#9d9d9d]">No SBOM components recorded for this passport.</td></tr>}
+              <thead className="text-[var(--spr-text-muted)]"><tr><th className="pb-2 pr-4">Component</th><th className="pb-2 pr-4">Version</th><th className="pb-2 pr-4">License</th><th className="pb-2 pr-4">Vulnerabilities</th><th className="pb-2">Critical/High</th></tr></thead>
+              <tbody className="text-[var(--spr-text)]">
+                {report.sbom.length === 0 && <tr><td colSpan={5} className="py-3 text-[var(--spr-text-muted)]">No SBOM components recorded for this passport.</td></tr>}
                 {report.sbom.map((component, index) => (
-                  <tr key={`${component.name}-${index}`} className="border-t border-[#3c3c3c]">
+                  <tr key={`${component.name}-${index}`} className="border-t border-[var(--spr-border)]">
                     <td className="py-2 pr-4">{component.name || '—'}</td>
                     <td className="py-2 pr-4">{component.version || '—'}</td>
                     <td className="py-2 pr-4">{component.license || '—'}</td>
@@ -471,15 +471,15 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
 
       {report?.controls && (
         <div className="spr-panel p-6">
-          <div className="flex items-center gap-2"><ShieldCheck size={18} className="text-[#3794ff]" /><h2 className="text-lg font-semibold">Findings by control</h2></div>
-          <p className="mt-2 text-sm text-[#9d9d9d]">Open trust findings grouped by control ID, worst-observed severity first.</p>
+          <div className="flex items-center gap-2"><ShieldCheck size={18} className="text-[var(--spr-highlight)]" /><h2 className="text-lg font-semibold">Findings by control</h2></div>
+          <p className="mt-2 text-sm text-[var(--spr-text-muted)]">Open trust findings grouped by control ID, worst-observed severity first.</p>
           <div className="mt-4 overflow-auto">
             <table className="w-full min-w-[480px] text-left text-xs">
-              <thead className="text-[#9d9d9d]"><tr><th className="pb-2 pr-4">Control</th><th className="pb-2 pr-4">Findings</th><th className="pb-2 pr-4">Open</th><th className="pb-2">Worst severity</th></tr></thead>
-              <tbody className="text-[#d4d4d4]">
-                {report.controls.length === 0 && <tr><td colSpan={4} className="py-3 text-[#9d9d9d]">No control-mapped findings for this passport.</td></tr>}
+              <thead className="text-[var(--spr-text-muted)]"><tr><th className="pb-2 pr-4">Control</th><th className="pb-2 pr-4">Findings</th><th className="pb-2 pr-4">Open</th><th className="pb-2">Worst severity</th></tr></thead>
+              <tbody className="text-[var(--spr-text)]">
+                {report.controls.length === 0 && <tr><td colSpan={4} className="py-3 text-[var(--spr-text-muted)]">No control-mapped findings for this passport.</td></tr>}
                 {report.controls.map((control) => (
-                  <tr key={control.controlId} className="border-t border-[#3c3c3c]">
+                  <tr key={control.controlId} className="border-t border-[var(--spr-border)]">
                     <td className="py-2 pr-4 font-mono">{control.controlId || '—'}</td>
                     <td className="py-2 pr-4">{control.findingCount ?? 0}</td>
                     <td className="py-2 pr-4">{control.openCount ?? 0}</td>
@@ -494,36 +494,36 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
 
       {clients.length > 0 && (
         <div className="spr-panel p-6">
-          <h2 className="text-lg font-semibold text-[#d4d4d4]">White-label client report</h2>
-          <p className="mt-2 text-sm text-[#9d9d9d]">Generates a co-branded PDF for one client using your MSP name, logo, and brand color. Runs entirely in the browser from already-loaded client data.</p>
+          <h2 className="text-lg font-semibold text-[var(--spr-text)]">White-label client report</h2>
+          <p className="mt-2 text-sm text-[var(--spr-text-muted)]">Generates a co-branded PDF for one client using your MSP name, logo, and brand color. Runs entirely in the browser from already-loaded client data.</p>
           <div className="mt-5 grid gap-4 lg:grid-cols-2">
             <div className="space-y-3">
-              <select value={whiteLabelClientId} onChange={(event) => setWhiteLabelClientId(event.target.value)} className="w-full rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2.5 text-sm text-[#d4d4d4]">
+              <select value={whiteLabelClientId} onChange={(event) => setWhiteLabelClientId(event.target.value)} className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2.5 text-sm text-[var(--spr-text)]">
                 {clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
               </select>
-              <input value={mspName} onChange={(event) => setMspName(event.target.value)} placeholder="Your MSP / firm name *" className="w-full rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2.5 text-sm text-[#d4d4d4] placeholder:text-[#6f6f6f]" />
-              <input value={reportTitle} onChange={(event) => setReportTitle(event.target.value)} placeholder="Report title" className="w-full rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2.5 text-sm text-[#d4d4d4]" />
+              <input value={mspName} onChange={(event) => setMspName(event.target.value)} placeholder="Your MSP / firm name *" className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2.5 text-sm text-[var(--spr-text)] placeholder:text-[var(--spr-text-faint)]" />
+              <input value={reportTitle} onChange={(event) => setReportTitle(event.target.value)} placeholder="Report title" className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2.5 text-sm text-[var(--spr-text)]" />
               <div className="flex items-center gap-3">
-                <label className="flex items-center gap-2 text-xs text-[#9d9d9d]">Brand color <input type="color" value={brandColor} onChange={(event) => setBrandColor(event.target.value)} className="h-8 w-8 rounded border border-[#3c3c3c] bg-transparent" /></label>
-                <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2 text-xs text-[#d4d4d4] hover:border-[#0e639c]/50"><Upload size={14} /> {logoBase64 ? 'Logo uploaded' : 'Upload logo'}<input type="file" accept="image/png,image/jpeg,image/webp" onChange={handleLogoUpload} className="hidden" /></label>
+                <label className="flex items-center gap-2 text-xs text-[var(--spr-text-muted)]">Brand color <input type="color" value={brandColor} onChange={(event) => setBrandColor(event.target.value)} className="h-8 w-8 rounded border border-[var(--spr-border)] bg-transparent" /></label>
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)] hover:border-[var(--spr-accent)]/50"><Upload size={14} /> {logoBase64 ? 'Logo uploaded' : 'Upload logo'}<input type="file" accept="image/png,image/jpeg,image/webp" onChange={handleLogoUpload} className="hidden" /></label>
               </div>
-              <textarea value={executiveSummary} onChange={(event) => setExecutiveSummary(event.target.value)} placeholder="Executive summary (optional)" rows={3} className="w-full rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2.5 text-sm text-[#d4d4d4] placeholder:text-[#6f6f6f]" />
+              <textarea value={executiveSummary} onChange={(event) => setExecutiveSummary(event.target.value)} placeholder="Executive summary (optional)" rows={3} className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2.5 text-sm text-[var(--spr-text)] placeholder:text-[var(--spr-text-faint)]" />
             </div>
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-2 text-xs text-[#d4d4d4]">
+              <div className="grid grid-cols-2 gap-2 text-xs text-[var(--spr-text)]">
                 {(Object.keys(sections) as Array<keyof typeof sections>).map((key) => (
-                  <label key={key} className="flex items-center gap-2 rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2 capitalize"><input type="checkbox" checked={sections[key]} onChange={(event) => setSections((current) => ({ ...current, [key]: event.target.checked }))} /> {key}</label>
+                  <label key={key} className="flex items-center gap-2 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 capitalize"><input type="checkbox" checked={sections[key]} onChange={(event) => setSections((current) => ({ ...current, [key]: event.target.checked }))} /> {key}</label>
                 ))}
               </div>
               <button onClick={generateWhiteLabelReport} disabled={!whiteLabelClientId || !mspName.trim()} className="inline-flex w-full items-center justify-center gap-2 spr-btn spr-btn-primary disabled:cursor-not-allowed disabled:opacity-40"><FileText size={16} /> Generate white-label PDF</button>
-              <p className="text-[11px] leading-5 text-[#9d9d9d]">Uses the client's already-loaded software inventory and compliance status. No score is fabricated beyond what SPR already has on record for this client.</p>
+              <p className="text-[11px] leading-5 text-[var(--spr-text-muted)]">Uses the client's already-loaded software inventory and compliance status. No score is fabricated beyond what SPR already has on record for this client.</p>
             </div>
           </div>
         </div>
       )}
 
-      <div className="rounded-md border border-[#cca700]/30 bg-[#cca700]/10 p-4 text-xs leading-5 text-[#cca700]/85">
-        <strong className="text-[#cca700]">Capability boundary:</strong> PDF export runs entirely in the browser from already-loaded passport data; there is no server-rendered PDF. Share links are stateless signed URLs with a 7-day expiry and cannot be individually revoked before then. "Print / save PDF" still uses the browser's print dialog for a full-page copy. Empty datasets remain empty and are not replaced with sample values.
+      <div className="rounded-md border border-[var(--spr-amber)]/30 bg-[var(--spr-amber)]/10 p-4 text-xs leading-5 text-[var(--spr-amber)]/85">
+        <strong className="text-[var(--spr-amber)]">Capability boundary:</strong> PDF export runs entirely in the browser from already-loaded passport data; there is no server-rendered PDF. Share links are stateless signed URLs with a 7-day expiry and cannot be individually revoked before then. "Print / save PDF" still uses the browser's print dialog for a full-page copy. Empty datasets remain empty and are not replaced with sample values.
       </div>
     </section>
   );

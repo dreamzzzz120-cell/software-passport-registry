@@ -103,29 +103,29 @@ export default function TrustOSTutorial({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1e1e1e]/80 backdrop-blur-xs p-4">
-      <div className="bg-[#0c1224] border border-[#3c3c3c]/90 rounded-md max-w-lg w-full p-6 md:p-8 shadow-2xl relative overflow-hidden text-left animate-in fade-in zoom-in duration-250">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--spr-surface)]/80 backdrop-blur-xs p-4">
+      <div className="bg-[#0c1224] border border-[var(--spr-border)]/90 rounded-md max-w-lg w-full p-6 md:p-8 shadow-2xl relative overflow-hidden text-left animate-in fade-in zoom-in duration-250">
         
         {/* Glow background accent */}
-        <div className="absolute -top-12 -left-12 w-48 h-48 bg-[#094771] rounded-full blur-2xl pointer-events-none"></div>
+        <div className="absolute -top-12 -left-12 w-48 h-48 bg-[var(--spr-accent-soft)] rounded-full blur-2xl pointer-events-none"></div>
         <div className="absolute -bottom-12 -right-12 w-48 h-48 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
 
         {/* Header bar */}
-        <div className="flex justify-between items-center border-b border-[#3c3c3c]/60 pb-4.5 relative z-10">
+        <div className="flex justify-between items-center border-b border-[var(--spr-border)]/60 pb-4.5 relative z-10">
           <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-[#094771] text-[#3794ff] rounded-lg border border-[#3794ff]/40">
+            <div className="p-1.5 bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] rounded-lg border border-[var(--spr-highlight)]/40">
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-[10px] font-semibold text-[#9d9d9d] uppercase tracking-wider leading-none">Getting started</span>
-              <h3 className="text-sm font-display font-bold text-[#d4d4d4] mt-1 block leading-none">SPR quick tour</h3>
+              <span className="text-[10px] font-semibold text-[var(--spr-text-muted)] uppercase tracking-wider leading-none">Getting started</span>
+              <h3 className="text-sm font-display font-bold text-[var(--spr-text)] mt-1 block leading-none">SPR quick tour</h3>
             </div>
           </div>
 
           <button
             onClick={onClose}
             aria-label="Close tutorial"
-            className="p-1.5 bg-[#111625] border border-[#3c3c3c] text-[#9d9d9d] hover:text-[#d4d4d4] rounded-xl cursor-pointer"
+            className="p-1.5 bg-[#111625] border border-[var(--spr-border)] text-[var(--spr-text-muted)] hover:text-[var(--spr-text)] rounded-xl cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -135,24 +135,24 @@ export default function TrustOSTutorial({
         <div className="my-6 space-y-4.5 relative z-10 min-h-[170px]">
           
           <div className="flex justify-between items-center">
-            <span className="px-2.5 py-1 bg-[#094771] border border-[#3794ff]/40 text-[#3794ff] rounded-lg text-[10px] font-mono font-black uppercase tracking-wider">
+            <span className="px-2.5 py-1 bg-[var(--spr-accent-soft)] border border-[var(--spr-highlight)]/40 text-[var(--spr-highlight)] rounded-lg text-[10px] font-mono font-black uppercase tracking-wider">
               {stepInfo.badge}
             </span>
 
-            <span className="text-xs font-mono text-[#9d9d9d]">
+            <span className="text-xs font-mono text-[var(--spr-text-muted)]">
               {currentStep + 1} of {steps.length}
             </span>
           </div>
 
           <div className="flex gap-4 items-start pt-1">
-            <div className="p-3.5 bg-[#111625] border border-[#3c3c3c] rounded-md text-[#3794ff] shrink-0">
+            <div className="p-3.5 bg-[#111625] border border-[var(--spr-border)] rounded-md text-[var(--spr-highlight)] shrink-0">
               <StepIcon className="w-6 h-6" />
             </div>
             <div className="space-y-2 text-left">
-              <h4 className="text-base font-display font-black text-[#d4d4d4] tracking-tight">
+              <h4 className="text-base font-display font-black text-[var(--spr-text)] tracking-tight">
                 {stepInfo.title}
               </h4>
-              <p className="text-sm text-[#d4d4d4] leading-relaxed font-sans">
+              <p className="text-sm text-[var(--spr-text)] leading-relaxed font-sans">
                 {stepInfo.description}
               </p>
             </div>
@@ -161,13 +161,13 @@ export default function TrustOSTutorial({
         </div>
 
         {/* Footer actions */}
-        <div className="flex justify-between items-center border-t border-[#3c3c3c]/60 pt-5 mt-4 relative z-10">
+        <div className="flex justify-between items-center border-t border-[var(--spr-border)]/60 pt-5 mt-4 relative z-10">
           <div className="flex gap-1">
             {steps.map((_, idx) => (
               <div
                 key={idx}
                 className={`h-1.5 w-4 rounded-full transition-all duration-200 ${
-                  idx === currentStep ? 'bg-[#094771] w-8' : idx < currentStep ? 'bg-emerald-500' : 'bg-[#2d2d2d]'
+                  idx === currentStep ? 'bg-[var(--spr-accent-soft)] w-8' : idx < currentStep ? 'bg-emerald-500' : 'bg-[var(--spr-surface-sunken)]'
                 }`}
               />
             ))}
@@ -177,7 +177,7 @@ export default function TrustOSTutorial({
             {currentStep > 0 && (
               <button
                 onClick={handlePrev}
-                className="flex items-center gap-1.5 px-3.5 py-2 hover:bg-[#111625] border border-[#3c3c3c]/80 rounded-xl text-[#d4d4d4] text-xs font-bold cursor-pointer transition-colors"
+                className="flex items-center gap-1.5 px-3.5 py-2 hover:bg-[#111625] border border-[var(--spr-border)]/80 rounded-xl text-[var(--spr-text)] text-xs font-bold cursor-pointer transition-colors"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>Back</span>
@@ -186,7 +186,7 @@ export default function TrustOSTutorial({
 
             <button
               onClick={handleNext}
-              className="flex items-center gap-1.5 bg-[#094771] hover:bg-[#094771] text-[#d4d4d4] px-5 py-2.5 rounded-xl text-xs font-black cursor-pointer transition-all shadow-md"
+              className="flex items-center gap-1.5 bg-[var(--spr-accent-soft)] hover:bg-[var(--spr-accent-soft)] text-[var(--spr-text)] px-5 py-2.5 rounded-xl text-xs font-black cursor-pointer transition-all shadow-md"
             >
               <span>{stepInfo.actionLabel}</span>
               <ArrowRight className="w-3.5 h-3.5" />

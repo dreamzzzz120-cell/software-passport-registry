@@ -7,7 +7,7 @@ import { CheckCircle2, HelpCircle, ShieldAlert, XCircle, Circle } from 'lucide-r
 import type { VerificationStatus } from '../../types';
 import { GREEN, AMBER, RED } from '../../workflows/featureColors';
 
-const NEUTRAL = '#6f6f6f';
+const NEUTRAL = 'var(--spr-text-faint)';
 
 export type TrustState = 'VERIFIED' | 'PARTIALLY_VERIFIED' | 'EVIDENCE_INCOMPLETE' | 'VERIFICATION_FAILED' | 'UNINITIALIZED';
 
@@ -75,7 +75,7 @@ export default function TrustStateBadge({ state, showDescription = false, classN
         <Icon className="h-3 w-3" style={{ color: meta.color }} />
         {meta.label}
       </span>
-      {showDescription && <span className="text-xs text-[#9d9d9d]">{meta.description}</span>}
+      {showDescription && <span className="text-xs text-[var(--spr-text-muted)]">{meta.description}</span>}
     </span>
   );
 }

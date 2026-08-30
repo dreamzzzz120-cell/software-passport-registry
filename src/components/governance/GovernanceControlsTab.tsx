@@ -12,9 +12,9 @@ type Control = {
 type ControlTest = { id: string; controlId: string; testerName: string; testedAt: string; methodology: string; expectedResult: string; actualResult: string; evidenceIds: string[]; notes: string; result: string };
 
 const STATUS_STYLE: Record<string, string> = {
-  NOT_IMPLEMENTED: 'text-[#9d9d9d] border-[#3c3c3c]', IMPLEMENTED: 'text-[#3794ff] border-[#3794ff]/40',
-  TESTING: 'text-[#cca700] border-[#cca700]/40', VERIFIED: 'text-[#89d185] border-[#89d185]/40',
-  FAILED: 'text-[#f14c4c] border-[#f14c4c]/40', NEEDS_REVIEW: 'text-[#cca700] border-[#cca700]/40', NOT_APPLICABLE: 'text-[#6f6f6f] border-[#3c3c3c]',
+  NOT_IMPLEMENTED: 'text-[var(--spr-text-muted)] border-[var(--spr-border)]', IMPLEMENTED: 'text-[var(--spr-highlight)] border-[var(--spr-highlight)]/40',
+  TESTING: 'text-[var(--spr-amber)] border-[var(--spr-amber)]/40', VERIFIED: 'text-[var(--spr-green)] border-[var(--spr-green)]/40',
+  FAILED: 'text-[var(--spr-red)] border-[var(--spr-red)]/40', NEEDS_REVIEW: 'text-[var(--spr-amber)] border-[var(--spr-amber)]/40', NOT_APPLICABLE: 'text-[var(--spr-text-faint)] border-[var(--spr-border)]',
 };
 
 export default function GovernanceControlsTab({ canWrite, canTest, onNavigatePolicy, selectIdOnLoad }: { canWrite: boolean; canTest: boolean; onNavigatePolicy: (id: string) => void; selectIdOnLoad?: string | null }) {
@@ -117,23 +117,23 @@ export default function GovernanceControlsTab({ canWrite, canTest, onNavigatePol
   return (
     <div className="grid gap-5 lg:grid-cols-5">
       <section className="lg:col-span-2 spr-panel overflow-hidden">
-        <div className="border-b border-[#3c3c3c] p-3 space-y-2">
-          <div className="relative"><Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#6f6f6f]" /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search controls…" className="w-full rounded-md border border-[#3c3c3c] bg-[#2d2d2d] py-1.5 pl-8 pr-2 text-xs text-[#d4d4d4]" /></div>
+        <div className="border-b border-[var(--spr-border)] p-3 space-y-2">
+          <div className="relative"><Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--spr-text-faint)]" /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search controls…" className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] py-1.5 pl-8 pr-2 text-xs text-[var(--spr-text)]" /></div>
           <div className="flex items-center justify-between gap-2">
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-2 py-1.5 text-xs text-[#d4d4d4]">
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2 py-1.5 text-xs text-[var(--spr-text)]">
               <option value="">All statuses</option>
               {Object.keys(STATUS_STYLE).map((s) => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
             </select>
             {canWrite && <button onClick={() => setShowCreate(true)} className="spr-btn spr-btn-primary inline-flex items-center gap-1.5 !text-xs"><Plus className="h-3.5 w-3.5" /> New</button>}
           </div>
         </div>
-        {error && <div role="alert" className="m-3 rounded-md border border-[#f14c4c]/40 bg-[#f14c4c]/10 px-3 py-2 text-xs text-[#f14c4c]">{error}</div>}
-        <div className="max-h-[560px] divide-y divide-[#3c3c3c] overflow-y-auto">
-          {loading ? <div className="p-6 text-sm text-[#9d9d9d]">Loading…</div> : filtered.length === 0 ? (
-            <div className="p-8 text-center text-sm text-[#9d9d9d]"><ShieldCheck className="mx-auto h-7 w-7 text-[#6f6f6f]" /><p className="mt-2 font-semibold text-[#d4d4d4]">{controls.length === 0 ? 'No controls exist yet.' : 'No controls match this search/filter.'}</p></div>
+        {error && <div role="alert" className="m-3 rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 px-3 py-2 text-xs text-[var(--spr-red)]">{error}</div>}
+        <div className="max-h-[560px] divide-y divide-[var(--spr-border)] overflow-y-auto">
+          {loading ? <div className="p-6 text-sm text-[var(--spr-text-muted)]">Loading…</div> : filtered.length === 0 ? (
+            <div className="p-8 text-center text-sm text-[var(--spr-text-muted)]"><ShieldCheck className="mx-auto h-7 w-7 text-[var(--spr-text-faint)]" /><p className="mt-2 font-semibold text-[var(--spr-text)]">{controls.length === 0 ? 'No controls exist yet.' : 'No controls match this search/filter.'}</p></div>
           ) : filtered.map((c) => (
-            <button key={c.id} onClick={() => setSelectedId(c.id)} className={`flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm transition ${selectedId === c.id ? 'bg-[#094771]/45' : 'hover:bg-[#2d2d2d]'}`}>
-              <span className="min-w-0"><span className="block truncate font-semibold text-[#d4d4d4]">{c.name}</span><span className="block text-xs text-[#6f6f6f]">{c.ownerName || 'No owner set'}</span></span>
+            <button key={c.id} onClick={() => setSelectedId(c.id)} className={`flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm transition ${selectedId === c.id ? 'bg-[var(--spr-accent-soft)]/45' : 'hover:bg-[var(--spr-surface-sunken)]'}`}>
+              <span className="min-w-0"><span className="block truncate font-semibold text-[var(--spr-text)]">{c.name}</span><span className="block text-xs text-[var(--spr-text-faint)]">{c.ownerName || 'No owner set'}</span></span>
               <span className={`shrink-0 rounded-sm border px-2 py-0.5 text-[10px] font-bold uppercase ${STATUS_STYLE[c.implementationStatus]}`}>{c.implementationStatus.replace('_', ' ')}</span>
             </button>
           ))}
@@ -141,48 +141,48 @@ export default function GovernanceControlsTab({ canWrite, canTest, onNavigatePol
       </section>
 
       <section className="lg:col-span-3 spr-panel p-5">
-        {!selected ? <p className="py-16 text-center text-sm text-[#9d9d9d]">Select a control to view details.</p> : (
+        {!selected ? <p className="py-16 text-center text-sm text-[var(--spr-text-muted)]">Select a control to view details.</p> : (
           <div className="space-y-4">
-            {saveError && <div role="alert" className="rounded-md border border-[#f14c4c]/40 bg-[#f14c4c]/10 px-3 py-2.5 text-xs text-[#f14c4c]">{saveError}</div>}
+            {saveError && <div role="alert" className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 px-3 py-2.5 text-xs text-[var(--spr-red)]">{saveError}</div>}
             <div className="flex items-start justify-between gap-3">
-              <div><h2 className="text-sm font-bold text-[#d4d4d4]">{selected.name}</h2><p className="text-xs text-[#6f6f6f]">Key: {selected.controlKey}</p></div>
-              <button onClick={() => setWhyOpenFor(selected.id)} className="inline-flex items-center gap-1 rounded-md border border-[#3c3c3c] px-2.5 py-1 text-xs font-semibold text-[#3794ff] hover:bg-[#2d2d2d]"><HelpCircle className="h-3.5 w-3.5" /> Why?</button>
+              <div><h2 className="text-sm font-bold text-[var(--spr-text)]">{selected.name}</h2><p className="text-xs text-[var(--spr-text-faint)]">Key: {selected.controlKey}</p></div>
+              <button onClick={() => setWhyOpenFor(selected.id)} className="inline-flex items-center gap-1 rounded-md border border-[var(--spr-border)] px-2.5 py-1 text-xs font-semibold text-[var(--spr-highlight)] hover:bg-[var(--spr-surface-sunken)]"><HelpCircle className="h-3.5 w-3.5" /> Why?</button>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className="flex flex-col gap-1 text-[10px] font-bold text-[#9d9d9d]">Name<input disabled={!canWrite} value={editForm.name ?? ''} onChange={(e) => setEditForm((c) => ({ ...c, name: e.target.value }))} className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-2.5 py-1.5 text-xs text-[#d4d4d4] disabled:opacity-60" /></label>
-              <label className="flex flex-col gap-1 text-[10px] font-bold text-[#9d9d9d]">Owner<input disabled={!canWrite} value={editForm.ownerName ?? ''} onChange={(e) => setEditForm((c) => ({ ...c, ownerName: e.target.value }))} className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-2.5 py-1.5 text-xs text-[#d4d4d4] disabled:opacity-60" /></label>
-              <label className="flex flex-col gap-1 text-[10px] font-bold text-[#9d9d9d]">Implementation status<select disabled={!canWrite} value={editForm.implementationStatus ?? ''} onChange={(e) => setEditForm((c) => ({ ...c, implementationStatus: e.target.value as Control['implementationStatus'] }))} className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-2.5 py-1.5 text-xs text-[#d4d4d4] disabled:opacity-60">{Object.keys(STATUS_STYLE).map((s) => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}</select></label>
-              <label className="flex flex-col gap-1 text-[10px] font-bold text-[#9d9d9d]">Test frequency<input disabled={!canWrite} value={editForm.frequency ?? ''} onChange={(e) => setEditForm((c) => ({ ...c, frequency: e.target.value }))} placeholder="e.g. Quarterly" className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-2.5 py-1.5 text-xs text-[#d4d4d4] disabled:opacity-60" /></label>
+              <label className="flex flex-col gap-1 text-[10px] font-bold text-[var(--spr-text-muted)]">Name<input disabled={!canWrite} value={editForm.name ?? ''} onChange={(e) => setEditForm((c) => ({ ...c, name: e.target.value }))} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2.5 py-1.5 text-xs text-[var(--spr-text)] disabled:opacity-60" /></label>
+              <label className="flex flex-col gap-1 text-[10px] font-bold text-[var(--spr-text-muted)]">Owner<input disabled={!canWrite} value={editForm.ownerName ?? ''} onChange={(e) => setEditForm((c) => ({ ...c, ownerName: e.target.value }))} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2.5 py-1.5 text-xs text-[var(--spr-text)] disabled:opacity-60" /></label>
+              <label className="flex flex-col gap-1 text-[10px] font-bold text-[var(--spr-text-muted)]">Implementation status<select disabled={!canWrite} value={editForm.implementationStatus ?? ''} onChange={(e) => setEditForm((c) => ({ ...c, implementationStatus: e.target.value as Control['implementationStatus'] }))} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2.5 py-1.5 text-xs text-[var(--spr-text)] disabled:opacity-60">{Object.keys(STATUS_STYLE).map((s) => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}</select></label>
+              <label className="flex flex-col gap-1 text-[10px] font-bold text-[var(--spr-text-muted)]">Test frequency<input disabled={!canWrite} value={editForm.frequency ?? ''} onChange={(e) => setEditForm((c) => ({ ...c, frequency: e.target.value }))} placeholder="e.g. Quarterly" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2.5 py-1.5 text-xs text-[var(--spr-text)] disabled:opacity-60" /></label>
             </div>
-            <label className="flex flex-col gap-1 text-[10px] font-bold text-[#9d9d9d]">Objective<textarea disabled={!canWrite} value={editForm.objective ?? ''} onChange={(e) => setEditForm((c) => ({ ...c, objective: e.target.value }))} rows={2} className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-2.5 py-1.5 text-xs text-[#d4d4d4] disabled:opacity-60" /></label>
-            <label className="flex flex-col gap-1 text-[10px] font-bold text-[#9d9d9d]">Evidence requirements<textarea disabled={!canWrite} value={editForm.evidenceRequirements ?? ''} onChange={(e) => setEditForm((c) => ({ ...c, evidenceRequirements: e.target.value }))} rows={2} className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-2.5 py-1.5 text-xs text-[#d4d4d4] disabled:opacity-60" /></label>
+            <label className="flex flex-col gap-1 text-[10px] font-bold text-[var(--spr-text-muted)]">Objective<textarea disabled={!canWrite} value={editForm.objective ?? ''} onChange={(e) => setEditForm((c) => ({ ...c, objective: e.target.value }))} rows={2} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2.5 py-1.5 text-xs text-[var(--spr-text)] disabled:opacity-60" /></label>
+            <label className="flex flex-col gap-1 text-[10px] font-bold text-[var(--spr-text-muted)]">Evidence requirements<textarea disabled={!canWrite} value={editForm.evidenceRequirements ?? ''} onChange={(e) => setEditForm((c) => ({ ...c, evidenceRequirements: e.target.value }))} rows={2} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2.5 py-1.5 text-xs text-[var(--spr-text)] disabled:opacity-60" /></label>
 
             {selected.relatedPolicyIds.length > 0 && (
-              <div><div className="text-[10px] font-bold uppercase tracking-wider text-[#6f6f6f]">Related policies</div><div className="mt-1 flex flex-wrap gap-1.5">{selected.relatedPolicyIds.map((id) => <button key={id} onClick={() => onNavigatePolicy(id)} className="rounded-sm border border-[#3c3c3c] px-2 py-0.5 text-[10px] text-[#3794ff] hover:underline">{id}</button>)}</div></div>
+              <div><div className="text-[10px] font-bold uppercase tracking-wider text-[var(--spr-text-faint)]">Related policies</div><div className="mt-1 flex flex-wrap gap-1.5">{selected.relatedPolicyIds.map((id) => <button key={id} onClick={() => onNavigatePolicy(id)} className="rounded-sm border border-[var(--spr-border)] px-2 py-0.5 text-[10px] text-[var(--spr-highlight)] hover:underline">{id}</button>)}</div></div>
             )}
 
             {canWrite && <button onClick={() => void handleSave()} disabled={saving} className="spr-btn spr-btn-primary inline-flex items-center gap-1.5 !text-xs disabled:opacity-50">{saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} Save changes</button>}
 
-            <div className="border-t border-[#3c3c3c] pt-4">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-[#d4d4d4]">Control tests</h3>
+            <div className="border-t border-[var(--spr-border)] pt-4">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--spr-text)]">Control tests</h3>
               {canTest && (
-                <form onSubmit={handleRunTest} className="mt-2 space-y-2 rounded-md border border-[#3c3c3c] bg-[#181818] p-3">
-                  {testError && <div role="alert" className="rounded-md border border-[#f14c4c]/40 bg-[#f14c4c]/10 px-2.5 py-2 text-xs text-[#f14c4c]">{testError}</div>}
+                <form onSubmit={handleRunTest} className="mt-2 space-y-2 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] p-3">
+                  {testError && <div role="alert" className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 px-2.5 py-2 text-xs text-[var(--spr-red)]">{testError}</div>}
                   <div className="grid gap-2 sm:grid-cols-2">
-                    <input required value={testForm.testerName} onChange={(e) => setTestForm((c) => ({ ...c, testerName: e.target.value }))} placeholder="Tester name *" className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-2.5 py-1.5 text-xs text-[#d4d4d4]" />
-                    <select value={testForm.result} onChange={(e) => setTestForm((c) => ({ ...c, result: e.target.value }))} className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-2.5 py-1.5 text-xs text-[#d4d4d4]">{['PASS', 'FAIL', 'PARTIAL', 'UNKNOWN', 'NEEDS_REVIEW'].map((r) => <option key={r} value={r}>{r}</option>)}</select>
+                    <input required value={testForm.testerName} onChange={(e) => setTestForm((c) => ({ ...c, testerName: e.target.value }))} placeholder="Tester name *" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2.5 py-1.5 text-xs text-[var(--spr-text)]" />
+                    <select value={testForm.result} onChange={(e) => setTestForm((c) => ({ ...c, result: e.target.value }))} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2.5 py-1.5 text-xs text-[var(--spr-text)]">{['PASS', 'FAIL', 'PARTIAL', 'UNKNOWN', 'NEEDS_REVIEW'].map((r) => <option key={r} value={r}>{r}</option>)}</select>
                   </div>
-                  <input value={testForm.methodology} onChange={(e) => setTestForm((c) => ({ ...c, methodology: e.target.value }))} placeholder="Methodology" className="w-full rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-2.5 py-1.5 text-xs text-[#d4d4d4]" />
-                  <input value={testForm.evidenceIds} onChange={(e) => setTestForm((c) => ({ ...c, evidenceIds: e.target.value }))} placeholder="Evidence IDs (comma-separated) -- required for a PASS result" className="w-full rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-2.5 py-1.5 text-xs text-[#d4d4d4]" />
-                  <button type="submit" disabled={!testForm.testerName.trim() || testing} className="inline-flex items-center gap-1.5 rounded-md bg-[#0e639c] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#1177bb] disabled:opacity-40">{testing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} Record test</button>
+                  <input value={testForm.methodology} onChange={(e) => setTestForm((c) => ({ ...c, methodology: e.target.value }))} placeholder="Methodology" className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2.5 py-1.5 text-xs text-[var(--spr-text)]" />
+                  <input value={testForm.evidenceIds} onChange={(e) => setTestForm((c) => ({ ...c, evidenceIds: e.target.value }))} placeholder="Evidence IDs (comma-separated) -- required for a PASS result" className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2.5 py-1.5 text-xs text-[var(--spr-text)]" />
+                  <button type="submit" disabled={!testForm.testerName.trim() || testing} className="inline-flex items-center gap-1.5 rounded-md bg-[var(--spr-accent)] px-3 py-1.5 text-xs font-bold text-white hover:bg-[var(--spr-accent-hover)] disabled:opacity-40">{testing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} Record test</button>
                 </form>
               )}
               <div className="mt-3 space-y-2">
-                {testsLoading ? <p className="text-xs text-[#9d9d9d]">Loading tests…</p> : tests.length === 0 ? <p className="text-xs italic text-[#6f6f6f]">No tests recorded yet.</p> : tests.map((t) => (
-                  <div key={t.id} className="rounded-md border border-[#3c3c3c] bg-[#181818] p-2.5 text-xs">
-                    <div className="flex items-center justify-between"><span className="font-semibold text-[#d4d4d4]">{t.testerName}</span><span className={`rounded-sm border px-1.5 py-0.5 text-[9px] font-bold ${t.result === 'PASS' ? 'border-[#89d185]/40 text-[#89d185]' : t.result === 'FAIL' ? 'border-[#f14c4c]/40 text-[#f14c4c]' : 'border-[#3c3c3c] text-[#9d9d9d]'}`}>{t.result}</span></div>
-                    <p className="mt-1 text-[#6f6f6f]">{new Date(t.testedAt).toLocaleString()} · {t.evidenceIds.length} evidence item{t.evidenceIds.length === 1 ? '' : 's'}</p>
+                {testsLoading ? <p className="text-xs text-[var(--spr-text-muted)]">Loading tests…</p> : tests.length === 0 ? <p className="text-xs italic text-[var(--spr-text-faint)]">No tests recorded yet.</p> : tests.map((t) => (
+                  <div key={t.id} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] p-2.5 text-xs">
+                    <div className="flex items-center justify-between"><span className="font-semibold text-[var(--spr-text)]">{t.testerName}</span><span className={`rounded-sm border px-1.5 py-0.5 text-[9px] font-bold ${t.result === 'PASS' ? 'border-[var(--spr-green)]/40 text-[var(--spr-green)]' : t.result === 'FAIL' ? 'border-[var(--spr-red)]/40 text-[var(--spr-red)]' : 'border-[var(--spr-border)] text-[var(--spr-text-muted)]'}`}>{t.result}</span></div>
+                    <p className="mt-1 text-[var(--spr-text-faint)]">{new Date(t.testedAt).toLocaleString()} · {t.evidenceIds.length} evidence item{t.evidenceIds.length === 1 ? '' : 's'}</p>
                   </div>
                 ))}
               </div>
@@ -193,17 +193,17 @@ export default function GovernanceControlsTab({ canWrite, canTest, onNavigatePol
 
       {showCreate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true">
-          <div className="w-full max-w-lg rounded-md border border-[#3c3c3c] bg-[#252526] p-6 shadow-2xl">
-            <div className="flex items-start justify-between gap-4"><h2 className="text-lg font-bold text-[#d4d4d4]">New control</h2><button onClick={() => setShowCreate(false)} aria-label="Close" className="rounded-md p-1.5 text-[#9d9d9d] hover:bg-[#383838]"><X className="h-4 w-4" /></button></div>
+          <div className="w-full max-w-lg rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4"><h2 className="text-lg font-bold text-[var(--spr-text)]">New control</h2><button onClick={() => setShowCreate(false)} aria-label="Close" className="rounded-md p-1.5 text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)]"><X className="h-4 w-4" /></button></div>
             <form onSubmit={handleCreate} className="mt-5 space-y-3">
-              {createError && <div role="alert" className="rounded-md border border-[#f14c4c]/40 bg-[#f14c4c]/10 px-3 py-2 text-xs text-[#f14c4c]">{createError}</div>}
-              <label className="flex flex-col gap-1 text-[10px] font-bold text-[#9d9d9d]">Control key * (unique)<input required value={form.controlKey} onChange={(e) => setForm((c) => ({ ...c, controlKey: e.target.value }))} className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2 text-xs text-[#d4d4d4]" /></label>
-              <label className="flex flex-col gap-1 text-[10px] font-bold text-[#9d9d9d]">Name *<input required value={form.name} onChange={(e) => setForm((c) => ({ ...c, name: e.target.value }))} className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2 text-xs text-[#d4d4d4]" /></label>
-              <label className="flex flex-col gap-1 text-[10px] font-bold text-[#9d9d9d]">Objective<textarea value={form.objective} onChange={(e) => setForm((c) => ({ ...c, objective: e.target.value }))} rows={2} className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2 text-xs text-[#d4d4d4]" /></label>
-              <label className="flex flex-col gap-1 text-[10px] font-bold text-[#9d9d9d]">Owner<input value={form.ownerName} onChange={(e) => setForm((c) => ({ ...c, ownerName: e.target.value }))} className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2 text-xs text-[#d4d4d4]" /></label>
+              {createError && <div role="alert" className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 px-3 py-2 text-xs text-[var(--spr-red)]">{createError}</div>}
+              <label className="flex flex-col gap-1 text-[10px] font-bold text-[var(--spr-text-muted)]">Control key * (unique)<input required value={form.controlKey} onChange={(e) => setForm((c) => ({ ...c, controlKey: e.target.value }))} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]" /></label>
+              <label className="flex flex-col gap-1 text-[10px] font-bold text-[var(--spr-text-muted)]">Name *<input required value={form.name} onChange={(e) => setForm((c) => ({ ...c, name: e.target.value }))} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]" /></label>
+              <label className="flex flex-col gap-1 text-[10px] font-bold text-[var(--spr-text-muted)]">Objective<textarea value={form.objective} onChange={(e) => setForm((c) => ({ ...c, objective: e.target.value }))} rows={2} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]" /></label>
+              <label className="flex flex-col gap-1 text-[10px] font-bold text-[var(--spr-text-muted)]">Owner<input value={form.ownerName} onChange={(e) => setForm((c) => ({ ...c, ownerName: e.target.value }))} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]" /></label>
               <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={() => setShowCreate(false)} className="rounded-md border border-[#3c3c3c] px-3.5 py-2 text-xs font-semibold text-[#9d9d9d] hover:bg-[#383838]">Cancel</button>
-                <button type="submit" disabled={creating || !form.controlKey.trim() || !form.name.trim()} className="inline-flex items-center gap-1.5 rounded-md bg-[#0e639c] px-3.5 py-2 text-xs font-bold text-white hover:bg-[#1177bb] disabled:opacity-40">{creating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}{creating ? 'Creating…' : 'Create'}</button>
+                <button type="button" onClick={() => setShowCreate(false)} className="rounded-md border border-[var(--spr-border)] px-3.5 py-2 text-xs font-semibold text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)]">Cancel</button>
+                <button type="submit" disabled={creating || !form.controlKey.trim() || !form.name.trim()} className="inline-flex items-center gap-1.5 rounded-md bg-[var(--spr-accent)] px-3.5 py-2 text-xs font-bold text-white hover:bg-[var(--spr-accent-hover)] disabled:opacity-40">{creating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}{creating ? 'Creating…' : 'Create'}</button>
               </div>
             </form>
           </div>

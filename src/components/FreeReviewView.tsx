@@ -173,48 +173,48 @@ export default function FreeReviewView({ onSignUp, initialResult }: FreeReviewVi
   const displayName = displayRepository(owner, repository);
 
   return (
-    <div className="min-h-screen bg-[#1e1e1e] px-6 py-16 text-[#d4d4d4]">
+    <div className="min-h-screen bg-[var(--spr-surface)] px-6 py-16 text-[var(--spr-text)]">
       <div className="mx-auto max-w-2xl">
         <div className="text-center">
-          <div className="text-[10px] font-semibold uppercase tracking-[.15em] text-[#3794ff]">Software Passport Registry</div>
+          <div className="text-[10px] font-semibold uppercase tracking-[.15em] text-[var(--spr-highlight)]">Software Passport Registry</div>
           <h1 className="mt-3 text-3xl font-semibold">Free software review</h1>
-          <p className="mt-3 text-sm leading-6 text-[#9d9d9d]">Enter a public GitHub repository. SPR runs a real dependency and secret scan against it and shows you exactly what it found - no account required.</p>
+          <p className="mt-3 text-sm leading-6 text-[var(--spr-text-muted)]">Enter a public GitHub repository. SPR runs a real dependency and secret scan against it and shows you exactly what it found - no account required.</p>
         </div>
 
         {!statusUrl && (
-          <form onSubmit={submit} className="mt-8 space-y-4 rounded-md border border-[#3c3c3c] bg-[#252526] p-6">
+          <form onSubmit={submit} className="mt-8 space-y-4 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6">
             <div className="flex gap-3">
               <label className="flex-1 text-sm font-semibold">Owner
-                <input className="mt-2 w-full rounded-xl border border-[#3c3c3c] bg-[#181818] px-4 py-3 outline-none focus:border-[#3794ff]/40" value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="e.g. anthropics" required />
+                <input className="mt-2 w-full rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-4 py-3 outline-none focus:border-[var(--spr-highlight)]/40" value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="e.g. anthropics" required />
               </label>
               <label className="flex-1 text-sm font-semibold">Repository
-                <input className="mt-2 w-full rounded-xl border border-[#3c3c3c] bg-[#181818] px-4 py-3 outline-none focus:border-[#3794ff]/40" value={repository} onChange={(e) => setRepository(e.target.value)} placeholder="e.g. claude-code or https://github.com/anthropics/claude-code" required />
+                <input className="mt-2 w-full rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-4 py-3 outline-none focus:border-[var(--spr-highlight)]/40" value={repository} onChange={(e) => setRepository(e.target.value)} placeholder="e.g. claude-code or https://github.com/anthropics/claude-code" required />
               </label>
             </div>
             {error && <div role="alert" className="rounded-xl border border-red-400/20 bg-red-400/10 p-3 text-sm text-red-200"><AlertCircle className="mr-2 inline h-4 w-4" />{error}</div>}
-            <button type="submit" disabled={submitting} className="w-full rounded-xl bg-[#0e639c] px-4 py-3.5 font-bold text-white disabled:opacity-50">{submitting ? <Loader className="mx-auto h-5 w-5 animate-spin" /> : <>Run free review <ArrowRight className="ml-1 inline h-4 w-4" /></>}</button>
+            <button type="submit" disabled={submitting} className="w-full rounded-xl bg-[var(--spr-accent)] px-4 py-3.5 font-bold text-white disabled:opacity-50">{submitting ? <Loader className="mx-auto h-5 w-5 animate-spin" /> : <>Run free review <ArrowRight className="ml-1 inline h-4 w-4" /></>}</button>
           </form>
         )}
 
         {statusUrl && (
-          <div className="mt-8 space-y-4 rounded-md border border-[#3c3c3c] bg-[#252526] p-6">
+          <div className="mt-8 space-y-4 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6">
             {error && <div role="alert" className="rounded-xl border border-red-400/20 bg-red-400/10 p-3 text-sm text-red-200"><AlertCircle className="mr-2 inline h-4 w-4" />{error}</div>}
-            {(!result || result.scanStatus === 'scanning') && (<div className="flex items-center gap-3 text-sm text-[#9d9d9d]"><Loader className="h-5 w-5 animate-spin" /> Scanning {displayName}... this usually takes under a minute.</div>)}
+            {(!result || result.scanStatus === 'scanning') && (<div className="flex items-center gap-3 text-sm text-[var(--spr-text-muted)]"><Loader className="h-5 w-5 animate-spin" /> Scanning {displayName}... this usually takes under a minute.</div>)}
             {result && result.scanStatus !== 'scanning' && (
               <div>
-                <div className="flex items-center gap-2 text-sm font-semibold"><CheckCircle2 className="h-5 w-5 text-[#3794ff]" /> Review complete{result.scanStatus === 'partial' ? ' (one scan engine did not finish)' : ''}</div>
+                <div className="flex items-center gap-2 text-sm font-semibold"><CheckCircle2 className="h-5 w-5 text-[var(--spr-highlight)]" /> Review complete{result.scanStatus === 'partial' ? ' (one scan engine did not finish)' : ''}</div>
                 <div className="mt-4 grid grid-cols-3 gap-3 text-center text-sm">
-                  <div className="rounded-xl border border-[#3c3c3c] p-3"><div className="text-2xl font-bold">{result.summary.openFindings}</div><div className="text-[#9d9d9d]">Open findings</div></div>
-                  <div className="rounded-xl border border-[#3c3c3c] p-3"><div className="text-2xl font-bold">{result.summary.criticalOrHigh}</div><div className="text-[#9d9d9d]">Critical/High</div></div>
-                  <div className="rounded-xl border border-[#3c3c3c] p-3"><div className="text-2xl font-bold">{result.summary.evidenceCount}</div><div className="text-[#9d9d9d]">Evidence items</div></div>
+                  <div className="rounded-xl border border-[var(--spr-border)] p-3"><div className="text-2xl font-bold">{result.summary.openFindings}</div><div className="text-[var(--spr-text-muted)]">Open findings</div></div>
+                  <div className="rounded-xl border border-[var(--spr-border)] p-3"><div className="text-2xl font-bold">{result.summary.criticalOrHigh}</div><div className="text-[var(--spr-text-muted)]">Critical/High</div></div>
+                  <div className="rounded-xl border border-[var(--spr-border)] p-3"><div className="text-2xl font-bold">{result.summary.evidenceCount}</div><div className="text-[var(--spr-text-muted)]">Evidence items</div></div>
                 </div>
-                {result.findings.length > 0 && (<ul className="mt-4 space-y-2 text-sm">{result.findings.slice(0, 20).map((f) => (<li key={f.id} className="rounded-lg border border-[#3c3c3c] p-3"><span className="font-semibold uppercase text-[#f48771]">{f.severity}</span> {f.title}{f.component ? ` — ${f.component}` : ''}</li>))}</ul>)}
-                <button onClick={onSignUp} className="mt-6 w-full rounded-xl bg-[#0e639c] px-4 py-3.5 font-bold text-white"><ShieldCheck className="mr-2 inline h-4 w-4" />Sign up to claim this Passport &amp; get continuous monitoring</button>
+                {result.findings.length > 0 && (<ul className="mt-4 space-y-2 text-sm">{result.findings.slice(0, 20).map((f) => (<li key={f.id} className="rounded-lg border border-[var(--spr-border)] p-3"><span className="font-semibold uppercase text-[#f48771]">{f.severity}</span> {f.title}{f.component ? ` — ${f.component}` : ''}</li>))}</ul>)}
+                <button onClick={onSignUp} className="mt-6 w-full rounded-xl bg-[var(--spr-accent)] px-4 py-3.5 font-bold text-white"><ShieldCheck className="mr-2 inline h-4 w-4" />Sign up to claim this Passport &amp; get continuous monitoring</button>
               </div>
             )}
           </div>
         )}
-        <p className="mt-6 text-center text-xs text-[#6f6f6f]">SPR reports observed evidence only. An empty result means no issues were found by these engines, not a guarantee of safety.</p>
+        <p className="mt-6 text-center text-xs text-[var(--spr-text-faint)]">SPR reports observed evidence only. An empty result means no issues were found by these engines, not a guarantee of safety.</p>
       </div>
     </div>
   );

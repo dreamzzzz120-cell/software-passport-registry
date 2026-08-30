@@ -9,10 +9,10 @@ const App = lazy(() => import('./App'));
 
 function AppBoot() {
   return (
-    <div className="min-h-screen bg-[#1e1e1e] text-[#d4d4d4] flex items-center justify-center px-6">
+    <div className="min-h-screen bg-[var(--spr-surface)] text-[var(--spr-text)] flex items-center justify-center px-6">
       <div className="max-w-lg text-center" role="status" aria-live="polite">
-        <div className="text-xs font-bold uppercase tracking-[.25em] text-[#3794ff]">SPR</div>
-        <div className="mt-3 text-sm text-[#9d9d9d]">Loading secure workspace…</div>
+        <div className="text-xs font-bold uppercase tracking-[.25em] text-[var(--spr-highlight)]">SPR</div>
+        <div className="mt-3 text-sm text-[var(--spr-text-muted)]">Loading secure workspace…</div>
       </div>
     </div>
   );
@@ -43,20 +43,20 @@ class BootBoundary extends Component<{ children?: ReactNode }, BootBoundaryState
     const firebaseConfigMissing = message.includes('VITE_FIREBASE_');
 
     return (
-      <div className="min-h-screen bg-[#1e1e1e] text-[#d4d4d4] flex items-center justify-center px-6">
-        <div className="w-full max-w-2xl rounded-md border border-[#f14c4c]/40 bg-[#252526] p-8">
-          <div className="text-xs font-bold uppercase tracking-[.25em] text-[#f14c4c]">SPR startup failure</div>
+      <div className="min-h-screen bg-[var(--spr-surface)] text-[var(--spr-text)] flex items-center justify-center px-6">
+        <div className="w-full max-w-2xl rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-surface-alt)] p-8">
+          <div className="text-xs font-bold uppercase tracking-[.25em] text-[var(--spr-red)]">SPR startup failure</div>
           <h1 className="mt-3 text-2xl font-semibold">The workspace could not start.</h1>
-          <p className="mt-3 text-sm leading-6 text-[#9d9d9d]">
+          <p className="mt-3 text-sm leading-6 text-[var(--spr-text-muted)]">
             {firebaseConfigMissing
               ? 'Firebase web configuration is missing from this deployment. Add the required VITE_FIREBASE_* variables to the Vercel environment, then redeploy.'
               : 'A client module failed during startup. The page is showing the real startup error instead of remaining blank.'}
           </p>
-          <pre className="mt-5 overflow-auto rounded-md border border-[#3c3c3c] bg-[#181818] p-4 text-xs text-[#9d9d9d]">{message}</pre>
+          <pre className="mt-5 overflow-auto rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] p-4 text-xs text-[var(--spr-text-muted)]">{message}</pre>
           <button
             type="button"
             onClick={() => window.location.reload()}
-            className="mt-6 rounded-[3px] bg-[#0e639c] px-4 py-2.5 text-sm font-bold text-white"
+            className="mt-6 rounded-[3px] bg-[var(--spr-accent)] px-4 py-2.5 text-sm font-bold text-white"
           >
             Reload application
           </button>

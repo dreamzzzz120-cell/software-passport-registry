@@ -59,6 +59,16 @@
     </script>
   </head>
   <body>
+    <script>
+      (function () {
+        try {
+          var saved = window.localStorage.getItem('spr-theme');
+          document.documentElement.setAttribute('data-theme', saved === 'light' ? 'light' : 'dark');
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

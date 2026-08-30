@@ -40,7 +40,7 @@ export default function EnterpriseReadinessView({ clients }: EnterpriseReadiness
     <header className="rounded-3xl border border-white/10 bg-white/[0.03] p-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 text-sm font-semibold text-[#cca700]"><ShieldCheck size={18}/> Enterprise Readiness</div>
+          <div className="flex items-center gap-2 text-sm font-semibold text-[var(--spr-amber)]"><ShieldCheck size={18}/> Enterprise Readiness</div>
           <h1 className="mt-2 text-2xl font-bold">Evidence-backed readiness</h1>
           <p className="mt-2 max-w-3xl text-sm text-white/60">Claims are not inferred from UI components. Deployment, certifications, infrastructure, pentests, integrations and telemetry remain unverified until supporting evidence is available.</p>
         </div>

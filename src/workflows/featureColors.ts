@@ -2,12 +2,12 @@
 // item, shared between the sidebar (CommandCenter.tsx) and each feature's own
 // page header, so a feature reads as the same color everywhere it appears.
 // Colors are drawn from the VS Code Dark+ token palette in src/index.css.
-export const BLUE = '#3794ff';
+export const BLUE = 'var(--spr-highlight)';
 export const CYAN = '#9cdcfe';
 export const TEAL = '#4ec9b0';
-export const GREEN = '#89d185';
-export const AMBER = '#cca700';
-export const RED = '#f14c4c';
+export const GREEN = 'var(--spr-green)';
+export const AMBER = 'var(--spr-amber)';
+export const RED = 'var(--spr-red)';
 export const PURPLE = '#c586c0';
 export const ORANGE = '#ce9178';
 

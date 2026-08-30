@@ -35,16 +35,16 @@ export default function GovernanceView({ role = 'Viewer' }: { role?: string }) {
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-10">
       <header>
-        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.2em] text-[#3794ff]"><ShieldCheck className="h-4 w-4" /> Governance & compliance</div>
-        <h1 className="mt-2 text-2xl font-bold tracking-tight text-[#d4d4d4]">Governance</h1>
-        <p className="mt-1 max-w-3xl text-sm leading-6 text-[#9d9d9d]">Policies, controls, framework requirements, and risk decisions -- all backed by real records. A control existing does not prove it is effective; a policy existing does not prove it is followed. Evidence and test results remain the authority, not this registry.</p>
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.2em] text-[var(--spr-highlight)]"><ShieldCheck className="h-4 w-4" /> Governance & compliance</div>
+        <h1 className="mt-2 text-2xl font-bold tracking-tight text-[var(--spr-text)]">Governance</h1>
+        <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--spr-text-muted)]">Policies, controls, framework requirements, and risk decisions -- all backed by real records. A control existing does not prove it is effective; a policy existing does not prove it is followed. Evidence and test results remain the authority, not this registry.</p>
       </header>
 
-      <div className="flex flex-wrap gap-1 border-b border-[#3c3c3c]">
+      <div className="flex flex-wrap gap-1 border-b border-[var(--spr-border)]">
         {TABS.map((t) => {
           const Icon = t.icon;
           return (
-            <button key={t.id} onClick={() => setTab(t.id)} className={`flex items-center gap-1.5 border-b-2 px-3.5 py-2.5 text-sm font-semibold transition ${tab === t.id ? 'border-[#3794ff] text-[#3794ff]' : 'border-transparent text-[#9d9d9d] hover:text-[#d4d4d4]'}`}>
+            <button key={t.id} onClick={() => setTab(t.id)} className={`flex items-center gap-1.5 border-b-2 px-3.5 py-2.5 text-sm font-semibold transition ${tab === t.id ? 'border-[var(--spr-highlight)] text-[var(--spr-highlight)]' : 'border-transparent text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]'}`}>
               <Icon className="h-4 w-4" /> {t.label}
             </button>
           );

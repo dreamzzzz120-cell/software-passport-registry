@@ -115,13 +115,13 @@ function usePath() {
 }
 
 function AuthLoading() {
-  return <div className="grid min-h-screen place-items-center bg-[#1e1e1e] text-[#d4d4d4]"><div className="text-center"><img src="/brand/spr-icon.png" alt="SPR" className="mx-auto h-14 w-14 rounded-md border border-[#3c3c3c] bg-white object-contain p-1.5" /><div className="mt-4 text-xs font-semibold uppercase tracking-[.15em] text-[#9d9d9d]">Securing workspace</div><div className="mt-1 text-sm text-[#6f6f6f]">Checking authenticated session…</div></div></div>;
+  return <div className="grid min-h-screen place-items-center bg-[var(--spr-surface)] text-[var(--spr-text)]"><div className="text-center"><img src="/brand/spr-icon.png" alt="SPR" className="mx-auto h-14 w-14 rounded-md border border-[var(--spr-border)] bg-white object-contain p-1.5" /><div className="mt-4 text-xs font-semibold uppercase tracking-[.15em] text-[var(--spr-text-muted)]">Securing workspace</div><div className="mt-1 text-sm text-[var(--spr-text-faint)]">Checking authenticated session…</div></div></div>;
 }
 
 
 function WorkflowBoundary({ title, description, extensionId, onNavigate }: { title: string; description: string; extensionId?: string; onNavigate: (path: string) => void }) {
   const extension = extensionId ? EXTENSIONS.find((item) => item.id === extensionId) : undefined;
-  return <section className="spr-panel p-6 md:p-8"><div className="text-[10px] font-semibold uppercase tracking-[.15em] text-[#6f6f6f]">Workflow boundary</div><h1 className="mt-2 text-2xl font-semibold tracking-tight text-[#d4d4d4]">{title}</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[#9d9d9d]">{description}</p>{extension && <button onClick={() => onNavigate(extension.entryPath)} className="spr-btn spr-btn-primary mt-5">Open {extension.name} →</button>}</section>;
+  return <section className="spr-panel p-6 md:p-8"><div className="text-[10px] font-semibold uppercase tracking-[.15em] text-[var(--spr-text-faint)]">Workflow boundary</div><h1 className="mt-2 text-2xl font-semibold tracking-tight text-[var(--spr-text)]">{title}</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--spr-text-muted)]">{description}</p>{extension && <button onClick={() => onNavigate(extension.entryPath)} className="spr-btn spr-btn-primary mt-5">Open {extension.name} →</button>}</section>;
 }
 
 export default function App() {
@@ -140,7 +140,18 @@ export default function App() {
   const [findings, setFindings] = useState<unknown[]>([]);
   const [scans, setScans] = useState<Scan[]>(EMPTY_SCANS);
   const [integrations, setIntegrations] = useState<Integration[]>(EMPTY_INTEGRATIONS);
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof window === 'undefined') return 'dark';
+    const saved = window.localStorage.getItem('spr-theme');
+    return saved === 'light' || saved === 'dark' ? saved : 'dark';
+  });
+  // Applies the chosen theme to the document root (so every CSS var-based
+  // surface repaints) and persists it, so the toggle in Settings survives
+  // a refresh and applies before React even mounts on the next load.
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    window.localStorage.setItem('spr-theme', theme);
+  }, [theme]);
   // Authoritative verification decisions for every visible passport, fetched
   // once via the batch endpoint. Surfaces consume this map instead of the
   // legacy verification_status column, and no surface issues a per-passport

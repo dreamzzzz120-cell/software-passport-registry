@@ -184,8 +184,8 @@ export default function ClientsView({
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <div>
           <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.22em] text-[#c586c0]"><Building2 className="h-4 w-4" /> Tenant directory</div>
-          <h1 className="text-xl font-display font-extrabold text-[#d4d4d4] mt-1">Client Tenant Directory</h1>
-          <p className="text-xs text-[#9d9d9d] font-sans mt-1">
+          <h1 className="text-xl font-display font-extrabold text-[var(--spr-text)] mt-1">Client Tenant Directory</h1>
+          <p className="text-xs text-[var(--spr-text-muted)] font-sans mt-1">
             Browse and manage software trust state across {clients.length} active workspace tenants. Click a card to open.
           </p>
         </div>
@@ -211,13 +211,13 @@ export default function ClientsView({
             <span>Export Directory</span>
           </button>
 
-          <div className="flex items-center gap-1.5 bg-[#252526] border border-[#3c3c3c] px-3 py-2 rounded-md text-xs text-[#6f6f6f] ">
-            <Filter className="w-3.5 h-3.5 text-[#9d9d9d]" />
+          <div className="flex items-center gap-1.5 bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] px-3 py-2 rounded-md text-xs text-[var(--spr-text-faint)] ">
+            <Filter className="w-3.5 h-3.5 text-[var(--spr-text-muted)]" />
             <span>Industry:</span>
             <select
               value={industryFilter}
               onChange={(e) => setIndustryFilter(e.target.value)}
-              className="bg-transparent focus:outline-none font-semibold cursor-pointer text-[#d4d4d4] "
+              className="bg-transparent focus:outline-none font-semibold cursor-pointer text-[var(--spr-text)] "
             >
               <option value="all">All Industries</option>
               {industries.map(ind => (
@@ -226,13 +226,13 @@ export default function ClientsView({
             </select>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-[#252526] border border-[#3c3c3c] px-3 py-2 rounded-md text-xs text-[#6f6f6f] ">
-            <ShieldAlert className="w-3.5 h-3.5 text-[#9d9d9d]" />
+          <div className="flex items-center gap-1.5 bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] px-3 py-2 rounded-md text-xs text-[var(--spr-text-faint)] ">
+            <ShieldAlert className="w-3.5 h-3.5 text-[var(--spr-text-muted)]" />
             <span>Risk Level:</span>
             <select
               value={riskFilter}
               onChange={(e) => setRiskFilter(e.target.value)}
-              className="bg-transparent focus:outline-none font-semibold cursor-pointer text-[#d4d4d4] "
+              className="bg-transparent focus:outline-none font-semibold cursor-pointer text-[var(--spr-text)] "
             >
               <option value="all">All Tiers</option>
               <option value="Safe">Safe</option>
@@ -254,8 +254,8 @@ export default function ClientsView({
               onClick={() => setSelectedClientId(c.id)}
               className={`spr-panel p-5 cursor-pointer flex flex-col gap-4 relative group transition-all duration-300 ${
                 isDrawerActive
-                  ? 'border-[#3794ff]'
-                  : 'hover:border-[#3794ff]'
+                  ? 'border-[var(--spr-highlight)]'
+                  : 'hover:border-[var(--spr-highlight)]'
               }`}
             >
               {/* Upper Details */}
@@ -265,60 +265,60 @@ export default function ClientsView({
                     {c.name.charAt(0)}
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-[#d4d4d4] group-hover:text-[#3794ff] transition-colors">
+                    <h3 className="text-sm font-bold text-[var(--spr-text)] group-hover:text-[var(--spr-highlight)] transition-colors">
                       {c.name}
                     </h3>
-                    <p className="text-[10px] text-[#9d9d9d] font-mono flex items-center gap-1 mt-0.5">
-                      <Globe className="w-3 h-3 text-[#9d9d9d]" />
+                    <p className="text-[10px] text-[var(--spr-text-muted)] font-mono flex items-center gap-1 mt-0.5">
+                      <Globe className="w-3 h-3 text-[var(--spr-text-muted)]" />
                       <span>{c.domain}</span> • <span>{c.industry}</span>
                     </p>
                   </div>
                 </div>
 
                 <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold border ${
-                  c.riskLevel === 'Safe' ? 'bg-[#89d185]/15 border-[#89d185] text-[#89d185] ' :
-                  c.riskLevel === 'Medium' ? 'bg-[#cca700]/15 border-[#cca700] text-[#cca700] ' :
-                  'bg-[#f14c4c]/15 border-[#f14c4c] text-[#f14c4c] '
+                  c.riskLevel === 'Safe' ? 'bg-[var(--spr-green)]/15 border-[var(--spr-green)] text-[var(--spr-green)] ' :
+                  c.riskLevel === 'Medium' ? 'bg-[var(--spr-amber)]/15 border-[var(--spr-amber)] text-[var(--spr-amber)] ' :
+                  'bg-[var(--spr-red)]/15 border-[var(--spr-red)] text-[var(--spr-red)] '
                 }`}>
                   {c.riskLevel} Risk
                 </span>
               </div>
 
               {/* Performance indicators Grid */}
-              <div className="grid grid-cols-3 gap-3 pt-3 border-t border-[#3c3c3c] text-center">
-                <div className="bg-[#2d2d2d] p-2.5 rounded-md border border-[#3c3c3c] ">
-                  <p className="text-[8px] text-[#9d9d9d] font-mono font-bold uppercase">Trust Score</p>
-                  <p className="text-base font-bold font-mono text-[#d4d4d4] mt-0.5">
-                    {c.trustScore}<span className="text-[10px] text-[#9d9d9d] ">/100</span>
+              <div className="grid grid-cols-3 gap-3 pt-3 border-t border-[var(--spr-border)] text-center">
+                <div className="bg-[var(--spr-surface-sunken)] p-2.5 rounded-md border border-[var(--spr-border)] ">
+                  <p className="text-[8px] text-[var(--spr-text-muted)] font-mono font-bold uppercase">Trust Score</p>
+                  <p className="text-base font-bold font-mono text-[var(--spr-text)] mt-0.5">
+                    {c.trustScore}<span className="text-[10px] text-[var(--spr-text-muted)] ">/100</span>
                   </p>
                 </div>
-                <div className="bg-[#2d2d2d] p-2.5 rounded-md border border-[#3c3c3c] ">
-                  <p className="text-[8px] text-[#9d9d9d] font-mono font-bold uppercase">Passports</p>
-                  <p className="text-base font-bold font-mono text-[#d4d4d4] mt-0.5">{c.passportCount}</p>
+                <div className="bg-[var(--spr-surface-sunken)] p-2.5 rounded-md border border-[var(--spr-border)] ">
+                  <p className="text-[8px] text-[var(--spr-text-muted)] font-mono font-bold uppercase">Passports</p>
+                  <p className="text-base font-bold font-mono text-[var(--spr-text)] mt-0.5">{c.passportCount}</p>
                 </div>
-                <div className="bg-[#2d2d2d] p-2.5 rounded-md border border-[#3c3c3c] ">
-                  <p className="text-[8px] text-[#9d9d9d] font-mono font-bold uppercase">Compliance</p>
-                  <p className="text-base font-bold font-mono text-[#d4d4d4] mt-0.5">{c.complianceProgress}%</p>
+                <div className="bg-[var(--spr-surface-sunken)] p-2.5 rounded-md border border-[var(--spr-border)] ">
+                  <p className="text-[8px] text-[var(--spr-text-muted)] font-mono font-bold uppercase">Compliance</p>
+                  <p className="text-base font-bold font-mono text-[var(--spr-text)] mt-0.5">{c.complianceProgress}%</p>
                 </div>
               </div>
 
               {/* Subtext warning / health status */}
               <div className="flex items-center justify-between text-[10px] font-mono mt-1">
-                <span className="text-[#9d9d9d] ">Joined: {c.joinedDate}</span>
+                <span className="text-[var(--spr-text-muted)] ">Joined: {c.joinedDate}</span>
                 {hasCriticalRisks ? (
-                  <span className="text-[#f14c4c] font-bold flex items-center gap-1">
-                    <AlertTriangle className="w-3.5 h-3.5 text-[#f14c4c] animate-pulse" />
+                  <span className="text-[var(--spr-red)] font-bold flex items-center gap-1">
+                    <AlertTriangle className="w-3.5 h-3.5 text-[var(--spr-red)] animate-pulse" />
                     {c.criticalRisksCount} Critical Alerts Active
                   </span>
                 ) : (
-                  <span className="text-[#89d185] font-bold flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5 text-[#89d185] " />
+                  <span className="text-[var(--spr-green)] font-bold flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5 text-[var(--spr-green)] " />
                     No critical risks recorded
                   </span>
                 )}
               </div>
 
-              <div className="absolute bottom-4 right-5 text-[#3794ff] opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 font-bold text-xs">
+              <div className="absolute bottom-4 right-5 text-[var(--spr-highlight)] opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 font-bold text-xs">
                 <span>Configure Drawer</span>
                 <ChevronRight className="w-3.5 h-3.5" />
               </div>
@@ -328,10 +328,10 @@ export default function ClientsView({
       </div>
 
       {filteredClients.length === 0 && (
-        <div className="bg-[#252526] border border-[#3c3c3c] rounded-md p-12 text-center ">
-          <Building2 className="w-12 h-12 text-[#d4d4d4] mx-auto mb-3" />
-          <h3 className="text-sm font-bold text-[#6f6f6f] ">{clients.length === 0 ? 'No clients yet' : 'No client workspaces found'}</h3>
-          <p className="text-xs text-[#9d9d9d] max-w-sm mx-auto mt-1">
+        <div className="bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] rounded-md p-12 text-center ">
+          <Building2 className="w-12 h-12 text-[var(--spr-text)] mx-auto mb-3" />
+          <h3 className="text-sm font-bold text-[var(--spr-text-faint)] ">{clients.length === 0 ? 'No clients yet' : 'No client workspaces found'}</h3>
+          <p className="text-xs text-[var(--spr-text-muted)] max-w-sm mx-auto mt-1">
             {clients.length === 0
               ? (canCreateClient ? 'Add your first client to start tracking their software passports and evidence.' : 'Ask an Owner or Admin to add a client to this workspace.')
               : 'Adjust your search keywords or industry filters and try again.'}
@@ -365,19 +365,19 @@ export default function ClientsView({
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 26, stiffness: 170 }}
-              className="fixed right-0 top-0 bottom-0 w-full max-w-4xl bg-[#2d2d2d] border-l border-[#3c3c3c] z-50 overflow-y-auto p-6 flex flex-col"
+              className="fixed right-0 top-0 bottom-0 w-full max-w-4xl bg-[var(--spr-surface-sunken)] border-l border-[var(--spr-border)] z-50 overflow-y-auto p-6 flex flex-col"
             >
               {/* Drawer Top Navigation & Actions */}
-              <div className="flex items-center justify-between border-b border-[#3c3c3c] pb-4 shrink-0">
+              <div className="flex items-center justify-between border-b border-[var(--spr-border)] pb-4 shrink-0">
                 <div className="flex items-center gap-3">
                   <div className={`w-10 h-10 rounded-md flex items-center justify-center font-bold text-sm ${client.avatarColor}`}>
                     {client.name.charAt(0)}
                   </div>
                   <div>
-                    <span className="text-[9px] font-mono font-bold tracking-wider text-[#9d9d9d] uppercase">
+                    <span className="text-[9px] font-mono font-bold tracking-wider text-[var(--spr-text-muted)] uppercase">
                       ACTIVE TENANT CONTROLLER
                     </span>
-                    <h2 className="text-base font-display font-extrabold text-[#d4d4d4] leading-tight">
+                    <h2 className="text-base font-display font-extrabold text-[var(--spr-text)] leading-tight">
                       {client.name}
                     </h2>
                   </div>
@@ -393,7 +393,7 @@ export default function ClientsView({
                   </button>
                   <button
                     onClick={() => setSelectedClientId('global')}
-                    className="p-1.8 hover:bg-[#383838] border border-[#3c3c3c] rounded-md text-[#9d9d9d] hover:text-[#6f6f6f] cursor-pointer transition-colors"
+                    className="p-1.8 hover:bg-[var(--spr-surface-hover)] border border-[var(--spr-border)] rounded-md text-[var(--spr-text-muted)] hover:text-[var(--spr-text-faint)] cursor-pointer transition-colors"
                     title="Close Drawer"
                   >
                     <X className="w-4 h-4" />
@@ -403,23 +403,23 @@ export default function ClientsView({
 
               {/* Badges and summary bar */}
               <div className="flex flex-wrap gap-2 text-[10px] font-mono mt-4 shrink-0">
-                <span className="bg-[#383838] text-[#6f6f6f] px-2.5 py-1 rounded-md font-medium border border-[#3c3c3c] ">
+                <span className="bg-[var(--spr-surface-hover)] text-[var(--spr-text-faint)] px-2.5 py-1 rounded-md font-medium border border-[var(--spr-border)] ">
                   Tier: {client.subscriptionTier}
                 </span>
-                <span className="bg-[#383838] text-[#6f6f6f] px-2.5 py-1 rounded-md font-medium border border-[#3c3c3c] ">
+                <span className="bg-[var(--spr-surface-hover)] text-[var(--spr-text-faint)] px-2.5 py-1 rounded-md font-medium border border-[var(--spr-border)] ">
                   Domain: {client.domain}
                 </span>
                 <span className={`px-2.5 py-1 rounded-md font-bold border ${
-                  client.riskLevel === 'Safe' ? 'bg-[#89d185]/15 border-[#89d185] text-[#89d185] ' :
-                  client.riskLevel === 'Medium' ? 'bg-[#cca700]/15 border-[#cca700] text-[#cca700] ' :
-                  'bg-[#f14c4c]/15 border-[#f14c4c] text-[#f14c4c] '
+                  client.riskLevel === 'Safe' ? 'bg-[var(--spr-green)]/15 border-[var(--spr-green)] text-[var(--spr-green)] ' :
+                  client.riskLevel === 'Medium' ? 'bg-[var(--spr-amber)]/15 border-[var(--spr-amber)] text-[var(--spr-amber)] ' :
+                  'bg-[var(--spr-red)]/15 border-[var(--spr-red)] text-[var(--spr-red)] '
                 }`}>
                   Risk Status: {client.riskLevel}
                 </span>
               </div>
 
               {/* Drawer Tabs Header */}
-              <div className="flex border-b border-[#3c3c3c] text-xs font-semibold gap-1 select-none overflow-x-auto mt-4 shrink-0">
+              <div className="flex border-b border-[var(--spr-border)] text-xs font-semibold gap-1 select-none overflow-x-auto mt-4 shrink-0">
                 {[
                   { id: 'overview', label: 'Trust Coordinates', icon: Award },
                   { id: 'inventory', label: 'SBOM Inventory', icon: FileCheck },
@@ -436,8 +436,8 @@ export default function ClientsView({
                       onClick={() => setWorkspaceTab(tb.id as any)}
                       className={`flex items-center gap-1.5 px-3 py-2 cursor-pointer border-b-2 font-sans font-bold text-[11px] transition-colors whitespace-nowrap ${
                         isSel 
-                          ? 'border-[#3794ff] text-[#3794ff] '
-                          : 'border-transparent text-[#9d9d9d] hover:text-[#d4d4d4] '
+                          ? 'border-[var(--spr-highlight)] text-[var(--spr-highlight)] '
+                          : 'border-transparent text-[var(--spr-text-muted)] hover:text-[var(--spr-text)] '
                       }`}
                     >
                       <Icon className="w-3.5 h-3.5" />
@@ -454,70 +454,70 @@ export default function ClientsView({
                 {workspaceTab === 'overview' && (
                   <div className="space-y-6">
                     {/* Trust Scores Bento Box */}
-                    <div className="bg-[#252526] p-5 rounded-md border border-[#3c3c3c] ">
-                      <h3 className="text-xs font-bold text-[#9d9d9d] font-mono uppercase tracking-wider mb-4">Core Trust Coordinates</h3>
+                    <div className="bg-[var(--spr-surface-alt)] p-5 rounded-md border border-[var(--spr-border)] ">
+                      <h3 className="text-xs font-bold text-[var(--spr-text-muted)] font-mono uppercase tracking-wider mb-4">Core Trust Coordinates</h3>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                        <div className="bg-[#2d2d2d] border border-[#3c3c3c] p-4 rounded-md text-center">
-                          <p className="text-[9px] text-[#9d9d9d] font-mono font-bold uppercase">Overall score</p>
-                          <p className="text-2xl font-display font-extrabold font-mono text-[#d4d4d4] mt-1">{client.trustScore}</p>
-                          <span className="text-[9px] text-[#9d9d9d] font-semibold font-mono">Observed client record</span>
+                        <div className="bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] p-4 rounded-md text-center">
+                          <p className="text-[9px] text-[var(--spr-text-muted)] font-mono font-bold uppercase">Overall score</p>
+                          <p className="text-2xl font-display font-extrabold font-mono text-[var(--spr-text)] mt-1">{client.trustScore}</p>
+                          <span className="text-[9px] text-[var(--spr-text-muted)] font-semibold font-mono">Observed client record</span>
                         </div>
-                        <div className="bg-[#2d2d2d] border border-[#3c3c3c] p-4 rounded-md text-center">
-                          <p className="text-[9px] text-[#9d9d9d] font-mono font-bold uppercase">Security Score</p>
-                          <p className="text-2xl font-display font-extrabold font-mono text-[#d4d4d4] mt-1">
+                        <div className="bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] p-4 rounded-md text-center">
+                          <p className="text-[9px] text-[var(--spr-text-muted)] font-mono font-bold uppercase">Security Score</p>
+                          <p className="text-2xl font-display font-extrabold font-mono text-[var(--spr-text)] mt-1">
                             {securityScores.length > 0 ? Math.round(securityScores.reduce((sum, score) => sum + score, 0) / securityScores.length) : 'Not verified'}
                           </p>
-                          <span className="text-[9px] text-[#9d9d9d] font-mono">Passport-derived</span>
+                          <span className="text-[9px] text-[var(--spr-text-muted)] font-mono">Passport-derived</span>
                         </div>
-                        <div className="bg-[#2d2d2d] border border-[#3c3c3c] p-4 rounded-md text-center">
-                          <p className="text-[9px] text-[#9d9d9d] font-mono font-bold uppercase">Compliance Score</p>
-                          <p className="text-2xl font-display font-extrabold font-mono text-[#d4d4d4] mt-1">{client.complianceProgress}%</p>
-                          <span className="text-[9px] text-[#9d9d9d] font-mono">Client record</span>
+                        <div className="bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] p-4 rounded-md text-center">
+                          <p className="text-[9px] text-[var(--spr-text-muted)] font-mono font-bold uppercase">Compliance Score</p>
+                          <p className="text-2xl font-display font-extrabold font-mono text-[var(--spr-text)] mt-1">{client.complianceProgress}%</p>
+                          <span className="text-[9px] text-[var(--spr-text-muted)] font-mono">Client record</span>
                         </div>
-                        <div className="bg-[#2d2d2d] border border-[#3c3c3c] p-4 rounded-md text-center">
-                          <p className="text-[9px] text-[#9d9d9d] font-mono font-bold uppercase">Supplier Rep</p>
-                          <p className="text-2xl font-display font-extrabold font-mono text-[#d4d4d4] mt-1">
+                        <div className="bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] p-4 rounded-md text-center">
+                          <p className="text-[9px] text-[var(--spr-text-muted)] font-mono font-bold uppercase">Supplier Rep</p>
+                          <p className="text-2xl font-display font-extrabold font-mono text-[var(--spr-text)] mt-1">
                             { 'Not verified'}
                           </p>
-                          <span className="text-[9px] text-[#9d9d9d] font-mono">No vendor score observed</span>
+                          <span className="text-[9px] text-[var(--spr-text-muted)] font-mono">No vendor score observed</span>
                         </div>
                       </div>
                     </div>
 
                     {/* Company Overview Details Card */}
-                    <div className="bg-[#252526] p-5 rounded-md border border-[#3c3c3c] grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div className="bg-[var(--spr-surface-alt)] p-5 rounded-md border border-[var(--spr-border)] grid grid-cols-1 sm:grid-cols-2 gap-6">
                       <div className="space-y-3.5">
-                        <h3 className="text-xs font-bold text-[#d4d4d4] font-display">Tenant Profile Overview</h3>
+                        <h3 className="text-xs font-bold text-[var(--spr-text)] font-display">Tenant Profile Overview</h3>
                         <div className="text-xs space-y-2">
-                          <div className="flex justify-between border-b border-[#3c3c3c] pb-1.5">
-                            <span className="text-[#9d9d9d] font-mono text-[10px]">ORGANIZATION NAME</span>
-                            <span className="font-semibold text-[#6f6f6f] ">{client.name}</span>
+                          <div className="flex justify-between border-b border-[var(--spr-border)] pb-1.5">
+                            <span className="text-[var(--spr-text-muted)] font-mono text-[10px]">ORGANIZATION NAME</span>
+                            <span className="font-semibold text-[var(--spr-text-faint)] ">{client.name}</span>
                           </div>
-                          <div className="flex justify-between border-b border-[#3c3c3c] pb-1.5">
-                            <span className="text-[#9d9d9d] font-mono text-[10px]">DOMAIN</span>
-                            <span className="font-semibold text-[#6f6f6f] font-mono">{client.domain}</span>
+                          <div className="flex justify-between border-b border-[var(--spr-border)] pb-1.5">
+                            <span className="text-[var(--spr-text-muted)] font-mono text-[10px]">DOMAIN</span>
+                            <span className="font-semibold text-[var(--spr-text-faint)] font-mono">{client.domain}</span>
                           </div>
-                          <div className="flex justify-between border-b border-[#3c3c3c] pb-1.5">
-                            <span className="text-[#9d9d9d] font-mono text-[10px]">INDUSTRY</span>
-                            <span className="font-semibold text-[#6f6f6f] ">{client.industry}</span>
+                          <div className="flex justify-between border-b border-[var(--spr-border)] pb-1.5">
+                            <span className="text-[var(--spr-text-muted)] font-mono text-[10px]">INDUSTRY</span>
+                            <span className="font-semibold text-[var(--spr-text-faint)] ">{client.industry}</span>
                           </div>
                         </div>
                       </div>
 
                       <div className="space-y-3.5">
-                        <h3 className="text-xs font-bold text-[#d4d4d4] font-display">SLA & Scope Details</h3>
+                        <h3 className="text-xs font-bold text-[var(--spr-text)] font-display">SLA & Scope Details</h3>
                         <div className="text-xs space-y-2">
-                          <div className="flex justify-between border-b border-[#3c3c3c] pb-1.5">
-                            <span className="text-[#9d9d9d] font-mono text-[10px]">VERIFIED REGISTRY</span>
-                            <span className="font-semibold text-[#6f6f6f] font-mono">tenant-{client.id}</span>
+                          <div className="flex justify-between border-b border-[var(--spr-border)] pb-1.5">
+                            <span className="text-[var(--spr-text-muted)] font-mono text-[10px]">VERIFIED REGISTRY</span>
+                            <span className="font-semibold text-[var(--spr-text-faint)] font-mono">tenant-{client.id}</span>
                           </div>
-                          <div className="flex justify-between border-b border-[#3c3c3c] pb-1.5">
-                            <span className="text-[#9d9d9d] font-mono text-[10px]">JOINED DATE</span>
-                            <span className="font-semibold text-[#6f6f6f] font-mono">{client.joinedDate}</span>
+                          <div className="flex justify-between border-b border-[var(--spr-border)] pb-1.5">
+                            <span className="text-[var(--spr-text-muted)] font-mono text-[10px]">JOINED DATE</span>
+                            <span className="font-semibold text-[var(--spr-text-faint)] font-mono">{client.joinedDate}</span>
                           </div>
-                          <div className="flex justify-between border-b border-[#3c3c3c] pb-1.5">
-                            <span className="text-[#9d9d9d] font-mono text-[10px]">COMPLIANCE TARGET</span>
-                            <span className="font-bold text-[#3794ff] font-mono">{client.complianceStatus.length ? client.complianceStatus.map((item) => item.code).join(', ') : 'Not observed'}</span>
+                          <div className="flex justify-between border-b border-[var(--spr-border)] pb-1.5">
+                            <span className="text-[var(--spr-text-muted)] font-mono text-[10px]">COMPLIANCE TARGET</span>
+                            <span className="font-bold text-[var(--spr-highlight)] font-mono">{client.complianceStatus.length ? client.complianceStatus.map((item) => item.code).join(', ') : 'Not observed'}</span>
                           </div>
                         </div>
                       </div>
@@ -529,12 +529,12 @@ export default function ClientsView({
                 {workspaceTab === 'inventory' && (
                   <div className="space-y-4">
                     <div className="flex justify-between items-center">
-                      <h3 className="text-xs font-bold text-[#9d9d9d] font-mono uppercase tracking-wider">Registered Client Software SBOM Passports</h3>
-                      <span className="text-[10px] text-[#9d9d9d] font-mono">Count: {client.passportCount}</span>
+                      <h3 className="text-xs font-bold text-[var(--spr-text-muted)] font-mono uppercase tracking-wider">Registered Client Software SBOM Passports</h3>
+                      <span className="text-[10px] text-[var(--spr-text-muted)] font-mono">Count: {client.passportCount}</span>
                     </div>
 
                     {client.softwareInventory.length === 0 && (
-                      <div className="rounded-md border border-dashed border-[#3c3c3c] px-5 py-10 text-center text-xs text-[#9d9d9d] ">No software passports registered for this client yet.</div>
+                      <div className="rounded-md border border-dashed border-[var(--spr-border)] px-5 py-10 text-center text-xs text-[var(--spr-text-muted)] ">No software passports registered for this client yet.</div>
                     )}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {passports.filter(p => {
@@ -544,21 +544,21 @@ export default function ClientsView({
                         <div
                           key={p.id}
                           onClick={() => onNavigateTab('passports', p.id)}
-                          className="bg-[#252526] p-4 rounded-md border border-[#3c3c3c] hover:border-[#3794ff] cursor-pointer transition-colors space-y-3 "
+                          className="bg-[var(--spr-surface-alt)] p-4 rounded-md border border-[var(--spr-border)] hover:border-[var(--spr-highlight)] cursor-pointer transition-colors space-y-3 "
                         >
                           <div className="flex justify-between items-start">
                             <div>
-                              <h4 className="text-xs font-bold text-[#d4d4d4] ">{p.name}</h4>
-                              <p className="text-[10px] text-[#9d9d9d] font-mono">Version: {p.version || 'Not observed'}</p>
+                              <h4 className="text-xs font-bold text-[var(--spr-text)] ">{p.name}</h4>
+                              <p className="text-[10px] text-[var(--spr-text-muted)] font-mono">Version: {p.version || 'Not observed'}</p>
                             </div>
-                            <span className="text-[10px] font-mono bg-[#094771] text-[#3794ff] px-2 py-0.5 border border-[#3794ff] rounded font-semibold">
+                            <span className="text-[10px] font-mono bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] px-2 py-0.5 border border-[var(--spr-highlight)] rounded font-semibold">
                               {p.sbom.length} Dependencies
                             </span>
                           </div>
 
-                          <div className="flex justify-between items-center text-[10px] font-mono text-[#9d9d9d] pt-2 border-t border-[#3c3c3c] ">
+                          <div className="flex justify-between items-center text-[10px] font-mono text-[var(--spr-text-muted)] pt-2 border-t border-[var(--spr-border)] ">
                             <span>Compliance: {p.complianceScore == null ? 'Not verified' : `${p.complianceScore}%`}</span>
-                            <span className="text-[#3794ff] font-bold flex items-center gap-0.5">
+                            <span className="text-[var(--spr-highlight)] font-bold flex items-center gap-0.5">
                               Open Passport <ChevronRight className="w-3 h-3" />
                             </span>
                           </div>
@@ -572,20 +572,20 @@ export default function ClientsView({
                 {workspaceTab === 'security' && (
                   <div className="space-y-4">
                     <div className="flex justify-between items-center">
-                      <h3 className="text-xs font-bold text-[#9d9d9d] font-mono uppercase tracking-wider">Active Vulnerability Footprint</h3>
+                      <h3 className="text-xs font-bold text-[var(--spr-text-muted)] font-mono uppercase tracking-wider">Active Vulnerability Footprint</h3>
                       <button
                         onClick={() => onNavigateTab('alerts')}
-                        className="text-[10px] font-mono text-[#3794ff] hover:underline font-bold"
+                        className="text-[10px] font-mono text-[var(--spr-highlight)] hover:underline font-bold"
                       >
                         Launch Threat Mitigator
                       </button>
                     </div>
 
-                    <div className="bg-[#252526] rounded-md border border-[#3c3c3c] overflow-hidden">
+                    <div className="bg-[var(--spr-surface-alt)] rounded-md border border-[var(--spr-border)] overflow-hidden">
                       <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse text-xs">
                           <thead>
-                            <tr className="bg-[#2d2d2d] text-[#9d9d9d] font-mono font-bold border-b border-[#3c3c3c] text-[10px]">
+                            <tr className="bg-[var(--spr-surface-sunken)] text-[var(--spr-text-muted)] font-mono font-bold border-b border-[var(--spr-border)] text-[10px]">
                               <th className="px-5 py-3">CVE ID</th>
                               <th className="px-5 py-3">COMPONENT</th>
                               <th className="px-5 py-3">SEVERITY</th>
@@ -594,18 +594,18 @@ export default function ClientsView({
                               <th className="px-5 py-3">THREAT SUMMARY</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-[#3c3c3c] text-[#6f6f6f] ">
+                          <tbody className="divide-y divide-[var(--spr-border)] text-[var(--spr-text-faint)] ">
                             {clientPassports.flatMap(passport => (passport.vulnerabilities || []).map(vulnerability => ({ passport, vulnerability }))).map(({ passport, vulnerability }, index) => (
-                              <tr key={`${passport.id}-${vulnerability.id}-${index}`} className="hover:bg-[#2d2d2d] ">
-                                <td className="px-5 py-3.5 font-bold text-[#3794ff] font-mono">{vulnerability.id}</td>
-                                <td className="px-5 py-3.5 font-semibold text-[#6f6f6f] ">{vulnerability.component}</td>
-                                <td className="px-5 py-3.5"><span className="rounded-full border border-[#3c3c3c] bg-[#383838] px-2.5 py-0.5 text-[9px] font-extrabold uppercase ">{vulnerability.severity}</span></td>
+                              <tr key={`${passport.id}-${vulnerability.id}-${index}`} className="hover:bg-[var(--spr-surface-sunken)] ">
+                                <td className="px-5 py-3.5 font-bold text-[var(--spr-highlight)] font-mono">{vulnerability.id}</td>
+                                <td className="px-5 py-3.5 font-semibold text-[var(--spr-text-faint)] ">{vulnerability.component}</td>
+                                <td className="px-5 py-3.5"><span className="rounded-full border border-[var(--spr-border)] bg-[var(--spr-surface-hover)] px-2.5 py-0.5 text-[9px] font-extrabold uppercase ">{vulnerability.severity}</span></td>
                                 <td className="px-5 py-3.5 font-bold font-mono">{vulnerability.cvss ?? 'Not observed'}</td>
-                                <td className="px-5 py-3.5"><span className="rounded border border-[#3c3c3c] bg-[#2d2d2d] px-2 py-0.5 text-[9px] font-bold ">{vulnerability.status}</span></td>
-                                <td className="max-w-sm truncate px-5 py-3.5 text-[#9d9d9d] " title={vulnerability.description}>{vulnerability.description || 'No description observed.'}</td>
+                                <td className="px-5 py-3.5"><span className="rounded border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2 py-0.5 text-[9px] font-bold ">{vulnerability.status}</span></td>
+                                <td className="max-w-sm truncate px-5 py-3.5 text-[var(--spr-text-muted)] " title={vulnerability.description}>{vulnerability.description || 'No description observed.'}</td>
                               </tr>
                             ))}
-                            {clientPassports.every(passport => !passport.vulnerabilities?.length) && <tr><td colSpan={6} className="px-5 py-6 text-center text-[#9d9d9d] font-mono">No vulnerability observations are recorded for this client.</td></tr>}
+                            {clientPassports.every(passport => !passport.vulnerabilities?.length) && <tr><td colSpan={6} className="px-5 py-6 text-center text-[var(--spr-text-muted)] font-mono">No vulnerability observations are recorded for this client.</td></tr>}
                           </tbody>
                         </table>
                       </div>
@@ -617,21 +617,21 @@ export default function ClientsView({
                 {workspaceTab === 'compliance' && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {client.complianceStatus.length === 0 && (
-                      <div className="col-span-full rounded-md border border-dashed border-[#3c3c3c] px-5 py-10 text-center text-xs text-[#9d9d9d] ">No compliance frameworks recorded for this client yet.</div>
+                      <div className="col-span-full rounded-md border border-dashed border-[var(--spr-border)] px-5 py-10 text-center text-xs text-[var(--spr-text-muted)] ">No compliance frameworks recorded for this client yet.</div>
                     )}
                     {client.complianceStatus.map((comp) => (
-                      <div key={comp.id} className="bg-[#252526] p-5 rounded-md border border-[#3c3c3c] flex flex-col justify-between gap-4">
+                      <div key={comp.id} className="bg-[var(--spr-surface-alt)] p-5 rounded-md border border-[var(--spr-border)] flex flex-col justify-between gap-4">
                         <div className="flex justify-between items-start">
                           <div>
-                            <span className="text-[9px] font-mono font-bold bg-[#094771] border border-[#3794ff] text-[#3794ff] px-2 py-0.5 rounded">
+                            <span className="text-[9px] font-mono font-bold bg-[var(--spr-accent-soft)] border border-[var(--spr-highlight)] text-[var(--spr-highlight)] px-2 py-0.5 rounded">
                               {comp.code} Framework
                             </span>
-                            <h3 className="text-sm font-bold text-[#d4d4d4] font-display mt-2">{comp.name}</h3>
+                            <h3 className="text-sm font-bold text-[var(--spr-text)] font-display mt-2">{comp.name}</h3>
                           </div>
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono border ${
-                            comp.status === 'Compliant' ? 'bg-[#89d185]/15 border-[#89d185] text-[#89d185] ' :
-                            comp.status === 'In Progress' ? 'bg-[#cca700]/15 border-[#cca700] text-[#cca700] ' :
-                            'bg-[#f14c4c]/15 border-[#f14c4c] text-[#f14c4c] '
+                            comp.status === 'Compliant' ? 'bg-[var(--spr-green)]/15 border-[var(--spr-green)] text-[var(--spr-green)] ' :
+                            comp.status === 'In Progress' ? 'bg-[var(--spr-amber)]/15 border-[var(--spr-amber)] text-[var(--spr-amber)] ' :
+                            'bg-[var(--spr-red)]/15 border-[var(--spr-red)] text-[var(--spr-red)] '
                           }`}>
                             {comp.status}
                           </span>
@@ -639,14 +639,14 @@ export default function ClientsView({
 
                         {/* Progress Bar */}
                         <div className="space-y-1.5">
-                          <div className="flex justify-between text-[10px] font-mono text-[#9d9d9d] ">
+                          <div className="flex justify-between text-[10px] font-mono text-[var(--spr-text-muted)] ">
                             <span>Controls verification progress</span>
-                            <span className="font-bold text-[#6f6f6f] ">{comp.progress}%</span>
+                            <span className="font-bold text-[var(--spr-text-faint)] ">{comp.progress}%</span>
                           </div>
-                          <div className="w-full bg-[#383838] h-2 rounded-full overflow-hidden">
-                            <div className="bg-[#0e639c] h-full transition-all duration-500" style={{ width: `${comp.progress}%` }}></div>
+                          <div className="w-full bg-[var(--spr-surface-hover)] h-2 rounded-full overflow-hidden">
+                            <div className="bg-[var(--spr-accent)] h-full transition-all duration-500" style={{ width: `${comp.progress}%` }}></div>
                           </div>
-                          <div className="flex justify-between text-[9px] font-mono text-[#9d9d9d] ">
+                          <div className="flex justify-between text-[9px] font-mono text-[var(--spr-text-muted)] ">
                             <span>{comp.compliantControls} of {comp.totalControls} Controls Certified</span>
                             <span>SLA Audit Ready</span>
                           </div>
@@ -665,35 +665,35 @@ export default function ClientsView({
 
                 {/* 5. Team Directory Tab */}
                 {workspaceTab === 'team' && (
-                  <div className="bg-[#252526] rounded-md border border-[#3c3c3c] overflow-hidden">
-                    <div className="px-5 py-4 border-b border-[#3c3c3c] ">
-                      <h3 className="text-sm font-bold text-[#d4d4d4] font-display">Client Stakeholders & Key Operators</h3>
-                      <p className="text-[10px] text-[#9d9d9d] font-mono mt-0.5">Authorizing authorities registered with access privileges inside this workspace.</p>
+                  <div className="bg-[var(--spr-surface-alt)] rounded-md border border-[var(--spr-border)] overflow-hidden">
+                    <div className="px-5 py-4 border-b border-[var(--spr-border)] ">
+                      <h3 className="text-sm font-bold text-[var(--spr-text)] font-display">Client Stakeholders & Key Operators</h3>
+                      <p className="text-[10px] text-[var(--spr-text-muted)] font-mono mt-0.5">Authorizing authorities registered with access privileges inside this workspace.</p>
                     </div>
-                    <div className="divide-y divide-[#3c3c3c] ">
+                    <div className="divide-y divide-[var(--spr-border)] ">
                       {client.teamMembers.length === 0 && (
-                        <div className="px-5 py-10 text-center text-xs text-[#9d9d9d] ">No stakeholders recorded for this client yet.</div>
+                        <div className="px-5 py-10 text-center text-xs text-[var(--spr-text-muted)] ">No stakeholders recorded for this client yet.</div>
                       )}
                       {client.teamMembers.map((member, i) => (
-                        <div key={i} className="px-5 py-4 flex items-center justify-between hover:bg-[#2d2d2d] ">
+                        <div key={i} className="px-5 py-4 flex items-center justify-between hover:bg-[var(--spr-surface-sunken)] ">
                           <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-full bg-[#094771] border border-[#3794ff] flex items-center justify-center text-xs font-bold text-[#3794ff] ">
+                            <div className="w-9 h-9 rounded-full bg-[var(--spr-accent-soft)] border border-[var(--spr-highlight)] flex items-center justify-center text-xs font-bold text-[var(--spr-highlight)] ">
                               {member.avatar}
                             </div>
                             <div>
-                              <h4 className="text-xs font-bold text-[#d4d4d4] ">{member.name}</h4>
-                              <p className="text-[10px] text-[#9d9d9d] font-mono">{member.role}</p>
+                              <h4 className="text-xs font-bold text-[var(--spr-text)] ">{member.name}</h4>
+                              <p className="text-[10px] text-[var(--spr-text-muted)] font-mono">{member.role}</p>
                             </div>
                           </div>
                           <div className="text-right">
                             <a
                               href={`mailto:${member.email}`}
-                              className="text-xs font-semibold text-[#3794ff] hover:text-[#3794ff] font-mono flex items-center gap-1 cursor-pointer"
+                              className="text-xs font-semibold text-[var(--spr-highlight)] hover:text-[var(--spr-highlight)] font-mono flex items-center gap-1 cursor-pointer"
                             >
                               <span>{member.email}</span>
                               <ExternalLink className="w-3.5 h-3.5" />
                             </a>
-                            <span className="text-[9px] font-mono text-[#9d9d9d] mt-1 block">Privileges: Authorized Auditor</span>
+                            <span className="text-[9px] font-mono text-[var(--spr-text-muted)] mt-1 block">Privileges: Authorized Auditor</span>
                           </div>
                         </div>
                       ))}
@@ -709,54 +709,54 @@ export default function ClientsView({
 
       {showAddClient && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-labelledby="add-client-title">
-          <div className="w-full max-w-lg rounded-md border border-[#3c3c3c] bg-[#252526] p-6 shadow-2xl">
+          <div className="w-full max-w-lg rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.18em] text-[#c586c0]"><Building2 className="h-4 w-4" /> New client trust environment</div>
-                <h2 id="add-client-title" className="mt-1 text-lg font-bold text-[#d4d4d4]">Establish a client trust environment</h2>
-                <p className="mt-1 text-xs leading-5 text-[#9d9d9d]">Create the foundation for monitoring the software, vendors, and technology this client depends on.</p>
+                <h2 id="add-client-title" className="mt-1 text-lg font-bold text-[var(--spr-text)]">Establish a client trust environment</h2>
+                <p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">Create the foundation for monitoring the software, vendors, and technology this client depends on.</p>
               </div>
-              <button onClick={() => setShowAddClient(false)} aria-label="Close" className="rounded-md p-1.5 text-[#9d9d9d] hover:bg-[#383838] hover:text-[#d4d4d4]"><X className="h-4 w-4" /></button>
+              <button onClick={() => setShowAddClient(false)} aria-label="Close" className="rounded-md p-1.5 text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)] hover:text-[var(--spr-text)]"><X className="h-4 w-4" /></button>
             </div>
 
             <form onSubmit={handleCreateClient} className="mt-5 space-y-3.5">
               {addClientError && (
-                <div role="alert" className="rounded-md border border-[#f14c4c]/40 bg-[#f14c4c]/10 px-3 py-2.5 text-xs text-[#f14c4c] flex items-center gap-2">
+                <div role="alert" className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 px-3 py-2.5 text-xs text-[var(--spr-red)] flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 shrink-0" /> {addClientError}
                 </div>
               )}
               {addClientSuccess && (
-                <div className="rounded-md border border-[#89d185]/40 bg-[#89d185]/10 px-3 py-2.5 text-xs text-[#89d185] flex items-center gap-2">
+                <div className="rounded-md border border-[var(--spr-green)]/40 bg-[var(--spr-green)]/10 px-3 py-2.5 text-xs text-[var(--spr-green)] flex items-center gap-2">
                   <CheckCircle className="w-4 h-4 shrink-0" /> {addClientSuccess}
                 </div>
               )}
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold text-[#9d9d9d]">Client / Organization name *</label>
-                <input required value={newClientName} onChange={(e) => setNewClientName(e.target.value)} placeholder="Acme Manufacturing" className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2 text-xs text-[#d4d4d4]" />
+                <label className="text-[10px] font-bold text-[var(--spr-text-muted)]">Client / Organization name *</label>
+                <input required value={newClientName} onChange={(e) => setNewClientName(e.target.value)} placeholder="Acme Manufacturing" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]" />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold text-[#9d9d9d]">Primary domain *</label>
-                <input required value={newClientDomain} onChange={(e) => setNewClientDomain(e.target.value)} placeholder="acme.com" className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2 text-xs text-[#d4d4d4]" />
+                <label className="text-[10px] font-bold text-[var(--spr-text-muted)]">Primary domain *</label>
+                <input required value={newClientDomain} onChange={(e) => setNewClientDomain(e.target.value)} placeholder="acme.com" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]" />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold text-[#9d9d9d]">Industry *</label>
-                <input required value={newClientIndustry} onChange={(e) => setNewClientIndustry(e.target.value)} placeholder="Manufacturing" className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2 text-xs text-[#d4d4d4]" />
+                <label className="text-[10px] font-bold text-[var(--spr-text-muted)]">Industry *</label>
+                <input required value={newClientIndustry} onChange={(e) => setNewClientIndustry(e.target.value)} placeholder="Manufacturing" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]" />
               </div>
 
-              <div className="rounded-md border border-[#3c3c3c] bg-[#1e1e1e] p-3.5">
-                <div className="text-[10px] font-bold uppercase tracking-[.14em] text-[#6f6f6f]">After creation, this environment will track</div>
+              <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3.5">
+                <div className="text-[10px] font-bold uppercase tracking-[.14em] text-[var(--spr-text-faint)]">After creation, this environment will track</div>
                 <div className="mt-2.5 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                  <div className="flex items-center gap-1.5 text-[11px] text-[#9d9d9d]"><Globe className="h-3.5 w-3.5 text-[#3794ff]" /> Software</div>
-                  <div className="flex items-center gap-1.5 text-[11px] text-[#9d9d9d]"><Users className="h-3.5 w-3.5 text-[#3794ff]" /> Vendors</div>
-                  <div className="flex items-center gap-1.5 text-[11px] text-[#9d9d9d]"><FileCheck className="h-3.5 w-3.5 text-[#3794ff]" /> Passports</div>
-                  <div className="flex items-center gap-1.5 text-[11px] text-[#9d9d9d]"><FileText className="h-3.5 w-3.5 text-[#3794ff]" /> Evidence</div>
-                  <div className="flex items-center gap-1.5 text-[11px] text-[#9d9d9d]"><Activity className="h-3.5 w-3.5 text-[#3794ff]" /> Monitoring</div>
+                  <div className="flex items-center gap-1.5 text-[11px] text-[var(--spr-text-muted)]"><Globe className="h-3.5 w-3.5 text-[var(--spr-highlight)]" /> Software</div>
+                  <div className="flex items-center gap-1.5 text-[11px] text-[var(--spr-text-muted)]"><Users className="h-3.5 w-3.5 text-[var(--spr-highlight)]" /> Vendors</div>
+                  <div className="flex items-center gap-1.5 text-[11px] text-[var(--spr-text-muted)]"><FileCheck className="h-3.5 w-3.5 text-[var(--spr-highlight)]" /> Passports</div>
+                  <div className="flex items-center gap-1.5 text-[11px] text-[var(--spr-text-muted)]"><FileText className="h-3.5 w-3.5 text-[var(--spr-highlight)]" /> Evidence</div>
+                  <div className="flex items-center gap-1.5 text-[11px] text-[var(--spr-text-muted)]"><Activity className="h-3.5 w-3.5 text-[var(--spr-highlight)]" /> Monitoring</div>
                 </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={() => setShowAddClient(false)} className="rounded-md border border-[#3c3c3c] px-3.5 py-2 text-xs font-semibold text-[#9d9d9d] hover:bg-[#383838]">Cancel</button>
-                <button type="submit" disabled={creatingClient || !newClientName.trim() || !newClientDomain.trim() || !newClientIndustry.trim()} className="inline-flex items-center gap-1.5 rounded-md bg-[#0e639c] px-3.5 py-2 text-xs font-bold text-white hover:bg-[#1177bb] disabled:opacity-40">
+                <button type="button" onClick={() => setShowAddClient(false)} className="rounded-md border border-[var(--spr-border)] px-3.5 py-2 text-xs font-semibold text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)]">Cancel</button>
+                <button type="submit" disabled={creatingClient || !newClientName.trim() || !newClientDomain.trim() || !newClientIndustry.trim()} className="inline-flex items-center gap-1.5 rounded-md bg-[var(--spr-accent)] px-3.5 py-2 text-xs font-bold text-white hover:bg-[var(--spr-accent-hover)] disabled:opacity-40">
                   {creatingClient ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
                   {creatingClient ? 'Establishing…' : 'Establish Trust Environment'}
                 </button>

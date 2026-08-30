@@ -59,7 +59,7 @@ function NavGroup({ group, activePath, onNavigate, defaultOpen }: { group: Group
     <div className="mb-1">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-[.06em] text-[#6f6f6f] hover:text-[#d4d4d4]"
+        className="flex w-full items-center justify-between px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--spr-text-faint)] hover:text-[var(--spr-text)]"
       >
         <span>{group.label}</span>
         <span className="text-[9px]">{open ? '▾' : '▸'}</span>
@@ -90,7 +90,7 @@ function NavGroup({ group, activePath, onNavigate, defaultOpen }: { group: Group
 
 type ExtensionButtonProps = { extension: ExtensionDefinition; active: boolean; onNavigate: (path: string) => void; key?: Key };
 function ExtensionButton({ extension, active, onNavigate }: ExtensionButtonProps) {
-  const color = EXTENSION_ACCENTS[extension.accent] ?? '#9d9d9d';
+  const color = EXTENSION_ACCENTS[extension.accent] ?? 'var(--spr-text-muted)';
   return (
     <button
       onClick={() => onNavigate(extension.entryPath)}
@@ -117,34 +117,34 @@ export default function CommandCenter({ children, path, userEmail, role, onNavig
   // Command-center canvas: deep-space ground, quiet technical grid and ambient
   // lighting. Purely atmospheric - it carries no state or meaning.
   return (
-    <div className="cc-canvas min-h-screen text-[#d4d4d4]">
+    <div className="cc-canvas min-h-screen text-[var(--spr-text)]">
       <div className="flex min-h-screen">
         <aside className="spr-nav hidden h-screen w-[240px] shrink-0 overflow-y-auto p-2.5 lg:sticky lg:top-0 lg:flex lg:flex-col">
           <button
             onClick={() => onNavigate('/dashboard')}
             aria-label="Open Overview"
             title="Go to the Overview dashboard."
-            className="mb-3 flex items-center gap-2.5 rounded-md border border-[#3c3c3c] p-2 text-left hover:bg-[#252526] focus:outline-none focus:ring-2 focus:ring-[#3794ff]/40"
+            className="mb-3 flex items-center gap-2.5 rounded-md border border-[var(--spr-border)] p-2 text-left hover:bg-[var(--spr-surface-alt)] focus:outline-none focus:ring-2 focus:ring-[var(--spr-highlight)]/40"
           >
-            <img src="/brand/spr-icon.png" alt="SPR" className="h-9 w-9 shrink-0 rounded-md border border-[#3c3c3c] bg-white object-contain p-1" />
+            <img src="/brand/spr-icon.png" alt="SPR" className="h-9 w-9 shrink-0 rounded-md border border-[var(--spr-border)] bg-white object-contain p-1" />
             <span className="min-w-0">
               <span className="block text-[13px] font-semibold leading-tight">Software Passport Registry</span>
-              <span className="block text-[10px] leading-tight text-[#6f6f6f]">Software Trust OS</span>
+              <span className="block text-[10px] leading-tight text-[var(--spr-text-faint)]">Software Trust OS</span>
             </span>
           </button>
           <NavGroup group={{ label: 'Core workflow', items: CORE }} activePath={active} onNavigate={onNavigate} defaultOpen />
           <NavGroup group={{ label: 'Governance', items: GOVERNANCE }} activePath={active} onNavigate={onNavigate} defaultOpen />
           <NavGroup group={{ label: 'Executive', items: executiveItems }} activePath={active} onNavigate={onNavigate} defaultOpen={false} />
-          <div className="mb-1 mt-2 flex items-center justify-between px-2 py-1.5 text-[11px] font-semibold uppercase tracking-[.06em] text-[#6f6f6f]">
+          <div className="mb-1 mt-2 flex items-center justify-between px-2 py-1.5 text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--spr-text-faint)]">
             <span>Extensions</span>
-            <span title={`${EXTENSIONS.length} extension${EXTENSIONS.length === 1 ? '' : 's'} installed in this workspace.`} className="rounded-sm border border-[#3c3c3c] px-1.5 text-[9px] text-[#9d9d9d]">{EXTENSIONS.length}</span>
+            <span title={`${EXTENSIONS.length} extension${EXTENSIONS.length === 1 ? '' : 's'} installed in this workspace.`} className="rounded-sm border border-[var(--spr-border)] px-1.5 text-[9px] text-[var(--spr-text-muted)]">{EXTENSIONS.length}</span>
           </div>
           <nav className="space-y-0.5">
             {EXTENSIONS.map((extension) => (
               <ExtensionButton key={extension.id} extension={extension} active={extensionActive && path === extension.entryPath} onNavigate={onNavigate} />
             ))}
           </nav>
-          <div className="mt-auto space-y-0.5 border-t border-[#3c3c3c] pt-2">
+          <div className="mt-auto space-y-0.5 border-t border-[var(--spr-border)] pt-2">
             {SYSTEM.map((item) => (
               <button
                 key={item.id}
@@ -162,28 +162,28 @@ export default function CommandCenter({ children, path, userEmail, role, onNavig
         </aside>
 
         <main className="min-w-0 flex-1">
-          <header className="sticky top-0 z-30 h-12 border-b border-[#3c3c3c] bg-[#1e1e1e]/95 px-4 backdrop-blur-none md:px-6">
+          <header className="sticky top-0 z-30 h-12 border-b border-[var(--spr-border)] bg-[var(--spr-surface)]/95 px-4 backdrop-blur-none md:px-6">
             <div className="flex h-12 items-center gap-3">
               <button
                 onClick={() => onNavigate('/dashboard')}
                 aria-label="Open Overview"
                 title="Go to the Overview dashboard."
-                className="rounded-md border border-[#3c3c3c] focus:outline-none focus:ring-2 focus:ring-[#3794ff]/40 lg:hidden"
+                className="rounded-md border border-[var(--spr-border)] focus:outline-none focus:ring-2 focus:ring-[var(--spr-highlight)]/40 lg:hidden"
               >
                 <img src="/brand/spr-icon.png" alt="SPR" className="h-7 w-7 rounded-md bg-white object-contain p-0.5" />
               </button>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5 text-[11px] text-[#6f6f6f]">
+                <div className="flex items-center gap-1.5 text-[11px] text-[var(--spr-text-faint)]">
                   <span>Workspace</span>
                   <span>/</span>
-                  <span className="font-medium text-[#d4d4d4]">{currentLabel}</span>
+                  <span className="font-medium text-[var(--spr-text)]">{currentLabel}</span>
                 </div>
               </div>
-              <span title="This session is connected to live workspace data." className="hidden items-center gap-1.5 rounded-sm border border-[#3c3c3c] px-2 py-0.5 text-[11px] text-[#9d9d9d] md:flex">
+              <span title="This session is connected to live workspace data." className="hidden items-center gap-1.5 rounded-sm border border-[var(--spr-border)] px-2 py-0.5 text-[11px] text-[var(--spr-text-muted)] md:flex">
                 <span className="spr-status-dot spr-status-dot--green" /> Live
               </span>
-              <span title="Your role in this workspace, which controls what you can view and change." className="hidden rounded-sm border border-[#3c3c3c] px-2 py-0.5 text-[11px] text-[#9d9d9d] md:inline">{role}</span>
-              <span title="The account you're signed in as." className="hidden max-w-[180px] truncate text-[11px] text-[#6f6f6f] xl:inline">{userEmail || 'Authenticated user'}</span>
+              <span title="Your role in this workspace, which controls what you can view and change." className="hidden rounded-sm border border-[var(--spr-border)] px-2 py-0.5 text-[11px] text-[var(--spr-text-muted)] md:inline">{role}</span>
+              <span title="The account you're signed in as." className="hidden max-w-[180px] truncate text-[11px] text-[var(--spr-text-faint)] xl:inline">{userEmail || 'Authenticated user'}</span>
               <button
                 onClick={() => setMobileMenuOpen((open) => !open)}
                 aria-expanded={mobileMenuOpen}
@@ -197,7 +197,7 @@ export default function CommandCenter({ children, path, userEmail, role, onNavig
             </div>
           </header>
 
-          <div className="border-b border-[#3c3c3c] bg-[#252526] px-2 py-1.5 lg:hidden">
+          <div className="border-b border-[var(--spr-border)] bg-[var(--spr-surface-alt)] px-2 py-1.5 lg:hidden">
             <div className="flex gap-1.5 overflow-x-auto pb-0.5">
               {mobileItems.slice(0, 8).map((item) => (
                 <button
@@ -205,7 +205,7 @@ export default function CommandCenter({ children, path, userEmail, role, onNavig
                   onClick={() => { onNavigate(item.path); setMobileMenuOpen(false); }}
                   data-active={active(item.path)}
                   title={'desc' in item && typeof item.desc === 'string' ? item.desc : undefined}
-                  className="spr-nav-item shrink-0 border border-[#3c3c3c] px-2.5 py-1.5 text-[11px]"
+                  className="spr-nav-item shrink-0 border border-[var(--spr-border)] px-2.5 py-1.5 text-[11px]"
                 >
                   {item.label}
                 </button>
@@ -215,14 +215,14 @@ export default function CommandCenter({ children, path, userEmail, role, onNavig
               </button>
             </div>
             {mobileMenuOpen && (
-              <div className="mt-1.5 grid max-h-64 grid-cols-2 gap-1.5 overflow-y-auto border-t border-[#3c3c3c] pt-1.5">
+              <div className="mt-1.5 grid max-h-64 grid-cols-2 gap-1.5 overflow-y-auto border-t border-[var(--spr-border)] pt-1.5">
                 {mobileItems.slice(8).map((item) => (
                   <button
                     key={item.id}
                     onClick={() => { onNavigate(item.path); setMobileMenuOpen(false); }}
                     data-active={active(item.path)}
                     title={'desc' in item && typeof item.desc === 'string' ? item.desc : undefined}
-                    className="spr-nav-item border border-[#3c3c3c] px-2.5 py-2 text-left text-[11px]"
+                    className="spr-nav-item border border-[var(--spr-border)] px-2.5 py-2 text-left text-[11px]"
                   >
                     {item.label}
                   </button>

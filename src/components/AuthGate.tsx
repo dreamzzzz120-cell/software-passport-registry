@@ -46,9 +46,9 @@ export default function AuthGate({ children }: { children: ReactNode }) {
   }, [user]);
 
   if (publicPath) return <>{children}</>;
-  if (!ready) return <div className="min-h-screen bg-[#1e1e1e] text-[#d4d4d4] grid place-items-center"><div role="status" aria-live="polite" className="text-sm text-[#9d9d9d]">Checking secure session…</div></div>;
-  if (!user) return <div className="min-h-screen bg-[#1e1e1e] text-[#d4d4d4] grid place-items-center"><div role="status" aria-live="polite" className="text-sm text-[#9d9d9d]">Redirecting to sign in…</div></div>;
-  if (!user.emailVerified) return <div className="min-h-screen bg-[#1e1e1e] text-[#d4d4d4] grid place-items-center p-6"><div className="max-w-md spr-panel p-6"><h1 className="text-xl font-semibold">Verify your email</h1><p className="mt-2 text-sm text-[#9d9d9d]">Your account must be email-verified before you can access the SPR workspace.</p><button className="spr-btn spr-btn-primary mt-5" onClick={() => void signOut(auth)}>Sign out</button></div></div>;
+  if (!ready) return <div className="min-h-screen bg-[var(--spr-surface)] text-[var(--spr-text)] grid place-items-center"><div role="status" aria-live="polite" className="text-sm text-[var(--spr-text-muted)]">Checking secure session…</div></div>;
+  if (!user) return <div className="min-h-screen bg-[var(--spr-surface)] text-[var(--spr-text)] grid place-items-center"><div role="status" aria-live="polite" className="text-sm text-[var(--spr-text-muted)]">Redirecting to sign in…</div></div>;
+  if (!user.emailVerified) return <div className="min-h-screen bg-[var(--spr-surface)] text-[var(--spr-text)] grid place-items-center p-6"><div className="max-w-md spr-panel p-6"><h1 className="text-xl font-semibold">Verify your email</h1><p className="mt-2 text-sm text-[var(--spr-text-muted)]">Your account must be email-verified before you can access the SPR workspace.</p><button className="spr-btn spr-btn-primary mt-5" onClick={() => void signOut(auth)}>Sign out</button></div></div>;
 
   return <>{children}</>;
 }

@@ -57,23 +57,23 @@ const INFRASTRUCTURE_STEPS: { n: string; title: string; description: string }[] 
 // the other eight sometimes referenced elsewhere in mockups.
 export default function HomePage({ onCreatePassport, onExploreTrustNetwork, onViewSamplePassport }: Props) {
   return (
-    <div className="min-h-screen bg-[#1e1e1e] text-[#cccccc]">
+    <div className="min-h-screen bg-[var(--spr-surface)] text-[#cccccc]">
       {/* Hero */}
       <section className="mx-auto flex max-w-7xl flex-col items-center gap-14 px-6 py-20 lg:flex-row lg:items-center lg:py-28">
         <div className="max-w-2xl">
           <img src="/brand/spr-logo.jpg" alt="Software Passport Registry" className="mb-6 h-10 w-auto" />
           <div className="mb-5 flex flex-wrap items-center gap-3">
-            <span className="text-[11px] font-bold uppercase tracking-[.22em] text-[#3794ff]">Software Trust Infrastructure</span>
+            <span className="text-[11px] font-bold uppercase tracking-[.22em] text-[var(--spr-highlight)]">Software Trust Infrastructure</span>
             {/* Honest status: the release gate has not been cleared, so the page
                 must not imply production readiness. */}
-            <span className="rounded-full border border-[#cca700]/40 bg-[#cca700]/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[.14em] text-[#cca700]">Limited early access</span>
+            <span className="rounded-full border border-[var(--spr-amber)]/40 bg-[var(--spr-amber)]/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[.14em] text-[var(--spr-amber)]">Limited early access</span>
           </div>
-          <h1 className="text-4xl font-semibold leading-[1.05] tracking-[-.02em] text-[#d4d4d4] md:text-5xl">Verify software before you trust it.</h1>
-          <p className="mt-6 max-w-xl text-base leading-7 text-[#9d9d9d]">SPR turns repositories, applications, dependencies and vendors into evidence-backed Software Passports — so buyers, security teams and operators can see what was observed, what was verified, and what remains unknown.</p>
+          <h1 className="text-4xl font-semibold leading-[1.05] tracking-[-.02em] text-[var(--spr-text)] md:text-5xl">Verify software before you trust it.</h1>
+          <p className="mt-6 max-w-xl text-base leading-7 text-[var(--spr-text-muted)]">SPR turns repositories, applications, dependencies and vendors into evidence-backed Software Passports — so buyers, security teams and operators can see what was observed, what was verified, and what remains unknown.</p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <button onClick={onExploreTrustNetwork} className="inline-flex items-center gap-2 rounded-[3px] bg-[#0e639c] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#1177bb]">Run a Free Review <ArrowRight className="h-4 w-4" /></button>
-            <button onClick={onViewSamplePassport} className="rounded-[3px] border border-[#3c3c3c] bg-[#2d2d2d] px-6 py-3 text-sm font-semibold text-[#cccccc] transition-colors hover:bg-[#383838]">View Sample Passport</button>
-            <button onClick={onCreatePassport} className="rounded-[3px] px-3 py-3 text-sm font-semibold text-[#9d9d9d] underline-offset-4 hover:text-[#3794ff] hover:underline">Sign in</button>
+            <button onClick={onExploreTrustNetwork} className="inline-flex items-center gap-2 rounded-[3px] bg-[var(--spr-accent)] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[var(--spr-accent-hover)]">Run a Free Review <ArrowRight className="h-4 w-4" /></button>
+            <button onClick={onViewSamplePassport} className="rounded-[3px] border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-6 py-3 text-sm font-semibold text-[#cccccc] transition-colors hover:bg-[var(--spr-surface-hover)]">View Sample Passport</button>
+            <button onClick={onCreatePassport} className="rounded-[3px] px-3 py-3 text-sm font-semibold text-[var(--spr-text-muted)] underline-offset-4 hover:text-[var(--spr-highlight)] hover:underline">Sign in</button>
           </div>
           <LegalFooterLinks className="mt-8" />
         </div>
@@ -94,26 +94,26 @@ export default function HomePage({ onCreatePassport, onExploreTrustNetwork, onVi
       </section>
 
       {/* Buyer questions replace the old generic asset taxonomy. */}
-      <section className="border-t border-[#3c3c3c] bg-[#181818] px-6 py-20">
+      <section className="border-t border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-6 py-20">
         <div className="mx-auto max-w-5xl">
-          <h2 className="text-2xl font-semibold text-[#d4d4d4] md:text-3xl">The questions SPR is built to answer.</h2>
+          <h2 className="text-2xl font-semibold text-[var(--spr-text)] md:text-3xl">The questions SPR is built to answer.</h2>
           <ul className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {BUYER_QUESTIONS.map((question) => (
-              <li key={question} className="rounded-md border border-[#3c3c3c] bg-[#252526] p-5 text-sm leading-6 text-[#d4d4d4]">{question}</li>
+              <li key={question} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5 text-sm leading-6 text-[var(--spr-text)]">{question}</li>
             ))}
           </ul>
         </div>
       </section>
 
       {/* Who it is for, framed as a job to be done. */}
-      <section className="border-t border-[#3c3c3c] px-6 py-20">
+      <section className="border-t border-[var(--spr-border)] px-6 py-20">
         <div className="mx-auto max-w-5xl">
-          <h2 className="text-2xl font-semibold text-[#d4d4d4] md:text-3xl">Who SPR is for</h2>
+          <h2 className="text-2xl font-semibold text-[var(--spr-text)] md:text-3xl">Who SPR is for</h2>
           <dl className="mt-8 grid gap-5 md:grid-cols-2">
             {AUDIENCES.map((item) => (
-              <div key={item.who} className="rounded-md border border-[#3c3c3c] bg-[#252526] p-5">
-                <dt className="text-sm font-semibold text-[#d4d4d4]">{item.who}</dt>
-                <dd className="mt-1.5 text-xs leading-5 text-[#9d9d9d]">{item.job}</dd>
+              <div key={item.who} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5">
+                <dt className="text-sm font-semibold text-[var(--spr-text)]">{item.who}</dt>
+                <dd className="mt-1.5 text-xs leading-5 text-[var(--spr-text-muted)]">{item.job}</dd>
               </div>
             ))}
           </dl>
@@ -121,25 +121,25 @@ export default function HomePage({ onCreatePassport, onExploreTrustNetwork, onVi
       </section>
 
       {/* Evidence, and the UNKNOWN differentiator. */}
-      <section className="border-t border-[#3c3c3c] bg-[#181818] px-6 py-20">
+      <section className="border-t border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-6 py-20">
         <div className="mx-auto max-w-5xl">
-          <h2 className="text-2xl font-semibold text-[#d4d4d4] md:text-3xl">See the evidence.</h2>
-          <p className="mt-4 max-w-3xl text-sm leading-7 text-[#9d9d9d]">
+          <h2 className="text-2xl font-semibold text-[var(--spr-text)] md:text-3xl">See the evidence.</h2>
+          <p className="mt-4 max-w-3xl text-sm leading-7 text-[var(--spr-text-muted)]">
             SPR keeps six things separate: observations, evidence, independent sources, verification,
             trust state and the decision. Repeated observations of one source are not independent
             corroboration, and SPR reports what its verification systems observed — it does not invent
             certainty where evidence is missing.
           </p>
-          <div className="mt-9 rounded-md border border-[#3c3c3c] bg-[#252526] p-6">
-            <div className="text-[10px] font-bold uppercase tracking-[.18em] text-[#cca700]">A state most products hide</div>
-            <h3 className="mt-2 text-xl font-semibold text-[#d4d4d4]">UNKNOWN is a real answer.</h3>
-            <p className="mt-3 max-w-3xl text-sm leading-7 text-[#9d9d9d]">
+          <div className="mt-9 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6">
+            <div className="text-[10px] font-bold uppercase tracking-[.18em] text-[var(--spr-amber)]">A state most products hide</div>
+            <h3 className="mt-2 text-xl font-semibold text-[var(--spr-text)]">UNKNOWN is a real answer.</h3>
+            <p className="mt-3 max-w-3xl text-sm leading-7 text-[var(--spr-text-muted)]">
               UNKNOWN does not mean safe, and it does not mean unsafe. It means the available evidence is
               insufficient to make that determination. SPR shows it with the same weight as any other
               state, because a trust product that cannot say &ldquo;I do not know&rdquo; is not
               trustworthy.
             </p>
-            <button onClick={onViewSamplePassport} className="mt-6 inline-flex items-center gap-2 rounded-[3px] border border-[#3c3c3c] bg-[#2d2d2d] px-5 py-2.5 text-sm font-semibold text-[#cccccc] hover:bg-[#383838]">
+            <button onClick={onViewSamplePassport} className="mt-6 inline-flex items-center gap-2 rounded-[3px] border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-5 py-2.5 text-sm font-semibold text-[#cccccc] hover:bg-[var(--spr-surface-hover)]">
               See it on a sample Passport <ArrowRight className="h-4 w-4" />
             </button>
           </div>
@@ -147,14 +147,14 @@ export default function HomePage({ onCreatePassport, onExploreTrustNetwork, onVi
       </section>
 
       {/* Tangible outputs that exist in the product today. */}
-      <section className="border-t border-[#3c3c3c] px-6 py-20">
+      <section className="border-t border-[var(--spr-border)] px-6 py-20">
         <div className="mx-auto max-w-5xl">
-          <h2 className="text-2xl font-semibold text-[#d4d4d4] md:text-3xl">What you get</h2>
+          <h2 className="text-2xl font-semibold text-[var(--spr-text)] md:text-3xl">What you get</h2>
           <div className="mt-8 grid gap-5 md:grid-cols-2">
             {OUTPUTS.map((item) => (
-              <div key={item.title} className="rounded-md border border-[#3c3c3c] bg-[#252526] p-5">
-                <h3 className="text-sm font-semibold text-[#d4d4d4]">{item.title}</h3>
-                <p className="mt-1.5 text-xs leading-5 text-[#9d9d9d]">{item.body}</p>
+              <div key={item.title} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5">
+                <h3 className="text-sm font-semibold text-[var(--spr-text)]">{item.title}</h3>
+                <p className="mt-1.5 text-xs leading-5 text-[var(--spr-text-muted)]">{item.body}</p>
               </div>
             ))}
           </div>
@@ -162,29 +162,29 @@ export default function HomePage({ onCreatePassport, onExploreTrustNetwork, onVi
       </section>
 
       {/* Infrastructure explainer */}
-      <section className="border-t border-[#3c3c3c] px-6 py-20">
+      <section className="border-t border-[var(--spr-border)] px-6 py-20">
         <div className="mx-auto max-w-5xl">
           <div className="grid gap-6 md:grid-cols-5">
             {INFRASTRUCTURE_STEPS.map((step) => (
-              <div key={step.n} className="rounded-md border border-[#3c3c3c] bg-[#252526] p-5">
-                <div className="font-mono text-xs font-bold text-[#3794ff]">{step.n}</div>
-                <h3 className="mt-2 text-sm font-semibold text-[#d4d4d4]">{step.title}</h3>
-                <p className="mt-2 text-xs leading-5 text-[#9d9d9d]">{step.description}</p>
+              <div key={step.n} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5">
+                <div className="font-mono text-xs font-bold text-[var(--spr-highlight)]">{step.n}</div>
+                <h3 className="mt-2 text-sm font-semibold text-[var(--spr-text)]">{step.title}</h3>
+                <p className="mt-2 text-xs leading-5 text-[var(--spr-text-muted)]">{step.description}</p>
               </div>
             ))}
           </div>
           <div className="mt-10 text-center">
-            <div className="inline-block rounded-md border border-[#3794ff]/40 bg-[#094771]/15 px-6 py-3 text-sm font-bold uppercase tracking-[.15em] text-[#3794ff]">Software Passport</div>
+            <div className="inline-block rounded-md border border-[var(--spr-highlight)]/40 bg-[var(--spr-accent-soft)]/15 px-6 py-3 text-sm font-bold uppercase tracking-[.15em] text-[var(--spr-highlight)]">Software Passport</div>
           </div>
         </div>
       </section>
 
       {/* Category statement */}
-      <section className="border-t border-[#3c3c3c] bg-[#181818] px-6 py-16 text-center">
+      <section className="border-t border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-6 py-16 text-center">
         <div className="mx-auto max-w-2xl">
-          <div className="text-[11px] font-bold uppercase tracking-[.22em] text-[#3794ff]">Software Trust Infrastructure</div>
-          <p className="mt-3 text-lg font-semibold text-[#d4d4d4]">The trust layer for the software ecosystem.</p>
-          <p className="mt-2 text-sm leading-6 text-[#9d9d9d]">Persistent software identity. Verifiable evidence. Explainable trust. Continuous observation.</p>
+          <div className="text-[11px] font-bold uppercase tracking-[.22em] text-[var(--spr-highlight)]">Software Trust Infrastructure</div>
+          <p className="mt-3 text-lg font-semibold text-[var(--spr-text)]">The trust layer for the software ecosystem.</p>
+          <p className="mt-2 text-sm leading-6 text-[var(--spr-text-muted)]">Persistent software identity. Verifiable evidence. Explainable trust. Continuous observation.</p>
         </div>
       </section>
     </div>

@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
-:root {
+:root,
+:root[data-theme="dark"] {
   color-scheme: dark;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background: #1e1e1e;
@@ -14,6 +15,7 @@
   --spr-highlight: #3794ff;
   --spr-border: #3c3c3c;
   --spr-surface: #1e1e1e;
+  --spr-surface-deep: #181818;
   --spr-surface-alt: #252526;
   --spr-surface-sunken: #2d2d2d;
   --spr-surface-hover: #383838;
@@ -28,9 +30,39 @@
   --spr-gray: #858585;
 }
 
+/* Light theme — same variable set, applied via data-theme="light" on <html>.
+   Kept as a flat, high-contrast palette (not a glow/glass theme) to match
+   the existing enterprise-neutral design direction. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  background: #faf9f8;
+  color: #242424;
+  --spr-accent: #0f6cbd;
+  --spr-accent-hover: #115ea3;
+  --spr-accent-soft: #e0f0ff;
+  --spr-highlight: #0f6cbd;
+  --spr-border: #e1dfdd;
+  --spr-surface: #faf9f8;
+  --spr-surface-deep: #f3f2f1;
+  --spr-surface-alt: #ffffff;
+  --spr-surface-sunken: #f3f2f1;
+  --spr-surface-hover: #eeecea;
+  --spr-text: #242424;
+  --spr-text-muted: #605e5c;
+  --spr-text-faint: #8a8886;
+  --spr-radius: 3px;
+  --spr-green: #107c10;
+  --spr-amber: #986f0b;
+  --spr-red: #d13438;
+  --spr-blue: #0f6cbd;
+  --spr-gray: #605e5c;
+}
+
+body { background: var(--spr-surface); color: var(--spr-text); transition: background .15s ease, color .15s ease; }
+
 * { box-sizing: border-box; }
 html, body, #root { min-height: 100%; margin: 0; }
-body { min-width: 320px; background: #1e1e1e; }
+body { min-width: 320px; }
 button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 

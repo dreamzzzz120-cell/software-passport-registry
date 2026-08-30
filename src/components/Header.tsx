@@ -65,11 +65,11 @@ export default function Header({
   };
 
   return (
-    <header className="bg-[#1e1e1e] border-b border-[#3c3c3c] h-16 px-6 flex items-center justify-between shrink-0 z-30 select-none">
+    <header className="bg-[var(--spr-surface)] border-b border-[var(--spr-border)] h-16 px-6 flex items-center justify-between shrink-0 z-30 select-none">
       {/* Hamburger menu for mobile screen sizes */}
       <button
         onClick={onToggleMobileMenu}
-        className="lg:hidden p-2 mr-2 -ml-2 rounded-md text-[#9d9d9d] hover:text-[#d4d4d4] hover:bg-[#383838] cursor-pointer flex items-center justify-center shrink-0"
+        className="lg:hidden p-2 mr-2 -ml-2 rounded-md text-[var(--spr-text-muted)] hover:text-[var(--spr-text)] hover:bg-[var(--spr-surface-hover)] cursor-pointer flex items-center justify-center shrink-0"
         aria-label="Open Navigation Menu"
         id="mobile-hamburger-trigger"
       >
@@ -79,13 +79,13 @@ export default function Header({
       {/* Search and context title */}
       <div className="flex items-center gap-6 flex-1 max-w-xl">
         <div className="relative w-full">
-          <Search className="w-4 h-4 text-[#9d9d9d] absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-[var(--spr-text-muted)] absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search passports, CVE IDs, vendors, or clients..."
-            className="w-full studio-input pl-10 pr-4 py-2 text-xs font-sans placeholder-[#6f6f6f]"
+            className="w-full studio-input pl-10 pr-4 py-2 text-xs font-sans placeholder-[var(--spr-text-faint)]"
             id="global-search-input"
           />
         </div>
@@ -94,23 +94,23 @@ export default function Header({
       {/* Right control utilities */}
       <div className="flex items-center gap-4">
         {/* Quick context info */}
-        <div className="hidden lg:flex items-center gap-2 border-r border-[#3c3c3c] pr-4 text-right">
+        <div className="hidden lg:flex items-center gap-2 border-r border-[var(--spr-border)] pr-4 text-right">
           <div>
-            <p className="text-[10px] text-[#9d9d9d] font-mono tracking-wider">WORKSPACE CONTEXT</p>
-            <p className="text-xs font-bold text-[#d4d4d4]">
+            <p className="text-[10px] text-[var(--spr-text-muted)] font-mono tracking-wider">WORKSPACE CONTEXT</p>
+            <p className="text-xs font-bold text-[var(--spr-text)]">
               {selectedClientId === 'global' ? 'Global Multi-Tenant Hub' : selectedClient?.name}
             </p>
           </div>
         </div>
 
         {/* Interactive RBAC Role Selector Widget */}
-        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-[#252526] border border-[#3c3c3c] rounded-md text-xs">
-          <Shield className="w-3.5 h-3.5 text-[#3794ff]" />
-          <span className="font-mono text-[10px] text-[#9d9d9d] font-bold uppercase mr-1">RBAC:</span>
+        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] rounded-md text-xs">
+          <Shield className="w-3.5 h-3.5 text-[var(--spr-highlight)]" />
+          <span className="font-mono text-[10px] text-[var(--spr-text-muted)] font-bold uppercase mr-1">RBAC:</span>
           <select
             value={userRole}
             onChange={(e) => onChangeRole(e.target.value)}
-            className="bg-transparent text-[#d4d4d4] focus:outline-none font-bold text-[11px] cursor-pointer"
+            className="bg-transparent text-[var(--spr-text)] focus:outline-none font-bold text-[11px] cursor-pointer"
             id="rbac-role-switcher"
             title="Switch roles to test access privileges on backend endpoints"
           >
@@ -127,7 +127,7 @@ export default function Header({
         {/* Dark Mode Toggle */}
         <button
           onClick={toggleTheme}
-          className="p-2.5 rounded-md border border-[#3c3c3c] text-[#9d9d9d] hover:bg-[#383838] hover:text-[#d4d4d4] transition-all cursor-pointer overflow-hidden flex items-center justify-center h-9 w-9"
+          className="p-2.5 rounded-md border border-[var(--spr-border)] text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)] hover:text-[var(--spr-text)] transition-all cursor-pointer overflow-hidden flex items-center justify-center h-9 w-9"
           aria-label="Toggle Theme"
           id="global-theme-toggle"
         >
@@ -146,9 +146,9 @@ export default function Header({
               className="flex items-center justify-center shrink-0"
             >
               {theme === 'dark' ? (
-                <Sun className="w-4 h-4 text-[#cca700] shrink-0" />
+                <Sun className="w-4 h-4 text-[var(--spr-amber)] shrink-0" />
               ) : (
-                <Moon className="w-4 h-4 text-[#3794ff] shrink-0" />
+                <Moon className="w-4 h-4 text-[var(--spr-highlight)] shrink-0" />
               )}
             </motion.div>
           </AnimatePresence>
@@ -157,11 +157,11 @@ export default function Header({
         {/* Tutorial / Help Center Trigger */}
         <button
           onClick={onStartTutorial}
-          className="p-2.5 rounded-md border border-[#3c3c3c] text-[#9d9d9d] hover:bg-[#383838] hover:text-[#3794ff] transition-all cursor-pointer flex items-center justify-center h-9 w-9"
+          className="p-2.5 rounded-md border border-[var(--spr-border)] text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)] hover:text-[var(--spr-highlight)] transition-all cursor-pointer flex items-center justify-center h-9 w-9"
           title="Launch Platform Tour"
           id="global-tutorial-toggle"
         >
-          <HelpCircle className="w-4 h-4 text-[#3794ff] animate-pulse shrink-0" />
+          <HelpCircle className="w-4 h-4 text-[var(--spr-highlight)] animate-pulse shrink-0" />
         </button>
 
         {/* Action button dropdown */}
@@ -177,17 +177,17 @@ export default function Header({
 
             {showActionsDropdown && (
               <div className="absolute right-0 mt-2.5 w-60 studio-dropdown py-2.5 z-50">
-                <div className="px-3.5 pb-2 border-b border-[#3c3c3c] mb-1.5">
-                  <span className="text-[10px] font-mono text-[#9d9d9d] font-bold uppercase tracking-wider">Rapid Trust Actions</span>
+                <div className="px-3.5 pb-2 border-b border-[var(--spr-border)] mb-1.5">
+                  <span className="text-[10px] font-mono text-[var(--spr-text-muted)] font-bold uppercase tracking-wider">Rapid Trust Actions</span>
                 </div>
                 <button
                   onClick={() => {
                     onOpenQuickAction('register-passport');
                     setShowActionsDropdown(false);
                   }}
-                  className="w-full text-left px-4 py-2.5 text-xs text-[#9d9d9d] hover:bg-[#383838] hover:text-[#d4d4d4] flex items-center gap-2.5 cursor-pointer transition-colors"
+                  className="w-full text-left px-4 py-2.5 text-xs text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)] hover:text-[var(--spr-text)] flex items-center gap-2.5 cursor-pointer transition-colors"
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-[#3794ff]" />
+                  <Sparkles className="w-3.5 h-3.5 text-[var(--spr-highlight)]" />
                   <span className="font-medium">Issue Software Passport</span>
                 </button>
                 <button
@@ -195,9 +195,9 @@ export default function Header({
                     onOpenQuickAction('scan-sbom');
                     setShowActionsDropdown(false);
                   }}
-                  className="w-full text-left px-4 py-2.5 text-xs text-[#9d9d9d] hover:bg-[#383838] hover:text-[#d4d4d4] flex items-center gap-2.5 cursor-pointer transition-colors"
+                  className="w-full text-left px-4 py-2.5 text-xs text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)] hover:text-[var(--spr-text)] flex items-center gap-2.5 cursor-pointer transition-colors"
                 >
-                  <CheckCircle className="w-3.5 h-3.5 text-[#89d185]" />
+                  <CheckCircle className="w-3.5 h-3.5 text-[var(--spr-green)]" />
                   <span className="font-medium">Verify CycloneDX / SPDX SBOM</span>
                 </button>
                 <button
@@ -205,9 +205,9 @@ export default function Header({
                     onOpenQuickAction('add-client');
                     setShowActionsDropdown(false);
                   }}
-                  className="w-full text-left px-4 py-2.5 text-xs text-[#9d9d9d] hover:bg-[#383838] hover:text-[#d4d4d4] flex items-center gap-2.5 cursor-pointer transition-colors"
+                  className="w-full text-left px-4 py-2.5 text-xs text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)] hover:text-[var(--spr-text)] flex items-center gap-2.5 cursor-pointer transition-colors"
                 >
-                  <Plus className="w-3.5 h-3.5 text-[#3794ff]" />
+                  <Plus className="w-3.5 h-3.5 text-[var(--spr-highlight)]" />
                   <span className="font-medium">Onboard Enterprise Organization</span>
                 </button>
               </div>
@@ -218,7 +218,7 @@ export default function Header({
         <div className="relative">
           <button
             onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-            className="flex items-center gap-2 border-l border-[#3c3c3c] pl-4 focus:outline-none text-left cursor-pointer hover:opacity-85 transition"
+            className="flex items-center gap-2 border-l border-[var(--spr-border)] pl-4 focus:outline-none text-left cursor-pointer hover:opacity-85 transition"
             id="user-profile-trigger"
           >
             {user?.photoURL ? (
@@ -226,18 +226,18 @@ export default function Header({
                 src={user.photoURL}
                 referrerPolicy="no-referrer"
                 alt="Avatar"
-                className="w-8 h-8 rounded-full border border-[#3c3c3c]"
+                className="w-8 h-8 rounded-full border border-[var(--spr-border)]"
               />
             ) : (
-              <div className="w-8 h-8 rounded-full bg-[#094771] text-[#3794ff] border border-[#3c3c3c] flex items-center justify-center text-xs font-semibold">
+              <div className="w-8 h-8 rounded-full bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] border border-[var(--spr-border)] flex items-center justify-center text-xs font-semibold">
                 {getInitials(user?.displayName || user?.email)}
               </div>
             )}
             <div className="hidden sm:block">
-              <p className="text-xs font-bold text-[#d4d4d4]">
+              <p className="text-xs font-bold text-[var(--spr-text)]">
                 {user?.displayName || 'MSP Administrator'}
               </p>
-              <p className="text-[9px] font-mono text-[#9d9d9d] truncate max-w-[120px]">
+              <p className="text-[9px] font-mono text-[var(--spr-text-muted)] truncate max-w-[120px]">
                 {user?.email}
               </p>
             </div>
@@ -245,29 +245,29 @@ export default function Header({
 
           {showProfileDropdown && (
             <div className="absolute right-0 mt-2.5 w-60 studio-dropdown py-2 z-50">
-              <div className="px-4 py-2 border-b border-[#3c3c3c] mb-2">
-                <p className="text-[10px] font-mono text-[#9d9d9d] uppercase tracking-wider">Account Active</p>
-                <p className="text-xs font-bold text-[#d4d4d4] mt-1 truncate">
+              <div className="px-4 py-2 border-b border-[var(--spr-border)] mb-2">
+                <p className="text-[10px] font-mono text-[var(--spr-text-muted)] uppercase tracking-wider">Account Active</p>
+                <p className="text-xs font-bold text-[var(--spr-text)] mt-1 truncate">
                   {user?.displayName || 'MSP User'}
                 </p>
-                <p className="text-[10px] font-mono text-[#9d9d9d] truncate">
+                <p className="text-[10px] font-mono text-[var(--spr-text-muted)] truncate">
                   {user?.email}
                 </p>
               </div>
 
-              <div className="px-4 py-1.5 text-[10px] font-mono text-[#9d9d9d] flex items-center gap-1.5">
-                <Shield className="w-3 h-3 text-[#3794ff]" />
+              <div className="px-4 py-1.5 text-[10px] font-mono text-[var(--spr-text-muted)] flex items-center gap-1.5">
+                <Shield className="w-3 h-3 text-[var(--spr-highlight)]" />
                 <span>TENANT CONTEXT:</span>
               </div>
-              <div className="px-4 pb-2 mb-2 border-b border-[#3c3c3c] text-[11px] font-bold text-[#d4d4d4] font-mono truncate">
+              <div className="px-4 pb-2 mb-2 border-b border-[var(--spr-border)] text-[11px] font-bold text-[var(--spr-text)] font-mono truncate">
                 tenant-{user?.email?.split('@')[1] || 'default'}
               </div>
 
               <button
                 onClick={handleLogout}
-                className="w-full text-left px-4 py-2 text-xs text-[#f14c4c] hover:bg-[#383838] flex items-center gap-2.5 cursor-pointer font-medium transition"
+                className="w-full text-left px-4 py-2 text-xs text-[var(--spr-red)] hover:bg-[var(--spr-surface-hover)] flex items-center gap-2.5 cursor-pointer font-medium transition"
               >
-                <LogOut className="w-3.5 h-3.5 text-[#f14c4c]" />
+                <LogOut className="w-3.5 h-3.5 text-[var(--spr-red)]" />
                 <span>Sign Out Securely</span>
               </button>
             </div>

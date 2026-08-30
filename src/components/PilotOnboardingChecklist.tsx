@@ -234,41 +234,41 @@ export default function PilotOnboardingChecklist({
   const progressPercent = (completedCount / tasks.length) * 100;
 
   return (
-    <div id="pilot-onboarding-hub" className="spr-panel text-[#d4d4d4] p-6 space-y-6 relative overflow-hidden">
+    <div id="pilot-onboarding-hub" className="spr-panel text-[var(--spr-text)] p-6 space-y-6 relative overflow-hidden">
       {/* Header and Progress Indicator */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative">
         <div className="space-y-1.5 text-left">
           <div className="flex items-center gap-2">
-            <span className="bg-[#094771] text-[#3794ff] border border-[#3794ff] text-[10px] font-mono font-bold px-2 py-0.5 rounded-md uppercase tracking-wider">
+            <span className="bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] border border-[var(--spr-highlight)] text-[10px] font-mono font-bold px-2 py-0.5 rounded-md uppercase tracking-wider">
               Getting started
             </span>
             <span className="flex h-2 w-2 relative">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#89d185] opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#89d185]"></span>
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--spr-green)] opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--spr-green)]"></span>
             </span>
           </div>
-          <h2 className="text-lg font-bold text-[#d4d4d4] font-display flex items-center gap-2">
+          <h2 className="text-lg font-bold text-[var(--spr-text)] font-display flex items-center gap-2">
             <span>Set up SPR</span>
-            <span className="text-xs font-normal text-[#9d9d9d]">Four practical steps</span>
+            <span className="text-xs font-normal text-[var(--spr-text-muted)]">Four practical steps</span>
           </h2>
-          <p className="text-xs text-[#9d9d9d] leading-relaxed max-w-2xl">
+          <p className="text-xs text-[var(--spr-text-muted)] leading-relaxed max-w-2xl">
             Add a client, register its software, run a scan, and review the recorded results. SPR marks each item complete from saved workspace data.
           </p>
         </div>
 
         {/* Progress Circle & Counter */}
-        <div className="flex items-center gap-4 bg-[#252526] border border-[#3c3c3c] p-4 rounded-md shrink-0">
+        <div className="flex items-center gap-4 bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] p-4 rounded-md shrink-0">
           <div className="relative w-12 h-12">
             <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
               <path
-                className="text-[#6f6f6f]"
+                className="text-[var(--spr-text-faint)]"
                 strokeWidth="3.5"
                 stroke="currentColor"
                 fill="none"
                 d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
               />
               <path
-                className="text-[#3794ff] transition-all duration-500 stroke-dasharray"
+                className="text-[var(--spr-highlight)] transition-all duration-500 stroke-dasharray"
                 strokeDasharray={`${progressPercent}, 100`}
                 strokeWidth="3.5"
                 strokeLinecap="round"
@@ -282,8 +282,8 @@ export default function PilotOnboardingChecklist({
             </div>
           </div>
           <div className="text-left space-y-0.5">
-            <span className="text-[10px] font-mono text-[#9d9d9d] block uppercase">Pilot Status</span>
-            <span className={`text-xs font-bold ${completedCount === 5 ? 'text-[#89d185]' : 'text-[#3794ff]'}`}>
+            <span className="text-[10px] font-mono text-[var(--spr-text-muted)] block uppercase">Pilot Status</span>
+            <span className={`text-xs font-bold ${completedCount === 5 ? 'text-[var(--spr-green)]' : 'text-[var(--spr-highlight)]'}`}>
               {completedCount === 5 ? '🚀 Pilot Ready: Attested' : 'In-Flight Ingestion'}
             </span>
           </div>
@@ -292,13 +292,13 @@ export default function PilotOnboardingChecklist({
 
       {/* Success and Error Indicators */}
       {successMsg && (
-        <div className="bg-[#89d185]/15 border border-[#89d185] text-[#89d185] p-4 rounded-md text-xs flex items-center gap-2 animate-fadeIn text-left">
+        <div className="bg-[var(--spr-green)]/15 border border-[var(--spr-green)] text-[var(--spr-green)] p-4 rounded-md text-xs flex items-center gap-2 animate-fadeIn text-left">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span>{successMsg}</span>
         </div>
       )}
       {errorMsg && (
-        <div className="bg-[#f14c4c]/15 border border-[#f14c4c] text-[#f14c4c] p-4 rounded-md text-xs flex items-center gap-2 animate-fadeIn text-left">
+        <div className="bg-[var(--spr-red)]/15 border border-[var(--spr-red)] text-[var(--spr-red)] p-4 rounded-md text-xs flex items-center gap-2 animate-fadeIn text-left">
           <AlertTriangle className="w-4 h-4 shrink-0" />
           <span>{errorMsg}</span>
         </div>
@@ -311,32 +311,32 @@ export default function PilotOnboardingChecklist({
             key={task.id}
             className={`p-4 rounded-md border transition-all flex flex-col justify-between space-y-4 ${
               task.status
-                ? 'bg-[#252526] border-[#89d185]'
-                : 'bg-[#252526] border-[#3c3c3c] hover:border-[#3c3c3c]'
+                ? 'bg-[var(--spr-surface-alt)] border-[var(--spr-green)]'
+                : 'bg-[var(--spr-surface-alt)] border-[var(--spr-border)] hover:border-[var(--spr-border)]'
             }`}
           >
             <div className="space-y-2 text-left">
               {/* Top line with step & checkbox */}
               <div className="flex justify-between items-center">
-                <span className="text-[9px] font-mono font-bold text-[#3794ff]">STEP 0{idx + 1}</span>
+                <span className="text-[9px] font-mono font-bold text-[var(--spr-highlight)]">STEP 0{idx + 1}</span>
                 {task.status ? (
-                  <span className="p-0.5 bg-[#89d185]/15 text-[#89d185] rounded-md border border-[#89d185]">
+                  <span className="p-0.5 bg-[var(--spr-green)]/15 text-[var(--spr-green)] rounded-md border border-[var(--spr-green)]">
                     <CheckSquare className="w-4 h-4" />
                   </span>
                 ) : (
-                  <span className="text-[#9d9d9d]">
+                  <span className="text-[var(--spr-text-muted)]">
                     <Square className="w-4 h-4" />
                   </span>
                 )}
               </div>
-              <h4 className="text-xs font-bold font-sans text-[#d4d4d4] line-clamp-1">{task.title}</h4>
-              <p className="text-[10px] text-[#9d9d9d] leading-normal line-clamp-3">{task.description}</p>
+              <h4 className="text-xs font-bold font-sans text-[var(--spr-text)] line-clamp-1">{task.title}</h4>
+              <p className="text-[10px] text-[var(--spr-text-muted)] leading-normal line-clamp-3">{task.description}</p>
             </div>
 
             {/* CTA action bottom */}
             <div>
               {task.status ? (
-                <div className="text-[10px] font-mono text-[#89d185] font-semibold flex items-center gap-1 bg-[#89d185]/15 px-2.5 py-1.5 rounded-md border border-[#89d185]">
+                <div className="text-[10px] font-mono text-[var(--spr-green)] font-semibold flex items-center gap-1 bg-[var(--spr-green)]/15 px-2.5 py-1.5 rounded-md border border-[var(--spr-green)]">
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   <span className="truncate">{task.completedText}</span>
                 </div>
@@ -356,18 +356,18 @@ export default function PilotOnboardingChecklist({
 
       {/* Tabs Switcher for Advanced Configurations */}
       {(activeTab === 'integrations' || activeTab === 'billing') && (
-        <div className="border-t border-[#3c3c3c] pt-6 animate-fadeIn">
+        <div className="border-t border-[var(--spr-border)] pt-6 animate-fadeIn">
           {/* Active Header for expand area */}
           <div className="flex justify-between items-center mb-4">
-            <h3 className="text-xs font-mono font-bold text-[#3794ff] uppercase tracking-widest flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-[#3794ff]" />
+            <h3 className="text-xs font-mono font-bold text-[var(--spr-highlight)] uppercase tracking-widest flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-[var(--spr-highlight)]" />
               <span>
                 {activeTab === 'integrations' ? 'Advanced Repositories & Databases Integration Center' : 'MSP Tenant Usage Limits & Billing Panel'}
               </span>
             </h3>
             <button
               onClick={() => setActiveTab('none')}
-              className="text-[10px] font-mono text-[#9d9d9d] hover:text-[#d4d4d4] underline"
+              className="text-[10px] font-mono text-[var(--spr-text-muted)] hover:text-[var(--spr-text)] underline"
             >
               Close Configurator
             </button>
@@ -377,57 +377,57 @@ export default function PilotOnboardingChecklist({
           {activeTab === 'integrations' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 text-left">
               {/* GitHub App Connector */}
-              <div className="bg-[#252526] border border-[#3c3c3c] p-5 rounded-md space-y-4">
+              <div className="bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] p-5 rounded-md space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Github className="w-4 h-4 text-[#3794ff]" />
-                    <span className="text-xs font-bold text-[#d4d4d4] font-sans">GitHub Enterprise Connector</span>
+                    <Github className="w-4 h-4 text-[var(--spr-highlight)]" />
+                    <span className="text-xs font-bold text-[var(--spr-text)] font-sans">GitHub Enterprise Connector</span>
                   </div>
                   <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded ${
-                    githubConnected ? 'bg-[#89d185]/15 text-[#89d185] border border-[#89d185]' : 'bg-[#252526] text-[#9d9d9d]'
+                    githubConnected ? 'bg-[var(--spr-green)]/15 text-[var(--spr-green)] border border-[var(--spr-green)]' : 'bg-[var(--spr-surface-alt)] text-[var(--spr-text-muted)]'
                   }`}>
                     {githubConnected ? 'CONNECTED' : 'UNCONFIGURED'}
                   </span>
                 </div>
-                <p className="text-[10px] text-[#9d9d9d] leading-normal">
+                <p className="text-[10px] text-[var(--spr-text-muted)] leading-normal">
                   Authenticates with your GitHub Organization. Seals continuous webhook callbacks to verify commit signatures and SBOM updates on pull-requests.
                 </p>
 
                 <div className="space-y-3 pt-2">
                   <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-[8px] font-mono font-bold text-[#9d9d9d] uppercase">APP ID</span>
+                    <span className="absolute left-3 top-2.5 text-[8px] font-mono font-bold text-[var(--spr-text-muted)] uppercase">APP ID</span>
                     <input
                       type="text"
                       value={githubAppId}
                       onChange={(e) => setGithubAppId(e.target.value)}
                       placeholder="e.g. app-12345"
-                      className="w-full bg-[#1e1e1e] border border-[#3c3c3c] rounded-md text-xs pl-16 pr-3 py-2 text-[#d4d4d4] font-mono focus:outline-none"
+                      className="w-full bg-[var(--spr-surface)] border border-[var(--spr-border)] rounded-md text-xs pl-16 pr-3 py-2 text-[var(--spr-text)] font-mono focus:outline-none"
                     />
                   </div>
                   <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-[8px] font-mono font-bold text-[#9d9d9d] uppercase">REPO</span>
+                    <span className="absolute left-3 top-2.5 text-[8px] font-mono font-bold text-[var(--spr-text-muted)] uppercase">REPO</span>
                     <input
                       type="text"
                       value={githubRepo}
                       onChange={(e) => setGithubRepo(e.target.value)}
                       placeholder="e.g. org/main-registry"
-                      className="w-full bg-[#1e1e1e] border border-[#3c3c3c] rounded-md text-xs pl-16 pr-3 py-2 text-[#d4d4d4] font-mono focus:outline-none"
+                      className="w-full bg-[var(--spr-surface)] border border-[var(--spr-border)] rounded-md text-xs pl-16 pr-3 py-2 text-[var(--spr-text)] font-mono focus:outline-none"
                     />
                   </div>
                   <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-[8px] font-mono font-bold text-[#9d9d9d] uppercase">PEM KEY</span>
+                    <span className="absolute left-3 top-2.5 text-[8px] font-mono font-bold text-[var(--spr-text-muted)] uppercase">PEM KEY</span>
                     <textarea
                       value={githubPrivateKey}
                       onChange={(e) => setGithubPrivateKey(e.target.value)}
                       placeholder="Paste the PEM-encoded private key"
                       rows={2}
-                      className="w-full bg-[#1e1e1e] border border-[#3c3c3c] rounded-md text-[9px] pl-16 pr-3 py-2 text-[#d4d4d4] font-mono focus:outline-none resize-none"
+                      className="w-full bg-[var(--spr-surface)] border border-[var(--spr-border)] rounded-md text-[9px] pl-16 pr-3 py-2 text-[var(--spr-text)] font-mono focus:outline-none resize-none"
                     />
                   </div>
                   <button
                     onClick={() => handleSaveIntegration('github')}
                     disabled={loading || !githubAppId || !githubRepo}
-                    className="w-full py-2 bg-[#0e639c] hover:bg-[#0e639c] text-[#d4d4d4] font-sans font-bold text-[10px] rounded-md transition disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
+                    className="w-full py-2 bg-[var(--spr-accent)] hover:bg-[var(--spr-accent)] text-[var(--spr-text)] font-sans font-bold text-[10px] rounded-md transition disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     {loading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
                     <span>Seal Connection & Sync</span>
@@ -436,47 +436,47 @@ export default function PilotOnboardingChecklist({
               </div>
 
               {/* GitLab API Connector */}
-              <div className="bg-[#252526] border border-[#3c3c3c] p-5 rounded-md space-y-4">
+              <div className="bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] p-5 rounded-md space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Gitlab className="w-4 h-4 text-[#3794ff]" />
-                    <span className="text-xs font-bold text-[#d4d4d4] font-sans">GitLab CI/CD Access</span>
+                    <Gitlab className="w-4 h-4 text-[var(--spr-highlight)]" />
+                    <span className="text-xs font-bold text-[var(--spr-text)] font-sans">GitLab CI/CD Access</span>
                   </div>
                   <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded ${
-                    gitlabConnected ? 'bg-[#89d185]/15 text-[#89d185] border border-[#89d185]' : 'bg-[#252526] text-[#9d9d9d]'
+                    gitlabConnected ? 'bg-[var(--spr-green)]/15 text-[var(--spr-green)] border border-[var(--spr-green)]' : 'bg-[var(--spr-surface-alt)] text-[var(--spr-text-muted)]'
                   }`}>
                     {gitlabConnected ? 'CONNECTED' : 'UNCONFIGURED'}
                   </span>
                 </div>
-                <p className="text-[10px] text-[#9d9d9d] leading-normal">
+                <p className="text-[10px] text-[var(--spr-text-muted)] leading-normal">
                   Link your private GitLab registry projects. Attest compile-time variables and artifact hashes securely within the software supply chain.
                 </p>
 
                 <div className="space-y-3 pt-2">
                   <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-[8px] font-mono font-bold text-[#9d9d9d] uppercase">TOKEN</span>
+                    <span className="absolute left-3 top-2.5 text-[8px] font-mono font-bold text-[var(--spr-text-muted)] uppercase">TOKEN</span>
                     <input
                       type="password"
                       value={gitlabToken}
                       onChange={(e) => setGitlabToken(e.target.value)}
                       placeholder="glpat-***"
-                      className="w-full bg-[#1e1e1e] border border-[#3c3c3c] rounded-md text-xs pl-16 pr-3 py-2 text-[#d4d4d4] font-mono focus:outline-none"
+                      className="w-full bg-[var(--spr-surface)] border border-[var(--spr-border)] rounded-md text-xs pl-16 pr-3 py-2 text-[var(--spr-text)] font-mono focus:outline-none"
                     />
                   </div>
                   <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-[8px] font-mono font-bold text-[#9d9d9d] uppercase">PROJECT</span>
+                    <span className="absolute left-3 top-2.5 text-[8px] font-mono font-bold text-[var(--spr-text-muted)] uppercase">PROJECT</span>
                     <input
                       type="text"
                       value={gitlabProject}
                       onChange={(e) => setGitlabProject(e.target.value)}
                       placeholder="e.g. gitlab.com/org/project-id"
-                      className="w-full bg-[#1e1e1e] border border-[#3c3c3c] rounded-md text-xs pl-16 pr-3 py-2 text-[#d4d4d4] font-mono focus:outline-none"
+                      className="w-full bg-[var(--spr-surface)] border border-[var(--spr-border)] rounded-md text-xs pl-16 pr-3 py-2 text-[var(--spr-text)] font-mono focus:outline-none"
                     />
                   </div>
                   <button
                     onClick={() => handleSaveIntegration('gitlab')}
                     disabled={loading || !gitlabToken || !gitlabProject}
-                    className="w-full py-2 bg-[#094771] hover:bg-[#0e639c] text-[#d4d4d4] font-sans font-bold text-[10px] rounded-md transition disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
+                    className="w-full py-2 bg-[var(--spr-accent-soft)] hover:bg-[var(--spr-accent)] text-[var(--spr-text)] font-sans font-bold text-[10px] rounded-md transition disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     {loading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Key className="w-3.5 h-3.5" />}
                     <span>Authenticate GitLab</span>
@@ -485,55 +485,55 @@ export default function PilotOnboardingChecklist({
               </div>
 
               {/* Package Registries & Vulnerability DBs */}
-              <div className="bg-[#252526] border border-[#3c3c3c] p-5 rounded-md space-y-4">
+              <div className="bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] p-5 rounded-md space-y-4">
                 <div className="flex items-center gap-2">
-                  <Database className="w-4 h-4 text-[#89d185]" />
-                  <span className="text-xs font-bold text-[#d4d4d4] font-sans">Threat Feeds & Package registries</span>
+                  <Database className="w-4 h-4 text-[var(--spr-green)]" />
+                  <span className="text-xs font-bold text-[var(--spr-text)] font-sans">Threat Feeds & Package registries</span>
                 </div>
-                <p className="text-[10px] text-[#9d9d9d] leading-normal">
+                <p className="text-[10px] text-[var(--spr-text-muted)] leading-normal">
                   Toggle active connections to vulnerability registries. SPR queries these APIs dynamically to compare package hashes and compile alerts.
                 </p>
 
                 {/* Registry Token */}
                 <div className="space-y-3 pt-1">
                   <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-[8px] font-mono font-bold text-[#9d9d9d] uppercase">NPM/PYPI</span>
+                    <span className="absolute left-3 top-2.5 text-[8px] font-mono font-bold text-[var(--spr-text-muted)] uppercase">NPM/PYPI</span>
                     <input
                       type="password"
                       value={pypiToken}
                       onChange={(e) => setPypiToken(e.target.value)}
                       placeholder="pypi-token-***"
-                      className="w-full bg-[#1e1e1e] border border-[#3c3c3c] rounded-md text-xs pl-16 pr-3 py-2 text-[#d4d4d4] font-mono focus:outline-none"
+                      className="w-full bg-[var(--spr-surface)] border border-[var(--spr-border)] rounded-md text-xs pl-16 pr-3 py-2 text-[var(--spr-text)] font-mono focus:outline-none"
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <span className="text-[9px] font-mono font-bold text-[#9d9d9d] block uppercase">ACTIVE VULNERABILITY REPOSITORIES</span>
+                    <span className="text-[9px] font-mono font-bold text-[var(--spr-text-muted)] block uppercase">ACTIVE VULNERABILITY REPOSITORIES</span>
                     <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
-                      <label className="flex items-center gap-1.5 cursor-pointer text-[#d4d4d4] hover:text-[#d4d4d4]">
+                      <label className="flex items-center gap-1.5 cursor-pointer text-[var(--spr-text)] hover:text-[var(--spr-text)]">
                         <input
                           type="checkbox"
                           checked={selectedFeeds.includes('nvd')}
                           onChange={() => toggleFeed('nvd')}
-                          className="rounded border-[#3c3c3c] bg-[#1e1e1e] text-[#3794ff] "
+                          className="rounded border-[var(--spr-border)] bg-[var(--spr-surface)] text-[var(--spr-highlight)] "
                         />
                         <span>NVD NIST Feed</span>
                       </label>
-                      <label className="flex items-center gap-1.5 cursor-pointer text-[#d4d4d4] hover:text-[#d4d4d4]">
+                      <label className="flex items-center gap-1.5 cursor-pointer text-[var(--spr-text)] hover:text-[var(--spr-text)]">
                         <input
                           type="checkbox"
                           checked={selectedFeeds.includes('cisa')}
                           onChange={() => toggleFeed('cisa')}
-                          className="rounded border-[#3c3c3c] bg-[#1e1e1e] text-[#3794ff] "
+                          className="rounded border-[var(--spr-border)] bg-[var(--spr-surface)] text-[var(--spr-highlight)] "
                         />
                         <span>CISA KEV Feed</span>
                       </label>
-                      <label className="flex items-center gap-1.5 cursor-pointer text-[#d4d4d4] hover:text-[#d4d4d4] col-span-2">
+                      <label className="flex items-center gap-1.5 cursor-pointer text-[var(--spr-text)] hover:text-[var(--spr-text)] col-span-2">
                         <input
                           type="checkbox"
                           checked={selectedFeeds.includes('snyk')}
                           onChange={() => toggleFeed('snyk')}
-                          className="rounded border-[#3c3c3c] bg-[#1e1e1e] text-[#3794ff] "
+                          className="rounded border-[var(--spr-border)] bg-[var(--spr-surface)] text-[var(--spr-highlight)] "
                         />
                         <span>Snyk Database Connector (Simulated)</span>
                       </label>
@@ -543,7 +543,7 @@ export default function PilotOnboardingChecklist({
                   <button
                     onClick={() => handleSaveIntegration('pypi')}
                     disabled={loading || !pypiToken}
-                    className="w-full py-2 bg-[#89d185] hover:bg-[#89d185] text-[#d4d4d4] font-sans font-bold text-[10px] rounded-md transition disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
+                    className="w-full py-2 bg-[var(--spr-green)] hover:bg-[var(--spr-green)] text-[var(--spr-text)] font-sans font-bold text-[10px] rounded-md transition disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     <span>Connect Threat Registries</span>
                   </button>
@@ -554,31 +554,31 @@ export default function PilotOnboardingChecklist({
 
           {/* Tab Content: Billing */}
           {activeTab === 'billing' && (
-            <div className="bg-[#252526] border border-[#3c3c3c] p-6 rounded-md space-y-6 text-left">
+            <div className="bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] p-6 rounded-md space-y-6 text-left">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-1">
-                  <h3 className="text-sm font-bold text-[#d4d4d4] flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-[var(--spr-text)] flex items-center gap-2">
                     <span>MSP Commercial Limits Center</span>
-                    <span className="bg-[#094771] text-[#3794ff] border border-[#3794ff] text-[9px] font-mono px-2 py-0.5 rounded">
+                    <span className="bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] border border-[var(--spr-highlight)] text-[9px] font-mono px-2 py-0.5 rounded">
                       Active Plan: {plans[currentPlan].name}
                     </span>
                   </h3>
-                  <p className="text-[11px] text-[#9d9d9d]">
+                  <p className="text-[11px] text-[var(--spr-text-muted)]">
                     Your usage metrics are derived dynamically from the multi-tenant PostgreSQL database clusters under isolated tenant partitions.
                   </p>
                 </div>
 
                 {/* Pricing period switcher */}
-                <div className="flex bg-[#1e1e1e] p-0.5 rounded-md border border-[#3c3c3c] text-[10px] font-mono font-bold shrink-0 self-start md:self-center">
+                <div className="flex bg-[var(--spr-surface)] p-0.5 rounded-md border border-[var(--spr-border)] text-[10px] font-mono font-bold shrink-0 self-start md:self-center">
                   <button
                     onClick={() => setBillingCycle('Monthly')}
-                    className={`px-3 py-1 rounded-md transition ${billingCycle === 'Monthly' ? 'bg-[#0e639c] text-[#d4d4d4]' : 'text-[#9d9d9d] hover:text-[#d4d4d4]'}`}
+                    className={`px-3 py-1 rounded-md transition ${billingCycle === 'Monthly' ? 'bg-[var(--spr-accent)] text-[var(--spr-text)]' : 'text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]'}`}
                   >
                     Monthly
                   </button>
                   <button
                     onClick={() => setBillingCycle('Annual')}
-                    className={`px-3 py-1 rounded-md transition ${billingCycle === 'Annual' ? 'bg-[#0e639c] text-[#d4d4d4]' : 'text-[#9d9d9d] hover:text-[#d4d4d4]'}`}
+                    className={`px-3 py-1 rounded-md transition ${billingCycle === 'Annual' ? 'bg-[var(--spr-accent)] text-[var(--spr-text)]' : 'text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]'}`}
                   >
                     Annual (20% Off)
                   </button>
@@ -588,73 +588,73 @@ export default function PilotOnboardingChecklist({
               {/* Progress Gauges Grid */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* Gauge 1: Clients Limit */}
-                <div className="space-y-2 bg-[#1e1e1e] p-4 rounded-md border border-[#3c3c3c]">
+                <div className="space-y-2 bg-[var(--spr-surface)] p-4 rounded-md border border-[var(--spr-border)]">
                   <div className="flex justify-between items-center text-xs font-mono">
-                    <span className="text-[#9d9d9d]">CLIENT WORKSPACES</span>
-                    <span className="font-bold text-[#d4d4d4]">
+                    <span className="text-[var(--spr-text-muted)]">CLIENT WORKSPACES</span>
+                    <span className="font-bold text-[var(--spr-text)]">
                       {clientsCount} / {currentLimits.clientLimit}
                     </span>
                   </div>
-                  <div className="w-full bg-[#252526] h-2 rounded-full overflow-hidden">
+                  <div className="w-full bg-[var(--spr-surface-alt)] h-2 rounded-full overflow-hidden">
                     <div
-                      className={`h-full rounded-full transition-all duration-500 ${clientUtilization >= 80 ? 'bg-[#f14c4c]' : 'bg-[#3794ff]'}`}
+                      className={`h-full rounded-full transition-all duration-500 ${clientUtilization >= 80 ? 'bg-[var(--spr-red)]' : 'bg-[var(--spr-highlight)]'}`}
                       style={{ width: `${Math.min(100, clientUtilization)}%` }}
                     ></div>
                   </div>
-                  <p className="text-[9px] text-[#9d9d9d]">Maximum client domains you can onboard under continuous SLA tracking.</p>
+                  <p className="text-[9px] text-[var(--spr-text-muted)]">Maximum client domains you can onboard under continuous SLA tracking.</p>
                 </div>
 
                 {/* Gauge 2: Passports Limit */}
-                <div className="space-y-2 bg-[#1e1e1e] p-4 rounded-md border border-[#3c3c3c]">
+                <div className="space-y-2 bg-[var(--spr-surface)] p-4 rounded-md border border-[var(--spr-border)]">
                   <div className="flex justify-between items-center text-xs font-mono">
-                    <span className="text-[#9d9d9d]">SOFTWARE PASSPORTS</span>
-                    <span className="font-bold text-[#d4d4d4]">
+                    <span className="text-[var(--spr-text-muted)]">SOFTWARE PASSPORTS</span>
+                    <span className="font-bold text-[var(--spr-text)]">
                       {passportsCount} / {currentLimits.passportLimit}
                     </span>
                   </div>
-                  <div className="w-full bg-[#252526] h-2 rounded-full overflow-hidden">
+                  <div className="w-full bg-[var(--spr-surface-alt)] h-2 rounded-full overflow-hidden">
                     <div
-                      className={`h-full rounded-full transition-all duration-500 ${passportUtilization >= 80 ? 'bg-[#f14c4c]' : 'bg-[#3794ff]'}`}
+                      className={`h-full rounded-full transition-all duration-500 ${passportUtilization >= 80 ? 'bg-[var(--spr-red)]' : 'bg-[var(--spr-highlight)]'}`}
                       style={{ width: `${Math.min(100, passportUtilization)}%` }}
                     ></div>
                   </div>
-                  <p className="text-[9px] text-[#9d9d9d]">Active software artifacts with cryptographic seals and verified SBOM registries.</p>
+                  <p className="text-[9px] text-[var(--spr-text-muted)]">Active software artifacts with cryptographic seals and verified SBOM registries.</p>
                 </div>
 
                 {/* Gauge 3: Continuous Scans Limit */}
-                <div className="space-y-2 bg-[#1e1e1e] p-4 rounded-md border border-[#3c3c3c]">
+                <div className="space-y-2 bg-[var(--spr-surface)] p-4 rounded-md border border-[var(--spr-border)]">
                   <div className="flex justify-between items-center text-xs font-mono">
-                    <span className="text-[#9d9d9d]">MONTHLY CONTINUOUS SCANS</span>
-                    <span className="font-bold text-[#d4d4d4]">
+                    <span className="text-[var(--spr-text-muted)]">MONTHLY CONTINUOUS SCANS</span>
+                    <span className="font-bold text-[var(--spr-text)]">
                       {scansCount} / {currentLimits.scanLimit}
                     </span>
                   </div>
-                  <div className="w-full bg-[#252526] h-2 rounded-full overflow-hidden">
+                  <div className="w-full bg-[var(--spr-surface-alt)] h-2 rounded-full overflow-hidden">
                     <div
-                      className={`h-full rounded-full transition-all duration-500 ${scanUtilization >= 80 ? 'bg-[#f14c4c]' : 'bg-[#3794ff]'}`}
+                      className={`h-full rounded-full transition-all duration-500 ${scanUtilization >= 80 ? 'bg-[var(--spr-red)]' : 'bg-[var(--spr-highlight)]'}`}
                       style={{ width: `${Math.min(100, scanUtilization)}%` }}
                     ></div>
                   </div>
-                  <p className="text-[9px] text-[#9d9d9d]">Dynamic scanner actions checking dependencies against the NIST vulnerability databases.</p>
+                  <p className="text-[9px] text-[var(--spr-text-muted)]">Dynamic scanner actions checking dependencies against the NIST vulnerability databases.</p>
                 </div>
               </div>
 
               {/* Plans pricing summary card */}
-              <div className="bg-[#1e1e1e] border border-[#3c3c3c] p-5 rounded-md flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+              <div className="bg-[var(--spr-surface)] border border-[var(--spr-border)] p-5 rounded-md flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                 <div className="space-y-1 text-left">
-                  <span className="text-[9px] font-mono font-bold text-[#3794ff] uppercase tracking-widest block">Active Commercial Tier</span>
+                  <span className="text-[9px] font-mono font-bold text-[var(--spr-highlight)] uppercase tracking-widest block">Active Commercial Tier</span>
                   <div className="flex items-baseline gap-1.5">
-                    <h4 className="text-base font-bold text-[#d4d4d4]">{plans[currentPlan].name} Tier</h4>
-                    <span className="text-xs font-mono text-[#3794ff]">${plans[currentPlan].price}/month</span>
+                    <h4 className="text-base font-bold text-[var(--spr-text)]">{plans[currentPlan].name} Tier</h4>
+                    <span className="text-xs font-mono text-[var(--spr-highlight)]">${plans[currentPlan].price}/month</span>
                   </div>
-                  <p className="text-[11px] text-[#9d9d9d] max-w-xl">
+                  <p className="text-[11px] text-[var(--spr-text-muted)] max-w-xl">
                     Need higher scale constraints or automated multi-tenant OS patch management? Switch subscriptions below to immediately expand limits without card prompt.
                   </p>
                 </div>
 
                 <button
                   onClick={() => setShowUpgradeModal(true)}
-                  className="px-5 py-2.5 bg-[#0e639c] hover:bg-[#0e639c] text-[#d4d4d4] font-sans font-bold text-xs rounded-md transition-all active:scale-98 flex items-center gap-1.5 cursor-pointer shrink-0"
+                  className="px-5 py-2.5 bg-[var(--spr-accent)] hover:bg-[var(--spr-accent)] text-[var(--spr-text)] font-sans font-bold text-xs rounded-md transition-all active:scale-98 flex items-center gap-1.5 cursor-pointer shrink-0"
                 >
                   <Layers className="w-4 h-4" />
                   <span>Switch Subscription Plan</span>
@@ -667,17 +667,17 @@ export default function PilotOnboardingChecklist({
 
       {/* Subscription upgrade modal dialog */}
       {showUpgradeModal && (
-        <div className="fixed inset-0 bg-[#1e1e1e] z-50 flex items-center justify-center p-4">
-          <div className="bg-[#1e1e1e] border border-[#3c3c3c] max-w-4xl w-full rounded-md p-6 relative space-y-6 text-left">
+        <div className="fixed inset-0 bg-[var(--spr-surface)] z-50 flex items-center justify-center p-4">
+          <div className="bg-[var(--spr-surface)] border border-[var(--spr-border)] max-w-4xl w-full rounded-md p-6 relative space-y-6 text-left">
             <div className="flex justify-between items-start">
               <div className="space-y-1">
-                <span className="bg-[#094771] text-[#3794ff] border border-[#3794ff] text-[9px] font-mono px-2 py-0.5 rounded uppercase">Commercial Selection</span>
-                <h3 className="text-base font-bold text-[#d4d4d4]">Upgrade MSP Workspace Limits</h3>
-                <p className="text-xs text-[#9d9d9d]">Instantly upgrade billing plans in the database sandbox to run more scans and register clients.</p>
+                <span className="bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] border border-[var(--spr-highlight)] text-[9px] font-mono px-2 py-0.5 rounded uppercase">Commercial Selection</span>
+                <h3 className="text-base font-bold text-[var(--spr-text)]">Upgrade MSP Workspace Limits</h3>
+                <p className="text-xs text-[var(--spr-text-muted)]">Instantly upgrade billing plans in the database sandbox to run more scans and register clients.</p>
               </div>
               <button
                 onClick={() => setShowUpgradeModal(false)}
-                className="p-1 text-[#9d9d9d] hover:text-[#d4d4d4]"
+                className="p-1 text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]"
               >
                 ✕
               </button>
@@ -693,33 +693,33 @@ export default function PilotOnboardingChecklist({
                     key={key}
                     className={`p-5 rounded-md border flex flex-col justify-between space-y-4 ${
                       isSelected
-                        ? 'bg-[#252526] border-[#3794ff]'
-                        : 'bg-[#252526] border-[#3c3c3c] hover:border-[#3c3c3c]'
+                        ? 'bg-[var(--spr-surface-alt)] border-[var(--spr-highlight)]'
+                        : 'bg-[var(--spr-surface-alt)] border-[var(--spr-border)] hover:border-[var(--spr-border)]'
                     }`}
                   >
                     <div className="space-y-3">
                       <div className="flex justify-between items-start">
-                        <h4 className="text-sm font-extrabold text-[#d4d4d4]">{plan.name}</h4>
-                        <span className="text-[9px] font-mono font-bold bg-[#094771] text-[#3794ff] px-1.5 py-0.5 rounded">
+                        <h4 className="text-sm font-extrabold text-[var(--spr-text)]">{plan.name}</h4>
+                        <span className="text-[9px] font-mono font-bold bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] px-1.5 py-0.5 rounded">
                           {plan.badge}
                         </span>
                       </div>
                       <div className="flex items-baseline gap-1">
-                        <span className="text-xl font-mono font-extrabold text-[#3794ff]">${plan.price}</span>
-                        <span className="text-[10px] text-[#9d9d9d] font-mono">/mo</span>
+                        <span className="text-xl font-mono font-extrabold text-[var(--spr-highlight)]">${plan.price}</span>
+                        <span className="text-[10px] text-[var(--spr-text-muted)] font-mono">/mo</span>
                       </div>
-                      <div className="border-t border-[#3c3c3c] pt-3 space-y-2 text-xs text-[#d4d4d4] font-mono">
+                      <div className="border-t border-[var(--spr-border)] pt-3 space-y-2 text-xs text-[var(--spr-text)] font-mono">
                         <div className="flex justify-between">
                           <span>Max Clients</span>
-                          <span className="font-bold text-[#d4d4d4]">{plan.clientLimit}</span>
+                          <span className="font-bold text-[var(--spr-text)]">{plan.clientLimit}</span>
                         </div>
                         <div className="flex justify-between">
                           <span>Max Passports</span>
-                          <span className="font-bold text-[#d4d4d4]">{plan.passportLimit}</span>
+                          <span className="font-bold text-[var(--spr-text)]">{plan.passportLimit}</span>
                         </div>
                         <div className="flex justify-between">
                           <span>Monthly Scans</span>
-                          <span className="font-bold text-[#d4d4d4]">{plan.scanLimit}</span>
+                          <span className="font-bold text-[var(--spr-text)]">{plan.scanLimit}</span>
                         </div>
                       </div>
                     </div>
@@ -729,8 +729,8 @@ export default function PilotOnboardingChecklist({
                       disabled={isSelected}
                       className={`w-full py-2 rounded-md text-xs font-bold transition-all ${
                         isSelected
-                          ? 'bg-[#2d2d2d] text-[#9d9d9d] cursor-default'
-                          : 'bg-[#0e639c] hover:bg-[#0e639c] text-[#d4d4d4] cursor-pointer active:scale-98'
+                          ? 'bg-[var(--spr-surface-sunken)] text-[var(--spr-text-muted)] cursor-default'
+                          : 'bg-[var(--spr-accent)] hover:bg-[var(--spr-accent)] text-[var(--spr-text)] cursor-pointer active:scale-98'
                       }`}
                     >
                       {isSelected ? 'CURRENT ACTIVE PLAN' : `UPGRADE TO ${key.toUpperCase()}`}
@@ -740,7 +740,7 @@ export default function PilotOnboardingChecklist({
               })}
             </div>
 
-            <p className="text-[10px] text-[#9d9d9d] font-mono text-center">
+            <p className="text-[10px] text-[var(--spr-text-muted)] font-mono text-center">
               * Upgrades instantly adjust database constraints for your current isolated tenant partition. Simulated via standard Stripe backend pipelines.
             </p>
           </div>

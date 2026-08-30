@@ -251,11 +251,11 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.22em] text-[#c586c0]"><Factory className="h-4 w-4" /> Supply chain trust</div>
-          <h1 className="mt-1 text-xl font-display font-bold text-[#d4d4d4] flex items-center gap-2">
-            <Factory className="w-5 h-5 text-[#3794ff]" />
+          <h1 className="mt-1 text-xl font-display font-bold text-[var(--spr-text)] flex items-center gap-2">
+            <Factory className="w-5 h-5 text-[var(--spr-highlight)]" />
             <span>Vendor Trust Registry</span>
           </h1>
-          <p className="text-xs text-[#9d9d9d] font-sans mt-1">
+          <p className="text-xs text-[var(--spr-text-muted)] font-sans mt-1">
             Trace supply chain vulnerability vectors, query validated publisher reputation indices, and inspect continuous compliance audit records.
           </p>
         </div>
@@ -268,32 +268,32 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
       {showAddVendor && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-labelledby="add-vendor-title">
-          <div className="w-full max-w-md rounded-md border border-[#3c3c3c] bg-[#252526] p-6 shadow-2xl">
+          <div className="w-full max-w-md rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
-              <h2 id="add-vendor-title" className="text-lg font-bold text-[#d4d4d4]">Add vendor</h2>
-              <button onClick={() => setShowAddVendor(false)} aria-label="Close" className="rounded-md p-1.5 text-[#9d9d9d] hover:bg-[#383838] hover:text-[#d4d4d4]"><X className="h-4 w-4" /></button>
+              <h2 id="add-vendor-title" className="text-lg font-bold text-[var(--spr-text)]">Add vendor</h2>
+              <button onClick={() => setShowAddVendor(false)} aria-label="Close" className="rounded-md p-1.5 text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)] hover:text-[var(--spr-text)]"><X className="h-4 w-4" /></button>
             </div>
             <form onSubmit={handleAddVendor} className="mt-5 space-y-3.5">
-              {addVendorError && <div role="alert" className="rounded-md border border-[#f14c4c]/40 bg-[#f14c4c]/10 px-3 py-2.5 text-xs text-[#f14c4c] flex items-center gap-2"><AlertCircle className="w-4 h-4 shrink-0" /> {addVendorError}</div>}
+              {addVendorError && <div role="alert" className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 px-3 py-2.5 text-xs text-[var(--spr-red)] flex items-center gap-2"><AlertCircle className="w-4 h-4 shrink-0" /> {addVendorError}</div>}
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold text-[#9d9d9d]">Vendor name *</label>
-                <input required value={newVendorName} onChange={(e) => setNewVendorName(e.target.value)} placeholder="e.g. Acme Cloud Backup" className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2 text-xs text-[#d4d4d4]" />
+                <label className="text-[10px] font-bold text-[var(--spr-text-muted)]">Vendor name *</label>
+                <input required value={newVendorName} onChange={(e) => setNewVendorName(e.target.value)} placeholder="e.g. Acme Cloud Backup" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]" />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold text-[#9d9d9d]">Category</label>
-                <input value={newVendorCategory} onChange={(e) => setNewVendorCategory(e.target.value)} placeholder="Software Publisher" className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2 text-xs text-[#d4d4d4]" />
+                <label className="text-[10px] font-bold text-[var(--spr-text-muted)]">Category</label>
+                <input value={newVendorCategory} onChange={(e) => setNewVendorCategory(e.target.value)} placeholder="Software Publisher" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]" />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold text-[#9d9d9d]">Website</label>
-                <input value={newVendorWebsite} onChange={(e) => setNewVendorWebsite(e.target.value)} placeholder="https://example.com" className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2 text-xs text-[#d4d4d4]" />
+                <label className="text-[10px] font-bold text-[var(--spr-text-muted)]">Website</label>
+                <input value={newVendorWebsite} onChange={(e) => setNewVendorWebsite(e.target.value)} placeholder="https://example.com" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]" />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold text-[#9d9d9d]">Location(s)</label>
-                <input value={newVendorLocations} onChange={(e) => setNewVendorLocations(e.target.value)} placeholder="e.g. United States" className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2 text-xs text-[#d4d4d4]" />
+                <label className="text-[10px] font-bold text-[var(--spr-text-muted)]">Location(s)</label>
+                <input value={newVendorLocations} onChange={(e) => setNewVendorLocations(e.target.value)} placeholder="e.g. United States" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]" />
               </div>
               <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={() => setShowAddVendor(false)} className="rounded-md border border-[#3c3c3c] px-3.5 py-2 text-xs font-semibold text-[#9d9d9d] hover:bg-[#383838]">Cancel</button>
-                <button type="submit" disabled={addingVendor || !newVendorName.trim()} className="inline-flex items-center gap-1.5 rounded-md bg-[#0e639c] px-3.5 py-2 text-xs font-bold text-white hover:bg-[#1177bb] disabled:opacity-40">
+                <button type="button" onClick={() => setShowAddVendor(false)} className="rounded-md border border-[var(--spr-border)] px-3.5 py-2 text-xs font-semibold text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)]">Cancel</button>
+                <button type="submit" disabled={addingVendor || !newVendorName.trim()} className="inline-flex items-center gap-1.5 rounded-md bg-[var(--spr-accent)] px-3.5 py-2 text-xs font-bold text-white hover:bg-[var(--spr-accent-hover)] disabled:opacity-40">
                   {addingVendor ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
                   {addingVendor ? 'Adding…' : 'Add vendor'}
                 </button>
@@ -308,18 +308,18 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
         <div className="flex flex-col md:flex-row gap-3">
           {/* Main search bar */}
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-[#9d9d9d]" />
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-[var(--spr-text-muted)]" />
             <input
               type="text"
               placeholder="Search by vendor name, category, location, or audit type..."
               value={localSearch}
               onChange={(e) => setLocalSearch(e.target.value)}
-              className="w-full bg-[#2d2d2d] hover:bg-[#252526] border border-[#3c3c3c] rounded-md pl-9 pr-4 py-2 text-xs focus:outline-none focus:border-[#3794ff] focus:bg-white transition-all text-[#d4d4d4] placeholder-[#6f6f6f]"
+              className="w-full bg-[var(--spr-surface-sunken)] hover:bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] rounded-md pl-9 pr-4 py-2 text-xs focus:outline-none focus:border-[var(--spr-highlight)] focus:bg-white transition-all text-[var(--spr-text)] placeholder-[var(--spr-text-faint)]"
             />
             {localSearch && (
               <button
                 onClick={() => setLocalSearch('')}
-                className="absolute right-3 top-2.5 text-[#9d9d9d] hover:text-[#6f6f6f] text-xs"
+                className="absolute right-3 top-2.5 text-[var(--spr-text-muted)] hover:text-[var(--spr-text-faint)] text-xs"
               >
                 Clear
               </button>
@@ -335,7 +335,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                 setReputationFilter('all');
                 setAuditStatusFilter('all');
               }}
-              className="text-xs text-[#3794ff] hover:text-[#5fa8ff] font-semibold px-2 py-1 bg-[#094771] hover:bg-[#0e639c]/30 rounded-md transition-all"
+              className="text-xs text-[var(--spr-highlight)] hover:text-[#5fa8ff] font-semibold px-2 py-1 bg-[var(--spr-accent-soft)] hover:bg-[var(--spr-accent)]/30 rounded-md transition-all"
             >
               Reset Filters
             </button>
@@ -346,19 +346,19 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
           {/* Review Status Filter */}
           <div className="space-y-1">
-            <label className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase tracking-wider block">Review Status</label>
+            <label className="text-[10px] font-mono font-bold text-[var(--spr-text-muted)] uppercase tracking-wider block">Review Status</label>
             <div className="relative">
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full bg-white border border-[#3c3c3c] hover:border-[#525252] rounded-md px-2.5 py-1.5 text-[11px] font-semibold text-[#6f6f6f] focus:outline-none focus:border-[#3794ff] cursor-pointer appearance-none"
+                className="w-full bg-white border border-[var(--spr-border)] hover:border-[#525252] rounded-md px-2.5 py-1.5 text-[11px] font-semibold text-[var(--spr-text-faint)] focus:outline-none focus:border-[var(--spr-highlight)] cursor-pointer appearance-none"
               >
                 <option value="all">All Statuses</option>
                 <option value="Approved">Approved Only</option>
                 <option value="Under Review">Under Review</option>
                 <option value="Blocked">Blocked Only</option>
               </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[#9d9d9d]">
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[var(--spr-text-muted)]">
                 <ChevronRight className="w-3.5 h-3.5 rotate-90" />
               </div>
             </div>
@@ -366,19 +366,19 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
           {/* Risk Tier Filter */}
           <div className="space-y-1">
-            <label className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase tracking-wider block">Risk Tier</label>
+            <label className="text-[10px] font-mono font-bold text-[var(--spr-text-muted)] uppercase tracking-wider block">Risk Tier</label>
             <div className="relative">
               <select
                 value={riskFilter}
                 onChange={(e) => setRiskFilter(e.target.value)}
-                className="w-full bg-white border border-[#3c3c3c] hover:border-[#525252] rounded-md px-2.5 py-1.5 text-[11px] font-semibold text-[#6f6f6f] focus:outline-none focus:border-[#3794ff] cursor-pointer appearance-none"
+                className="w-full bg-white border border-[var(--spr-border)] hover:border-[#525252] rounded-md px-2.5 py-1.5 text-[11px] font-semibold text-[var(--spr-text-faint)] focus:outline-none focus:border-[var(--spr-highlight)] cursor-pointer appearance-none"
               >
                 <option value="all">All Risk Tiers</option>
                 <option value="Low">Low Risk</option>
                 <option value="Medium">Medium Risk</option>
                 <option value="High">High Risk</option>
               </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[#9d9d9d]">
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[var(--spr-text-muted)]">
                 <ChevronRight className="w-3.5 h-3.5 rotate-90" />
               </div>
             </div>
@@ -386,12 +386,12 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
           {/* Reputation Score Filter */}
           <div className="space-y-1">
-            <label className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase tracking-wider block">Reputation Index</label>
+            <label className="text-[10px] font-mono font-bold text-[var(--spr-text-muted)] uppercase tracking-wider block">Reputation Index</label>
             <div className="relative">
               <select
                 value={reputationFilter}
                 onChange={(e) => setReputationFilter(e.target.value)}
-                className="w-full bg-white border border-[#3c3c3c] hover:border-[#525252] rounded-md px-2.5 py-1.5 text-[11px] font-semibold text-[#6f6f6f] focus:outline-none focus:border-[#3794ff] cursor-pointer appearance-none"
+                className="w-full bg-white border border-[var(--spr-border)] hover:border-[#525252] rounded-md px-2.5 py-1.5 text-[11px] font-semibold text-[var(--spr-text-faint)] focus:outline-none focus:border-[var(--spr-highlight)] cursor-pointer appearance-none"
               >
                 <option value="all">All Scores</option>
                 <option value="excellent">Excellent (90+)</option>
@@ -399,7 +399,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                 <option value="fair">Fair (70-79)</option>
                 <option value="critical">Critical (&lt;70)</option>
               </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[#9d9d9d]">
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[var(--spr-text-muted)]">
                 <ChevronRight className="w-3.5 h-3.5 rotate-90" />
               </div>
             </div>
@@ -407,19 +407,19 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
           {/* Compliance Audit Status Filter */}
           <div className="space-y-1">
-            <label className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase tracking-wider block">Audit Ledger Status</label>
+            <label className="text-[10px] font-mono font-bold text-[var(--spr-text-muted)] uppercase tracking-wider block">Audit Ledger Status</label>
             <div className="relative">
               <select
                 value={auditStatusFilter}
                 onChange={(e) => setAuditStatusFilter(e.target.value)}
-                className="w-full bg-white border border-[#3c3c3c] hover:border-[#525252] rounded-md px-2.5 py-1.5 text-[11px] font-semibold text-[#6f6f6f] focus:outline-none focus:border-[#3794ff] cursor-pointer appearance-none"
+                className="w-full bg-white border border-[var(--spr-border)] hover:border-[#525252] rounded-md px-2.5 py-1.5 text-[11px] font-semibold text-[var(--spr-text-faint)] focus:outline-none focus:border-[var(--spr-highlight)] cursor-pointer appearance-none"
               >
                 <option value="all">All Audit Outcomes</option>
                 <option value="Passed">Passed Audits</option>
                 <option value="Under Review">Under Review Only</option>
                 <option value="Failed">Failed/Gaps Only</option>
               </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[#9d9d9d]">
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[var(--spr-text-muted)]">
                 <ChevronRight className="w-3.5 h-3.5 rotate-90" />
               </div>
             </div>
@@ -434,17 +434,17 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
         <div className="lg:col-span-3 space-y-4">
           <div className="spr-panel overflow-hidden">
             {/* Header with Sorting Indicators */}
-            <div className="bg-[#252526] border-b border-[#3c3c3c] px-4 py-2.5 flex justify-between items-center text-[10px] font-mono text-[#9d9d9d] font-bold uppercase">
-              <span className="flex items-center gap-1 cursor-pointer hover:text-[#6f6f6f]" onClick={() => toggleSort('name')}>
+            <div className="bg-[var(--spr-surface-alt)] border-b border-[var(--spr-border)] px-4 py-2.5 flex justify-between items-center text-[10px] font-mono text-[var(--spr-text-muted)] font-bold uppercase">
+              <span className="flex items-center gap-1 cursor-pointer hover:text-[var(--spr-text-faint)]" onClick={() => toggleSort('name')}>
                 Publisher Organization
                 <ArrowUpDown className="w-3 h-3" />
               </span>
               <div className="flex items-center gap-6">
-                <span className="flex items-center gap-1 cursor-pointer hover:text-[#6f6f6f]" onClick={() => toggleSort('passports')}>
+                <span className="flex items-center gap-1 cursor-pointer hover:text-[var(--spr-text-faint)]" onClick={() => toggleSort('passports')}>
                   Passports
                   <ArrowUpDown className="w-3 h-3" />
                 </span>
-                <span className="flex items-center gap-1 cursor-pointer hover:text-[#6f6f6f]" onClick={() => toggleSort('score')}>
+                <span className="flex items-center gap-1 cursor-pointer hover:text-[var(--spr-text-faint)]" onClick={() => toggleSort('score')}>
                   Trust Score
                   <ArrowUpDown className="w-3 h-3" />
                 </span>
@@ -453,7 +453,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
             {/* List Body */}
             {filteredVendors.length > 0 ? (
-              <div className="divide-y divide-[#3c3c3c] max-h-[500px] overflow-y-auto">
+              <div className="divide-y divide-[var(--spr-border)] max-h-[500px] overflow-y-auto">
                 {filteredVendors.map((vendor) => {
                   const isSelected = selectedVendor?.id === vendor.id;
                   const score = vendor.reputationScore ?? vendor.overallTrustScore;
@@ -464,23 +464,23 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                       onClick={() => setSelectedVendorId(vendor.id)}
                       className={`px-4 py-3.5 transition-all cursor-pointer flex justify-between items-center ${
                         isSelected 
-                          ? 'bg-[#094771]/45 border-l-4 border-[#0e639c]'
-                          : 'hover:bg-[#2d2d2d] border-l-4 border-transparent'
+                          ? 'bg-[var(--spr-accent-soft)]/45 border-l-4 border-[var(--spr-accent)]'
+                          : 'hover:bg-[var(--spr-surface-sunken)] border-l-4 border-transparent'
                       }`}
                     >
                       {/* Name / Category */}
                       <div className="space-y-1 min-w-0 pr-4">
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-[#d4d4d4] text-xs truncate">{vendor.name}</span>
+                          <span className="font-bold text-[var(--spr-text)] text-xs truncate">{vendor.name}</span>
                           <span className={`px-1.5 py-0.5 rounded-full text-[8px] font-bold ${
-                            vendor.reviewStatus === 'Approved' ? 'bg-[#89d185]/15 text-[#89d185]' : 'bg-[#cca700]/15 text-[#cca700]'
+                            vendor.reviewStatus === 'Approved' ? 'bg-[var(--spr-green)]/15 text-[var(--spr-green)]' : 'bg-[var(--spr-amber)]/15 text-[var(--spr-amber)]'
                           }`}>
                             {vendor.reviewStatus}
                           </span>
                         </div>
-                        <div className="flex items-center gap-2 text-[10px] text-[#9d9d9d] font-sans">
+                        <div className="flex items-center gap-2 text-[10px] text-[var(--spr-text-muted)] font-sans">
                           <span>{vendor.category}</span>
-                          <span className="text-[#6f6f6f]">•</span>
+                          <span className="text-[var(--spr-text-faint)]">•</span>
                           <span className="text-[9px] font-mono truncate">{vendor.locations}</span>
                         </div>
                       </div>
@@ -488,7 +488,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                       {/* Score / Status */}
                       <div className="flex items-center gap-5 shrink-0">
                         {/* Passport Count */}
-                        <span className="text-xs font-mono font-bold text-[#6f6f6f] bg-[#2d2d2d] px-2 py-0.5 rounded-md border border-[#3c3c3c]">
+                        <span className="text-xs font-mono font-bold text-[var(--spr-text-faint)] bg-[var(--spr-surface-sunken)] px-2 py-0.5 rounded-md border border-[var(--spr-border)]">
                           {vendor.activePassportsCount} {vendor.activePassportsCount === 1 ? 'Passport' : 'Passports'}
                         </span>
 
@@ -496,14 +496,14 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                         <div className="flex items-center gap-1.5">
                           <div className={`w-8 h-8 rounded-full flex items-center justify-center font-mono font-bold text-xs ${
                             score >= 90 
-                              ? 'bg-[#89d185]/10 text-[#89d185] border border-[#89d185]/30'
+                              ? 'bg-[var(--spr-green)]/10 text-[var(--spr-green)] border border-[var(--spr-green)]/30'
                               : score >= 80 
-                                ? 'bg-[#cca700]/10 text-[#cca700] border border-[#cca700]/30'
-                                : 'bg-[#f14c4c]/10 text-[#f14c4c] border border-[#f14c4c]/30'
+                                ? 'bg-[var(--spr-amber)]/10 text-[var(--spr-amber)] border border-[var(--spr-amber)]/30'
+                                : 'bg-[var(--spr-red)]/10 text-[var(--spr-red)] border border-[var(--spr-red)]/30'
                           }`}>
                             {score}
                           </div>
-                          <ChevronRight className={`w-4 h-4 text-[#9d9d9d] transition-transform ${isSelected ? 'translate-x-0.5 text-[#3794ff]' : ''}`} />
+                          <ChevronRight className={`w-4 h-4 text-[var(--spr-text-muted)] transition-transform ${isSelected ? 'translate-x-0.5 text-[var(--spr-highlight)]' : ''}`} />
                         </div>
                       </div>
                     </div>
@@ -511,8 +511,8 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                 })}
               </div>
             ) : (
-              <div className="p-8 text-center text-[#9d9d9d] space-y-2">
-                <AlertCircle className="w-8 h-8 text-[#6f6f6f] mx-auto" />
+              <div className="p-8 text-center text-[var(--spr-text-muted)] space-y-2">
+                <AlertCircle className="w-8 h-8 text-[var(--spr-text-faint)] mx-auto" />
                 {vendors.length === 0 ? (
                   <>
                     <p className="text-xs font-semibold">No vendors recorded for this tenant yet.</p>
@@ -536,36 +536,36 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
           {/* Quick Metrics Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="spr-panel p-3 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-md bg-[#89d185]/10 text-[#89d185] flex items-center justify-center">
+              <div className="w-8 h-8 rounded-md bg-[var(--spr-green)]/10 text-[var(--spr-green)] flex items-center justify-center">
                 <ShieldCheck className="w-4 h-4" />
               </div>
               <div>
-                <div className="text-[10px] font-mono text-[#9d9d9d] uppercase font-bold">Approved Publishers</div>
-                <div className="text-sm font-bold text-[#d4d4d4]">
+                <div className="text-[10px] font-mono text-[var(--spr-text-muted)] uppercase font-bold">Approved Publishers</div>
+                <div className="text-sm font-bold text-[var(--spr-text)]">
                   {vendors.filter(v => v.reviewStatus === 'Approved').length} / {vendors.length}
                 </div>
               </div>
             </div>
 
             <div className="spr-panel p-3 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-md bg-[#094771] text-[#3794ff] flex items-center justify-center">
+              <div className="w-8 h-8 rounded-md bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] flex items-center justify-center">
                 <Award className="w-4 h-4" />
               </div>
               <div>
-                <div className="text-[10px] font-mono text-[#9d9d9d] uppercase font-bold">Avg Reputation score</div>
-                <div className="text-sm font-bold text-[#d4d4d4]">
+                <div className="text-[10px] font-mono text-[var(--spr-text-muted)] uppercase font-bold">Avg Reputation score</div>
+                <div className="text-sm font-bold text-[var(--spr-text)]">
                   {vendors.length === 0 ? '—' : `${Math.round(vendors.reduce((acc, v) => acc + (v.reputationScore ?? v.overallTrustScore), 0) / vendors.length)}/100`}
                 </div>
               </div>
             </div>
 
             <div className="spr-panel p-3 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-md bg-[#cca700]/10 text-[#cca700] flex items-center justify-center">
+              <div className="w-8 h-8 rounded-md bg-[var(--spr-amber)]/10 text-[var(--spr-amber)] flex items-center justify-center">
                 <Activity className="w-4 h-4" />
               </div>
               <div>
-                <div className="text-[10px] font-mono text-[#9d9d9d] uppercase font-bold">Unobserved Audits</div>
-                <div className="text-sm font-bold text-[#d4d4d4]">
+                <div className="text-[10px] font-mono text-[var(--spr-text-muted)] uppercase font-bold">Unobserved Audits</div>
+                <div className="text-sm font-bold text-[var(--spr-text)]">
                   {vendors.filter(v => v.reviewStatus === 'Under Review').length} Under Review
                 </div>
               </div>
@@ -580,19 +580,19 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
               
               {/* Card 1: Vendor Trust Profile */}
               <div className="spr-panel p-5 space-y-4">
-                <div className="flex justify-between items-start border-b border-[#3c3c3c] pb-3">
+                <div className="flex justify-between items-start border-b border-[var(--spr-border)] pb-3">
                   <div>
-                    <span className="text-[9px] font-mono font-bold bg-[#094771] text-[#3794ff] px-2 py-0.5 rounded uppercase">
+                    <span className="text-[9px] font-mono font-bold bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] px-2 py-0.5 rounded uppercase">
                       Publisher Profile
                     </span>
-                    <h2 className="text-sm font-bold text-[#d4d4d4] mt-1">{selectedVendor.name}</h2>
-                    <p className="text-[10px] text-[#9d9d9d] mt-0.5">{selectedVendor.category}</p>
+                    <h2 className="text-sm font-bold text-[var(--spr-text)] mt-1">{selectedVendor.name}</h2>
+                    <p className="text-[10px] text-[var(--spr-text-muted)] mt-0.5">{selectedVendor.category}</p>
                   </div>
                   <a
                     href={selectedVendor.website}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-[#9d9d9d] hover:text-[#6f6f6f] p-1.5 bg-[#252526] hover:bg-[#2d2d2d] rounded-md transition-all"
+                    className="text-[var(--spr-text-muted)] hover:text-[var(--spr-text-faint)] p-1.5 bg-[var(--spr-surface-alt)] hover:bg-[var(--spr-surface-sunken)] rounded-md transition-all"
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
                   </a>
@@ -600,7 +600,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
                 {/* Sub-scores metrics block */}
                 <div className="space-y-3">
-                  <h3 className="text-[10px] font-mono font-bold text-[#9d9d9d] uppercase tracking-wider">
+                  <h3 className="text-[10px] font-mono font-bold text-[var(--spr-text-muted)] uppercase tracking-wider">
                     Supply Chain Reputation Metrics
                   </h3>
 
@@ -610,34 +610,34 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                         reputationScore (+2, or a hardcoded 95 fallback), which fabricated a
                         metric that was never actually observed. Show the true state instead. */}
                     <div>
-                      <div className="flex justify-between text-[10px] font-semibold text-[#6f6f6f] mb-1">
+                      <div className="flex justify-between text-[10px] font-semibold text-[var(--spr-text-faint)] mb-1">
                         <span>Binary & Code Signing Attestation</span>
-                        <span className="font-mono font-bold text-[#9d9d9d]">Not available</span>
+                        <span className="font-mono font-bold text-[var(--spr-text-muted)]">Not available</span>
                       </div>
-                      <div className="w-full h-1.5 bg-[#2d2d2d] rounded-full overflow-hidden" title="No code-signing attestation evidence source is connected for this vendor." />
+                      <div className="w-full h-1.5 bg-[var(--spr-surface-sunken)] rounded-full overflow-hidden" title="No code-signing attestation evidence source is connected for this vendor." />
                     </div>
 
                     {/* Vulnerability SLA performance -- previously re-displayed
                         overallTrustScore under an unrelated label; there is no real
                         SLA-response-time data source for vendors. */}
                     <div>
-                      <div className="flex justify-between text-[10px] font-semibold text-[#6f6f6f] mb-1">
+                      <div className="flex justify-between text-[10px] font-semibold text-[var(--spr-text-faint)] mb-1">
                         <span>Vulnerability SLA Response Speed</span>
-                        <span className="font-mono font-bold text-[#9d9d9d]">Not available</span>
+                        <span className="font-mono font-bold text-[var(--spr-text-muted)]">Not available</span>
                       </div>
-                      <div className="w-full h-1.5 bg-[#2d2d2d] rounded-full overflow-hidden" title="No SLA response-time evidence source is connected for this vendor." />
+                      <div className="w-full h-1.5 bg-[var(--spr-surface-sunken)] rounded-full overflow-hidden" title="No SLA response-time evidence source is connected for this vendor." />
                     </div>
 
                     {/* Threat / Incident frequency */}
-                    <div className="flex justify-between items-center text-[10px] bg-[#252526] border border-[#3c3c3c] rounded-md p-2.5 font-sans">
+                    <div className="flex justify-between items-center text-[10px] bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] rounded-md p-2.5 font-sans">
                       <div className="space-y-0.5">
-                        <span className="text-[#6f6f6f] font-semibold block">Known Threat Incidents</span>
-                        <span className="text-[9px] text-[#9d9d9d]">Past 12 Months</span>
+                        <span className="text-[var(--spr-text-faint)] font-semibold block">Known Threat Incidents</span>
+                        <span className="text-[9px] text-[var(--spr-text-muted)]">Past 12 Months</span>
                       </div>
                       <span className={`font-mono font-bold px-2 py-0.5 rounded ${
                         selectedVendor.securityIncidentsCount === 0 
-                          ? 'bg-[#89d185]/10 text-[#89d185]'
-                          : 'bg-[#f14c4c]/10 text-[#f14c4c]'
+                          ? 'bg-[var(--spr-green)]/10 text-[var(--spr-green)]'
+                          : 'bg-[var(--spr-red)]/10 text-[var(--spr-red)]'
                       }`}>
                         {selectedVendor.securityIncidentsCount} {selectedVendor.securityIncidentsCount === 1 ? 'Incident' : 'Incidents'}
                       </span>
@@ -648,17 +648,17 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
               {/* Card 2: Associated Compliance Audit History */}
               <div className="spr-panel p-5 space-y-4">
-                <div className="flex justify-between items-center border-b border-[#3c3c3c] pb-3">
+                <div className="flex justify-between items-center border-b border-[var(--spr-border)] pb-3">
                   <div className="flex items-center gap-1.5">
-                    <FileText className="w-4.5 h-4.5 text-[#9d9d9d]" />
-                    <h3 className="text-xs font-bold text-[#d4d4d4]">Compliance Audit Ledger</h3>
+                    <FileText className="w-4.5 h-4.5 text-[var(--spr-text-muted)]" />
+                    <h3 className="text-xs font-bold text-[var(--spr-text)]">Compliance Audit Ledger</h3>
                   </div>
 
                   {/* Add attestation action */}
                   {canLodgeAudit && (
                     <button
                       onClick={() => { setIsAddingAudit(!isAddingAudit); setLodgeAuditError(''); }}
-                      className="text-[10px] font-sans font-bold bg-[#0e639c] hover:bg-[#1177bb] text-white px-2 py-1 rounded-md flex items-center gap-0.5 transition-all cursor-pointer"
+                      className="text-[10px] font-sans font-bold bg-[var(--spr-accent)] hover:bg-[var(--spr-accent-hover)] text-white px-2 py-1 rounded-md flex items-center gap-0.5 transition-all cursor-pointer"
                     >
                       {isAddingAudit ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
                       <span>{isAddingAudit ? 'Cancel' : 'Lodge Proof'}</span>
@@ -668,10 +668,10 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
                 {/* Lodge Attestation Panel Form */}
                 {isAddingAudit && canLodgeAudit && (
-                  <form onSubmit={handleAddAuditAttestation} className="p-3.5 spr-panel-alt text-[#d4d4d4] space-y-3">
-                    {lodgeAuditError && <div role="alert" className="rounded-md border border-[#f14c4c]/40 bg-[#f14c4c]/10 px-3 py-2.5 text-xs text-[#f14c4c] flex items-center gap-2"><AlertCircle className="w-4 h-4 shrink-0" /> {lodgeAuditError}</div>}
-                    <div className="flex justify-between items-center border-b border-[#3c3c3c] pb-1.5">
-                      <span className="text-[10px] font-mono font-bold text-[#3794ff] flex items-center gap-1">
+                  <form onSubmit={handleAddAuditAttestation} className="p-3.5 spr-panel-alt text-[var(--spr-text)] space-y-3">
+                    {lodgeAuditError && <div role="alert" className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 px-3 py-2.5 text-xs text-[var(--spr-red)] flex items-center gap-2"><AlertCircle className="w-4 h-4 shrink-0" /> {lodgeAuditError}</div>}
+                    <div className="flex justify-between items-center border-b border-[var(--spr-border)] pb-1.5">
+                      <span className="text-[10px] font-mono font-bold text-[var(--spr-highlight)] flex items-center gap-1">
                         <Lock className="w-3 h-3" /> Lock Attestation Proof
                       </span>
                     </div>
@@ -679,11 +679,11 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                     <div className="space-y-2 text-xs">
                       {/* Audit Standard Type */}
                       <div className="space-y-0.5">
-                        <label className="text-[9px] font-mono text-[#9d9d9d] block uppercase">Audit Type</label>
+                        <label className="text-[9px] font-mono text-[var(--spr-text-muted)] block uppercase">Audit Type</label>
                         <select
                           value={newAuditType}
                           onChange={(e) => setNewAuditType(e.target.value)}
-                          className="w-full bg-[#1e1e1e] border border-[#3c3c3c] rounded px-2.5 py-1 text-xs text-white"
+                          className="w-full bg-[var(--spr-surface)] border border-[var(--spr-border)] rounded px-2.5 py-1 text-xs text-white"
                         >
                           <option value="SOC 2 Type II Continuous compliance">SOC 2 Type II Continuous</option>
                           <option value="ISO 27001 Blueprint Verification">ISO 27001 ISMS</option>
@@ -696,24 +696,24 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
                       {/* Auditor Name */}
                       <div className="space-y-0.5">
-                        <label className="text-[9px] font-mono text-[#9d9d9d] block uppercase">Auditor / Entity ID</label>
+                        <label className="text-[9px] font-mono text-[var(--spr-text-muted)] block uppercase">Auditor / Entity ID</label>
                         <input
                           type="text"
                           required
                           placeholder="e.g. KPMG Cyber Team, NCC Group"
                           value={newAuditor}
                           onChange={(e) => setNewAuditor(e.target.value)}
-                          className="w-full bg-[#1e1e1e] border border-[#3c3c3c] rounded px-2.5 py-1 text-xs text-white"
+                          className="w-full bg-[var(--spr-surface)] border border-[var(--spr-border)] rounded px-2.5 py-1 text-xs text-white"
                         />
                       </div>
 
                       {/* Audit Status */}
                       <div className="space-y-0.5">
-                        <label className="text-[9px] font-mono text-[#9d9d9d] block uppercase">Audit Outcome</label>
+                        <label className="text-[9px] font-mono text-[var(--spr-text-muted)] block uppercase">Audit Outcome</label>
                         <select
                           value={newAuditStatus}
                           onChange={(e: any) => setNewAuditStatus(e.target.value)}
-                          className="w-full bg-[#1e1e1e] border border-[#3c3c3c] rounded px-2.5 py-1 text-xs text-white"
+                          className="w-full bg-[var(--spr-surface)] border border-[var(--spr-border)] rounded px-2.5 py-1 text-xs text-white"
                         >
                           <option value="Passed">PASSED (Score Boosts)</option>
                           <option value="Under Review">UNDER REVIEW (No Score Impact)</option>
@@ -723,32 +723,32 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
                       {/* Details */}
                       <div className="space-y-0.5">
-                        <label className="text-[9px] font-mono text-[#9d9d9d] block uppercase">Attestation Logs</label>
+                        <label className="text-[9px] font-mono text-[var(--spr-text-muted)] block uppercase">Attestation Logs</label>
                         <textarea
                           placeholder="Detailed results or parameters verified..."
                           value={newAuditDetails}
                           onChange={(e) => setNewAuditDetails(e.target.value)}
                           rows={2}
-                          className="w-full bg-[#1e1e1e] border border-[#3c3c3c] rounded px-2.5 py-1 text-xs text-white"
+                          className="w-full bg-[var(--spr-surface)] border border-[var(--spr-border)] rounded px-2.5 py-1 text-xs text-white"
                         />
                       </div>
 
                       {/* Cryptographic reference hash */}
                       <div className="space-y-0.5">
-                        <label className="text-[9px] font-mono text-[#9d9d9d] block uppercase">Cryptographical Hash reference (Optional)</label>
+                        <label className="text-[9px] font-mono text-[var(--spr-text-muted)] block uppercase">Cryptographical Hash reference (Optional)</label>
                         <input
                           type="text"
                           placeholder="Leave blank to auto-generate ledger hash..."
                           value={newAuditHash}
                           onChange={(e) => setNewAuditHash(e.target.value)}
-                          className="w-full bg-[#1e1e1e] border border-[#3c3c3c] rounded px-2.5 py-1 font-mono text-[10px] text-white"
+                          className="w-full bg-[var(--spr-surface)] border border-[var(--spr-border)] rounded px-2.5 py-1 font-mono text-[10px] text-white"
                         />
                       </div>
 
                       <button
                         type="submit"
                         disabled={lodgingAudit}
-                        className="w-full bg-[#0e639c] hover:bg-[#1177bb] text-white font-sans font-bold py-1.5 rounded transition-colors flex justify-center items-center gap-1 cursor-pointer mt-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full bg-[var(--spr-accent)] hover:bg-[var(--spr-accent-hover)] text-white font-sans font-bold py-1.5 rounded transition-colors flex justify-center items-center gap-1 cursor-pointer mt-1 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {lodgingAudit ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
                         <span>{lodgingAudit ? 'Locking…' : 'Lock into Ledger'}</span>
@@ -769,69 +769,69 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                           key={audit.id}
                           className={`p-3.5 border rounded-md space-y-2 transition-all ${
                             isPassed 
-                              ? 'bg-[#89d185]/10 border-[#89d185]/25'
+                              ? 'bg-[var(--spr-green)]/10 border-[var(--spr-green)]/25'
                               : isFailed 
-                                ? 'bg-[#f14c4c]/10 border-[#f14c4c]/25'
-                                : 'bg-[#cca700]/10 border-[#cca700]/25'
+                                ? 'bg-[var(--spr-red)]/10 border-[var(--spr-red)]/25'
+                                : 'bg-[var(--spr-amber)]/10 border-[var(--spr-amber)]/25'
                           }`}
                         >
                           {/* Header of Audit Event */}
                           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1">
                             <div className="space-y-0.5">
-                              <span className="text-[10px] font-bold text-[#d4d4d4] block leading-tight">
+                              <span className="text-[10px] font-bold text-[var(--spr-text)] block leading-tight">
                                 {audit.auditType}
                               </span>
-                              <span className="text-[9px] text-[#9d9d9d] font-mono flex items-center gap-1">
-                                <Calendar className="w-3 h-3 text-[#9d9d9d]" />
+                              <span className="text-[9px] text-[var(--spr-text-muted)] font-mono flex items-center gap-1">
+                                <Calendar className="w-3 h-3 text-[var(--spr-text-muted)]" />
                                 <span>{audit.date}</span>
                               </span>
                             </div>
                             
                             <span className={`px-2 py-0.5 rounded font-mono text-[8px] font-bold self-start ${
                               isPassed 
-                                ? 'bg-[#89d185]/15 text-[#89d185] border border-emerald-200'
+                                ? 'bg-[var(--spr-green)]/15 text-[var(--spr-green)] border border-emerald-200'
                                 : isFailed 
-                                  ? 'bg-[#f14c4c]/15 text-[#f14c4c] border border-[#f14c4c]/30'
-                                  : 'bg-[#cca700]/15 text-[#cca700] border border-amber-200'
+                                  ? 'bg-[var(--spr-red)]/15 text-[var(--spr-red)] border border-[var(--spr-red)]/30'
+                                  : 'bg-[var(--spr-amber)]/15 text-[var(--spr-amber)] border border-amber-200'
                             }`}>
                               {audit.status.toUpperCase()}
                             </span>
                           </div>
 
                           {/* Details description */}
-                          <p className="text-[10px] text-[#6f6f6f] leading-relaxed">
+                          <p className="text-[10px] text-[var(--spr-text-faint)] leading-relaxed">
                             {audit.details}
                           </p>
 
                           {/* Metadata: Auditor & Cryptographic Hash References */}
-                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#3c3c3c] font-mono text-[9px] text-[#9d9d9d] bg-[#2d2d2d] p-2 rounded-md">
+                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[var(--spr-border)] font-mono text-[9px] text-[var(--spr-text-muted)] bg-[var(--spr-surface-sunken)] p-2 rounded-md">
                             <div>
-                              <span className="block text-[#9d9d9d] font-bold uppercase text-[7px]">Auditor</span>
-                              <span className="font-semibold text-[#6f6f6f] flex items-center gap-1 mt-0.5 truncate" title={audit.auditor}>
-                                <User className="w-2.5 h-2.5 shrink-0 text-[#9d9d9d]" />
+                              <span className="block text-[var(--spr-text-muted)] font-bold uppercase text-[7px]">Auditor</span>
+                              <span className="font-semibold text-[var(--spr-text-faint)] flex items-center gap-1 mt-0.5 truncate" title={audit.auditor}>
+                                <User className="w-2.5 h-2.5 shrink-0 text-[var(--spr-text-muted)]" />
                                 {audit.auditor}
                               </span>
                             </div>
 
                             <div>
-                              <span className="block text-[#9d9d9d] font-bold uppercase text-[7px]">Ledger Hash Proof</span>
+                              <span className="block text-[var(--spr-text-muted)] font-bold uppercase text-[7px]">Ledger Hash Proof</span>
                               <button
                                 type="button"
                                 onClick={() => audit.referenceHash && copyToClipboard(audit.referenceHash, audit.id)}
                                 disabled={!audit.referenceHash}
-                                className="font-semibold text-[#3794ff] hover:text-[#5fa8ff] flex items-center gap-1 mt-0.5 text-left w-full truncate cursor-copy disabled:cursor-default disabled:text-[#9d9d9d]"
+                                className="font-semibold text-[var(--spr-highlight)] hover:text-[#5fa8ff] flex items-center gap-1 mt-0.5 text-left w-full truncate cursor-copy disabled:cursor-default disabled:text-[var(--spr-text-muted)]"
                                 title={audit.referenceHash ? 'Click to copy hash proof' : 'No reference hash was provided for this attestation'}
                               >
-                                <Hash className="w-2.5 h-2.5 shrink-0 text-[#9d9d9d]" />
+                                <Hash className="w-2.5 h-2.5 shrink-0 text-[var(--spr-text-muted)]" />
                                 <span className="truncate">
                                   {audit.referenceHash ? `${audit.referenceHash.substring(0, 15)}...` : 'Not provided'}
                                 </span>
                                 {copiedAuditId === audit.id ? (
-                                  <span className="text-[8px] text-[#89d185] bg-[#89d185]/10 px-1 rounded uppercase font-bold font-sans">
+                                  <span className="text-[8px] text-[var(--spr-green)] bg-[var(--spr-green)]/10 px-1 rounded uppercase font-bold font-sans">
                                     Copied!
                                   </span>
                                 ) : (
-                                  <span className="text-[8px] text-[#6f6f6f] font-sans group-hover:block">
+                                  <span className="text-[8px] text-[var(--spr-text-faint)] font-sans group-hover:block">
                                     Copy
                                   </span>
                                 )}
@@ -842,8 +842,8 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                       );
                     })
                   ) : (
-                    <div className="text-center p-6 text-[#9d9d9d]">
-                      <HelpCircle className="w-7 h-7 text-[#6f6f6f] mx-auto mb-1.5" />
+                    <div className="text-center p-6 text-[var(--spr-text-muted)]">
+                      <HelpCircle className="w-7 h-7 text-[var(--spr-text-faint)] mx-auto mb-1.5" />
                       <p className="text-xs">No audit logs listed on the secure ledger.</p>
                       <p className="text-[10px]">Click "Lodge Proof" above to register an audit.</p>
                     </div>
@@ -852,7 +852,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
               </div>
             </div>
           ) : (
-            <div className="h-full flex items-center justify-center p-8 text-center spr-panel text-[#9d9d9d]">
+            <div className="h-full flex items-center justify-center p-8 text-center spr-panel text-[var(--spr-text-muted)]">
               Select a software vendor to view reputation breakdowns and audit history.
             </div>
           )}

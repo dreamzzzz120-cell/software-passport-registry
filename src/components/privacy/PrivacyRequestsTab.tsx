@@ -8,8 +8,8 @@ type PrivacyRequest = {
 };
 
 const STATUS_STYLE: Record<string, string> = {
-  RECEIVED: 'border-[#3c3c3c] text-[#9d9d9d]', IN_PROGRESS: 'border-[#cca700]/40 text-[#cca700]',
-  COMPLETED: 'border-[#89d185]/40 text-[#89d185]', REJECTED: 'border-[#f14c4c]/40 text-[#f14c4c]', WITHDRAWN: 'border-[#3c3c3c] text-[#6f6f6f]',
+  RECEIVED: 'border-[var(--spr-border)] text-[var(--spr-text-muted)]', IN_PROGRESS: 'border-[var(--spr-amber)]/40 text-[var(--spr-amber)]',
+  COMPLETED: 'border-[var(--spr-green)]/40 text-[var(--spr-green)]', REJECTED: 'border-[var(--spr-red)]/40 text-[var(--spr-red)]', WITHDRAWN: 'border-[var(--spr-border)] text-[var(--spr-text-faint)]',
 };
 
 export default function PrivacyRequestsTab({ canProcess }: { canProcess: boolean }) {
@@ -68,17 +68,17 @@ export default function PrivacyRequestsTab({ canProcess }: { canProcess: boolean
   return (
     <div className="grid gap-5 lg:grid-cols-5">
       <section className="lg:col-span-2 spr-panel overflow-hidden">
-        <div className="flex items-center justify-between border-b border-[#3c3c3c] p-3">
-          <span className="text-xs font-bold uppercase tracking-wider text-[#9d9d9d]">Privacy requests</span>
+        <div className="flex items-center justify-between border-b border-[var(--spr-border)] p-3">
+          <span className="text-xs font-bold uppercase tracking-wider text-[var(--spr-text-muted)]">Privacy requests</span>
           {canProcess && <button onClick={() => setShowCreate(true)} className="spr-btn spr-btn-primary inline-flex items-center gap-1.5 !text-xs"><Plus className="h-3.5 w-3.5" /> Log request</button>}
         </div>
-        {error && <div role="alert" className="m-3 rounded-md border border-[#f14c4c]/40 bg-[#f14c4c]/10 px-3 py-2 text-xs text-[#f14c4c]">{error}</div>}
-        <div className="max-h-[560px] divide-y divide-[#3c3c3c] overflow-y-auto">
-          {loading ? <div className="p-6 text-sm text-[#9d9d9d]">Loading…</div> : requests.length === 0 ? (
-            <div className="p-8 text-center text-sm text-[#9d9d9d]"><Inbox className="mx-auto h-7 w-7 text-[#6f6f6f]" /><p className="mt-2 font-semibold text-[#d4d4d4]">No privacy requests logged yet.</p></div>
+        {error && <div role="alert" className="m-3 rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 px-3 py-2 text-xs text-[var(--spr-red)]">{error}</div>}
+        <div className="max-h-[560px] divide-y divide-[var(--spr-border)] overflow-y-auto">
+          {loading ? <div className="p-6 text-sm text-[var(--spr-text-muted)]">Loading…</div> : requests.length === 0 ? (
+            <div className="p-8 text-center text-sm text-[var(--spr-text-muted)]"><Inbox className="mx-auto h-7 w-7 text-[var(--spr-text-faint)]" /><p className="mt-2 font-semibold text-[var(--spr-text)]">No privacy requests logged yet.</p></div>
           ) : requests.map((r) => (
-            <button key={r.id} onClick={() => setSelectedId(r.id)} className={`flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm transition ${selectedId === r.id ? 'bg-[#094771]/45' : 'hover:bg-[#2d2d2d]'}`}>
-              <span className="min-w-0"><span className="block truncate font-semibold text-[#d4d4d4]">{r.requestorName}</span><span className="block text-xs text-[#6f6f6f]">{r.requestType}</span></span>
+            <button key={r.id} onClick={() => setSelectedId(r.id)} className={`flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm transition ${selectedId === r.id ? 'bg-[var(--spr-accent-soft)]/45' : 'hover:bg-[var(--spr-surface-sunken)]'}`}>
+              <span className="min-w-0"><span className="block truncate font-semibold text-[var(--spr-text)]">{r.requestorName}</span><span className="block text-xs text-[var(--spr-text-faint)]">{r.requestType}</span></span>
               <span className={`shrink-0 rounded-sm border px-2 py-0.5 text-[10px] font-bold uppercase ${STATUS_STYLE[r.status]}`}>{r.status.replace('_', ' ')}</span>
             </button>
           ))}
@@ -86,40 +86,40 @@ export default function PrivacyRequestsTab({ canProcess }: { canProcess: boolean
       </section>
 
       <section className="lg:col-span-3 spr-panel p-5">
-        {!selected ? <p className="py-16 text-center text-sm text-[#9d9d9d]">Select a request to view details.</p> : (
+        {!selected ? <p className="py-16 text-center text-sm text-[var(--spr-text-muted)]">Select a request to view details.</p> : (
           <div className="space-y-3 text-xs">
-            {saveError && <div role="alert" className="rounded-md border border-[#f14c4c]/40 bg-[#f14c4c]/10 px-3 py-2.5 text-xs text-[#f14c4c]">{saveError}</div>}
-            <h2 className="text-sm font-bold text-[#d4d4d4]">{selected.requestorName} — {selected.requestType}</h2>
-            <p className="text-[#9d9d9d]">Scope: {selected.scope || 'Not specified'}</p>
-            <p className="text-[#6f6f6f]">Received {new Date(selected.receivedAt).toLocaleString()}</p>
+            {saveError && <div role="alert" className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 px-3 py-2.5 text-xs text-[var(--spr-red)]">{saveError}</div>}
+            <h2 className="text-sm font-bold text-[var(--spr-text)]">{selected.requestorName} — {selected.requestType}</h2>
+            <p className="text-[var(--spr-text-muted)]">Scope: {selected.scope || 'Not specified'}</p>
+            <p className="text-[var(--spr-text-faint)]">Received {new Date(selected.receivedAt).toLocaleString()}</p>
             {canProcess && (
               <>
-                <textarea value={response} onChange={(e) => setResponse(e.target.value)} rows={3} placeholder="Response notes" className="w-full rounded-md border border-[#3c3c3c] bg-[#181818] px-2.5 py-1.5 text-xs text-[#d4d4d4]" />
+                <textarea value={response} onChange={(e) => setResponse(e.target.value)} rows={3} placeholder="Response notes" className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-2.5 py-1.5 text-xs text-[var(--spr-text)]" />
                 <div className="flex flex-wrap gap-2">
                   {['IN_PROGRESS', 'COMPLETED', 'REJECTED', 'WITHDRAWN'].filter((s) => s !== selected.status).map((s) => (
-                    <button key={s} disabled={saving} onClick={() => void updateStatus(s)} className="rounded-md border border-[#3c3c3c] px-2.5 py-1.5 text-xs font-semibold text-[#d4d4d4] hover:bg-[#383838] disabled:opacity-50">{saving ? <Loader2 className="inline h-3 w-3 animate-spin" /> : null} Mark {s.replace('_', ' ')}</button>
+                    <button key={s} disabled={saving} onClick={() => void updateStatus(s)} className="rounded-md border border-[var(--spr-border)] px-2.5 py-1.5 text-xs font-semibold text-[var(--spr-text)] hover:bg-[var(--spr-surface-hover)] disabled:opacity-50">{saving ? <Loader2 className="inline h-3 w-3 animate-spin" /> : null} Mark {s.replace('_', ' ')}</button>
                   ))}
                 </div>
               </>
             )}
-            {selected.completedAt && <p className="text-[#89d185]">Completed {new Date(selected.completedAt).toLocaleString()}</p>}
+            {selected.completedAt && <p className="text-[var(--spr-green)]">Completed {new Date(selected.completedAt).toLocaleString()}</p>}
           </div>
         )}
       </section>
 
       {showCreate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true">
-          <div className="w-full max-w-lg rounded-md border border-[#3c3c3c] bg-[#252526] p-6 shadow-2xl">
-            <div className="flex items-start justify-between gap-4"><h2 className="text-lg font-bold text-[#d4d4d4]">Log privacy request</h2><button onClick={() => setShowCreate(false)} aria-label="Close" className="rounded-md p-1.5 text-[#9d9d9d] hover:bg-[#383838]"><X className="h-4 w-4" /></button></div>
+          <div className="w-full max-w-lg rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4"><h2 className="text-lg font-bold text-[var(--spr-text)]">Log privacy request</h2><button onClick={() => setShowCreate(false)} aria-label="Close" className="rounded-md p-1.5 text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)]"><X className="h-4 w-4" /></button></div>
             <form onSubmit={handleCreate} className="mt-5 space-y-3">
-              {createError && <div role="alert" className="rounded-md border border-[#f14c4c]/40 bg-[#f14c4c]/10 px-3 py-2 text-xs text-[#f14c4c]">{createError}</div>}
-              <label className="flex flex-col gap-1 text-[10px] font-bold text-[#9d9d9d]">Requestor name *<input required value={form.requestorName} onChange={(e) => setForm((c) => ({ ...c, requestorName: e.target.value }))} className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2 text-xs text-[#d4d4d4]" /></label>
-              <label className="flex flex-col gap-1 text-[10px] font-bold text-[#9d9d9d]">Requestor email<input value={form.requestorEmail} onChange={(e) => setForm((c) => ({ ...c, requestorEmail: e.target.value }))} className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2 text-xs text-[#d4d4d4]" /></label>
-              <label className="flex flex-col gap-1 text-[10px] font-bold text-[#9d9d9d]">Request type<select value={form.requestType} onChange={(e) => setForm((c) => ({ ...c, requestType: e.target.value }))} className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2 text-xs text-[#d4d4d4]">{['ACCESS', 'CORRECTION', 'DELETION', 'PORTABILITY', 'OBJECTION', 'OTHER'].map((t) => <option key={t} value={t}>{t}</option>)}</select></label>
-              <label className="flex flex-col gap-1 text-[10px] font-bold text-[#9d9d9d]">Scope<textarea value={form.scope} onChange={(e) => setForm((c) => ({ ...c, scope: e.target.value }))} rows={2} className="rounded-md border border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2 text-xs text-[#d4d4d4]" /></label>
+              {createError && <div role="alert" className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 px-3 py-2 text-xs text-[var(--spr-red)]">{createError}</div>}
+              <label className="flex flex-col gap-1 text-[10px] font-bold text-[var(--spr-text-muted)]">Requestor name *<input required value={form.requestorName} onChange={(e) => setForm((c) => ({ ...c, requestorName: e.target.value }))} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]" /></label>
+              <label className="flex flex-col gap-1 text-[10px] font-bold text-[var(--spr-text-muted)]">Requestor email<input value={form.requestorEmail} onChange={(e) => setForm((c) => ({ ...c, requestorEmail: e.target.value }))} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]" /></label>
+              <label className="flex flex-col gap-1 text-[10px] font-bold text-[var(--spr-text-muted)]">Request type<select value={form.requestType} onChange={(e) => setForm((c) => ({ ...c, requestType: e.target.value }))} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]">{['ACCESS', 'CORRECTION', 'DELETION', 'PORTABILITY', 'OBJECTION', 'OTHER'].map((t) => <option key={t} value={t}>{t}</option>)}</select></label>
+              <label className="flex flex-col gap-1 text-[10px] font-bold text-[var(--spr-text-muted)]">Scope<textarea value={form.scope} onChange={(e) => setForm((c) => ({ ...c, scope: e.target.value }))} rows={2} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]" /></label>
               <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={() => setShowCreate(false)} className="rounded-md border border-[#3c3c3c] px-3.5 py-2 text-xs font-semibold text-[#9d9d9d] hover:bg-[#383838]">Cancel</button>
-                <button type="submit" disabled={creating || !form.requestorName.trim()} className="inline-flex items-center gap-1.5 rounded-md bg-[#0e639c] px-3.5 py-2 text-xs font-bold text-white hover:bg-[#1177bb] disabled:opacity-40">{creating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}{creating ? 'Logging…' : 'Log'}</button>
+                <button type="button" onClick={() => setShowCreate(false)} className="rounded-md border border-[var(--spr-border)] px-3.5 py-2 text-xs font-semibold text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)]">Cancel</button>
+                <button type="submit" disabled={creating || !form.requestorName.trim()} className="inline-flex items-center gap-1.5 rounded-md bg-[var(--spr-accent)] px-3.5 py-2 text-xs font-bold text-white hover:bg-[var(--spr-accent-hover)] disabled:opacity-40">{creating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}{creating ? 'Logging…' : 'Log'}</button>
               </div>
             </form>
           </div>

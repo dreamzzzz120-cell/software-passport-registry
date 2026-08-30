@@ -11,9 +11,9 @@
 // navigate() callback into every consumer.
 export default function LegalFooterLinks({ className = '' }: { className?: string }) {
   return (
-    <div className={`flex flex-wrap gap-4 text-xs text-[#6f6f6f] ${className}`}>
-      <a href="/terms" className="hover:text-[#3794ff] hover:underline">Terms of Service</a>
-      <a href="/privacy" className="hover:text-[#3794ff] hover:underline">Privacy Policy</a>
+    <div className={`flex flex-wrap gap-4 text-xs text-[var(--spr-text-faint)] ${className}`}>
+      <a href="/terms" className="hover:text-[var(--spr-highlight)] hover:underline">Terms of Service</a>
+      <a href="/privacy" className="hover:text-[var(--spr-highlight)] hover:underline">Privacy Policy</a>
     </div>
   );
 }

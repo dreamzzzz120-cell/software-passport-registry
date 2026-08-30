@@ -163,7 +163,7 @@ export default function DemoPassport({ onRunFreeReview, onHome }: { onRunFreeRev
             <h2 className="text-lg font-semibold">See this on your own software</h2>
             <p className="mt-1 text-sm text-[var(--cc-ink-muted)]">Submit a public GitHub repository and see what SPR can actually observe.</p>
           </div>
-          <button onClick={onRunFreeReview} className="rounded-xl bg-[#0e639c] px-6 py-3 text-sm font-bold text-white hover:bg-[#1177bb]">
+          <button onClick={onRunFreeReview} className="rounded-xl bg-[var(--spr-accent)] px-6 py-3 text-sm font-bold text-white hover:bg-[var(--spr-accent-hover)]">
             Run a Free Review
           </button>
         </GlassPanel>

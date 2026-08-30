@@ -36,29 +36,29 @@ export default function RiskMitigation({
   };
 
   const severityColors = {
-    Critical: 'bg-[#f14c4c]/15 text-[#f14c4c] border-[#f14c4c]/40',
+    Critical: 'bg-[var(--spr-red)]/15 text-[var(--spr-red)] border-[var(--spr-red)]/40',
     High: 'bg-amber-100 text-amber-800 border-amber-200',
     Medium: 'bg-blue-100 text-blue-800 border-blue-200',
-    Low: 'bg-[#2d2d2d] text-[#d4d4d4] border-[#3c3c3c]'
+    Low: 'bg-[var(--spr-surface-sunken)] text-[var(--spr-text)] border-[var(--spr-border)]'
   };
 
   return (
-    <div className="bg-[#2d2d2d] border border-[#3c3c3c] rounded-xl p-4.5 space-y-4 animate-fade-in">
-      <div className="flex justify-between items-start pb-3 border-b border-[#3c3c3c]">
+    <div className="bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] rounded-xl p-4.5 space-y-4 animate-fade-in">
+      <div className="flex justify-between items-start pb-3 border-b border-[var(--spr-border)]">
         <div className="flex items-center gap-2">
-          <ShieldAlert className="w-4 h-4 text-[#3794ff]" />
+          <ShieldAlert className="w-4 h-4 text-[var(--spr-highlight)]" />
           <div>
-            <h4 className="text-xs font-bold text-[#d4d4d4] font-display flex items-center gap-1.5">
+            <h4 className="text-xs font-bold text-[var(--spr-text)] font-display flex items-center gap-1.5">
               <span>Risk Remediation Plan</span>
-              <span className="text-[10px] text-[#9d9d9d] font-mono">({vulnerability.id})</span>
+              <span className="text-[10px] text-[var(--spr-text-muted)] font-mono">({vulnerability.id})</span>
             </h4>
-            <p className="text-[10px] text-[#9d9d9d] mt-0.5">{vulnerability.title}</p>
+            <p className="text-[10px] text-[var(--spr-text-muted)] mt-0.5">{vulnerability.title}</p>
           </div>
         </div>
         <button
           type="button"
           onClick={onCancel}
-          className="p-1 text-[#9d9d9d] hover:text-[#6f6f6f] hover:bg-[#2d2d2d] rounded-md transition-colors cursor-pointer"
+          className="p-1 text-[var(--spr-text-muted)] hover:text-[var(--spr-text-faint)] hover:bg-[var(--spr-surface-sunken)] rounded-md transition-colors cursor-pointer"
         >
           <X className="w-4 h-4" />
         </button>
@@ -68,8 +68,8 @@ export default function RiskMitigation({
         {/* Row 1: Owner & Target Date */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="flex flex-col gap-1">
-            <label className="font-semibold text-[#6f6f6f] flex items-center gap-1">
-              <User className="w-3.5 h-3.5 text-[#9d9d9d]" />
+            <label className="font-semibold text-[var(--spr-text-faint)] flex items-center gap-1">
+              <User className="w-3.5 h-3.5 text-[var(--spr-text-muted)]" />
               <span>Assigned Owner</span>
             </label>
             <input
@@ -78,13 +78,13 @@ export default function RiskMitigation({
               placeholder="e.g. Alice Vance (Security Lead)"
               value={owner}
               onChange={(e) => setOwner(e.target.value)}
-              className="bg-[#2d2d2d] border border-[#3c3c3c] rounded-lg p-2 focus:outline-none focus:border-[#3794ff]/40 transition-colors"
+              className="bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] rounded-lg p-2 focus:outline-none focus:border-[var(--spr-highlight)]/40 transition-colors"
             />
           </div>
 
           <div className="flex flex-col gap-1">
-            <label className="font-semibold text-[#6f6f6f] flex items-center gap-1">
-              <Calendar className="w-3.5 h-3.5 text-[#9d9d9d]" />
+            <label className="font-semibold text-[var(--spr-text-faint)] flex items-center gap-1">
+              <Calendar className="w-3.5 h-3.5 text-[var(--spr-text-muted)]" />
               <span>Target Completion Date</span>
             </label>
             <input
@@ -92,19 +92,19 @@ export default function RiskMitigation({
               required
               value={targetDate}
               onChange={(e) => setTargetDate(e.target.value)}
-              className="bg-[#2d2d2d] border border-[#3c3c3c] rounded-lg p-2 focus:outline-none focus:border-[#3794ff]/40 transition-colors font-mono cursor-pointer"
+              className="bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] rounded-lg p-2 focus:outline-none focus:border-[var(--spr-highlight)]/40 transition-colors font-mono cursor-pointer"
             />
           </div>
 
           <div className="flex flex-col gap-1">
-            <label className="font-semibold text-[#6f6f6f] flex items-center gap-1">
-              <CheckCircle className="w-3.5 h-3.5 text-[#9d9d9d]" />
+            <label className="font-semibold text-[var(--spr-text-faint)] flex items-center gap-1">
+              <CheckCircle className="w-3.5 h-3.5 text-[var(--spr-text-muted)]" />
               <span>Vulnerability Status</span>
             </label>
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as any)}
-              className="bg-[#2d2d2d] border border-[#3c3c3c] rounded-lg p-2 focus:outline-none focus:border-[#3794ff]/40 transition-colors cursor-pointer font-medium text-[#d4d4d4]"
+              className="bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] rounded-lg p-2 focus:outline-none focus:border-[var(--spr-highlight)]/40 transition-colors cursor-pointer font-medium text-[var(--spr-text)]"
             >
               <option value="Open">Open (Active Risk)</option>
               <option value="Mitigated">Mitigated (Plan active)</option>
@@ -116,8 +116,8 @@ export default function RiskMitigation({
 
         {/* Row 2: Action Details Plan */}
         <div className="flex flex-col gap-1">
-          <label className="font-semibold text-[#6f6f6f] flex items-center gap-1">
-            <FileText className="w-3.5 h-3.5 text-[#9d9d9d]" />
+          <label className="font-semibold text-[var(--spr-text-faint)] flex items-center gap-1">
+            <FileText className="w-3.5 h-3.5 text-[var(--spr-text-muted)]" />
             <span>Remediation & Mitigation Plan</span>
           </label>
           <textarea
@@ -126,22 +126,22 @@ export default function RiskMitigation({
             placeholder="Outline the mitigation steps, fallback controls, patch deployment schedule, or validation criteria..."
             value={plan}
             onChange={(e) => setPlan(e.target.value)}
-            className="bg-[#2d2d2d] border border-[#3c3c3c] rounded-lg p-2.5 focus:outline-none focus:border-[#3794ff]/40 transition-colors leading-relaxed resize-none"
+            className="bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] rounded-lg p-2.5 focus:outline-none focus:border-[var(--spr-highlight)]/40 transition-colors leading-relaxed resize-none"
           />
         </div>
 
         {/* Form Actions */}
-        <div className="pt-3 border-t border-[#3c3c3c] flex justify-end gap-2">
+        <div className="pt-3 border-t border-[var(--spr-border)] flex justify-end gap-2">
           <button
             type="button"
             onClick={onCancel}
-            className="px-3 py-1.5 hover:bg-[#383838] border border-[#3c3c3c] rounded-lg text-[#6f6f6f] text-xs font-semibold cursor-pointer transition-colors"
+            className="px-3 py-1.5 hover:bg-[var(--spr-surface-hover)] border border-[var(--spr-border)] rounded-lg text-[var(--spr-text-faint)] text-xs font-semibold cursor-pointer transition-colors"
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="px-3.5 py-1.5 bg-[#094771] hover:bg-[#094771] text-[#d4d4d4] text-xs font-semibold rounded-lg shadow-sm cursor-pointer transition-colors flex items-center gap-1.5"
+            className="px-3.5 py-1.5 bg-[var(--spr-accent-soft)] hover:bg-[var(--spr-accent-soft)] text-[var(--spr-text)] text-xs font-semibold rounded-lg shadow-sm cursor-pointer transition-colors flex items-center gap-1.5"
           >
             <Save className="w-3.5 h-3.5" />
             <span>Save Mitigation Plan</span>

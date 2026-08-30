@@ -41,20 +41,20 @@ export default class ViewErrorBoundary extends Component<Props, State> {
     const { error } = this.state;
     if (!error) return this.props.children;
     return (
-      <section className="rounded-md border border-[#f14c4c]/40 bg-[#252526] p-6 md:p-8" role="alert">
-        <div className="text-[10px] font-semibold uppercase tracking-[.15em] text-[#f14c4c]">View error</div>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-[#d4d4d4]">This view failed to render.</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-[#9d9d9d]">
+      <section className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-surface-alt)] p-6 md:p-8" role="alert">
+        <div className="text-[10px] font-semibold uppercase tracking-[.15em] text-[var(--spr-red)]">View error</div>
+        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-[var(--spr-text)]">This view failed to render.</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--spr-text-muted)]">
           The rest of SPR is still available - use the left rail to continue. The underlying
           error is shown below rather than leaving the screen blank.
         </p>
-        <pre className="mt-5 overflow-auto rounded-md border border-[#3c3c3c] bg-[#181818] p-4 text-xs text-[#9d9d9d]">
+        <pre className="mt-5 overflow-auto rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] p-4 text-xs text-[var(--spr-text-muted)]">
           {error.message || String(error)}
         </pre>
         <button
           type="button"
           onClick={() => window.location.reload()}
-          className="mt-6 rounded-[3px] bg-[#0e639c] px-4 py-2.5 text-sm font-bold text-white"
+          className="mt-6 rounded-[3px] bg-[var(--spr-accent)] px-4 py-2.5 text-sm font-bold text-white"
         >
           Reload application
         </button>
