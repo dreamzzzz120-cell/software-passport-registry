@@ -16,6 +16,7 @@ Allow: /$
 Allow: /free-review
 Allow: /pricing
 Allow: /msp
+Allow: /passport/demo
 Allow: /terms
 Allow: /privacy
 

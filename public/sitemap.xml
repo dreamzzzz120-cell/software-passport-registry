@@ -34,6 +34,11 @@
     <priority>0.9</priority>
   </url>
   <url>
+    <loc>https://softwarepassportregistry.com/passport/demo</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://softwarepassportregistry.com/pricing</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>

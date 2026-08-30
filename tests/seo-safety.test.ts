@@ -21,7 +21,11 @@ const indexMarkup = stripComments(indexHtml);
 
 // The authoritative public route set, taken from App.tsx rather than
 // assumed. /login is public but deliberately not indexed.
-const PUBLIC_INDEXABLE = ['/', '/free-review', '/pricing', '/msp', '/terms', '/privacy'];
+// /passport/demo was added deliberately as a reviewed public route: a static,
+// read-only sample Passport that touches no database and no tenant. The
+// guarantee this list protects is unchanged - every entry must be genuinely
+// public, and no authenticated route may ever appear here.
+const PUBLIC_INDEXABLE = ['/', '/free-review', '/passport/demo', '/pricing', '/msp', '/terms', '/privacy'];
 
 // Authenticated views rendering tenant-scoped customer data. /registry is
 // included on purpose: despite the name it is an alias of the authenticated

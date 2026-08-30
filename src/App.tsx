@@ -40,6 +40,7 @@ import MspPricingView from './components/MspPricingView';
 import MspLandingView from './components/MspLandingView';
 import HomePage from './components/HomePage';
 import FreeReviewView from './components/FreeReviewView';
+import DemoPassport from './components/DemoPassport';
 import ViewErrorBoundary from './components/ViewErrorBoundary';
 import { normalizeClientRecord, toJsonArrayColumn } from './lib/clientJsonColumns';
 import TermsView from './components/legal/TermsView';
@@ -50,7 +51,7 @@ import type { VerificationDecisionState } from './components/trust/TrustStateBad
 import type { VerificationDecisionDetail } from './components/design/CommandCenter';
 import { EXTENSIONS } from './workflows/extensionRegistry';
 
-const PUBLIC_PATHS = new Set(['/','/login','/free-review','/pricing','/msp','/terms','/privacy']);
+const PUBLIC_PATHS = new Set(['/','/login','/free-review','/pricing','/msp','/terms','/privacy','/passport/demo']);
 
 // A completed Free Review result is addressable at
 //   /free-review/result/<passportId>/<token>
@@ -293,7 +294,7 @@ export default function App() {
   const signOutUser = async () => { await signOut(auth); navigate('/login'); };
 
   if (!authReady) return <AuthLoading />;
-  if (path === '/') return <HomePage onCreatePassport={() => navigate('/login')} onExploreTrustNetwork={() => navigate('/free-review')} />;
+  if (path === '/') return <HomePage onCreatePassport={() => navigate('/login')} onExploreTrustNetwork={() => navigate('/free-review')} onViewSamplePassport={() => navigate('/passport/demo')} />;
   if (path === '/login') return <LoginView onLoginSuccess={() => navigate('/dashboard')} />;
   // Public legal documents -- always reachable regardless of auth state,
   // since /terms has no existing authenticated route to preserve. /privacy
@@ -302,6 +303,9 @@ export default function App() {
   // the unrelated internal Privacy Governance tool and must not be replaced.
   if (path === '/terms') return <TermsView />;
   if (!user && path === '/privacy') return <PrivacyPolicyView />;
+  // Static sample Passport. Reads no database and no tenant - see
+  // DemoPassport.tsx. Public by design and explicitly labelled DEMO.
+  if (path === '/passport/demo') return <DemoPassport onRunFreeReview={() => navigate('/free-review')} onHome={() => navigate('/')} />;
   if (!user && path === '/free-review') return <FreeReviewView onSignUp={() => navigate('/login')} />;
   if (!user && freeReviewResult) return <FreeReviewView onSignUp={() => navigate('/login')} initialResult={freeReviewResult} />;
   if (!user && path === '/pricing') return <MspPricingView isAuthenticated={false} onPrimaryAction={() => navigate('/login')} />;

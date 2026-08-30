@@ -17,7 +17,10 @@ describe('public /msp landing page reuses existing pricing and billing, without 
 
   it('App.tsx serves MspLandingView at /msp for unauthenticated visitors without touching the authenticated /msp route', () => {
     const s = read('src/App.tsx');
-    expect(s).toContain("PUBLIC_PATHS = new Set(['/','/login','/free-review','/pricing','/msp','/terms','/privacy'])");
+    // Asserts /msp specifically rather than pinning the whole PUBLIC_PATHS
+    // literal, so an unrelated public route cannot break this guarantee.
+    const publicPathsLine = s.split('\n').find((l) => l.includes('const PUBLIC_PATHS = new Set(')) ?? '';
+    expect(publicPathsLine).toContain("'/msp'");
     expect(s).toContain("if (!user && path === '/msp') return <MspLandingView onEnter={() => navigate('/login')} onViewPricing={() => navigate('/pricing')} />;");
     // Asserts the authenticated /msp route still renders MSPCommandCenter,
     // without pinning the full prop list - that made the test break on any

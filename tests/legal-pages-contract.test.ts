@@ -11,7 +11,12 @@ describe('public /terms and /privacy routing', () => {
 
   it('are reachable without authentication', () => {
     const s = app();
-    expect(s).toContain("PUBLIC_PATHS = new Set(['/','/login','/free-review','/pricing','/msp','/terms','/privacy'])");
+    // Asserts the routes this test actually guards are public, rather than
+    // pinning the whole PUBLIC_PATHS literal - that broke on any unrelated
+    // route addition without protecting anything extra.
+    const publicPathsLine = s.split('\n').find((l) => l.includes('const PUBLIC_PATHS = new Set(')) ?? '';
+    expect(publicPathsLine).toContain("'/terms'");
+    expect(publicPathsLine).toContain("'/privacy'");
     expect(s).toContain("if (path === '/terms') return <TermsView />;");
     expect(s).toContain("if (!user && path === '/privacy') return <PrivacyPolicyView />;");
   });
