@@ -22,14 +22,7 @@ interface BootBoundaryState {
   error: Error | null;
 }
 
-class BootBoundary extends Component<{}, BootBoundaryState> {
-  private readonly children: ReactNode;
-
-  constructor(props: { children?: ReactNode }) {
-    super(props);
-    this.children = props.children ?? null;
-  }
-
+class BootBoundary extends Component<{ children?: ReactNode }, BootBoundaryState> {
   state: BootBoundaryState = { error: null };
 
   static getDerivedStateFromError(error: Error): BootBoundaryState {
@@ -42,7 +35,11 @@ class BootBoundary extends Component<{}, BootBoundaryState> {
 
   render() {
     const { error } = this.state;
-    if (!error) return this.children;
+    // Read from props rather than a constructor-captured copy: a snapshot
+    // taken at construction freezes the app tree at its first render. The
+    // cast is needed only because this project has no @types/react, so
+    // Component's inherited members are invisible to TypeScript.
+    if (!error) return (this as unknown as { props: { children?: ReactNode } }).props.children;
 
     const message = error.message || 'The application could not start.';
     const firebaseConfigMissing = message.includes('VITE_FIREBASE_');

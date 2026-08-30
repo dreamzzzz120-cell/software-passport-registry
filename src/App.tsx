@@ -40,6 +40,7 @@ import MspPricingView from './components/MspPricingView';
 import MspLandingView from './components/MspLandingView';
 import HomePage from './components/HomePage';
 import FreeReviewView from './components/FreeReviewView';
+import ViewErrorBoundary from './components/ViewErrorBoundary';
 import TermsView from './components/legal/TermsView';
 import PrivacyPolicyView from './components/legal/PrivacyPolicyView';
 import ReportsView from './components/ReportsView';
@@ -280,8 +281,17 @@ export default function App() {
     case '/team': view = <TeamView role={role} />; break;
     case '/audit-log': view = <AuditLogView />; break;
     case '/extensions': view = <ExtensionMarketplace onNavigateTab={onNavigateTab} role={role} />; break;
+    // Free Review is a public tool, but a signed-in user reaching it fell
+    // through to the default WorkflowBoundary below - so following the link
+    // while authenticated landed on a generic "Workflow" page instead of the
+    // scanner. Render it inside the Command Center so the left rail stays.
+    case '/free-review': view = <FreeReviewView onSignUp={() => navigate('/passports')} />; break;
     default: view = <WorkflowBoundary title="Workflow" description="This authenticated capability is explicitly routed through the Command Center. Choose its owning workflow from the left rail." onNavigate={navigate} />;
   }
 
-  return <CommandCenter path={path} userEmail={user.email} role={role} onNavigate={navigate} onSignOut={() => void signOutUser()}>{view}</CommandCenter>;
+  return (
+    <CommandCenter path={path} userEmail={user.email} role={role} onNavigate={navigate} onSignOut={() => void signOutUser()}>
+      <ViewErrorBoundary routeKey={path}>{view}</ViewErrorBoundary>
+    </CommandCenter>
+  );
 }
