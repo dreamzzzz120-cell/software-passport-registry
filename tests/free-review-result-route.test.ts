@@ -16,7 +16,9 @@ const stripComments = (s) => s.split(String.fromCharCode(10))
 // The route pattern App uses, mirrored here so the tests exercise the real shape.
 const PATTERN = /^\/free-review\/result\/([^/]+)\/([^/]+)\/?$/;
 const SHA_ID = 'passport_free_94a11a8517f84683b940a880da34fe64';
-const TOKEN = 'eyJ2IjoxfQ.abcDEF123-_';
+// Deliberately low-entropy and obviously fake: a JWT-shaped fixture trips
+// the repository's secret scanner. The slash also exercises URL encoding.
+const TOKEN = 'fake-test-token/not-a-real-credential';
 
 describe('1-4. the result is URL-addressable and survives navigation', () => {
   it('builds a public result path from the passport id and signed token', () => {
