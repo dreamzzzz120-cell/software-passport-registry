@@ -36,10 +36,26 @@ describe('Drizzle sql-tag array binding: use "IN ${array}", never "= ANY(${array
   });
 
   it('no remaining "= ANY(${...})" array-parameter pattern exists anywhere in src/, the exact shape that produces a malformed-array-literal error at runtime', () => {
-    const files = ['src/routes/governance.ts', 'src/trust/trust-loop.ts', 'src/routes/vendors.ts', 'src/routes/questionnaires.ts', 'src/routes/savings.ts', 'src/routes/monitoring.ts'];
-    for (const f of files) {
-      const s = read(f);
-      expect(s, `${f} still has the ANY(\${...}) bug pattern`).not.toMatch(/=\s*ANY\(\$\{[a-zA-Z]+\}\)/);
-    }
+    // Walks the whole src/ tree rather than a fixed file list -- the fixed
+    // list previously missed src/routes/auth.ts's /user/verification batch
+    // endpoint, which reintroduced this exact bug (confirmed by reproducing
+    // Drizzle's own query-chunk output: both `= ANY(${arr})` and `IN ${arr}`
+    // bind the same single JS-array parameter, but only IN's special-cased
+    // handling expands it into a real Postgres list -- ANY's wraps it in a
+    // literal `(...)`, producing `ANY(($2))`, the confirmed-live-broken shape).
+    const offenders: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name === 'tmp_build_source') continue;
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) { walk(full); continue; }
+        if (!/\.(ts|tsx)$/.test(entry.name)) continue;
+        const relative = path.relative(root, full);
+        const contents = fs.readFileSync(full, 'utf8');
+        if (/=\s*ANY\(\$\{[a-zA-Z]+\}\)/.test(contents)) offenders.push(relative);
+      }
+    };
+    walk(path.join(root, 'src'));
+    expect(offenders).toEqual([]);
   });
 });

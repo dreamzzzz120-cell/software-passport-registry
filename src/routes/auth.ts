@@ -636,11 +636,11 @@ export function createAuthRouter() {
       const evidenceRows = (await db.execute(sql`
         SELECT id, asset_id AS "assetId", name, type, status, signer, timestamp, hash, engine_id AS "engineId"
         FROM evidence_items
-        WHERE tenant_id=${tenantId} AND asset_id = ANY(${passportIds})
+        WHERE tenant_id=${tenantId} AND asset_id IN ${passportIds}
       `) as any).rows || [];
       const openFindings = (await db.execute(sql`
         SELECT id, asset_id AS "assetId" FROM scan_findings
-        WHERE tenant_id=${tenantId} AND asset_id = ANY(${passportIds})
+        WHERE tenant_id=${tenantId} AND asset_id IN ${passportIds}
           AND lower(status) NOT IN ('resolved','closed','verified')
       `) as any).rows || [];
 

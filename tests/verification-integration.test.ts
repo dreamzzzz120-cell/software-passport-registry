@@ -197,7 +197,14 @@ describe('batch verification is orchestration, not a second evaluator', () => {
   it('avoids N+1: evidence and findings are fetched in one query each', () => {
     const start = source.indexOf("'/user/verification'");
     const handler = source.slice(start, start + 4000);
-    expect(handler).toContain('asset_id = ANY(');
+    // Not `asset_id = ANY(${passportIds})`: reproduced live against
+    // production (via the real drizzle db.execute(sql`...`) path, not just
+    // raw pg) that this shape throws "malformed array literal" the moment a
+    // tenant has any passports -- Drizzle's sql tag does not bind a JS array
+    // for ANY() the way it does for IN. `IN ${passportIds}` is the correct,
+    // proven-working idiom and is still exactly one query, not N+1.
+    expect(handler).toContain('asset_id IN ${passportIds}');
+    expect(handler).not.toMatch(/asset_id\s*=\s*ANY\(/);
     expect(handler).toContain('evidenceByPassport');
   });
 
