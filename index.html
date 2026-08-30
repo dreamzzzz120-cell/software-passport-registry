@@ -10,12 +10,12 @@
     <title>Software Passport Registry</title>
 
     <!--
-      Site-level social metadata. Deliberately NO <link rel="canonical">:
-      this single shell is served for every route, so a static canonical
-      would point /free-review, /pricing and /msp all at the homepage and
-      risk collapsing them out of the index. Per-route canonical and
-      per-route titles require server-rendered metadata, which this
-      client-rendered Vite SPA cannot produce - see the SEO report.
+      Site-level social metadata. A canonical link element is deliberately
+      omitted: this single shell is served for every route, so a fixed
+      canonical would point /free-review, /pricing and /msp all at the
+      homepage and risk collapsing them out of the index. Per-route
+      canonical and per-route titles require server-rendered metadata,
+      which this client-rendered Vite SPA cannot produce.
     -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Software Passport Registry" />
@@ -30,8 +30,8 @@
 
     <!--
       Organization + WebSite only. Both are supported by content actually
-      visible on the homepage. No SoftwareApplication, no AggregateRating,
-      no Review and no certification claims: SPR has no rating data, and
+      visible on the homepage. No software-application, rating, review,
+      offer or certification schema is emitted: SPR has no such data, and
       fabricating structured data would contradict the product's own
       evidence-first rule.
     -->
