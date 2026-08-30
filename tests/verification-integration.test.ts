@@ -179,3 +179,66 @@ describe('display layer formats the authoritative decision without reinterpretin
     }
   });
 });
+
+describe('batch verification is orchestration, not a second evaluator', () => {
+  const source = read('src/routes/auth.ts');
+
+  it('exists, requires auth, and reuses the single adapter and evaluator', () => {
+    expect(source).toContain("router.get('/user/verification', requireAuth");
+    const start = source.indexOf("'/user/verification'");
+    const handler = source.slice(start, start + 4000);
+    expect(handler).toContain('adaptEvidenceForEvaluation({');
+    expect(handler).toContain('evaluateVerification({');
+    // No predicate of its own.
+    expect(handler).not.toContain('minThirdPartySources');
+    expect(handler).not.toContain('maxAgeDays');
+  });
+
+  it('avoids N+1: evidence and findings are fetched in one query each', () => {
+    const start = source.indexOf("'/user/verification'");
+    const handler = source.slice(start, start + 4000);
+    expect(handler).toContain('asset_id = ANY(');
+    expect(handler).toContain('evidenceByPassport');
+  });
+
+  it('stays tenant-scoped, Client-restricted and uncacheable', () => {
+    const start = source.indexOf("'/user/verification'");
+    const handler = source.slice(start, start + 4000);
+    expect(handler).toContain('tenant_id=${tenantId}');
+    expect(handler).toContain('clientScope');
+    expect(handler).toContain("'private, max-age=0, no-store'");
+  });
+
+  it('uses one evaluation instant so freshness is consistent across the batch', () => {
+    const start = source.indexOf("'/user/verification'");
+    expect(source.slice(start, start + 4000)).toContain('const evaluatedAt = Date.now()');
+  });
+});
+
+describe('PDF makes no claim stronger than the authoritative decision', () => {
+  it('an unassessed score reads NOT ASSESSED rather than 0/100', async () => {
+    const { scoreDisplay, assessmentDisplay } = await import('../src/utils/pdfGenerator.ts');
+    expect(scoreDisplay(0)).toBe('NOT ASSESSED');
+    expect(scoreDisplay(null)).toBe('NOT ASSESSED');
+    expect(scoreDisplay(undefined)).toBe('NOT ASSESSED');
+    expect(assessmentDisplay(0)).toBe('NOT ASSESSED');
+    // A genuine value is still shown if one is ever computed.
+    expect(scoreDisplay(81)).toBe('81/100');
+    expect(assessmentDisplay(40)).toBe('40%');
+  });
+
+  it('never prints an unqualified Safe risk claim', async () => {
+    const { riskDisplay } = await import('../src/utils/pdfGenerator.ts');
+    expect(riskDisplay('Safe')).toBe('Risk not assessed');
+    expect(riskDisplay('Unknown')).toBe('Risk not assessed');
+    expect(riskDisplay('')).toBe('Risk not assessed');
+    expect(riskDisplay('High')).toContain('not verified');
+  });
+
+  it('the PDF no longer colours an unassessed client green or asserts Safe Risk', () => {
+    const pdf = read('src/utils/pdfGenerator.ts');
+    expect(pdf).not.toContain("client.riskLevel === 'Safe' ? [16, 185, 129]");
+    expect(pdf).not.toContain("client.riskLevel + ' Risk'");
+    expect(pdf).not.toContain('`${client.trustScore}/100`');
+  });
+});

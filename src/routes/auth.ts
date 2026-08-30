@@ -18,6 +18,7 @@ import { canCreateClient, PLAN_CONFIG } from './billing.ts';
 import { normalizeClientRecord, normalizeClientRecords, normalizePassportRecords } from '../lib/clientJsonColumns.ts';
 import { adaptEvidenceForEvaluation } from '../lib/verification/evidenceAdapter.ts';
 import { evaluateVerification } from '../lib/verification/evaluateVerification.ts';
+import { VERIFICATION_POLICY_VERSION } from '../lib/verification/verificationPolicy.ts';
 import { verifySlsaProvenance } from '../utils/slsa-verification.ts';
 import { calculateAndStoreTrustScore } from '../utils/scanner.ts';
 
@@ -603,6 +604,83 @@ export function createAuthRouter() {
           undatedRecords: adapted.undatedCount,
         },
       });
+    } catch (error) { return next(error); }
+  });
+
+  // Batch verification for every passport visible to the caller.
+  //
+  // A thin orchestration layer only: it batches retrieval and then calls the
+  // SAME evidenceAdapter and evaluateVerification per passport. It contains
+  // no verification logic of its own, so it cannot become a second evaluator.
+  //
+  // Three queries total regardless of passport count - passports, then all
+  // their evidence, then all their open findings - grouped in memory. This
+  // exists specifically so grid surfaces (MSP Command Center) never call the
+  // single-passport endpoint once per row.
+  router.get('/user/verification', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const clientScope = req.user!.role === 'Client' ? req.user!.clientId : null;
+
+      const passports = (await db.execute(sql`
+        SELECT id, name, version, publisher FROM passports
+        WHERE tenant_id=${tenantId} AND (${clientScope}::text IS NULL OR client_id = ${clientScope})
+        ORDER BY name ASC
+      `) as any).rows || [];
+      if (passports.length === 0) return res.json({ policyVersion: VERIFICATION_POLICY_VERSION, decisions: [] });
+
+      const passportIds = passports.map((row: any) => String(row.id));
+      // Tenant filter stays on every query; ids are additionally constrained
+      // to the set already proven visible above.
+      const evidenceRows = (await db.execute(sql`
+        SELECT id, asset_id AS "assetId", name, type, status, signer, timestamp, hash, engine_id AS "engineId"
+        FROM evidence_items
+        WHERE tenant_id=${tenantId} AND asset_id = ANY(${passportIds})
+      `) as any).rows || [];
+      const openFindings = (await db.execute(sql`
+        SELECT id, asset_id AS "assetId" FROM scan_findings
+        WHERE tenant_id=${tenantId} AND asset_id = ANY(${passportIds})
+          AND lower(status) NOT IN ('resolved','closed','verified')
+      `) as any).rows || [];
+
+      const evidenceByPassport = new Map<string, any[]>();
+      for (const row of evidenceRows) {
+        const key = String(row.assetId);
+        if (!evidenceByPassport.has(key)) evidenceByPassport.set(key, []);
+        evidenceByPassport.get(key)!.push(row);
+      }
+      const findingsByPassport = new Map<string, string[]>();
+      for (const row of openFindings) {
+        const key = String(row.assetId);
+        if (!findingsByPassport.has(key)) findingsByPassport.set(key, []);
+        findingsByPassport.get(key)!.push(String(row.id));
+      }
+
+      // One evaluation instant for the whole batch keeps freshness consistent
+      // across every passport in a single response.
+      const evaluatedAt = Date.now();
+      const decisions = passports.map((passport: any) => {
+        const adapted = adaptEvidenceForEvaluation({
+          evidence: evidenceByPassport.get(String(passport.id)) || [],
+          passportVersion: passport.version,
+          openFindingEvidenceIds: findingsByPassport.get(String(passport.id)) || [],
+        });
+        const decision = evaluateVerification({ evidence: adapted.evidence, evaluatedAt, targetIdentity: adapted.targetIdentity });
+        return {
+          passportId: String(passport.id),
+          name: passport.name,
+          decision,
+          counts: {
+            observations: (evidenceByPassport.get(String(passport.id)) || []).length,
+            uniqueEvidence: decision.uniqueEvidenceCount,
+            independentSources: decision.independentSourceCount,
+          },
+        };
+      });
+
+      res.setHeader('cache-control', 'private, max-age=0, no-store');
+      return res.json({ policyVersion: VERIFICATION_POLICY_VERSION, evaluatedAt, decisions });
     } catch (error) { return next(error); }
   });
 

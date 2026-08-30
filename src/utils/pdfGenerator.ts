@@ -7,6 +7,37 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Client, SoftwarePassport, EvidenceItem, Vulnerability } from '../types';
 
+/**
+ * Truthful display of the legacy client score fields.
+ *
+ * clients.trust_score, risk_level and compliance_progress are only ever read
+ * - no code in the product computes or writes them - so an unassessed client
+ * carries 0 / 'Unknown'. Rendering that as "0/100" beside a green "Safe Risk"
+ * badge asserted a safety conclusion the evidence never supported, and
+ * contradicted the authoritative verification engine.
+ *
+ * These helpers change presentation only. They invent no score, alter no
+ * weighting, and never upgrade a value: an unassessed field reads as NOT
+ * ASSESSED, and a real value is still shown if one is ever computed.
+ */
+export function scoreDisplay(score: number | null | undefined): string {
+  const value = Number(score);
+  return Number.isFinite(value) && value > 0 ? `${value}/100` : 'NOT ASSESSED';
+}
+
+export function riskDisplay(riskLevel: string | null | undefined): string {
+  const value = String(riskLevel ?? '').trim();
+  // 'Safe' is an unsupported safety claim unless something actually assessed
+  // it; there is no such assessment path today.
+  if (!value || value.toLowerCase() === 'unknown' || value.toLowerCase() === 'safe') return 'Risk not assessed';
+  return `${value} (self-reported, not verified)`;
+}
+
+export function assessmentDisplay(progress: number | null | undefined): string {
+  const value = Number(progress);
+  return Number.isFinite(value) && value > 0 ? `${value}%` : 'NOT ASSESSED';
+}
+
 export function generateClientCompliancePDF(client: Client) {
   // Create instance of jsPDF in A4 format (210 x 297 mm)
   const doc = new jsPDF('p', 'mm', 'a4');
@@ -111,8 +142,14 @@ export function generateClientCompliancePDF(client: Client) {
   const gap = 4;
 
   const metrics = [
-    { label: 'TRUST SCORE', val: `${client.trustScore}/100`, status: client.riskLevel + ' Risk', color: client.riskLevel === 'Safe' ? [16, 185, 129] : [245, 158, 11] },
-    { label: 'COMPLIANCE PROGRESS', val: `${client.complianceProgress}%`, status: 'Unverified progress indicator', color: [79, 70, 229] },
+    // clients.trust_score and clients.risk_level are only ever read - nothing
+    // in the product computes or writes them, so they default to 0/'Unknown'.
+    // Printing "0/100" beside a green "Safe Risk" label made a customer-facing
+    // safety claim with no evidentiary basis, and contradicted the
+    // verification engine, which reports nothing as verified. Presentation
+    // only: no score is invented and no weight is changed.
+    { label: 'TRUST SCORE', val: scoreDisplay(client.trustScore), status: riskDisplay(client.riskLevel), color: [107, 114, 128] },
+    { label: 'COMPLIANCE PROGRESS', val: assessmentDisplay(client.complianceProgress), status: 'Not an authoritative assessment', color: [79, 70, 229] },
     { label: 'PASSPORTS IN USE', val: `${client.softwareInventory.length}`, status: 'Configured inventory', color: [13, 148, 136] },
     { label: 'CRITICAL RISKS', val: `${client.criticalRisksCount}`, status: client.criticalRisksCount > 0 ? 'Action Required' : 'Guarded', color: client.criticalRisksCount > 0 ? [239, 68, 68] : [16, 185, 129] },
   ];
@@ -448,7 +485,7 @@ export function generateCoBrandedTrustReport(
     const gap = 4;
 
     const metrics = [
-      { label: 'CLIENT TRUST SCORE', val: `${client.trustScore}/100`, sub: `${client.riskLevel} Risk Profile`, color: client.riskLevel === 'Safe' ? [16, 185, 129] : [245, 158, 11] },
+      { label: 'CLIENT TRUST SCORE', val: scoreDisplay(client.trustScore), sub: riskDisplay(client.riskLevel), color: [107, 114, 128] },
       { label: 'ACTIVE PASSPORTS', val: `${client.softwareInventory.length} Active`, sub: 'Evidence status per record', color: [rgb.r, rgb.g, rgb.b] },
       { label: 'PATCHED VULNS (CVE)', val: `${patchedCvesCount} Patched`, sub: 'Remediated past 30 days', color: [16, 185, 129] },
       { label: 'UNRESOLVED ALERTS', val: `${client.criticalRisksCount}`, sub: client.criticalRisksCount > 0 ? 'Action Required' : 'Guarded', color: client.criticalRisksCount > 0 ? [239, 68, 68] : [16, 185, 129] },
