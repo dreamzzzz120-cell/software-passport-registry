@@ -23,16 +23,18 @@ describe('billing plan definitions', () => {
   it('never hard-codes a Stripe price ID -- only display labels for the specified prices', () => {
     const source = read('src/routes/billing.ts');
     expect(source).not.toMatch(/price_[A-Za-z0-9]{10,}/);
-    // Price *IDs* must come only from config.stripe.prices (env vars).
-    expect(source).toContain('config.stripe.prices[plan]');
+    // Price *IDs* must come only from config.stripe.prices (env vars), keyed
+    // by each plan's priceKey -- e.g. `pilot` resolves through `mspPilot`
+    // since it is priced/checked-out against the canonical MSP catalog.
+    expect(source).toContain('config.stripe.prices[PLAN_CONFIG[plan].priceKey');
   });
 
   it('PLAN_CONFIG is the single source of truth PLAN_CLIENT_LIMITS is derived from, never maintained twice', () => {
     const source = read('src/routes/billing.ts');
     expect(source).toContain('Object.fromEntries(');
     expect(PLAN_CONFIG.starter.priceLabel).toBe('$499/month');
-    expect(PLAN_CONFIG.professional.priceLabel).toBe('$1,499/month');
-    expect(PLAN_CONFIG.growth.priceLabel).toBe('$2,999/month');
+    expect(PLAN_CONFIG.professional.priceLabel).toBe('$1,000/month');
+    expect(PLAN_CONFIG.growth.priceLabel).toBe('$2,500/month');
   });
 });
 

@@ -42,7 +42,11 @@ const envSchema = z.object({
   FIREBASE_PROJECT_ID: optionalTrimmedString, FIREBASE_SERVICE_ACCOUNT_KEY: optionalTrimmedString, FIREBASE_SERVICE_ACCOUNT_KEY_B64: optionalTrimmedString, GOOGLE_APPLICATION_CREDENTIALS: optionalTrimmedString,
   STRIPE_SECRET_KEY: optionalTrimmedString, STRIPE_WEBHOOK_SECRET: optionalTrimmedString,
   STRIPE_PRICE_PILOT: optionalTrimmedString, STRIPE_PRICE_STARTER: optionalTrimmedString, STRIPE_PRICE_PROFESSIONAL: optionalTrimmedString, STRIPE_PRICE_GROWTH: optionalTrimmedString, STRIPE_PRICE_ENTERPRISE: optionalTrimmedString,
-  STRIPE_PRICE_PRODUCT_PASSPORT: optionalTrimmedString,
+  STRIPE_PRICE_MSP_PILOT: optionalTrimmedString, STRIPE_PRICE_MSP_GROWTH: optionalTrimmedString, STRIPE_PRICE_MSP_SCALE: optionalTrimmedString,
+  STRIPE_PRICE_SOFTWARE_PASSPORT: optionalTrimmedString, STRIPE_PRICE_EVIDENCE_REPORT: optionalTrimmedString, STRIPE_PRICE_SECURITY_ASSESSMENT: optionalTrimmedString,
+  STRIPE_PRICE_VERIFIED_SYSTEM_REPORT: optionalTrimmedString, STRIPE_PRICE_DUE_DILIGENCE_REPORT: optionalTrimmedString, STRIPE_PRICE_VENDOR_RISK_ASSESSMENT: optionalTrimmedString,
+  STRIPE_PRICE_SBOM_ANALYSIS: optionalTrimmedString, STRIPE_PRICE_PORTFOLIO_ASSESSMENT: optionalTrimmedString, STRIPE_PRICE_AUDIT_EVIDENCE_PACKAGE: optionalTrimmedString, STRIPE_PRICE_CUSTOM_ASSESSMENT: optionalTrimmedString,
+  STRIPE_PRICE_CONTINUOUS_VERIFICATION: optionalTrimmedString, STRIPE_PRICE_TRUST_BADGE: optionalTrimmedString, STRIPE_PRICE_PUBLIC_PASSPORT: optionalTrimmedString, STRIPE_PRICE_API: optionalTrimmedString,
   GEMINI_API_KEY: optionalTrimmedString, GOOGLE_GENAI_API_KEY: optionalTrimmedString, AI_GATEWAY_API_KEY: optionalTrimmedString,
   SPR_INITIAL_OWNER_EMAIL: z.preprocess((value) => typeof value === 'string' ? (value.trim().toLowerCase() || undefined) : value, z.string().email().optional()),
   SPR_OWNER_BOOTSTRAP_SECRET: optionalTrimmedString,
@@ -74,11 +78,6 @@ export const config = {
   appUrl: effectiveAppUrl, allowedOrigins: effectiveAllowedOrigins, enforceHttps: parseBoolean(parsedEnv.ENFORCE_HTTPS, false), trustProxy: parseBoolean(parsedEnv.TRUST_PROXY, false), allowIframe: parseBoolean(parsedEnv.ALLOW_IFRAME, false),
   database: {
     connectionString: parsedEnv.DATABASE_URL, host: parsedEnv.SQL_HOST, user: parsedEnv.SQL_USER, password: parsedEnv.SQL_PASSWORD, name: parsedEnv.SQL_DB_NAME,
-    // APP_DATABASE_URL/WORKER_DATABASE_URL point at least-privileged, RLS-bound
-    // Postgres roles (see migration 0020) so the HTTP API and background workers
-    // cannot see another tenant's rows even if a query forgets its own tenant_id
-    // filter. Falling back to the owner-role DATABASE_URL keeps existing
-    // deployments working unchanged until they provision the separate roles.
     appConnectionString: parsedEnv.APP_DATABASE_URL ?? parsedEnv.DATABASE_URL,
     workerConnectionString: parsedEnv.WORKER_DATABASE_URL ?? parsedEnv.DATABASE_URL,
     ssl: databaseSslEnabled,
@@ -90,16 +89,30 @@ export const config = {
   firebase: { projectId: parsedEnv.FIREBASE_PROJECT_ID, serviceAccountKey: parsedEnv.FIREBASE_SERVICE_ACCOUNT_KEY, serviceAccountKeyB64: parsedEnv.FIREBASE_SERVICE_ACCOUNT_KEY_B64, googleApplicationCredentials: parsedEnv.GOOGLE_APPLICATION_CREDENTIALS },
   stripe: {
     secretKey: parsedEnv.STRIPE_SECRET_KEY, webhookSecret: parsedEnv.STRIPE_WEBHOOK_SECRET,
-    // Price IDs are created in the Stripe Dashboard once a real account
-    // exists (Products -> Prices) -- SPR never invents a dollar amount or
-    // creates Stripe objects on its own; a plan whose env var is unset is
-    // simply not offered for checkout yet (see routes/billing.ts).
-    prices: { pilot: parsedEnv.STRIPE_PRICE_PILOT, starter: parsedEnv.STRIPE_PRICE_STARTER, professional: parsedEnv.STRIPE_PRICE_PROFESSIONAL, growth: parsedEnv.STRIPE_PRICE_GROWTH, enterprise: parsedEnv.STRIPE_PRICE_ENTERPRISE },
-    // Separate from `prices` (subscription plans) on purpose: these are
-    // one-time Stripe Prices (mode 'payment') for the per-resource product
-    // catalog in src/lib/entitlements/productCatalog.ts, a distinct
-    // commercial line from the MSP subscription tiers above.
-    productPrices: { passport: parsedEnv.STRIPE_PRICE_PRODUCT_PASSPORT },
+    prices: {
+      pilot: parsedEnv.STRIPE_PRICE_MSP_PILOT ?? parsedEnv.STRIPE_PRICE_PILOT,
+      starter: parsedEnv.STRIPE_PRICE_STARTER,
+      professional: parsedEnv.STRIPE_PRICE_MSP_GROWTH ?? parsedEnv.STRIPE_PRICE_PROFESSIONAL,
+      growth: parsedEnv.STRIPE_PRICE_MSP_SCALE ?? parsedEnv.STRIPE_PRICE_GROWTH,
+      enterprise: parsedEnv.STRIPE_PRICE_ENTERPRISE,
+      mspPilot: parsedEnv.STRIPE_PRICE_MSP_PILOT,
+      mspGrowth: parsedEnv.STRIPE_PRICE_MSP_GROWTH,
+      mspScale: parsedEnv.STRIPE_PRICE_MSP_SCALE,
+      softwarePassport: parsedEnv.STRIPE_PRICE_SOFTWARE_PASSPORT,
+      evidenceReport: parsedEnv.STRIPE_PRICE_EVIDENCE_REPORT,
+      securityAssessment: parsedEnv.STRIPE_PRICE_SECURITY_ASSESSMENT,
+      verifiedSystemReport: parsedEnv.STRIPE_PRICE_VERIFIED_SYSTEM_REPORT,
+      dueDiligenceReport: parsedEnv.STRIPE_PRICE_DUE_DILIGENCE_REPORT,
+      vendorRiskAssessment: parsedEnv.STRIPE_PRICE_VENDOR_RISK_ASSESSMENT,
+      sbomAnalysis: parsedEnv.STRIPE_PRICE_SBOM_ANALYSIS,
+      portfolioAssessment: parsedEnv.STRIPE_PRICE_PORTFOLIO_ASSESSMENT,
+      auditEvidencePackage: parsedEnv.STRIPE_PRICE_AUDIT_EVIDENCE_PACKAGE,
+      customAssessment: parsedEnv.STRIPE_PRICE_CUSTOM_ASSESSMENT,
+      continuousVerification: parsedEnv.STRIPE_PRICE_CONTINUOUS_VERIFICATION,
+      trustBadge: parsedEnv.STRIPE_PRICE_TRUST_BADGE,
+      publicPassport: parsedEnv.STRIPE_PRICE_PUBLIC_PASSPORT,
+      api: parsedEnv.STRIPE_PRICE_API,
+    },
   },
   gemini: { apiKey: parsedEnv.GEMINI_API_KEY ?? parsedEnv.GOOGLE_GENAI_API_KEY }, aiGateway: { apiKey: parsedEnv.AI_GATEWAY_API_KEY },
   ownerBootstrap: { initialOwnerEmail: parsedEnv.SPR_INITIAL_OWNER_EMAIL, secret: parsedEnv.SPR_OWNER_BOOTSTRAP_SECRET, secretSha256: parsedEnv.SPR_OWNER_BOOTSTRAP_SECRET_SHA256 },
@@ -140,7 +153,10 @@ export const configurationCatalog = [
   { name: 'SPR_PUBLIC_PASSPORT_SECRET', category: 'requiredProduction', requiredInProduction: true },
   { name: 'AI_GATEWAY_API_KEY', category: 'featureSpecific', requiredInProduction: false }, { name: 'SPR_OWNER_BOOTSTRAP_SECRET_SHA256', category: 'bootstrap-only', requiredInProduction: false },
   { name: 'STRIPE_SECRET_KEY', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_WEBHOOK_SECRET', category: 'featureSpecific', requiredInProduction: false },
-  { name: 'STRIPE_PRICE_PILOT', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_STARTER', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_PROFESSIONAL', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_GROWTH', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_ENTERPRISE', category: 'featureSpecific', requiredInProduction: false },
-  { name: 'STRIPE_PRICE_PRODUCT_PASSPORT', category: 'featureSpecific', requiredInProduction: false },
+  { name: 'STRIPE_PRICE_MSP_PILOT', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_MSP_GROWTH', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_MSP_SCALE', category: 'featureSpecific', requiredInProduction: false },
+  { name: 'STRIPE_PRICE_SOFTWARE_PASSPORT', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_EVIDENCE_REPORT', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_SECURITY_ASSESSMENT', category: 'featureSpecific', requiredInProduction: false },
+  { name: 'STRIPE_PRICE_VERIFIED_SYSTEM_REPORT', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_DUE_DILIGENCE_REPORT', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_VENDOR_RISK_ASSESSMENT', category: 'featureSpecific', requiredInProduction: false },
+  { name: 'STRIPE_PRICE_SBOM_ANALYSIS', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_PORTFOLIO_ASSESSMENT', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_AUDIT_EVIDENCE_PACKAGE', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_CUSTOM_ASSESSMENT', category: 'featureSpecific', requiredInProduction: false },
+  { name: 'STRIPE_PRICE_CONTINUOUS_VERIFICATION', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_TRUST_BADGE', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_PUBLIC_PASSPORT', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_API', category: 'featureSpecific', requiredInProduction: false },
   { name: 'GEMINI_API_KEY', category: 'featureSpecific', requiredInProduction: false }, { name: 'SENTRY_DSN', category: 'optional', requiredInProduction: false },
 ] as const;
