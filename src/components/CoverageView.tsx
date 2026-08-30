@@ -73,9 +73,14 @@ export default function CoverageView({ clients, scans, passports, onNavigateTab 
             <p className="mt-4 text-sm leading-6 text-[#9d9d9d]">Coverage is calculated from records currently loaded from the tenant backend. Missing evidence is shown as missing; it is never treated as a positive security or trust signal.</p>
           </div>
           <div className="spr-panel-alt px-6 py-5 text-left lg:min-w-56">
-            <div className="text-[11px] font-semibold uppercase tracking-[.06em] text-[#6f6f6f]">Evidence-bearing passports</div>
-            <div className="mt-2 text-4xl font-semibold text-[#d4d4d4]">{metrics.overall}%</div>
-            <div className="mt-1 text-xs text-[#9d9d9d]">{metrics.evidenceBearing} of {metrics.total} passport records</div>
+            {/* The count leads, not the percentage. This measures how many
+                passports carry any evidence at all, not how complete that
+                evidence is - a passport counted here can still be
+                "Evidence Incomplete". A headline "100%" derived from 1 of 1
+                record reads as completeness and overstates what was observed. */}
+            <div className="text-[11px] font-semibold uppercase tracking-[.06em] text-[#6f6f6f]">Passports carrying evidence</div>
+            <div className="mt-2 text-4xl font-semibold text-[#d4d4d4]">{metrics.evidenceBearing} <span className="text-2xl text-[#9d9d9d]">of {metrics.total}</span></div>
+            <div className="mt-1 text-xs text-[#9d9d9d]">Carrying any evidence — not a completeness measure</div>
           </div>
         </div>
 
