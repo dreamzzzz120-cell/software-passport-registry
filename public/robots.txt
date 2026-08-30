@@ -56,6 +56,11 @@ Disallow: /extensions
 # Sign-in is public but has no search value.
 Disallow: /login
 
+# Free Review result links embed a signed, time-boxed bearer token. They are
+# publicly reachable by design so a visitor can return to or share their own
+# result, but they must never be crawled, cached or indexed.
+Disallow: /free-review/result
+
 # APIs, including signed public share links. A Passport verification link
 # is a time-boxed bearer token; it must not be crawled, cached or indexed.
 Disallow: /api/

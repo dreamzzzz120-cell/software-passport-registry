@@ -50,6 +50,32 @@ import type { VerificationDecisionState } from './components/trust/TrustStateBad
 import { EXTENSIONS } from './workflows/extensionRegistry';
 
 const PUBLIC_PATHS = new Set(['/','/login','/free-review','/pricing','/msp','/terms','/privacy']);
+
+// A completed Free Review result is addressable at
+//   /free-review/result/<passportId>/<token>
+// so it survives navigation and refresh, and can be reopened from a copied
+// link. The token is the same HMAC-signed, two-hour status token the API
+// already issues; it stays an opaque credential and is validated only
+// server-side by verifyFreeReviewStatusToken.
+//
+// Deliberately a narrow pattern rather than whitelisting /free-review/*:
+// only this exact three-segment shape is public. Anything else under
+// /free-review still falls through to the authenticated guard.
+const FREE_REVIEW_RESULT_PATH = /^\/free-review\/result\/([^/]+)\/([^/]+)\/?$/;
+
+function parseFreeReviewResultPath(path: string): { passportId: string; token: string } | null {
+  const match = FREE_REVIEW_RESULT_PATH.exec(path);
+  if (!match) return null;
+  try {
+    return { passportId: decodeURIComponent(match[1]), token: decodeURIComponent(match[2]) };
+  } catch {
+    return null;
+  }
+}
+
+function isPublicPath(path: string): boolean {
+  return PUBLIC_PATHS.has(path) || FREE_REVIEW_RESULT_PATH.test(path);
+}
 const EMPTY_CLIENTS: Client[] = [];
 const EMPTY_PASSPORTS: SoftwarePassport[] = [];
 const EMPTY_VENDORS: Vendor[] = [];
@@ -98,6 +124,7 @@ function WorkflowBoundary({ title, description, extensionId, onNavigate }: { tit
 
 export default function App() {
   const path = usePath();
+  const freeReviewResult = useMemo(() => parseFreeReviewResultPath(path), [path]);
   const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState('Viewer');
@@ -165,7 +192,7 @@ export default function App() {
       unsubscribe();
     };
   }, []);
-  useEffect(() => { if (authReady && !user && !PUBLIC_PATHS.has(path)) navigate('/login'); }, [authReady, user, path]);
+  useEffect(() => { if (authReady && !user && !isPublicPath(path)) navigate('/login'); }, [authReady, user, path]);
 
   useEffect(() => {
     if (!user) return;
@@ -269,6 +296,7 @@ export default function App() {
   if (path === '/terms') return <TermsView />;
   if (!user && path === '/privacy') return <PrivacyPolicyView />;
   if (!user && path === '/free-review') return <FreeReviewView onSignUp={() => navigate('/login')} />;
+  if (!user && freeReviewResult) return <FreeReviewView onSignUp={() => navigate('/login')} initialResult={freeReviewResult} />;
   if (!user && path === '/pricing') return <MspPricingView isAuthenticated={false} onPrimaryAction={() => navigate('/login')} />;
   if (!user && path === '/msp') return <MspLandingView onEnter={() => navigate('/login')} onViewPricing={() => navigate('/pricing')} />;
   if (!user) return <AuthLoading />;

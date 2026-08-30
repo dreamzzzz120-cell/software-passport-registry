@@ -50,12 +50,36 @@ function displayRepository(owner: string, repository: string): string {
     : normalizedRepository || normalizedOwner || repository.trim();
 }
 
-export default function FreeReviewView({ onSignUp }: { onSignUp: () => void }) {
+/** The public, shareable address of a completed review. */
+export function freeReviewResultPath(passportId: string, token: string): string {
+  return `/free-review/result/${encodeURIComponent(passportId)}/${encodeURIComponent(token)}`;
+}
+
+/** The signed status API the result page reads. Mirrors what POST /scan returns. */
+export function freeReviewStatusApiPath(passportId: string, token: string): string {
+  return `/api/free-review/scan/${encodeURIComponent(passportId)}/status/${encodeURIComponent(token)}`;
+}
+
+interface FreeReviewViewProps {
+  onSignUp: () => void;
+  /**
+   * Parsed from /free-review/result/<passportId>/<token>. The URL is the
+   * source of truth for a result - nothing is written to localStorage or
+   * sessionStorage - so a result survives navigation and refresh and can be
+   * reopened from a copied link. The token stays opaque here and is
+   * validated only server-side.
+   */
+  initialResult?: { passportId: string; token: string } | null;
+}
+
+export default function FreeReviewView({ onSignUp, initialResult }: FreeReviewViewProps) {
   const [owner, setOwner] = useState('');
   const [repository, setRepository] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [statusUrl, setStatusUrl] = useState('');
+  const [statusUrl, setStatusUrl] = useState(
+    initialResult ? freeReviewStatusApiPath(initialResult.passportId, initialResult.token) : '',
+  );
   const [result, setResult] = useState<FreeReviewStatus | null>(null);
   const pollAttempt = useRef(0);
 
@@ -129,6 +153,16 @@ export default function FreeReviewView({ onSignUp }: { onSignUp: () => void }) {
         return;
       }
       setStatusUrl(data.statusUrl);
+      // Put the result on the URL immediately, so leaving the page and coming
+      // back - or refreshing, or sharing the link - reaches the same review
+      // instead of losing it. Uses the passport id and signed token the API
+      // just returned; nothing is decoded or re-signed here.
+      if (typeof data?.passportId === 'string') {
+        const token = String(data.statusUrl).split('/status/')[1];
+        if (token) {
+          window.history.replaceState({}, '', freeReviewResultPath(data.passportId, decodeURIComponent(token)));
+        }
+      }
     } catch {
       setError('Network error while starting the review.');
     } finally {
