@@ -23,12 +23,47 @@ const STATE_META: Record<TrustState, { label: string; color: string; icon: typeo
   UNINITIALIZED: { label: 'Trust State Uninitialized', color: NEUTRAL, icon: Circle, description: 'No Passport or evidence exists yet.' },
 };
 
-// The single mapping from the real, backend-computed verificationStatus onto
-// a display state -- callers must not invent their own mapping.
+/**
+ * LEGACY mapping, retained deliberately and documented per the integration
+ * rules. It maps the stored passports.verification_status column, which the
+ * repository scanner hardcodes to 'unverified' on every write, so it always
+ * yields EVIDENCE_INCOMPLETE for scanned software.
+ *
+ * It is NOT the authoritative verification decision. Prefer
+ * trustStateFromDecision() below, which consumes the evaluator's result from
+ * GET /api/user/passports/:id/verification. This function remains only
+ * because TrustRoom and MSPCommandCenter still read the column directly; it
+ * must not be used for any new surface.
+ */
 export function trustStateFromVerification(status: VerificationStatus | null | undefined): TrustState {
   if (status === 'verified') return 'VERIFIED';
   if (status === 'partial') return 'PARTIALLY_VERIFIED';
   return 'EVIDENCE_INCOMPLETE';
+}
+
+/** The authoritative evaluator's states (src/lib/verification/verificationPolicy.ts). */
+export type VerificationDecisionState = 'VERIFIED' | 'PARTIAL' | 'INVESTIGATE' | 'AVOID' | 'UNKNOWN';
+
+/**
+ * The single mapping from the authoritative verification decision onto a
+ * display state. This formats the evaluator's result; it never reinterprets
+ * it, and it can never upgrade one state into a stronger one.
+ *
+ * INVESTIGATE and AVOID both map to VERIFICATION_FAILED's visual treatment
+ * only in the sense of "not a pass" - the caller is expected to render the
+ * evaluator's own explanation and reason codes alongside the badge, so the
+ * distinction between "adverse findings need review" and "insufficient
+ * evidence" stays visible to the reader.
+ */
+export function trustStateFromDecision(state: VerificationDecisionState | null | undefined): TrustState {
+  switch (state) {
+    case 'VERIFIED': return 'VERIFIED';
+    case 'PARTIAL': return 'PARTIALLY_VERIFIED';
+    case 'INVESTIGATE': return 'VERIFICATION_FAILED';
+    case 'AVOID': return 'VERIFICATION_FAILED';
+    case 'UNKNOWN': return 'EVIDENCE_INCOMPLETE';
+    default: return 'UNINITIALIZED';
+  }
 }
 
 export default function TrustStateBadge({ state, showDescription = false, className = '' }: { state: TrustState; showDescription?: boolean; className?: string }) {

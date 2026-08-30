@@ -140,3 +140,42 @@ describe('the API endpoint is authoritative and safely scoped', () => {
     }
   });
 });
+
+describe('display layer formats the authoritative decision without reinterpreting it', () => {
+  it('maps every evaluator state, and never upgrades one to a stronger state', async () => {
+    const { trustStateFromDecision } = await import('../src/components/trust/TrustStateBadge.tsx');
+    expect(trustStateFromDecision('VERIFIED')).toBe('VERIFIED');
+    expect(trustStateFromDecision('PARTIAL')).toBe('PARTIALLY_VERIFIED');
+    expect(trustStateFromDecision('UNKNOWN')).toBe('EVIDENCE_INCOMPLETE');
+    // Neither adverse state may present as a pass.
+    expect(trustStateFromDecision('INVESTIGATE')).not.toBe('VERIFIED');
+    expect(trustStateFromDecision('AVOID')).not.toBe('VERIFIED');
+    // Absent decision must not default to anything reassuring.
+    expect(trustStateFromDecision(null)).toBe('UNINITIALIZED');
+    expect(trustStateFromDecision(undefined)).toBe('UNINITIALIZED');
+  });
+
+  it('only VERIFIED from the evaluator can display as VERIFIED', async () => {
+    const { trustStateFromDecision } = await import('../src/components/trust/TrustStateBadge.tsx');
+    for (const state of ['PARTIAL', 'INVESTIGATE', 'AVOID', 'UNKNOWN'] as const) {
+      expect(trustStateFromDecision(state)).not.toBe('VERIFIED');
+    }
+  });
+
+  it('the legacy column mapping is documented as legacy and not authoritative', () => {
+    const source = read('src/components/trust/TrustStateBadge.tsx');
+    expect(source).toContain('LEGACY mapping');
+    expect(source).toContain('NOT the authoritative verification decision');
+    expect(source).toContain('trustStateFromDecision');
+  });
+
+  it('there is exactly one evaluator in the repository', () => {
+    const evaluator = read('src/lib/verification/evaluateVerification.ts');
+    expect(evaluator).toContain('export function evaluateVerification');
+    // No presentation layer may implement its own predicate.
+    for (const file of ['src/components/trust/TrustStateBadge.tsx', 'src/components/EvidenceDashboardView.tsx']) {
+      expect(read(file), file).not.toContain('minThirdPartySources');
+      expect(read(file), file).not.toContain('maxAgeDays');
+    }
+  });
+});
