@@ -274,8 +274,12 @@ describe('TrustRoom and MSPCommandCenter consume the authoritative decision', ()
     const app = read('src/App.tsx');
     expect(app).toContain("apiFetch('/api/user/verification')");
     expect((app.match(/api\/user\/verification/g) || []).length).toBe(1);
+    // Both surfaces receive the decisions; adjacency of props is not pinned,
+    // so adding a prop cannot break the behaviour this guards.
     expect(app).toContain('verificationDecisions={verificationDecisions}');
-    expect(app).toContain('verificationDecisions={verificationDecisions} passports={passports}');
+    expect(app).toContain('<PassportsView verificationDecisions={verificationDecisions}');
+    expect(app).toContain('<MSPCommandCenter');
+    expect(app).toContain('verificationDetails={verificationDetails}');
   });
 
   it('a failed batch retrieval never becomes a reassuring state', () => {

@@ -1,0 +1,134 @@
+/**
+ * SPR Command Center — presentation layer only.
+ *
+ * Contains no logic and no decision semantics. Every decision colour below is
+ * keyed to an authoritative evaluator state; the class is chosen by the
+ * component from a decision it was handed, never derived here.
+ *
+ * Palette note: the five states are deliberately differentiated by HUE AND
+ * SHAPE, not by a good/bad gradient. UNKNOWN is a considered slate-blue with
+ * the same bloom budget as VERIFIED - it reads as "deliberate", not "failed",
+ * because insufficient evidence is a legitimate conclusion, not a bad grade.
+ */
+
+:root {
+  --cc-void: #070b12;
+  --cc-deep: #0b111c;
+  --cc-panel: rgba(21, 28, 41, 0.62);
+  --cc-panel-raised: rgba(28, 37, 53, 0.72);
+  --cc-hairline: rgba(148, 172, 205, 0.14);
+  --cc-hairline-strong: rgba(148, 172, 205, 0.26);
+  --cc-ink: #e6edf6;
+  --cc-ink-muted: #9fb0c7;
+  --cc-ink-faint: #6b7d95;
+
+  /* Decision hues - meaning, not judgement. */
+  --cc-verified: #46d9a0;
+  --cc-partial: #e5a541;
+  --cc-investigate: #4aa8ff;
+  --cc-avoid: #ff6b6b;
+  --cc-unknown: #8fa3bf;
+}
+
+/* ---------------------------------------------------------------- canvas */
+
+.cc-canvas {
+  position: relative;
+  min-height: 100vh;
+  background:
+    radial-gradient(1200px 700px at 15% -10%, rgba(58, 108, 168, 0.16), transparent 60%),
+    radial-gradient(900px 600px at 95% 5%, rgba(70, 217, 160, 0.07), transparent 55%),
+    linear-gradient(180deg, var(--cc-deep) 0%, var(--cc-void) 100%);
+  background-attachment: fixed;
+}
+
+/* A quiet technical grid. Kept very low contrast so it creates depth without
+   competing with the decision. */
+.cc-canvas::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(148, 172, 205, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 172, 205, 0.045) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse 90% 60% at 50% 0%, #000 40%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 90% 60% at 50% 0%, #000 40%, transparent 100%);
+}
+
+/* ----------------------------------------------------------------- glass */
+
+.cc-glass {
+  position: relative;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-hairline);
+  border-radius: 14px;
+  backdrop-filter: blur(18px) saturate(120%);
+  -webkit-backdrop-filter: blur(18px) saturate(120%);
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.04) inset,
+    0 18px 40px -24px rgba(0, 0, 0, 0.9);
+}
+
+.cc-glass-raised { background: var(--cc-panel-raised); border-color: var(--cc-hairline-strong); }
+
+.cc-glass-interactive { transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease; }
+.cc-glass-interactive:hover {
+  transform: translateY(-2px);
+  border-color: var(--cc-hairline-strong);
+  box-shadow: 0 1px 0 0 rgba(255,255,255,.06) inset, 0 26px 50px -26px rgba(0,0,0,.95);
+}
+
+/* ------------------------------------------------------------ typography */
+
+.cc-eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--cc-ink-faint);
+}
+.cc-display { font-size: clamp(2.25rem, 5vw, 3.75rem); line-height: 1.02; letter-spacing: -.03em; font-weight: 600; color: var(--cc-ink); }
+.cc-numeric { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+.cc-mono { font-family: var(--spr-mono); }
+
+/* --------------------------------------------------------- decision bloom */
+
+.cc-decision {
+  --glow: var(--cc-unknown);
+  position: relative;
+  border: 1px solid color-mix(in srgb, var(--glow) 42%, transparent);
+  background: color-mix(in srgb, var(--glow) 10%, transparent);
+  color: var(--glow);
+  border-radius: 12px;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--glow) 16%, transparent),
+    0 0 28px -6px color-mix(in srgb, var(--glow) 45%, transparent);
+}
+
+.cc-decision-VERIFIED    { --glow: var(--cc-verified); }
+.cc-decision-PARTIAL     { --glow: var(--cc-partial); }
+.cc-decision-INVESTIGATE { --glow: var(--cc-investigate); }
+.cc-decision-AVOID       { --glow: var(--cc-avoid); }
+.cc-decision-UNKNOWN     { --glow: var(--cc-unknown); }
+
+/* The hero carries a slightly wider bloom, still bounded so text stays legible. */
+.cc-decision-hero {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--glow) 20%, transparent),
+    0 0 70px -14px color-mix(in srgb, var(--glow) 55%, transparent);
+}
+
+/* Motion is opt-in and never carries meaning on its own. */
+@media (prefers-reduced-motion: no-preference) {
+  .cc-enter { animation: cc-rise .42s cubic-bezier(.2,.7,.3,1) both; }
+  @keyframes cc-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+}
+
+/* Focus must remain visible against the darker canvas. */
+.cc-canvas :is(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--cc-investigate);
+  outline-offset: 2px;
+  border-radius: 6px;
+}

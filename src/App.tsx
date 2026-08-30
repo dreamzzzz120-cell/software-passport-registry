@@ -47,6 +47,7 @@ import PrivacyPolicyView from './components/legal/PrivacyPolicyView';
 import ReportsView from './components/ReportsView';
 import TrustGraphView from './components/TrustGraphView';
 import type { VerificationDecisionState } from './components/trust/TrustStateBadge';
+import type { VerificationDecisionDetail } from './components/design/CommandCenter';
 import { EXTENSIONS } from './workflows/extensionRegistry';
 
 const PUBLIC_PATHS = new Set(['/','/login','/free-review','/pricing','/msp','/terms','/privacy']);
@@ -144,6 +145,9 @@ export default function App() {
   // legacy verification_status column, and no surface issues a per-passport
   // verification request.
   const [verificationDecisions, setVerificationDecisions] = useState<Record<string, VerificationDecisionState>>({});
+  // Full authoritative decision objects, keyed by passport id, so presentation
+  // surfaces can render the explanation, reason codes and counts verbatim.
+  const [verificationDetails, setVerificationDetails] = useState<Record<string, VerificationDecisionDetail>>({});
 
   useEffect(() => {
     let mounted = true;
@@ -232,9 +236,12 @@ export default function App() {
             const map: Record<string, VerificationDecisionState> = {};
             for (const entry of data.decisions) { if (entry?.passportId && entry?.decision?.state) map[String(entry.passportId)] = entry.decision.state; }
             setVerificationDecisions(map);
+            const details: Record<string, VerificationDecisionDetail> = {};
+            for (const entry of data.decisions) { if (entry?.passportId) details[String(entry.passportId)] = entry; }
+            setVerificationDetails(details);
           }
         }
-      } catch { if (!cancelled) setVerificationDecisions({}); }
+      } catch { if (!cancelled) { setVerificationDecisions({}); setVerificationDetails({}); } }
     };
     void load().catch((error) => console.warn('[SPR command center load]', error));
     return () => { cancelled = true; };
@@ -308,7 +315,7 @@ export default function App() {
     case '/coverage': view = <CoverageView clients={clients} scans={scans} passports={passports} onNavigateTab={onNavigateTab} />; break;
     case '/evidence-explorer': view = <EvidenceExplorerView passports={passports} />; break;
     case '/assets': view = <AssetsView clients={clients} searchQuery="" assets={assets} />; break;
-    case '/passports': case '/registry': view = <PassportsView verificationDecisions={verificationDecisions} passports={passports} selectedPassportId={selectedPassportId} setSelectedPassportId={setSelectedPassportId} searchQuery="" clients={clients} assets={assets} role={role} onNavigateTab={onNavigateTab} onUpdatePassport={(passport) => setPassports((current) => current.map((item) => item.id === passport.id ? passport : item))} />; break;
+    case '/passports': case '/registry': view = <PassportsView verificationDecisions={verificationDecisions} verificationDetails={verificationDetails} passports={passports} selectedPassportId={selectedPassportId} setSelectedPassportId={setSelectedPassportId} searchQuery="" clients={clients} assets={assets} role={role} onNavigateTab={onNavigateTab} onUpdatePassport={(passport) => setPassports((current) => current.map((item) => item.id === passport.id ? passport : item))} />; break;
     case '/scans': view = <ScansView scans={scans} clients={clients} assets={assets} passports={passports} role={role} onTriggerNewScan={(scan) => setScans((current) => [scan, ...current.filter((item) => item.id !== scan.id)].slice(0, 100))} />; break;
     case '/alerts': view = <AlertsView alerts={alerts} onAlertAction={performAlertAction} role={role} />; break;
     case '/reports': view = <ReportsView clients={clients} passports={passports} scans={scans} alerts={alerts} findings={findings} role={role} />; break;

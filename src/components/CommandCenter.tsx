@@ -114,8 +114,10 @@ export default function CommandCenter({ children, path, userEmail, role, onNavig
   const currentItem = [...CORE, ...GOVERNANCE, ...executiveItems, ...SYSTEM].find((item) => active(item.path));
   const currentLabel = extensionActive ? 'Extension workflow' : currentItem?.label || 'Trust workspace';
 
+  // Command-center canvas: deep-space ground, quiet technical grid and ambient
+  // lighting. Purely atmospheric - it carries no state or meaning.
   return (
-    <div className="min-h-screen bg-[#1e1e1e] text-[#d4d4d4]">
+    <div className="cc-canvas min-h-screen text-[#d4d4d4]">
       <div className="flex min-h-screen">
         <aside className="spr-nav hidden h-screen w-[240px] shrink-0 overflow-y-auto p-2.5 lg:sticky lg:top-0 lg:flex lg:flex-col">
           <button

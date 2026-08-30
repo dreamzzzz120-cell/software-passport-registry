@@ -8,6 +8,7 @@ import { AlertTriangle, ArrowRight, CheckCircle2, ExternalLink, FileSearch, Load
 import { apiFetch } from '../../utils/apiClient';
 import TrustField from './TrustField';
 import TrustStateBadge, { trustStateFromDecision, type VerificationDecisionState } from './TrustStateBadge';
+import { DecisionHero } from '../design/CommandCenter';
 import type { Client, SoftwarePassport } from '../../types';
 
 interface Props {
@@ -28,6 +29,12 @@ interface Props {
    * renders UNINITIALIZED - never a fallback to the legacy column.
    */
   verificationDecision?: VerificationDecisionState;
+  /** Authoritative explanation, rendered verbatim. */
+  verificationExplanation?: string;
+  verificationPolicyVersion?: string;
+  verificationReasonCodes?: string[];
+  verificationTargetIdentity?: string | null;
+  verificationCounts?: { observations?: number; uniqueEvidence?: number; independentSources?: number };
 }
 
 // This predicate must stay identical to the one in SoftwareLineageTracker.tsx
@@ -47,7 +54,7 @@ function formatTimestamp(value?: string | null) {
   return Number.isNaN(parsed) ? value : new Date(parsed).toLocaleString();
 }
 
-export default function TrustRoom({ passport, client, canRunAudit, auditBusy, onRunAudit, canCreateRemediation, remediationBusy, onCreateRemediation, onNavigateTab, onViewLineage, canSharePassport, verificationDecision }: Props) {
+export default function TrustRoom({ passport, client, canRunAudit, auditBusy, onRunAudit, canCreateRemediation, remediationBusy, onCreateRemediation, onNavigateTab, onViewLineage, canSharePassport, verificationDecision, verificationExplanation, verificationPolicyVersion, verificationReasonCodes, verificationTargetIdentity, verificationCounts }: Props) {
   const [shareBusy, setShareBusy] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
@@ -120,8 +127,9 @@ export default function TrustRoom({ passport, client, canRunAudit, auditBusy, on
         <span aria-hidden="true">/</span><span className="text-[#9d9d9d]">{passport.name}</span>
       </nav>
 
+      {/* 01 - Identity */}
       <header>
-        <div className="text-[10px] font-bold uppercase tracking-[.18em] text-[#3794ff]">Software Passport</div>
+        <div className="cc-eyebrow">01 · Software identity</div>
         <h1 className="mt-1 text-2xl font-bold text-[#d4d4d4]">{passport.name}</h1>
         <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs text-[#9d9d9d] sm:grid-cols-4">
           <div><dt className="text-[10px] uppercase tracking-wide text-[#6f6f6f]">Publisher</dt><dd className="text-[#d4d4d4]">{passport.publisher || 'Not observed'}</dd></div>
@@ -130,6 +138,20 @@ export default function TrustRoom({ passport, client, canRunAudit, auditBusy, on
           <div><dt className="text-[10px] uppercase tracking-wide text-[#6f6f6f]">Last observed</dt><dd className="text-[#d4d4d4]">{lastObserved || 'Not yet observed'}</dd></div>
         </dl>
       </header>
+
+      {/* 02 - Decision Hero. Every value below is passed straight through from
+          the authoritative decision supplied by App's batch retrieval; this
+          component computes nothing and never re-words the explanation. */}
+      <DecisionHero
+        state={verificationDecision}
+        explanation={verificationExplanation}
+        policyVersion={verificationPolicyVersion}
+        reasonCodes={verificationReasonCodes}
+        observationCount={verificationCounts?.observations}
+        evidenceReferenceCount={verificationCounts?.uniqueEvidence}
+        independentSourceCount={verificationCounts?.independentSources}
+        targetIdentity={verificationTargetIdentity}
+      />
 
       {zeroData ? (
         <section className="rounded-md border border-dashed border-[#3c3c3c] bg-[#181818] py-16 text-center">

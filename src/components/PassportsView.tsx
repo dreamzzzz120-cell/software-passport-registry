@@ -5,6 +5,7 @@ import SoftwareLineageTracker from './SoftwareLineageTracker';
 import SoftwareSectorsPanel from './SoftwareSectorsPanel';
 import TrustRoom from './trust/TrustRoom';
 import type { VerificationDecisionState } from './trust/TrustStateBadge';
+import type { VerificationDecisionDetail } from './design/CommandCenter';
 import type { Client, SoftwarePassport, VerificationStatus } from '../types';
 
 // A score is never shown without its verification state -- unverified means
@@ -22,6 +23,8 @@ interface PassportsViewProps {
   selectedPassportId: string | null;
   /** Authoritative decisions by passport id, from App's batch retrieval. */
   verificationDecisions?: Record<string, VerificationDecisionState>;
+  /** Full authoritative decision objects, keyed by passport id. */
+  verificationDetails?: Record<string, VerificationDecisionDetail>;
   setSelectedPassportId: (id: string | null) => void;
   searchQuery: string;
   onUpdatePassport?: (updatedPassport: SoftwarePassport) => void;
@@ -31,7 +34,7 @@ interface PassportsViewProps {
   role?: string;
 }
 
-export default function PassportsView({ passports, selectedPassportId, setSelectedPassportId, searchQuery, onNavigateTab, onUpdatePassport, clients = [], assets = [], role = 'Viewer', verificationDecisions }: PassportsViewProps) {
+export default function PassportsView({ passports, selectedPassportId, setSelectedPassportId, searchQuery, onNavigateTab, onUpdatePassport, clients = [], assets = [], role = 'Viewer', verificationDecisions, verificationDetails }: PassportsViewProps) {
   // Matches backend gating exactly: POST /api/agent-jobs requires
   // Owner/Admin/Operator (scans.ts); POST /api/trust-loop/remediations
   // additionally allows Technician (server.ts requireTrustMutationRole).
@@ -120,6 +123,11 @@ export default function PassportsView({ passports, selectedPassportId, setSelect
           <TrustRoom
             passport={selected}
             verificationDecision={verificationDecisions?.[selected.id]}
+            verificationExplanation={verificationDetails?.[selected.id]?.decision?.explanation}
+            verificationPolicyVersion={verificationDetails?.[selected.id]?.decision?.policyVersion}
+            verificationReasonCodes={verificationDetails?.[selected.id]?.decision?.reasonCodes}
+            verificationTargetIdentity={verificationDetails?.[selected.id]?.decision?.targetIdentity}
+            verificationCounts={verificationDetails?.[selected.id]?.counts}
             client={clients.find((c) => (c.softwareInventory || []).some((item) => item.passportId === selected.id))}
             canRunAudit={canRunAudit}
             auditBusy={auditBusy}
