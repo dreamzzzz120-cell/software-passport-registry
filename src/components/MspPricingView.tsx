@@ -12,69 +12,68 @@ interface Props {
   onPrimaryAction: () => void;
 }
 
-// Prices and client limits shown here must always match PLAN_CONFIG in
-// src/routes/billing.ts (the single source of truth the server actually
-// enforces) -- this page is display copy, not a second definition of the
-// plans. Checkout runs through the existing BillingView/Stripe flow.
+// Public MSP pricing mirrors the server-side PLAN_CONFIG values. Checkout is
+// still performed by Stripe inside the authenticated SPR Billing surface.
 const TIERS: { name: string; tagline: string; priceLabel: string; features: string[]; highlight?: boolean }[] = [
   {
     name: 'Pilot',
-    tagline: 'Evaluate SPR before committing',
-    priceLabel: 'Negotiated ($0–$500 one-time)',
+    tagline: 'White-label MSP pilot',
+    priceLabel: '$500/month',
     features: [
-      'Up to 2 clients',
-      'Limited Passport creation and reporting',
-      'Full evidence-first trust scoring on what you onboard',
-      'For a bounded evaluation window',
+      'Up to 2 client environments',
+      'White-label MSP workflow',
+      'Software Passports and evidence',
+      'Reports and monitoring',
+      'Bounded pilot program',
     ],
   },
   {
     name: 'Starter',
-    tagline: 'Small MSP, first few clients',
+    tagline: 'Small MSP, first client book',
     priceLabel: '$499/month',
     features: [
       'Up to 10 client environments',
-      'Software passport registry per client',
-      'SBOM + OSV vulnerability scanning',
-      'Evidence-backed trust scoring',
-      'Client-ready PDF reports',
-    ],
-  },
-  {
-    name: 'Professional',
-    tagline: 'MSP with an established client book',
-    priceLabel: '$1,499/month',
-    highlight: true,
-    features: [
-      'Up to 50 client environments',
-      'Everything in Starter',
-      'Technician assignment & remediation workflow',
-      'Governance, risk, and privacy management',
-      'Cross-client risk rollup (Command Center)',
+      'Software Passport registry',
+      'SBOM + vulnerability evidence',
+      'Evidence-backed trust state',
+      'Client-ready reports',
     ],
   },
   {
     name: 'Growth',
-    tagline: 'Growing MSP scaling client operations',
-    priceLabel: '$2,999/month',
+    tagline: 'MSP scaling its client operations',
+    priceLabel: '$1,000/month',
+    highlight: true,
+    features: [
+      'Up to 50 client environments',
+      'Everything in Starter',
+      'Remediation workflow',
+      'Governance, risk, and privacy management',
+      'Cross-client risk rollup',
+    ],
+  },
+  {
+    name: 'Scale',
+    tagline: 'Larger MSP portfolio',
+    priceLabel: '$2,500/month',
     features: [
       'Up to 150 client environments',
-      'Everything in Professional',
-      'White-label branding on reports',
+      'Everything in Growth',
+      'White-label reporting',
       'GitHub repository scanning',
-      'MSP time & tool savings / ROI reporting',
+      'MSP time and ROI reporting',
     ],
   },
   {
     name: 'Enterprise',
-    tagline: 'Larger MSP, multiple teams, custom terms',
-    priceLabel: '$5,000+/month (custom)',
+    tagline: 'Custom contracts and larger teams',
+    priceLabel: '$5,000+/month',
     features: [
-      'Unlimited client environments',
-      'Everything in Growth',
-      'Custom limits and contract terms',
+      'Custom client limits',
+      'Everything in Scale',
+      'Custom contract terms',
       'Role-based team management',
-      'Audit log & compliance evidence exports',
+      'Audit and compliance exports',
       'Priority support',
     ],
   },
@@ -85,10 +84,9 @@ export default function MspPricingView({ isAuthenticated, onPrimaryAction }: Pro
     <div className="mx-auto max-w-6xl px-6 py-16 text-[#d4d4d4]">
       <div className="text-center">
         <div className="text-[10px] font-semibold uppercase tracking-[.15em] text-[#3794ff]">Software Passport Registry for MSPs</div>
-        <h1 className="mt-3 text-3xl font-bold tracking-tight md:text-4xl">Pricing built around clients and software, not seats</h1>
+        <h1 className="mt-3 text-3xl font-bold tracking-tight md:text-4xl">Pay for the software trust work you use</h1>
         <p className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-[#9d9d9d]">
-          Packaging shown below reflects how SPR is priced for MSPs. Checkout and invoicing run through your SPR workspace —
-          this page does not itself charge a card.
+          SPR charges for verification, evidence, reports, monitoring, API access, and MSP operations. No hidden free tier for paid work.
         </p>
       </div>
 
@@ -107,7 +105,7 @@ export default function MspPricingView({ isAuthenticated, onPrimaryAction }: Pro
               ))}
             </ul>
             <button onClick={onPrimaryAction} className="spr-btn spr-btn-primary mt-6 w-full">
-              {isAuthenticated ? 'Manage billing' : 'Enter SPR'}
+              {isAuthenticated ? 'Open billing' : 'Enter SPR'}
             </button>
           </div>
         ))}
@@ -116,10 +114,7 @@ export default function MspPricingView({ isAuthenticated, onPrimaryAction }: Pro
       <div className="mx-auto mt-10 flex max-w-2xl items-start gap-3 rounded-md border border-[#3c3c3c] bg-[#181818] p-4 text-xs leading-5 text-[#9d9d9d]">
         <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#3794ff]" />
         <p>
-          Actual checkout runs through Stripe inside your authenticated workspace (Billing). Client-environment limits shown
-          above are enforced by the application once a plan is active; other listed features reflect current SPR
-          functionality, not a separate per-feature metering system. Enterprise pricing and limits are set by contract, not
-          automated checkout.
+          Actual checkout runs through Stripe inside SPR Billing. One-time verification products and recurring add-ons are also available there. Enterprise pricing and limits are contractual rather than automated checkout.
         </p>
       </div>
 
