@@ -31,12 +31,37 @@ export default function EvidenceDashboardView({ clients, alerts, scans, passport
   // Every figure below is computed directly from already-loaded tenant records —
   // no score is inferred and no metric is shown without a real, checkable source.
   const portfolio = useMemo(() => {
-    const verifiedPassports = passports.filter((p) => hasArrayValue(p.evidence) && p.evidence.every((e: any) => e.status === 'VERIFIED')).length;
+    // Reported as evidence actually carrying a VERIFIED status, not as a
+    // count of "verified passports".
+    //
+    // The previous metric was passports.every(e => e.status === 'VERIFIED'),
+    // which is structurally unreachable: the scan pipeline only ever writes
+    // OBSERVED or UNKNOWN, and no code path anywhere sets evidence status to
+    // VERIFIED. That counter could only ever read 0, and because it used
+    // .every() a single OBSERVED item would pin it to 0 permanently. A metric
+    // that cannot move is worse than no metric - it reads as a security
+    // failure when it actually reports that verification is not implemented.
+    //
+    // Counting the underlying evidence is true, moves if a verification path
+    // is ever built, and states plainly that nothing is independently
+    // verified today.
+    const totalEvidenceItems = passports.reduce((total, p) => total + (hasArrayValue(p.evidence) ? p.evidence.length : 0), 0);
+    const verifiedEvidenceItems = passports.reduce(
+      (total, p) => total + (hasArrayValue(p.evidence) ? p.evidence.filter((e: any) => e.status === 'VERIFIED').length : 0),
+      0,
+    );
     const openVulnerabilities = passports.reduce((total, p) => total + (p.vulnerabilities || []).filter((v: any) => v.status === 'Open').length, 0);
     const criticalFindings = (findings as any[]).filter((f) => String(f?.severity || '').toLowerCase() === 'critical' && !['resolved', 'closed', 'verified'].includes(String(f?.status || '').toLowerCase())).length;
     const evidenceBearing = passports.filter((p) => hasArrayValue(p.evidence) || hasArrayValue((p as any).sbom) || hasArrayValue(p.timeline)).length;
-    const complianceAverage = clients.length === 0 ? null : Math.round(clients.reduce((total, c: any) => total + (Number(c.complianceProgress) || 0), 0) / clients.length);
-    return { verifiedPassports, openVulnerabilities, criticalFindings, evidenceBearing, totalPassports: passports.length, complianceAverage };
+    // clients.compliance_progress defaults to 0 and is never computed from
+    // evidence anywhere in the product, so a 0 means "not assessed", not
+    // "assessed and failing". Distinguish the two rather than rendering an
+    // unassessed workspace as 0%.
+    const anyComplianceAssessed = clients.some((c: any) => Number(c.complianceProgress) > 0);
+    const complianceAverage = clients.length === 0 || !anyComplianceAssessed
+      ? null
+      : Math.round(clients.reduce((total, c: any) => total + (Number(c.complianceProgress) || 0), 0) / clients.length);
+    return { totalEvidenceItems, verifiedEvidenceItems, openVulnerabilities, criticalFindings, evidenceBearing, totalPassports: passports.length, complianceAverage, hasClients: clients.length > 0 };
   }, [passports, findings, clients]);
   const results = useMemo(() => { const q = query.trim().toLowerCase(); if (!q) return []; return passports.filter((p: any) => `${p.name} ${p.version} ${p.publisher}`.toLowerCase().includes(q)).slice(0, 6); }, [passports, query]);
   useEffect(() => { const h = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setCommandOpen(true); } if (e.key === 'Escape') { setCommandOpen(false); setTourOpen(false); } }; window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h); }, []);
@@ -73,7 +98,7 @@ export default function EvidenceDashboardView({ clients, alerts, scans, passport
     <section className="spr-panel p-6">
       <div className="flex items-center justify-between"><div className="text-xs font-semibold text-[#d4d4d4]">Portfolio health</div><div className="text-[11px] text-[#6f6f6f]">Computed from loaded passport, finding, and client records</div></div>
       <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <HealthTile icon={FileCheck2} label="Verified passports" value={`${portfolio.verifiedPassports} / ${passports.length}`} onClick={() => onNavigateTab('/passports')} accent="text-[#89d185]" />
+        <HealthTile icon={FileCheck2} label="Independently verified evidence" value={`${portfolio.verifiedEvidenceItems} of ${portfolio.totalEvidenceItems}`} onClick={() => onNavigateTab('/passports')} accent="text-[#89d185]" />
         {/* Reported as a fraction, not a percentage. This counts passports
             carrying ANY evidence at all - it says nothing about whether that
             evidence is complete. Rendered as "100%" next to a passport marked
@@ -83,7 +108,7 @@ export default function EvidenceDashboardView({ clients, alerts, scans, passport
         <HealthTile icon={Database} label="Passports carrying evidence" value={`${portfolio.evidenceBearing} of ${portfolio.totalPassports}`} onClick={() => onNavigateTab('/coverage')} accent="text-[#3794ff]" />
         <HealthTile icon={AlertOctagon} label="Critical findings" value={String(portfolio.criticalFindings)} onClick={() => onNavigateTab('/security')} accent={portfolio.criticalFindings > 0 ? 'text-[#f14c4c]' : 'text-[#d4d4d4]'} />
         <HealthTile icon={Bug} label="Open vulnerabilities" value={String(portfolio.openVulnerabilities)} onClick={() => onNavigateTab('/passports')} accent={portfolio.openVulnerabilities > 0 ? 'text-[#cca700]' : 'text-[#d4d4d4]'} />
-        <HealthTile icon={Scale} label="Compliance posture" value={portfolio.complianceAverage === null ? 'No clients' : `${portfolio.complianceAverage}%`} onClick={() => onNavigateTab('/compliance')} accent="text-[#3794ff]" />
+        <HealthTile icon={Scale} label="Compliance posture" value={portfolio.complianceAverage === null ? (portfolio.hasClients ? 'Not assessed' : 'No clients') : `${portfolio.complianceAverage}%`} onClick={() => onNavigateTab('/compliance')} accent="text-[#3794ff]" />
       </div>
     </section>
 
