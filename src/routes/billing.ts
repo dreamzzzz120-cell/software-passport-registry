@@ -12,40 +12,59 @@ import { config } from '../config.ts';
 import { db } from '../db/index.ts';
 import { appendAuditEntry } from '../security/audit-log.ts';
 
-// The centralized, configuration-driven plan model. SPR never invents a
-// dollar amount or creates Stripe Products/Prices on its own -- each plan
-// is only checkout-able once its real Price ID (created in the Stripe
-// Dashboard) is set as the matching env var (config.stripe.prices). Limits
-// here are the single source of truth for entitlement enforcement -- no
-// component should hard-code a plan's limit separately from this table.
+// Subscription plans are mapped only to real Stripe Price IDs supplied by
+// deployment configuration. SPR never invents prices or creates Stripe
+// Products/Prices at runtime.
 export const PLAN_CONFIG = {
-  pilot: { label: 'Pilot', priceLabel: 'Negotiated ($0–$500 one-time)', clientLimit: 2 },
-  starter: { label: 'Starter', priceLabel: '$499/month', clientLimit: 10 },
-  professional: { label: 'Professional', priceLabel: '$1,499/month', clientLimit: 50 },
-  growth: { label: 'Growth', priceLabel: '$2,999/month', clientLimit: 150 },
-  enterprise: { label: 'Enterprise', priceLabel: '$5,000+/month (custom)', clientLimit: null as number | null },
+  pilot: { label: 'MSP White-Label Pilot', priceLabel: '$500/month', clientLimit: 2, priceKey: 'mspPilot' as const },
+  starter: { label: 'MSP Starter', priceLabel: '$499/month', clientLimit: 10, priceKey: 'starter' as const },
+  professional: { label: 'MSP Growth', priceLabel: '$1,000/month', clientLimit: 50, priceKey: 'mspGrowth' as const },
+  growth: { label: 'MSP Scale', priceLabel: '$2,500/month', clientLimit: 150, priceKey: 'mspScale' as const },
+  enterprise: { label: 'Enterprise', priceLabel: '$5,000+/month (custom)', clientLimit: null as number | null, priceKey: 'enterprise' as const },
 } as const;
 export type PlanId = keyof typeof PLAN_CONFIG;
 const PLAN_IDS = Object.keys(PLAN_CONFIG) as PlanId[];
-// Flat lookup derived from PLAN_CONFIG (never maintained separately) for the
-// call sites below that only need a plan's client limit.
+
+export const ONE_TIME_CONFIG = {
+  softwarePassport: { label: 'Software Passport', priceLabel: '$49', priceKey: 'softwarePassport' as const },
+  evidenceReport: { label: 'Evidence Report', priceLabel: '$99', priceKey: 'evidenceReport' as const },
+  securityAssessment: { label: 'Security Assessment', priceLabel: '$199', priceKey: 'securityAssessment' as const },
+  verifiedSystemReport: { label: 'Verified System Report', priceLabel: '$499', priceKey: 'verifiedSystemReport' as const },
+  dueDiligenceReport: { label: 'Software Due-Diligence Report', priceLabel: '$799', priceKey: 'dueDiligenceReport' as const },
+  vendorRiskAssessment: { label: 'Vendor Risk Assessment', priceLabel: '$999', priceKey: 'vendorRiskAssessment' as const },
+  sbomAnalysis: { label: 'SBOM Analysis', priceLabel: '$199', priceKey: 'sbomAnalysis' as const },
+  portfolioAssessment: { label: 'Portfolio Assessment', priceLabel: '$1,499', priceKey: 'portfolioAssessment' as const },
+  auditEvidencePackage: { label: 'Audit Evidence Package', priceLabel: '$999', priceKey: 'auditEvidencePackage' as const },
+  customAssessment: { label: 'Custom Assessment', priceLabel: '$1,500', priceKey: 'customAssessment' as const },
+} as const;
+export type OneTimeProductId = keyof typeof ONE_TIME_CONFIG;
+const ONE_TIME_IDS = Object.keys(ONE_TIME_CONFIG) as OneTimeProductId[];
+
+export const ADDON_CONFIG = {
+  continuousVerification: { label: 'Continuous Verification', priceLabel: '$149/month', priceKey: 'continuousVerification' as const },
+  trustBadge: { label: 'Trust Badge', priceLabel: '$49/month', priceKey: 'trustBadge' as const },
+  publicPassport: { label: 'Public Software Passport', priceLabel: '$49/month', priceKey: 'publicPassport' as const },
+  api: { label: 'SPR API', priceLabel: '$199/month', priceKey: 'api' as const },
+} as const;
+export type AddonId = keyof typeof ADDON_CONFIG;
+const ADDON_IDS = Object.keys(ADDON_CONFIG) as AddonId[];
+
 export const PLAN_CLIENT_LIMITS: Record<PlanId, number | null> = Object.fromEntries(
   PLAN_IDS.map((id) => [id, PLAN_CONFIG[id].clientLimit]),
 ) as Record<PlanId, number | null>;
 
 function planPriceId(plan: PlanId): string | undefined {
-  return config.stripe.prices[plan];
+  return config.stripe.prices[PLAN_CONFIG[plan].priceKey as keyof typeof config.stripe.prices];
 }
 
-/**
- * Centralized entitlement read: a tenant with no subscription row, or a
- * plan with a null limit (Enterprise), is unrestricted. A tenant with a
- * real recorded plan is limited exactly to that plan's configured value.
- * See docs/billing-paywall-inventory.md for why an absent subscription
- * means "unrestricted" rather than "no plan" -- retroactively restricting
- * every tenant that predates this system (including the real production
- * tenant) would silently break existing access no one ever agreed to lose.
- */
+function oneTimePriceId(product: OneTimeProductId): string | undefined {
+  return config.stripe.prices[ONE_TIME_CONFIG[product].priceKey as keyof typeof config.stripe.prices];
+}
+
+function addonPriceId(addon: AddonId): string | undefined {
+  return config.stripe.prices[ADDON_CONFIG[addon].priceKey as keyof typeof config.stripe.prices];
+}
+
 export async function getPlanLimits(tenantId: string, scopedDb: { execute: (query: any) => Promise<any> }): Promise<{ plan: PlanId | null; clientLimit: number | null }> {
   const subResult = await scopedDb.execute(sql`SELECT plan, client_limit AS "clientLimit" FROM tenant_subscriptions WHERE tenant_id = ${tenantId} LIMIT 1`);
   const row = (subResult as any).rows?.[0];
@@ -58,6 +77,8 @@ function stripeClient(): Stripe {
 }
 
 const checkoutSchema = z.object({ plan: z.enum(PLAN_IDS as [PlanId, ...PlanId[]]) }).strict();
+const oneTimeCheckoutSchema = z.object({ product: z.enum(ONE_TIME_IDS as [OneTimeProductId, ...OneTimeProductId[]]) }).strict();
+const addonCheckoutSchema = z.object({ addon: z.enum(ADDON_IDS as [AddonId, ...AddonId[]]) }).strict();
 
 export function createBillingRouter() {
   const router = Router();
@@ -75,6 +96,10 @@ export function createBillingRouter() {
         billingConfigured: Boolean(config.stripe.secretKey),
         plans: PLAN_IDS.map((id) => ({ id, ...PLAN_CONFIG[id], checkoutAvailable: Boolean(planPriceId(id)) })),
         availablePlans: PLAN_IDS.filter((plan) => Boolean(planPriceId(plan))),
+        products: ONE_TIME_IDS.map((id) => ({ id, ...ONE_TIME_CONFIG[id], checkoutAvailable: Boolean(oneTimePriceId(id)) })),
+        availableProducts: ONE_TIME_IDS.filter((id) => Boolean(oneTimePriceId(id))),
+        addons: ADDON_IDS.map((id) => ({ id, ...ADDON_CONFIG[id], checkoutAvailable: Boolean(addonPriceId(id)) })),
+        availableAddons: ADDON_IDS.filter((id) => Boolean(addonPriceId(id))),
         subscription: (subResult as any).rows?.[0] ?? null,
         clientCount: (clientCountResult as any).rows?.[0]?.count ?? 0,
       });
@@ -118,6 +143,55 @@ export function createBillingRouter() {
     } catch (error) { return next(error); }
   });
 
+  router.post('/one-time-checkout', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+    try {
+      if (!config.stripe.secretKey) return res.status(503).json({ error: 'BILLING_NOT_CONFIGURED' });
+      const parsed = oneTimeCheckoutSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+      const priceId = oneTimePriceId(parsed.data.product);
+      if (!priceId) return res.status(503).json({ error: 'This product is not yet available for checkout.' });
+      const tenantId = req.user!.tenantId;
+      const stripe = stripeClient();
+      const session = await stripe.checkout.sessions.create({
+        mode: 'payment',
+        customer_email: req.user!.email,
+        line_items: [{ price: priceId, quantity: 1 }],
+        success_url: `${config.appUrl}/billing?purchase=success&product=${encodeURIComponent(parsed.data.product)}`,
+        cancel_url: `${config.appUrl}/billing?purchase=cancelled`,
+        client_reference_id: tenantId,
+        metadata: { tenantId, product: parsed.data.product },
+      });
+      if (!session.url) throw new Error('STRIPE_CHECKOUT_SESSION_MISSING_URL');
+      await appendAuditEntry(req.db!, { tenantId, action: 'billing.purchase.initiated', actor: req.user!.uid, payload: { product: parsed.data.product, checkoutSessionId: session.id } });
+      return res.json({ url: session.url });
+    } catch (error) { return next(error); }
+  });
+
+  router.post('/addon-checkout', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+    try {
+      if (!config.stripe.secretKey) return res.status(503).json({ error: 'BILLING_NOT_CONFIGURED' });
+      const parsed = addonCheckoutSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+      const priceId = addonPriceId(parsed.data.addon);
+      if (!priceId) return res.status(503).json({ error: 'This add-on is not yet available for checkout.' });
+      const tenantId = req.user!.tenantId;
+      const stripe = stripeClient();
+      const session = await stripe.checkout.sessions.create({
+        mode: 'subscription',
+        customer_email: req.user!.email,
+        line_items: [{ price: priceId, quantity: 1 }],
+        success_url: `${config.appUrl}/billing?addon=success&addon=${encodeURIComponent(parsed.data.addon)}`,
+        cancel_url: `${config.appUrl}/billing?addon=cancelled`,
+        client_reference_id: tenantId,
+        subscription_data: { metadata: { tenantId, addon: parsed.data.addon } },
+        metadata: { tenantId, addon: parsed.data.addon },
+      });
+      if (!session.url) throw new Error('STRIPE_CHECKOUT_SESSION_MISSING_URL');
+      await appendAuditEntry(req.db!, { tenantId, action: 'billing.addon.initiated', actor: req.user!.uid, payload: { addon: parsed.data.addon, checkoutSessionId: session.id } });
+      return res.json({ url: session.url });
+    } catch (error) { return next(error); }
+  });
+
   router.post('/portal', requireAuth, requireRole(['Owner', 'Admin']), async (req: AuthenticatedRequest, res, next) => {
     try {
       if (!config.stripe.secretKey) return res.status(503).json({ error: 'BILLING_NOT_CONFIGURED' });
@@ -133,13 +207,6 @@ export function createBillingRouter() {
   return router;
 }
 
-// Mounted directly on `app` with express.raw() BEFORE the global
-// express.json() middleware -- Stripe's signature verification needs the
-// exact raw request bytes; parsing it as JSON first makes constructEvent's
-// signature check always fail. No per-request tenant context exists for a
-// server-to-server callback, so this uses the owner `db` connection
-// directly (bypasses RLS) and scopes every write explicitly by tenant_id or
-// stripe_subscription_id itself, the same pattern resolveAgentPassport uses.
 export async function stripeWebhookHandler(req: Request, res: Response) {
   if (!config.stripe.webhookSecret || !config.stripe.secretKey) return res.status(503).json({ error: 'BILLING_NOT_CONFIGURED' });
   const signature = req.headers['stripe-signature'];
@@ -167,15 +234,17 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
         const session = event.data.object as Stripe.Checkout.Session;
         const tenantId = session.client_reference_id || session.metadata?.tenantId;
         const plan = session.metadata?.plan as PlanId | undefined;
-        if (tenantId && session.subscription) {
-          const clientLimit = plan ? PLAN_CLIENT_LIMITS[plan] ?? null : null;
+        if (tenantId && session.subscription && plan && PLAN_CONFIG[plan]) {
+          const clientLimit = PLAN_CLIENT_LIMITS[plan];
           await db.execute(sql`
             UPDATE tenant_subscriptions
-            SET stripe_subscription_id = ${String(session.subscription)}, plan = COALESCE(${plan ?? null}, plan),
-                status = 'active', client_limit = COALESCE(${clientLimit}, client_limit), updated_at = CURRENT_TIMESTAMP
+            SET stripe_subscription_id = ${String(session.subscription)}, plan = ${plan},
+                status = 'active', client_limit = ${clientLimit}, updated_at = CURRENT_TIMESTAMP
             WHERE tenant_id = ${tenantId}
           `);
-          await appendAuditEntry(db, { tenantId, action: 'billing.subscription.activated', actor: 'stripe-webhook', payload: { plan: plan ?? null, stripeEventId: event.id, stripeSubscriptionId: String(session.subscription) } });
+          await appendAuditEntry(db, { tenantId, action: 'billing.subscription.activated', actor: 'stripe-webhook', payload: { plan, stripeEventId: event.id, stripeSubscriptionId: String(session.subscription) } });
+        } else if (tenantId && session.mode === 'payment') {
+          await appendAuditEntry(db, { tenantId, action: 'billing.purchase.completed', actor: 'stripe-webhook', payload: { product: session.metadata?.product ?? null, stripeEventId: event.id, checkoutSessionId: session.id } });
         }
         break;
       }
@@ -217,14 +286,6 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
   }
 }
 
-// Centralized entitlement check wired into POST /api/user/clients. The read
-// here (SELECT count, SELECT limit) is advisory/informational only, so the
-// caller can return a clear, structured "limit reached" response before
-// attempting the write -- the actual, concurrency-safe enforcement is the
-// `spr_client_limit_guard` trigger (migration 0043), which re-checks the
-// same limit inside the same transaction as the INSERT under a per-tenant
-// advisory lock. This function existing does not replace that trigger; a
-// caller that skipped this check would still be blocked by the database.
 export async function canCreateClient(tenantId: string, scopedDb: { execute: (query: any) => Promise<any> }): Promise<{
   allowed: boolean; plan: PlanId | null; clientLimit: number | null; clientCount: number; nextPlan: PlanId | null;
 }> {
