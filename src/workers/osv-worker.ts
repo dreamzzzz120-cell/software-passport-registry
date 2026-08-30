@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process';
 import { Pool, PoolClient } from 'pg';
 import { assessOsvSeverity } from '../security/osv-severity.ts';
 import { componentIdentity, vulnerabilityIdentity } from '../security/osv-identity.ts';
+import { normalizeCycloneDxComponentNames } from '../security/component-path-normalization.ts';
 
 type ClaimedJob = {
   id: string;
@@ -334,7 +335,14 @@ export async function generateRepositorySbom(scanRoot: string, syftPath: string,
   try { result = await runBounded(syftPath, [...prefix,'scan',`dir:${scanRoot}`,'-o','cyclonedx-json'], options.timeoutMs ?? SBOM_TIMEOUT_MS); }
   catch (error: any) { if (error?.message === 'REPOSITORY_ACQUISITION_TIMEOUT') throw new Error('SBOM_GENERATION_TIMEOUT'); throw error; }
   if (result.code !== 0) throw new Error('SBOM_GENERATION_FAILED');
-  let document: any; try { document = JSON.parse(result.stdout.toString('utf8')); } catch { throw new Error('SBOM_INVALID'); }
+  let parsed: any; try { parsed = JSON.parse(result.stdout.toString('utf8')); } catch { throw new Error('SBOM_INVALID'); }
+  // Syft names file-shaped components after the absolute path it scanned.
+  // Normalize to repository-relative names here, at the single boundary
+  // every consumer goes through, so no server path or per-run job id can
+  // reach finding identity, the persisted SBOM, or an API response.
+  // `raw` stays the untouched Syft output so rawSbomHash still attests to
+  // exactly what the generator produced.
+  const document = normalizeCycloneDxComponentNames(parsed, scanRoot);
   return { document, components: normalizeCycloneDx(document), raw: result.stdout, exitCode: result.code };
 }
 

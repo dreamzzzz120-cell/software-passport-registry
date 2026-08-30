@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { normalizeComponentName } from '../security/component-path-normalization.ts';
 
 export type ScannerFinding = {
   engineId: string;
@@ -88,12 +89,20 @@ export async function scanConfiguration(root: string): Promise<ScannerFinding[]>
   return findings;
 }
 
-export function scanLicenses(cycloneDx: any): ScannerFinding[] {
+// scanRoot is optional so callers that already hold a normalized SBOM keep
+// working, but it is always passed by runRealRepositoryScanners. Normalizing
+// again here is idempotent and deliberate: it guarantees no absolute scan
+// path can reach a finding's component/description (and therefore the
+// finding identity) even if this is ever called with a raw Syft document.
+export function scanLicenses(cycloneDx: any, scanRoot?: string): ScannerFinding[] {
   const findings: ScannerFinding[] = [];
   const components = Array.isArray(cycloneDx?.components) ? cycloneDx.components : [];
   for (const component of components) {
     const licenses = Array.isArray(component?.licenses) ? component.licenses : [];
-    if (licenses.length === 0) findings.push({ engineId: 'spr-license-scanner-v1', severity: 'medium', category: 'License', title: 'License not observed', description: `No license declaration was present in the generated SBOM for ${String(component?.name || 'unknown component')}.`, component: String(component?.name || 'unknown') });
+    if (licenses.length === 0) {
+      const name = normalizeComponentName(component?.name, scanRoot);
+      findings.push({ engineId: 'spr-license-scanner-v1', severity: 'medium', category: 'License', title: 'License not observed', description: `No license declaration was present in the generated SBOM for ${name}.`, component: name });
+    }
   }
   return findings;
 }
@@ -104,6 +113,6 @@ export function scannerEvidenceHash(findings: ScannerFinding[]) {
 
 export async function runRealRepositoryScanners(root: string, cycloneDx: any) {
   const [secrets, configuration] = await Promise.all([scanSecrets(root), scanConfiguration(root)]);
-  const licenses = scanLicenses(cycloneDx);
+  const licenses = scanLicenses(cycloneDx, root);
   return { findings: [...secrets, ...configuration, ...licenses], engines: ['spr-secret-scanner-v1','spr-iac-config-scanner-v1','spr-license-scanner-v1'] };
 }
