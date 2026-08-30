@@ -94,3 +94,33 @@ export function normalizeClientRecords<T extends Record<string, any>>(rows: unkn
   if (!Array.isArray(rows)) return [];
   return rows.map((row) => normalizeClientRecord(row as T));
 }
+
+/**
+ * The passport fields persisted as JSON-array text columns
+ * (src/db/schema.ts:78-81).
+ *
+ * `evidence` and `vulnerabilities` are deliberately absent: GET
+ * /user/passports builds those with json_agg, so the driver already returns
+ * real arrays. `sbom` and `timeline` are selected as plain text columns and
+ * arrived as JSON strings.
+ *
+ * That was worse than the client crash rather than better. The browser
+ * guarded them with `Array.isArray(row.sbom) ? row.sbom : []`, which does
+ * not throw - it silently replaced the parsed SBOM with an empty array, so
+ * the component inventory of every Software Passport rendered as empty.
+ */
+export const PASSPORT_JSON_ARRAY_FIELDS = ['sbom', 'timeline'] as const;
+
+export function normalizePassportRecord<T extends Record<string, any>>(row: T): T {
+  if (!row || typeof row !== 'object') return row;
+  const normalized: Record<string, any> = { ...row };
+  for (const field of PASSPORT_JSON_ARRAY_FIELDS) {
+    normalized[field] = toJsonArrayColumn(row[field]);
+  }
+  return normalized as T;
+}
+
+export function normalizePassportRecords<T extends Record<string, any>>(rows: unknown): T[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((row) => normalizePassportRecord(row as T));
+}

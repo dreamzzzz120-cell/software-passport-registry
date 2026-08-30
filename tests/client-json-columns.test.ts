@@ -160,3 +160,32 @@ describe('the normalization is wired into every production path', () => {
     expect(fs.existsSync(path.join(root, 'src/components/ViewErrorBoundary.tsx'))).toBe(true);
   });
 });
+
+describe('passport JSON columns (sbom / timeline)', () => {
+  it('a JSON-string sbom is parsed instead of silently dropped', async () => {
+    const { normalizePassportRecord } = await import('../src/lib/clientJsonColumns.ts');
+    const components = [{ name: 'lodash', version: '4.17.21' }, { name: 'express', version: '5.0.0' }];
+    const row = { id: 'p1', sbom: JSON.stringify(components), timeline: '[]' };
+    const normalized = normalizePassportRecord(row);
+    expect(normalized.sbom).toEqual(components);
+    expect(normalized.timeline).toEqual([]);
+    // The precise regression: Array.isArray('[{...}]') is false, so the old
+    // guard replaced a real SBOM with an empty array and the component
+    // inventory rendered as empty.
+    expect(Array.isArray(row.sbom)).toBe(false);
+    expect(normalized.sbom).toHaveLength(2);
+  });
+
+  it('evidence and vulnerabilities are left alone (json_agg already returns arrays)', async () => {
+    const { PASSPORT_JSON_ARRAY_FIELDS } = await import('../src/lib/clientJsonColumns.ts');
+    expect([...PASSPORT_JSON_ARRAY_FIELDS]).toEqual(['sbom', 'timeline']);
+  });
+
+  it('the passports endpoint and the browser both normalize', () => {
+    expect(read('src/routes/auth.ts')).toContain('normalizePassportRecords((result as any).rows || [])');
+    const app = read('src/App.tsx');
+    expect(app).toContain('sbom: toJsonArrayColumn(row.sbom)');
+    expect(app).toContain('timeline: toJsonArrayColumn(row.timeline)');
+    expect(app).not.toContain('Array.isArray(row.sbom)');
+  });
+});

@@ -15,7 +15,7 @@ import { appendAuditEntry, verifyAuditChain } from '../security/audit-log.ts';
 import { describeUserAgent, sessionFingerprint } from '../security/session-tracking.ts';
 import { offboardTenantData } from '../db/sync.ts';
 import { canCreateClient, PLAN_CONFIG } from './billing.ts';
-import { normalizeClientRecord, normalizeClientRecords } from '../lib/clientJsonColumns.ts';
+import { normalizeClientRecord, normalizeClientRecords, normalizePassportRecords } from '../lib/clientJsonColumns.ts';
 import { verifySlsaProvenance } from '../utils/slsa-verification.ts';
 import { calculateAndStoreTrustScore } from '../utils/scanner.ts';
 
@@ -539,7 +539,10 @@ export function createAuthRouter() {
       // belonging to their own client, not the MSP's whole portfolio.
       const clientScope = req.user!.role === 'Client' ? req.user!.clientId : null;
       const result = await db.execute(sql`SELECT p.id, p.client_id AS "clientId", p.name, p.version, p.publisher, p.category, p.release_date AS "releaseDate", p.license_type AS "licenseType", p.sbom, COALESCE((SELECT json_agg(json_build_object('id', e.id, 'name', e.name, 'type', e.type, 'verified', e.verified, 'status', e.status, 'signer', e.signer, 'timestamp', e.timestamp, 'hash', e.hash, 'engineId', e.engine_id, 'verificationFailureReason', e.verification_failure_reason, 'failureReason', e.verification_failure_reason, 'rawContent', e.raw_content) ORDER BY e.timestamp DESC) FROM evidence_items e WHERE e.tenant_id=p.tenant_id AND e.asset_id=p.id), '[]'::json) AS evidence, COALESCE((SELECT json_agg(json_build_object('id', f.id, 'findingId', f.id, 'severity', f.severity, 'category', f.category, 'title', f.title, 'description', f.description, 'component', f.component, 'fixedVersion', f.fixed_version, 'status', f.status, 'detectedAt', f.detected_at, 'engineId', f.engine_id) ORDER BY f.detected_at DESC) FROM scan_findings f WHERE f.tenant_id=p.tenant_id AND f.asset_id=p.id), '[]'::json) AS vulnerabilities, p.timeline, NULL AS scores, 'not_authoritatively_scored' AS "scoreStatus" FROM passports p WHERE p.tenant_id=${req.user!.tenantId} AND (${clientScope}::text IS NULL OR p.client_id = ${clientScope}) ORDER BY p.name ASC`);
-      return res.json((result as any).rows || []);
+      // evidence/vulnerabilities are built with json_agg above and are already
+      // real arrays; sbom and timeline are plain text columns holding JSON, so
+      // they need parsing before the browser sees them.
+      return res.json(normalizePassportRecords((result as any).rows || []));
     } catch (error) {
       return next(error);
     }
