@@ -1,0 +1,63 @@
+# Software Passport Registry - crawler policy
+#
+# Served as a real static file from the Vite public/ directory. Vercel
+# resolves static files before the SPA catch-all rewrite, so this is
+# returned as text/plain rather than the index.html shell.
+#
+# robots.txt is NOT a security boundary. Every route listed under Disallow
+# is additionally protected server-side by Firebase authentication,
+# role checks and tenant-scoped queries; this file only keeps crawlers off
+# pages that have no public value.
+
+User-agent: *
+
+# Public marketing and self-service surfaces.
+Allow: /$
+Allow: /free-review
+Allow: /pricing
+Allow: /msp
+Allow: /terms
+Allow: /privacy
+
+# Authenticated application. These render tenant-scoped customer data and
+# are behind auth; they must never appear in search results.
+# Note /registry is an ALIAS of the authenticated /passports view, not a
+# public registry - it is deliberately disallowed.
+Disallow: /dashboard
+Disallow: /registry
+Disallow: /passports
+Disallow: /clients
+Disallow: /assets
+Disallow: /coverage
+Disallow: /evidence-explorer
+Disallow: /scans
+Disallow: /alerts
+Disallow: /reports
+Disallow: /trust-graph
+Disallow: /vendors
+Disallow: /questionnaires
+Disallow: /savings
+Disallow: /governance
+Disallow: /integrations
+Disallow: /monitoring
+Disallow: /security
+Disallow: /compliance
+Disallow: /agent-trust
+Disallow: /ai-trust-center
+Disallow: /enterprise-readiness
+Disallow: /investor
+Disallow: /founder
+Disallow: /billing
+Disallow: /settings
+Disallow: /team
+Disallow: /audit-log
+Disallow: /extensions
+
+# Sign-in is public but has no search value.
+Disallow: /login
+
+# APIs, including signed public share links. A Passport verification link
+# is a time-boxed bearer token; it must not be crawled, cached or indexed.
+Disallow: /api/
+
+Sitemap: https://softwarepassportregistry.com/sitemap.xml

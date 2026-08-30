@@ -8,6 +8,55 @@
     <link rel="icon" type="image/png" href="/brand/spr-icon.png" />
     <link rel="apple-touch-icon" href="/brand/spr-icon.png" />
     <title>Software Passport Registry</title>
+
+    <!--
+      Site-level social metadata. Deliberately NO <link rel="canonical">:
+      this single shell is served for every route, so a static canonical
+      would point /free-review, /pricing and /msp all at the homepage and
+      risk collapsing them out of the index. Per-route canonical and
+      per-route titles require server-rendered metadata, which this
+      client-rendered Vite SPA cannot produce - see the SEO report.
+    -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Software Passport Registry" />
+    <meta property="og:title" content="Software Passport Registry" />
+    <meta property="og:description" content="The trust infrastructure layer for software. SPR gives software a persistent identity, verifies its evidence, and reports observed evidence only — never inferred safety." />
+    <meta property="og:url" content="https://softwarepassportregistry.com/" />
+    <meta property="og:image" content="https://softwarepassportregistry.com/brand/spr-logo.jpg" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Software Passport Registry" />
+    <meta name="twitter:description" content="Evidence-first software trust infrastructure. Observed evidence, explicit unknowns, no inferred safety." />
+    <meta name="twitter:image" content="https://softwarepassportregistry.com/brand/spr-logo.jpg" />
+
+    <!--
+      Organization + WebSite only. Both are supported by content actually
+      visible on the homepage. No SoftwareApplication, no AggregateRating,
+      no Review and no certification claims: SPR has no rating data, and
+      fabricating structured data would contradict the product's own
+      evidence-first rule.
+    -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://softwarepassportregistry.com/#organization",
+            "name": "Software Passport Registry",
+            "url": "https://softwarepassportregistry.com/",
+            "logo": "https://softwarepassportregistry.com/brand/spr-logo.jpg"
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://softwarepassportregistry.com/#website",
+            "url": "https://softwarepassportregistry.com/",
+            "name": "Software Passport Registry",
+            "description": "The trust infrastructure layer for software.",
+            "publisher": { "@id": "https://softwarepassportregistry.com/#organization" }
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

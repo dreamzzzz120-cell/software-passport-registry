@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Software Passport Registry sitemap.
+
+  Contains ONLY the six genuinely public, server-independent marketing and
+  self-service routes (the public members of PUBLIC_PATHS in src/App.tsx,
+  minus /login which has no search value).
+
+  Deliberately absent, and why:
+
+  - /registry and /passports are the same authenticated view over
+    tenant-scoped customer data. Despite the name, /registry is not a
+    public registry.
+  - Individual Software Passports have no crawlable public page. They are
+    reachable only through /api/public/v1/passports/:id/trust/:token, an
+    HMAC-signed, time-boxed bearer link. Listing those would publish
+    customer passports and leak share tokens.
+  - Free Review results are per-submission and token-scoped, so they are
+    not stable public URLs.
+
+  No lastmod is declared: inventing dates for these pages would be
+  fabricated data, and an absent lastmod is treated as unknown rather than
+  as a false freshness signal.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://softwarepassportregistry.com/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://softwarepassportregistry.com/free-review</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://softwarepassportregistry.com/pricing</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://softwarepassportregistry.com/msp</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://softwarepassportregistry.com/terms</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://softwarepassportregistry.com/privacy</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+</urlset>
