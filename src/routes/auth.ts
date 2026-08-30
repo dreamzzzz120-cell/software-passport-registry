@@ -15,6 +15,7 @@ import { appendAuditEntry, verifyAuditChain } from '../security/audit-log.ts';
 import { describeUserAgent, sessionFingerprint } from '../security/session-tracking.ts';
 import { offboardTenantData } from '../db/sync.ts';
 import { canCreateClient, PLAN_CONFIG } from './billing.ts';
+import { normalizeClientRecord, normalizeClientRecords } from '../lib/clientJsonColumns.ts';
 import { verifySlsaProvenance } from '../utils/slsa-verification.ts';
 import { calculateAndStoreTrustScore } from '../utils/scanner.ts';
 
@@ -459,7 +460,11 @@ export function createAuthRouter() {
         WHERE tenant_id=${req.user!.tenantId} AND (${clientScope}::text IS NULL OR id = ${clientScope})
         ORDER BY joined_date DESC
       `);
-      return res.json((result as any).rows || []);
+      // software_inventory/compliance_status/team_members/activity_timeline
+      // are JSON-stringified TEXT columns. Parse them here so the response
+      // matches the Client type the browser is written against, instead of
+      // shipping raw JSON strings that array methods then blow up on.
+      return res.json(normalizeClientRecords((result as any).rows || []));
     } catch (error) {
       return next(error);
     }
@@ -518,7 +523,10 @@ export function createAuthRouter() {
       }
       const row = (inserted as any).rows?.[0];
       await appendAuditEntry(db, { tenantId, action: 'client.created', actor: req.user!.email, payload: { clientId: row.id, name: row.name, domain: row.domain } });
-      return res.status(201).json(row);
+      // Same JSON-array columns as the list route above: a newly created
+      // client is rendered by the same components, so it must arrive in the
+      // same canonical shape.
+      return res.status(201).json(normalizeClientRecord(row));
     } catch (error) {
       return next(error);
     }

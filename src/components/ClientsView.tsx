@@ -6,6 +6,7 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { fuzzyMatch, filterData } from '../utils/filter';
+import { toJsonArrayColumn } from '../lib/clientJsonColumns';
 import {
   Building2,
   ShieldCheck,
@@ -94,8 +95,15 @@ export default function ClientsView({
         trustScore: data.trustScore ?? 0, riskLevel: data.riskLevel ?? 'Unknown', avatarColor: data.avatarColor ?? 'indigo',
         subscriptionTier: data.subscriptionTier ?? 'Standard', joinedDate: data.joinedDate ?? new Date().toISOString(),
         teamCount: data.teamCount ?? 1, passportCount: data.passportCount ?? 0, criticalRisksCount: data.criticalRisksCount ?? 0,
-        complianceProgress: data.complianceProgress ?? 0, softwareInventory: data.softwareInventory ?? [],
-        complianceStatus: data.complianceStatus ?? [], teamMembers: data.teamMembers ?? [], activityTimeline: data.activityTimeline ?? [],
+        complianceProgress: data.complianceProgress ?? 0,
+        // `?? []` only covered null/undefined; these four arrive as
+        // JSON-stringified TEXT columns, and a string is neither. Coerce
+        // properly so a freshly created client cannot crash the views that
+        // iterate these fields.
+        softwareInventory: toJsonArrayColumn(data.softwareInventory),
+        complianceStatus: toJsonArrayColumn(data.complianceStatus),
+        teamMembers: toJsonArrayColumn(data.teamMembers),
+        activityTimeline: toJsonArrayColumn(data.activityTimeline),
       };
       onClientCreated?.(created);
       setAddClientSuccess(`${created.name} created.`);
