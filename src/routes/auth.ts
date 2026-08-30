@@ -16,6 +16,8 @@ import { describeUserAgent, sessionFingerprint } from '../security/session-track
 import { offboardTenantData } from '../db/sync.ts';
 import { canCreateClient, PLAN_CONFIG } from './billing.ts';
 import { normalizeClientRecord, normalizeClientRecords, normalizePassportRecords } from '../lib/clientJsonColumns.ts';
+import { adaptEvidenceForEvaluation } from '../lib/verification/evidenceAdapter.ts';
+import { evaluateVerification } from '../lib/verification/evaluateVerification.ts';
 import { verifySlsaProvenance } from '../utils/slsa-verification.ts';
 import { calculateAndStoreTrustScore } from '../utils/scanner.ts';
 
@@ -530,6 +532,78 @@ export function createAuthRouter() {
     } catch (error) {
       return next(error);
     }
+  });
+
+  // The authoritative verification decision for one passport.
+  //
+  // This is the single place a verification decision is produced for any
+  // surface: the dashboard, Passport view, Evidence Explorer and PDF are all
+  // expected to consume this rather than recomputing anything. Presentation
+  // may format the result; it may not reinterpret it.
+  //
+  // Tenant-scoped through req.db (attachTenantScope) and filtered explicitly
+  // by tenant_id, so one tenant's evidence can never influence another's
+  // decision. A 'Client'-role user stays restricted to their own client's
+  // passports, exactly as GET /user/passports does.
+  router.get('/user/passports/:id/verification', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const clientScope = req.user!.role === 'Client' ? req.user!.clientId : null;
+      const passportId = String(req.params.id);
+
+      const passport = (await db.execute(sql`
+        SELECT id, name, version, publisher, verification_status AS "verificationStatus"
+        FROM passports
+        WHERE id=${passportId} AND tenant_id=${tenantId}
+          AND (${clientScope}::text IS NULL OR client_id = ${clientScope})
+        LIMIT 1
+      `) as any).rows?.[0];
+      // Same not-found response whether the passport is absent or belongs to
+      // another tenant, so this cannot be used to probe for existence.
+      if (!passport) return res.status(404).json({ error: 'Passport not found' });
+
+      const evidenceRows = (await db.execute(sql`
+        SELECT id, name, type, status, signer, timestamp, hash, engine_id AS "engineId"
+        FROM evidence_items
+        WHERE tenant_id=${tenantId} AND asset_id=${passportId}
+      `) as any).rows || [];
+
+      // Open findings mark their evidence as adverse so the evaluator can
+      // return INVESTIGATE rather than quietly verifying around them.
+      const openFindings = (await db.execute(sql`
+        SELECT id FROM scan_findings
+        WHERE tenant_id=${tenantId} AND asset_id=${passportId}
+          AND lower(status) NOT IN ('resolved','closed','verified')
+      `) as any).rows || [];
+
+      const adapted = adaptEvidenceForEvaluation({
+        evidence: evidenceRows,
+        passportVersion: passport.version,
+        openFindingEvidenceIds: openFindings.map((row: any) => String(row.id)),
+      });
+
+      const decision = evaluateVerification({
+        evidence: adapted.evidence,
+        evaluatedAt: Date.now(),
+        targetIdentity: adapted.targetIdentity,
+      });
+
+      res.setHeader('cache-control', 'private, max-age=0, no-store');
+      return res.json({
+        passport: { id: passport.id, name: passport.name, version: passport.version, publisher: passport.publisher },
+        decision,
+        // Observation count is reported separately from unique evidence and
+        // independent sources so repeated scans can never read as verification.
+        counts: {
+          observations: evidenceRows.length,
+          uniqueEvidence: decision.uniqueEvidenceCount,
+          independentSources: decision.independentSourceCount,
+          unmappedRecords: adapted.unmappedCount,
+          undatedRecords: adapted.undatedCount,
+        },
+      });
+    } catch (error) { return next(error); }
   });
 
   router.get('/user/passports', requireAuth, async (req: AuthenticatedRequest, res, next) => {
