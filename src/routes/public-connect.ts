@@ -5,6 +5,8 @@ import { db } from '../db/index.ts';
 import { config } from '../config.ts';
 import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/security.ts';
 import { attachTenantScope, ScopedDb } from '../middleware/tenant-scope.ts';
+import { adaptEvidenceForEvaluation } from '../lib/verification/evidenceAdapter.ts';
+import { evaluateVerification } from '../lib/verification/evaluateVerification.ts';
 
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30;
 const REPORT_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7;
@@ -31,11 +33,48 @@ export function signFreeReviewStatusToken(passportId: string, expiresAt: number)
 export function verifyFreeReviewStatusToken(token: string, passportId: string) { if (!config.publicPassport.secret) return null; const parts = token.split('.'); if (parts.length !== 2 || !parts[0] || !parts[1] || token.length > 4096) return null; const expected = crypto.createHmac('sha256', config.publicPassport.secret).update(parts[0]).digest(); let supplied: Buffer; try { supplied = Buffer.from(parts[1], 'base64url'); } catch { return null; } if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) return null; try { const payload = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8')) as { v?: number; kind?: string; passportId?: string; exp?: number }; if (payload.v !== 1 || payload.kind !== 'free_review_status' || payload.passportId !== passportId || !payload.exp || payload.exp <= Math.floor(Date.now() / 1000)) return null; return payload; } catch { return null; } }
 
 export async function publicTrustResponse(scopedDb: ScopedDb, passport: any) {
+  // Release-audit finding: `status` below used to be computed independently
+  // of src/lib/verification (a second, looser evaluator - VERIFIED required
+  // only "an observation exists, evidence.length > 0, no open critical/high
+  // finding", with no independent-third-party-source requirement at all).
+  // For any passport evidenced by the repository-scan pipeline (Free Review,
+  // POST /scans/repository - i.e. every passport this product actually
+  // produces today), trust_findings/evidence_ledger/trust_observations are
+  // empty, since those tables are written only by the separate continuous-
+  // monitoring trust loop (src/trust/trust-loop.ts). `status` now comes from
+  // the same authoritative evaluator every other surface uses
+  // (GET /user/passports/:id/verification, Trust Room, MSP Command Center),
+  // so a public share link can never claim a stronger trust state than the
+  // one thing in this codebase allowed to decide that.
+  const evidenceRows = (await scopedDb.execute(sql`SELECT id, name, type, status, signer, timestamp, hash, engine_id AS "engineId" FROM evidence_items WHERE tenant_id=${passport.tenant_id} AND asset_id=${passport.id}`) as any).rows || [];
+  const openScanFindings = (await scopedDb.execute(sql`SELECT id FROM scan_findings WHERE tenant_id=${passport.tenant_id} AND asset_id=${passport.id} AND lower(status) NOT IN ('resolved','closed','verified')`) as any).rows || [];
+  const adapted = adaptEvidenceForEvaluation({ evidence: evidenceRows, passportVersion: passport.version, openFindingEvidenceIds: openScanFindings.map((row: any) => String(row.id)) });
+  const decision = evaluateVerification({ evidence: adapted.evidence, evaluatedAt: Date.now(), targetIdentity: adapted.targetIdentity });
+
+  // Retained for the separate continuous-monitoring trust loop, which some
+  // passports may still have real data for. No longer authoritative for
+  // `status` - see decision above - but not deleted, since it is not
+  // confirmed dead and may still be genuinely populated for passports that
+  // go through that subsystem.
   const findings = (await scopedDb.execute(sql`SELECT id,control_id,title,severity,status,updated_at,resolved_at FROM trust_findings WHERE tenant_id=${passport.tenant_id} AND passport_id=${passport.id} ORDER BY CASE severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 WHEN 'low' THEN 4 ELSE 5 END, updated_at DESC LIMIT 50`) as any).rows || [];
-  const evidence = (await scopedDb.execute(sql`SELECT id,provider,control_id,subject,observed_at,verification_method,status,severity,evidence_hash,limitation FROM evidence_ledger WHERE tenant_id=${passport.tenant_id} AND passport_id=${passport.id} ORDER BY observed_at DESC LIMIT 100`) as any).rows || [];
+  const legacyEvidence = (await scopedDb.execute(sql`SELECT id,provider,control_id,subject,observed_at,verification_method,status,severity,evidence_hash,limitation FROM evidence_ledger WHERE tenant_id=${passport.tenant_id} AND passport_id=${passport.id} ORDER BY observed_at DESC LIMIT 100`) as any).rows || [];
   const observations = (await scopedDb.execute(sql`SELECT id,observation_version,generated_at,canonical_payload_hash,completeness_basis_points,open_finding_count,unknown_dimension_count FROM trust_observations WHERE tenant_id=${passport.tenant_id} AND passport_id=${passport.id} ORDER BY observation_version DESC LIMIT 1`) as any).rows || [];
-  const latest = observations[0]; const openFindings = findings.filter((f: any) => !['resolved','closed','verified'].includes(String(f.status).toLowerCase())); const criticalOrHigh = openFindings.filter((f: any) => ['critical','high'].includes(String(f.severity).toLowerCase())); const completeness = latest?.completeness_basis_points == null ? null : Number(latest.completeness_basis_points) / 10000; const status = latest && evidence.length > 0 ? (criticalOrHigh.length > 0 ? 'AVOID' : openFindings.length > 0 ? 'INVESTIGATE' : 'VERIFIED') : 'UNKNOWN';
-  return { schemaVersion: 'spr-public-passport-v1', status, passport: { id: passport.id, name: passport.name, version: passport.version, publisher: passport.publisher, category: passport.category }, scores: null, scoreStatus: 'not_authoritatively_scored', evidence: { count: evidence.length, completeness, latestObservationAt: latest?.generated_at ?? null, latestHash: latest?.canonical_payload_hash ?? null }, findings: { open: openFindings.length, criticalOrHigh: criticalOrHigh.length, items: findings }, verification: { observed: Boolean(latest), evidenceBacked: evidence.length > 0, generatedAt: latest?.generated_at ?? null }, sources: evidence.slice(0, 50).map((e: any) => ({ provider: e.provider, observedAt: e.observed_at, verificationMethod: e.verification_method, evidenceHash: e.evidence_hash, limitation: e.limitation })), policy: { rule: 'SPR reports observed evidence only; UNKNOWN means insufficient evidence and is not a trust approval.' } };
+  const latest = observations[0]; const openFindings = findings.filter((f: any) => !['resolved','closed','verified'].includes(String(f.status).toLowerCase())); const criticalOrHigh = openFindings.filter((f: any) => ['critical','high'].includes(String(f.severity).toLowerCase())); const completeness = latest?.completeness_basis_points == null ? null : Number(latest.completeness_basis_points) / 10000;
+
+  return {
+    schemaVersion: 'spr-public-passport-v1',
+    status: decision.state,
+    decision,
+    passport: { id: passport.id, name: passport.name, version: passport.version, publisher: passport.publisher, category: passport.category },
+    scores: null,
+    scoreStatus: 'not_authoritatively_scored',
+    evidence: { count: evidenceRows.length, uniqueEvidence: decision.uniqueEvidenceCount, independentSources: decision.independentSourceCount },
+    findings: { open: openFindings.length, criticalOrHigh: criticalOrHigh.length, items: findings },
+    verification: { observed: adapted.evidence.length > 0, evidenceBacked: adapted.evidence.length > 0, generatedAt: latest?.generated_at ?? null },
+    sources: legacyEvidence.slice(0, 50).map((e: any) => ({ provider: e.provider, observedAt: e.observed_at, verificationMethod: e.verification_method, evidenceHash: e.evidence_hash, limitation: e.limitation })),
+    continuousMonitoring: { completeness, latestObservationAt: latest?.generated_at ?? null, latestHash: latest?.canonical_payload_hash ?? null },
+    policy: { rule: 'SPR reports observed evidence only; UNKNOWN means insufficient evidence and is not a trust approval.' },
+  };
 }
 
 export async function resolveAgentPassport(reference: string) {
