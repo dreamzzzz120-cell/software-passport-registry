@@ -19,7 +19,11 @@ describe('public /msp landing page reuses existing pricing and billing, without 
     const s = read('src/App.tsx');
     expect(s).toContain("PUBLIC_PATHS = new Set(['/','/login','/free-review','/pricing','/msp','/terms','/privacy'])");
     expect(s).toContain("if (!user && path === '/msp') return <MspLandingView onEnter={() => navigate('/login')} onViewPricing={() => navigate('/pricing')} />;");
-    expect(s).toContain("case '/msp': view = <MSPCommandCenter clients={clients} alerts={alerts} passports={passports} role={role} onSelectClient={setSelectedClientId} onSelectPassport={setSelectedPassportId} onNavigate={navigate} />; break;");
+    // Asserts the authenticated /msp route still renders MSPCommandCenter,
+    // without pinning the full prop list - that made the test break on any
+    // unrelated prop addition rather than on the behaviour it guards.
+    expect(s).toContain("case '/msp': view = <MSPCommandCenter");
+    expect(s).toContain('clients={clients} alerts={alerts} passports={passports} role={role}');
   });
 });
 

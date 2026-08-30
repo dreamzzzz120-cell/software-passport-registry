@@ -17,7 +17,11 @@ describe('SPR MSP Command Center — software verification metrics', () => {
 
   it('counts verified vs unknown software from the real verificationStatus field, not a fabricated default', () => {
     const s = source();
-    expect(s).toContain("passport.verificationStatus === 'verified'");
+    // Superseded: verification truth moved from the legacy verification_status
+    // column to the authoritative evaluator. Intent preserved - counts must come
+    // from real data, never a fabricated default.
+    expect(s).toContain("const decision = verificationDecisions?.[passport.id]");
+    expect(s).not.toContain("passport.verificationStatus === 'verified'");
     expect(s).not.toContain('verified: true');
   });
 

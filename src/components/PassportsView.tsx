@@ -4,6 +4,7 @@ import { apiFetch } from '../utils/apiClient';
 import SoftwareLineageTracker from './SoftwareLineageTracker';
 import SoftwareSectorsPanel from './SoftwareSectorsPanel';
 import TrustRoom from './trust/TrustRoom';
+import type { VerificationDecisionState } from './trust/TrustStateBadge';
 import type { Client, SoftwarePassport, VerificationStatus } from '../types';
 
 // A score is never shown without its verification state -- unverified means
@@ -19,6 +20,8 @@ function verificationBadge(status: VerificationStatus): { label: string; classNa
 interface PassportsViewProps {
   passports: SoftwarePassport[];
   selectedPassportId: string | null;
+  /** Authoritative decisions by passport id, from App's batch retrieval. */
+  verificationDecisions?: Record<string, VerificationDecisionState>;
   setSelectedPassportId: (id: string | null) => void;
   searchQuery: string;
   onUpdatePassport?: (updatedPassport: SoftwarePassport) => void;
@@ -28,7 +31,7 @@ interface PassportsViewProps {
   role?: string;
 }
 
-export default function PassportsView({ passports, selectedPassportId, setSelectedPassportId, searchQuery, onNavigateTab, onUpdatePassport, clients = [], assets = [], role = 'Viewer' }: PassportsViewProps) {
+export default function PassportsView({ passports, selectedPassportId, setSelectedPassportId, searchQuery, onNavigateTab, onUpdatePassport, clients = [], assets = [], role = 'Viewer', verificationDecisions }: PassportsViewProps) {
   // Matches backend gating exactly: POST /api/agent-jobs requires
   // Owner/Admin/Operator (scans.ts); POST /api/trust-loop/remediations
   // additionally allows Technician (server.ts requireTrustMutationRole).
@@ -116,6 +119,7 @@ export default function PassportsView({ passports, selectedPassportId, setSelect
         {selected && (
           <TrustRoom
             passport={selected}
+            verificationDecision={verificationDecisions?.[selected.id]}
             client={clients.find((c) => (c.softwareInventory || []).some((item) => item.passportId === selected.id))}
             canRunAudit={canRunAudit}
             auditBusy={auditBusy}

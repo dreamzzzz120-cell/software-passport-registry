@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, ChevronRight, Clock, Fingerprint, GitCommitVertical, Link2, ShieldQuestion, XCircle } from 'lucide-react';
+import { CheckCircle2, ChevronRight, Clock, Fingerprint, GitCommitVertical, Link2, Search, ShieldQuestion, XCircle } from 'lucide-react';
 import type { SoftwarePassport } from '../types';
 import { apiFetch } from '../utils/apiClient';
 
@@ -10,7 +10,11 @@ type Ledger = { observations: LedgerObservation[]; findings: LedgerFinding[]; ev
 
 interface Props {
   passports?: SoftwarePassport[];
+  selectedPassportId?: string | null;
+  onSelectPassportId?: (id: string) => void;
 }
+
+const STATUS_FILTERS = ['ALL', 'PASS', 'FAIL', 'UNKNOWN'] as const;
 
 function responseError(data: any, fallback: string) {
   if (typeof data?.error === 'string') return data.error;
@@ -25,13 +29,23 @@ function parseIds(value: string): string[] {
 const STATUS_ICON: Record<string, typeof CheckCircle2> = { PASS: CheckCircle2, FAIL: XCircle, UNKNOWN: ShieldQuestion };
 const STATUS_COLOR: Record<string, string> = { PASS: 'text-[#89d185]', FAIL: 'text-[#f14c4c]', UNKNOWN: 'text-amber-300' };
 
-export default function EvidenceExplorerView({ passports = [] }: Props) {
-  const [passportId, setPassportId] = useState(passports[0]?.id || '');
+export default function EvidenceExplorerView({ passports = [], selectedPassportId, onSelectPassportId }: Props) {
+  // Arriving here from the Trust Room ("Inspect evidence" / "View evidence")
+  // should land on the same passport the user was just investigating, not
+  // silently reset to whichever passport happens to be first in the list.
+  const [passportId, setPassportId] = useState(() => (selectedPassportId && passports.some((p) => p.id === selectedPassportId)) ? selectedPassportId : passports[0]?.id || '');
   const [ledger, setLedger] = useState<Ledger | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null);
+  const [claimQuery, setClaimQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTERS)[number]>('ALL');
 
+  const selectPassport = (id: string) => { setPassportId(id); onSelectPassportId?.(id); };
+
+  useEffect(() => {
+    if (selectedPassportId && selectedPassportId !== passportId && passports.some((p) => p.id === selectedPassportId)) setPassportId(selectedPassportId);
+  }, [selectedPassportId]);
   useEffect(() => {
     if (!passports.some((p) => p.id === passportId)) setPassportId(passports[0]?.id || '');
   }, [passports, passportId]);
@@ -57,6 +71,19 @@ export default function EvidenceExplorerView({ passports = [] }: Props) {
   const claimHistory = useMemo(() => selectedFinding ? (ledger?.observations || []).filter((obs) => parseIds(obs.finding_ids).includes(selectedFinding.id)).sort((a, b) => b.observation_version - a.observation_version) : [], [selectedFinding, ledger]);
   const latestObservation = ledger?.observations[0];
 
+  // Filters read the real finding + its linked evidence statuses -- a status
+  // filter of PASS/FAIL/UNKNOWN matches if any evidence item backing that
+  // claim carries that real evidence status.
+  const filteredFindings = useMemo(() => {
+    const query = claimQuery.trim().toLowerCase();
+    return (ledger?.findings || []).filter((finding) => {
+      const matchesQuery = !query || `${finding.title} ${finding.control_id}`.toLowerCase().includes(query);
+      if (!matchesQuery) return false;
+      if (statusFilter === 'ALL') return true;
+      return parseIds(finding.evidence_ids).some((id) => evidenceById.get(id)?.status === statusFilter);
+    });
+  }, [ledger, claimQuery, statusFilter, evidenceById]);
+
   return (
     <section className="space-y-6" aria-labelledby="evidence-explorer-title">
       <header className="rounded-md border border-[#3c3c3c] bg-[#252526] p-6">
@@ -65,7 +92,7 @@ export default function EvidenceExplorerView({ passports = [] }: Props) {
         <p className="mt-2 max-w-3xl text-sm leading-6 text-[#9d9d9d]">{ledger?.trace || 'Claim → Evidence → Source → Timestamp → Hash → History. Select a finding to see exactly what backs it.'}</p>
         <div className="mt-5">
           <label className="sr-only" htmlFor="evidence-explorer-passport">Passport</label>
-          <select id="evidence-explorer-passport" value={passportId} onChange={(event) => setPassportId(event.target.value)} className="min-w-[260px] rounded-xl border border-[#3c3c3c] bg-[#0b101b] px-3 py-2.5 text-sm text-[#d4d4d4]">
+          <select id="evidence-explorer-passport" value={passportId} onChange={(event) => selectPassport(event.target.value)} className="min-w-[260px] rounded-xl border border-[#3c3c3c] bg-[#0b101b] px-3 py-2.5 text-sm text-[#d4d4d4]">
             {!passports.length && <option value="">No passports loaded</option>}
             {passports.map((passport) => <option key={passport.id} value={passport.id}>{passport.name} · {passport.version}</option>)}
           </select>
@@ -81,12 +108,25 @@ export default function EvidenceExplorerView({ passports = [] }: Props) {
 
       <div className="grid gap-6 xl:grid-cols-[.9fr_1.4fr]">
         <div className="rounded-md border border-[#3c3c3c] bg-[#252526] p-5">
-          <h2 className="text-sm font-semibold text-[#d4d4d4]">Claims ({ledger?.findings.length ?? 0})</h2>
+          <h2 className="text-sm font-semibold text-[#d4d4d4]">Claims ({filteredFindings.length}{filteredFindings.length !== (ledger?.findings.length ?? 0) ? ` of ${ledger?.findings.length ?? 0}` : ''})</h2>
           <p className="mt-1 text-xs text-[#9d9d9d]">Each finding is a claim about this passport. Select one to see its evidence chain.</p>
+
+          {(ledger?.findings.length ?? 0) > 0 && (
+            <div className="mt-4 space-y-2.5">
+              <label className="flex items-center gap-2 rounded-xl border border-[#3c3c3c] bg-[#181818] px-3 py-2"><Search className="h-3.5 w-3.5 shrink-0 text-[#6f6f6f]" /><input value={claimQuery} onChange={(event) => setClaimQuery(event.target.value)} placeholder="Search claims by title or control" aria-label="Search claims" className="min-w-0 flex-1 bg-transparent text-xs text-[#d4d4d4] outline-none placeholder:text-[#6f6f6f]" /></label>
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter claims by evidence status">
+                {STATUS_FILTERS.map((status) => (
+                  <button key={status} onClick={() => setStatusFilter(status)} aria-pressed={statusFilter === status} className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide transition ${statusFilter === status ? 'border-[#3794ff]/50 bg-[#094771] text-[#d4d4d4]' : 'border-[#3c3c3c] bg-[#181818] text-[#9d9d9d] hover:border-[#3794ff]/40'}`}>{status}</button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {loading && <div className="mt-4 space-y-2"><div className="h-14 animate-pulse rounded-xl bg-[#252526]" /><div className="h-14 animate-pulse rounded-xl bg-[#252526]" /></div>}
           {!loading && ledger && ledger.findings.length === 0 && <p className="mt-4 text-xs text-[#9d9d9d]">No findings recorded for this passport.</p>}
+          {!loading && ledger && ledger.findings.length > 0 && filteredFindings.length === 0 && <p className="mt-4 text-xs text-[#9d9d9d]">No claims match this search or filter.</p>}
           <ul className="mt-4 max-h-[560px] space-y-2 overflow-auto pr-1">
-            {ledger?.findings.map((finding) => (
+            {filteredFindings.map((finding) => (
               <li key={finding.id}>
                 <button onClick={() => setSelectedFindingId(finding.id)} className={`w-full rounded-xl border px-3 py-3 text-left text-xs transition ${selectedFindingId === finding.id ? 'border-[#3794ff]/40 bg-[#094771] text-[#d4d4d4]' : 'border-[#3c3c3c] bg-[#181818] text-[#d4d4d4] hover:border-[#3794ff]/40'}`}>
                   <div className="flex items-center justify-between gap-2"><span className="font-semibold">{finding.title || finding.control_id}</span><ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#6f6f6f]" /></div>

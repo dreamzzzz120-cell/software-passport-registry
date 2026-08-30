@@ -242,3 +242,53 @@ describe('PDF makes no claim stronger than the authoritative decision', () => {
     expect(pdf).not.toContain('`${client.trustScore}/100`');
   });
 });
+
+describe('TrustRoom and MSPCommandCenter consume the authoritative decision', () => {
+  it('TrustRoom no longer uses the legacy column mapping', () => {
+    const source = read('src/components/trust/TrustRoom.tsx');
+    expect(source).toContain('trustStateFromDecision(verificationDecision)');
+    expect(source).not.toContain('trustStateFromVerification');
+    expect(source).not.toContain('passport.verificationStatus');
+  });
+
+  it('MSPCommandCenter maps grid state and rollup counts from decisions', () => {
+    const source = read('src/components/MSPCommandCenter.tsx');
+    expect(source).toContain('trustStateFromDecision(verificationDecisions?.[item.passportId])');
+    expect(source).toContain("const decision = verificationDecisions?.[passport.id]");
+    expect(source).not.toContain('trustStateFromVerification');
+    expect(source).not.toContain("passport.verificationStatus === 'verified'");
+  });
+
+  it('MSPCommandCenter issues no per-passport verification request (no N+1)', () => {
+    const source = read('src/components/MSPCommandCenter.tsx');
+    // Assert against code only: prose like "verification time" appears in
+    // this component's copy, and its props doc comment names the batch
+    // endpoint precisely to explain that the grid does NOT call it.
+    const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    expect(code).not.toContain('/api/user/verification');
+    expect(code).not.toMatch(/user\/passports\/[^'`]*\/verification/);
+    expect(code).not.toContain('apiFetch(`/api/user/passports/');
+  });
+
+  it('App fetches decisions once via the batch endpoint and passes them down', () => {
+    const app = read('src/App.tsx');
+    expect(app).toContain("apiFetch('/api/user/verification')");
+    expect((app.match(/api\/user\/verification/g) || []).length).toBe(1);
+    expect(app).toContain('verificationDecisions={verificationDecisions}');
+    expect(app).toContain('verificationDecisions={verificationDecisions} passports={passports}');
+  });
+
+  it('a failed batch retrieval never becomes a reassuring state', () => {
+    const app = read('src/App.tsx');
+    // Failure clears the map; an absent decision renders UNINITIALIZED.
+    expect(app).toContain('setVerificationDecisions({})');
+    expect(app).not.toContain("state: 'VERIFIED'");
+  });
+
+  it('each passport receives its own decision, keyed by its own id', () => {
+    const msp = read('src/components/MSPCommandCenter.tsx');
+    expect(msp).toContain('verificationDecisions?.[item.passportId]');
+    const pv = read('src/components/PassportsView.tsx');
+    expect(pv).toContain('verificationDecisions?.[selected.id]');
+  });
+});

@@ -11,8 +11,8 @@ describe('Trust Room renders only real Passport data', () => {
 
   it('derives Current Trust State from the real verificationStatus via the shared mapping, not a local guess', () => {
     const s = source();
-    expect(s).toContain("import TrustStateBadge, { trustStateFromVerification } from './TrustStateBadge';");
-    expect(s).toContain('const trustState = trustStateFromVerification(passport.verificationStatus);');
+    expect(s).toContain("import TrustStateBadge, { trustStateFromDecision, type VerificationDecisionState } from './TrustStateBadge';");
+    expect(s).toContain('const trustState = trustStateFromDecision(verificationDecision);');
   });
 
   it('reuses the existing TrustField rather than a second competing visualization', () => {

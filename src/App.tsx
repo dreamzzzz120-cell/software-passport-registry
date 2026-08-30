@@ -46,6 +46,7 @@ import TermsView from './components/legal/TermsView';
 import PrivacyPolicyView from './components/legal/PrivacyPolicyView';
 import ReportsView from './components/ReportsView';
 import TrustGraphView from './components/TrustGraphView';
+import type { VerificationDecisionState } from './components/trust/TrustStateBadge';
 import { EXTENSIONS } from './workflows/extensionRegistry';
 
 const PUBLIC_PATHS = new Set(['/','/login','/free-review','/pricing','/msp','/terms','/privacy']);
@@ -111,6 +112,11 @@ export default function App() {
   const [scans, setScans] = useState<Scan[]>(EMPTY_SCANS);
   const [integrations, setIntegrations] = useState<Integration[]>(EMPTY_INTEGRATIONS);
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  // Authoritative verification decisions for every visible passport, fetched
+  // once via the batch endpoint. Surfaces consume this map instead of the
+  // legacy verification_status column, and no surface issues a per-passport
+  // verification request.
+  const [verificationDecisions, setVerificationDecisions] = useState<Record<string, VerificationDecisionState>>({});
 
   useEffect(() => {
     let mounted = true;
@@ -188,6 +194,20 @@ export default function App() {
       if (clientsResponse.ok) { const data = await clientsResponse.json().catch(() => []); const rows = Array.isArray(data) ? data : data?.clients; if (!cancelled && Array.isArray(rows)) setClients(rows.map((row: any) => normalizeClientRecord({ ...row, id: String(row.id), name: String(row.name || row.company_name || 'Unnamed client') })) as Client[]); }
       if (integrationsResponse.ok) { const data = await integrationsResponse.json().catch(() => []); if (!cancelled && Array.isArray(data)) setIntegrations(data); }
       if (vendorsResponse.ok) { const data = await vendorsResponse.json().catch(() => []); if (!cancelled && Array.isArray(data)) setVendors(data as Vendor[]); } else if (!cancelled) { setVendors(EMPTY_VENDORS); }
+      // One batch call for every visible passport's authoritative decision.
+      // A failure leaves the map empty, which renders UNINITIALIZED - it is
+      // never converted into a verified or otherwise reassuring state.
+      try {
+        const verificationResponse = await apiFetch('/api/user/verification');
+        if (verificationResponse.ok) {
+          const data = await verificationResponse.json().catch(() => null);
+          if (!cancelled && Array.isArray(data?.decisions)) {
+            const map: Record<string, VerificationDecisionState> = {};
+            for (const entry of data.decisions) { if (entry?.passportId && entry?.decision?.state) map[String(entry.passportId)] = entry.decision.state; }
+            setVerificationDecisions(map);
+          }
+        }
+      } catch { if (!cancelled) setVerificationDecisions({}); }
     };
     void load().catch((error) => console.warn('[SPR command center load]', error));
     return () => { cancelled = true; };
@@ -260,7 +280,7 @@ export default function App() {
     case '/coverage': view = <CoverageView clients={clients} scans={scans} passports={passports} onNavigateTab={onNavigateTab} />; break;
     case '/evidence-explorer': view = <EvidenceExplorerView passports={passports} />; break;
     case '/assets': view = <AssetsView clients={clients} searchQuery="" assets={assets} />; break;
-    case '/passports': case '/registry': view = <PassportsView passports={passports} selectedPassportId={selectedPassportId} setSelectedPassportId={setSelectedPassportId} searchQuery="" clients={clients} assets={assets} role={role} onNavigateTab={onNavigateTab} onUpdatePassport={(passport) => setPassports((current) => current.map((item) => item.id === passport.id ? passport : item))} />; break;
+    case '/passports': case '/registry': view = <PassportsView verificationDecisions={verificationDecisions} passports={passports} selectedPassportId={selectedPassportId} setSelectedPassportId={setSelectedPassportId} searchQuery="" clients={clients} assets={assets} role={role} onNavigateTab={onNavigateTab} onUpdatePassport={(passport) => setPassports((current) => current.map((item) => item.id === passport.id ? passport : item))} />; break;
     case '/scans': view = <ScansView scans={scans} clients={clients} assets={assets} passports={passports} role={role} onTriggerNewScan={(scan) => setScans((current) => [scan, ...current.filter((item) => item.id !== scan.id)].slice(0, 100))} />; break;
     case '/alerts': view = <AlertsView alerts={alerts} onAlertAction={performAlertAction} role={role} />; break;
     case '/reports': view = <ReportsView clients={clients} passports={passports} scans={scans} alerts={alerts} findings={findings} role={role} />; break;
@@ -275,7 +295,7 @@ export default function App() {
     case '/monitoring': view = <MonitoringView role={role} passports={passports} clients={clients} />; break;
     case '/security': view = <SecurityCenterView clients={clients} passports={passports} />; break;
     case '/compliance': view = <ComplianceView clients={clients} role={role} />; break;
-    case '/msp': view = <MSPCommandCenter clients={clients} alerts={alerts} passports={passports} role={role} onSelectClient={setSelectedClientId} onSelectPassport={setSelectedPassportId} onNavigate={navigate} />; break;
+    case '/msp': view = <MSPCommandCenter clients={clients} alerts={alerts} passports={passports} role={role} onSelectClient={setSelectedClientId} onSelectPassport={setSelectedPassportId} onNavigate={navigate} verificationDecisions={verificationDecisions} />; break;
     case '/agent-trust': view = <AgentTrustView />; break;
     case '/ai-trust-center': view = <AITrustCenterView role={role} />; break;
     case '/enterprise-readiness': view = <EnterpriseReadinessView clients={clients} />; break;

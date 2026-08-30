@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { AlertTriangle, ArrowRight, CheckCircle2, ExternalLink, FileSearch, Loader2, Radio, ShieldQuestion } from 'lucide-react';
 import { apiFetch } from '../../utils/apiClient';
 import TrustField from './TrustField';
-import TrustStateBadge, { trustStateFromVerification } from './TrustStateBadge';
+import TrustStateBadge, { trustStateFromDecision, type VerificationDecisionState } from './TrustStateBadge';
 import type { Client, SoftwarePassport } from '../../types';
 
 interface Props {
@@ -22,6 +22,12 @@ interface Props {
   onNavigateTab: (tab: string, itemId?: string) => void;
   onViewLineage: () => void;
   canSharePassport: boolean;
+  /**
+   * The authoritative evaluator's decision for this passport, supplied by the
+   * batch retrieval in App. Undefined means "not yet evaluated", which
+   * renders UNINITIALIZED - never a fallback to the legacy column.
+   */
+  verificationDecision?: VerificationDecisionState;
 }
 
 // This predicate must stay identical to the one in SoftwareLineageTracker.tsx
@@ -41,13 +47,19 @@ function formatTimestamp(value?: string | null) {
   return Number.isNaN(parsed) ? value : new Date(parsed).toLocaleString();
 }
 
-export default function TrustRoom({ passport, client, canRunAudit, auditBusy, onRunAudit, canCreateRemediation, remediationBusy, onCreateRemediation, onNavigateTab, onViewLineage, canSharePassport }: Props) {
+export default function TrustRoom({ passport, client, canRunAudit, auditBusy, onRunAudit, canCreateRemediation, remediationBusy, onCreateRemediation, onNavigateTab, onViewLineage, canSharePassport, verificationDecision }: Props) {
   const [shareBusy, setShareBusy] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const trustState = trustStateFromVerification(passport.verificationStatus);
+  // Verification state comes from the authoritative evaluator, never from
+  // passports.verification_status. The legacy column is hardcoded to
+  // 'unverified' by the scanner and is not a decision. When no authoritative
+  // decision has been retrieved yet the badge stays UNINITIALIZED rather than
+  // falling back to the legacy mapping, so an un-evaluated passport can never
+  // display a state the evaluator did not produce.
+  const trustState = trustStateFromDecision(verificationDecision);
   const evidence = passport.evidence || [];
   const vulnerabilities = passport.vulnerabilities || [];
   const timeline = passport.timeline || [];

@@ -3,7 +3,7 @@ import { AlertTriangle, ArrowRight, Building2, CheckCircle2, Clock3, Database, F
 import { Alert, Client, SoftwarePassport } from '../types';
 import { apiFetch } from '../utils/apiClient';
 import TrustNetworkMap, { type NetworkClientNode } from './trust/TrustNetworkMap';
-import { trustStateFromVerification, type TrustState } from './trust/TrustStateBadge';
+import { trustStateFromDecision, type TrustState, type VerificationDecisionState } from './trust/TrustStateBadge';
 
 interface Props {
   clients: Client[];
@@ -13,6 +13,13 @@ interface Props {
   onSelectClient: (id: string) => void;
   onSelectPassport?: (id: string) => void;
   onNavigate: (tab: string) => void;
+  /**
+   * Authoritative decisions keyed by passport id, from the single batch
+   * retrieval in App (GET /api/user/verification). The grid never issues a
+   * per-passport verification request, and a passport absent from this map
+   * renders UNINITIALIZED rather than falling back to the legacy column.
+   */
+  verificationDecisions?: Record<string, VerificationDecisionState>;
 }
 
 type Assignment = { id: string; client_id: string; technician_display: string; assigned_by: string; updated_at: string };
@@ -42,7 +49,7 @@ const NETWORK_NAV = [
   { id: 'reports', label: 'Reports', path: '/reports' },
 ];
 
-export default function MSPCommandCenter({ clients, alerts, passports, role = 'Viewer', onSelectClient, onSelectPassport, onNavigate }: Props) {
+export default function MSPCommandCenter({ clients, alerts, passports, role = 'Viewer', onSelectClient, onSelectPassport, onNavigate, verificationDecisions }: Props) {
   const [selected, setSelected] = useState<Alert | null>(null);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [team, setTeam] = useState<TeamMember[]>([]);
@@ -96,8 +103,12 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
     let staleOrMissingEvidence = 0;
     const now = Date.now();
     for (const passport of passports) {
-      if (passport.verificationStatus === 'verified') verified += 1;
-      else if (passport.verificationStatus === 'partial') needsReview += 1;
+      // Rollup counts come from the authoritative evaluator, not from the
+      // legacy verification_status column. A passport with no decision yet is
+      // counted as unknown rather than assumed to be anything better.
+      const decision = verificationDecisions?.[passport.id];
+      if (decision === 'VERIFIED') verified += 1;
+      else if (decision === 'PARTIAL' || decision === 'INVESTIGATE') needsReview += 1;
       else unknown += 1;
 
       const evidenceTimestamps = (passport.evidence || [])
@@ -118,7 +129,7 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
     const coveragePct = total > 0 ? Math.round((verified / total) * 100) : null;
     const freshnessPct = total > 0 ? Math.round((freshEvidence / total) * 100) : null;
     return { total, verified, needsReview, unknown, freshEvidence, staleOrMissingEvidence, coveragePct, freshnessPct };
-  }, [passports]);
+  }, [passports, verificationDecisions]);
 
   // Evidence coverage counts real evidence *items* (not passports): how many
   // of all recorded evidence entries across the portfolio carry a VERIFIED
@@ -134,7 +145,7 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
       }
     }
     return { total, verified, pct: total > 0 ? Math.round((verified / total) * 100) : null };
-  }, [passports]);
+  }, [passports, verificationDecisions]);
 
   // Recent observations come only from each passport's own real timeline
   // entries. Nothing here is synthesized — a portfolio with no timeline
@@ -148,7 +159,7 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
       }
     }
     return entries.sort((a, b) => Date.parse(b.date) - Date.parse(a.date)).slice(0, 8);
-  }, [passports]);
+  }, [passports, verificationDecisions]);
 
   // The Trust Network map's Client -> Software layer, built strictly from
   // each client's own real softwareInventory (server-computed), joined back
@@ -162,10 +173,12 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
     name: client.name,
     software: (client.softwareInventory || []).map((item) => {
       const passport = passportsById.get(item.passportId);
-      const state: TrustState = passport ? trustStateFromVerification(passport.verificationStatus) : 'EVIDENCE_INCOMPLETE';
+      // Authoritative decision from the single batch retrieval in App - never
+      // the legacy verification_status column, and never a per-row request.
+      const state: TrustState = trustStateFromDecision(verificationDecisions?.[item.passportId]);
       return { passportId: item.passportId, name: item.name, state };
     }),
-  })), [clientRiskRollup, passportsById]);
+  })), [clientRiskRollup, passportsById, verificationDecisions]);
   const clientsOmittedFromNetwork = Math.max(0, clients.length - networkClients.length);
 
   useEffect(() => {

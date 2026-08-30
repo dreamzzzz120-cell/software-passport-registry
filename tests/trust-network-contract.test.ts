@@ -40,8 +40,8 @@ describe('Trust Network never fabricates counts, scores, or history', () => {
 
   it('Current Trust State reads real verificationStatus and a real critical-client count, not invented numbers', () => {
     const s = source();
-    expect(s).toContain("if (passport.verificationStatus === 'verified') verified += 1;");
-    expect(s).toContain("else if (passport.verificationStatus === 'partial') needsReview += 1;");
+    expect(s).toContain("if (decision === 'VERIFIED') verified += 1;");
+    expect(s).toContain("else if (decision === 'PARTIAL' || decision === 'INVESTIGATE') needsReview += 1;");
     expect(s).toContain('value={criticalClients}');
   });
 
@@ -68,7 +68,7 @@ describe('Trust Network never fabricates counts, scores, or history', () => {
   it('the Trust Network map is built from each client\'s real softwareInventory joined to real passport verification state, with an honest fallback for unresolved software', () => {
     const s = source();
     expect(s).toContain('client.softwareInventory || []');
-    expect(s).toContain("const state: TrustState = passport ? trustStateFromVerification(passport.verificationStatus) : 'EVIDENCE_INCOMPLETE';");
+    expect(s).toContain("const state: TrustState = trustStateFromDecision(verificationDecisions?.[item.passportId]);");
   });
 
   it('the Attention list never invents a software/passport link for a finding that has none', () => {
