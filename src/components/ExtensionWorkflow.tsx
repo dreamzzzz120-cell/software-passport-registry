@@ -77,7 +77,9 @@ export default function ExtensionWorkflow({ id, onNavigate }: Props) {
       <div><div className="mb-4 flex flex-wrap items-center gap-2"><span className="rounded-sm border border-[#3c3c3c] bg-[#252526] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[.18em] text-[#4ec9b0]">Extension workflow</span><span className="rounded-sm border border-[#3c3c3c] px-2.5 py-1 text-[10px] text-[#89d185]">Protected evidence surface</span></div><h1 className="max-w-3xl text-3xl font-semibold tracking-tight text-[#d4d4d4] md:text-4xl">{extension.name}</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-[#9d9d9d]">{extension.description}</p><div className="mt-6 flex flex-wrap gap-3"><button onClick={() => onNavigate(firstRoute)} className="spr-btn spr-btn-primary">Open source workflow</button><button onClick={() => setActiveStep((step) => Math.min(step + 1, extension.steps.length - 1))} className="spr-btn spr-btn-secondary">Advance workflow</button></div></div>
     </div>
 
-    <div className="grid gap-3 md:grid-cols-3">{metrics.map(([label, value]) => <Metric key={label} label={label} value={value} loading={loading} />)}</div>
+    {/* Indexed rather than destructured: metrics is a readonly tuple array,
+        which cannot be assigned to a mutable [label, value] parameter. */}
+    <div className="grid gap-3 md:grid-cols-3">{metrics.map((entry) => <Metric key={entry[0]} label={entry[0]} value={entry[1]} loading={loading} />)}</div>
 
     <div className="grid gap-5 xl:grid-cols-[1.1fr_.9fr]">
       <div className="spr-panel p-5"><div className="mb-4"><div className="text-sm font-semibold text-[#d4d4d4]">Workflow</div><div className="mt-1 text-xs text-[#6f6f6f]">Every extension owns its own operating sequence.</div></div><div className="space-y-2">{extension.steps.map((step, index) => <Step key={step} index={index} label={step} active={index === activeStep} />)}</div></div>

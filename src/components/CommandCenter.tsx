@@ -202,7 +202,7 @@ export default function CommandCenter({ children, path, userEmail, role, onNavig
                   key={item.id}
                   onClick={() => { onNavigate(item.path); setMobileMenuOpen(false); }}
                   data-active={active(item.path)}
-                  title={'desc' in item ? item.desc : undefined}
+                  title={'desc' in item && typeof item.desc === 'string' ? item.desc : undefined}
                   className="spr-nav-item shrink-0 border border-[#3c3c3c] px-2.5 py-1.5 text-[11px]"
                 >
                   {item.label}
@@ -219,7 +219,7 @@ export default function CommandCenter({ children, path, userEmail, role, onNavig
                     key={item.id}
                     onClick={() => { onNavigate(item.path); setMobileMenuOpen(false); }}
                     data-active={active(item.path)}
-                    title={'desc' in item ? item.desc : undefined}
+                    title={'desc' in item && typeof item.desc === 'string' ? item.desc : undefined}
                     className="spr-nav-item border border-[#3c3c3c] px-2.5 py-2 text-left text-[11px]"
                   >
                     {item.label}
