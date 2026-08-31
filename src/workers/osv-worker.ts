@@ -40,7 +40,12 @@ function buildSsl() {
   if (mode === 'require' || mode === 'true' || mode === '1') return { rejectUnauthorized: false };
   if (mode === 'verify' || mode === 'verify-full') {
     if (!ca) throw new Error('SQL_SSL_CA_REQUIRED_FOR_VERIFICATION');
-    return { rejectUnauthorized: true, ca, checkServerIdentity: undefined };
+    // Node throws when checkServerIdentity is present but not a function, so the
+    // key is omitted entirely rather than set to undefined. Omitting it keeps
+    // the default hostname check, which is exactly what verify-full requires:
+    // the Railway Postgres server certificate carries the private hostname in
+    // its SAN, so the dialled host is verified against it.
+    return { rejectUnauthorized: true, ca };
   }
   throw new Error('INVALID_SQL_SSL_MODE');
 }
