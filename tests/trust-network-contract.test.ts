@@ -13,10 +13,42 @@ describe('Trust Network (MSP Command Center rebuild) preserves existing function
     const s = source();
     expect(s).toContain("apiFetch('/api/msp/assignments')");
     expect(s).toContain("apiFetch('/api/organization/team')");
-    expect(s).toContain("apiFetch(`/api/alerts/${encodeURIComponent(selected.id)}`)");
+    // /api/alerts/:id (finding detail) has no backend route yet -- a
+    // separate, known, still-open gap. Not asserted as working here; see
+    // the route-inventory audit that found it. Everything else in this
+    // block now has a real backend, proven below, not just preserved text.
     expect(s).toContain("apiFetch('/api/remediation-tasks'");
     expect(s).toContain("apiFetch('/api/monitoring/monitoring-configurations')");
     expect(s).toContain("onSelectClient(client.id); onNavigate('clients')");
+  });
+
+  // Previously this suite only checked that these literal strings survived a
+  // refactor -- it never proved a matching backend route existed, which is
+  // exactly how /api/remediation-tasks shipped as dead UI for as long as it
+  // did (see tests/remediation-tasks-contract.test.ts for the real backend's
+  // own contract and DB-behavioral tests). This cross-checks every call this
+  // component makes against src/routes/remediation-tasks.ts directly.
+  it('every /api/remediation-tasks call the frontend makes has a matching real backend route', () => {
+    const frontend = source();
+    const backend = read('src/routes/remediation-tasks.ts');
+    expect(frontend).toContain("apiFetch('/api/remediation-tasks')");
+    expect(backend).toContain("router.get('/'");
+    expect(frontend).toContain("apiFetch(`/api/remediation-tasks/${encodeURIComponent(task.id)}`)");
+    expect(backend).toContain("router.get('/:id'");
+    expect(frontend).toContain("apiFetch('/api/remediation-tasks', { method: 'POST'");
+    expect(backend).toContain("router.post('/', requireRole");
+    expect(frontend).toContain("apiFetch(`/api/remediation-tasks/${encodeURIComponent(task.id)}/${action}`, { method: 'POST' })");
+    expect(backend).toContain("makeTransitionRoute(router, 'start', 'OPEN', 'IN_PROGRESS'");
+    expect(backend).toContain("makeTransitionRoute(router, 'ready-for-verification', 'IN_PROGRESS', 'READY_FOR_VERIFICATION'");
+    expect(frontend).toContain("apiFetch(`/api/remediation-tasks/${encodeURIComponent(task.id)}/verify`, { method: 'POST'");
+    expect(backend).toContain("router.post('/:id/verify', requireRole");
+    // The frontend's optimistic merge after queueing verification
+    // (status: 'VERIFICATION_QUEUED', verificationJobId: body.collectorJobId)
+    // must match the real field names and values the backend actually
+    // returns -- not a guess baked into the UI.
+    expect(frontend).toContain("verificationJobId: body.collectorJobId");
+    expect(backend).toContain('collectorJobId: resolvedJobId');
+    expect(backend).toContain("status = 'VERIFICATION_QUEUED'");
   });
 
   it('renamed the page to Trust Network with the MSP control plane framing', () => {

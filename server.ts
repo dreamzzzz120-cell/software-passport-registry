@@ -22,6 +22,7 @@ import { createIntegrationMonitoringRouter } from './src/routes/integration-moni
 import { createAgentApiRouter } from './src/routes/agent-api.ts';
 import { createMspRouter } from './src/routes/msp.ts';
 import { createAiTrustRouter } from './src/routes/ai-trust.ts';
+import { createRemediationTasksRouter } from './src/routes/remediation-tasks.ts';
 import { createBillingRouter, stripeWebhookHandler } from './src/routes/billing.ts';
 import { createVendorsRouter } from './src/routes/vendors.ts';
 import { createQuestionnairesRouter } from './src/routes/questionnaires.ts';
@@ -136,6 +137,7 @@ app.use('/api/savings', createSavingsRouter());
 app.use('/api/governance', createGovernanceRouter());
 app.use('/api/privacy', createPrivacyRouter());
 app.use('/api/ai-trust', requireAuth, createAiTrustRouter());
+app.use('/api/remediation-tasks', requireAuth, createRemediationTasksRouter());
 
 const mcpBearer = process.env.SPR_MCP_BEARER_TOKEN;
 if (mcpBearer) {
