@@ -9,6 +9,8 @@ import { eq } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { users } from '../db/schema.ts';
+import { db } from '../db/index.ts';
+import { attachTenantScope } from '../middleware/tenant-scope.ts';
 import { AuthenticatedRequest, requireAuth, requireRole } from '../middleware/security.ts';
 import { adminAuth, setUserCustomClaims } from '../lib/firebase-admin.ts';
 import { appendAuditEntry, verifyAuditChain } from '../security/audit-log.ts';
@@ -61,6 +63,91 @@ const brandingSchema = z.object({
 
 export function createAuthRouter() {
   const router = Router();
+
+  // Self-service workspace creation. A Firebase account with a verified email
+  // and no SPR membership gets its own new, empty workspace and becomes its
+  // Owner.
+  //
+  // Without this the funnel dead-ended: LoginView's "Create account" button
+  // already creates a Firebase user and sends a verification email, but
+  // nothing ever provisioned an SPR row for it, so every endpoint answered
+  // 403 'User account is not provisioned'. Invites could not close the gap
+  // either -- POST /organization/invite writes the INVITER's tenant, so it
+  // adds members to an existing workspace and can never create a new one.
+  // The only other tenant-minting path, the initial-owner bootstrap, refuses
+  // once any Owner exists. The product therefore had no way to admit a second
+  // customer at all.
+  //
+  // This route deliberately does NOT use requireAuth: requireAuth's job is to
+  // reject a caller with no SPR user row, which is exactly the caller this
+  // route exists to serve. The Firebase ID token is still verified with the
+  // same adminAuth.verifyIdToken(token, true) call requireAuth uses, so
+  // authentication is unchanged -- only the authorization outcome differs.
+  //
+  // Three invariants keep it from becoming an access-control hole:
+  //   1. email_verified must be true, so an unverified address can neither
+  //      mint a workspace nor squat on one.
+  //   2. An existing membership always wins. This never moves a user between
+  //      tenants and never joins an existing one, so an invited user keeps
+  //      the workspace that invited them and no one can self-serve their way
+  //      into somebody else's data.
+  //   3. The insert is ON CONFLICT (uid) DO NOTHING against the users_uid_key
+  //      unique index, so two concurrent sign-ins cannot mint two workspaces
+  //      for one identity.
+  router.post('/auth/workspace', async (req, res, next) => {
+    try {
+      const header = req.headers.authorization;
+      const token = header?.startsWith('Bearer ') ? header.slice(7).trim() : '';
+      if (!token || token.length > 8192) return res.status(401).json({ error: 'Unauthorized: Missing or invalid authorization token' });
+
+      let decoded;
+      try {
+        decoded = await adminAuth.verifyIdToken(token, true);
+      } catch {
+        return res.status(401).json({ error: 'Unauthorized: Invalid or expired security token' });
+      }
+
+      const uid = decoded.uid;
+      if (!uid || typeof uid !== 'string' || uid.length > 256) return res.status(401).json({ error: 'Unauthorized: Invalid security token' });
+      if (decoded.email_verified !== true) return res.status(403).json({ error: 'Verify your email address before creating a workspace.', code: 'EMAIL_NOT_VERIFIED' });
+      const email = typeof decoded.email === 'string' ? decoded.email.trim().toLowerCase() : '';
+      if (!email || email.length > 255) return res.status(400).json({ error: 'A verified email address is required.' });
+
+      const existing = await db.select({ tenantId: users.tenantId, role: users.role }).from(users).where(eq(users.uid, uid)).then(rows => rows[0]);
+      if (existing) return res.status(200).json({ tenantId: existing.tenantId, role: existing.role, created: false });
+
+      const tenantId = `tenant-${crypto.randomUUID()}`;
+      const inserted = await db.execute(sql`
+        INSERT INTO users (uid, email, tenant_id, role, onboarded)
+        VALUES (${uid}, ${email}, ${tenantId}, 'Owner', 0)
+        ON CONFLICT (uid) DO NOTHING
+        RETURNING id, tenant_id AS "tenantId", role
+      `);
+      const created = (inserted as any).rows?.[0];
+      if (!created) {
+        // Lost the race with a concurrent sign-in. That request created the
+        // workspace, so report its result instead of minting a second one.
+        const settled = await db.select({ tenantId: users.tenantId, role: users.role }).from(users).where(eq(users.uid, uid)).then(rows => rows[0]);
+        if (!settled) return res.status(409).json({ error: 'Workspace creation could not be completed. Sign in again.' });
+        return res.status(200).json({ tenantId: settled.tenantId, role: settled.role, created: false });
+      }
+
+      // Claims are a client-side convenience only: requireAuth re-reads the
+      // persisted role and tenant on every request and never trusts them.
+      await setUserCustomClaims(uid, { workspaceId: tenantId, role: 'Owner', clientId: null });
+
+      // Bind app.user_id as well as app.tenant_id: migration 0052 and the
+      // organization provisioning path both read it, so the scope this audit
+      // write runs under must match what every other authenticated request
+      // establishes.
+      const scoped = await attachTenantScope(tenantId, res, Number(created.id));
+      await appendAuditEntry(scoped, { tenantId, action: 'workspace.created', actor: email, payload: { via: 'self-service-signup' } });
+
+      return res.status(201).json({ tenantId, role: 'Owner', created: true });
+    } catch (error) {
+      return next(error);
+    }
+  });
 
   // The Firebase ID token is the sole authentication authority. The database
   // record supplies the tenant/RBAC projection after token verification.
