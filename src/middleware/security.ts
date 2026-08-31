@@ -89,15 +89,9 @@ export function setRateLimiterStore(s: RateLimitStore) { if (!isTestMode()) thro
 
 function budgetFor(req: Request) {
   const path = req.path.toLowerCase();
-  if (path.includes('/scan') || path.includes('/monitoring') || path.includes('/reports') || path.includes('/passport')) {
-    return { windowMs: 60_000, max: 20, className: 'expensive' };
-  }
-  if (path.includes('/webhook') || path.includes('/integration') || path.includes('/v1')) {
-    return { windowMs: 60_000, max: 60, className: 'api' };
-  }
-  if (req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'OPTIONS') {
-    return { windowMs: 60_000, max: 40, className: 'mutation' };
-  }
+  if (path.includes('/scan') || path.includes('/monitoring') || path.includes('/reports') || path.includes('/passport')) return { windowMs: 60_000, max: 20, className: 'expensive' };
+  if (path.includes('/webhook') || path.includes('/integration') || path.includes('/v1')) return { windowMs: 60_000, max: 60, className: 'api' };
+  if (req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'OPTIONS') return { windowMs: 60_000, max: 40, className: 'mutation' };
   return { windowMs: rateLimitWindowMs, max: maxRequestsPerWindow, className: 'default' };
 }
 
@@ -106,21 +100,14 @@ function limiterIdentity(req: Request) {
   const apiKey = typeof req.headers['x-api-key'] === 'string' ? req.headers['x-api-key'].trim() : '';
   const bearer = typeof req.headers.authorization === 'string' ? req.headers.authorization.trim() : '';
   const credential = apiKey || bearer;
-  const credentialFingerprint = credential
-    ? createHash('sha256').update(credential, 'utf8').digest('hex').slice(0, 32)
-    : '';
+  const credentialFingerprint = credential ? createHash('sha256').update(credential, 'utf8').digest('hex').slice(0, 32) : '';
   return { ip, credentialFingerprint };
 }
 
 export const rateLimiter = async (req: Request, res: Response, next: NextFunction) => {
   const budget = budgetFor(req);
   const { ip, credentialFingerprint } = limiterIdentity(req);
-  // Bind the limit to both network origin and credential. This prevents an attacker
-  // from rotating API keys/bearer tokens to evade the per-IP abuse budget while still
-  // retaining a credential-specific dimension for legitimate multi-user clients.
-  const identity = credentialFingerprint
-    ? `ip:${ip}:credential:${credentialFingerprint}`
-    : `ip:${ip}`;
+  const identity = credentialFingerprint ? `ip:${ip}:credential:${credentialFingerprint}` : `ip:${ip}`;
   const key = `rl:v3:${budget.className}:${identity}`;
   try {
     const counter = await sharedStore.incr(key, budget.windowMs, budget.max);
@@ -149,10 +136,6 @@ export const requireAuth = async (req: AuthenticatedRequest, res: Response, next
     const decodedToken = await adminAuth.verifyIdToken(token, true);
     const uid = decodedToken.uid;
     if (!uid || typeof uid !== 'string' || uid.length > 256) return res.status(401).json({ error: 'Unauthorized: Invalid security token' });
-
-    // req.path has already had the router's mount prefix (e.g. '/api') stripped
-    // by Express, so the exemption must be checked against the full mounted
-    // path (req.baseUrl + req.path), not req.path alone.
     const isVerificationExemptPath = ['/api/user/me', '/api/auth/resend-verification', '/api/auth/verify-status'].includes(req.baseUrl + req.path);
     const emailVerified = decodedToken.email_verified === true;
     if (!emailVerified && !isVerificationExemptPath) return res.status(403).json({ error: 'Email verification required', code: 'EMAIL_NOT_VERIFIED' });
@@ -167,7 +150,7 @@ export const requireAuth = async (req: AuthenticatedRequest, res: Response, next
     if (tokenEmail && dbEmail && tokenEmail !== dbEmail) return res.status(403).json({ error: 'User identity does not match the provisioned account' });
 
     req.user = { id: dbUser.id, uid, email: dbUser.email, tenantId: dbUser.tenantId, role: dbUser.role, clientId: dbUser.clientId ?? null, emailVerified };
-    req.db = await attachTenantScope(dbUser.tenantId, res);
+    req.db = await attachTenantScope(dbUser.tenantId, res, dbUser.id);
     const ip = req.ip || req.socket.remoteAddress || 'unknown';
     const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'].slice(0, 512) : '';
     try {
