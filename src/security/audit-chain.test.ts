@@ -18,4 +18,16 @@ describe('tamper-evident audit chain', () => {
   it('changes when security-relevant event data changes', () => {
     expect(hashAuditEvent(event, null)).not.toBe(hashAuditEvent({ ...event, result: 'success' }, null));
   });
+
+  it('canonicalizes equivalent ISO timestamps', () => {
+    expect(hashAuditEvent(event, null)).toBe(
+      hashAuditEvent({ ...event, timestamp: '2026-08-17T00:00:00+00:00' }, null),
+    );
+  });
+
+  it('changes when tenant identity changes', () => {
+    expect(hashAuditEvent(event, null)).not.toBe(
+      hashAuditEvent({ ...event, tenantId: 'tenant-b' }, null),
+    );
+  });
 });
