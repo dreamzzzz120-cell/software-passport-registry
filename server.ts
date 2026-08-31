@@ -42,7 +42,9 @@ const requestTimeoutMs = Number(process.env.REQUEST_TIMEOUT_MS || 120_000);
 const keepAliveTimeoutMs = Number(process.env.KEEP_ALIVE_TIMEOUT_MS || 65_000);
 
 async function ensureInitialSelfPassport() {
-  const owner = (await db.execute(sql`SELECT tenant_id AS "tenantId" FROM users WHERE role = 'Owner' ORDER BY created_at ASC LIMIT 1`)).rows?.[0] as { tenantId?: string } | undefined;
+  const ownerResult = await db.execute(sql`SELECT tenant_id AS "tenantId" FROM users WHERE role = 'Owner' ORDER BY created_at ASC LIMIT 1`);
+  const rows = Array.isArray((ownerResult as any).rows) ? (ownerResult as any).rows as Array<{ tenantId?: string | null }> : [];
+  const owner = rows[0];
   if (!owner?.tenantId) { console.warn('[SPR] Initial self-passport skipped: no Owner tenant exists yet.'); return; }
   await db.execute(sql`INSERT INTO passports (id, tenant_id, name, version, publisher, category, overall_score, security_score, compliance_score, vendor_reputation_score, verification_status, release_date, file_hash, license_type, ai_summary, sbom, evidence, vulnerabilities, timeline) VALUES ('passport_spr_self', ${owner.tenantId}, 'Software Passport Registry', '1.0.0', 'SPR', 'Platform', NULL, NULL, NULL, NULL, 'unverified', CURRENT_DATE::text, 'not-observed', 'Unknown', 'Initial SPR self-passport. Evidence collection is pending.', '[]', '[]', '[]', '[]') ON CONFLICT (id) DO NOTHING`);
   console.info('[SPR] Initial self-passport ready.');
