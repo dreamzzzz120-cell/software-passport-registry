@@ -12,13 +12,11 @@ export type ScopedDb = NodePgDatabase<typeof schema>;
 
 /**
  * Opens one transaction on the tenant-scoped pool for the lifetime of a single
- * request and binds `app.tenant_id` for that transaction via set_config(), so
- * every Row-Level Security policy created in migration 0020 filters to exactly
- * this tenant. The transaction commits when the response finishes successfully
- * and rolls back on error or premature disconnect; the client is always
- * released back to the pool exactly once.
+ * request. Both authenticated user and tenant context are bound locally to
+ * the transaction so RLS policies and SECURITY DEFINER provisioning functions
+ * have an authoritative server-side identity.
  */
-export async function attachTenantScope(tenantId: string, res: Response): Promise<ScopedDb> {
+export async function attachTenantScope(tenantId: string, res: Response, userId?: number): Promise<ScopedDb> {
   const client = await appPool.connect();
   let settled = false;
   const finish = async (commit: boolean) => {
@@ -35,6 +33,9 @@ export async function attachTenantScope(tenantId: string, res: Response): Promis
   try {
     await client.query('BEGIN');
     await client.query("SELECT set_config('app.tenant_id', $1, true)", [tenantId]);
+    if (userId !== undefined) {
+      await client.query("SELECT set_config('app.user_id', $1, true)", [String(userId)]);
+    }
   } catch (error) {
     client.release();
     throw error;
