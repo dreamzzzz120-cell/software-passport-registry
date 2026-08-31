@@ -10,7 +10,7 @@ import { adminAuth } from '../lib/firebase-admin.ts';
 import { config } from '../config.ts';
 import { db } from '../db/index.ts';
 import { users } from '../db/schema.ts';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { attachTenantScope, ScopedDb } from './tenant-scope.ts';
 import { recordSession } from '../security/session-tracking.ts';
 
@@ -128,6 +128,58 @@ export const rateLimiter = async (req: Request, res: Response, next: NextFunctio
   }
 };
 
+const BILLING_EXEMPT_PATHS = [
+  '/api/billing',
+  '/api/user/me',
+  '/api/auth/resend-verification',
+  '/api/auth/verify-status',
+] as const;
+
+function isBillingExemptPath(req: Request): boolean {
+  const path = `${req.baseUrl}${req.path}`.replace(/\/$/, '') || '/';
+  return BILLING_EXEMPT_PATHS.some((allowed) => path === allowed || path.startsWith(`${allowed}/`));
+}
+
+/**
+ * Commercial enforcement is deliberately attached to the same authenticated
+ * boundary used by tenant/RLS authorization. This prevents a UI-only paywall:
+ * a caller cannot bypass billing by calling an API route directly.
+ *
+ * Billing/account bootstrap endpoints remain reachable so an unpaid customer
+ * can sign in, view plans, and purchase access. Public free-review endpoints
+ * never call requireAuth and therefore remain free.
+ */
+async function enforcePaidAccess(req: AuthenticatedRequest, res: Response): Promise<boolean> {
+  if (isBillingExemptPath(req)) return true;
+  const tenantId = req.user?.tenantId;
+  const scopedDb = req.db;
+  if (!tenantId || !scopedDb) {
+    res.status(403).json({ error: 'SUBSCRIPTION_REQUIRED', code: 'SUBSCRIPTION_REQUIRED', message: 'An authenticated workspace is required.' });
+    return false;
+  }
+
+  const result = await scopedDb.execute(sql`
+    SELECT plan, status, current_period_end AS "currentPeriodEnd"
+    FROM tenant_subscriptions
+    WHERE tenant_id = ${tenantId}
+    LIMIT 1
+  `);
+  const subscription = (result as any).rows?.[0] as { plan?: string | null; status?: string | null; currentPeriodEnd?: string | null } | undefined;
+  const active = subscription?.plan && (subscription.status === 'active' || subscription.status === 'trialing');
+  if (!active) {
+    res.status(402).json({
+      error: 'SUBSCRIPTION_REQUIRED',
+      code: 'SUBSCRIPTION_REQUIRED',
+      message: 'This SPR capability requires an active paid plan.',
+      billingPath: '/billing',
+      subscriptionStatus: subscription?.status ?? 'none',
+    });
+    return false;
+  }
+  res.locals.billing = { plan: subscription.plan, status: subscription.status, currentPeriodEnd: subscription.currentPeriodEnd ?? null };
+  return true;
+}
+
 export const requireAuth = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
   const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
@@ -151,6 +203,9 @@ export const requireAuth = async (req: AuthenticatedRequest, res: Response, next
 
     req.user = { id: dbUser.id, uid, email: dbUser.email, tenantId: dbUser.tenantId, role: dbUser.role, clientId: dbUser.clientId ?? null, emailVerified };
     req.db = await attachTenantScope(dbUser.tenantId, res, dbUser.id);
+
+    if (!(await enforcePaidAccess(req, res))) return;
+
     const ip = req.ip || req.socket.remoteAddress || 'unknown';
     const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'].slice(0, 512) : '';
     try {
