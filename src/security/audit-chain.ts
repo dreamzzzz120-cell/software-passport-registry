@@ -12,10 +12,17 @@ export type SecurityAuditEvent = {
   metadata?: Record<string, unknown>;
 };
 
+function normalizeIsoTimestamp(timestamp: string): string {
+  // Parse ISO 8601 timestamp and normalize to UTC with milliseconds
+  // Handles: 2026-08-17T00:00:00.000Z, 2026-08-17T00:00:00Z, 2026-08-17T00:00:00+00:00, etc.
+  const date = new Date(timestamp);
+  return date.toISOString();
+}
+
 export function canonicalAuditEvent(event: SecurityAuditEvent): string {
   return JSON.stringify({
     eventId: event.eventId,
-    timestamp: event.timestamp,
+    timestamp: normalizeIsoTimestamp(event.timestamp),
     tenantId: event.tenantId,
     actorId: event.actorId ?? null,
     action: event.action,
@@ -29,3 +36,4 @@ export function canonicalAuditEvent(event: SecurityAuditEvent): string {
 export function hashAuditEvent(event: SecurityAuditEvent, previousHash: string | null): string {
   return crypto.createHash('sha256').update(`${previousHash ?? 'GENESIS'}\n${canonicalAuditEvent(event)}`, 'utf8').digest('hex');
 }
+
