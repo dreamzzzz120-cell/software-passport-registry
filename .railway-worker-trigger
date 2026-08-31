@@ -1,3 +1,4 @@
 worker redeploy: database URL normalization
 worker scan completion hardening
 worker redeploy: scan finding identity fix + AI evidence reasoning hardening
+worker redeploy: commercial notification and retention workers
