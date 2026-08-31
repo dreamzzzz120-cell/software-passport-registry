@@ -200,7 +200,7 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
   }, [task?.id, task?.status]);
   useEffect(() => {
     if (!selected) return;
-    apiFetch('/api/monitoring-configurations').then(response => response.ok ? response.json() : []).then(rows => {
+    apiFetch('/api/monitoring/monitoring-configurations').then(response => response.ok ? response.json() : []).then(rows => {
       if (Array.isArray(rows)) { setMonitoringConfigurations(rows); setMonitoringConfigurationId(rows[0]?.id || ''); }
     }).catch(() => { setMonitoringConfigurations([]); setMonitoringConfigurationId(''); });
   }, [selected?.id]);

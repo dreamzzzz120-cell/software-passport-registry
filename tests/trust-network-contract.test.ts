@@ -15,7 +15,7 @@ describe('Trust Network (MSP Command Center rebuild) preserves existing function
     expect(s).toContain("apiFetch('/api/organization/team')");
     expect(s).toContain("apiFetch(`/api/alerts/${encodeURIComponent(selected.id)}`)");
     expect(s).toContain("apiFetch('/api/remediation-tasks'");
-    expect(s).toContain("apiFetch('/api/monitoring-configurations')");
+    expect(s).toContain("apiFetch('/api/monitoring/monitoring-configurations')");
     expect(s).toContain("onSelectClient(client.id); onNavigate('clients')");
   });
 
