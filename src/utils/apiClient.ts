@@ -57,6 +57,21 @@ export const apiFetch = async (
       if (response.status === 401) {
         window.dispatchEvent(new CustomEvent('auth-expired'));
       }
+      if (response.status === 402) {
+        // The server is the authority for paid access. Keep the user signed in
+        // and route them to the real billing surface instead of treating a
+        // commercial denial as an authentication failure. This also makes the
+        // paywall work for direct API attempts, not only visible UI buttons.
+        const isBillingPage = window.location.pathname === '/billing' || window.location.pathname === '/pricing';
+        if (!isBillingPage) {
+          const billingUrl = '/billing';
+          window.history.pushState({}, '', billingUrl);
+          window.dispatchEvent(new PopStateEvent('popstate'));
+          window.dispatchEvent(new CustomEvent('billing-required', {
+            detail: { path: resolvedUrl.pathname },
+          }));
+        }
+      }
       if (response.status === 403 && resolvedUrl.pathname === '/api/user/me' && !isSignupTransitionActive()) {
         // A valid Firebase identity without a persisted SPR user record is
         // authenticated but not authorized for the workspace. Do not render
