@@ -23,3 +23,18 @@ secret*.json
 test-temp-file.txt
 .vercel
 .env*
+
+# Credential-bearing operational artifacts.
+# 2026-08-31: an ad-hoc role-rotation script (rotate-worker-role.cjs) carrying
+# a live connection string sat untracked in the working tree, one `git add .`
+# away from committing a production database password. The Dockerfile already
+# refuses to build an image containing these, but that is the last line of
+# defence, not the first.
+*.pem
+*.key
+*.p12
+*.pfx
+rotate-*.cjs
+rotate-*.mjs
+rotate-*.sh
+*.connstr
