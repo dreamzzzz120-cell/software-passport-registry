@@ -9,6 +9,7 @@ import { checkDatabaseHealth, closeDatabase, db } from './src/db/index.ts';
 import { sql } from 'drizzle-orm';
 import { AuthenticatedRequest, rateLimiter, requireAuth, requireRole } from './src/middleware/security.ts';
 import { createAuthRouter } from './src/routes/auth.ts';
+import { createOrganizationProvisioningRouter } from './src/routes/organization-provisioning.ts';
 import { createConnectRouter } from './src/routes/connect.ts';
 import { createIntegrationsRouter } from './src/routes/integrations.ts';
 import { createLiveIntegrationsRouter } from './src/routes/integrations-live.ts';
@@ -94,9 +95,6 @@ const corsOrigin = (origin: string | undefined, callback: (error: Error | null, 
 app.use(helmet({ contentSecurityPolicy: { useDefaults: false, directives: { defaultSrc: ["'self'"], baseUri: ["'self'"], objectSrc: ["'none'"], frameAncestors: ["'none'"], formAction: ["'self'"], scriptSrc: ["'self'", "'sha256-kWQT+628v4D1A4MJk9hTD6a0W1AdPlPKtzhPlYKIpZc='"], styleSrc: ["'self'", "'unsafe-inline'"], imgSrc: ["'self'", 'data:', 'blob:', 'https:'], fontSrc: ["'self'", 'data:', 'https:'], connectSrc: ["'self'", ...(appOrigin ? [appOrigin] : [])], frameSrc: ["'self'", 'https:'], workerSrc: ["'self'", 'blob:'], manifestSrc: ["'self'"], upgradeInsecureRequests: [] } }, crossOriginEmbedderPolicy: false, frameguard: { action: 'deny' }, referrerPolicy: { policy: 'no-referrer' } }));
 app.use(cors({ origin: corsOrigin, credentials: true, methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], allowedHeaders: ['Authorization', 'Content-Type', 'X-Request-ID', 'X-API-Key'] }));
 app.use((req, res, next) => { if (req.method === 'TRACE' || req.method === 'CONNECT') return res.status(405).json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'HTTP method is not allowed.' } }); if (req.headers['content-length'] && !/^\d+$/.test(String(req.headers['content-length']))) return res.status(400).json({ error: { code: 'INVALID_CONTENT_LENGTH', message: 'Invalid Content-Length header.' } }); return next(); });
-// Stripe's signature verification needs the exact raw request bytes, so this
-// must be registered with express.raw() before the global express.json()
-// below parses (and discards) the raw body for every other route.
 app.post('/api/billing/webhook', express.raw({ type: 'application/json', limit: requestBodyLimit }), stripeWebhookHandler);
 app.use(express.json({ limit: requestBodyLimit, strict: true, type: ['application/json', 'application/*+json'] }));
 app.use(express.urlencoded({ extended: false, limit: requestBodyLimit }));
@@ -107,22 +105,15 @@ app.get('/ready', async (_req, res) => { const database = await checkDatabaseHea
 app.get('/api/health', async (_req, res) => { const database = await checkDatabaseHealth(); res.status(database.ok ? 200 : 503).json({ status: database.ok ? 'ok' : 'degraded', database: database.ok ? database : { ok: false, latencyMs: database.latencyMs, error: 'DATABASE_UNAVAILABLE' } }); });
 app.use('/api', rateLimiter);
 app.use('/api', createAuthRouter());
+app.use('/api', createOrganizationProvisioningRouter());
 app.use('/api', createPublicConnectRouter());
 app.use('/api', createFreeReviewRouter());
 const connectRouter = createConnectRouter();
 app.use('/api', connectRouter);
 app.use('/api/connect', connectRouter);
 app.use('/api/integrations/connect', connectRouter);
-// Note: /api/ai/analyze-passport was removed here - it was a misleadingly
-// named stub (no LLM call, just a templated string from a DB query), had no
-// frontend caller and no test coverage. The real AI explanation endpoint is
-// POST /api/ai-trust/explain-passport below, which actually calls a model
-// and validates its output against the authoritative evidence snapshot.
 app.use('/api/integrations', createIntegrationsRouter());
 app.use('/api/integrations-live', createLiveIntegrationsRouter());
-// A 'Client'-role user may only sign off on remediation work already
-// verified by staff (POST /remediations/:id/approve) -- every other
-// mutation under this router still requires an internal staff role.
 const requireTrustMutationRole = (req: Request, res: Response, next: NextFunction) => { if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next(); if (req.method === 'POST' && /\/remediations\/[^/]+\/approve$/.test(req.path)) return requireRole(['Owner', 'Admin', 'Operator', 'Technician', 'Client'])(req as AuthenticatedRequest, res, next); return requireRole(['Owner', 'Admin', 'Operator', 'Technician'])(req as AuthenticatedRequest, res, next); };
 app.use('/api/trust-loop', requireAuth, requireTrustMutationRole);
 app.use('/api/trust-loop', createTrustLoopRouter());
@@ -147,26 +138,11 @@ if (mcpBearer) {
 
 app.use('/api', createScansRouter());
 app.use('/api/compliance', createComplianceRouter());
-// Resolve the static asset root from the process working directory in both
-// production CJS and local tsx execution. This avoids import.meta.url in the
-// CJS bundle while keeping the deployed /app layout deterministic.
 const publicDir = path.resolve(process.cwd());
 app.use(express.static(publicDir, { index: false, maxAge: config.isProduction ? '1y' : 0 }));
 app.get('/*splat', (req, res, next) => { if (req.path.startsWith('/api/') || req.path === '/mcp') return next(); return res.sendFile(path.join(publicDir, 'index.html'), error => error ? next(error) : undefined); });
-// `error` is always a plain, human-readable string here, matching every route
-// handler's own JSON shape (e.g. { error: 'Invalid request' }) -- it used to be
-// a nested { code, message, requestId } object on exactly these two handlers,
-// which silently broke every frontend call site written against the flat
-// convention (new Error(data?.error) rendered the literal text
-// "[object Object]" whenever a request fell through to one of these instead of
-// a route's own inline error handling). `code`/`requestId` are still present,
-// just promoted to sibling fields instead of nested inside `error`.
 app.use((req, res, next) => { if (req.path.startsWith('/api/') || req.path === '/mcp') return res.status(404).json({ error: 'Route not found.', code: 'NOT_FOUND', requestId: res.locals.requestId }); return next(); });
 app.use((err: any, req: Request, res: Response, next: NextFunction) => { if (res.headersSent) return next(err); const requestId = res.locals.requestId || `req_${randomUUID()}`; const status = Number.isInteger(err?.status) && err.status >= 400 && err.status < 600 ? err.status : 500; console.error('[HTTP_ERROR]', { requestId, status, method: req.method, path: req.path, message: err?.message || String(err) }); if (config.sentry.dsn) Sentry.captureException(err, { tags: { requestId } }); return res.status(status).json({ error: status === 500 ? 'An unexpected server error occurred.' : err?.message || 'Request failed.', code: status === 500 ? 'INTERNAL_SERVER_ERROR' : 'REQUEST_FAILED', requestId }); });
-// Node's http server never dispatches CONNECT to Express's normal request
-// handler — it fires a separate 'connect' event on the raw socket instead, so
-// the CONNECT rejection in the Express middleware above never actually runs
-// for a real CONNECT request. This closes that gap at the socket level.
 export function rejectConnectTunnels(target: ReturnType<typeof app.listen>) {
   target.on('connect', (_req, socket) => { socket.end('HTTP/1.1 405 Method Not Allowed\r\nContent-Length: 0\r\nConnection: close\r\n\r\n'); });
   return target;
