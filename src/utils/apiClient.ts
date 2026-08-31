@@ -4,7 +4,7 @@
  */
 
 import { auth } from '../lib/firebase';
-import { setAuthNotice } from '../lib/authNotice';
+import { setAuthNotice, notProvisionedMessage } from '../lib/authNotice';
 import { isSignupTransitionActive } from '../lib/signupTransition';
 
 interface FetchOptions extends RequestInit {
@@ -67,8 +67,11 @@ export const apiFetch = async (
         // is not provisioned yet - reporting it would replace the signup
         // success message with a misleading failure. Every other 403 still
         // surfaces normally, and the server's decision is unchanged.
-        setAuthNotice('Your Firebase account is valid, but SPR has not provisioned this account in its workspace yet.');
-        window.dispatchEvent(new CustomEvent('auth-provisioning-failed'));
+        // Read the address before signOut() clears currentUser, so the notice
+        // can name the identity that was actually refused.
+        const rejectedEmail = auth?.currentUser?.email ?? null;
+        setAuthNotice(notProvisionedMessage(rejectedEmail));
+        window.dispatchEvent(new CustomEvent('auth-provisioning-failed', { detail: { email: rejectedEmail } }));
         await auth.signOut().catch(() => undefined);
       }
       return response;

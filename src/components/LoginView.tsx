@@ -13,7 +13,7 @@ import {
 } from 'firebase/auth';
 import { AlertCircle, ArrowRight, CheckCircle2, Eye, EyeOff, Loader, ShieldCheck } from 'lucide-react';
 import { auth, googleAuthProvider, firebaseConfigured } from '../lib/firebase';
-import { consumeAuthNotice } from '../lib/authNotice';
+import { consumeAuthNotice, notProvisionedMessage } from '../lib/authNotice';
 import { beginSignupTransition, endSignupTransition } from '../lib/signupTransition';
 
 interface LoginViewProps {
@@ -80,8 +80,9 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
       if (!currentUser || currentUser.emailVerified) return;
       setNotice('Verify your email before entering the protected workspace.');
     });
-    const onProvisioningFailure = () => {
-      setError('Your Firebase account is valid, but SPR has not provisioned this account in its workspace yet.');
+    const onProvisioningFailure = (event: Event) => {
+      const email = (event as CustomEvent<{ email?: string | null }>).detail?.email ?? null;
+      setError(notProvisionedMessage(email));
       setNotice('Authentication succeeded; workspace authorization is still required.');
     };
     window.addEventListener('auth-provisioning-failed', onProvisioningFailure);
