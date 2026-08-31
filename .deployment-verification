@@ -1,0 +1,5 @@
+Auto-deploy pipeline verification trigger
+Timestamp: 2026-08-31
+Purpose: Verify spr-worker deploys automatically after "Wait for CI" was disabled in Railway dashboard
+Expected: Automatic deployment (no SKIPPED status)
+
