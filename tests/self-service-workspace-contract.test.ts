@@ -82,23 +82,47 @@ describe('self-service workspace creation contract', () => {
     expect(handler).toContain("action: 'workspace.created'");
   });
 
-  it('is reached by the sign-in flow before the authenticated shell loads', () => {
-    const login = stripComments(read('src/components/LoginView.tsx'));
-    expect(login).toContain("apiFetch('/api/auth/workspace', { method: 'POST' })");
-    const call = login.indexOf("apiFetch('/api/auth/workspace'");
-    const success = login.indexOf('onLoginSuccess({');
+  it('runs in the authenticated load, the one choke point every session passes through', () => {
+    const app = stripComments(read('src/App.tsx'));
+    expect(app).toContain("apiFetch('/api/auth/workspace', { method: 'POST' })");
+    const call = app.indexOf("apiFetch('/api/auth/workspace'");
+    const batch = app.indexOf("apiFetch('/api/user/me'), apiFetch('/api/scans')");
     expect(call).toBeGreaterThan(-1);
-    expect(success).toBeGreaterThan(-1);
-    // Provisioning must complete before control passes to the dashboard,
-    // otherwise the shell starts its authenticated load against an account
-    // that is not provisioned yet and 403s on every request.
-    expect(call).toBeLessThan(success);
+    expect(batch).toBeGreaterThan(-1);
+    // Provisioning must complete before the batch load, or every request in
+    // it answers 403 against an account that is not provisioned yet.
+    expect(call).toBeLessThan(batch);
+  });
+
+  it('only provisions a verified identity from the client side too', () => {
+    const app = stripComments(read('src/App.tsx'));
+    expect(app).toContain('auth.currentUser?.emailVerified');
+    expect(app).toContain('probe.status === 403');
+  });
+
+  it('suppresses the 403 auto-sign-out while provisioning is in flight', () => {
+    const app = stripComments(read('src/App.tsx'));
+    const begin = app.indexOf('beginSignupTransition()');
+    const call = app.indexOf("apiFetch('/api/auth/workspace'");
+    const end = app.indexOf('endSignupTransition()', call);
+    // Without this the 403 handler in apiClient signs the user out mid-
+    // provision and shows a stale "not a member of any workspace" notice.
+    expect(begin).toBeGreaterThan(-1);
+    expect(begin).toBeLessThan(call);
+    expect(end).toBeGreaterThan(call);
   });
 
   it('refreshes the ID token after provisioning so stale claims are not used', () => {
-    const login = stripComments(read('src/components/LoginView.tsx'));
-    const call = login.indexOf("apiFetch('/api/auth/workspace'");
-    const refresh = login.indexOf('user.getIdToken(true)', call);
+    const app = stripComments(read('src/App.tsx'));
+    const call = app.indexOf("apiFetch('/api/auth/workspace'");
+    const refresh = app.indexOf('getIdToken(true)', call);
     expect(refresh).toBeGreaterThan(call);
+  });
+
+  it('keeps provisioning to a single path, not duplicated in LoginView', () => {
+    const login = stripComments(read('src/components/LoginView.tsx'));
+    // A second provisioning call here would be a divergent path of exactly
+    // the kind that produced the duplicate-pool-factory outage.
+    expect(login).not.toContain('/api/auth/workspace');
   });
 });

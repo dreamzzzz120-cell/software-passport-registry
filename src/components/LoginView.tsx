@@ -15,7 +15,6 @@ import { AlertCircle, ArrowRight, CheckCircle2, Eye, EyeOff, Loader, ShieldCheck
 import { auth, googleAuthProvider, firebaseConfigured } from '../lib/firebase';
 import { consumeAuthNotice, notProvisionedMessage } from '../lib/authNotice';
 import { beginSignupTransition, endSignupTransition } from '../lib/signupTransition';
-import { apiFetch } from '../utils/apiClient';
 
 interface LoginViewProps {
   onLoginSuccess: (user: { uid: string; email: string | null; displayName: string; token: string; emailVerified: boolean; onboarded: 0 }) => void;
@@ -61,25 +60,14 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
       setNotice('Verify your email before entering SPR. We sent a fresh verification email. Then sign in again.');
       return;
     }
-    // Ensure this verified identity has a workspace before handing control to
-    // the authenticated shell. The endpoint is idempotent and never moves an
-    // existing member: someone who was invited keeps the tenant that invited
-    // them, and only an identity with no membership at all gets a new one.
-    // Without this step a self-signed-up account reaches the dashboard and
-    // every request answers 403 'not provisioned'.
-    // apiFetch attaches the current user's ID token itself.
-    const provisioned = await apiFetch('/api/auth/workspace', { method: 'POST' }).catch(() => null);
-    if (!provisioned || !provisioned.ok) {
-      const detail = provisioned ? await provisioned.json().catch(() => null) : null;
-      setError(detail?.error || 'Signed in, but your workspace could not be prepared. Please try again.');
-      await signOut(auth).catch(() => undefined);
-      return;
-    }
-    // The workspace may have just been created, so the ID token's claims are
-    // stale. Refresh before the shell starts making authorized requests.
-    const freshToken = await user.getIdToken(true);
+    // Workspace provisioning deliberately does NOT happen here. It lives in
+    // App.tsx's authenticated load, which is the one choke point every session
+    // passes through -- this function is bypassed entirely by the Google
+    // redirect path and by a page reload on an existing session. Doing it in
+    // both places would be a second, divergent provisioning path.
+    const token = await user.getIdToken(true);
 
-    onLoginSuccess({ uid: user.uid, email: user.email, displayName: user.displayName || user.email?.split('@')[0] || 'User', token: freshToken, emailVerified: true, onboarded: 0 });
+    onLoginSuccess({ uid: user.uid, email: user.email, displayName: user.displayName || user.email?.split('@')[0] || 'User', token, emailVerified: true, onboarded: 0 });
   };
 
   useEffect(() => {

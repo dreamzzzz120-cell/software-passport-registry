@@ -4,7 +4,7 @@ import type { Alert, Client, Integration, Scan, SoftwarePassport, Vendor } from 
 import { apiFetch } from './utils/apiClient';
 import { auth } from './lib/firebase';
 import { setAuthNotice } from './lib/authNotice';
-import { isSignupTransitionActive } from './lib/signupTransition';
+import { isSignupTransitionActive, beginSignupTransition, endSignupTransition } from './lib/signupTransition';
 import CommandCenter from './components/CommandCenter';
 import ExtensionWorkflow from './components/ExtensionWorkflow';
 import ExtensionMarketplace from './components/ExtensionMarketplace';
@@ -214,6 +214,38 @@ export default function App() {
     if (!user) return;
     let cancelled = false;
     const load = async () => {
+      // Ensure a verified identity has a workspace BEFORE the batch load runs.
+      //
+      // This is the only choke point that catches every way a session can
+      // begin. LoginView.complete() covers the email/password and Google-popup
+      // paths, but onAuthStateChanged fires the moment Firebase restores or
+      // completes a sign-in -- including the Google *redirect* path and a page
+      // reload on an existing session -- and this effect then starts loading
+      // against an account that may not be provisioned yet. Doing it here
+      // covers all of them.
+      //
+      // beginSignupTransition() suppresses apiClient's 403-on-/api/user/me
+      // auto-sign-out for the duration. Without it that handler fires first
+      // and signs the user out mid-provision: production showed a burst of
+      // 403s at 09:51:38 followed by a successful workspace POST at 09:51:40 --
+      // the workspace was created, but the user had already been bounced to
+      // /login with a stale "not a member of any workspace" notice.
+      beginSignupTransition();
+      try {
+        const probe = await apiFetch('/api/user/me');
+        if (probe.status === 403 && auth.currentUser?.emailVerified) {
+          const provisioned = await apiFetch('/api/auth/workspace', { method: 'POST' });
+          // Claims are stale immediately after provisioning; refresh so the
+          // batch load below authenticates against the new workspace.
+          if (provisioned.ok) await auth.currentUser.getIdToken(true);
+        }
+      } catch {
+        // A failed probe is not fatal: the batch load below reports the real
+        // outcome through the existing 401/403 handling.
+      } finally {
+        endSignupTransition();
+      }
+
       const responses = await Promise.all([
         apiFetch('/api/user/me'), apiFetch('/api/scans'), apiFetch('/api/trust-loop/findings'), apiFetch('/api/user/passports'), apiFetch('/api/user/clients'), apiFetch('/api/integrations'), apiFetch('/api/vendors'),
       ]);
