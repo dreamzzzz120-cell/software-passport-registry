@@ -1,0 +1,4 @@
+Auto-deploy verification — force-deploy succeeded, now testing automatic deployment
+Timestamp: 2026-08-31 (post force-deploy)
+Expected: spr-worker auto-deploys WITHOUT "Wait for CI" skip
+
