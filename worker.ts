@@ -4,6 +4,7 @@ import { runWebhookWorkerLoop } from './src/workers/webhook-worker.ts';
 import { runSecurityScannerLoop } from './src/workers/security-scanner-worker.ts';
 import { runTrustMonitoringWorkerLoop } from './src/workers/trust-monitoring-worker.ts';
 import { runNotificationWorkerLoop } from './src/workers/notification-worker.ts';
+import { runRetentionWorkerLoop } from './src/workers/retention-worker.ts';
 import { createWorkerPool, assertWorkerDatabase } from './src/workers/worker-db.ts';
 
 let ready = false;
@@ -25,7 +26,7 @@ async function verifyDatabase() { const pool = createWorkerPool(); try { await a
 async function supervise(name: string, run: () => Promise<void>) {
   let delay = 1000;
   while (true) {
-    try { await run(); if (name !== 'notifications') console.warn(`[Worker] ${name} loop exited; restarting`); delay = 1000; }
+    try { await run(); delay = 1000; }
     catch (error) { console.error(`[Worker] ${name} loop failure:`, error instanceof Error ? error.message : String(error)); await new Promise(resolve => setTimeout(resolve, delay)); delay = Math.min(delay * 2, 30_000); }
   }
 }
@@ -38,6 +39,7 @@ async function main() {
     supervise('trust-monitoring', runTrustMonitoringWorkerLoop),
     supervise('webhook', runWebhookWorkerLoop),
     supervise('notifications', runNotificationWorkerLoop),
+    supervise('retention', runRetentionWorkerLoop),
   ]);
 }
 main().catch(error => { ready = false; console.error('[Worker] Fatal startup error:', error instanceof Error ? error.message : String(error)); process.exit(1); });
