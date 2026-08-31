@@ -7,6 +7,16 @@ import { Pool, PoolClient } from 'pg';
 import { assessOsvSeverity } from '../security/osv-severity.ts';
 import { componentIdentity, vulnerabilityIdentity } from '../security/osv-identity.ts';
 import { normalizeCycloneDxComponentNames } from '../security/component-path-normalization.ts';
+// This worker used to carry its own pool factory that read DATABASE_URL -- the
+// owner role, which bypasses RLS -- and duplicated the TLS logic every other
+// worker gets from worker-db.ts. Divergence between those two copies is what
+// produced the 2026-08-31 outage. It now shares the single factory, so it
+// connects as the least-privileged spr_worker_runtime role (via
+// WORKER_DATABASE_URL) and there is exactly one TLS implementation to keep
+// correct. Cross-tenant reads still work: migration 0048 gives that role an
+// explicit spr_worker_cross_tenant policy on every tenant-scoped table, which
+// is what the job queue needs and what BYPASSRLS used to provide.
+import { createWorkerPool } from './worker-db.ts';
 
 type ClaimedJob = {
   id: string;
@@ -32,42 +42,6 @@ const SYFT_VERSION = '1.49.0';
 const GITHUB_API_ORIGIN = 'https://api.github.com';
 const GITHUB_CODELOAD_ORIGIN = 'https://codeload.github.com';
 const OSV_ORIGIN = 'https://api.osv.dev';
-
-function buildSsl() {
-  const mode = (process.env.SQL_SSL || '').trim().toLowerCase();
-  const ca = process.env.SQL_SSL_CA?.trim();
-  if (!mode || mode === 'false' || mode === '0') return undefined;
-  if (mode === 'require' || mode === 'true' || mode === '1') return { rejectUnauthorized: false };
-  if (mode === 'verify' || mode === 'verify-full') {
-    if (!ca) throw new Error('SQL_SSL_CA_REQUIRED_FOR_VERIFICATION');
-    // Node throws when checkServerIdentity is present but not a function, so the
-    // key is omitted entirely rather than set to undefined. Omitting it keeps
-    // the default hostname check, which is exactly what verify-full requires:
-    // the Railway Postgres server certificate carries the private hostname in
-    // its SAN, so the dialled host is verified against it.
-    return { rejectUnauthorized: true, ca };
-  }
-  throw new Error('INVALID_SQL_SSL_MODE');
-}
-
-export function createWorkerPool() {
-  const connectionString = process.env.DATABASE_URL?.trim();
-  const ssl = buildSsl();
-  return new Pool({
-    ...(connectionString ? { connectionString } : {
-      host: process.env.SQL_HOST,
-      user: process.env.SQL_USER,
-      password: process.env.SQL_PASSWORD,
-      database: process.env.SQL_DB_NAME,
-    }),
-    ssl,
-    max: 4,
-    connectionTimeoutMillis: 10_000,
-    idleTimeoutMillis: 30_000,
-    statement_timeout: 30_000,
-    query_timeout: 30_000,
-  });
-}
 
 async function claimJob(pool: Pool): Promise<ClaimedJob | null> {
   const client = await pool.connect();
