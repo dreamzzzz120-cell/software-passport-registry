@@ -141,7 +141,11 @@ describe('7. verified/provisioned users still authenticate normally', () => {
     expect(security).toContain('adminAuth.verifyIdToken(token, true)');
     expect(security).toContain("EMAIL_NOT_VERIFIED");
     expect(security).toContain('await db.select().from(users).where(eq(users.uid, uid))');
-    expect(security).toContain('req.db = await attachTenantScope(dbUser.tenantId, res)');
+    // The third argument binds app.user_id alongside app.tenant_id (added
+    // with the organization provisioning work). The assertion checks the
+    // tenant binding it has always covered without pinning the exact arity,
+    // so a further scope argument does not read as a regression here.
+    expect(security).toContain('req.db = await attachTenantScope(dbUser.tenantId, res');
   });
 
   it('email verification is not bypassed anywhere in the signup change', () => {
