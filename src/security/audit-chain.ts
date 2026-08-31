@@ -12,10 +12,16 @@ export type SecurityAuditEvent = {
   metadata?: Record<string, unknown>;
 };
 
+function normalizeIsoTimestamp(timestamp: string): string {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) throw new Error('Invalid audit timestamp');
+  return date.toISOString();
+}
+
 export function canonicalAuditEvent(event: SecurityAuditEvent): string {
   return JSON.stringify({
     eventId: event.eventId,
-    timestamp: event.timestamp,
+    timestamp: normalizeIsoTimestamp(event.timestamp),
     tenantId: event.tenantId,
     actorId: event.actorId ?? null,
     action: event.action,
