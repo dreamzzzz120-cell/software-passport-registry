@@ -1,8 +1,3 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import { Request, Response, NextFunction } from 'express';
 import { createHash, randomUUID } from 'node:crypto';
 import IORedis from 'ioredis';
@@ -13,10 +8,10 @@ import { users } from '../db/schema.ts';
 import { eq, sql } from 'drizzle-orm';
 import { attachTenantScope, ScopedDb } from './tenant-scope.ts';
 import { recordSession } from '../security/session-tracking.ts';
+import { capabilityForPath, tenantHasCapability } from '../security/entitlements.ts';
 
 export interface AuthenticatedRequest extends Request {
   user?: { id: number; uid: string; email: string; tenantId: string; role: string; clientId: string | null; emailVerified: boolean };
-  /** Per-request, tenant-scoped connection (Row-Level Security enforced). Set by requireAuth. */
   db?: ScopedDb;
 }
 
@@ -32,48 +27,35 @@ export function setRateLimiterConfig(opts: { windowMs?: number; maxRequests?: nu
 
 interface RateLimitRecord { count: number; resetAt: number; }
 interface RateLimitStore { incr(key: string, windowMs: number, limit: number): Promise<RateLimitRecord>; }
-
 class InMemoryStore implements RateLimitStore {
   private map = new Map<string, RateLimitRecord>();
   async incr(key: string, windowMs: number, _limit: number) {
-    const now = Date.now();
-    const rec = this.map.get(key);
-    if (!rec || now >= rec.resetAt) {
-      const next = { count: 1, resetAt: now + windowMs };
-      this.map.set(key, next);
-      return next;
-    }
-    rec.count += 1;
-    return rec;
+    const now = Date.now(); const rec = this.map.get(key);
+    if (!rec || now >= rec.resetAt) { const next = { count: 1, resetAt: now + windowMs }; this.map.set(key, next); return next; }
+    rec.count += 1; return rec;
   }
 }
-
 interface AtomicRateLimitClient { increment(script: string, key: string, windowMs: number, limit: number): Promise<unknown>; }
 export class IORedisAtomicClient implements AtomicRateLimitClient {
   constructor(private readonly client: { eval(script: string, numKeys: number, ...args: Array<string | number>): Promise<unknown> }) {}
   increment(script: string, key: string, windowMs: number, limit: number) { return this.client.eval(script, 1, key, String(windowMs), String(limit)); }
 }
-
 export function createAtomicRateLimitClient(provider: 'ioredis', client: any): AtomicRateLimitClient {
   if (provider === 'ioredis' && client && typeof client.eval === 'function') return new IORedisAtomicClient(client);
   throw new Error('Invalid or unsupported rate limit provider');
 }
-
 export class RedisStore implements RateLimitStore {
   private readonly lua = `local count = redis.call("INCR", KEYS[1])\nlocal ttl = redis.call("PTTL", KEYS[1])\nif count == 1 or ttl < 0 then redis.call("PEXPIRE", KEYS[1], ARGV[1]) ttl = tonumber(ARGV[1]) end\nreturn {count, ttl}`;
   constructor(private readonly atomicClient: AtomicRateLimitClient) {}
   async incr(key: string, windowMs: number, limit: number) {
     const res = await this.atomicClient.increment(this.lua, key, windowMs, limit);
     if (!Array.isArray(res) || res.length < 2) throw new Error('Unexpected Redis rate-limit response');
-    const count = Number(res[0]);
-    const ttl = Number(res[1]);
+    const count = Number(res[0]); const ttl = Number(res[1]);
     if (!Number.isFinite(count) || count < 0 || !Number.isFinite(ttl) || ttl <= 0) throw new Error('Invalid Redis rate-limit response');
     return { count, resetAt: Date.now() + ttl };
   }
 }
-
 let sharedStore: RateLimitStore = new InMemoryStore();
-
 export function createSharedRateLimitStoreFromEnv(): RateLimitStore {
   if (!config.isProduction) return new InMemoryStore();
   if (!config.redis.url) throw new Error('REDIS_URL is required for production rate limiting');
@@ -86,7 +68,6 @@ export function createSharedRateLimitStoreFromEnv(): RateLimitStore {
 }
 if (config.isProduction) sharedStore = createSharedRateLimitStoreFromEnv();
 export function setRateLimiterStore(s: RateLimitStore) { if (!isTestMode()) throw new Error('setRateLimiterStore is only available in test mode'); sharedStore = s; }
-
 function budgetFor(req: Request) {
   const path = req.path.toLowerCase();
   if (path.includes('/scan') || path.includes('/monitoring') || path.includes('/reports') || path.includes('/passport')) return { windowMs: 60_000, max: 20, className: 'expensive' };
@@ -94,7 +75,6 @@ function budgetFor(req: Request) {
   if (req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'OPTIONS') return { windowMs: 60_000, max: 40, className: 'mutation' };
   return { windowMs: rateLimitWindowMs, max: maxRequestsPerWindow, className: 'default' };
 }
-
 function limiterIdentity(req: Request) {
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
   const apiKey = typeof req.headers['x-api-key'] === 'string' ? req.headers['x-api-key'].trim() : '';
@@ -103,127 +83,59 @@ function limiterIdentity(req: Request) {
   const credentialFingerprint = credential ? createHash('sha256').update(credential, 'utf8').digest('hex').slice(0, 32) : '';
   return { ip, credentialFingerprint };
 }
-
 export const rateLimiter = async (req: Request, res: Response, next: NextFunction) => {
-  const budget = budgetFor(req);
-  const { ip, credentialFingerprint } = limiterIdentity(req);
+  const budget = budgetFor(req); const { ip, credentialFingerprint } = limiterIdentity(req);
   const identity = credentialFingerprint ? `ip:${ip}:credential:${credentialFingerprint}` : `ip:${ip}`;
-  const key = `rl:v3:${budget.className}:${identity}`;
   try {
-    const counter = await sharedStore.incr(key, budget.windowMs, budget.max);
-    res.setHeader('X-RateLimit-Limit', String(budget.max));
-    res.setHeader('X-RateLimit-Remaining', String(Math.max(0, budget.max - counter.count)));
-    res.setHeader('X-RateLimit-Reset', String(Math.ceil(counter.resetAt / 1000)));
-    res.setHeader('X-RateLimit-Policy', `${budget.max};w=${Math.ceil(budget.windowMs / 1000)};class=${budget.className}`);
-    if (counter.count > budget.max) {
-      const retryAfter = Math.max(1, Math.ceil((counter.resetAt - Date.now()) / 1000));
-      res.setHeader('Retry-After', String(retryAfter));
-      return res.status(429).json({ error: { code: 'RATE_LIMITED', message: 'Too many requests.' } });
-    }
+    const counter = await sharedStore.incr(`rl:v3:${budget.className}:${identity}`, budget.windowMs, budget.max);
+    res.setHeader('X-RateLimit-Limit', String(budget.max)); res.setHeader('X-RateLimit-Remaining', String(Math.max(0, budget.max - counter.count));
+    res.setHeader('X-RateLimit-Reset', String(Math.ceil(counter.resetAt / 1000))); res.setHeader('X-RateLimit-Policy', `${budget.max};w=${Math.ceil(budget.windowMs / 1000)};class=${budget.className}`);
+    if (counter.count > budget.max) { const retryAfter = Math.max(1, Math.ceil((counter.resetAt - Date.now()) / 1000)); res.setHeader('Retry-After', String(retryAfter)); return res.status(429).json({ error: { code: 'RATE_LIMITED', message: 'Too many requests.' } }); }
     return next();
-  } catch (err) {
-    const requestId = randomUUID();
-    console.error('[RateLimiter] fail-closed (requestId=%s): %s', requestId, err instanceof Error ? err.message : String(err));
-    return res.status(503).json({ error: { code: 'RATE_LIMIT_STORE_UNAVAILABLE', message: 'This operation is temporarily unavailable.', requestId } });
-  }
+  } catch (err) { const requestId = randomUUID(); console.error('[RateLimiter] fail-closed (requestId=%s): %s', requestId, err instanceof Error ? err.message : String(err)); return res.status(503).json({ error: { code: 'RATE_LIMIT_STORE_UNAVAILABLE', message: 'This operation is temporarily unavailable.', requestId } }); }
 };
-
-const BILLING_EXEMPT_PATHS = [
-  '/api/billing',
-  '/api/user/me',
-  '/api/auth/resend-verification',
-  '/api/auth/verify-status',
-] as const;
-
-function isBillingExemptPath(req: Request): boolean {
-  const path = `${req.baseUrl}${req.path}`.replace(/\/$/, '') || '/';
-  return BILLING_EXEMPT_PATHS.some((allowed) => path === allowed || path.startsWith(`${allowed}/`));
-}
-
-/**
- * Commercial enforcement is deliberately attached to the same authenticated
- * boundary used by tenant/RLS authorization. This prevents a UI-only paywall:
- * a caller cannot bypass billing by calling an API route directly.
- *
- * Billing/account bootstrap endpoints remain reachable so an unpaid customer
- * can sign in, view plans, and purchase access. Public free-review endpoints
- * never call requireAuth and therefore remain free.
- */
+const BILLING_EXEMPT_PATHS = ['/api/billing','/api/user/me','/api/auth/resend-verification','/api/auth/verify-status'] as const;
+function isBillingExemptPath(req: Request): boolean { const path = `${req.baseUrl}${req.path}`.replace(/\/$/, '') || '/'; return BILLING_EXEMPT_PATHS.some(allowed => path === allowed || path.startsWith(`${allowed}/`)); }
 async function enforcePaidAccess(req: AuthenticatedRequest, res: Response): Promise<boolean> {
   if (isBillingExemptPath(req)) return true;
-  const tenantId = req.user?.tenantId;
-  const scopedDb = req.db;
-  if (!tenantId || !scopedDb) {
-    res.status(403).json({ error: 'SUBSCRIPTION_REQUIRED', code: 'SUBSCRIPTION_REQUIRED', message: 'An authenticated workspace is required.' });
-    return false;
-  }
-
-  const result = await scopedDb.execute(sql`
-    SELECT plan, status, current_period_end AS "currentPeriodEnd"
-    FROM tenant_subscriptions
-    WHERE tenant_id = ${tenantId}
-    LIMIT 1
-  `);
+  const tenantId = req.user?.tenantId; const scopedDb = req.db;
+  if (!tenantId || !scopedDb) { res.status(403).json({ error: 'SUBSCRIPTION_REQUIRED', code: 'SUBSCRIPTION_REQUIRED', message: 'An authenticated workspace is required.' }); return false; }
+  const result = await scopedDb.execute(sql`SELECT plan, status, current_period_end AS "currentPeriodEnd" FROM tenant_subscriptions WHERE tenant_id = ${tenantId} LIMIT 1`);
   const subscription = (result as any).rows?.[0] as { plan?: string | null; status?: string | null; currentPeriodEnd?: string | null } | undefined;
-  const active = subscription?.plan && (subscription.status === 'active' || subscription.status === 'trialing');
-  if (!active) {
-    res.status(402).json({
-      error: 'SUBSCRIPTION_REQUIRED',
-      code: 'SUBSCRIPTION_REQUIRED',
-      message: 'This SPR capability requires an active paid plan.',
-      billingPath: '/billing',
-      subscriptionStatus: subscription?.status ?? 'none',
-    });
+  const active = Boolean(subscription?.plan && (subscription.status === 'active' || subscription.status === 'trialing'));
+  if (!active) { res.status(402).json({ error: 'SUBSCRIPTION_REQUIRED', code: 'SUBSCRIPTION_REQUIRED', message: 'This SPR capability requires an active paid plan.', billingPath: '/billing', subscriptionStatus: subscription?.status ?? 'none' }); return false; }
+  const capability = capabilityForPath(req);
+  if (!(await tenantHasCapability(scopedDb, tenantId, capability))) {
+    res.status(402).json({ error: 'CAPABILITY_NOT_INCLUDED', code: 'CAPABILITY_NOT_INCLUDED', capability, message: `The active SPR plan does not include ${capability.replaceAll('_', ' ')}.`, billingPath: '/billing', plan: subscription.plan });
     return false;
   }
-  res.locals.billing = { plan: subscription.plan, status: subscription.status, currentPeriodEnd: subscription.currentPeriodEnd ?? null };
+  res.locals.billing = { plan: subscription.plan, status: subscription.status, currentPeriodEnd: subscription.currentPeriodEnd ?? null, capability };
   return true;
 }
-
 export const requireAuth = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+  const authHeader = req.headers.authorization; const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
   if (!token || token.length > 8192) return res.status(401).json({ error: 'Unauthorized: Missing or invalid authorization token' });
   try {
-    const decodedToken = await adminAuth.verifyIdToken(token, true);
-    const uid = decodedToken.uid;
+    const decodedToken = await adminAuth.verifyIdToken(token, true); const uid = decodedToken.uid;
     if (!uid || typeof uid !== 'string' || uid.length > 256) return res.status(401).json({ error: 'Unauthorized: Invalid security token' });
-    const isVerificationExemptPath = ['/api/user/me', '/api/auth/resend-verification', '/api/auth/verify-status'].includes(req.baseUrl + req.path);
+    const isVerificationExemptPath = ['/api/user/me','/api/auth/resend-verification','/api/auth/verify-status'].includes(req.baseUrl + req.path);
     const emailVerified = decodedToken.email_verified === true;
     if (!emailVerified && !isVerificationExemptPath) return res.status(403).json({ error: 'Email verification required', code: 'EMAIL_NOT_VERIFIED' });
-
     const dbUser = await db.select().from(users).where(eq(users.uid, uid)).then(rows => rows[0]);
     if (!dbUser) return res.status(403).json({ error: 'User account is not provisioned' });
     if (!dbUser.tenantId || dbUser.tenantId.length > 256) return res.status(403).json({ error: 'User account has invalid tenant configuration' });
     if (!dbUser.role || dbUser.role.length > 64) return res.status(403).json({ error: 'User account has invalid role configuration' });
-
-    const dbEmail = dbUser.email.trim().toLowerCase();
-    const tokenEmail = typeof decodedToken.email === 'string' ? decodedToken.email.trim().toLowerCase() : '';
+    const dbEmail = dbUser.email.trim().toLowerCase(); const tokenEmail = typeof decodedToken.email === 'string' ? decodedToken.email.trim().toLowerCase() : '';
     if (tokenEmail && dbEmail && tokenEmail !== dbEmail) return res.status(403).json({ error: 'User identity does not match the provisioned account' });
-
     req.user = { id: dbUser.id, uid, email: dbUser.email, tenantId: dbUser.tenantId, role: dbUser.role, clientId: dbUser.clientId ?? null, emailVerified };
     req.db = await attachTenantScope(dbUser.tenantId, res, dbUser.id);
-
     if (!(await enforcePaidAccess(req, res))) return;
-
-    const ip = req.ip || req.socket.remoteAddress || 'unknown';
-    const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'].slice(0, 512) : '';
-    try {
-      await recordSession(req.db, { tenantId: dbUser.tenantId, userId: dbUser.id, uid, ip, userAgent });
-    } catch (err) {
-      console.error('[Session] recordSession failed:', err instanceof Error ? err.message : String(err));
-    }
+    const ip = req.ip || req.socket.remoteAddress || 'unknown'; const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'].slice(0, 512) : '';
+    try { await recordSession(req.db, { tenantId: dbUser.tenantId, userId: dbUser.id, uid, ip, userAgent }); } catch (err) { console.error('[Session] recordSession failed:', err instanceof Error ? err.message : String(err)); }
     return next();
-  } catch {
-    return res.status(401).json({ error: 'Unauthorized: Invalid or expired security token' });
-  }
+  } catch { return res.status(401).json({ error: 'Unauthorized: Invalid or expired security token' }); }
 };
-
 export function requireRole(roles: string | string[]) {
   const allowedRoles = Array.isArray(roles) ? roles : [roles];
-  return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
-    if (allowedRoles.length > 0 && !allowedRoles.includes(req.user.role)) return res.status(403).json({ error: 'Forbidden' });
-    return next();
-  };
+  return (req: AuthenticatedRequest, res: Response, next: NextFunction) => { if (!req.user) return res.status(401).json({ error: 'Unauthorized' }); if (allowedRoles.length > 0 && !allowedRoles.includes(req.user.role)) return res.status(403).json({ error: 'Forbidden' }); return next(); };
 }
