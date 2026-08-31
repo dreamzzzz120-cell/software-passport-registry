@@ -5,6 +5,13 @@
 
 BEGIN;
 
+-- 0049 created RLS policies that depend on the original UUID user_id type.
+-- PostgreSQL refuses ALTER COLUMN TYPE while those policies reference the
+-- column, so remove only these two newly-created policies before the type
+-- conversion and recreate them below with the authoritative integer type.
+DROP POLICY IF EXISTS organization_member_isolation ON organizations;
+DROP POLICY IF EXISTS organization_membership_isolation ON organization_memberships;
+
 -- 0049 initially declared UUID user references. SPR users use serial IDs.
 -- The provisioning tables are new and must use the existing authoritative user PK.
 ALTER TABLE organizations
@@ -39,12 +46,9 @@ BEGIN
   END IF;
 END $$;
 
--- A user has exactly one workspace in the current SPR authorization model.
 CREATE UNIQUE INDEX IF NOT EXISTS organization_memberships_one_org_per_user_idx
   ON organization_memberships (user_id);
 
--- The recorded owner must be the OWNER membership. This prevents an org from
--- naming an unrelated user as owner while still claiming a valid membership.
 CREATE OR REPLACE FUNCTION enforce_organization_owner_membership()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -69,9 +73,6 @@ AFTER INSERT OR UPDATE OF owner_user_id ON organizations
 DEFERRABLE INITIALLY DEFERRED
 FOR EACH ROW EXECUTE FUNCTION enforce_organization_owner_membership();
 
--- Keep membership roles constrained to the supported RBAC set and prevent an
--- existing owner from being silently demoted while organizations.owner_user_id
--- still points at them.
 CREATE OR REPLACE FUNCTION enforce_organization_role_integrity()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -95,8 +96,6 @@ CREATE TRIGGER organization_membership_role_guard
 BEFORE UPDATE OF role, user_id ON organization_memberships
 FOR EACH ROW EXECUTE FUNCTION enforce_organization_role_integrity();
 
--- Security-definer membership check avoids recursive RLS evaluation while
--- keeping callers unable to bypass the organization membership boundary.
 CREATE OR REPLACE FUNCTION is_organization_admin(p_organization_id uuid, p_user_id integer)
 RETURNS boolean
 LANGUAGE sql
@@ -116,8 +115,6 @@ $$;
 REVOKE ALL ON FUNCTION is_organization_admin(uuid, integer) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION is_organization_admin(uuid, integer) TO spr_app_runtime;
 
--- Members may see their own membership; owners/admins may administer memberships
--- within their own organization. No tenant context continues to fail closed.
 DROP POLICY IF EXISTS organization_membership_isolation ON organization_memberships;
 CREATE POLICY organization_membership_isolation ON organization_memberships
   USING (
@@ -134,7 +131,6 @@ CREATE POLICY organization_membership_isolation ON organization_memberships
     )
   );
 
--- Organization rows are visible only to members of that organization.
 DROP POLICY IF EXISTS organization_member_isolation ON organizations;
 CREATE POLICY organization_member_isolation ON organizations
   USING (
