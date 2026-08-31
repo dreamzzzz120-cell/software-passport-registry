@@ -185,7 +185,7 @@ export function ReasonCode({ code, description }: { code: string; description?: 
 
 export function SourceIdentity({ source, party }: { source: string; party?: 'first-party' | 'third-party' }) {
   return (
-    <span className="inline-flex items-center gap-1.5 text-[11px] text-[var(--cc-ink-muted)]">
+    <span className="inline-flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] text-[var(--cc-ink-muted)]">
       <span className="cc-mono">{source}</span>
       {party && (
         <span className="rounded border border-[var(--cc-hairline)] px-1.5 py-0.5 text-[10px] uppercase tracking-wide">
@@ -199,7 +199,7 @@ export function SourceIdentity({ source, party }: { source: string; party?: 'fir
 /** Renders a freshness state the caller was given. It computes nothing. */
 export function FreshnessIndicator({ label, observedAt }: { label: string; observedAt?: string | number | null }) {
   return (
-    <span className="inline-flex items-center gap-2 text-[11px] text-[var(--cc-ink-muted)]">
+    <span className="inline-flex min-w-0 flex-wrap items-center gap-2 text-[11px] text-[var(--cc-ink-muted)]">
       <span className="cc-eyebrow">{label}</span>
       {observedAt ? <span className="cc-numeric">{new Date(observedAt).toLocaleString()}</span> : <span>Not observed</span>}
     </span>
@@ -210,7 +210,7 @@ export function EvidenceCard({
   name, type, source, party, observedAt, hash, children,
 }: { name: string; type?: string; source?: string; party?: 'first-party' | 'third-party'; observedAt?: string | number | null; hash?: string | null; children?: ReactNode }) {
   return (
-    <GlassPanel as="article" interactive className="p-4">
+    <GlassPanel as="article" interactive className="min-w-0 p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold text-[var(--cc-ink)]">{name}</div>
@@ -221,7 +221,7 @@ export function EvidenceCard({
           Observed
         </span>
       </div>
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+      <div className="mt-3 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1.5">
         {source && <SourceIdentity source={source} party={party} />}
         <FreshnessIndicator label="Collected" observedAt={observedAt} />
       </div>
