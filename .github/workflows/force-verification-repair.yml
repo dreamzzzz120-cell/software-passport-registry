@@ -30,11 +30,9 @@ jobs:
           raw = workflow[start:end]
           script = '\n'.join(line[10:] if line.startswith('          ') else line for line in raw.splitlines())
           exec(compile(script, 'prepared-verification-repair.py', 'exec'), {})
-          # The prepared script inserts the new auth imports before writing its
-          # endpoint from a stale string. Re-apply the imports after that write.
           p = Path('src/routes/auth.ts')
           s = p.read_text(encoding='utf-8')
-          if 'adaptEvidenceForEvaluation' not in s:
+          if "from '../lib/verification/evidenceAdapter.ts'" not in s:
               anchor = "import { INTEGRATION_CATALOG } from '../integrations/catalog.ts';"
               imports = anchor + "\nimport { adaptEvidenceForEvaluation } from '../lib/verification/evidenceAdapter.ts';\nimport { evaluateVerification, type VerificationDecision } from '../lib/verification/evaluateVerification.ts';"
               if anchor not in s:
