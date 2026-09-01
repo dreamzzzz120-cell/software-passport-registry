@@ -117,19 +117,10 @@ export function createBillingRouter() {
       const tenantId = req.user!.tenantId;
       const scopedDb = req.db!;
       const existing = (await scopedDb.execute(sql`SELECT stripe_customer_id AS "stripeCustomerId" FROM tenant_subscriptions WHERE tenant_id = ${tenantId} LIMIT 1`) as any).rows?.[0];
-      let customerId: string | undefined = existing?.stripeCustomerId;
-      if (!customerId) {
-        const customer = await stripe.customers.create({ email: req.user!.email, metadata: { tenantId } });
-        customerId = customer.id;
-        await scopedDb.execute(sql`
-          INSERT INTO tenant_subscriptions (tenant_id, stripe_customer_id, plan, status)
-          VALUES (${tenantId}, ${customerId}, ${parsed.data.plan}, 'incomplete')
-          ON CONFLICT (tenant_id) DO UPDATE SET stripe_customer_id = EXCLUDED.stripe_customer_id, plan = EXCLUDED.plan
-        `);
-      }
+      const customerId: string | undefined = existing?.stripeCustomerId;
       const session = await stripe.checkout.sessions.create({
         mode: 'subscription',
-        customer: customerId,
+        ...(customerId ? { customer: customerId } : { customer_email: req.user!.email }),
         line_items: [{ price: priceId, quantity: 1 }],
         success_url: `${config.appUrl}/billing?checkout=success`,
         cancel_url: `${config.appUrl}/billing?checkout=cancelled`,
@@ -138,6 +129,15 @@ export function createBillingRouter() {
         metadata: { tenantId, plan: parsed.data.plan },
       });
       if (!session.url) throw new Error('STRIPE_CHECKOUT_SESSION_MISSING_URL');
+      await scopedDb.execute(sql`
+        INSERT INTO tenant_subscriptions (tenant_id, stripe_customer_id, plan, status)
+        VALUES (${tenantId}, ${customerId ?? null}, ${parsed.data.plan}, 'incomplete')
+        ON CONFLICT (tenant_id) DO UPDATE SET
+          stripe_customer_id = COALESCE(EXCLUDED.stripe_customer_id, tenant_subscriptions.stripe_customer_id),
+          plan = EXCLUDED.plan,
+          status = 'incomplete',
+          updated_at = CURRENT_TIMESTAMP
+      `);
       await appendAuditEntry(scopedDb, { tenantId, action: 'billing.checkout.initiated', actor: req.user!.uid, payload: { plan: parsed.data.plan, checkoutSessionId: session.id } });
       return res.json({ url: session.url });
     } catch (error) { return next(error); }
@@ -236,13 +236,15 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
         const plan = session.metadata?.plan as PlanId | undefined;
         if (tenantId && session.subscription && plan && PLAN_CONFIG[plan]) {
           const clientLimit = PLAN_CLIENT_LIMITS[plan];
+          const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id;
           await db.execute(sql`
             UPDATE tenant_subscriptions
-            SET stripe_subscription_id = ${String(session.subscription)}, plan = ${plan},
+            SET stripe_customer_id = COALESCE(${customerId ?? null}, stripe_customer_id),
+                stripe_subscription_id = ${String(session.subscription)}, plan = ${plan},
                 status = 'active', client_limit = ${clientLimit}, updated_at = CURRENT_TIMESTAMP
             WHERE tenant_id = ${tenantId}
           `);
-          await appendAuditEntry(db, { tenantId, action: 'billing.subscription.activated', actor: 'stripe-webhook', payload: { plan, stripeEventId: event.id, stripeSubscriptionId: String(session.subscription) } });
+          await appendAuditEntry(db, { tenantId, action: 'billing.subscription.activated', actor: 'stripe-webhook', payload: { plan, stripeEventId: event.id, stripeSubscriptionId: String(session.subscription), stripeCustomerId: customerId ?? null } });
         } else if (tenantId && session.mode === 'payment') {
           await appendAuditEntry(db, { tenantId, action: 'billing.purchase.completed', actor: 'stripe-webhook', payload: { product: session.metadata?.product ?? null, stripeEventId: event.id, checkoutSessionId: session.id } });
         }
