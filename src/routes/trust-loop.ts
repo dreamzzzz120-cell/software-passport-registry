@@ -28,6 +28,26 @@ function parseJson(value: unknown, fallback: unknown = []) { try { return value 
 
 const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low'];
 
+export type ReportPassportRow = {
+  overall_score: number | null;
+  security_score: number | null;
+  compliance_score: number | null;
+  verification_status: string | null;
+  confidence_score: number | null;
+  evidence_completeness: number | null;
+};
+
+export function deriveReportRiskFields(passport: ReportPassportRow) {
+  const verificationStatus = passport.verification_status || 'unverified';
+  const isMeasured = verificationStatus !== 'unverified';
+  return {
+    canonicalScore: isMeasured ? passport.overall_score : null,
+    verificationStatus,
+    confidenceBasisPoints: isMeasured && passport.confidence_score != null ? Math.round(passport.confidence_score * 100) : null,
+    completenessBasisPoints: isMeasured && passport.evidence_completeness != null ? Math.round(passport.evidence_completeness * 100) : null,
+  };
+}
+
 function buildReportTypeExtras(reportType: string, passport: any, findings: any[]) {
   if (reportType === 'sbom') {
     const components = parseJson(passport.sbom, []) as any[];
@@ -89,10 +109,6 @@ export function createTrustLoopRouter() {
     }
   });
 
-  // Every finding's workflow state actually lives on its most recent remediation
-  // work item, not on the finding row itself — without this join the frontend has
-  // no way to know a remediation already exists, so "resolve"/"assign" actions on
-  // an alert would PATCH a work item id that was never created and silently no-op.
   const findingsWithRemediationSelect = sql`
     SELECT f.*, r.id AS remediation_id, r.status AS remediation_status, r.owner_id AS remediation_owner_id,
            r.owner_display AS remediation_owner_display, r.sla_due_at AS remediation_sla_due_at, r.updated_at AS remediation_updated_at
@@ -143,15 +159,6 @@ export function createTrustLoopRouter() {
     } catch (error) { return next(error); }
   });
 
-  // Reuses verifyRemediation() (the same function /verify calls) instead of
-  // building a second verification path. The caller only supplies which
-  // remediation to re-check; SPR resolves "new evidence" itself as the most
-  // recent trust_observation already on file for that finding's passport,
-  // rather than trusting the client to name evidence/observation IDs. This
-  // still fails honestly through verifyRemediation()'s real checks (PASS
-  // status, newer than prior evidence, actually linked to the observation) --
-  // it does not skip them, it just removes the burden of the caller knowing
-  // observation/evidence IDs in advance.
   router.post('/remediations/:id/verify-latest', async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
@@ -264,24 +271,20 @@ export function createTrustLoopRouter() {
   return router;
 }
 
-// Shared by GET /reports/:passportId above and by other routers (e.g. the
-// compliance-schedule "run" action) that need to generate the same
-// evidence-backed report rather than building a second generator. Returns
-// null if the passport doesn't exist for this tenant; the caller decides
-// how to surface that (404 vs. skip-and-continue for a multi-passport run).
 export async function buildAndPersistReport(db: any, tenantId: string, passportId: string, reportType: string) {
-  const passport = (await db.execute(sql`SELECT id,name,overall_score,security_score,compliance_score,sbom,evidence,vulnerabilities,timeline FROM passports WHERE id=${passportId} AND tenant_id=${tenantId} LIMIT 1`) as any).rows?.[0];
+  const passport = (await db.execute(sql`SELECT id,name,overall_score,security_score,compliance_score,verification_status,confidence_score,evidence_completeness,sbom,evidence,vulnerabilities,timeline FROM passports WHERE id=${passportId} AND tenant_id=${tenantId} LIMIT 1`) as any).rows?.[0];
   if (!passport) return null;
   const findings = (await db.execute(sql`SELECT id,control_id,title,severity,status,description,remediation,evidence_ids,updated_at,resolved_at FROM trust_findings WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY CASE severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 WHEN 'low' THEN 4 ELSE 5 END,updated_at DESC`) as any).rows || [];
   const evidence = (await db.execute(sql`SELECT id,provider,control_id,subject,source_url,observed_at,verification_method,status,severity,evidence_hash,limitation FROM evidence_ledger WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY observed_at DESC`) as any).rows || [];
-  const observations = (await db.execute(sql`SELECT id,observation_version,generated_at,previous_observation_id,evidence_ids,finding_ids,canonical_payload_hash,completeness_basis_points,open_finding_count,unknown_dimension_count FROM trust_observations WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY observation_version DESC`) as any).rows || [];
+  const observations = (await db.execute(sql`SELECT id,observation_version,generated_at,previous_observation_id,evidence_ids,finding_ids,canonical_payload_hash,completeness_basis_points,confidence_basis_points,open_finding_count,unknown_dimension_count FROM trust_observations WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY observation_version DESC`) as any).rows || [];
   const remediation = (await db.execute(sql`SELECT * FROM trust_remediation_work_items WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY updated_at DESC`) as any).rows || [];
   const verification = (await db.execute(sql`SELECT * FROM remediation_verification_ledger WHERE tenant_id=${tenantId} AND finding_id IN (SELECT id FROM trust_findings WHERE tenant_id=${tenantId} AND passport_id=${passportId}) ORDER BY created_at DESC`) as any).rows || [];
   const latest = observations[0];
+  const risk = deriveReportRiskFields(passport as ReportPassportRow);
   const report = {
     schemaVersion: 'spr.report.v2', reportType, generatedAt: new Date().toISOString(), passport: { id: passport.id, name: passport.name },
-    risk: { overall: passport.overall_score, security: passport.security_score, compliance: passport.compliance_score },
-    evidenceQuality: { completenessBasisPoints: latest?.completeness_basis_points ?? 0, unknownDimensions: latest?.unknown_dimension_count ?? 0, latestObservationAt: latest?.generated_at ?? null },
+    risk: { overall: risk.canonicalScore, security: passport.security_score, compliance: passport.compliance_score, verificationStatus: risk.verificationStatus },
+    evidenceQuality: { completenessBasisPoints: risk.completenessBasisPoints, confidenceBasisPoints: risk.confidenceBasisPoints, unknownDimensions: latest?.unknown_dimension_count ?? 0, latestObservationAt: latest?.generated_at ?? null },
     findings, evidence, observations, remediation, verification,
     traceability: 'Report -> Passport -> Risk -> Finding -> Observation -> Provider -> Source -> Timestamp -> Hash',
     resolutionTraceability: 'Finding -> remediation -> new observation -> independent verification',
@@ -290,6 +293,6 @@ export async function buildAndPersistReport(db: any, tenantId: string, passportI
   };
   const canonicalPayload = JSON.stringify(report);
   const reportHash = crypto.createHash('sha256').update(canonicalPayload).digest('hex');
-  await db.execute(sql`INSERT INTO trust_report_snapshots (id,tenant_id,passport_id,report_type,generated_at,score,confidence_basis_points,completeness_basis_points,evidence_ids,finding_ids,observation_id,canonical_payload_hash,payload,created_at) VALUES (${id('report')},${tenantId},${passportId},${reportType},${report.generatedAt},${Number(passport.overall_score ?? 0)},${Number(latest?.confidence_basis_points ?? 0)},${Number(latest?.completeness_basis_points ?? 0)},${JSON.stringify(evidence.map((item: any) => item.id))},${JSON.stringify(findings.map((item: any) => item.id))},${latest?.id ?? null},${reportHash},${canonicalPayload},${report.generatedAt}) ON CONFLICT (tenant_id,passport_id,report_type,canonical_payload_hash) DO NOTHING`);
+  await db.execute(sql`INSERT INTO trust_report_snapshots (id,tenant_id,passport_id,report_type,generated_at,score,confidence_basis_points,completeness_basis_points,evidence_ids,finding_ids,observation_id,canonical_payload_hash,payload,created_at) VALUES (${id('report')},${tenantId},${passportId},${reportType},${report.generatedAt},${risk.canonicalScore},${risk.confidenceBasisPoints},${risk.completenessBasisPoints},${JSON.stringify(evidence.map((item: any) => item.id))},${JSON.stringify(findings.map((item: any) => item.id))},${latest?.id ?? null},${reportHash},${canonicalPayload},${report.generatedAt}) ON CONFLICT (tenant_id,passport_id,report_type,canonical_payload_hash) DO NOTHING`);
   return { ...report, reportHash };
 }
