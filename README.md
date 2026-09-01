@@ -56,3 +56,4 @@ docker-compose up
 - Client boot failures now render an explicit diagnostic state instead of a blank screen.
 
 <!-- Railway source-sync trigger: 2026-08-18T06:00:00Z -->
+<!-- Verification repair runner trigger: 2026-09-01 -->
