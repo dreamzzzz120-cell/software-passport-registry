@@ -4,6 +4,7 @@ import { apiFetch } from '../utils/apiClient';
 import SoftwareLineageTracker from './SoftwareLineageTracker';
 import SoftwareSectorsPanel from './SoftwareSectorsPanel';
 import type { Client, SoftwarePassport } from '../types';
+import type { VerificationDecision } from '../lib/verification/evaluateVerification';
 
 interface PassportsViewProps {
   passports: SoftwarePassport[];
@@ -15,9 +16,11 @@ interface PassportsViewProps {
   clients?: Client[];
   assets?: any[];
   role?: string;
+  verificationDecisions?: Record<string, VerificationDecision>;
+  verificationDetails?: Record<string, unknown>;
 }
 
-export default function PassportsView({ passports, selectedPassportId, setSelectedPassportId, searchQuery, onNavigateTab, clients = [], assets = [], role = 'Viewer' }: PassportsViewProps) {
+export default function PassportsView({ passports, selectedPassportId, setSelectedPassportId, searchQuery, onNavigateTab, clients = [], assets = [], role = 'Viewer', verificationDecisions = {}, verificationDetails = {} }: PassportsViewProps) {
   // Matches backend gating exactly: POST /api/agent-jobs requires
   // Owner/Admin/Operator (scans.ts); POST /api/trust-loop/remediations
   // additionally allows Technician (server.ts requireTrustMutationRole).
@@ -31,6 +34,8 @@ export default function PassportsView({ passports, selectedPassportId, setSelect
   const [remediationBusy, setRemediationBusy] = useState<string | null>(null);
 
   const selected = useMemo(() => passports.find((p) => p.id === selectedPassportId) ?? null, [passports, selectedPassportId]);
+  const verificationDecision = selected ? verificationDecisions?.[selected.id] : undefined;
+  const verificationDetailsForSelected = selected ? verificationDetails?.[selected.id] : undefined;
   const categories = useMemo(() => Array.from(new Set(passports.map((p) => p.category).filter(Boolean))), [passports]);
   const filtered = useMemo(() => passports.filter((p) => {
     const query = (localQuery || searchQuery).trim().toLowerCase();
@@ -203,7 +208,7 @@ export default function PassportsView({ passports, selectedPassportId, setSelect
           <div className="mt-4 flex flex-wrap gap-6 rounded-md border border-[#e1dfdd] bg-[#faf9f8] p-3">
             <div><div className="text-[11px] text-[#605e5c]">Evidence</div><div className="text-lg font-semibold text-[#201f1e]">{selected.evidence?.length ?? 0}</div><div className="text-[11px] text-[#8a8886]">Recorded entries</div></div>
             <div><div className="text-[11px] text-[#605e5c]">Findings</div><div className="text-lg font-semibold text-[#201f1e]">{selected.vulnerabilities?.length ?? 0}</div><div className="text-[11px] text-[#8a8886]">Observed or reported findings</div></div>
-            <div><div className="text-[11px] text-[#605e5c]">Score status</div><div className="text-[15px] font-semibold text-[#201f1e]">{selected.overallScore == null ? 'Not verified' : 'Measured'}</div><div className="text-[11px] text-[#8a8886]">Authoritative scoring required</div></div>
+            <div><div className="text-[11px] text-[#605e5c]">Score status</div><div className="text-[15px] font-semibold text-[#201f1e]">{verificationDecisions?.[selected.id]?.state === 'VERIFIED' ? 'Verified' : verificationDecisions?.[selected.id]?.state === 'PARTIAL' ? 'Partially verified' : verificationDecisions?.[selected.id]?.state === 'INVESTIGATE' ? 'Investigate' : 'Not verified'}</div><div className="text-[11px] text-[#8a8886]">Authoritative scoring required</div></div>
           </div>
 
           {selected.evidence?.length > 0 && <div className="mt-4">

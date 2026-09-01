@@ -14,6 +14,8 @@ import { appendAuditEntry, verifyAuditChain } from '../security/audit-log.ts';
 import { describeUserAgent, sessionFingerprint } from '../security/session-tracking.ts';
 import { offboardTenantData } from '../db/sync.ts';
 import { INTEGRATION_CATALOG } from '../integrations/catalog.ts';
+import { adaptEvidenceForEvaluation } from '../lib/verification/evidenceAdapter.ts';
+import { evaluateVerification, type VerificationDecision } from '../lib/verification/evaluateVerification.ts';
 
 const INVITABLE_ROLES = ['Admin', 'Technician', 'Viewer', 'Client'] as const;
 const inviteSchema = z.object({ email: z.string().trim().email().max(255), role: z.enum(INVITABLE_ROLES) }).strict();
@@ -524,6 +526,56 @@ export function createAuthRouter() {
 
   router.get('/auth/verify-status', requireAuth, async (req: AuthenticatedRequest, res) => {
     return res.json({ verified: req.user!.emailVerified, emailVerified: req.user!.emailVerified });
+  });
+
+
+
+  router.get('/user/passports/:id/verification', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const clientScope = req.user!.role === 'Client' ? (req.user as any).clientId : null;
+      const passportResult = await db.execute(sql`SELECT id, version, evidence, client_id AS "clientId" FROM passports WHERE id=${req.params.id} AND tenant_id=${tenantId} AND (${clientScope} IS NULL OR client_id=${clientScope}) LIMIT 1`) as any;
+      const passport = passportResult.rows?.[0];
+      if (!passport) return res.status(404).json({ error: 'Passport not found' });
+      const findingResult = await db.execute(sql`SELECT id, passport_id AS "passportId", evidence_ids, status FROM trust_findings WHERE tenant_id=${tenantId} AND passport_id=${passport.id}`) as any;
+      const parseJson = (value: unknown): unknown[] => { try { const parsed = JSON.parse(String(value ?? '')); return Array.isArray(parsed) ? parsed : []; } catch { return []; } };
+      const openFindingEvidenceIds = (findingResult.rows ?? []).filter((row: any) => !['resolved','closed','verified'].includes(String(row.status || '').toLowerCase())).flatMap((row: any) => parseJson(row.evidence_ids)).filter((id: any): id is string => typeof id === 'string');
+      const adapted = adaptEvidenceForEvaluation({ evidence: parseJson(passport.evidence) as any[], passportVersion: passport.version, openFindingEvidenceIds });
+      const evaluatedAt = Date.now();
+      const decision = evaluateVerification({ evidence: adapted.evidence, evaluatedAt, targetIdentity: adapted.targetIdentity });
+      res.setHeader('Cache-Control', 'private, max-age=0, no-store');
+      return res.json({ decision, observations: decision.observationCount, independentSources: decision.independentSourceCount });
+    } catch (error) { return next(error); }
+  });
+
+  router.get('/user/verification', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const clientScope = req.user!.role === 'Client' ? (req.user as any).clientId : null;
+      const passportRows = (await db.execute(sql`SELECT id, version, evidence, client_id AS "clientId" FROM passports WHERE tenant_id=${tenantId} AND (${clientScope} IS NULL OR client_id=${clientScope}) ORDER BY id`) as any).rows ?? [];
+      const passportIds = passportRows.map((row: any) => String(row.id));
+      const parseJson = (value: unknown): unknown[] => { try { const parsed = JSON.parse(String(value ?? '')); return Array.isArray(parsed) ? parsed : []; } catch { return []; } };
+      // Drizzle's proven one-query binding shape for the passport findings is
+      // `asset_id IN ${passportIds}`; do not replace this with ANY(array).
+      const findingRows = passportIds.length ? ((await db.execute(sql`SELECT id, passport_id AS "passportId", evidence_ids, status FROM trust_findings WHERE tenant_id=${tenantId} AND passport_id IN ${passportIds}`) as any).rows ?? []) : [];
+      const evidenceByPassport = new Map<string, any[]>();
+      for (const passport of passportRows) evidenceByPassport.set(String(passport.id), parseJson(passport.evidence) as any[]);
+      const evaluatedAt = Date.now();
+      const verificationDecisions: Record<string, VerificationDecision> = {};
+      const verificationDetails: Record<string, unknown> = {};
+      for (const passport of passportRows) {
+        const findings = findingRows.filter((row: any) => String(row.passportId) === String(passport.id));
+        const openFindingEvidenceIds = findings.filter((row: any) => !['resolved','closed','verified'].includes(String(row.status || '').toLowerCase())).flatMap((row: any) => parseJson(row.evidence_ids)).filter((id: any): id is string => typeof id === 'string');
+        const adapted = adaptEvidenceForEvaluation({ evidence: evidenceByPassport.get(String(passport.id)) ?? [], passportVersion: passport.version, openFindingEvidenceIds });
+        const decision = evaluateVerification({ evidence: adapted.evidence, evaluatedAt, targetIdentity: adapted.targetIdentity });
+        verificationDecisions[String(passport.id)] = decision;
+        verificationDetails[String(passport.id)] = { unmappedCount: adapted.unmappedCount, undatedCount: adapted.undatedCount, observations: decision.observationCount, independentSources: decision.independentSourceCount };
+      }
+      res.setHeader('Cache-Control', 'private, max-age=0, no-store');
+      return res.json({ verificationDecisions, verificationDetails });
+    } catch (error) { return next(error); }
   });
 
   return router;

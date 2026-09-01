@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { getRedirectResult, onAuthStateChanged, signOut, type User } from 'firebase/auth';
 import type { Alert, Client, Integration, Scan, SoftwarePassport, Vendor } from './types';
+import type { VerificationDecision } from './lib/verification/evaluateVerification.ts';
 import { apiFetch } from './utils/apiClient';
 import { auth } from './lib/firebase';
 import CommandCenter from './components/CommandCenter';
@@ -104,6 +105,8 @@ export default function App() {
   const [scans, setScans] = useState<Scan[]>(EMPTY_SCANS);
   const [integrations, setIntegrations] = useState<Integration[]>(EMPTY_INTEGRATIONS);
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  const [verificationDecisions, setVerificationDecisions] = useState<Record<string, VerificationDecision>>({});
+  const [verificationDetails, setVerificationDetails] = useState<Record<string, unknown>>({});
 
   useEffect(() => {
     let mounted = true;
@@ -150,10 +153,11 @@ export default function App() {
     let cancelled = false;
     const load = async () => {
       const responses = await Promise.all([
-        apiFetch('/api/user/me'), apiFetch('/api/scans'), apiFetch('/api/trust-loop/findings'), apiFetch('/api/user/passports'), apiFetch('/api/user/clients'), apiFetch('/api/integrations'),
+        apiFetch('/api/user/me'), apiFetch('/api/scans'), apiFetch('/api/trust-loop/findings'), apiFetch('/api/user/passports'), apiFetch('/api/user/clients'), apiFetch('/api/integrations'), apiFetch('/api/user/verification'),
       ]);
       if (responses.some((response) => response.status === 401)) { await signOut(auth); navigate('/login'); return; }
-      const [me, scansResponse, findingsResponse, passportsResponse, clientsResponse, integrationsResponse] = responses;
+      const [me, scansResponse, findingsResponse, passportsResponse, clientsResponse, integrationsResponse, verificationResponse] = responses;
+      if (verificationResponse.ok) { const data = await verificationResponse.json().catch(() => null); if (!cancelled) { setVerificationDecisions(data?.verificationDecisions && typeof data.verificationDecisions === 'object' ? data.verificationDecisions : {}); setVerificationDetails(data?.verificationDetails && typeof data.verificationDetails === 'object' ? data.verificationDetails : {}); } } else if (!cancelled) { setVerificationDecisions({}); setVerificationDetails({}); }
       if (me.ok) { const data = await me.json().catch(() => null); if (!cancelled) setRole(String(data?.role || 'Viewer')); }
       if (scansResponse.ok) { const data = await scansResponse.json().catch(() => []); if (!cancelled && Array.isArray(data)) setScans(data); }
       if (findingsResponse.ok) { const data = await findingsResponse.json().catch(() => []); const rows = Array.isArray(data) ? data : data?.findings; if (!cancelled && Array.isArray(rows)) { setFindings(rows); setAlerts(rows.map((row: any) => ({ id: String(row.id), title: String(row.title || row.control_id || 'Trust finding'), severity: String(row.severity || 'Low').replace(/^./, (s: string) => s.toUpperCase()), category: 'Trust finding', clientName: String(row.client_id || 'Tenant'), description: String(row.description || 'Evidence-backed finding'), timestamp: String(row.updated_at || ''), status: deriveAlertStatus(row.remediation_status, row.status), remediationId: row.remediation_id ? String(row.remediation_id) : null, ownerDisplay: row.remediation_owner_display || null, slaDueAt: row.remediation_sla_due_at || null })) as Alert[]); } }
@@ -224,7 +228,7 @@ export default function App() {
     case '/coverage': view = <CoverageView clients={clients} scans={scans} passports={passports} onNavigateTab={onNavigateTab} />; break;
     case '/evidence-explorer': view = <EvidenceExplorerView passports={passports} />; break;
     case '/assets': view = <AssetsView clients={clients} searchQuery="" assets={assets} />; break;
-    case '/passports': case '/registry': view = <PassportsView passports={passports} selectedPassportId={selectedPassportId} setSelectedPassportId={setSelectedPassportId} searchQuery="" clients={clients} assets={assets} role={role} onNavigateTab={onNavigateTab} onUpdatePassport={(passport) => setPassports((current) => current.map((item) => item.id === passport.id ? passport : item))} />; break;
+    case '/passports': case '/registry': view = <PassportsView verificationDecisions={verificationDecisions} verificationDetails={verificationDetails} passports={passports} selectedPassportId={selectedPassportId} setSelectedPassportId={setSelectedPassportId} searchQuery="" clients={clients} assets={assets} role={role} onNavigateTab={onNavigateTab} onUpdatePassport={(passport) => setPassports((current) => current.map((item) => item.id === passport.id ? passport : item))} />; break;
     case '/scans': view = <ScansView scans={scans} clients={clients} assets={assets} passports={passports} role={role} onTriggerNewScan={(scan) => setScans((current) => [scan, ...current.filter((item) => item.id !== scan.id)].slice(0, 100))} />; break;
     case '/alerts': view = <AlertsView alerts={alerts} onAlertAction={performAlertAction} />; break;
     case '/reports': view = <ReportsView clients={clients} passports={passports} scans={scans} alerts={alerts} findings={findings} role={role} />; break;
@@ -235,7 +239,7 @@ export default function App() {
     case '/monitoring': view = <MonitoringView role={role} />; break;
     case '/security': view = <SecurityCenterView clients={clients} passports={passports} />; break;
     case '/compliance': view = <ComplianceView clients={clients} role={role} />; break;
-    case '/msp': view = <MSPCommandCenter clients={clients} alerts={alerts} findings={findings} role={role} onSelectClient={setSelectedClientId} onNavigate={navigate} />; break;
+    case '/msp': view = <MSPCommandCenter verificationDecisions={verificationDecisions} verificationDetails={verificationDetails} clients={clients} alerts={alerts} findings={findings} role={role} onSelectClient={setSelectedClientId} onNavigate={navigate} />; break;
     case '/agent-trust': view = <AgentTrustView />; break;
     case '/ai-trust-center': view = <AITrustCenterView role={role} />; break;
     case '/enterprise-readiness': view = <EnterpriseReadinessView clients={clients} />; break;

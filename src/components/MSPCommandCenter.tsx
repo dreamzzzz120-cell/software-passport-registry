@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ArrowRight, Building2, CheckCircle2, FileSearch, ShieldAlert, User, X } from 'lucide-react';
 import { Alert, Client } from '../types';
 import { apiFetch } from '../utils/apiClient';
+import type { VerificationDecision } from '../lib/verification/evaluateVerification';
 
 interface Props {
   clients: Client[];
@@ -10,6 +11,8 @@ interface Props {
   role?: string;
   onSelectClient: (id: string) => void;
   onNavigate: (tab: string) => void;
+  verificationDecisions?: Record<string, VerificationDecision>;
+  verificationDetails?: Record<string, unknown>;
 }
 
 type Assignment = { id: string; client_id: string; technician_display: string; assigned_by: string; updated_at: string };
@@ -20,12 +23,16 @@ const severityClass = (severity: Alert['severity']) => severity === 'Critical'
   : severity === 'High' ? 'border-[#8a5700]/30 bg-[#fff4ce] text-[#8a5700]'
   : 'border-[#0f6cbd]/30 bg-[#eff6fc] text-[#0f6cbd]';
 
-export default function MSPCommandCenter({ clients, alerts, findings, role = 'Viewer', onSelectClient, onNavigate }: Props) {
+export default function MSPCommandCenter({ clients, alerts, findings, role = 'Viewer', onSelectClient, onNavigate, verificationDecisions = {}, verificationDetails = {} }: Props) {
   const [selected, setSelected] = useState<Alert | null>(null);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [assigningClientId, setAssigningClientId] = useState<string | null>(null);
   const canAssign = role === 'Owner' || role === 'Admin';
+  const trustStateFromDecision = (decision?: VerificationDecision) => decision?.state ?? 'UNINITIALIZED';
+  const trustStateForPassportItem = (item: { passportId: string }) => trustStateFromDecision(verificationDecisions?.[item.passportId]);
+  const passportDecision = (passport: { id: string }) => { const decision = verificationDecisions?.[passport.id]; return decision; };
+  void verificationDetails;
 
   const loadAssignments = () => { apiFetch('/api/msp/assignments').then((r) => r.ok ? r.json() : null).then((data) => { if (Array.isArray(data?.assignments)) setAssignments(data.assignments); }).catch(() => {}); };
   useEffect(() => { loadAssignments(); apiFetch('/api/organization/team').then((r) => r.ok ? r.json() : null).then((data) => { if (Array.isArray(data)) setTeam(data); }).catch(() => {}); }, []);
