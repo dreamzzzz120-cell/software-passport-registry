@@ -1,0 +1,69 @@
+name: repair report changes
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Apply report change detection
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('src/routes/trust-loop.ts')
+          s = p.read_text()
+          old = "import { persistTrustLoop, verifyRemediation } from '../trust/trust-loop.ts';"
+          new = old + "\nimport { classifyCanonicalChange, compareCanonicalObservations } from '../utils/observation-history.ts';"
+          if "classifyCanonicalChange, compareCanonicalObservations" not in s:
+              s = s.replace(old, new, 1)
+          marker = "  router.get('/reports/:passportId/history', async (req: AuthenticatedRequest, res, next) => {"
+          if "router.get('/reports/:passportId/changes'" not in s:
+              route = r'''  router.get('/reports/:passportId/changes', async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const passportId = req.params.passportId;
+      const clientScope = req.user!.role === 'Client' ? req.user!.clientId : null;
+      const type = typeof req.query.type === 'string' ? req.query.type : 'executive';
+      const rows = await db.execute(sql`SELECT id,report_type,generated_at,score,confidence_basis_points,completeness_basis_points,evidence_ids,finding_ids,canonical_payload_hash FROM trust_report_snapshots WHERE tenant_id=${tenantId} AND passport_id=${passportId} AND report_type=${type} AND (${clientScope}::text IS NULL OR client_id = ${clientScope}) ORDER BY generated_at DESC LIMIT 2`);
+      const snapshots = (rows as any).rows || [];
+      const current = snapshots[0];
+      const previous = snapshots[1];
+      if (!current) return res.json({ insufficientData: true, current: null, previous: null, changes: [] });
+      if (!previous) return res.json({ insufficientData: true, current, previous: null, changes: [] });
+      const comparable = (snapshot: any) => ({
+        score: snapshot.score == null ? null : Number(snapshot.score),
+        confidence: snapshot.confidence_basis_points == null ? null : Number(snapshot.confidence_basis_points),
+        completenessBasisPoints: Number(snapshot.completeness_basis_points ?? 0),
+        findingIds: parseJson(snapshot.finding_ids, []) as string[],
+      });
+      const changes = compareCanonicalObservations(comparable(previous), comparable(current)!);
+      return res.json({ insufficientData: false, current, previous, changes: changes.map((change) => ({ ...change, ...classifyCanonicalChange(change) })) });
+    } catch (error) { return next(error); }
+  });
+
+'''
+              s = s.replace(marker, route + marker, 1)
+              p.write_text(s)
+      - name: Commit repair
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/routes/trust-loop.ts
+          git diff --cached --quiet || git commit -m "fix: add report change detection"
+          git push
+      - name: Remove repair workflow
+        if: success()
+        run: |
+          git rm .github/workflows/repair-report-changes.yml
+          git commit -m "chore: remove one-time report repair workflow"
+          git push
