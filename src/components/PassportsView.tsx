@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { FileCheck2, Search } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
 import SoftwareLineageTracker from './SoftwareLineageTracker';
+import TrustRoom from './trust/TrustRoom';
 import SoftwareSectorsPanel from './SoftwareSectorsPanel';
 import type { Client, SoftwarePassport } from '../types';
 import type { VerificationDecision } from '../lib/verification/evaluateVerification';
@@ -34,6 +35,7 @@ export default function PassportsView({ passports, selectedPassportId, setSelect
   const [remediationBusy, setRemediationBusy] = useState<string | null>(null);
 
   const selected = useMemo(() => passports.find((p) => p.id === selectedPassportId) ?? null, [passports, selectedPassportId]);
+  const owningClient = selected ? clients.find((c) => (c.softwareInventory || []).some((item) => item.passportId === selected.id)) : undefined;
   const verificationDecision = selected ? verificationDecisions?.[selected.id] : undefined;
   const verificationDetailsForSelected = selected ? verificationDetails?.[selected.id] : undefined;
   const categories = useMemo(() => Array.from(new Set(passports.map((p) => p.category).filter(Boolean))), [passports]);
@@ -196,62 +198,27 @@ export default function PassportsView({ passports, selectedPassportId, setSelect
           </table>
         </div>
 
-        {selected && <div className="rounded-md border border-[#e1dfdd] bg-white p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h2 className="text-[16px] font-semibold text-[#201f1e]">{selected.name}</h2>
-              <p className="mt-1 text-[13px] text-[#605e5c]">{selected.version || 'Version not observed'} · {selected.publisher || 'Publisher not observed'}</p>
-            </div>
-            <div className="rounded border border-[#f5d7ac] bg-[#fff4ce] px-3 py-1.5 text-[12px] text-[#8a5700]">Overall score: {selected.overallScore == null ? 'Not verified' : String(selected.overallScore)}</div>
-          </div>
-
-          <div className="mt-4 flex flex-wrap gap-6 rounded-md border border-[#e1dfdd] bg-[#faf9f8] p-3">
-            <div><div className="text-[11px] text-[#605e5c]">Evidence</div><div className="text-lg font-semibold text-[#201f1e]">{selected.evidence?.length ?? 0}</div><div className="text-[11px] text-[#8a8886]">Recorded entries</div></div>
-            <div><div className="text-[11px] text-[#605e5c]">Findings</div><div className="text-lg font-semibold text-[#201f1e]">{selected.vulnerabilities?.length ?? 0}</div><div className="text-[11px] text-[#8a8886]">Observed or reported findings</div></div>
-            <div><div className="text-[11px] text-[#605e5c]">Score status</div><div className="text-[15px] font-semibold text-[#201f1e]">{verificationDecisions?.[selected.id]?.state === 'VERIFIED' ? 'Verified' : verificationDecisions?.[selected.id]?.state === 'PARTIAL' ? 'Partially verified' : verificationDecisions?.[selected.id]?.state === 'INVESTIGATE' ? 'Investigate' : 'Not verified'}</div><div className="text-[11px] text-[#8a8886]">Authoritative scoring required</div></div>
-          </div>
-
-          {selected.evidence?.length > 0 && <div className="mt-4">
-            <div className="mb-2 text-[11px] uppercase tracking-wide text-[#605e5c]">Evidence ledger snapshot</div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {selected.evidence.map((item: any) => (
-                <div key={String(item.id)} className="rounded-md border border-[#e1dfdd] p-3">
-                  <div className="text-[13px] font-medium text-[#201f1e]">{String(item.name || item.type || 'Evidence item')}</div>
-                  <div className="mt-1 text-[11px] text-[#605e5c]">Status: {String(item.status || 'Not verified')}</div>
-                </div>
-              ))}
-            </div>
-          </div>}
-
-          {selected.vulnerabilities?.length > 0 && <div className="mt-4">
-            <div className="mb-2 text-[11px] uppercase tracking-wide text-[#605e5c]">Trust findings / remediation</div>
-            <div className="space-y-2">
-              {selected.vulnerabilities.map((v: any) => {
-                const id = String(v.findingId ?? v.id ?? '');
-                return (
-                  <div key={id} className="rounded-md border border-[#e1dfdd] p-3">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <div className="text-[13px] font-medium text-[#201f1e]">{String(v.title || id)}</div>
-                        <div className="mt-1 text-[11px] text-[#605e5c]">{String(v.status || 'Open')} · {String(v.severity || 'Unknown severity')}</div>
-                      </div>
-                      <button
-                        onClick={() => void createRemediation(v)}
-                        disabled={!canCreateRemediation || !id || remediationBusy === id}
-                        title={!canCreateRemediation ? `Your ${role} role cannot create remediations.` : undefined}
-                        className="h-8 shrink-0 rounded border border-[#c8c6c4] px-3 text-[12px] font-medium text-[#323130] hover:bg-black/[.03] disabled:opacity-50"
-                      >
-                        {remediationBusy === id ? 'Persisting…' : 'Create persisted remediation'}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>}
-
-          <div className="mt-4 rounded-md border border-[#e1dfdd] bg-[#faf9f8] p-3 text-[12px] leading-5 text-[#605e5c]">This workflow never upgrades self-submitted data to VERIFIED. Durable evidence and remediation state must come from the Trust Loop backend.</div>
-        </div>}
+        {selected && (
+          <TrustRoom
+            passport={selected}
+            client={owningClient}
+            canRunAudit={canRunAudit}
+            auditBusy={auditBusy}
+            onRunAudit={() => void runAudit()}
+            canCreateRemediation={canCreateRemediation}
+            remediationBusy={remediationBusy}
+            onCreateRemediation={(v) => void createRemediation(v)}
+            onNavigateTab={(nextTab, itemId) => onNavigateTab?.(nextTab, itemId)}
+            onViewLineage={() => setTab('lineage')}
+            canSharePassport={true}
+            verificationDecision={verificationDecision}
+            verificationExplanation={undefined}
+            verificationPolicyVersion={undefined}
+            verificationReasonCodes={undefined}
+            verificationTargetIdentity={undefined}
+            verificationCounts={undefined}
+          />
+        )}
       </>}
     </section>
   );

@@ -10,6 +10,7 @@ interface Props {
   findings: any[];
   role?: string;
   onSelectClient: (id: string) => void;
+  onSelectPassport?: (passportId: string) => void;
   onNavigate: (tab: string) => void;
   verificationDecisions?: Record<string, VerificationDecision>;
   verificationDetails?: Record<string, unknown>;
@@ -23,7 +24,7 @@ const severityClass = (severity: Alert['severity']) => severity === 'Critical'
   : severity === 'High' ? 'border-[#8a5700]/30 bg-[#fff4ce] text-[#8a5700]'
   : 'border-[#0f6cbd]/30 bg-[#eff6fc] text-[#0f6cbd]';
 
-export default function MSPCommandCenter({ clients, alerts, findings, role = 'Viewer', onSelectClient, onNavigate, verificationDecisions = {}, verificationDetails = {} }: Props) {
+export default function MSPCommandCenter({ clients, alerts, findings, role = 'Viewer', onSelectClient, onNavigate, onSelectPassport, verificationDecisions = {}, verificationDetails = {} }: Props) {
   const [selected, setSelected] = useState<Alert | null>(null);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [team, setTeam] = useState<TeamMember[]>([]);
@@ -31,6 +32,7 @@ export default function MSPCommandCenter({ clients, alerts, findings, role = 'Vi
   const canAssign = role === 'Owner' || role === 'Admin';
   const trustStateFromDecision = (decision?: VerificationDecision) => decision?.state ?? 'UNINITIALIZED';
   const trustStateForPassportItem = (item: { passportId: string }) => trustStateFromDecision(verificationDecisions?.[item.passportId]);
+  const selectPassport = (passportId: string) => { onSelectPassport?.(passportId); };
   const passportDecision = (passport: { id: string }) => { const decision = verificationDecisions?.[passport.id]; return decision; };
   void verificationDetails;
 
