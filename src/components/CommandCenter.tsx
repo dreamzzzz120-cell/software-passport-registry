@@ -1,107 +1,97 @@
 import { useState, type Key, type ReactNode } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { EXTENSIONS, type ExtensionDefinition } from '../workflows/extensionRegistry';
-import { AMBER, BLUE, CYAN, GREEN, ORANGE, PURPLE, RED, TEAL } from '../workflows/featureColors';
 
-type NavItem = { id: string; label: string; icon: string; path: string; color: string; desc: string };
+type NavItem = { id: string; label: string; icon: string; path: string; badge?: string };
+type NavGroup = { title: string; items: NavItem[] };
 
-// A distinct accent per feature so the sidebar reads at a glance instead of
-// as a wall of identically-gray glyphs — see workflows/featureColors.ts,
-// which is also used by each feature's own page header so the same feature
-// reads as the same color everywhere it appears.
-
-const CORE: NavItem[] = [
-  { id: 'msp', label: 'MSP Command', icon: '▦', path: '/msp', color: PURPLE, desc: 'Cross-client oversight for managed service providers — your primary entry point.' },
-  { id: 'dashboard', label: 'Overview', icon: '⌂', path: '/dashboard', color: BLUE, desc: 'Workspace summary — key metrics across passports, evidence, and alerts at a glance.' },
-  { id: 'assets', label: 'Assets', icon: '◈', path: '/assets', color: CYAN, desc: 'The software assets you track — services, applications, and components under management.' },
-  { id: 'passports', label: 'Passports', icon: '◇', path: '/passports', color: AMBER, desc: 'Software Passports — structured records combining identity, security, and evidence for a piece of software.' },
-  { id: 'coverage', label: 'Evidence coverage', icon: '▤', path: '/coverage', color: GREEN, desc: 'How much of your inventory has verifiable evidence versus self-attested claims.' },
-  { id: 'evidence-explorer', label: 'Evidence Explorer', icon: '⛾', path: '/evidence-explorer', color: TEAL, desc: 'Browse and search the underlying evidence records collected for your passports.' },
-  { id: 'scans', label: 'Scans', icon: '⌁', path: '/scans', color: ORANGE, desc: 'SBOM and vulnerability scans run against your assets.' },
-  { id: 'monitoring', label: 'Monitoring', icon: '◉', path: '/monitoring', color: BLUE, desc: 'Live monitoring signals for tracked assets and integrations.' },
-  { id: 'alerts', label: 'Alerts', icon: '!', path: '/alerts', color: RED, desc: 'Active findings and notifications that need attention.' },
-  { id: 'clients', label: 'Clients', icon: '◎', path: '/clients', color: PURPLE, desc: 'Organizations and teams you manage passports and evidence for.' },
-  { id: 'trust-graph', label: 'Trust Graph', icon: '◌', path: '/trust-graph', color: CYAN, desc: 'A relationship graph connecting assets, vendors, and evidence.' },
+const OVERVIEW: NavItem[] = [
+  { id: 'dashboard', label: 'Overview', icon: '⌂', path: '/dashboard' },
 ];
-const GOVERNANCE: NavItem[] = [
-  { id: 'security', label: 'Security', icon: '⌾', path: '/security', color: RED, desc: 'Security posture and findings across your tracked software.' },
-  { id: 'compliance', label: 'Compliance', icon: '✓', path: '/compliance', color: GREEN, desc: 'Compliance status against the frameworks and policies you track.' },
-  { id: 'audit-log', label: 'Audit Log', icon: '▥', path: '/audit-log', color: ORANGE, desc: 'A chronological record of actions taken in this workspace.' },
-  { id: 'vendors', label: 'Vendors', icon: '◫', path: '/vendors', color: PURPLE, desc: 'Third-party vendors and suppliers whose software you assess.' },
-  { id: 'questionnaires', label: 'Trust Response', icon: '?', path: '/questionnaires', color: BLUE, desc: 'Draft answers to security questionnaires from real, matched evidence.' },
-  { id: 'governance', label: 'Governance', icon: '⚖', path: '/governance', color: AMBER, desc: 'Policies, controls, framework requirements, and risk decisions, backed by real evidence and audit records.' },
-  { id: 'privacy', label: 'Privacy', icon: '◍', path: '/privacy', color: CYAN, desc: 'Personal information inventory, privacy requests, and privacy impact assessments.' },
-  { id: 'integrations', label: 'Integrations', icon: '↔', path: '/integrations', color: TEAL, desc: 'Connected tools and data sources feeding evidence into SPR.' },
-  { id: 'reports', label: 'Reports Center', icon: '▤', path: '/reports', color: BLUE, desc: 'Generated reports summarizing trust, compliance, and evidence.' },
+const SOFTWARE: NavItem[] = [
+  { id: 'passports', label: 'Passports', icon: '◇', path: '/passports' },
+  { id: 'scans', label: 'Scans', icon: '⌁', path: '/scans' },
+  { id: 'assets', label: 'Assets', icon: '◈', path: '/assets' },
+  { id: 'coverage', label: 'Evidence coverage', icon: '▤', path: '/coverage' },
+];
+const TRUST: NavItem[] = [
+  { id: 'evidence-explorer', label: 'Evidence Explorer', icon: '⛾', path: '/evidence-explorer' },
+  { id: 'trust-graph', label: 'Trust Graph', icon: '◌', path: '/trust-graph' },
+  { id: 'alerts', label: 'Findings', icon: '!', path: '/alerts' },
+  { id: 'security', label: 'Security', icon: '⌾', path: '/security' },
+  { id: 'monitoring', label: 'Monitoring', icon: '◉', path: '/monitoring' },
+];
+const REPORTS: NavItem[] = [
+  { id: 'reports', label: 'Reports Center', icon: '▤', path: '/reports' },
+];
+const INTEGRATIONS: NavItem[] = [
+  { id: 'integrations', label: 'Integrations', icon: '↔', path: '/integrations' },
+];
+const COMPLIANCE: NavItem[] = [
+  { id: 'compliance', label: 'Compliance', icon: '✓', path: '/compliance' },
+  { id: 'audit-log', label: 'Audit Log', icon: '▥', path: '/audit-log' },
+  { id: 'vendors', label: 'Vendors', icon: '◫', path: '/vendors' },
+  { id: 'clients', label: 'Clients', icon: '◎', path: '/clients' },
 ];
 const EXECUTIVE: NavItem[] = [
-  { id: 'savings', label: 'Time & Savings', icon: '$', path: '/savings', color: GREEN, desc: 'Estimated time and cost savings from SPR activity, from a baseline you provide.' },
-  { id: 'agent-trust', label: 'AI Agent Trust', icon: 'AI', path: '/agent-trust', color: CYAN, desc: 'Trust posture for AI agents operating in your environment.' },
-  { id: 'ai-trust-center', label: 'AI Trust Center', icon: 'AI', path: '/ai-trust-center', color: BLUE, desc: 'Centralized view of AI-related trust and governance signals.' },
-  { id: 'enterprise-readiness', label: 'Enterprise Readiness', icon: 'ER', path: '/enterprise-readiness', color: AMBER, desc: 'Readiness checklist for enterprise buyers and procurement.' },
-  { id: 'investor', label: 'Investor View', icon: 'IV', path: '/investor', color: GREEN, desc: 'A read-only summary view built for investor updates.' },
-  { id: 'founder', label: 'Founder Dashboard', icon: 'FD', path: '/founder', color: RED, desc: 'Founder-only internal metrics and controls.' },
+  { id: 'msp', label: 'MSP Command', icon: '▦', path: '/msp' },
+  { id: 'agent-trust', label: 'AI Agent Trust', icon: 'AI', path: '/agent-trust' },
+  { id: 'ai-trust-center', label: 'AI Trust Center', icon: 'AI', path: '/ai-trust-center' },
+  { id: 'enterprise-readiness', label: 'Enterprise Readiness', icon: 'ER', path: '/enterprise-readiness' },
+  { id: 'investor', label: 'Investor View', icon: 'IV', path: '/investor' },
+  { id: 'founder', label: 'Founder Dashboard', icon: 'FD', path: '/founder' },
 ];
-const SYSTEM: NavItem[] = [
-  { id: 'team', label: 'Team', icon: '♙', path: '/team', color: TEAL, desc: 'Manage teammates and their roles in this workspace.' },
-  { id: 'extensions', label: 'Extension Marketplace', icon: 'EX', path: '/extensions', color: PURPLE, desc: 'Optional workflow extensions you can add to SPR.' },
-  { id: 'billing', label: 'Billing', icon: '$', path: '/billing', color: AMBER, desc: 'Subscription plan and billing details.' },
-  { id: 'settings', label: 'Settings', icon: '⚙', path: '/settings', color: CYAN, desc: 'Workspace configuration and preferences.' },
+const ADMIN: NavItem[] = [
+  { id: 'team', label: 'Team', icon: '♙', path: '/team' },
+  { id: 'extensions', label: 'Extension Marketplace', icon: 'EX', path: '/extensions' },
+  { id: 'billing', label: 'Billing', icon: '$', path: '/billing' },
+  { id: 'settings', label: 'Settings', icon: '⚙', path: '/settings' },
 ];
 
-const EXTENSION_ACCENTS: Record<string, string> = { cyan: BLUE, violet: PURPLE, fuchsia: '#d16d9e', amber: AMBER, emerald: GREEN };
-
-type Group = { label: string; items: NavItem[] };
-
-function NavGroup({ group, activePath, onNavigate, defaultOpen }: { group: Group; activePath: (p: string) => boolean; onNavigate: (path: string) => void; defaultOpen: boolean }) {
-  const [open, setOpen] = useState(defaultOpen);
-  const hasActive = group.items.some((item) => activePath(item.path));
+type NavButtonProps = { item: NavItem; active: boolean; onNavigate: (path: string) => void; key?: Key };
+function NavButton({ item, active, onNavigate }: NavButtonProps) {
   return (
-    <div className="mb-1">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--spr-text-faint)] hover:text-[var(--spr-text)]"
-      >
-        <span>{group.label}</span>
-        <span className="text-[9px]">{open ? '▾' : '▸'}</span>
-      </button>
-      {(open || hasActive) && (
-        <nav className="space-y-0.5">
-          {group.items.map((item) => {
-            const active = activePath(item.path);
-            return (
-              <button
-                key={item.id}
-                onClick={() => onNavigate(item.path)}
-                data-active={active}
-                title={item.desc}
-                className="spr-nav-item flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[13px]"
-                style={active ? undefined : { color: 'var(--spr-text)' }}
-              >
-                <span className="grid h-5 w-5 shrink-0 place-items-center text-[10px]" style={{ color: item.color }}>{item.icon}</span>
-                <span className="flex-1 truncate">{item.label}</span>
-              </button>
-            );
-          })}
-        </nav>
-      )}
-    </div>
+    <button
+      onClick={() => onNavigate(item.path)}
+      aria-current={active ? 'page' : undefined}
+      className={`flex w-full items-center gap-2.5 rounded px-2.5 py-[7px] text-left text-[13px] transition-colors ${active ? 'bg-[#eff6fc] font-semibold text-[#004578]' : 'text-[#323130] hover:bg-black/[.04]'}`}
+    >
+      <span className={`grid h-5 w-5 shrink-0 place-items-center rounded text-[10px] font-semibold ${active ? 'text-[#0f6cbd]' : 'text-[#605e5c]'}`}>{item.icon}</span>
+      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+      {item.badge && <span className="shrink-0 rounded-full bg-[#f3f2f1] px-1.5 text-[10px] font-medium text-[#605e5c]">{item.badge}</span>}
+    </button>
   );
 }
 
 type ExtensionButtonProps = { extension: ExtensionDefinition; active: boolean; onNavigate: (path: string) => void; key?: Key };
 function ExtensionButton({ extension, active, onNavigate }: ExtensionButtonProps) {
-  const color = EXTENSION_ACCENTS[extension.accent] ?? 'var(--spr-text-muted)';
   return (
     <button
       onClick={() => onNavigate(extension.entryPath)}
-      data-active={active}
-      title={extension.description}
-      className="spr-nav-item flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[13px]"
-      style={active ? undefined : { color: 'var(--spr-text)' }}
+      aria-current={active ? 'page' : undefined}
+      className={`flex w-full items-center gap-2.5 rounded px-2.5 py-[7px] text-left text-[13px] transition-colors ${active ? 'bg-[#eff6fc] font-semibold text-[#004578]' : 'text-[#323130] hover:bg-black/[.04]'}`}
     >
-      <span className="grid h-5 w-5 shrink-0 place-items-center rounded-sm border text-[8px] font-bold" style={{ borderColor: color, color }}>EX</span>
+      <span className="grid h-5 w-5 shrink-0 place-items-center rounded text-[9px] font-bold text-[#605e5c]">EX</span>
       <span className="min-w-0 flex-1 truncate">{extension.shortName}</span>
     </button>
+  );
+}
+
+function NavGroupBlock({ group, active, onNavigate, defaultOpen = true }: { group: NavGroup; active: (path: string) => boolean; onNavigate: (path: string) => void; defaultOpen?: boolean; key?: Key }) {
+  const [open, setOpen] = useState(defaultOpen);
+  if (group.items.length === 0) return null;
+  return (
+    <div className="mb-1">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between px-2.5 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wide text-[#605e5c] hover:text-[#323130]"
+        aria-expanded={open}
+      >
+        <span>{group.title}</span>
+        <ChevronDown className={`h-3 w-3 transition-transform ${open ? '' : '-rotate-90'}`} />
+      </button>
+      {open && <nav className="space-y-px px-1">{group.items.map((item) => <NavButton key={item.id} item={item} active={active(item.path)} onNavigate={onNavigate} />)}</nav>}
+    </div>
   );
 }
 
@@ -110,128 +100,72 @@ export default function CommandCenter({ children, path, userEmail, role, onNavig
   const extensionActive = path.startsWith('/extensions/');
   const active = (candidate: string) => path === candidate || (candidate !== '/dashboard' && path.startsWith(`${candidate}/`));
   const executiveItems = role === 'Owner' ? EXECUTIVE : EXECUTIVE.filter((item) => item.id !== 'founder');
-  const mobileItems = [...CORE, ...GOVERNANCE, ...executiveItems, ...SYSTEM, ...EXTENSIONS.map((extension) => ({ id: extension.id, label: extension.shortName, icon: 'EX', path: extension.entryPath }))];
-  const currentItem = [...CORE, ...GOVERNANCE, ...executiveItems, ...SYSTEM].find((item) => active(item.path));
+  const groups: NavGroup[] = [
+    { title: 'Overview', items: OVERVIEW },
+    { title: 'Software', items: SOFTWARE },
+    { title: 'Trust', items: TRUST },
+    { title: 'Reports', items: REPORTS },
+    { title: 'Integrations', items: INTEGRATIONS },
+    { title: 'Compliance', items: COMPLIANCE },
+    { title: 'Executive', items: executiveItems },
+    { title: 'Administration', items: ADMIN },
+  ];
+  const mobileItems = [...groups.flatMap((g) => g.items), ...EXTENSIONS.map((extension) => ({ id: extension.id, label: extension.shortName, icon: 'EX', path: extension.entryPath }))];
+  const currentItem = groups.flatMap((g) => g.items).find((item) => active(item.path));
   const currentLabel = extensionActive ? 'Extension workflow' : currentItem?.label || 'Trust workspace';
 
-  // Command-center canvas: deep-space ground, quiet technical grid and ambient
-  // lighting. Purely atmospheric - it carries no state or meaning.
   return (
-    <div className="cc-canvas min-h-screen text-[var(--spr-text)]">
+    <div className="min-h-screen bg-[#faf9f8] text-[#201f1e]">
       <div className="flex min-h-screen">
-        <aside className="spr-nav hidden h-screen w-[240px] shrink-0 overflow-y-auto p-2.5 lg:sticky lg:top-0 lg:flex lg:flex-col">
-          <button
-            onClick={() => onNavigate('/dashboard')}
-            aria-label="Open Overview"
-            title="Go to the Overview dashboard."
-            className="mb-3 flex items-center gap-2.5 rounded-md border border-[var(--spr-border)] p-2 text-left hover:bg-[var(--spr-surface-alt)] focus:outline-none focus:ring-2 focus:ring-[var(--spr-highlight)]/40"
-          >
-            <img src="/brand/spr-icon.png" alt="SPR" className="h-9 w-9 shrink-0 rounded-md border border-[var(--spr-border)] bg-white object-contain p-1" />
-            <span className="min-w-0">
-              <span className="block text-[13px] font-semibold leading-tight">Software Passport Registry</span>
-              <span className="block text-[10px] leading-tight text-[var(--spr-text-faint)]">Software Trust OS</span>
+        <aside className="hidden h-screen w-[224px] shrink-0 overflow-y-auto border-r border-[#e1dfdd] bg-[#f3f2f1] lg:sticky lg:top-0 lg:flex lg:flex-col">
+          <button onClick={() => onNavigate('/dashboard')} aria-label="Go to overview" className="flex h-12 shrink-0 items-center gap-2 border-b border-[#e1dfdd] px-3 text-left hover:bg-black/[.03]">
+            <span className="grid h-6 w-6 place-items-center rounded bg-[#0f6cbd] text-[10px] font-bold text-white">S</span>
+            <span className="min-w-0 leading-tight">
+              <span className="block text-[13px] font-semibold">SPR</span>
+              <span className="block text-[10px] text-[#605e5c]">Software Trust Registry</span>
             </span>
           </button>
-          <NavGroup group={{ label: 'Core workflow', items: CORE }} activePath={active} onNavigate={onNavigate} defaultOpen />
-          <NavGroup group={{ label: 'Governance', items: GOVERNANCE }} activePath={active} onNavigate={onNavigate} defaultOpen />
-          <NavGroup group={{ label: 'Executive', items: executiveItems }} activePath={active} onNavigate={onNavigate} defaultOpen={false} />
-          <div className="mb-1 mt-2 flex items-center justify-between px-2 py-1.5 text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--spr-text-faint)]">
-            <span>Extensions</span>
-            <span title={`${EXTENSIONS.length} extension${EXTENSIONS.length === 1 ? '' : 's'} installed in this workspace.`} className="rounded-sm border border-[var(--spr-border)] px-1.5 text-[9px] text-[var(--spr-text-muted)]">{EXTENSIONS.length}</span>
-          </div>
-          <nav className="space-y-0.5">
-            {EXTENSIONS.map((extension) => (
-              <ExtensionButton key={extension.id} extension={extension} active={extensionActive && path === extension.entryPath} onNavigate={onNavigate} />
-            ))}
-          </nav>
-          <div className="mt-auto space-y-0.5 border-t border-[var(--spr-border)] pt-2">
-            {SYSTEM.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => onNavigate(item.path)}
-                data-active={active(item.path)}
-                title={item.desc}
-                className="spr-nav-item flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[13px]"
-                style={active(item.path) ? undefined : { color: 'var(--spr-text)' }}
-              >
-                <span className="grid h-5 w-5 shrink-0 place-items-center text-[10px]" style={{ color: item.color }}>{item.icon}</span>
-                <span className="flex-1 truncate">{item.label}</span>
-              </button>
-            ))}
+          <div className="flex-1 overflow-y-auto py-2">
+            {groups.map((group) => <NavGroupBlock key={group.title} group={group} active={active} onNavigate={onNavigate} />)}
+            {EXTENSIONS.length > 0 && (
+              <div className="mb-1">
+                <div className="flex items-center justify-between px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#605e5c]">
+                  <span>Extensions</span>
+                  <span className="rounded-full bg-white px-1.5 text-[10px] text-[#605e5c]">{EXTENSIONS.length}</span>
+                </div>
+                <nav className="space-y-px px-1">{EXTENSIONS.map((extension) => <ExtensionButton key={extension.id} extension={extension} active={extensionActive && path === extension.entryPath} onNavigate={onNavigate} />)}</nav>
+              </div>
+            )}
           </div>
         </aside>
 
         <main className="min-w-0 flex-1">
-          <header className="sticky top-0 z-30 h-12 border-b border-[var(--spr-border)] bg-[var(--spr-surface)]/95 px-4 backdrop-blur-none md:px-6">
-            <div className="flex h-12 items-center gap-3">
-              <button
-                onClick={() => onNavigate('/dashboard')}
-                aria-label="Open Overview"
-                title="Go to the Overview dashboard."
-                className="rounded-md border border-[var(--spr-border)] focus:outline-none focus:ring-2 focus:ring-[var(--spr-highlight)]/40 lg:hidden"
-              >
-                <img src="/brand/spr-icon.png" alt="SPR" className="h-7 w-7 rounded-md bg-white object-contain p-0.5" />
-              </button>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5 text-[11px] text-[var(--spr-text-faint)]">
-                  <span>Workspace</span>
-                  <span>/</span>
-                  <span className="font-medium text-[var(--spr-text)]">{currentLabel}</span>
-                </div>
+          <header className="sticky top-0 z-30 flex h-12 items-center gap-3 border-b border-[#e1dfdd] bg-white px-3 md:px-4">
+            <button onClick={() => setMobileMenuOpen((open) => !open)} aria-expanded={mobileMenuOpen} aria-label="Open navigation" className="rounded border border-[#e1dfdd] px-2 py-1 text-xs text-[#323130] lg:hidden">{mobileMenuOpen ? 'Close' : 'Menu'}</button>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 text-[11px] text-[#605e5c]">
+                <span>SPR</span><span>/</span><span className="truncate font-medium text-[#201f1e]">{currentLabel}</span>
               </div>
-              <span title="This session is connected to live workspace data." className="hidden items-center gap-1.5 rounded-sm border border-[var(--spr-border)] px-2 py-0.5 text-[11px] text-[var(--spr-text-muted)] md:flex">
-                <span className="spr-status-dot spr-status-dot--green" /> Live
-              </span>
-              <span title="Your role in this workspace, which controls what you can view and change." className="hidden rounded-sm border border-[var(--spr-border)] px-2 py-0.5 text-[11px] text-[var(--spr-text-muted)] md:inline">{role}</span>
-              <span title="The account you're signed in as." className="hidden max-w-[180px] truncate text-[11px] text-[var(--spr-text-faint)] xl:inline">{userEmail || 'Authenticated user'}</span>
-              <button
-                onClick={() => setMobileMenuOpen((open) => !open)}
-                aria-expanded={mobileMenuOpen}
-                aria-label="Open workspace navigation"
-                title="Open the full navigation menu."
-                className="spr-btn spr-btn-secondary !py-1 !px-2.5 !text-[11px] lg:hidden"
-              >
-                {mobileMenuOpen ? 'Close' : 'Menu'}
-              </button>
-              <button onClick={onSignOut} title="Sign out of your SPR account." className="spr-btn spr-btn-secondary !py-1 !px-2.5 !text-[11px]">Sign out</button>
             </div>
+            <span className="hidden items-center gap-1 rounded border border-[#e1dfdd] px-2 py-0.5 text-[11px] text-[#605e5c] sm:inline-flex">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#0e700e]" /> Live
+            </span>
+            <span className="hidden rounded border border-[#e1dfdd] px-2 py-0.5 text-[11px] text-[#605e5c] md:inline">{role}</span>
+            <span className="hidden max-w-[180px] truncate text-[12px] text-[#605e5c] xl:inline">{userEmail || 'Authenticated user'}</span>
+            <button onClick={onSignOut} className="rounded border border-[#e1dfdd] px-2.5 py-1 text-[12px] text-[#323130] hover:bg-black/[.03]">Sign out</button>
           </header>
 
-          <div className="border-b border-[var(--spr-border)] bg-[var(--spr-surface-alt)] px-2 py-1.5 lg:hidden">
-            <div className="flex gap-1.5 overflow-x-auto pb-0.5">
-              {mobileItems.slice(0, 8).map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => { onNavigate(item.path); setMobileMenuOpen(false); }}
-                  data-active={active(item.path)}
-                  title={'desc' in item && typeof item.desc === 'string' ? item.desc : undefined}
-                  className="spr-nav-item shrink-0 border border-[var(--spr-border)] px-2.5 py-1.5 text-[11px]"
-                >
-                  {item.label}
-                </button>
-              ))}
-              <button onClick={() => setMobileMenuOpen((open) => !open)} className="spr-btn spr-btn-secondary shrink-0 !py-1.5 !px-2.5 !text-[11px]">
-                {mobileMenuOpen ? 'Less' : 'More'}
-              </button>
-            </div>
-            {mobileMenuOpen && (
-              <div className="mt-1.5 grid max-h-64 grid-cols-2 gap-1.5 overflow-y-auto border-t border-[var(--spr-border)] pt-1.5">
-                {mobileItems.slice(8).map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => { onNavigate(item.path); setMobileMenuOpen(false); }}
-                    data-active={active(item.path)}
-                    title={'desc' in item && typeof item.desc === 'string' ? item.desc : undefined}
-                    className="spr-nav-item border border-[var(--spr-border)] px-2.5 py-2 text-left text-[11px]"
-                  >
-                    {item.label}
-                  </button>
+          {mobileMenuOpen && (
+            <div className="border-b border-[#e1dfdd] bg-white px-3 py-2 lg:hidden">
+              <div className="grid grid-cols-2 gap-1">
+                {mobileItems.map((item) => (
+                  <button key={item.id} onClick={() => { onNavigate(item.path); setMobileMenuOpen(false); }} className={`truncate rounded px-2.5 py-1.5 text-left text-[12px] ${active(item.path) ? 'bg-[#eff6fc] font-medium text-[#004578]' : 'text-[#323130]'}`}>{item.label}</button>
                 ))}
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
-          <div className="mx-auto max-w-[1600px] p-4 md:p-6">{children}</div>
+          <div className="mx-auto max-w-[1400px] p-4 md:p-6">{children}</div>
         </main>
       </div>
     </div>

@@ -19,7 +19,7 @@ interface SettingsViewProps {
 }
 
 export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps) {
-  const [activeSubTab, setActiveSubTab] = useState<'configurations' | 'bible' | 'organization' | 'guide'>('configurations');
+  const [activeSubTab, setActiveSubTab] = useState<'configurations' | 'bible' | 'organization'>('configurations');
   const [mfaEnabled, setMfaEnabled] = useState(true);
   const [slaTarget, setSlaTarget] = useState(85);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -32,8 +32,6 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('Technician');
-  const [inviteClientId, setInviteClientId] = useState('');
-  const [clientsList, setClientsList] = useState<{ id: string; name: string }[]>([]);
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileName, setProfileName] = useState('');
   const [profileJobTitle, setProfileJobTitle] = useState('');
@@ -41,16 +39,6 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
   const [loadingTeam, setLoadingTeam] = useState(false);
   const [teamError, setTeamError] = useState<string | null>(null);
   const [teamSuccess, setTeamSuccess] = useState<string | null>(null);
-
-  // Persistent white-label branding (migration 0030) -- set once, applied to
-  // every future white-label report export instead of retyping it each time.
-  const [brandingCompanyName, setBrandingCompanyName] = useState('');
-  const [brandingColor, setBrandingColor] = useState('var(--spr-highlight)');
-  const [brandingLogoDataUrl, setBrandingLogoDataUrl] = useState<string | null>(null);
-  const [brandingUpdatedAt, setBrandingUpdatedAt] = useState<string | null>(null);
-  const [savingBranding, setSavingBranding] = useState(false);
-  const [brandingError, setBrandingError] = useState<string | null>(null);
-  const [brandingSuccess, setBrandingSuccess] = useState<string | null>(null);
 
   // profile is fetched from /api/user/me, which already returns the caller's
   // role — derive gating from it directly rather than requiring a separate
@@ -87,79 +75,24 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
     }
   };
 
-  const fetchBranding = async () => {
-    try {
-      const res = await apiFetch('/api/organization/branding');
-      if (res.ok) {
-        const data = await res.json();
-        setBrandingCompanyName(data.companyName || '');
-        setBrandingColor(data.brandColor || 'var(--spr-highlight)');
-        setBrandingLogoDataUrl(data.logoDataUrl || null);
-        setBrandingUpdatedAt(data.updatedAt || null);
-      }
-    } catch (err) {
-      console.error('Error fetching branding:', err);
-    }
-  };
-
-  const handleBrandingLogoFile = (file: File | null) => {
-    if (!file) return;
-    if (file.size > 220_000) { setBrandingError('Logo file is too large. Use an image under ~200KB.'); return; }
-    const reader = new FileReader();
-    reader.onload = () => { if (typeof reader.result === 'string') setBrandingLogoDataUrl(reader.result); };
-    reader.readAsDataURL(file);
-  };
-
-  const handleSaveBranding = async () => {
-    if (!canManageTeam) return;
-    setSavingBranding(true);
-    setBrandingError(null);
-    setBrandingSuccess(null);
-    try {
-      const res = await apiFetch('/api/organization/branding', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          companyName: brandingCompanyName.trim() || null,
-          brandColor: brandingColor || null,
-          logoDataUrl: brandingLogoDataUrl || null,
-        }),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || 'Failed to save branding.');
-      setBrandingUpdatedAt(data.updatedAt || null);
-      setBrandingSuccess('Branding saved. Future white-label reports will use it automatically.');
-    } catch (err) {
-      setBrandingError(err instanceof Error ? err.message : 'Failed to save branding.');
-    } finally {
-      setSavingBranding(false);
-    }
-  };
-
-  const fetchClientsList = () => {
-    apiFetch('/api/user/clients').then((r) => r.ok ? r.json() : []).then((data) => { if (Array.isArray(data)) setClientsList(data.map((c: any) => ({ id: c.id, name: c.name }))); }).catch(() => {});
-  };
-
   const handleInviteMember = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteEmail || !canManageTeam) return;
-    if (inviteRole === 'Client' && !inviteClientId) { setTeamError('Select which client this invitation is for.'); return; }
     setTeamError(null);
     setTeamSuccess(null);
     try {
       const res = await apiFetch('/api/organization/invite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: inviteEmail, role: inviteRole, clientId: inviteRole === 'Client' ? inviteClientId : undefined })
+        body: JSON.stringify({ email: inviteEmail, role: inviteRole })
       });
       if (res.ok) {
         setTeamSuccess(`Successfully sent security invitation to ${inviteEmail}`);
         setInviteEmail('');
-        setInviteClientId('');
         fetchProfileAndTeam();
       } else {
-        const errData = await res.json().catch(() => null);
-        setTeamError(errData?.error || errData?.message || 'Failed to send workspace invitation.');
+        const errData = await res.json();
+        setTeamError(errData.message || 'Failed to send workspace invitation.');
       }
     } catch (err) {
       setTeamError('Network error while dispatching invitation.');
@@ -366,7 +299,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
         const data = await sessRes.json();
         setSessions(data);
       }
-      
+
       const histRes = await apiFetch('/api/auth/login-history');
       if (histRes.ok) {
         const data = await histRes.json();
@@ -388,8 +321,6 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
   useEffect(() => {
     fetchAuthDataLedgers();
     fetchProfileAndTeam();
-    fetchBranding();
-    fetchClientsList();
   }, []);
 
   const handleRevokeSession = async (sessionId: string) => {
@@ -478,7 +409,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
 
   const filteredBibleProducts = useMemo(() => {
     return bibleProducts.filter(bp => {
-      const matchSearch = bp.name.toLowerCase().includes(bibleSearchQuery.toLowerCase()) || 
+      const matchSearch = bp.name.toLowerCase().includes(bibleSearchQuery.toLowerCase()) ||
                           bp.type.toLowerCase().includes(bibleSearchQuery.toLowerCase()) ||
                           bp.complianceTarget.toLowerCase().includes(bibleSearchQuery.toLowerCase());
       const matchRisk = bibleFilterRisk === 'all' || bp.riskTier.toLowerCase() === bibleFilterRisk.toLowerCase();
@@ -610,221 +541,219 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
   };
 
   return (
-    <div className="space-y-6" id="msp-settings-view">
+    <div className="space-y-4" id="msp-settings-view">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-[var(--spr-border)] pb-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.22em] text-[#9cdcfe]"><Sliders className="h-4 w-4" /> Platform configuration</div>
-          <h1 className="mt-2 text-xl font-bold text-[var(--spr-text)] flex items-center gap-2">
-            <Settings className="w-5 h-5 text-[#9cdcfe]" />
+          <h1 className="text-[22px] font-semibold text-[#201f1e] flex items-center gap-2">
+            <Settings className="h-4 w-4 text-[#0f6cbd]" />
             <span>Platform Settings & Compliance Bible</span>
           </h1>
-          <p className="text-xs text-[var(--spr-text-muted)] font-sans mt-1">
-            Configure thresholds, SAML authentication gateways, operator sessions, and access the master product security Bible.
+          <p className="mt-1 text-[13px] text-[#605e5c]">
+            Configure thresholds, SAML authentication gateways, operator sessions, and the master product security Bible.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Sub-Tab Selector */}
-          <div className="flex bg-[var(--spr-surface-sunken)] p-1 rounded-md text-xs">
-            <button
-              type="button"
-              onClick={() => setActiveSubTab('configurations')}
-              className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeSubTab === 'configurations'
-                  ? 'bg-[var(--spr-accent-soft)] text-white font-bold'
-                  : 'text-[var(--spr-text-muted)] hover:text-[var(--spr-text)] '
-              }`}
-            >
-              <Sliders className="w-3.5 h-3.5" />
-              <span>Configurations</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveSubTab('organization')}
-              className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeSubTab === 'organization'
-                  ? 'bg-[var(--spr-accent-soft)] text-white font-bold'
-                  : 'text-[var(--spr-text-muted)] hover:text-[var(--spr-text)] '
-              }`}
-            >
-              <Layers className="w-3.5 h-3.5" />
-              <span>Team & Profile</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveSubTab('bible')}
-              className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeSubTab === 'bible'
-                  ? 'bg-[var(--spr-accent-soft)] text-white font-bold'
-                  : 'text-[var(--spr-text-muted)] hover:text-[var(--spr-text)] '
-              }`}
-            >
-              <BookOpen className="w-3.5 h-3.5" />
-              <span>Master Bible</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveSubTab('guide')}
-              className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeSubTab === 'guide'
-                  ? 'bg-[var(--spr-accent-soft)] text-white font-bold'
-                  : 'text-[var(--spr-text-muted)] hover:text-[var(--spr-text)] '
-              }`}
-            >
-              <HelpCircle className="w-3.5 h-3.5" />
-              <span>Getting Started</span>
-            </button>
-          </div>
+        <button
+          onClick={fetchAuthDataLedgers}
+          disabled={loadingLedgers}
+          className="inline-flex h-9 items-center gap-1.5 rounded border border-[#c8c6c4] px-3 text-[13px] font-medium text-[#323130] hover:bg-black/[.03] disabled:opacity-60"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${loadingLedgers ? 'animate-spin' : ''}`} />
+          <span>Sync Audits</span>
+        </button>
+      </div>
 
-          <button
-            onClick={fetchAuthDataLedgers}
-            disabled={loadingLedgers}
-            className="p-2 bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] text-[var(--spr-text)] rounded-md hover:bg-[var(--spr-surface-hover)] transition flex items-center gap-1.5 text-xs font-mono cursor-pointer"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loadingLedgers ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">Sync Audits</span>
-          </button>
-        </div>
+      {/* Sub-Tab Selector */}
+      <div className="flex gap-1 border-b border-[#e1dfdd]">
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('configurations')}
+          className={`flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium border-b-2 -mb-px ${
+            activeSubTab === 'configurations'
+              ? 'border-[#0f6cbd] text-[#0f6cbd]'
+              : 'border-transparent text-[#605e5c] hover:text-[#323130]'
+          }`}
+        >
+          <Sliders className="h-3.5 w-3.5" />
+          <span>Configurations</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('organization')}
+          className={`flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium border-b-2 -mb-px ${
+            activeSubTab === 'organization'
+              ? 'border-[#0f6cbd] text-[#0f6cbd]'
+              : 'border-transparent text-[#605e5c] hover:text-[#323130]'
+          }`}
+        >
+          <Layers className="h-3.5 w-3.5" />
+          <span>Team & Profile</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('bible')}
+          className={`flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium border-b-2 -mb-px ${
+            activeSubTab === 'bible'
+              ? 'border-[#0f6cbd] text-[#0f6cbd]'
+              : 'border-transparent text-[#605e5c] hover:text-[#323130]'
+          }`}
+        >
+          <BookOpen className="h-3.5 w-3.5" />
+          <span>Master Bible</span>
+        </button>
       </div>
 
       {activeSubTab === 'configurations' ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fadeIn">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Left Column: Core Preferences */}
-          <div className="lg:col-span-2 space-y-6">
-            
+          <div className="lg:col-span-2 space-y-4">
+
+            <details className="rounded-md border border-[#e1dfdd] bg-[#faf9f8] text-[13px]">
+              <summary className="cursor-pointer select-none px-3 py-2 font-medium text-[#323130]">What is this? &middot; How it works</summary>
+              <div className="px-3 pb-3 text-[#605e5c]">
+                <p>Platform-wide thresholds, single sign-on, and session controls for this workspace.</p>
+                <ol className="mt-1.5 list-decimal space-y-0.5 pl-4">
+                  <li>Set the trust score threshold that triggers alerts.</li>
+                  <li>Configure the SAML identity provider your organization uses to sign in.</li>
+                  <li>Review and revoke active operator sessions if needed.</li>
+                </ol>
+              </div>
+            </details>
+
             {/* General platform settings card */}
-            <div className="spr-panel p-5 space-y-4">
-              <h3 className="text-xs font-bold text-[var(--spr-text)] flex items-center gap-1.5 pb-2 border-b border-[var(--spr-border)]">
-                <Sliders className="w-4.5 h-4.5 text-[var(--spr-highlight)]" />
-                <span>General Platform Parameters</span>
+            <div className="rounded-md border border-[#e1dfdd] bg-white p-4 space-y-3">
+              <h3 className="flex items-center gap-1.5 border-b border-[#e1dfdd] pb-2 text-[14px] font-semibold text-[#201f1e]">
+                <Sliders className="h-4 w-4 text-[#0f6cbd]" />
+                <span>General platform parameters</span>
               </h3>
 
-              <div className="space-y-3.5 text-xs">
+              <div className="space-y-3 text-[13px]">
                 <div className="flex flex-col gap-1">
-                  <label className="font-semibold text-[var(--spr-text)]">Audit Trust SLA Target Threshold (Score)</label>
-                  <div className="flex gap-2 items-center">
+                  <label className="font-medium text-[#323130]">Audit trust SLA target threshold (score)</label>
+                  <div className="flex items-center gap-2">
                     <input
                       type="range"
                       min="60"
                       max="98"
                       value={slaTarget}
                       onChange={(e) => setSlaTarget(Number(e.target.value))}
-                      className="flex-1 bg-[var(--spr-surface-sunken)] h-1.5 rounded-full cursor-pointer accent-[var(--spr-highlight)]"
+                      className="h-1.5 flex-1 cursor-pointer accent-[#0f6cbd]"
                     />
-                    <span className="font-mono font-bold text-[var(--spr-highlight)] bg-[var(--spr-accent-soft)] border border-[var(--spr-border)] px-2 py-1 rounded">
+                    <span className="rounded border border-[#c8c6c4] bg-[#eff6fc] px-2 py-1 font-medium text-[#0f6cbd]">
                       {slaTarget}/100
                     </span>
                   </div>
-                  <p className="text-[10px] text-[var(--spr-text-faint)] mt-0.5">Alerts are compiled if a software passport overall rating drops below this value.</p>
+                  <p className="text-[12px] text-[#605e5c]">Alerts are compiled if a software passport overall rating drops below this value.</p>
                 </div>
 
-                <div className="flex justify-between items-center border-t border-[var(--spr-border)] pt-3">
+                <div className="flex items-center justify-between gap-4 border-t border-[#e1dfdd] pt-3">
                   <div>
-                    <span className="font-semibold text-[var(--spr-text)] block">Enable Automated Daily Recalculation Scans</span>
-                    <p className="text-[10px] text-[var(--spr-text-faint)] leading-snug">Automatically scan active client software inventory on CVE database updates.</p>
+                    <span className="block font-medium text-[#323130]">Enable automated daily recalculation scans</span>
+                    <p className="text-[12px] text-[#605e5c]">Automatically scan active client software inventory on CVE database updates.</p>
                   </div>
                   <input
                     type="checkbox"
                     defaultChecked
-                    className="w-4.5 h-4.5 text-[var(--spr-highlight)] border-[var(--spr-border)] rounded focus:ring-[var(--spr-highlight)]"
+                    className="h-4 w-4 rounded border-[#c8c6c4] text-[#0f6cbd] focus:ring-[#0f6cbd]"
                   />
                 </div>
               </div>
             </div>
 
             {/* Theme & Interface Customization Card */}
-            <div className="spr-panel p-5 space-y-4">
-              <h3 className="text-xs font-bold text-[var(--spr-text)] flex items-center gap-1.5 pb-2 border-b border-[var(--spr-border)]">
-                <Sun className="w-4.5 h-4.5 text-[var(--spr-highlight)]" />
-                <span>Theme & Interface Customization</span>
+            <div className="rounded-md border border-[#e1dfdd] bg-white p-4 space-y-3">
+              <h3 className="flex items-center gap-1.5 border-b border-[#e1dfdd] pb-2 text-[14px] font-semibold text-[#201f1e]">
+                <Sun className="h-4 w-4 text-[#0f6cbd]" />
+                <span>Theme & interface</span>
               </h3>
 
-              <div className="space-y-4 text-xs">
-                <div className="flex flex-col gap-1.5">
-                  <span className="font-semibold text-[var(--spr-text)]">Active Theme Preference</span>
-                  <p className="text-[10px] text-[var(--spr-text-faint)] ">Choose between high-contrast light mode or a dark interface designed for operating centers.</p>
+              <div className="space-y-3 text-[13px]">
+                <div className="flex flex-col gap-1">
+                  <span className="font-medium text-[#323130]">Active theme preference</span>
+                  <p className="text-[12px] text-[#605e5c]">Choose between a light interface or a dark interface for operating centers.</p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => theme === 'dark' && onToggleTheme()}
-                    className={`flex items-center justify-center gap-2.5 p-3 rounded-md border transition-all cursor-pointer ${
+                    className={`flex h-9 items-center justify-center gap-2 rounded border text-[13px] font-medium ${
                       theme === 'light'
-                        ? 'bg-[var(--spr-accent-soft)] border-[var(--spr-border)] text-[var(--spr-highlight)] font-semibold shadow-sm'
-                        : 'bg-[var(--spr-surface-sunken)] border-[var(--spr-border)] text-[var(--spr-text-muted)] hover:text-[var(--spr-text)] hover:bg-[var(--spr-surface-hover)]'
+                        ? 'border-[#0f6cbd] bg-[#eff6fc] text-[#0f6cbd]'
+                        : 'border-[#c8c6c4] text-[#323130] hover:bg-black/[.03]'
                     }`}
                   >
-                    <Sun className="w-4 h-4 text-[var(--spr-amber)]" />
-                    <span>Light Mode</span>
+                    <Sun className="h-3.5 w-3.5" />
+                    <span>Light mode</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => theme === 'light' && onToggleTheme()}
-                    className={`flex items-center justify-center gap-2.5 p-3 rounded-md border transition-all cursor-pointer ${
+                    className={`flex h-9 items-center justify-center gap-2 rounded border text-[13px] font-medium ${
                       theme === 'dark'
-                        ? 'bg-[var(--spr-accent-soft)] border-[var(--spr-border)] text-[var(--spr-highlight)] font-semibold shadow-inner'
-                        : 'bg-[var(--spr-surface-sunken)] hover:bg-[var(--spr-surface-hover)] border-[var(--spr-border)] text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]'
+                        ? 'border-[#0f6cbd] bg-[#eff6fc] text-[#0f6cbd]'
+                        : 'border-[#c8c6c4] text-[#323130] hover:bg-black/[.03]'
                     }`}
                   >
-                    <Moon className="w-4 h-4 text-[var(--spr-highlight)]" />
-                    <span>Dark Mode</span>
+                    <Moon className="h-3.5 w-3.5" />
+                    <span>Dark mode</span>
                   </button>
                 </div>
               </div>
             </div>
 
             {/* SAML SSO Configuration Card */}
-            <div className="spr-panel p-5 space-y-4">
-              <h3 className="text-xs font-bold text-[var(--spr-text)] flex items-center gap-1.5 pb-2 border-b border-[var(--spr-border)]">
-                <Globe className="w-4.5 h-4.5 text-[var(--spr-highlight)]" />
-                <span>Enterprise SAML / SSO Integration Configuration</span>
+            <div className="rounded-md border border-[#e1dfdd] bg-white p-4 space-y-3">
+              <h3 className="flex items-center gap-1.5 border-b border-[#e1dfdd] pb-2 text-[14px] font-semibold text-[#201f1e]">
+                <Globe className="h-4 w-4 text-[#0f6cbd]" />
+                <span>Enterprise SAML / SSO integration</span>
               </h3>
 
-              <div className="space-y-4 text-xs">
-                <div className="flex justify-between items-center">
+              <div className="space-y-3 text-[13px]">
+                <div className="flex items-center justify-between gap-4">
                   <div>
-                    <span className="font-semibold text-[var(--spr-text)] block">SAML SSO Access Gate</span>
-                    <p className="text-[10px] text-[var(--spr-text-faint)] leading-snug">Redirect unauthenticated corporate domains to the unified Identity Provider (IdP).</p>
+                    <span className="block font-medium text-[#323130]">SAML SSO access gate</span>
+                    <p className="text-[12px] text-[#605e5c]">Redirect unauthenticated corporate domains to the unified identity provider (IdP).</p>
                   </div>
                   <button
                     onClick={() => setSsoEnabled(!ssoEnabled)}
-                    className={`px-3 py-1 text-xs font-bold rounded-md border cursor-pointer transition-colors ${
-                      ssoEnabled ? 'bg-[var(--spr-surface-sunken)] border-[var(--spr-border)] text-[var(--spr-green)]' : 'bg-[var(--spr-surface-sunken)] border-[var(--spr-border)] text-[var(--spr-text-muted)]'
+                    className={`inline-flex h-8 items-center gap-1.5 rounded border px-2.5 text-[12px] font-medium ${
+                      ssoEnabled ? 'border-[#c8c6c4] bg-[#dff6dd] text-[#0e700e]' : 'border-[#c8c6c4] bg-[#f3f2f1] text-[#605e5c]'
                     }`}
                   >
-                    {ssoEnabled ? 'SSO Active' : 'SSO Inactive'}
+                    <span className={`h-1.5 w-1.5 rounded-full ${ssoEnabled ? 'bg-[#0e700e]' : 'bg-[#8a8886]'}`} />
+                    {ssoEnabled ? 'SSO active' : 'SSO inactive'}
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                <div className="grid grid-cols-1 gap-3 border-t border-[#e1dfdd] pt-3 md:grid-cols-2">
                   <div>
-                    <label className="block text-[10px] font-mono font-bold text-[var(--spr-text-faint)] uppercase mb-1">Corporate Identity Provider</label>
+                    <label className="mb-1 block text-[12px] font-medium text-[#605e5c]">Corporate identity provider</label>
                     <input
                       type="text"
                       value={ssoProvider}
                       onChange={(e) => setSsoProvider(e.target.value)}
-                      className="w-full rounded-md border border-[var(--spr-border)] text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] p-2.5 bg-[var(--spr-surface-sunken)]"
+                      className="h-9 w-full rounded border border-[#c8c6c4] px-2.5 text-[13px] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-mono font-bold text-[var(--spr-text-faint)] uppercase mb-1">Client ID / Issuer URL</label>
+                    <label className="mb-1 block text-[12px] font-medium text-[#605e5c]">Client ID / issuer URL</label>
                     <input
                       type="text"
                       value={ssoClientId}
                       onChange={(e) => setSsoClientId(e.target.value)}
-                      className="w-full rounded-md border border-[var(--spr-border)] text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] p-2.5 bg-[var(--spr-surface-sunken)] font-mono"
+                      className="h-9 w-full rounded border border-[#c8c6c4] px-2.5 font-mono text-[13px] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
                     />
                   </div>
                   <div className="md:col-span-2">
-                    <label className="block text-[10px] font-mono font-bold text-[var(--spr-text-faint)] uppercase mb-1">SAML 2.0 Metadata XML Endpoint URL</label>
+                    <label className="mb-1 block text-[12px] font-medium text-[#605e5c]">SAML 2.0 metadata XML endpoint URL</label>
                     <input
                       type="text"
                       value={ssoMetadataUrl}
                       onChange={(e) => setSsoMetadataUrl(e.target.value)}
-                      className="w-full rounded-md border border-[var(--spr-border)] text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] p-2.5 bg-[var(--spr-surface-sunken)] font-mono"
+                      className="h-9 w-full rounded border border-[#c8c6c4] px-2.5 font-mono text-[13px] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
                     />
                   </div>
                 </div>
@@ -832,51 +761,51 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
             </div>
 
             {/* Active Sessions Monitoring Ledger */}
-            <div className="spr-panel p-5 space-y-4">
-              <h3 className="text-xs font-bold text-[var(--spr-text)] flex items-center justify-between pb-2 border-b border-[var(--spr-border)]">
+            <div className="rounded-md border border-[#e1dfdd] bg-white p-4 space-y-3">
+              <h3 className="flex items-center justify-between border-b border-[#e1dfdd] pb-2 text-[14px] font-semibold text-[#201f1e]">
                 <span className="flex items-center gap-1.5">
-                  <Lock className="w-4.5 h-4.5 text-[var(--spr-highlight)]" />
-                  <span>Active Operator Sessions Ledger</span>
+                  <Lock className="h-4 w-4 text-[#0f6cbd]" />
+                  <span>Active operator sessions</span>
                 </span>
-                <span className="font-mono text-[10px] text-[var(--spr-highlight)] bg-[var(--spr-accent-soft)] px-2 py-0.5 rounded border border-[var(--spr-border)]">
-                  {sessions.length} Active Node{sessions.length !== 1 ? 's' : ''}
+                <span className="rounded border border-[#c8c6c4] bg-[#eff6fc] px-2 py-0.5 text-[12px] font-medium text-[#0f6cbd]">
+                  {sessions.length} active
                 </span>
               </h3>
 
-              <div className="overflow-x-auto text-xs">
-                <table className="w-full text-left border-collapse">
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-left text-[13px]">
                   <thead>
-                    <tr className="border-b border-[var(--spr-border)] text-[var(--spr-text-faint)] font-mono text-[10px] uppercase">
-                      <th className="py-2">User / Identity</th>
-                      <th className="py-2">IP Address</th>
-                      <th className="py-2">Device & Location</th>
-                      <th className="py-2 text-right">Actions</th>
+                    <tr className="border-b border-[#e1dfdd] text-[11px] uppercase tracking-wide text-[#605e5c]">
+                      <th className="py-2 font-medium">User / identity</th>
+                      <th className="py-2 font-medium">IP address</th>
+                      <th className="py-2 font-medium">Device & location</th>
+                      <th className="py-2 text-right font-medium">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[var(--spr-border)] font-sans">
+                  <tbody>
                     {sessions.map((sess) => (
-                      <tr key={sess.id} className="hover:bg-[var(--spr-surface-hover)]">
-                        <td className="py-3 pr-2 font-semibold text-[var(--spr-text)]">
+                      <tr key={sess.id} className="border-b border-[#f3f2f1] hover:bg-black/[.02]">
+                        <td className="py-2.5 pr-2 font-medium text-[#201f1e]">
                           {sess.email}
                           {sess.current && (
-                            <span className="ml-2 font-mono text-[8px] bg-[var(--spr-surface-sunken)] text-[var(--spr-green)] border border-[var(--spr-border)] px-1.5 py-0.2 rounded font-bold uppercase">
-                              Current Node
+                            <span className="ml-2 rounded border border-[#c8c6c4] bg-[#dff6dd] px-1.5 py-0.5 text-[11px] font-medium text-[#0e700e]">
+                              Current
                             </span>
                           )}
                         </td>
-                        <td className="py-3 font-mono text-[var(--spr-text-muted)]">{sess.ip}</td>
-                        <td className="py-3 text-[var(--spr-text-muted)] leading-normal">
+                        <td className="py-2.5 font-mono text-[#605e5c]">{sess.ip}</td>
+                        <td className="py-2.5 text-[#605e5c]">
                           <span className="block">{sess.device}</span>
-                          <span className="text-[10px] text-[var(--spr-text-faint)]">{sess.location}</span>
+                          <span className="text-[12px] text-[#8a8886]">{sess.location}</span>
                         </td>
-                        <td className="py-3 text-right">
+                        <td className="py-2.5 text-right">
                           {!sess.current && (
                             <button
                               onClick={() => handleRevokeSession(sess.id)}
-                              className="p-1.5 text-[var(--spr-red)] hover:bg-[var(--spr-surface-hover)] rounded-lg cursor-pointer transition"
+                              className="rounded p-1.5 text-[#a4262c] hover:bg-[#fdf2f2]"
                               title="Revoke session and force termination"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="h-3.5 w-3.5" />
                             </button>
                           )}
                         </td>
@@ -884,8 +813,8 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                     ))}
                     {sessions.length === 0 && (
                       <tr>
-                        <td colSpan={4} className="py-4 text-center text-[var(--spr-text-faint)] font-mono">
-                          No active sessions identified in memory.
+                        <td colSpan={4} className="py-4 text-center text-[#8a8886]">
+                          No active sessions identified.
                         </td>
                       </tr>
                     )}
@@ -895,42 +824,42 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
             </div>
 
             {/* Cryptographically Chained Audit Ledger visualization */}
-            <div className="spr-panel p-5 space-y-4">
-              <div className="flex items-center justify-between pb-2 border-b border-[var(--spr-border)]">
-                <h3 className="text-xs font-bold text-[var(--spr-text)] flex items-center gap-1.5">
-                  <FileCode className="w-4.5 h-4.5 text-[var(--spr-highlight)]" />
-                  <span>Cryptographic Blockchain Audit Ledger</span>
+            <div className="rounded-md border border-[#e1dfdd] bg-white p-4 space-y-3">
+              <div className="flex items-center justify-between border-b border-[#e1dfdd] pb-2">
+                <h3 className="flex items-center gap-1.5 text-[14px] font-semibold text-[#201f1e]">
+                  <FileCode className="h-4 w-4 text-[#0f6cbd]" />
+                  <span>Cryptographic audit ledger</span>
                 </h3>
-                <span className="font-mono text-[10px] text-[var(--spr-green)] bg-[var(--spr-surface-sunken)] px-2 py-0.5 rounded border border-[var(--spr-border)] flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--spr-green)] animate-pulse" />
-                  Tamper-Proof SLA verified
+                <span className="inline-flex items-center gap-1.5 rounded border border-[#c8c6c4] bg-[#dff6dd] px-2 py-0.5 text-[12px] font-medium text-[#0e700e]">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#0e700e]" />
+                  Tamper-proof, SLA verified
                 </span>
               </div>
-              
-              <p className="text-[10px] text-[var(--spr-text-faint)] font-sans leading-relaxed">
-                Every critical login event and administrative action is recorded into a secure hash chain. Each block references the SHA-256 hash of its predecessor, creating a mathematically unalterable audit trail.
+
+              <p className="text-[13px] text-[#605e5c]">
+                Every critical login event and administrative action is recorded into a secure hash chain. Each block references the SHA-256 hash of its predecessor, creating an unalterable audit trail.
               </p>
 
               {/* Integrity Scanner Trigger */}
-              <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={handleVerifyLedger}
                   disabled={verifyingLedger}
-                  className="flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-bold text-white bg-[var(--spr-accent)] hover:bg-[var(--spr-accent-hover)] disabled:bg-[var(--spr-surface-sunken)] rounded-lg shadow-sm cursor-pointer transition-all shrink-0"
+                  className="inline-flex h-9 items-center gap-2 rounded bg-[#0f6cbd] px-3 text-[13px] font-medium text-white hover:bg-[#004578] disabled:opacity-60"
                 >
                   {verifyingLedger ? (
                     <>
-                      <svg className="animate-spin -ml-1 mr-1.5 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <svg className="h-3.5 w-3.5 animate-spin text-white" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                       </svg>
-                      <span>Verifying Cryptographic Ledger...</span>
+                      <span>Verifying ledger…</span>
                     </>
                   ) : (
                     <>
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>Verify Cryptographic Chain Integrity</span>
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <span>Verify chain integrity</span>
                     </>
                   )}
                 </button>
@@ -938,55 +867,55 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                   <button
                     type="button"
                     onClick={() => setVerificationResult(null)}
-                    className="text-[10px] font-sans font-semibold text-[var(--spr-text-muted)] hover:text-[var(--spr-text)] px-3 py-2 bg-[var(--spr-surface-sunken)] hover:bg-[var(--spr-surface-hover)] rounded-lg cursor-pointer transition-colors"
+                    className="inline-flex h-9 items-center rounded border border-[#c8c6c4] px-3 text-[13px] font-medium text-[#323130] hover:bg-black/[.03]"
                   >
-                    Clear Audit Report
+                    Clear report
                   </button>
                 )}
               </div>
 
               {/* Dynamic Verification Report */}
               {verificationResult && (
-                <div className={`p-4 rounded-md border font-sans text-xs ${
-                  verificationResult.isValid 
-                    ? 'bg-[var(--spr-surface-sunken)] border-[var(--spr-border)] text-[var(--spr-green)]'
-                    : 'bg-[var(--spr-surface-sunken)] border-[var(--spr-border)] text-[var(--spr-red)]'
-                } space-y-2.5 transition-all duration-300`}>
+                <div className={`space-y-2 rounded-md border p-3 text-[13px] ${
+                  verificationResult.isValid
+                    ? 'border-[#c8c6c4] bg-[#dff6dd] text-[#0e700e]'
+                    : 'border-[#c8c6c4] bg-[#fdf2f2] text-[#a4262c]'
+                }`}>
                   <div className="flex items-center justify-between">
-                    <span className="font-bold flex items-center gap-1.5 uppercase tracking-wide text-[10px]">
+                    <span className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide">
                       {verificationResult.isValid ? (
-                        <CheckCircle2 className="w-4.5 h-4.5 text-[var(--spr-green)] shrink-0" />
+                        <CheckCircle2 className="h-4 w-4 shrink-0" />
                       ) : (
-                        <AlertCircle className="w-4.5 h-4.5 text-[var(--spr-red)] shrink-0" />
+                        <AlertCircle className="h-4 w-4 shrink-0" />
                       )}
-                      <span>LEDGER ATTESTATION REPORT</span>
+                      <span>Ledger attestation report</span>
                     </span>
-                    <span className="font-mono text-[9px] text-[var(--spr-text-faint)] ">
-                      Verified At: {new Date(verificationResult.verifiedAt).toLocaleTimeString()}
+                    <span className="text-[11px] text-[#605e5c]">
+                      Verified at {new Date(verificationResult.verifiedAt).toLocaleTimeString()}
                     </span>
                   </div>
-                  <p className="text-[11px] leading-relaxed">
-                    {verificationResult.isValid 
-                      ? `SUCCESS: Checked sequential block hash connections across all ${verificationResult.totalBlocksVerified} audit ledger records. Zero database tampering, row injection, or signature modifications were identified.`
-                      : `CRITICAL EXCEPTION: Ledger validation check failed! Cryptographic hash mismatch or missing blocks. ${verificationResult.error || 'Please contact the system security administrator immediately.'}`}
+                  <p className="text-[13px] leading-relaxed">
+                    {verificationResult.isValid
+                      ? `Checked sequential block hash connections across all ${verificationResult.totalBlocksVerified} audit ledger records. No database tampering, row injection, or signature modifications were identified.`
+                      : `Ledger validation check failed. Cryptographic hash mismatch or missing blocks. ${verificationResult.error || 'Please contact the system security administrator immediately.'}`}
                   </p>
-                  
+
                   {/* Verified Blocks Scrollable List */}
                   {verificationResult.details && verificationResult.details.length > 0 && (
-                    <div className="bg-[var(--spr-surface-sunken)] p-2.5 rounded-lg max-h-40 overflow-y-auto font-mono text-[9px] space-y-1.5 border border-[var(--spr-border)]">
-                      <div className="font-sans font-bold text-[8px] text-[var(--spr-text-faint)] border-b border-[var(--spr-border)] pb-1 mb-1.5 uppercase">
-                        Cryptographic Signatures Checked
+                    <div className="max-h-40 space-y-1.5 overflow-y-auto rounded border border-[#e1dfdd] bg-white p-2.5 font-mono text-[11px]">
+                      <div className="mb-1.5 border-b border-[#e1dfdd] pb-1 text-[11px] font-medium uppercase text-[#605e5c]">
+                        Cryptographic signatures checked
                       </div>
                       {verificationResult.details.map((vBlock: any, vIdx: number) => (
-                        <div key={vIdx} className="flex justify-between items-center gap-2">
-                          <div className="truncate text-[var(--spr-text-muted)]">
-                            Block #{vBlock.id} ({vBlock.action}): 
-                            <span className="ml-1 text-[var(--spr-text-faint)] select-all">{vBlock.storedHash.substring(0, 16)}...</span>
+                        <div key={vIdx} className="flex items-center justify-between gap-2">
+                          <div className="truncate text-[#605e5c]">
+                            Block #{vBlock.id} ({vBlock.action}):
+                            <span className="ml-1 select-all text-[#8a8886]">{vBlock.storedHash.substring(0, 16)}...</span>
                           </div>
-                          <span className={`px-1.5 py-0.5 rounded text-[8px] uppercase font-bold shrink-0 ${
-                            vBlock.valid 
-                              ? 'bg-[var(--spr-surface-sunken)] text-[var(--spr-green)]'
-                              : 'bg-[var(--spr-surface-sunken)] text-[var(--spr-red)]'
+                          <span className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                            vBlock.valid
+                              ? 'bg-[#dff6dd] text-[#0e700e]'
+                              : 'bg-[#fdf2f2] text-[#a4262c]'
                           }`}>
                             {vBlock.valid ? 'Verified' : 'Corrupt'}
                           </span>
@@ -997,33 +926,33 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                 </div>
               )}
 
-              <div className="space-y-3 font-mono text-[10px]">
-                {auditChain.length === 0 && <p className="text-[var(--spr-text-faint)] font-sans">No audit events recorded yet.</p>}
+              <div className="space-y-2">
+                {auditChain.length === 0 && <p className="text-[13px] text-[#8a8886]">No audit events recorded yet.</p>}
                 {auditChain.slice(0, 3).map((blockObj, idx) => (
-                  <div key={idx} className="p-3 bg-[var(--spr-surface-sunken)] rounded-md border border-[var(--spr-border)] space-y-1 text-[var(--spr-text-muted)] relative overflow-hidden">
-                    <div className="absolute right-2 top-2 text-[8px] bg-[var(--spr-surface-sunken)] text-[var(--spr-text-muted)] px-1.5 py-0.5 rounded uppercase font-bold">
+                  <div key={idx} className="relative space-y-1 rounded-md border border-[#e1dfdd] bg-[#faf9f8] p-3 font-mono text-[11px] text-[#605e5c]">
+                    <div className="absolute right-2 top-2 rounded bg-[#f3f2f1] px-1.5 py-0.5 text-[11px] font-medium text-[#605e5c]">
                       Block #{auditChain.length - 1 - idx}
                     </div>
                     <div className="flex gap-2">
-                      <span className="text-[var(--spr-highlight)] font-bold uppercase">EVENT:</span>
-                      <span className="text-[var(--spr-text)] font-bold">
-                        {blockObj.block?.actionType || blockObj.block?.action || 'Genesis Node Initiated'}
+                      <span className="font-medium uppercase text-[#0f6cbd]">Event:</span>
+                      <span className="font-medium text-[#201f1e]">
+                        {blockObj.block?.actionType || blockObj.block?.action || 'Genesis node initiated'}
                       </span>
                     </div>
                     {blockObj.block?.userEmail && (
                       <div className="flex gap-2">
-                        <span className="text-[var(--spr-text-faint)]">IDENTITY:</span>
-                        <span className="text-[var(--spr-text)] font-semibold">{blockObj.block?.userEmail}</span>
+                        <span className="text-[#8a8886]">Identity:</span>
+                        <span className="font-medium text-[#323130]">{blockObj.block?.userEmail}</span>
                       </div>
                     )}
                     <div className="space-y-0.5">
-                      <div className="flex gap-2 text-[9px] truncate">
-                        <span className="text-[var(--spr-text-faint)] uppercase font-bold shrink-0">BLOCK HASH:</span>
-                        <span className="text-[var(--spr-highlight)] select-all font-mono truncate">{blockObj.hash}</span>
+                      <div className="flex gap-2 truncate">
+                        <span className="shrink-0 font-medium uppercase text-[#8a8886]">Block hash:</span>
+                        <span className="select-all truncate text-[#0f6cbd]">{blockObj.hash}</span>
                       </div>
-                      <div className="flex gap-2 text-[9px] truncate">
-                        <span className="text-[var(--spr-text-faint)] uppercase shrink-0">PREV HASH:</span>
-                        <span className="text-[var(--spr-text-muted)] select-all font-mono truncate">{blockObj.previousHash}</span>
+                      <div className="flex gap-2 truncate">
+                        <span className="shrink-0 uppercase text-[#8a8886]">Prev hash:</span>
+                        <span className="select-all truncate text-[#605e5c]">{blockObj.previousHash}</span>
                       </div>
                     </div>
                   </div>
@@ -1032,165 +961,166 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
             </div>
 
             {/* Security Credentials settings */}
-            <div className="spr-panel p-5 space-y-4">
-              <h3 className="text-xs font-bold text-[var(--spr-text)] flex items-center gap-1.5 pb-2 border-b border-[var(--spr-border)]">
-                <KeyRound className="w-4.5 h-4.5 text-[var(--spr-highlight)]" />
-                <span>Operator Authentication & Security Keys</span>
+            <div className="rounded-md border border-[#e1dfdd] bg-white p-4 space-y-3">
+              <h3 className="flex items-center gap-1.5 border-b border-[#e1dfdd] pb-2 text-[14px] font-semibold text-[#201f1e]">
+                <KeyRound className="h-4 w-4 text-[#0f6cbd]" />
+                <span>Operator authentication & security keys</span>
               </h3>
 
-              <div className="space-y-3.5 text-xs">
-                <div className="flex justify-between items-center">
+              <div className="space-y-3 text-[13px]">
+                <div className="flex items-center justify-between gap-4">
                   <div>
-                    <span className="font-semibold text-[var(--spr-text)] block">Enforce Multi-Factor Authentication (MFA)</span>
-                    <p className="text-[10px] text-[var(--spr-text-faint)] leading-snug">All MSP users must provide TOTP codes on logon.</p>
+                    <span className="block font-medium text-[#323130]">Enforce multi-factor authentication (MFA)</span>
+                    <p className="text-[12px] text-[#605e5c]">All MSP users must provide TOTP codes on logon.</p>
                   </div>
                   <button
                     onClick={() => setMfaEnabled(!mfaEnabled)}
-                    className={`px-3 py-1 text-xs font-bold rounded-md border cursor-pointer transition-colors ${
-                      mfaEnabled ? 'bg-[var(--spr-surface-sunken)] border-[var(--spr-border)] text-[var(--spr-green)]' : 'bg-[var(--spr-surface-sunken)] border-[var(--spr-border)] text-[var(--spr-text-muted)]'
+                    className={`inline-flex h-8 items-center gap-1.5 rounded border px-2.5 text-[12px] font-medium ${
+                      mfaEnabled ? 'border-[#c8c6c4] bg-[#dff6dd] text-[#0e700e]' : 'border-[#c8c6c4] bg-[#f3f2f1] text-[#605e5c]'
                     }`}
                   >
-                    {mfaEnabled ? 'MFA Enabled' : 'MFA Disabled'}
+                    <span className={`h-1.5 w-1.5 rounded-full ${mfaEnabled ? 'bg-[#0e700e]' : 'bg-[#8a8886]'}`} />
+                    {mfaEnabled ? 'MFA enabled' : 'MFA disabled'}
                   </button>
                 </div>
 
-                <div className="flex justify-between items-center border-t border-[var(--spr-border)] pt-3">
+                <div className="flex items-center justify-between gap-4 border-t border-[#e1dfdd] pt-3">
                   <div>
-                    <span className="font-semibold text-[var(--spr-text)] block">Cryptographic PGP Auditing Key (Private)</span>
-                    <p className="text-[10px] text-[var(--spr-text-faint)] ">Used for signing generated software passports and audit attestations.</p>
+                    <span className="block font-medium text-[#323130]">Cryptographic PGP auditing key (private)</span>
+                    <p className="text-[12px] text-[#605e5c]">Used for signing generated software passports and audit attestations.</p>
                   </div>
-                  <button className="bg-[var(--spr-surface-sunken)] hover:bg-[var(--spr-surface-hover)] text-white font-sans font-semibold text-xs px-3.5 py-1.8 rounded-lg cursor-pointer transition-colors">
-                    Regenerate Sign Key
+                  <button className="inline-flex h-8 items-center rounded border border-[#c8c6c4] px-3 text-[13px] font-medium text-[#323130] hover:bg-black/[.03]">
+                    Regenerate sign key
                   </button>
                 </div>
 
-                <div className="flex justify-between items-center border-t border-[var(--spr-border)] pt-4 mt-2 bg-[var(--spr-surface-sunken)] p-3.5 rounded-lg border border-dashed border-[var(--spr-border)]">
+                <div className="flex items-center justify-between gap-4 rounded-md border border-[#a4262c]/30 bg-[#fdf2f2] p-3">
                   <div>
-                    <span className="font-bold text-[var(--spr-red)] block flex items-center gap-1.5">
-                      <Shield className="w-4 h-4 text-[var(--spr-red)]" /> Tenant Offboarding & Data Deletion (DPA Compliance)
+                    <span className="flex items-center gap-1.5 font-semibold text-[#a4262c]">
+                      <Shield className="h-3.5 w-3.5" /> Tenant offboarding & data deletion (DPA compliance)
                     </span>
-                    <p className="text-[10px] text-[var(--spr-text-muted)] leading-snug mt-1">
-                      Cascading-delete all client lists, passports, vulnerability logs, and active integrations. This action is immediate and completely irreversible under GDPR/DPA compliance standards.
+                    <p className="mt-1 text-[12px] text-[#605e5c]">
+                      Cascading-delete all client lists, passports, vulnerability logs, and active integrations. This action is immediate and irreversible under GDPR/DPA compliance standards.
                     </p>
                   </div>
                   <button
                     onClick={handleOffboardTenant}
                     disabled={!isOwner || offboarding}
                     title={!isOwner ? `Your ${currentRole} role cannot offboard this workspace. Owner is required.` : undefined}
-                    className="bg-[var(--spr-red)] hover:bg-[#e04343] text-white font-sans font-bold text-xs px-4 py-2.5 rounded-lg cursor-pointer transition-colors shadow-sm disabled:cursor-not-allowed disabled:opacity-50 shrink-0"
+                    className="inline-flex h-9 shrink-0 items-center rounded bg-[#a4262c] px-3 text-[13px] font-medium text-white hover:bg-[#8a1f24] disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {offboarding ? 'Purging Context...' : 'Offboard Workspace'}
+                    {offboarding ? 'Purging…' : 'Offboard workspace'}
                   </button>
                 </div>
               </div>
             </div>
 
-            <div className="flex justify-end gap-2">
+            <div className="flex items-center justify-end gap-3">
               {saveSuccess && (
-                <span className="text-xs text-[var(--spr-amber)] font-semibold flex items-center gap-1">
-                  <CheckCircle className="w-4 h-4" />
+                <span className="flex items-center gap-1.5 text-[12px] font-medium text-[#8a5700]">
+                  <CheckCircle className="h-3.5 w-3.5" />
                   <span>Not saved to a server — these fields are local to this browser session only.</span>
                 </span>
               )}
               <button
                 onClick={handleSaveSettings}
                 title="These settings are not persisted to a backend yet."
-                className="px-4 py-2 bg-[var(--spr-accent)] hover:bg-[var(--spr-accent-hover)] text-white font-sans font-semibold text-xs rounded-lg shadow-sm cursor-pointer transition-all"
+                className="inline-flex h-9 items-center rounded bg-[#0f6cbd] px-4 text-[13px] font-medium text-white hover:bg-[#004578]"
               >
-                Save Platform Settings
+                Save platform settings
               </button>
             </div>
           </div>
 
           {/* Right Column: Information panel & Live CI/CD Diagnostics */}
-          <div className="space-y-6">
-            
+          <div className="space-y-4">
+
             {/* Active Login Audit Trail Panel */}
-            <div className="spr-panel p-5 space-y-4">
-              <h3 className="text-xs font-bold text-[var(--spr-text)] flex items-center gap-1.5 pb-2 border-b border-[var(--spr-border)]">
-                <Fingerprint className="w-4.5 h-4.5 text-[var(--spr-highlight)]" />
-                <span>Real-time Login Audit Trail</span>
+            <div className="rounded-md border border-[#e1dfdd] bg-white p-4 space-y-3">
+              <h3 className="flex items-center gap-1.5 border-b border-[#e1dfdd] pb-2 text-[14px] font-semibold text-[#201f1e]">
+                <Fingerprint className="h-4 w-4 text-[#0f6cbd]" />
+                <span>Real-time login audit trail</span>
               </h3>
 
-              <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+              <div className="max-h-72 space-y-2 overflow-y-auto">
                 {history.map((log) => (
-                  <div key={log.id} className="p-2.5 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[10px] space-y-1 text-left">
-                    <div className="flex justify-between items-center">
-                      <span className="font-mono font-bold text-[var(--spr-text)] truncate max-w-36">{log.email}</span>
-                      <span className={`font-mono text-[8px] font-bold px-1.5 py-0.2 rounded ${
-                        log.status === 'Verified' ? 'bg-[var(--spr-surface-sunken)] text-[var(--spr-green)] ' : 'bg-[var(--spr-surface-sunken)] text-[var(--spr-red)]'
+                  <div key={log.id} className="space-y-1 rounded-md border border-[#e1dfdd] bg-[#faf9f8] p-2.5 text-[12px]">
+                    <div className="flex items-center justify-between">
+                      <span className="max-w-36 truncate font-medium text-[#323130]">{log.email}</span>
+                      <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                        log.status === 'Verified' ? 'bg-[#dff6dd] text-[#0e700e]' : 'bg-[#fdf2f2] text-[#a4262c]'
                       }`}>
                         {log.status}
                       </span>
                     </div>
-                    <div className="text-[var(--spr-text-muted)]">
-                      <span className="block font-medium">{log.action}</span>
-                      <span className="block text-[9px] font-mono mt-0.5">{new Date(log.timestamp).toLocaleString()}</span>
+                    <div className="text-[#605e5c]">
+                      <span className="block">{log.action}</span>
+                      <span className="mt-0.5 block text-[11px] text-[#8a8886]">{new Date(log.timestamp).toLocaleString()}</span>
                     </div>
-                    <div className="flex justify-between font-mono text-[9px] text-[var(--spr-text-faint)] border-t border-[var(--spr-border)] pt-1 mt-1">
+                    <div className="flex justify-between border-t border-[#e1dfdd] pt-1 text-[11px] text-[#8a8886]">
                       <span>IP: {log.ip}</span>
                       <span>Loc: {log.location}</span>
                     </div>
                   </div>
                 ))}
                 {history.length === 0 && (
-                  <p className="text-center font-mono text-[var(--spr-text-faint)] py-4">No audit logs identified.</p>
+                  <p className="py-4 text-center text-[13px] text-[#8a8886]">No audit logs identified.</p>
                 )}
               </div>
             </div>
 
-            <div className="spr-panel p-5 space-y-4 h-fit">
-              <h3 className="text-xs font-bold text-[var(--spr-text)] flex items-center gap-1.5 pb-2 border-b border-[var(--spr-border)]">
-                <Shield className="w-4.5 h-4.5 text-[var(--spr-text-faint)] " />
-                <span>Platform Pedigree Coordinates</span>
+            <div className="rounded-md border border-[#e1dfdd] bg-white p-4 space-y-3">
+              <h3 className="flex items-center gap-1.5 border-b border-[#e1dfdd] pb-2 text-[14px] font-semibold text-[#201f1e]">
+                <Shield className="h-4 w-4 text-[#8a8886]" />
+                <span>Platform pedigree coordinates</span>
               </h3>
 
-              <div className="text-xs space-y-2.5 font-mono text-[var(--spr-text-faint)] ">
-                <div className="flex justify-between border-b border-[var(--spr-border)] pb-1.5">
-                  <span>PORTAL SERVICE:</span>
-                  <span className="font-bold text-[var(--spr-text)]">SPR-CORE-VM</span>
+              <div className="space-y-2 text-[13px] text-[#605e5c]">
+                <div className="flex justify-between border-b border-[#f3f2f1] pb-1.5">
+                  <span>Portal service</span>
+                  <span className="font-medium text-[#323130]">SPR-CORE-VM</span>
                 </div>
-                <div className="flex justify-between border-b border-[var(--spr-border)] pb-1.5">
-                  <span>COMPILATION:</span>
-                  <span className="font-bold text-[var(--spr-text)]">DOCKER PROD v2.4</span>
+                <div className="flex justify-between border-b border-[#f3f2f1] pb-1.5">
+                  <span>Compilation</span>
+                  <span className="font-medium text-[#323130]">Docker prod v2.4</span>
                 </div>
-                <div className="flex justify-between border-b border-[var(--spr-border)] pb-1.5">
-                  <span>SLA COMPLIANCE:</span>
-                  <span className="font-bold text-[var(--spr-green)]">99.98%</span>
+                <div className="flex justify-between pb-1.5">
+                  <span>SLA compliance</span>
+                  <span className="font-medium text-[#0e700e]">99.98%</span>
                 </div>
               </div>
             </div>
 
-            <div className="spr-panel p-5 space-y-4 h-fit">
-              <h3 className="text-xs font-bold text-[var(--spr-text)] flex items-center gap-1.5 pb-2 border-b border-[var(--spr-border)]">
-                <CheckCircle className="w-4.5 h-4.5 text-[var(--spr-green)]" />
-                <span>Readiness Diagnostics</span>
+            <div className="rounded-md border border-[#e1dfdd] bg-white p-4 space-y-3">
+              <h3 className="flex items-center gap-1.5 border-b border-[#e1dfdd] pb-2 text-[14px] font-semibold text-[#201f1e]">
+                <CheckCircle className="h-4 w-4 text-[#0e700e]" />
+                <span>Readiness diagnostics</span>
               </h3>
-              <p className="text-[10px] text-[var(--spr-text-faint)] font-sans leading-relaxed">
+              <p className="text-[13px] text-[#605e5c]">
                 Checks live database connectivity via the same /api/ready probe an orchestrator uses. This does not verify row-level isolation, OAuth handshakes, or API quota — those have no self-check endpoint yet.
               </p>
 
               <button
                 onClick={runDiagnosticSuite}
                 disabled={testing}
-                className="w-full py-2 bg-[var(--spr-surface-sunken)] hover:bg-[var(--spr-surface-hover)] text-white font-sans font-bold text-xs rounded-lg transition-colors cursor-pointer"
+                className="h-9 w-full rounded border border-[#c8c6c4] text-[13px] font-medium text-[#323130] hover:bg-black/[.03] disabled:opacity-60"
               >
-                {testing ? 'Checking…' : 'Check Readiness'}
+                {testing ? 'Checking…' : 'Check readiness'}
               </button>
 
               {testResults.length > 0 && (
-                <div className="space-y-2.5 pt-2.5 border-t border-[var(--spr-border)]">
+                <div className="space-y-2 border-t border-[#e1dfdd] pt-2">
                   {testResults.map((t: any, idx: number) => (
-                    <div key={idx} className="text-[10px] space-y-0.5">
-                      <div className="flex justify-between items-center">
-                        <span className="font-bold text-[var(--spr-text)]">{t.name}</span>
-                        <span className={`font-mono font-bold px-1.5 py-0.2 rounded text-[8px] ${
-                          t.status === 'PASS' ? 'bg-[var(--spr-surface-sunken)] text-[var(--spr-green)] ' : 'bg-[var(--spr-surface-sunken)] text-[var(--spr-red)]'
+                    <div key={idx} className="space-y-0.5 text-[12px]">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-[#323130]">{t.name}</span>
+                        <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                          t.status === 'PASS' ? 'bg-[#dff6dd] text-[#0e700e]' : 'bg-[#fdf2f2] text-[#a4262c]'
                         }`}>
                           {t.status}
                         </span>
                       </div>
-                      <p className="text-[var(--spr-text-faint)] font-sans leading-snug">{t.details}</p>
+                      <p className="leading-snug text-[#605e5c]">{t.details}</p>
                     </div>
                   ))}
                 </div>
@@ -1199,108 +1129,108 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
           </div>
         </div>
       ) : activeSubTab === 'organization' ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fadeIn text-xs">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Profile Management Section */}
-          <div className="lg:col-span-1 space-y-6">
-            <div className="spr-panel p-5 space-y-4 text-left">
-              <h3 className="text-xs font-bold text-[var(--spr-text)] flex items-center gap-2 pb-2 border-b border-[var(--spr-border)]">
-                <Sliders className="w-4.5 h-4.5 text-[var(--spr-highlight)]" />
-                <span>User Profile Credentials</span>
+          <div className="lg:col-span-1 space-y-4">
+            <div className="rounded-md border border-[#e1dfdd] bg-white p-4 space-y-3">
+              <h3 className="flex items-center gap-1.5 border-b border-[#e1dfdd] pb-2 text-[14px] font-semibold text-[#201f1e]">
+                <Sliders className="h-4 w-4 text-[#0f6cbd]" />
+                <span>User profile credentials</span>
               </h3>
 
               {teamError && (
-                <div className="p-3 bg-[var(--spr-surface-sunken)] text-[var(--spr-red)] border border-[var(--spr-border)] rounded-md flex gap-2">
-                  <ShieldAlert className="w-4 h-4 shrink-0" />
+                <div className="flex gap-2 rounded-md border border-[#a4262c]/30 bg-[#fdf2f2] p-3 text-[13px] text-[#a4262c]">
+                  <ShieldAlert className="h-3.5 w-3.5 shrink-0" />
                   <p>{teamError}</p>
                 </div>
               )}
 
               {teamSuccess && (
-                <div className="p-3 bg-[var(--spr-surface-sunken)] text-[var(--spr-green)] border border-[var(--spr-border)] rounded-md flex gap-2">
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <div className="flex gap-2 rounded-md border border-[#0e700e]/30 bg-[#dff6dd] p-3 text-[13px] text-[#0e700e]">
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
                   <p>{teamSuccess}</p>
                 </div>
               )}
 
               {editingProfile ? (
-                <form onSubmit={handleSaveProfile} className="space-y-3.5">
+                <form onSubmit={handleSaveProfile} className="space-y-3">
                   <div className="flex flex-col gap-1">
-                    <label className="font-semibold text-[var(--spr-text-muted)]">Display Name</label>
+                    <label className="text-[12px] font-medium text-[#605e5c]">Display name</label>
                     <input
                       type="text"
                       required
                       value={profileName}
                       onChange={(e) => setProfileName(e.target.value)}
-                      className="rounded-md border border-[var(--spr-border)] text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] p-2.5 bg-[var(--spr-surface-sunken)]"
+                      className="h-9 w-full rounded border border-[#c8c6c4] px-2.5 text-[13px] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
                     />
                   </div>
 
                   <div className="flex flex-col gap-1">
-                    <label className="font-semibold text-[var(--spr-text-muted)]">Corporate Job Title</label>
+                    <label className="text-[12px] font-medium text-[#605e5c]">Corporate job title</label>
                     <input
                       type="text"
                       required
                       value={profileJobTitle}
                       onChange={(e) => setProfileJobTitle(e.target.value)}
-                      className="rounded-md border border-[var(--spr-border)] text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] p-2.5 bg-[var(--spr-surface-sunken)]"
+                      className="h-9 w-full rounded border border-[#c8c6c4] px-2.5 text-[13px] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
                     />
                   </div>
 
                   <div className="flex flex-col gap-1">
-                    <label className="font-semibold text-[var(--spr-text-muted)]">Organization Name</label>
+                    <label className="text-[12px] font-medium text-[#605e5c]">Organization name</label>
                     <input
                       type="text"
                       required
                       value={profileCompany}
                       onChange={(e) => setProfileCompany(e.target.value)}
-                      className="rounded-md border border-[var(--spr-border)] text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] p-2.5 bg-[var(--spr-surface-sunken)]"
+                      className="h-9 w-full rounded border border-[#c8c6c4] px-2.5 text-[13px] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
                     />
                   </div>
 
-                  <div className="flex justify-end gap-2 pt-2">
+                  <div className="flex justify-end gap-2 pt-1">
                     <button
                       type="button"
                       onClick={() => setEditingProfile(false)}
-                      className="px-3 py-1.5 border border-[var(--spr-border)] rounded-lg text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)] cursor-pointer"
+                      className="inline-flex h-9 items-center rounded border border-[#c8c6c4] px-3 text-[13px] font-medium text-[#323130] hover:bg-black/[.03]"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="px-3 py-1.5 bg-[var(--spr-accent)] text-white font-bold rounded-lg hover:bg-[var(--spr-accent-hover)] cursor-pointer"
+                      className="inline-flex h-9 items-center rounded bg-[#0f6cbd] px-3 text-[13px] font-medium text-white hover:bg-[#004578]"
                     >
-                      Save Profile
+                      Save profile
                     </button>
                   </div>
                 </form>
               ) : (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-md bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] font-bold flex items-center justify-center text-lg border border-[var(--spr-border)]">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-full border border-[#c8c6c4] bg-[#eff6fc] text-[15px] font-semibold text-[#0f6cbd]">
                       {profileName ? profileName.substring(0, 2).toUpperCase() : 'U'}
                     </div>
                     <div>
-                      <h4 className="font-bold text-sm text-[var(--spr-text)]">
+                      <h4 className="text-[14px] font-semibold text-[#201f1e]">
                         {profileName || 'Active Operator'}
                       </h4>
-                      <p className="text-[10px] font-semibold text-[var(--spr-highlight)] font-mono mt-0.5">
+                      <p className="mt-0.5 text-[12px] text-[#605e5c]">
                         {profileJobTitle || 'Workspace Administrator'}
                       </p>
                     </div>
                   </div>
 
-                  <div className="space-y-2 border-t border-[var(--spr-border)] pt-3 text-[11px] leading-normal text-[var(--spr-text-muted)]">
+                  <div className="space-y-1.5 border-t border-[#e1dfdd] pt-3 text-[12px] text-[#605e5c]">
                     <div className="flex justify-between">
-                      <span className="text-[var(--spr-text-faint)]">Email Identifier:</span>
-                      <span className="font-mono font-bold text-[var(--spr-text)] select-all">{profile?.email || 'N/A'}</span>
+                      <span>Email identifier</span>
+                      <span className="select-all font-medium text-[#201f1e]">{profile?.email || 'N/A'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-[var(--spr-text-faint)]">Active Tenant ID:</span>
-                      <span className="font-mono text-[var(--spr-text-muted)] select-all">{profile?.tenantId || 'global'}</span>
+                      <span>Active tenant ID</span>
+                      <span className="select-all">{profile?.tenantId || 'global'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-[var(--spr-text-faint)]">MSP Workspace:</span>
-                      <span className="font-bold text-[var(--spr-text)]">{profile?.companyName || 'Not Defined'}</span>
+                      <span>MSP workspace</span>
+                      <span className="font-medium text-[#201f1e]">{profile?.companyName || 'Not defined'}</span>
                     </div>
                   </div>
 
@@ -1312,121 +1242,37 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                       setProfileCompany(profile?.companyName || '');
                       setEditingProfile(true);
                     }}
-                    className="w-full py-2 border border-[var(--spr-border)] text-[var(--spr-highlight)] font-semibold rounded-lg hover:bg-[var(--spr-surface-hover)] cursor-pointer transition text-center"
+                    className="h-9 w-full rounded border border-[#c8c6c4] text-[13px] font-medium text-[#323130] hover:bg-black/[.03]"
                   >
-                    Edit Profile Details
+                    Edit profile details
                   </button>
                 </div>
               )}
             </div>
 
-            <div className="spr-panel p-5 space-y-3.5 text-left text-[var(--spr-text-faint)]">
-              <h4 className="text-[10px] font-mono font-bold uppercase text-[var(--spr-text-muted)] tracking-wider">
-                Authorized Role Hierarchy
+            <div className="rounded-md border border-[#e1dfdd] bg-[#faf9f8] p-4 space-y-2">
+              <h4 className="text-[12px] font-semibold uppercase tracking-wide text-[#605e5c]">
+                Authorized role hierarchy
               </h4>
-              <p className="text-[10px] leading-relaxed">
-                RBAC enforces strict isolation gates. Permissions cascade in order: <strong>Owner &gt; Admin &gt; Technician &gt; Viewer &gt; Client</strong>. Modifying team permissions automatically triggers a cryptographic token invalidation audit block.
+              <p className="text-[12px] leading-relaxed text-[#605e5c]">
+                RBAC enforces strict isolation gates. Permissions cascade in order: <strong className="text-[#323130]">Owner &gt; Admin &gt; Technician &gt; Viewer &gt; Client</strong>. Modifying team permissions automatically triggers a cryptographic token invalidation audit block.
               </p>
-            </div>
-
-            {/* Persistent white-label branding */}
-            <div className="spr-panel p-5 space-y-4 text-left">
-              <h3 className="text-xs font-bold text-[var(--spr-text)] flex items-center gap-2 pb-2 border-b border-[var(--spr-border)]">
-                <FileText className="w-4.5 h-4.5 text-[var(--spr-highlight)]" />
-                <span>White-label Branding</span>
-              </h3>
-              <p className="text-[10px] leading-relaxed text-[var(--spr-text-muted)]">
-                Set once here; the Reports page's white-label export uses this automatically instead of asking you to retype it every time. This only changes report packaging — it never changes any score or evidence.
-              </p>
-
-              {brandingError && (
-                <div className="p-3 bg-[var(--spr-surface-sunken)] text-[var(--spr-red)] border border-[var(--spr-border)] rounded-md flex gap-2 text-[11px]">
-                  <ShieldAlert className="w-4 h-4 shrink-0" />
-                  <p>{brandingError}</p>
-                </div>
-              )}
-              {brandingSuccess && (
-                <div className="p-3 bg-[var(--spr-surface-sunken)] text-[var(--spr-green)] border border-[var(--spr-border)] rounded-md flex gap-2 text-[11px]">
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  <p>{brandingSuccess}</p>
-                </div>
-              )}
-
-              <div className="flex flex-col gap-1">
-                <label className="font-semibold text-[var(--spr-text-muted)] text-[11px]">Company / MSP name</label>
-                <input
-                  type="text"
-                  value={brandingCompanyName}
-                  onChange={(e) => setBrandingCompanyName(e.target.value)}
-                  disabled={!canManageTeam}
-                  placeholder="Your MSP name"
-                  className="rounded-md border border-[var(--spr-border)] text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] p-2.5 bg-[var(--spr-surface-sunken)] text-xs disabled:opacity-50"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="font-semibold text-[var(--spr-text-muted)] text-[11px]">Brand color</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={brandingColor}
-                    onChange={(e) => setBrandingColor(e.target.value)}
-                    disabled={!canManageTeam}
-                    className="h-9 w-14 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] disabled:opacity-50"
-                  />
-                  <span className="font-mono text-[11px] text-[var(--spr-text-muted)]">{brandingColor}</span>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="font-semibold text-[var(--spr-text-muted)] text-[11px]">Logo (under ~200KB)</label>
-                {brandingLogoDataUrl && (
-                  <div className="mb-1 flex items-center gap-2">
-                    <img src={brandingLogoDataUrl} alt="Logo preview" className="h-10 w-auto rounded border border-[var(--spr-border)] bg-white p-1" />
-                    {canManageTeam && (
-                      <button type="button" onClick={() => setBrandingLogoDataUrl(null)} className="text-[10px] text-[var(--spr-red)] hover:underline">Remove</button>
-                    )}
-                  </div>
-                )}
-                {canManageTeam && (
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/svg+xml,image/webp"
-                    onChange={(e) => handleBrandingLogoFile(e.target.files?.[0] || null)}
-                    className="text-[10px] text-[var(--spr-text-muted)] file:mr-2 file:rounded-md file:border file:border-[var(--spr-border)] file:bg-[var(--spr-surface-sunken)] file:px-2.5 file:py-1.5 file:text-[10px] file:text-[var(--spr-text)]"
-                  />
-                )}
-              </div>
-
-              {canManageTeam ? (
-                <button
-                  type="button"
-                  onClick={handleSaveBranding}
-                  disabled={savingBranding}
-                  className="w-full py-2 bg-[var(--spr-accent)] hover:bg-[var(--spr-accent-hover)] text-white font-sans font-bold text-xs rounded-lg cursor-pointer transition-colors disabled:opacity-50"
-                >
-                  {savingBranding ? 'Saving…' : 'Save branding'}
-                </button>
-              ) : (
-                <p className="text-[10px] text-[var(--spr-text-faint)]">Only Owner/Admin can change branding.</p>
-              )}
-              {brandingUpdatedAt && <p className="text-[9px] text-[var(--spr-text-faint)]">Last updated {new Date(brandingUpdatedAt).toLocaleString()}</p>}
             </div>
           </div>
 
           {/* Organization & Team Access List Section */}
-          <div className="lg:col-span-2 space-y-6 text-left">
+          <div className="lg:col-span-2 space-y-4">
             {/* Invite form card */}
-            <div className="spr-panel p-5 space-y-4">
-              <h3 className="text-xs font-bold text-[var(--spr-text)] flex items-center gap-2 pb-2 border-b border-[var(--spr-border)]">
-                <PlusCircle className="w-4.5 h-4.5 text-[var(--spr-highlight)]" />
-                <span>Invite New MSP Team Member</span>
+            <div className="rounded-md border border-[#e1dfdd] bg-white p-4 space-y-3">
+              <h3 className="flex items-center gap-1.5 border-b border-[#e1dfdd] pb-2 text-[14px] font-semibold text-[#201f1e]">
+                <PlusCircle className="h-4 w-4 text-[#0f6cbd]" />
+                <span>Invite new MSP team member</span>
               </h3>
 
-              <form onSubmit={handleInviteMember} className="flex flex-col md:flex-row gap-3">
-                <div className="flex-1 flex flex-col gap-1">
-                  <label className="block text-[10px] font-mono font-bold text-[var(--spr-text-faint)] uppercase">
-                    Email Address
+              <form onSubmit={handleInviteMember} className="flex flex-col gap-3 md:flex-row md:items-end">
+                <div className="flex flex-1 flex-col gap-1">
+                  <label className="text-[12px] font-medium text-[#605e5c]">
+                    Email address
                   </label>
                   <input
                     type="email"
@@ -1434,18 +1280,18 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                     placeholder="e.g. associate@company.com"
                     value={inviteEmail}
                     onChange={(e) => setInviteEmail(e.target.value)}
-                    className="rounded-md border border-[var(--spr-border)] text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] p-2.5 bg-[var(--spr-surface-sunken)]"
+                    className="h-9 w-full rounded border border-[#c8c6c4] px-2.5 text-[13px] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
                   />
                 </div>
 
-                <div className="w-full md:w-44 flex flex-col gap-1">
-                  <label className="block text-[10px] font-mono font-bold text-[var(--spr-text-faint)] uppercase">
-                    Security Role
+                <div className="flex w-full flex-col gap-1 md:w-44">
+                  <label className="text-[12px] font-medium text-[#605e5c]">
+                    Security role
                   </label>
                   <select
                     value={inviteRole}
-                    onChange={(e) => { setInviteRole(e.target.value); setInviteClientId(''); }}
-                    className="rounded-md border border-[var(--spr-border)] text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] p-2.5 bg-[var(--spr-surface-sunken)] cursor-pointer font-semibold text-[var(--spr-text)]"
+                    onChange={(e) => setInviteRole(e.target.value)}
+                    className="h-9 w-full rounded border border-[#c8c6c4] px-2.5 text-[13px] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
                   >
                     <option value="Admin">Admin</option>
                     <option value="Technician">Technician</option>
@@ -1454,78 +1300,61 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                   </select>
                 </div>
 
-                {inviteRole === 'Client' && (
-                  <div className="w-full md:w-52 flex flex-col gap-1">
-                    <label className="block text-[10px] font-mono font-bold text-[var(--spr-text-faint)] uppercase">
-                      Client
-                    </label>
-                    <select
-                      required
-                      value={inviteClientId}
-                      onChange={(e) => setInviteClientId(e.target.value)}
-                      className="rounded-md border border-[var(--spr-border)] text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] p-2.5 bg-[var(--spr-surface-sunken)] cursor-pointer font-semibold text-[var(--spr-text)]"
-                    >
-                      <option value="">{clientsList.length ? 'Select client…' : 'No clients yet'}</option>
-                      {clientsList.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
-                  </div>
-                )}
-
                 <button
                   type="submit"
                   disabled={!canManageTeam}
                   title={!canManageTeam ? `Your ${currentRole} role cannot invite team members.` : undefined}
-                  className="mt-5 md:mt-4 bg-[var(--spr-accent)] hover:bg-[var(--spr-accent-hover)] text-white font-bold px-5 py-2.5 rounded-md shrink-0 transition shadow-sm cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex h-9 shrink-0 items-center rounded bg-[#0f6cbd] px-4 text-[13px] font-medium text-white hover:bg-[#004578] disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Send Invitation
+                  Send invitation
                 </button>
               </form>
-              {!canManageTeam && <p className="text-[10px] text-[var(--spr-amber)]">Your {currentRole} role has read-only team access.</p>}
+              {!canManageTeam && <p className="text-[12px] text-[#8a5700]">Your {currentRole} role has read-only team access.</p>}
             </div>
 
             {/* Team Members List Card */}
-            <div className="spr-panel p-5 space-y-4">
-              <h3 className="text-xs font-bold text-[var(--spr-text)] flex items-center justify-between pb-2 border-b border-[var(--spr-border)]">
-                <span className="flex items-center gap-2">
-                  <Lock className="w-4.5 h-4.5 text-[var(--spr-highlight)]" />
-                  <span>Workspace Associates Matrix</span>
+            <div className="rounded-md border border-[#e1dfdd] bg-white p-4 space-y-3">
+              <h3 className="flex items-center justify-between border-b border-[#e1dfdd] pb-2 text-[14px] font-semibold text-[#201f1e]">
+                <span className="flex items-center gap-1.5">
+                  <Lock className="h-4 w-4 text-[#0f6cbd]" />
+                  <span>Workspace associates</span>
                 </span>
-                <span className="font-mono text-[9px] text-[var(--spr-highlight)] bg-[var(--spr-accent-soft)] px-2 py-0.5 rounded border border-[var(--spr-border)]">
-                  {teamMembers.length} Registered Nodes
+                <span className="rounded border border-[#c8c6c4] bg-[#eff6fc] px-2 py-0.5 text-[12px] font-medium text-[#0f6cbd]">
+                  {teamMembers.length} registered
                 </span>
               </h3>
 
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
+                <table className="w-full border-collapse text-left text-[13px]">
                   <thead>
-                    <tr className="border-b border-[var(--spr-border)] text-[var(--spr-text-faint)] font-mono text-[10px] uppercase">
-                      <th className="py-2.5">User Details</th>
-                      <th className="py-2.5">Authority Role</th>
-                      <th className="py-2.5 text-right">Administrative Actions</th>
+                    <tr className="border-b border-[#e1dfdd] text-[11px] uppercase tracking-wide text-[#605e5c]">
+                      <th className="py-2 font-medium">User details</th>
+                      <th className="py-2 font-medium">Authority role</th>
+                      <th className="py-2 text-right font-medium">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[var(--spr-border)]">
+                  <tbody>
                     {teamMembers.map((member) => (
-                      <tr key={member.id} className="hover:bg-[var(--spr-surface-hover)]">
-                        <td className="py-3.5 pr-3">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-md bg-[var(--spr-surface-sunken)] text-[var(--spr-text-muted)] font-bold flex items-center justify-center text-xs shrink-0 border border-[var(--spr-border)]">
+                      <tr key={member.id} className="border-b border-[#f3f2f1] hover:bg-black/[.02]">
+                        <td className="py-2.5 pr-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#c8c6c4] bg-[#f3f2f1] text-[12px] font-semibold text-[#605e5c]">
                               {member.displayName ? member.displayName.substring(0, 2).toUpperCase() : member.email.substring(0, 2).toUpperCase()}
                             </div>
                             <div>
-                              <span className="font-bold text-[var(--spr-text)] block">
-                                {member.displayName || 'Pending Associate Registration'}
+                              <span className="block font-medium text-[#201f1e]">
+                                {member.displayName || 'Pending registration'}
                               </span>
-                              <span className="text-[10px] font-mono text-[var(--spr-text-faint)] select-all block">
+                              <span className="block select-all text-[12px] text-[#8a8886]">
                                 {member.email}
                               </span>
                             </div>
                           </div>
                         </td>
-                        <td className="py-3.5">
+                        <td className="py-2.5">
                           {member.role === 'Owner' ? (
-                            <span className="font-mono text-[9px] font-bold bg-[var(--spr-accent)] text-[var(--spr-highlight)] border border-[var(--spr-highlight)] px-2 py-0.5 rounded uppercase">
-                              Owner (Root)
+                            <span className="rounded border border-[#c8c6c4] bg-[#eff6fc] px-2 py-0.5 text-[12px] font-medium text-[#0f6cbd]">
+                              Owner (root)
                             </span>
                           ) : (
                             <select
@@ -1533,7 +1362,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                               disabled={!canManageTeam}
                               title={!canManageTeam ? `Your ${currentRole} role cannot change roles.` : undefined}
                               onChange={(e) => handleUpdateMemberRole(member.id, e.target.value)}
-                              className="bg-transparent border border-[var(--spr-border)] rounded p-1 font-mono text-[10px] font-bold cursor-pointer text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] disabled:cursor-not-allowed disabled:opacity-50"
+                              className="rounded border border-[#c8c6c4] p-1 text-[12px] text-[#323130] focus:border-[#0f6cbd] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               <option value="Admin">Admin</option>
                               <option value="Technician">Technician</option>
@@ -1542,13 +1371,13 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                             </select>
                           )}
                         </td>
-                        <td className="py-3.5 text-right">
+                        <td className="py-2.5 text-right">
                           {member.role !== 'Owner' && member.id !== profile?.id && canManageTeam && (
                             <button
                               onClick={() => handleRemoveMember(member.id)}
-                              className="px-2.5 py-1.5 text-[10px] font-bold text-[var(--spr-red)] border border-[var(--spr-border)] hover:bg-[var(--spr-surface-hover)] rounded-lg cursor-pointer transition-colors"
+                              className="rounded border border-[#a4262c]/30 px-2.5 py-1 text-[12px] font-medium text-[#a4262c] hover:bg-[#fdf2f2]"
                             >
-                              Revoke Access
+                              Revoke access
                             </button>
                           )}
                         </td>
@@ -1556,8 +1385,8 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                     ))}
                     {teamMembers.length === 0 && (
                       <tr>
-                        <td colSpan={3} className="py-6 text-center text-[var(--spr-text-faint)] font-mono">
-                          {loadingTeam ? 'Securing team data...' : 'No other associates mapped to this workspace.'}
+                        <td colSpan={3} className="py-6 text-center text-[#8a8886]">
+                          {loadingTeam ? 'Securing team data…' : 'No other associates mapped to this workspace.'}
                         </td>
                       </tr>
                     )}
@@ -1567,73 +1396,66 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
             </div>
           </div>
         </div>
-      ) : activeSubTab === 'bible' ? (
-        <div className="space-y-6 animate-fadeIn" id="product-master-bible-container">
+      ) : (
+        <div className="space-y-4" id="product-master-bible-container">
           {/* Welcome Alert / Info Bar */}
-          <div className="spr-panel p-5">
-            <div className="flex items-start gap-4">
-              <div className="p-2.5 bg-[var(--spr-accent)] rounded-md text-white">
-                <BookOpen className="w-5 h-5" />
-              </div>
-              <div className="space-y-1">
-                <h3 className="text-xs font-bold text-[var(--spr-highlight)]">Enterprise Platform Master Product Bible</h3>
-                <p className="text-xs text-[var(--spr-highlight)] font-sans leading-relaxed">
-                  This Bible defines standard secure baseline versions, permitted/copyleft licenses, risk classifications, and operational NIST/ISO security safeguard guidelines. Ingested Software Passports must be checked against these standards to prevent compliance violations.
-                </p>
-                <div className="flex gap-4 pt-2 text-[10px] font-semibold text-[var(--spr-highlight)]">
-                  <span>• Policy Reference: NIST SP 800-53 r5</span>
-                  <span>• Legal Stand: SSPL/AGPL Copyleft Blocked</span>
-                  <span>• Baseline updates: Automated daily RSS synchronizations</span>
-                </div>
-              </div>
+          <details className="rounded-md border border-[#e1dfdd] bg-[#faf9f8] text-[13px]">
+            <summary className="cursor-pointer select-none px-3 py-2 font-medium text-[#323130]">What is this? &middot; How the Master Bible works</summary>
+            <div className="px-3 pb-3 text-[#605e5c]">
+              <p>The Master Bible defines standard secure baseline versions, permitted/copyleft licenses, risk classifications, and operational NIST/ISO security safeguard guidelines. Ingested software passports are checked against these standards to prevent compliance violations.</p>
+              <ol className="mt-1.5 list-decimal space-y-0.5 pl-4">
+                <li>Policy reference: NIST SP 800-53 r5.</li>
+                <li>Legal stance: SSPL/AGPL copyleft blocked.</li>
+                <li>Baseline updates: automated daily RSS synchronizations.</li>
+              </ol>
             </div>
-          </div>
+          </details>
 
           {/* Grid Layout: Left Column = Product Bible Directory, Right Column = Selected Specifications & Sandbox Compliance Auditor */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
             {/* Left Column: List of Products with Search & Add option */}
-            <div className="lg:col-span-1 space-y-4">
-              <div className="spr-panel p-5 space-y-4">
-                <div className="flex justify-between items-center">
+            <div className="lg:col-span-1 space-y-3">
+              <div className="rounded-md border border-[#e1dfdd] bg-white p-4 space-y-3">
+                <div className="flex items-center justify-between">
                   <div>
-                    <h4 className="text-xs font-bold text-[var(--spr-text)]">Product Bible Index</h4>
-                    <p className="text-[10px] text-[var(--spr-text-faint)] font-sans">Index of certified system components</p>
+                    <h4 className="text-[14px] font-semibold text-[#201f1e]">Product Bible index</h4>
+                    <p className="text-[12px] text-[#605e5c]">Index of certified system components</p>
                   </div>
                   <button
                     onClick={() => setShowAddBibleProduct(!showAddBibleProduct)}
-                    className="p-1.5 text-[var(--spr-highlight)] hover:bg-[var(--spr-surface-hover)] rounded-lg cursor-pointer transition flex items-center gap-1 text-[11px] font-bold"
+                    className="inline-flex items-center gap-1 rounded border border-[#c8c6c4] px-2.5 py-1.5 text-[12px] font-medium text-[#323130] hover:bg-black/[.03]"
                     title="Register a new software specification"
                   >
-                    <PlusCircle className="w-4.5 h-4.5" />
+                    <PlusCircle className="h-3.5 w-3.5" />
                     <span>Register</span>
                   </button>
                 </div>
 
                 {/* Quick Search & Filter */}
-                <div className="space-y-2 text-xs">
-                  <div className="flex items-center gap-2 bg-[var(--spr-surface-sunken)] px-3 py-2 rounded-lg border border-[var(--spr-border)]">
-                    <Search className="w-4 h-4 text-[var(--spr-text-faint)]" />
+                <div className="space-y-2">
+                  <div className="flex h-9 items-center gap-2 rounded border border-[#c8c6c4] px-2.5 focus-within:border-[#0f6cbd] focus-within:ring-1 focus-within:ring-[#0f6cbd]">
+                    <Search className="h-3.5 w-3.5 text-[#8a8886]" />
                     <input
                       type="text"
                       placeholder="Search specifications..."
                       value={bibleSearchQuery}
                       onChange={(e) => setBibleSearchQuery(e.target.value)}
-                      className="w-full bg-transparent focus:outline-none text-[var(--spr-text)] "
+                      className="w-full bg-transparent text-[13px] text-[#323130] focus:outline-none"
                     />
                   </div>
 
-                  <div className="flex items-center justify-between text-[10px] text-[var(--spr-text-muted)] pt-1">
-                    <span>Risk Filter:</span>
-                    <div className="flex gap-1.5 font-semibold">
+                  <div className="flex items-center justify-between pt-1 text-[12px] text-[#605e5c]">
+                    <span>Risk filter</span>
+                    <div className="flex gap-1">
                       {['all', 'low', 'medium', 'high'].map(r => (
                         <button
                           key={r}
                           onClick={() => setBibleFilterRisk(r)}
-                          className={`px-1.5 py-0.5 rounded capitalize cursor-pointer transition ${
+                          className={`rounded px-1.5 py-0.5 capitalize ${
                             bibleFilterRisk === r
-                              ? 'bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] font-bold'
-                              : 'hover:text-[var(--spr-text)]'
+                              ? 'bg-[#eff6fc] font-medium text-[#0f6cbd]'
+                              : 'hover:text-[#323130]'
                           }`}
                         >
                           {r}
@@ -1645,28 +1467,28 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
 
                 {/* Add New Specification Form Block */}
                 {showAddBibleProduct && (
-                  <form onSubmit={handleAddBibleProduct} className="p-4 bg-[var(--spr-surface-sunken)] rounded-md border border-[var(--spr-border)] text-xs space-y-3">
-                    <h5 className="font-bold text-[var(--spr-text)]">New Standard Specifications Registration</h5>
-                    
+                  <form onSubmit={handleAddBibleProduct} className="space-y-3 rounded-md border border-[#e1dfdd] bg-[#faf9f8] p-3 text-[13px]">
+                    <h5 className="text-[13px] font-semibold text-[#201f1e]">New standard specification registration</h5>
+
                     <div>
-                      <label className="block text-[10px] text-[var(--spr-text-faint)] uppercase font-bold font-mono mb-1">Product / Package Name</label>
+                      <label className="mb-1 block text-[12px] font-medium text-[#605e5c]">Product / package name</label>
                       <input
                         type="text"
                         placeholder="e.g. Apache Kafka"
                         required
                         value={newBpName}
                         onChange={(e) => setNewBpName(e.target.value)}
-                        className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] p-2"
+                        className="h-9 w-full rounded border border-[#c8c6c4] bg-white px-2.5 text-[13px] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
                       />
                     </div>
 
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-[10px] text-[var(--spr-text-faint)] uppercase font-bold font-mono mb-1">Class Type</label>
+                        <label className="mb-1 block text-[12px] font-medium text-[#605e5c]">Class type</label>
                         <select
                           value={newBpType}
                           onChange={(e) => setNewBpType(e.target.value)}
-                          className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] p-1.5"
+                          className="h-9 w-full rounded border border-[#c8c6c4] bg-white px-2 text-[13px] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
                         >
                           <option value="Web Infrastructure / Proxy">Web / Proxy</option>
                           <option value="Database Systems">Database</option>
@@ -1678,45 +1500,46 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                       </div>
 
                       <div>
-                        <label className="block text-[10px] text-[var(--spr-text-faint)] uppercase font-bold font-mono mb-1">Secure Baseline</label>
+                        <label className="mb-1 block text-[12px] font-medium text-[#605e5c]">Secure baseline</label>
                         <input
                           type="text"
                           placeholder="e.g. 3.4.0"
                           required
                           value={newBpVersion}
                           onChange={(e) => setNewBpVersion(e.target.value)}
-                          className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] p-1.5"
+                          className="h-9 w-full rounded border border-[#c8c6c4] bg-white px-2.5 text-[13px] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-[10px] text-[var(--spr-text-faint)] uppercase font-bold font-mono mb-1">Permitted Licenses</label>
+                      <label className="mb-1 block text-[12px] font-medium text-[#605e5c]">Permitted licenses</label>
                       <input
                         type="text"
                         value={newBpAllowedLics}
                         onChange={(e) => setNewBpAllowedLics(e.target.value)}
-                        className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] p-2 font-mono text-[10px]"
+                        className="h-9 w-full rounded border border-[#c8c6c4] bg-white px-2.5 font-mono text-[12px] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
                       />
+                      <p className="mt-1 text-[11px] text-[#8a8886]">Comma-separated SPDX identifiers.</p>
                     </div>
 
                     <div>
-                      <label className="block text-[10px] text-[var(--spr-text-faint)] uppercase font-bold font-mono mb-1">Prohibited Copylefts</label>
+                      <label className="mb-1 block text-[12px] font-medium text-[#605e5c]">Prohibited copylefts</label>
                       <input
                         type="text"
                         value={newBpDisallowedLics}
                         onChange={(e) => setNewBpDisallowedLics(e.target.value)}
-                        className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] p-2 font-mono text-[10px]"
+                        className="h-9 w-full rounded border border-[#c8c6c4] bg-white px-2.5 font-mono text-[12px] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
                       />
                     </div>
 
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-[10px] text-[var(--spr-text-faint)] uppercase font-bold font-mono mb-1">Risk Tier</label>
+                        <label className="mb-1 block text-[12px] font-medium text-[#605e5c]">Risk tier</label>
                         <select
                           value={newBpRisk}
                           onChange={(e) => setNewBpRisk(e.target.value as any)}
-                          className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] p-1.5"
+                          className="h-9 w-full rounded border border-[#c8c6c4] bg-white px-2 text-[13px] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
                         >
                           <option value="Low">Low</option>
                           <option value="Medium">Medium</option>
@@ -1725,51 +1548,51 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                       </div>
 
                       <div>
-                        <label className="block text-[10px] text-[var(--spr-text-faint)] uppercase font-bold font-mono mb-1">Target Compliance</label>
+                        <label className="mb-1 block text-[12px] font-medium text-[#605e5c]">Target compliance</label>
                         <input
                           type="text"
                           placeholder="e.g. HIPAA CC4 / ISO"
                           value={newBpCompliance}
                           onChange={(e) => setNewBpCompliance(e.target.value)}
-                          className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] p-1.5"
+                          className="h-9 w-full rounded border border-[#c8c6c4] bg-white px-2.5 text-[13px] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-[10px] text-[var(--spr-text-faint)] uppercase font-bold font-mono mb-1">Operational Safeguard Policy</label>
+                      <label className="mb-1 block text-[12px] font-medium text-[#605e5c]">Operational safeguard policy</label>
                       <textarea
                         rows={2}
                         placeholder="Safeguards required..."
                         value={newBpSafeguard}
                         onChange={(e) => setNewBpSafeguard(e.target.value)}
-                        className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] p-2"
+                        className="w-full rounded border border-[#c8c6c4] bg-white px-2.5 py-2 text-[13px] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
                       />
                     </div>
 
-                    <div className="flex gap-2 justify-end pt-1">
+                    <div className="flex justify-end gap-2 pt-1">
                       <button
                         type="button"
                         onClick={() => setShowAddBibleProduct(false)}
-                        className="px-2.5 py-1.5 bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] hover:bg-[var(--spr-surface-hover)] text-[var(--spr-text-muted)] rounded font-bold transition cursor-pointer"
+                        className="inline-flex h-9 items-center rounded border border-[#c8c6c4] px-3 text-[13px] font-medium text-[#323130] hover:bg-black/[.03]"
                       >
                         Cancel
                       </button>
                       <button
                         type="submit"
-                        className="px-3 py-1.5 bg-[var(--spr-accent)] hover:bg-[var(--spr-accent-hover)] text-white rounded font-bold transition flex items-center gap-1 cursor-pointer"
+                        className="inline-flex h-9 items-center gap-1.5 rounded bg-[#0f6cbd] px-3 text-[13px] font-medium text-white hover:bg-[#004578]"
                       >
-                        <Check className="w-3.5 h-3.5" />
-                        <span>Register Spec</span>
+                        <Check className="h-3.5 w-3.5" />
+                        <span>Register spec</span>
                       </button>
                     </div>
                   </form>
                 )}
 
                 {/* List of Specs */}
-                <div className="space-y-1.5 max-h-[400px] overflow-y-auto pr-1">
+                <div className="max-h-[400px] space-y-1 overflow-y-auto">
                   {filteredBibleProducts.length === 0 ? (
-                    <p className="text-center text-[10px] text-[var(--spr-text-faint)] py-6">No matching standard specifications found.</p>
+                    <p className="py-6 text-center text-[12px] text-[#8a8886]">No matching standard specifications found.</p>
                   ) : (
                     filteredBibleProducts.map(bp => {
                       const isSelected = bp.id === selectedBibleProductId;
@@ -1777,26 +1600,26 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                         <button
                           key={bp.id}
                           onClick={() => setSelectedBibleProductId(bp.id)}
-                          className={`w-full text-left p-3 rounded-lg border text-xs flex justify-between items-center transition cursor-pointer ${
+                          className={`flex w-full items-center justify-between rounded border p-2.5 text-left text-[13px] ${
                             isSelected
-                              ? 'bg-[var(--spr-accent-soft)] border-[var(--spr-border)] text-[var(--spr-highlight)] font-bold shadow-xs'
-                              : 'bg-[var(--spr-surface-sunken)] border-[var(--spr-border)] hover:bg-[var(--spr-surface-hover)] text-[var(--spr-text)]'
+                              ? 'border-[#0f6cbd] bg-[#eff6fc] text-[#0f6cbd]'
+                              : 'border-[#e1dfdd] bg-white text-[#323130] hover:bg-black/[.02]'
                           }`}
                         >
                           <div className="min-w-0">
-                            <p className="truncate font-sans leading-snug">{bp.name}</p>
-                            <span className="text-[8px] font-mono text-[var(--spr-text-faint)] block mt-0.5">{bp.type}</span>
+                            <p className="truncate leading-snug">{bp.name}</p>
+                            <span className="mt-0.5 block text-[11px] text-[#8a8886]">{bp.type}</span>
                           </div>
 
-                          <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                            <span className={`px-1.5 py-0.2 rounded-[4px] text-[8px] font-mono font-bold ${
-                              bp.riskTier === 'High' ? 'bg-[var(--spr-surface-sunken)] text-[var(--spr-red)] border border-[var(--spr-border)]' :
-                              bp.riskTier === 'Medium' ? 'bg-[var(--spr-surface-sunken)] text-[var(--spr-amber)] border border-[var(--spr-border)]' :
-                              'bg-[var(--spr-surface-sunken)] text-[var(--spr-green)] border border-[var(--spr-border)]'
+                          <div className="ml-2 flex shrink-0 items-center gap-1.5">
+                            <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                              bp.riskTier === 'High' ? 'bg-[#fdf2f2] text-[#a4262c]' :
+                              bp.riskTier === 'Medium' ? 'bg-[#fff4ce] text-[#8a5700]' :
+                              'bg-[#dff6dd] text-[#0e700e]'
                             }`}>
                               {bp.riskTier}
                             </span>
-                            <ChevronRight className={`w-3.5 h-3.5 ${isSelected ? 'text-[var(--spr-highlight)]' : 'text-[var(--spr-text-faint)]'}`} />
+                            <ChevronRight className={`h-3.5 w-3.5 ${isSelected ? 'text-[#0f6cbd]' : 'text-[#8a8886]'}`} />
                           </div>
                         </button>
                       );
@@ -1807,85 +1630,85 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
             </div>
 
             {/* Right 2 Columns: Specification Details & Interactive Sandbox compliance auditor */}
-            <div className="lg:col-span-2 space-y-6">
-              
+            <div className="lg:col-span-2 space-y-4">
+
               {/* Card 1: Active Specification detail */}
               {activeBibleProduct && (
-                <div className="spr-panel p-5 space-y-4">
-                  <div className="flex justify-between items-start border-b border-[var(--spr-border)] pb-3">
+                <div className="rounded-md border border-[#e1dfdd] bg-white p-4 space-y-3">
+                  <div className="flex items-start justify-between border-b border-[#e1dfdd] pb-3">
                     <div>
-                      <span className="text-[8px] font-mono uppercase tracking-widest font-bold text-[var(--spr-highlight)]">Approved Platform Standard Spec</span>
-                      <h3 className="text-sm font-bold text-[var(--spr-text)] mt-1 flex items-center gap-1.5">
-                        <CheckCircle2 className="w-4.5 h-4.5 text-[var(--spr-green)]" />
+                      <span className="text-[11px] font-medium uppercase tracking-wide text-[#0f6cbd]">Approved platform standard spec</span>
+                      <h3 className="mt-1 flex items-center gap-1.5 text-[15px] font-semibold text-[#201f1e]">
+                        <CheckCircle2 className="h-4 w-4 text-[#0e700e]" />
                         {activeBibleProduct.name}
                       </h3>
-                      <p className="text-[10px] text-[var(--spr-text-faint)] font-sans mt-0.5">{activeBibleProduct.type}</p>
+                      <p className="mt-0.5 text-[12px] text-[#605e5c]">{activeBibleProduct.type}</p>
                     </div>
 
-                    <span className="bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase border border-[var(--spr-border)]">
-                      Baseline: v{activeBibleProduct.baselineSecureVersion}
+                    <span className="rounded border border-[#c8c6c4] bg-[#eff6fc] px-2 py-0.5 text-[12px] font-medium text-[#0f6cbd]">
+                      Baseline v{activeBibleProduct.baselineSecureVersion}
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-sans">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div className="space-y-3">
                       <div>
-                        <span className="text-[9px] text-[var(--spr-text-faint)] block font-mono font-bold uppercase">Permitted Security greenlist licenses</span>
-                        <div className="flex flex-wrap gap-1.5 mt-1.5">
+                        <span className="block text-[11px] font-medium uppercase text-[#605e5c]">Permitted (greenlist) licenses</span>
+                        <div className="mt-1.5 flex flex-wrap gap-1.5">
                           {activeBibleProduct.allowedLicenses.map((lic: string) => (
-                            <span key={lic} className="bg-[var(--spr-surface-sunken)] text-[var(--spr-green)] text-[10px] font-mono px-2 py-0.5 rounded border border-[var(--spr-border)] font-semibold">
+                            <span key={lic} className="rounded border border-[#c8c6c4] bg-[#dff6dd] px-2 py-0.5 text-[11px] font-medium text-[#0e700e]">
                               {lic}
                             </span>
                           ))}
-                          {activeBibleProduct.allowedLicenses.length === 0 && <span className="text-[var(--spr-text-muted)] italic text-[11px]">None specified</span>}
+                          {activeBibleProduct.allowedLicenses.length === 0 && <span className="text-[12px] italic text-[#8a8886]">None specified</span>}
                         </div>
                       </div>
 
                       <div>
-                        <span className="text-[9px] text-[var(--spr-text-faint)] block font-mono font-bold uppercase">Prohibited copyleft blacklisted licenses</span>
-                        <div className="flex flex-wrap gap-1.5 mt-1.5">
+                        <span className="block text-[11px] font-medium uppercase text-[#605e5c]">Prohibited (blacklisted) licenses</span>
+                        <div className="mt-1.5 flex flex-wrap gap-1.5">
                           {activeBibleProduct.disallowedLicenses.map((lic: string) => (
-                            <span key={lic} className="bg-[var(--spr-surface-sunken)] text-[var(--spr-red)] text-[10px] font-mono px-2 py-0.5 rounded border border-[var(--spr-border)] font-semibold">
+                            <span key={lic} className="rounded border border-[#c8c6c4] bg-[#fdf2f2] px-2 py-0.5 text-[11px] font-medium text-[#a4262c]">
                               {lic}
                             </span>
                           ))}
-                          {activeBibleProduct.disallowedLicenses.length === 0 && <span className="text-[var(--spr-text-muted)] italic text-[11px]">None prohibited</span>}
+                          {activeBibleProduct.disallowedLicenses.length === 0 && <span className="text-[12px] italic text-[#8a8886]">None prohibited</span>}
                         </div>
                       </div>
                     </div>
 
-                    <div className="p-3.5 bg-[var(--spr-surface-sunken)] rounded-md border border-[var(--spr-border)] space-y-2">
-                      <span className="text-[9px] text-[var(--spr-text-faint)] block font-mono font-bold uppercase">Target Regulatory Framework Compliance</span>
-                      <p className="font-bold text-[var(--spr-text)]">{activeBibleProduct.complianceTarget}</p>
-                      <p className="text-[10px] text-[var(--spr-text-muted)] leading-normal">
+                    <div className="space-y-2 rounded-md border border-[#e1dfdd] bg-[#faf9f8] p-3">
+                      <span className="block text-[11px] font-medium uppercase text-[#605e5c]">Target regulatory framework compliance</span>
+                      <p className="text-[13px] font-medium text-[#323130]">{activeBibleProduct.complianceTarget}</p>
+                      <p className="text-[12px] leading-normal text-[#605e5c]">
                         Ingested components of this product category must be validated in accordance with audit guidelines mapped to this baseline.
                       </p>
                     </div>
                   </div>
 
-                  <div className="p-4 bg-[var(--spr-accent-soft)] rounded-md border border-[var(--spr-border)] space-y-1.5 text-xs">
-                    <span className="font-bold text-[var(--spr-highlight)] font-mono text-[9px] uppercase tracking-wider block">Standard Core Safeguards Policy</span>
-                    <p className="text-[var(--spr-text)] leading-normal font-sans text-[11px]">{activeBibleProduct.safeguardPolicy}</p>
+                  <div className="space-y-1.5 rounded-md border border-[#e1dfdd] bg-[#eff6fc] p-3">
+                    <span className="block text-[11px] font-medium uppercase tracking-wide text-[#0f6cbd]">Standard core safeguards policy</span>
+                    <p className="text-[13px] leading-normal text-[#323130]">{activeBibleProduct.safeguardPolicy}</p>
                   </div>
                 </div>
               )}
 
               {/* Card 2: Interactive Sandbox Compliance Auditor */}
-              <div className="spr-panel p-5 space-y-4">
+              <div className="rounded-md border border-[#e1dfdd] bg-white p-4 space-y-3">
                 <div>
-                  <h3 className="text-xs font-bold text-[var(--spr-text)] flex items-center gap-1.5">
-                    <Sparkles className="w-4.5 h-4.5 text-[var(--spr-amber)] animate-bounce" />
-                    <span>Interactive Product Compliance Sandbox Auditor</span>
+                  <h3 className="flex items-center gap-1.5 text-[14px] font-semibold text-[#201f1e]">
+                    <Sparkles className="h-4 w-4 text-[#0f6cbd]" />
+                    <span>Interactive product compliance sandbox</span>
                   </h3>
-                  <p className="text-[10px] text-[var(--spr-text-muted)] font-sans mt-0.5">
-                    Simulate software ingest requests and instantly query compliance safety standards against the Master Product Bible.
+                  <p className="mt-0.5 text-[12px] text-[#605e5c]">
+                    Simulate software ingest requests and instantly check compliance against the Master Product Bible.
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-sans">
-                  <div className="space-y-3.5">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="space-y-3">
                     <div>
-                      <label className="block text-[10px] text-[var(--spr-text-faint)] font-mono uppercase font-bold mb-1">Select Target Product Class</label>
+                      <label className="mb-1 block text-[12px] font-medium text-[#605e5c]">Select target product class</label>
                       <select
                         value={sandboxProduct}
                         onChange={(e) => {
@@ -1896,64 +1719,64 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                             setSandboxLicense(found.allowedLicenses[0] || 'MIT');
                           }
                         }}
-                        className="w-full rounded-md border border-[var(--spr-border)] text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] p-2.5 bg-[var(--spr-surface-sunken)] text-[var(--spr-text)]"
+                        className="h-9 w-full rounded border border-[#c8c6c4] px-2.5 text-[13px] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
                       >
                         {bibleProducts.map(bp => (
                           <option key={bp.id} value={bp.name}>{bp.name}</option>
                         ))}
-                        <option value="custom">-- Custom/Unregistered Product --</option>
+                        <option value="custom">-- Custom/unregistered product --</option>
                       </select>
                     </div>
 
                     {sandboxProduct === 'custom' && (
-                      <div className="animate-fadeIn">
-                        <label className="block text-[10px] text-[var(--spr-text-faint)] font-mono uppercase font-bold mb-1">Custom Product Name</label>
+                      <div>
+                        <label className="mb-1 block text-[12px] font-medium text-[#605e5c]">Custom product name</label>
                         <input
                           type="text"
                           placeholder="e.g. Apache Kafka"
                           value={sandboxCustomName}
                           onChange={(e) => setSandboxCustomName(e.target.value)}
-                          className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] p-2.5"
+                          className="h-9 w-full rounded border border-[#c8c6c4] px-2.5 text-[13px] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
                         />
                       </div>
                     )}
 
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-[10px] text-[var(--spr-text-faint)] font-mono uppercase font-bold mb-1">Ingested Version</label>
+                        <label className="mb-1 block text-[12px] font-medium text-[#605e5c]">Ingested version</label>
                         <input
                           type="text"
                           value={sandboxVersion}
                           onChange={(e) => setSandboxVersion(e.target.value)}
-                          className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] p-2 font-mono"
+                          className="h-9 w-full rounded border border-[#c8c6c4] px-2.5 font-mono text-[13px] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
                           placeholder="e.g. 1.25.0"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-[10px] text-[var(--spr-text-faint)] font-mono uppercase font-bold mb-1">License SPDX</label>
+                        <label className="mb-1 block text-[12px] font-medium text-[#605e5c]">License SPDX</label>
                         <input
                           type="text"
                           value={sandboxLicense}
                           onChange={(e) => setSandboxLicense(e.target.value)}
-                          className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] p-2 font-mono"
+                          className="h-9 w-full rounded border border-[#c8c6c4] px-2.5 font-mono text-[13px] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
                           placeholder="e.g. GPL-3.0-only"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-[10px] text-[var(--spr-text-faint)] font-mono uppercase font-bold mb-1">Target Deploy Environment</label>
+                      <label className="mb-1 block text-[12px] font-medium text-[#605e5c]">Target deploy environment</label>
                       <div className="grid grid-cols-3 gap-2">
                         {['Production', 'Staging', 'Development'].map(env => (
                           <button
                             key={env}
                             type="button"
                             onClick={() => setSandboxEnv(env)}
-                            className={`p-2 rounded-lg border text-center font-semibold cursor-pointer transition ${
+                            className={`rounded border p-2 text-center text-[12px] font-medium ${
                               sandboxEnv === env
-                                ? 'bg-[var(--spr-accent-soft)] border-[var(--spr-border)] text-[var(--spr-highlight)] font-bold '
-                                : 'bg-[var(--spr-surface-sunken)] border-[var(--spr-border)] hover:bg-[var(--spr-surface-hover)] text-[var(--spr-text-muted)] '
+                                ? 'border-[#0f6cbd] bg-[#eff6fc] text-[#0f6cbd]'
+                                : 'border-[#c8c6c4] text-[#605e5c] hover:bg-black/[.03]'
                             }`}
                           >
                             {env}
@@ -1965,84 +1788,84 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                     <button
                       type="button"
                       onClick={handleRunSandboxAudit}
-                      className="w-full py-2.5 bg-[var(--spr-surface-sunken)] hover:bg-[var(--spr-surface-hover)] text-white font-bold rounded-lg transition cursor-pointer flex items-center justify-center gap-1.5 text-xs shadow-xs"
+                      className="flex h-9 w-full items-center justify-center gap-1.5 rounded bg-[#0f6cbd] text-[13px] font-medium text-white hover:bg-[#004578]"
                     >
-                      <Play className="w-3.5 h-3.5 fill-current text-[var(--spr-green)]" />
-                      <span>Run Sandbox Compliance Attestation</span>
+                      <Play className="h-3.5 w-3.5" />
+                      <span>Run sandbox compliance attestation</span>
                     </button>
                   </div>
 
                   {/* Attestation Sandbox Report panel */}
-                  <div className="border border-[var(--spr-border)] rounded-md p-4.5 bg-[var(--spr-surface-sunken)] flex flex-col justify-between min-h-[240px]">
+                  <div className="flex min-h-[240px] flex-col justify-between rounded-md border border-[#e1dfdd] bg-[#faf9f8] p-3">
                     {sandboxReport ? (
-                      <div className="space-y-3 font-sans animate-fadeIn">
-                        <div className="flex justify-between items-center border-b border-[var(--spr-border)] pb-2">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between border-b border-[#e1dfdd] pb-2">
                           <div>
-                            <span className="text-[8px] font-mono text-[var(--spr-text-faint)] font-bold block">ATTESTATION REPORT</span>
-                            <h4 className="font-bold text-[var(--spr-text)] text-[11px] font-mono uppercase truncate max-w-[130px]">{sandboxReport.productName}</h4>
+                            <span className="block text-[11px] font-medium text-[#605e5c]">Attestation report</span>
+                            <h4 className="max-w-[160px] truncate text-[13px] font-semibold text-[#201f1e]">{sandboxReport.productName}</h4>
                           </div>
 
-                          <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase flex items-center gap-1 ${
-                            sandboxReport.overallStatus === 'PASS' ? 'bg-[var(--spr-surface-sunken)] text-[var(--spr-green)] border border-[var(--spr-border)]' :
-                            sandboxReport.overallStatus === 'WARN' ? 'bg-[var(--spr-surface-sunken)] text-[var(--spr-amber)] border border-[var(--spr-border)]' :
-                            'bg-[var(--spr-surface-sunken)] text-[var(--spr-red)] border border-[var(--spr-border)]'
+                          <span className={`inline-flex items-center gap-1 rounded border border-[#c8c6c4] px-2 py-0.5 text-[11px] font-medium ${
+                            sandboxReport.overallStatus === 'PASS' ? 'bg-[#dff6dd] text-[#0e700e]' :
+                            sandboxReport.overallStatus === 'WARN' ? 'bg-[#fff4ce] text-[#8a5700]' :
+                            'bg-[#fdf2f2] text-[#a4262c]'
                           }`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${
-                              sandboxReport.overallStatus === 'PASS' ? 'bg-[var(--spr-green)]' :
-                              sandboxReport.overallStatus === 'WARN' ? 'bg-[var(--spr-amber)] animate-pulse' :
-                              'bg-[var(--spr-red)] animate-pulse'
+                            <span className={`h-1.5 w-1.5 rounded-full ${
+                              sandboxReport.overallStatus === 'PASS' ? 'bg-[#0e700e]' :
+                              sandboxReport.overallStatus === 'WARN' ? 'bg-[#8a5700]' :
+                              'bg-[#a4262c]'
                             }`} />
                             {sandboxReport.overallStatus}
                           </span>
                         </div>
 
-                        <div className="space-y-2 text-[10px] leading-normal font-sans">
+                        <div className="space-y-2 text-[12px] leading-normal">
                           <div className="flex items-start gap-1.5">
                             {sandboxReport.versionStatus === 'Compliant' ? (
-                              <Check className="w-3.5 h-3.5 text-[var(--spr-green)] shrink-0 mt-0.5" />
+                              <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#0e700e]" />
                             ) : sandboxReport.versionStatus === 'Warning' ? (
-                              <AlertTriangle className="w-3.5 h-3.5 text-[var(--spr-amber)] shrink-0 mt-0.5" />
+                              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#8a5700]" />
                             ) : (
-                              <ShieldAlert className="w-3.5 h-3.5 text-[var(--spr-red)] shrink-0 mt-0.5" />
+                              <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#a4262c]" />
                             )}
                             <div>
-                              <span className="font-bold text-[var(--spr-text)]">Version Standard: </span>
-                              <span className="text-[var(--spr-text-muted)]">{sandboxReport.versionDetails}</span>
+                              <span className="font-medium text-[#323130]">Version standard: </span>
+                              <span className="text-[#605e5c]">{sandboxReport.versionDetails}</span>
                             </div>
                           </div>
 
                           <div className="flex items-start gap-1.5">
                             {sandboxReport.licenseStatus === 'Compliant' ? (
-                              <Check className="w-3.5 h-3.5 text-[var(--spr-green)] shrink-0 mt-0.5" />
+                              <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#0e700e]" />
                             ) : sandboxReport.licenseStatus === 'Warning' ? (
-                              <AlertTriangle className="w-3.5 h-3.5 text-[var(--spr-amber)] shrink-0 mt-0.5" />
+                              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#8a5700]" />
                             ) : (
-                              <ShieldAlert className="w-3.5 h-3.5 text-[var(--spr-red)] shrink-0 mt-0.5" />
+                              <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#a4262c]" />
                             )}
                             <div>
-                              <span className="font-bold text-[var(--spr-text)]">License Standard: </span>
-                              <span className="text-[var(--spr-text-muted)]">{sandboxReport.licenseDetails}</span>
+                              <span className="font-medium text-[#323130]">License standard: </span>
+                              <span className="text-[#605e5c]">{sandboxReport.licenseDetails}</span>
                             </div>
                           </div>
                         </div>
 
-                        <div className="p-2.5 bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] rounded text-[9px] text-[var(--spr-text-muted)] leading-normal space-y-1">
-                          <p className="font-bold text-[var(--spr-text)] font-mono text-[8px] uppercase">Compliance Checklist ({sandboxReport.complianceTarget}):</p>
-                          <p className="font-sans italic">{sandboxReport.safeguardPolicy}</p>
+                        <div className="space-y-1 rounded border border-[#e1dfdd] bg-white p-2.5 text-[12px] leading-normal text-[#605e5c]">
+                          <p className="text-[11px] font-medium uppercase text-[#323130]">Compliance checklist ({sandboxReport.complianceTarget}):</p>
+                          <p className="italic">{sandboxReport.safeguardPolicy}</p>
                         </div>
                       </div>
                     ) : (
-                      <div className="text-center py-10 text-[var(--spr-text-faint)] space-y-2 font-sans flex flex-col justify-center items-center h-full">
-                        <Sliders className="w-8 h-8 text-[var(--spr-text-faint)]" />
-                        <p className="text-[11px] font-bold text-[var(--spr-text-muted)] mt-2">Attestation Pending</p>
-                        <p className="text-[9px] text-[var(--spr-text-faint)] leading-snug max-w-[180px]">
-                          Configure simulation parameters and run Sandbox Compliance Attestation to test build parameters against standards.
+                      <div className="flex h-full flex-col items-center justify-center space-y-2 py-10 text-center text-[#8a8886]">
+                        <Sliders className="h-6 w-6 text-[#c8c6c4]" />
+                        <p className="mt-2 text-[13px] font-medium text-[#605e5c]">Attestation pending</p>
+                        <p className="max-w-[220px] text-[12px] leading-snug text-[#8a8886]">
+                          Configure simulation parameters and run the sandbox compliance attestation to test build parameters against standards.
                         </p>
                       </div>
                     )}
 
-                    <div className="text-[8px] font-mono text-[var(--spr-text-faint)] border-t border-[var(--spr-border)] pt-2 mt-2 flex justify-between items-center">
-                      <span>AUDIT KERNEL: SEC_ENGINE_v1.0</span>
+                    <div className="mt-2 flex items-center justify-between border-t border-[#e1dfdd] pt-2 text-[11px] text-[#8a8886]">
+                      <span>Audit kernel: SEC_ENGINE_v1.0</span>
                       {sandboxReport && (
                         <span>Attested: {new Date(sandboxReport.timestamp).toLocaleTimeString()}</span>
                       )}
@@ -2056,111 +1879,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
 
           </div>
         </div>
-      ) : (
-        <GettingStartedGuide />
       )}
-    </div>
-  );
-}
-
-// Kept as real, current documentation of what's actually live -- update this
-// alongside any feature that changes what it describes, the same way code
-// comments describe the code next to them. Nothing here should claim a
-// capability exists before it's actually built and deployed.
-function GettingStartedGuide() {
-  const step = (title: string, children: React.ReactNode) => (
-    <li className="pl-1">
-      <span className="font-semibold text-[var(--spr-text)]">{title}</span>
-      <div className="mt-0.5 text-[var(--spr-text-muted)]">{children}</div>
-    </li>
-  );
-  return (
-    <div className="space-y-6 animate-fadeIn text-xs" id="settings-getting-started-guide">
-      <div className="spr-panel p-5">
-        <h3 className="text-xs font-bold text-[var(--spr-text)] flex items-center gap-2 pb-2 border-b border-[var(--spr-border)]">
-          <HelpCircle className="w-4.5 h-4.5 text-[var(--spr-highlight)]" />
-          <span>Getting Started</span>
-        </h3>
-        <p className="mt-3 text-[var(--spr-text-muted)] leading-relaxed">
-          Every capability below is real and connected to the backend — nothing here is a UI-only mockup. Where something isn't built yet, it's listed honestly under "Not available yet" instead of being left for you to discover the hard way.
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <div className="spr-panel p-5 space-y-3">
-          <h4 className="text-[11px] font-bold text-[var(--spr-text)] uppercase tracking-wide">GitHub connector</h4>
-          <ol className="space-y-2.5 list-decimal list-inside leading-relaxed">
-            {step('Go to Integrations', 'Find the GitHub card, click Connect.')}
-            {step('Paste a personal access token', 'Create one on github.com under Settings → Developer settings → Personal access tokens, with read access to Contents, Metadata, Secret scanning alerts, and Code scanning alerts.')}
-            {step('Save credentials, then pick a passport', 'Use the selector at the top of the page.')}
-            {step('Click Test connection', 'Status turns Live on success, Error on failure with the real reason shown.')}
-            {step('Discover repositories → pick one → Run software scan', 'Queues a real Syft SBOM + OSV vulnerability scan.')}
-          </ol>
-        </div>
-
-        <div className="spr-panel p-5 space-y-3">
-          <h4 className="text-[11px] font-bold text-[var(--spr-text)] uppercase tracking-wide">Google Cloud connector</h4>
-          <ol className="space-y-2.5 list-decimal list-inside leading-relaxed">
-            {step('Integrations → Google Cloud → Connect', 'Paste the entire contents of a service-account JSON key file.')}
-            {step('Save credentials, pick a passport, Run live test', 'This signs a real JWT with your key and exchanges it for a Google access token, then queries your accessible Cloud projects.')}
-          </ol>
-        </div>
-
-        <div className="spr-panel p-5 space-y-3">
-          <h4 className="text-[11px] font-bold text-[var(--spr-text)] uppercase tracking-wide">Other connectors</h4>
-          <p className="leading-relaxed">GitLab, Bitbucket, Azure DevOps, Jira, Confluence, Slack, Microsoft 365, AWS, Azure: same pattern — Connect, fill in the fields shown for that provider, Save credentials, pick a passport, Run live test.</p>
-        </div>
-
-        <div className="spr-panel p-5 space-y-3">
-          <h4 className="text-[11px] font-bold text-[var(--spr-text)] uppercase tracking-wide">MSP connectors (ConnectWise, Autotask, NinjaOne, Hudu)</h4>
-          <ol className="space-y-2.5 list-decimal list-inside leading-relaxed">
-            {step('Connect and test', 'Same as above.')}
-            {step('Discover customers', 'Once Live, a customer-mapping panel appears on the card automatically — pulls the provider’s real customer list.')}
-            {step('Map each one to an SPR Client', 'Enforced server-side: you can only map to a client your own tenant owns.')}
-          </ol>
-        </div>
-
-        <div className="spr-panel p-5 space-y-3">
-          <h4 className="text-[11px] font-bold text-[var(--spr-text)] uppercase tracking-wide">Persistent white-label branding</h4>
-          <ol className="space-y-2.5 list-decimal list-inside leading-relaxed">
-            {step('Settings → Team & Profile', 'Find the White-label Branding panel.')}
-            {step('Set company name, brand color, logo', 'Under ~200KB.')}
-            {step('Save branding', 'Owner/Admin only — this is saved once for the whole tenant.')}
-          </ol>
-        </div>
-
-        <div className="spr-panel p-5 space-y-3">
-          <h4 className="text-[11px] font-bold text-[var(--spr-text)] uppercase tracking-wide">White-label PDF report export</h4>
-          <ol className="space-y-2.5 list-decimal list-inside leading-relaxed">
-            {step('Reports → "White-label client report"', 'Your saved branding pre-fills automatically; you can still override it just for this export.')}
-            {step('Pick the client and sections, Generate white-label PDF', 'Uses that client’s real, already-loaded inventory and scores — nothing is fabricated for the export.')}
-          </ol>
-        </div>
-
-        <div className="spr-panel p-5 space-y-3">
-          <h4 className="text-[11px] font-bold text-[var(--spr-text)] uppercase tracking-wide">Core evidence workflow</h4>
-          <p className="leading-relaxed"><strong className="text-[var(--spr-text)]">Passports</strong> — browse/search software passports. <strong className="text-[var(--spr-text)]">Evidence Explorer</strong> — underlying evidence records. <strong className="text-[var(--spr-text)]">Trust Graph</strong> — relationships across assets/vendors/evidence. <strong className="text-[var(--spr-text)]">Scans</strong> — SBOM/vulnerability history. <strong className="text-[var(--spr-text)]">Monitoring</strong> — scheduled re-collection status. <strong className="text-[var(--spr-text)]">Alerts</strong> — findings needing attention.</p>
-        </div>
-
-        <div className="spr-panel p-5 space-y-3">
-          <h4 className="text-[11px] font-bold text-[var(--spr-text)] uppercase tracking-wide">Public Passport</h4>
-          <p className="leading-relaxed">Generated from a passport's detail view — a signed public link. It never exposes your authoritative trust score publicly, only observed evidence and a status of AVOID / INVESTIGATE / VERIFIED / UNKNOWN.</p>
-        </div>
-
-        <div className="spr-panel p-5 space-y-3">
-          <h4 className="text-[11px] font-bold text-[var(--spr-text)] uppercase tracking-wide">Team & RBAC</h4>
-          <p className="leading-relaxed">Settings → Team & Profile → invite teammates by email and role (Owner/Admin/Technician/Viewer/Client). Only Owner/Admin can invite, change roles, or remove members.</p>
-        </div>
-
-        <div className="spr-panel p-5 space-y-3 border-dashed">
-          <h4 className="text-[11px] font-bold text-[var(--spr-amber)] uppercase tracking-wide flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> Not available yet</h4>
-          <ul className="space-y-1.5 list-disc list-inside leading-relaxed">
-            <li><strong className="text-[var(--spr-text)]">Billing</strong> — no backend exists yet; the Billing page says so rather than showing fake data.</li>
-            <li><strong className="text-[var(--spr-text)]">Custom domains</strong> — not implemented.</li>
-            <li><strong className="text-[var(--spr-text)]">Branding on the public passport / emails</strong> — your saved branding currently only feeds the Reports PDF export, not yet the public passport page itself.</li>
-          </ul>
-        </div>
-      </div>
     </div>
   );
 }

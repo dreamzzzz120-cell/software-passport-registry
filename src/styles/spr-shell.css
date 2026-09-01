@@ -1,97 +1,98 @@
-/* SPR shell — global chrome layer. Flat VS Code Dark+ theme, no blur/gradient/glow. */
-:root{--spr-bg:#1e1e1e;--spr-panel:#252526;--spr-panel-strong:#252526;--spr-line:#3c3c3c;--spr-cyan:#3794ff;--spr-indigo:#3794ff;--spr-text:#d4d4d4;}
+/* SPR enterprise shell — global chrome + compaction layer.
+   Mirrors the Microsoft 365 Admin Center / Google Admin Console visual
+   language: neutral surfaces, 1px borders instead of shadows, small
+   radii, status color reserved for meaning rather than decoration. */
+:root{
+  --spr-bg:#faf9f8;
+  --spr-sidebar-bg:#f3f2f1;
+  --spr-panel:#ffffff;
+  --spr-line:#e1dfdd;
+  --spr-line-strong:#c8c6c4;
+  --spr-text:#201f1e;
+  --spr-text-secondary:#605e5c;
+  --spr-text-tertiary:#8a8886;
+  --spr-accent:#0f6cbd;
+  --spr-accent-strong:#004578;
+  --spr-selected-bg:#eff6fc;
+  --spr-success:#0e700e;
+  --spr-success-bg:#dff6dd;
+  --spr-warning:#8a5700;
+  --spr-warning-bg:#fff4ce;
+  --spr-danger:#a4262c;
+  --spr-danger-bg:#fdf2f2;
+  --spr-radius:6px;
+  --spr-radius-sm:4px;
+}
 *{box-sizing:border-box}
 html{background:var(--spr-bg)}
 body{min-height:100vh;background:var(--spr-bg);color:var(--spr-text)}
 button,input,select,textarea{font:inherit}
+
 .spr-shell-header{position:sticky;top:0;z-index:40;border-bottom:1px solid var(--spr-line);background:var(--spr-panel)}
-.spr-brand-mark{display:inline-flex;align-items:center;gap:.65rem}.spr-brand-dot{width:.62rem;height:.62rem;border-radius:999px;background:var(--spr-cyan)}
-.spr-shell-content{position:relative;z-index:1}.spr-section-label{font-size:.68rem;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--spr-cyan)}
+.spr-brand-mark{display:inline-flex;align-items:center;gap:.5rem}
+.spr-brand-dot{width:.5rem;height:.5rem;border-radius:999px;background:var(--spr-accent)}
+.spr-shell-content{position:relative;z-index:1}
+.spr-section-label{font-size:.68rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--spr-text-tertiary)}
 
-/* Authenticated command-center chrome. */
+/* Authenticated command-center chrome: neutral canvas, no blur/glow/gradient. */
 body:has(aside){background:var(--spr-bg)}
-body:has(aside) header{background:var(--spr-panel)!important;border-color:var(--spr-line)!important}
-body:has(aside) header button:first-child{position:relative;transition:transform .15s ease}body:has(aside) header button:first-child:hover{transform:translateY(-1px)}
-body:has(aside) aside{background:var(--spr-panel);border-color:var(--spr-line)!important;position:relative}
-body:has(aside) aside nav{display:flex;flex-direction:column;gap:.28rem;padding:.3rem}
-body:has(aside) aside nav button{position:relative;border:1px solid transparent;transition:background .12s ease,color .12s ease,border-color .12s ease}
-body:has(aside) aside nav button:hover{background:#383838!important;border-color:var(--spr-line)}
-body:has(aside) main{position:relative;min-height:calc(100vh - 73px)}
-body:has(aside) main>*{position:relative;z-index:1}
-body:has(aside) main .bg-white,body:has(aside) main .bg-slate-50{background:var(--spr-panel)!important}
+body:has(aside) header{background:var(--spr-panel)!important;border-color:var(--spr-line)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;box-shadow:none!important}
+body:has(aside) aside{background:var(--spr-sidebar-bg);border-color:var(--spr-line)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+body:has(aside) aside:after{content:none}
+body:has(aside) aside nav{display:flex;flex-direction:column;gap:1px;padding:0}
+body:has(aside) aside nav button{position:relative;border:1px solid transparent;border-radius:var(--spr-radius-sm);transition:background .12s ease,color .12s ease}
+body:has(aside) aside nav button:before{content:none}
+body:has(aside) aside nav button:hover{transform:none;background:rgba(0,0,0,.04)!important;border-color:transparent}
+body:has(aside) aside nav button[class*="bg-cyan"],
+body:has(aside) aside nav button[aria-current="page"]{
+  background:var(--spr-selected-bg)!important;color:var(--spr-accent-strong)!important;
+  border-color:transparent;box-shadow:inset 2px 0 0 var(--spr-accent);
+}
+body:has(aside) main{position:relative;min-height:calc(100vh - 49px);background:var(--spr-bg)}
+body:has(aside) main:before{content:none}
+body:has(aside) main>*{position:relative;z-index:1;animation:spr-page-enter .12s ease-out both}
 
-/* Dashboard command-center controls. */
-#msp-dashboard-view{isolation:isolate}
-#msp-dashboard-view button{transition:transform .15s ease,background .15s ease,border-color .15s ease}
-#msp-dashboard-view button:hover:not(:disabled){transform:translateY(-1px)}
-#msp-dashboard-view > div:first-child{position:sticky;top:5.4rem;z-index:15;background:var(--spr-panel)!important;border:1px solid var(--spr-line)!important}
+/* Compact scale: tone down radii, shadows and oversized spacing/type that
+   individual pages still carry as Tailwind utility classes. Purely
+   cosmetic — no layout classes (flex/grid/width) are touched. */
+body:has(aside) main [class*="rounded-3xl"],
+body:has(aside) main [class*="rounded-2xl"]{border-radius:var(--spr-radius)!important}
+body:has(aside) main [class*="shadow-2xl"],
+body:has(aside) main [class*="shadow-xl"],
+body:has(aside) main [class*="shadow-lg"]{box-shadow:0 1px 2px rgba(0,0,0,.06)!important}
+body:has(aside) main [class*="backdrop-blur"]{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+body:has(aside) main [class*="text-6xl"],
+body:has(aside) main [class*="text-5xl"]{font-size:1.75rem!important;line-height:2.25rem!important}
+body:has(aside) main [class*="text-4xl"]{font-size:1.5rem!important;line-height:2rem!important}
+body:has(aside) main [class*="text-3xl"]{font-size:1.375rem!important;line-height:1.85rem!important}
+body:has(aside) main [class*="p-10"],
+body:has(aside) main [class*="p-12"],
+body:has(aside) main [class*="p-16"]{padding:1.25rem!important}
+body:has(aside) main [class*="py-16"],
+body:has(aside) main [class*="py-20"],
+body:has(aside) main [class*="py-24"]{padding-top:1.5rem!important;padding-bottom:1.5rem!important}
 
-/* Public cover surface (login / signup forms). */
+/* Border/text colors used by pages authored against a light surface —
+   keep them as-authored (no forced dark re-theme) so native slate tones
+   read correctly on the new light canvas. */
+body:has(aside) main .bg-white,
+body:has(aside) main .bg-slate-50{background:var(--spr-panel)}
+body:has(aside) main .border-slate-100,
+body:has(aside) main .border-slate-200{border-color:var(--spr-line)}
+
+main #msp-dashboard-view{isolation:isolate}
+main #msp-dashboard-view [class*="rounded-2xl"],
+main #msp-dashboard-view [class*="rounded-xl"]{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+main #msp-dashboard-view > div:first-child{position:sticky;top:3.5rem;z-index:15;background:var(--spr-panel)!important;border:1px solid var(--spr-line)!important;box-shadow:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+
+/* Public / unauthenticated surfaces (login, cover page) render their own
+   light theme directly in JSX; only keep a neutral fallback here. */
 body:has(> div form),body:has(form){background:var(--spr-bg)}
-body:has(form) form{padding:2rem;border:1px solid var(--spr-line);border-radius:.5rem;background:var(--spr-panel)}
-body:has(form) form input{width:100%;border:1px solid var(--spr-line);border-radius:.4rem;background:#2d2d2d;color:var(--spr-text);padding:.8rem .9rem;outline:none;transition:border-color .15s,background .15s}
-body:has(form) form input:focus{border-color:var(--spr-cyan);background:#2d2d2d}
-body:has(form) form button{border-radius:.4rem;border:1px solid var(--spr-line);padding:.75rem 1rem;color:var(--spr-text);background:#2d2d2d;transition:background .15s,border-color .15s}
-body:has(form) form button:hover:not(:disabled){background:#383838;border-color:var(--spr-line)}
-body:has(form) form button[type="submit"]{background:#0e639c;color:#fff;border:0;font-weight:700}
-body:has(form) form button[type="submit"]:hover:not(:disabled){background:#1177bb}
-body:has(form) form [role="alert"],body:has(form) form [role="status"]{border-radius:.4rem;padding:.75rem;background:#2d2d2d;border:1px solid var(--spr-line)}
 
+@keyframes spr-page-enter{from{opacity:0;transform:translateY(2px)}to{opacity:1;transform:translateY(0)}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
-@media(max-width:767px){body:has(aside) aside{border-right:0!important;border-bottom:1px solid var(--spr-line)!important}body:has(aside) aside nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));max-height:15rem;overflow:auto}#msp-dashboard-view>div:first-child{position:relative;top:auto}}
-
-/* Safety net for the older workflow surfaces in case any literal light-theme
-   utility class slips through on a data-driven code path. Keeps them on the
-   same flat dark surface as the rest of the app. */
-body:has(aside) #msp-integrations-view,
-body:has(aside) #msp-clients-index,
-body:has(aside) #msp-vendors-view-dashboard,
-body:has(aside) #msp-founder-dashboard {
-  color: var(--spr-text);
-}
-body:has(aside) #msp-integrations-view .bg-white,
-body:has(aside) #msp-integrations-view .bg-slate-50,
-body:has(aside) #msp-clients-index .bg-white,
-body:has(aside) #msp-clients-index .bg-slate-50,
-body:has(aside) #msp-vendors-view-dashboard .bg-white,
-body:has(aside) #msp-vendors-view-dashboard .bg-slate-50 {
-  background: var(--spr-panel) !important;
-  border-color: var(--spr-line) !important;
-}
-body:has(aside) #msp-integrations-view .text-slate-900,
-body:has(aside) #msp-integrations-view .text-slate-800,
-body:has(aside) #msp-clients-index .text-slate-900,
-body:has(aside) #msp-clients-index .text-slate-800,
-body:has(aside) #msp-vendors-view-dashboard .text-slate-900,
-body:has(aside) #msp-vendors-view-dashboard .text-slate-800 {
-  color: var(--spr-text) !important;
-}
-body:has(aside) #msp-integrations-view .text-slate-700,
-body:has(aside) #msp-integrations-view .text-slate-600,
-body:has(aside) #msp-clients-index .text-slate-700,
-body:has(aside) #msp-clients-index .text-slate-600,
-body:has(aside) #msp-vendors-view-dashboard .text-slate-700,
-body:has(aside) #msp-vendors-view-dashboard .text-slate-600 {
-  color: #9d9d9d !important;
-}
-body:has(aside) #msp-integrations-view input,
-body:has(aside) #msp-integrations-view select,
-body:has(aside) #msp-clients-index input,
-body:has(aside) #msp-clients-index select,
-body:has(aside) #msp-vendors-view-dashboard input,
-body:has(aside) #msp-vendors-view-dashboard select {
-  color: var(--spr-text);
-  background-color: #2d2d2d;
-  border-color: var(--spr-line);
-}
-body:has(aside) #msp-integrations-view .border-slate-100,
-body:has(aside) #msp-integrations-view .border-slate-200,
-body:has(aside) #msp-clients-index .border-slate-100,
-body:has(aside) #msp-clients-index .border-slate-200,
-body:has(aside) #msp-vendors-view-dashboard .border-slate-100,
-body:has(aside) #msp-vendors-view-dashboard .border-slate-200 {
-  border-color: var(--spr-line) !important;
-}
-body:has(aside) #msp-integrations-view .bg-slate-900 {
-  background: var(--spr-panel) !important;
+@media(max-width:767px){
+  body:has(aside) aside{border-right:0!important;border-bottom:1px solid var(--spr-line)!important}
+  body:has(aside) aside nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));max-height:15rem;overflow:auto}
+  main #msp-dashboard-view>div:first-child{position:relative;top:auto}
 }

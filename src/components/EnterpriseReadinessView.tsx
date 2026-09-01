@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useMemo, useState } from 'react';
-import { ShieldCheck, Search, Info } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { ShieldCheck, Search } from 'lucide-react';
 import { Client } from '../types';
 
 interface EnterpriseReadinessViewProps { clients: Client[]; }
@@ -25,6 +25,12 @@ const capabilityCatalog: Capability[] = [
   { id: 'trust-1', category: 'Trust', name: 'Software Passport evidence', description: 'Passport evidence derived from supplied passport records.', status: 'Not verified' },
 ];
 
+const STATUS_DOT: Record<EvidenceStatus, string> = {
+  Observed: 'bg-[#0e700e]',
+  Calculated: 'bg-[#0f6cbd]',
+  'Not verified': 'bg-[#8a8886]',
+};
+
 export default function EnterpriseReadinessView({ clients }: EnterpriseReadinessViewProps) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('All');
@@ -36,38 +42,59 @@ export default function EnterpriseReadinessView({ clients }: EnterpriseReadiness
   const calculatedCount = filtered.filter(c => c.status === 'Calculated').length;
   const unverifiedCount = filtered.filter(c => c.status === 'Not verified').length;
 
-  return <div className="space-y-6">
-    <header className="rounded-3xl border border-white/10 bg-white/[0.03] p-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-sm font-semibold text-[var(--spr-amber)]"><ShieldCheck size={18}/> Enterprise Readiness</div>
-          <h1 className="mt-2 text-2xl font-bold">Evidence-backed readiness</h1>
-          <p className="mt-2 max-w-3xl text-sm text-white/60">Claims are not inferred from UI components. Deployment, certifications, infrastructure, pentests, integrations and telemetry remain unverified until supporting evidence is available.</p>
-        </div>
-        <div className="rounded-xl border border-white/10 px-3 py-2 text-xs text-white/60"><Info size={14} className="inline mr-1"/> Evidence-first</div>
+  return (
+    <section aria-labelledby="enterprise-readiness-title">
+      <div className="mb-4">
+        <h1 id="enterprise-readiness-title" className="flex items-center gap-1.5 text-[22px] font-semibold text-[#201f1e]"><ShieldCheck className="h-4 w-4 text-[#605e5c]" />Evidence-backed readiness</h1>
+        <p className="mt-1 max-w-2xl text-[13px] text-[#605e5c]">Claims are not inferred from UI components. Deployment, certifications, infrastructure, pentests, integrations and telemetry remain unverified until supporting evidence is available.</p>
       </div>
-    </header>
 
-    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-      <Metric label="Observed" value={observedCount}/>
-      <Metric label="Calculated" value={calculatedCount}/>
-      <Metric label="Not verified" value={unverifiedCount}/>
-    </div>
+      <details className="mb-4 rounded-md border border-[#e1dfdd] bg-[#faf9f8] text-[13px]">
+        <summary className="cursor-pointer select-none px-3 py-2 font-medium text-[#323130]">ⓘ What is this? · How it works</summary>
+        <div className="px-3 pb-3 text-[#605e5c]">
+          <p>A catalog of enterprise-readiness capabilities, each labeled by the strength of evidence actually behind it — not by whether the UI happens to expose a control for it.</p>
+          <ol className="mt-1.5 list-decimal space-y-0.5 pl-4">
+            <li>Observed = backed by data this view was given directly.</li>
+            <li>Calculated = derived from observed data.</li>
+            <li>Not verified = no supporting evidence is currently connected.</li>
+          </ol>
+        </div>
+      </details>
 
-    <div className="flex flex-wrap gap-3">
-      <div className="flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2"><Search size={16}/><input aria-label="Search capabilities" className="bg-transparent outline-none text-sm" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search capabilities"/></div>
-      <select aria-label="Filter capability category" className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm" value={category} onChange={e => setCategory(e.target.value)}>{categories.map(c => <option key={c}>{c}</option>)}</select>
-    </div>
+      <div className="mb-4 flex flex-wrap gap-6 rounded-md border border-[#e1dfdd] bg-white p-3">
+        <Metric label="Observed" value={observedCount} />
+        <Metric label="Calculated" value={calculatedCount} />
+        <Metric label="Not verified" value={unverifiedCount} />
+      </div>
 
-    <div className="space-y-3">{filtered.map(c => <article key={c.id} className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
-      <div className="flex items-center justify-between gap-4"><div><div className="text-xs text-white/40">{c.category}</div><h2 className="font-semibold">{c.name}</h2></div><Status status={c.status}/></div>
-      <p className="mt-2 text-sm text-white/60">{c.description}</p>
-      {c.evidence && <p className="mt-2 text-xs text-white/45">Evidence: {c.evidence}</p>}
-    </article>)}</div>
+      <div className="mb-4 flex flex-wrap gap-2">
+        <div className="flex h-9 items-center gap-2 rounded border border-[#c8c6c4] bg-white px-3"><Search className="h-3.5 w-3.5 text-[#8a8886]" /><input aria-label="Search capabilities" className="bg-transparent text-[13px] text-[#201f1e] outline-none placeholder:text-[#8a8886]" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search capabilities" /></div>
+        <select aria-label="Filter capability category" className="h-9 rounded border border-[#c8c6c4] bg-white px-3 text-[13px] text-[#201f1e] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]" value={category} onChange={e => setCategory(e.target.value)}>{categories.map(c => <option key={c}>{c}</option>)}</select>
+      </div>
 
-    <footer className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 text-xs text-white/45">{clients.length} client record{clients.length === 1 ? '' : 's'} are available to this view. This count is observed application state, not a claim about production infrastructure.</footer>
-  </div>;
+      <div className="rounded-md border border-[#e1dfdd] bg-white">
+        <table className="w-full min-w-[560px] text-left text-[13px]">
+          <thead className="border-b border-[#e1dfdd] text-[11px] uppercase tracking-wide text-[#605e5c]"><tr><th className="px-4 py-2">Capability</th><th className="px-4 py-2">Category</th><th className="px-4 py-2">Status</th></tr></thead>
+          <tbody>
+            {filtered.map(c => (
+              <tr key={c.id} className="border-b border-[#f3f2f1] align-top hover:bg-black/[.02]">
+                <td className="px-4 py-2.5">
+                  <div className="font-medium text-[#201f1e]">{c.name}</div>
+                  <p className="mt-0.5 text-[12px] text-[#605e5c]">{c.description}</p>
+                  {c.evidence && <p className="mt-1 text-[11px] text-[#8a8886]">Evidence: {c.evidence}</p>}
+                </td>
+                <td className="px-4 py-2.5 text-[#605e5c]">{c.category}</td>
+                <td className="px-4 py-2.5"><span className="inline-flex items-center gap-1.5 text-[13px]"><span className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[c.status]}`} />{c.status}</span></td>
+              </tr>
+            ))}
+            {filtered.length === 0 && <tr><td colSpan={3} className="px-4 py-6 text-center text-[13px] text-[#8a8886]">No capabilities match this search.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="mt-4 text-[12px] text-[#8a8886]">{clients.length} client record{clients.length === 1 ? '' : 's'} are available to this view. This count is observed application state, not a claim about production infrastructure.</p>
+    </section>
+  );
 }
 
-function Metric({ label, value }: { label: string; value: number }) { return <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4"><div className="text-xs text-white/45">{label}</div><div className="mt-1 text-xl font-bold">{value}</div></div>; }
-function Status({ status }: { status: EvidenceStatus }) { return <span className="rounded-full border border-white/10 px-2.5 py-1 text-xs font-medium">{status}</span>; }
+function Metric({ label, value }: { label: string; value: number }) { return <div><div className="text-[11px] text-[#605e5c]">{label}</div><div className="text-lg font-semibold text-[#201f1e]">{value}</div></div>; }

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CalendarClock, Check, Play, Plus, Search, ShieldCheck, Trash2 } from 'lucide-react';
+import { AlertCircle, CalendarClock, Check, Play, Plus, Search, Trash2 } from 'lucide-react';
 import type { Client } from '../types';
 import { apiFetch } from '../utils/apiClient';
 
@@ -148,22 +148,164 @@ export default function ComplianceView({ clients, role = 'Viewer' }: { clients: 
     finally { setActionLoading(null); }
   };
 
-  return <section className="space-y-6">
-    <header className="spr-panel p-6">
-      <div className="flex items-start gap-3"><div className="grid h-10 w-10 place-items-center rounded-md border border-[var(--spr-border)] bg-[var(--spr-accent-soft)] text-[var(--spr-green)]"><ShieldCheck size={18}/></div><div><div className="text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--spr-green)]">Evidence-first governance</div><h1 className="mt-1 text-2xl font-semibold">Compliance workspace</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--spr-text-muted)]">Framework controls, schedules, and verification actions live here. Certifications, auditor claims, hashes, dates, and pass/fail attestations are not inferred from the UI.</p></div></div>
-      {error && <div role="alert" className="mt-4 flex gap-2 rounded-md border border-[var(--spr-red)]/30 bg-[var(--spr-red)]/10 px-3 py-2 text-xs text-[var(--spr-red)]"><AlertCircle size={14}/> {error}</div>}
-      {notice && <div role="status" className="mt-4 flex gap-2 rounded-md border border-[var(--spr-green)]/30 bg-[var(--spr-green)]/10 px-3 py-2 text-xs text-[var(--spr-green)]"><Check size={14}/> {notice}</div>}
-    </header>
+  return (
+    <section>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <h1 className="text-[22px] font-semibold text-[#201f1e]">Compliance workspace</h1>
+          <p className="mt-1 text-[13px] text-[#605e5c]">Framework controls, schedules, and verification actions for this tenant.</p>
+        </div>
+      </div>
 
-    <div className="grid gap-3 sm:grid-cols-4">{(Object.keys(FRAMEWORKS) as Framework[]).map((item) => <button key={item} onClick={() => setFramework(item)} className={`rounded-md border p-4 text-left ${framework === item ? 'border-[var(--spr-accent)] bg-[var(--spr-accent-soft)]' : 'border-[var(--spr-border)] spr-panel-alt'}`}><div className="text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--spr-text-faint)]">Framework</div><div className="mt-1 font-semibold">{item}</div><div className="mt-2 text-xs text-[var(--spr-text-muted)]">{FRAMEWORKS[item].controls.length} controls</div></button>)}</div>
+      <details className="mb-4 rounded-md border border-[#e1dfdd] bg-[#faf9f8] text-[13px]">
+        <summary className="cursor-pointer select-none px-3 py-2 font-medium text-[#323130]">ⓘ What is this? · How it works</summary>
+        <div className="px-3 pb-3 text-[#605e5c]">
+          <p>Certifications, auditor claims, hashes, dates, and pass/fail attestations are never inferred from the UI — controls stay "Not verified" until backed by tenant evidence.</p>
+          <ol className="mt-1.5 list-decimal space-y-0.5 pl-4">
+            <li>Pick a framework to see its controls and current evidence status.</li>
+            <li>Add a schedule to periodically request verification for a client.</li>
+            <li>"Verify now" generates a real report on demand — it does not email anyone or run automatically.</li>
+          </ol>
+        </div>
+      </details>
 
-    <section className="spr-panel p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">{FRAMEWORKS[framework].name}</h2><p className="mt-1 text-sm text-[var(--spr-text-muted)]">{FRAMEWORKS[framework].description}</p></div><label className="flex items-center gap-2 rounded-md border border-[var(--spr-border)] px-3 py-2"><Search size={15} className="text-[var(--spr-text-muted)]"/><input aria-label="Search compliance controls" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search controls" className="bg-transparent text-sm outline-none"/></label></div><div className="mt-5 space-y-3">{controls.map((control) => <article key={control.code} className="spr-panel-alt p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><div className="text-xs font-mono text-[var(--spr-highlight)]">{control.code}</div><h3 className="mt-1 font-medium">{control.description}</h3></div><span className="rounded-full border border-[var(--spr-amber)]/30 bg-[var(--spr-amber)]/10 px-2.5 py-1 text-[10px] font-semibold text-[var(--spr-amber)]">Not verified</span></div><p className="mt-2 text-xs text-[var(--spr-text-muted)]">{control.evidence}</p></article>)}</div></section>
+      {error && <div role="alert" className="mb-4 flex items-center gap-2 rounded-md border border-[#a4262c]/30 bg-[#fdf2f2] px-3 py-2 text-[13px] text-[#a4262c]"><AlertCircle size={14} /> {error}</div>}
+      {notice && <div role="status" className="mb-4 flex items-center gap-2 rounded-md border border-[#0e700e]/30 bg-[#dff6dd] px-3 py-2 text-[13px] text-[#0e700e]"><Check size={14} /> {notice}</div>}
 
-    <section className="spr-panel p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">Compliance verification schedules</h2><p className="mt-1 text-sm text-[var(--spr-text-muted)]">Server-backed schedules only. A queued audit is not itself a passed audit. "Verify now" generates a real report — it does not email anyone or run automatically.</p></div><button onClick={() => setShowAdd((value) => !value)} disabled={!canManageSchedules} title={!canManageSchedules ? `Your ${role} role cannot manage compliance schedules.` : undefined} className="spr-btn spr-btn-primary inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"><Plus size={14}/> Add schedule</button></div>
-      {showAdd && <form onSubmit={createSchedule} className="mt-4 grid gap-3 spr-panel-alt p-4 md:grid-cols-4"><select aria-label="Client" value={newClientId} onChange={(event) => setNewClientId(event.target.value)} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-sm text-[var(--spr-text)]"><option value="">Select client</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select><select aria-label="Frequency" value={newFrequency} onChange={(event) => setNewFrequency(event.target.value)} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-sm text-[var(--spr-text)]"><option>Daily</option><option>Weekly</option><option>Monthly</option></select><input aria-label="Target email" type="email" required value={newTargetEmail} onChange={(event) => setNewTargetEmail(event.target.value)} placeholder="notification@example.com" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-sm text-[var(--spr-text)]"/><button type="submit" disabled={actionLoading === 'create'} className="spr-btn spr-btn-primary">{actionLoading === 'create' ? 'Saving…' : 'Create'}</button></form>}
-      {loading ? <div className="mt-4 text-sm text-[var(--spr-text-muted)]">Loading schedules…</div> : schedules.length === 0 ? <div className="mt-4 rounded-md border border-dashed border-[var(--spr-border)] p-8 text-center"><CalendarClock className="mx-auto h-8 w-8 text-[var(--spr-text-faint)]"/><p className="mt-2 text-sm text-[var(--spr-text-muted)]">No compliance schedules are configured.</p></div> : <div className="mt-4 space-y-3">{schedules.map((schedule) => <article key={schedule.id} className="rounded-md border border-[var(--spr-border)] p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="text-sm font-semibold">{clients.find((client) => client.id === schedule.clientId)?.name || 'Unresolved client'}</div><div className="mt-1 text-xs text-[var(--spr-text-muted)]">{schedule.frequency} · Last run {formatDate(schedule.lastAuditAt)} · Next check {formatDate(schedule.nextAuditAt)}</div></div><span className="rounded-full border border-[var(--spr-border)] px-2 py-1 text-[10px] text-[var(--spr-text-muted)]">{schedule.status}</span></div><div className="mt-4 flex flex-wrap gap-2"><button disabled={!canManageSchedules || !!actionLoading} title={!canManageSchedules ? `Your ${role} role cannot run compliance verifications.` : undefined} onClick={() => void runSchedule(schedule.id)} className="spr-btn spr-btn-primary inline-flex items-center gap-2 !text-xs disabled:cursor-not-allowed disabled:opacity-50"><Play size={13}/> {actionLoading === `${schedule.id}:run` ? 'Queueing…' : 'Verify now'}</button><button disabled={!canManageSchedules || !!actionLoading} title={!canManageSchedules ? `Your ${role} role cannot change schedules.` : undefined} onClick={() => void toggleSchedule(schedule)} className="rounded-lg border border-[var(--spr-border)] px-3 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50">{schedule.status === 'Active' ? 'Pause' : 'Resume'}</button><button disabled={!canManageSchedules || !!actionLoading} title={!canManageSchedules ? `Your ${role} role cannot delete schedules.` : undefined} onClick={() => void deleteSchedule(schedule.id)} className="inline-flex items-center gap-2 rounded-lg border border-[var(--spr-red)]/25 px-3 py-2 text-xs text-[var(--spr-red)] disabled:cursor-not-allowed disabled:opacity-50"><Trash2 size={13}/> Delete</button></div></article>)}</div>}
+      <div className="mb-4 grid gap-2 sm:grid-cols-4">
+        {(Object.keys(FRAMEWORKS) as Framework[]).map((item) => (
+          <button
+            key={item}
+            onClick={() => setFramework(item)}
+            className={`rounded-md border p-3 text-left ${framework === item ? 'border-[#0f6cbd] bg-[#eff6fc]' : 'border-[#e1dfdd] bg-white hover:bg-black/[.02]'}`}
+          >
+            <div className="text-[11px] uppercase tracking-wide text-[#8a8886]">Framework</div>
+            <div className="mt-0.5 text-[13px] font-semibold text-[#201f1e]">{item}</div>
+            <div className="mt-1 text-[12px] text-[#605e5c]">{FRAMEWORKS[item].controls.length} controls</div>
+          </button>
+        ))}
+      </div>
+
+      <section className="mb-4 rounded-md border border-[#e1dfdd] bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-[14px] font-semibold text-[#201f1e]">{FRAMEWORKS[framework].name}</h2>
+            <p className="mt-0.5 text-[13px] text-[#605e5c]">{FRAMEWORKS[framework].description}</p>
+          </div>
+          <label className="flex h-9 items-center gap-2 rounded border border-[#c8c6c4] px-3 focus-within:border-[#0f6cbd] focus-within:ring-1 focus-within:ring-[#0f6cbd]">
+            <Search size={14} className="text-[#8a8886]" />
+            <input aria-label="Search compliance controls" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search controls" className="bg-transparent text-[13px] outline-none placeholder:text-[#8a8886]" />
+          </label>
+        </div>
+        <div className="mt-3 space-y-2">
+          {controls.map((control) => (
+            <article key={control.code} className="rounded-md border border-[#e1dfdd] bg-[#faf9f8] p-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="font-mono text-[11px] text-[#0f6cbd]">{control.code}</div>
+                  <h3 className="mt-0.5 text-[13px] font-medium text-[#201f1e]">{control.description}</h3>
+                </div>
+                <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[#8a5700]"><span className="h-1.5 w-1.5 rounded-full bg-[#8a5700]" />Not verified</span>
+              </div>
+              <p className="mt-1.5 text-[12px] text-[#605e5c]">{control.evidence}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="mb-4 rounded-md border border-[#e1dfdd] bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-[14px] font-semibold text-[#201f1e]">Compliance verification schedules</h2>
+            <p className="mt-0.5 text-[13px] text-[#605e5c]">Server-backed schedules only. A queued audit is not itself a passed audit.</p>
+          </div>
+          <button
+            onClick={() => setShowAdd((value) => !value)}
+            disabled={!canManageSchedules}
+            title={!canManageSchedules ? `Your ${role} role cannot manage compliance schedules.` : undefined}
+            className="inline-flex h-8 items-center gap-1.5 rounded bg-[#0f6cbd] px-3 text-[13px] font-medium text-white hover:bg-[#004578] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Plus size={14} /> Add schedule
+          </button>
+        </div>
+
+        {showAdd && (
+          <form onSubmit={createSchedule} className="mt-3 grid gap-2 rounded-md border border-[#e1dfdd] bg-[#faf9f8] p-3 md:grid-cols-4">
+            <select aria-label="Client" value={newClientId} onChange={(event) => setNewClientId(event.target.value)} className="h-9 rounded border border-[#c8c6c4] bg-white px-3 text-[13px] focus:border-[#0f6cbd] focus:ring-1 focus:ring-[#0f6cbd]">
+              <option value="">Select client</option>
+              {clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
+            </select>
+            <select aria-label="Frequency" value={newFrequency} onChange={(event) => setNewFrequency(event.target.value)} className="h-9 rounded border border-[#c8c6c4] bg-white px-3 text-[13px] focus:border-[#0f6cbd] focus:ring-1 focus:ring-[#0f6cbd]">
+              <option>Daily</option>
+              <option>Weekly</option>
+              <option>Monthly</option>
+            </select>
+            <input aria-label="Target email" type="email" required value={newTargetEmail} onChange={(event) => setNewTargetEmail(event.target.value)} placeholder="notification@example.com" className="h-9 rounded border border-[#c8c6c4] bg-white px-3 text-[13px] focus:border-[#0f6cbd] focus:ring-1 focus:ring-[#0f6cbd]" />
+            <button type="submit" disabled={actionLoading === 'create'} className="inline-flex h-9 items-center justify-center rounded bg-[#0f6cbd] px-3 text-[13px] font-medium text-white hover:bg-[#004578] disabled:cursor-not-allowed disabled:opacity-50">{actionLoading === 'create' ? 'Saving…' : 'Create'}</button>
+          </form>
+        )}
+
+        {loading ? (
+          <div className="mt-3 text-[13px] text-[#605e5c]">Loading schedules…</div>
+        ) : schedules.length === 0 ? (
+          <div className="mt-3 rounded-md border border-dashed border-[#e1dfdd] p-6 text-center">
+            <CalendarClock className="mx-auto h-6 w-6 text-[#8a8886]" />
+            <p className="mt-2 text-[13px] text-[#605e5c]">No compliance schedules are configured.</p>
+          </div>
+        ) : (
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[640px] text-left text-[13px]">
+              <thead className="border-b border-[#e1dfdd] text-[11px] uppercase tracking-wide text-[#605e5c]">
+                <tr>
+                  <th className="px-3 py-2">Client</th>
+                  <th className="px-3 py-2">Schedule</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {schedules.map((schedule) => (
+                  <tr key={schedule.id} className="border-b border-[#f3f2f1] align-top hover:bg-black/[.02]">
+                    <td className="px-3 py-2.5 font-medium text-[#201f1e]">{clients.find((client) => client.id === schedule.clientId)?.name || 'Unresolved client'}</td>
+                    <td className="px-3 py-2.5 text-[#605e5c]">{schedule.frequency} · Last run {formatDate(schedule.lastAuditAt)} · Next check {formatDate(schedule.nextAuditAt)}</td>
+                    <td className="px-3 py-2.5 text-[#605e5c]">{schedule.status}</td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          disabled={!canManageSchedules || !!actionLoading}
+                          title={!canManageSchedules ? `Your ${role} role cannot run compliance verifications.` : undefined}
+                          onClick={() => void runSchedule(schedule.id)}
+                          className="inline-flex h-7 items-center gap-1.5 rounded bg-[#0f6cbd] px-2.5 text-[12px] font-medium text-white hover:bg-[#004578] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <Play size={12} /> {actionLoading === `${schedule.id}:run` ? 'Queueing…' : 'Verify now'}
+                        </button>
+                        <button
+                          disabled={!canManageSchedules || !!actionLoading}
+                          title={!canManageSchedules ? `Your ${role} role cannot change schedules.` : undefined}
+                          onClick={() => void toggleSchedule(schedule)}
+                          className="inline-flex h-7 items-center rounded border border-[#c8c6c4] px-2.5 text-[12px] font-medium text-[#323130] hover:bg-black/[.03] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {schedule.status === 'Active' ? 'Pause' : 'Resume'}
+                        </button>
+                        <button
+                          disabled={!canManageSchedules || !!actionLoading}
+                          title={!canManageSchedules ? `Your ${role} role cannot delete schedules.` : undefined}
+                          onClick={() => void deleteSchedule(schedule.id)}
+                          className="inline-flex h-7 items-center gap-1.5 rounded border border-[#a4262c]/30 px-2.5 text-[12px] font-medium text-[#a4262c] hover:bg-[#fdf2f2] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <Trash2 size={12} /> Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <div className="rounded-md border border-[#e1dfdd] bg-[#faf9f8] p-3 text-[12px] text-[#605e5c]">{clients.length} client record{clients.length === 1 ? '' : 's'} are available to this workspace. This is observed application data, not a compliance certification.</div>
     </section>
-
-    <footer className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] p-4 text-xs text-[var(--spr-text-muted)]">{clients.length} client record{clients.length === 1 ? '' : 's'} are available to this workspace. This is observed application data, not a compliance certification.</footer>
-  </section>;
+  );
 }

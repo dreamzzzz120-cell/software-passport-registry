@@ -5,18 +5,10 @@
 
 import React, { useState, useMemo } from 'react';
 import { fuzzyMatch, filterData } from '../utils/filter';
-import { apiFetch } from '../utils/apiClient';
 import {
-  Factory,
-  ShieldCheck,
-  ShieldAlert,
-  Shield,
   ExternalLink,
-  Filter,
   Search,
-  Award,
   HelpCircle,
-  CheckCircle2,
   AlertCircle,
   Calendar,
   User,
@@ -24,67 +16,38 @@ import {
   X,
   ChevronRight,
   Plus,
-  Activity,
   FileText,
   Check,
   Lock,
-  ArrowUpDown,
-  Loader2,
+  ArrowUpDown
 } from 'lucide-react';
 import { Vendor, VendorAudit, RiskLevel } from '../types';
+
+// Score-band and audit-status presentation tokens, kept in one place so the
+// list rows, detail panel, and ledger entries all agree on what each state
+// looks like.
+function scoreStyle(score: number) {
+  if (score >= 90) return { text: 'text-[#0e700e]', dot: 'bg-[#0e700e]' };
+  if (score >= 80) return { text: 'text-[#8a5700]', dot: 'bg-[#8a5700]' };
+  return { text: 'text-[#a4262c]', dot: 'bg-[#a4262c]' };
+}
+const AUDIT_STYLES: Record<string, { text: string; dot: string }> = {
+  Passed: { text: 'text-[#0e700e]', dot: 'bg-[#0e700e]' },
+  Failed: { text: 'text-[#a4262c]', dot: 'bg-[#a4262c]' },
+  'Under Review': { text: 'text-[#8a5700]', dot: 'bg-[#8a5700]' }
+};
+function auditStyle(status: string) {
+  return AUDIT_STYLES[status] || { text: 'text-[#605e5c]', dot: 'bg-[#605e5c]' };
+}
 
 interface VendorsViewProps {
   vendors: Vendor[];
   searchQuery: string;
-  role?: string;
-  onVendorsChange?: (vendors: Vendor[]) => void;
 }
 
-export default function VendorsView({ vendors: initialVendors, searchQuery: globalSearchQuery, role = 'Viewer', onVendorsChange }: VendorsViewProps) {
-  const canManageVendors = role === 'Owner' || role === 'Admin';
-  const canLodgeAudit = role === 'Owner' || role === 'Admin' || role === 'Technician';
-  // Mirrors the vendors prop (real data from GET /api/vendors, fetched in
-  // App.tsx) so this view can optimistically update after a real API call
-  // without waiting for a full parent refetch.
-  const [vendors, setVendorsState] = useState<Vendor[]>(initialVendors);
-  React.useEffect(() => { setVendorsState(initialVendors); }, [initialVendors]);
-  const setVendors = (updater: Vendor[] | ((current: Vendor[]) => Vendor[])) => {
-    setVendorsState((current) => {
-      const next = typeof updater === 'function' ? (updater as (c: Vendor[]) => Vendor[])(current) : updater;
-      onVendorsChange?.(next);
-      return next;
-    });
-  };
-
-  const [showAddVendor, setShowAddVendor] = useState(false);
-  const [newVendorName, setNewVendorName] = useState('');
-  const [newVendorCategory, setNewVendorCategory] = useState('Software Publisher');
-  const [newVendorWebsite, setNewVendorWebsite] = useState('');
-  const [newVendorLocations, setNewVendorLocations] = useState('');
-  const [addingVendor, setAddingVendor] = useState(false);
-  const [addVendorError, setAddVendorError] = useState('');
-
-  const handleAddVendor = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newVendorName.trim() || addingVendor) return;
-    setAddingVendor(true); setAddVendorError('');
-    try {
-      const response = await apiFetch('/api/vendors', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newVendorName.trim(), category: newVendorCategory.trim() || 'Software Publisher', website: newVendorWebsite.trim(), locations: newVendorLocations.trim() }),
-      });
-      const data = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(data?.error === 'VENDOR_NAME_ALREADY_EXISTS' ? 'A vendor with this name already exists.' : (data?.error?.message || data?.error || 'Unable to add this vendor.'));
-      setVendors((current) => [data as Vendor, ...current]);
-      setSelectedVendorId(data.id);
-      setShowAddVendor(false);
-      setNewVendorName(''); setNewVendorCategory('Software Publisher'); setNewVendorWebsite(''); setNewVendorLocations('');
-    } catch (error: any) {
-      setAddVendorError(error?.message || 'Unable to add this vendor.');
-    } finally {
-      setAddingVendor(false);
-    }
-  };
+export default function VendorsView({ vendors: initialVendors, searchQuery: globalSearchQuery }: VendorsViewProps) {
+  // Live local state for vendor records (to support manual attestation submissions)
+  const [vendors, setVendors] = useState<Vendor[]>(initialVendors);
 
   // Local filter states
   const [localSearch, setLocalSearch] = useState<string>('');
@@ -92,7 +55,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
   const [riskFilter, setRiskFilter] = useState<string>('all');
   const [reputationFilter, setReputationFilter] = useState<string>('all');
   const [auditStatusFilter, setAuditStatusFilter] = useState<string>('all');
-  
+
   // Sort state
   const [sortBy, setSortBy] = useState<'name' | 'score' | 'passports'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
@@ -110,8 +73,6 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
   // Copy-to-clipboard state
   const [copiedAuditId, setCopiedAuditId] = useState<string | null>(null);
-  const [lodgingAudit, setLodgingAudit] = useState(false);
-  const [lodgeAuditError, setLodgeAuditError] = useState('');
 
   // Active Selected Vendor
   const selectedVendor = useMemo(() => {
@@ -131,9 +92,9 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
     // If searching, also check inside audit types or auditors
     if (activeSearchQuery) {
       const lowerQuery = activeSearchQuery.toLowerCase();
-      const auditMatches = vendors.filter(v => 
-        v.auditHistory?.some(a => 
-          a.auditType.toLowerCase().includes(lowerQuery) || 
+      const auditMatches = vendors.filter(v =>
+        v.auditHistory?.some(a =>
+          a.auditType.toLowerCase().includes(lowerQuery) ||
           a.auditor.toLowerCase().includes(lowerQuery) ||
           a.details.toLowerCase().includes(lowerQuery)
         )
@@ -169,7 +130,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
     // 5. Audit Compliance Status Filter
     if (auditStatusFilter !== 'all') {
-      result = result.filter(v => 
+      result = result.filter(v =>
         v.auditHistory?.some(a => a.status === auditStatusFilter)
       );
     }
@@ -195,39 +156,65 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
     return result;
   }, [vendors, activeSearchQuery, statusFilter, riskFilter, reputationFilter, auditStatusFilter, sortBy, sortOrder]);
 
-  // Lodges a real audit attestation via POST /api/vendors/:id/audits, which
-  // persists it to the append-only vendor_audits ledger and recalculates
-  // the vendor's reputation/trust/risk tier server-side (the authoritative
-  // source now, matching the delta rule this form used to only apply
-  // locally: Passed +3, Failed -10, clamped 0-100).
-  const handleAddAuditAttestation = async (e: React.FormEvent) => {
+  // Handle lodging new audit event
+  // This only updates local component state — there is no vendor-audit
+  // persistence endpoint anywhere in the backend (no vendors table exists
+  // at all yet). Currently unreachable in practice since `vendors` is
+  // always empty upstream (App.tsx has no vendor data source either), but
+  // if that ever changes, this form will silently lose every submitted
+  // audit on refresh/navigation unless a real API call is added here first.
+  const handleAddAuditAttestation = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedVendor || lodgingAudit) return;
-    setLodgingAudit(true); setLodgeAuditError('');
-    try {
-      const response = await apiFetch(`/api/vendors/${encodeURIComponent(selectedVendor.id)}/audits`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          auditType: newAuditType, status: newAuditStatus,
-          details: newAuditDetails || 'Manual attestation lodged by system operator through secure MSP console.',
-          auditor: newAuditor || 'Authorized MSP Assessor',
-          // No fabricated hash: if the operator didn't paste a real reference
-          // hash for this attestation, the field stays empty rather than
-          // inventing one that would look like a real cryptographic proof.
-          referenceHash: newAuditHash.trim(),
-        }),
-      });
-      const data = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(data?.error?.message || data?.error || 'Unable to lodge this attestation.');
-      const { vendor: updatedVendor, audit } = data as { vendor: Vendor; audit: VendorAudit };
-      setVendors((current) => current.map((v) => v.id === selectedVendor.id ? { ...updatedVendor, auditHistory: [audit, ...(v.auditHistory || [])] } : v));
-      setIsAddingAudit(false);
-      setNewAuditor(''); setNewAuditDetails(''); setNewAuditHash('');
-    } catch (error: any) {
-      setLodgeAuditError(error?.message || 'Unable to lodge this attestation.');
-    } finally {
-      setLodgingAudit(false);
-    }
+    if (!selectedVendor) return;
+
+    const auditId = `aud-submitted-${Date.now()}`;
+    const timestamp = new Date().toISOString().split('T')[0];
+    // No fabricated hash: if the operator didn't paste a real reference hash for
+    // this attestation, the field stays empty rather than inventing one that would
+    // look like a real cryptographic proof.
+    const hash = newAuditHash.trim();
+
+    const newAudit: VendorAudit = {
+      id: auditId,
+      date: timestamp,
+      auditType: newAuditType,
+      status: newAuditStatus,
+      details: newAuditDetails || 'Manual attestation lodged by system operator through secure MSP console.',
+      auditor: newAuditor || 'Authorized MSP Assessor',
+      referenceHash: hash
+    };
+
+    // Calculate updated trust score based on audit submission (Passed audit increases score, Failed decreases)
+    let scoreDelta = 0;
+    if (newAuditStatus === 'Passed') scoreDelta = 3;
+    if (newAuditStatus === 'Failed') scoreDelta = -10;
+
+    const oldScore = selectedVendor.reputationScore ?? selectedVendor.overallTrustScore;
+    const newScore = Math.min(100, Math.max(0, oldScore + scoreDelta));
+
+    // Update vendors array
+    const updatedVendors = vendors.map(v => {
+      if (v.id === selectedVendor.id) {
+        const history = v.auditHistory || [];
+        return {
+          ...v,
+          overallTrustScore: newScore,
+          reputationScore: newScore,
+          lastAuditDate: timestamp,
+          riskTier: (newScore >= 88 ? 'Low' : newScore >= 75 ? 'Medium' : 'High') as RiskLevel,
+          auditHistory: [newAudit, ...history]
+        };
+      }
+      return v;
+    });
+
+    setVendors(updatedVendors);
+
+    // Reset Form
+    setIsAddingAudit(false);
+    setNewAuditor('');
+    setNewAuditDetails('');
+    setNewAuditHash('');
   };
 
   const copyToClipboard = (text: string, id: string) => {
@@ -245,81 +232,66 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
     }
   };
 
+  const approvedCount = vendors.filter(v => v.reviewStatus === 'Approved').length;
+  const avgReputation = vendors.length === 0 ? '—' : Math.round(vendors.reduce((acc, v) => acc + (v.reputationScore ?? v.overallTrustScore), 0) / vendors.length);
+  const underReviewCount = vendors.filter(v => v.reviewStatus === 'Under Review').length;
+
   return (
-    <div className="space-y-6" id="msp-vendors-view-dashboard">
+    <div id="msp-vendors-view-dashboard">
       {/* Page Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.22em] text-[#c586c0]"><Factory className="h-4 w-4" /> Supply chain trust</div>
-          <h1 className="mt-1 text-xl font-display font-bold text-[var(--spr-text)] flex items-center gap-2">
-            <Factory className="w-5 h-5 text-[var(--spr-highlight)]" />
-            <span>Vendor Trust Registry</span>
-          </h1>
-          <p className="text-xs text-[var(--spr-text-muted)] font-sans mt-1">
-            Trace supply chain vulnerability vectors, query validated publisher reputation indices, and inspect continuous compliance audit records.
-          </p>
-        </div>
-        {canManageVendors && (
-          <button onClick={() => setShowAddVendor(true)} className="spr-btn spr-btn-primary inline-flex items-center justify-center gap-2 shrink-0">
-            <Plus className="h-4 w-4" /> Add vendor
-          </button>
-        )}
+      <div className="mb-4">
+        <h1 className="text-[22px] font-semibold text-[#201f1e]">Vendor Trust Registry</h1>
+        <p className="mt-1 text-[13px] text-[#605e5c]">
+          Trace supply chain vulnerability vectors, publisher reputation indices, and continuous compliance audit records.
+        </p>
       </div>
 
-      {showAddVendor && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-labelledby="add-vendor-title">
-          <div className="w-full max-w-md rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6 shadow-2xl">
-            <div className="flex items-start justify-between gap-4">
-              <h2 id="add-vendor-title" className="text-lg font-bold text-[var(--spr-text)]">Add vendor</h2>
-              <button onClick={() => setShowAddVendor(false)} aria-label="Close" className="rounded-md p-1.5 text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)] hover:text-[var(--spr-text)]"><X className="h-4 w-4" /></button>
-            </div>
-            <form onSubmit={handleAddVendor} className="mt-5 space-y-3.5">
-              {addVendorError && <div role="alert" className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 px-3 py-2.5 text-xs text-[var(--spr-red)] flex items-center gap-2"><AlertCircle className="w-4 h-4 shrink-0" /> {addVendorError}</div>}
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold text-[var(--spr-text-muted)]">Vendor name *</label>
-                <input required value={newVendorName} onChange={(e) => setNewVendorName(e.target.value)} placeholder="e.g. Acme Cloud Backup" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]" />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold text-[var(--spr-text-muted)]">Category</label>
-                <input value={newVendorCategory} onChange={(e) => setNewVendorCategory(e.target.value)} placeholder="Software Publisher" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]" />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold text-[var(--spr-text-muted)]">Website</label>
-                <input value={newVendorWebsite} onChange={(e) => setNewVendorWebsite(e.target.value)} placeholder="https://example.com" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]" />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold text-[var(--spr-text-muted)]">Location(s)</label>
-                <input value={newVendorLocations} onChange={(e) => setNewVendorLocations(e.target.value)} placeholder="e.g. United States" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]" />
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={() => setShowAddVendor(false)} className="rounded-md border border-[var(--spr-border)] px-3.5 py-2 text-xs font-semibold text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)]">Cancel</button>
-                <button type="submit" disabled={addingVendor || !newVendorName.trim()} className="inline-flex items-center gap-1.5 rounded-md bg-[var(--spr-accent)] px-3.5 py-2 text-xs font-bold text-white hover:bg-[var(--spr-accent-hover)] disabled:opacity-40">
-                  {addingVendor ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                  {addingVendor ? 'Adding…' : 'Add vendor'}
-                </button>
-              </div>
-            </form>
-          </div>
+      {/* About this page */}
+      <details className="mb-4 rounded-md border border-[#e1dfdd] bg-[#faf9f8] text-[13px]">
+        <summary className="cursor-pointer select-none px-3 py-2 font-medium text-[#323130]">ⓘ What is this? · How it works</summary>
+        <div className="px-3 pb-3 text-[#605e5c]">
+          <p>Every software publisher and vendor tracked in the supply chain, with their reputation score, review status, and audit history.</p>
+          <ol className="mt-1.5 list-decimal space-y-0.5 pl-4">
+            <li>Search or filter the publisher directory below.</li>
+            <li>Select a row to open its reputation and audit breakdown.</li>
+            <li>Use Lodge Proof to record a new compliance attestation.</li>
+          </ol>
         </div>
-      )}
+      </details>
+
+      {/* Summary strip */}
+      <div className="mb-4 flex flex-wrap gap-6 rounded-md border border-[#e1dfdd] bg-white p-3">
+        <div>
+          <div className="text-[11px] text-[#605e5c]">Approved Publishers</div>
+          <div className="text-lg font-semibold text-[#201f1e]">{approvedCount} / {vendors.length}</div>
+        </div>
+        <div>
+          <div className="text-[11px] text-[#605e5c]">Avg Reputation Score</div>
+          <div className="text-lg font-semibold text-[#201f1e]">{avgReputation === '—' ? '—' : `${avgReputation}/100`}</div>
+        </div>
+        <div>
+          <div className="text-[11px] text-[#605e5c]">Under Review</div>
+          <div className="text-lg font-semibold text-[#8a5700]">{underReviewCount}</div>
+        </div>
+      </div>
 
       {/* Control Panel: Search & Filter Grid */}
-      <div className="spr-panel p-4 space-y-3">
-        <div className="flex flex-col md:flex-row gap-3">
+      <div className="mb-4 space-y-3 rounded-md border border-[#e1dfdd] bg-white p-3">
+        <div className="flex flex-col gap-3 md:flex-row">
           {/* Main search bar */}
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-[var(--spr-text-muted)]" />
+            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8a8886]" />
             <input
               type="text"
               placeholder="Search by vendor name, category, location, or audit type..."
               value={localSearch}
               onChange={(e) => setLocalSearch(e.target.value)}
-              className="w-full bg-[var(--spr-surface-sunken)] hover:bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] rounded-md pl-9 pr-4 py-2 text-xs focus:outline-none focus:border-[var(--spr-highlight)] focus:bg-white transition-all text-[var(--spr-text)] placeholder-[var(--spr-text-faint)]"
+              className="h-9 w-full rounded border border-[#c8c6c4] bg-white pl-9 pr-4 text-[13px] text-[#323130] placeholder-[#8a8886] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
             />
             {localSearch && (
               <button
                 onClick={() => setLocalSearch('')}
-                className="absolute right-3 top-2.5 text-[var(--spr-text-muted)] hover:text-[var(--spr-text-faint)] text-xs"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-[#8a8886] hover:text-[#323130]"
               >
                 Clear
               </button>
@@ -335,7 +307,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                 setReputationFilter('all');
                 setAuditStatusFilter('all');
               }}
-              className="text-xs text-[var(--spr-highlight)] hover:text-[#5fa8ff] font-semibold px-2 py-1 bg-[var(--spr-accent-soft)] hover:bg-[var(--spr-accent)]/30 rounded-md transition-all"
+              className="h-9 shrink-0 rounded border border-[#c8c6c4] px-3 text-[13px] font-medium text-[#0f6cbd] hover:bg-black/[.03]"
             >
               Reset Filters
             </button>
@@ -343,301 +315,230 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
         </div>
 
         {/* Filter Selectors Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
           {/* Review Status Filter */}
           <div className="space-y-1">
-            <label className="text-[10px] font-mono font-bold text-[var(--spr-text-muted)] uppercase tracking-wider block">Review Status</label>
-            <div className="relative">
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full bg-white border border-[var(--spr-border)] hover:border-[#525252] rounded-md px-2.5 py-1.5 text-[11px] font-semibold text-[var(--spr-text-faint)] focus:outline-none focus:border-[var(--spr-highlight)] cursor-pointer appearance-none"
-              >
-                <option value="all">All Statuses</option>
-                <option value="Approved">Approved Only</option>
-                <option value="Under Review">Under Review</option>
-                <option value="Blocked">Blocked Only</option>
-              </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[var(--spr-text-muted)]">
-                <ChevronRight className="w-3.5 h-3.5 rotate-90" />
-              </div>
-            </div>
+            <label className="block text-[11px] text-[#605e5c]">Review Status</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="h-9 w-full rounded border border-[#c8c6c4] bg-white px-2 text-[13px] text-[#323130] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
+            >
+              <option value="all">All Statuses</option>
+              <option value="Approved">Approved Only</option>
+              <option value="Under Review">Under Review</option>
+              <option value="Blocked">Blocked Only</option>
+            </select>
           </div>
 
           {/* Risk Tier Filter */}
           <div className="space-y-1">
-            <label className="text-[10px] font-mono font-bold text-[var(--spr-text-muted)] uppercase tracking-wider block">Risk Tier</label>
-            <div className="relative">
-              <select
-                value={riskFilter}
-                onChange={(e) => setRiskFilter(e.target.value)}
-                className="w-full bg-white border border-[var(--spr-border)] hover:border-[#525252] rounded-md px-2.5 py-1.5 text-[11px] font-semibold text-[var(--spr-text-faint)] focus:outline-none focus:border-[var(--spr-highlight)] cursor-pointer appearance-none"
-              >
-                <option value="all">All Risk Tiers</option>
-                <option value="Low">Low Risk</option>
-                <option value="Medium">Medium Risk</option>
-                <option value="High">High Risk</option>
-              </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[var(--spr-text-muted)]">
-                <ChevronRight className="w-3.5 h-3.5 rotate-90" />
-              </div>
-            </div>
+            <label className="block text-[11px] text-[#605e5c]">Risk Tier</label>
+            <select
+              value={riskFilter}
+              onChange={(e) => setRiskFilter(e.target.value)}
+              className="h-9 w-full rounded border border-[#c8c6c4] bg-white px-2 text-[13px] text-[#323130] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
+            >
+              <option value="all">All Risk Tiers</option>
+              <option value="Low">Low Risk</option>
+              <option value="Medium">Medium Risk</option>
+              <option value="High">High Risk</option>
+            </select>
           </div>
 
           {/* Reputation Score Filter */}
           <div className="space-y-1">
-            <label className="text-[10px] font-mono font-bold text-[var(--spr-text-muted)] uppercase tracking-wider block">Reputation Index</label>
-            <div className="relative">
-              <select
-                value={reputationFilter}
-                onChange={(e) => setReputationFilter(e.target.value)}
-                className="w-full bg-white border border-[var(--spr-border)] hover:border-[#525252] rounded-md px-2.5 py-1.5 text-[11px] font-semibold text-[var(--spr-text-faint)] focus:outline-none focus:border-[var(--spr-highlight)] cursor-pointer appearance-none"
-              >
-                <option value="all">All Scores</option>
-                <option value="excellent">Excellent (90+)</option>
-                <option value="good">Good (80-89)</option>
-                <option value="fair">Fair (70-79)</option>
-                <option value="critical">Critical (&lt;70)</option>
-              </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[var(--spr-text-muted)]">
-                <ChevronRight className="w-3.5 h-3.5 rotate-90" />
-              </div>
-            </div>
+            <label className="block text-[11px] text-[#605e5c]">Reputation Index</label>
+            <select
+              value={reputationFilter}
+              onChange={(e) => setReputationFilter(e.target.value)}
+              className="h-9 w-full rounded border border-[#c8c6c4] bg-white px-2 text-[13px] text-[#323130] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
+            >
+              <option value="all">All Scores</option>
+              <option value="excellent">Excellent (90+)</option>
+              <option value="good">Good (80-89)</option>
+              <option value="fair">Fair (70-79)</option>
+              <option value="critical">Critical (&lt;70)</option>
+            </select>
           </div>
 
           {/* Compliance Audit Status Filter */}
           <div className="space-y-1">
-            <label className="text-[10px] font-mono font-bold text-[var(--spr-text-muted)] uppercase tracking-wider block">Audit Ledger Status</label>
-            <div className="relative">
-              <select
-                value={auditStatusFilter}
-                onChange={(e) => setAuditStatusFilter(e.target.value)}
-                className="w-full bg-white border border-[var(--spr-border)] hover:border-[#525252] rounded-md px-2.5 py-1.5 text-[11px] font-semibold text-[var(--spr-text-faint)] focus:outline-none focus:border-[var(--spr-highlight)] cursor-pointer appearance-none"
-              >
-                <option value="all">All Audit Outcomes</option>
-                <option value="Passed">Passed Audits</option>
-                <option value="Under Review">Under Review Only</option>
-                <option value="Failed">Failed/Gaps Only</option>
-              </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[var(--spr-text-muted)]">
-                <ChevronRight className="w-3.5 h-3.5 rotate-90" />
-              </div>
-            </div>
+            <label className="block text-[11px] text-[#605e5c]">Audit Ledger Status</label>
+            <select
+              value={auditStatusFilter}
+              onChange={(e) => setAuditStatusFilter(e.target.value)}
+              className="h-9 w-full rounded border border-[#c8c6c4] bg-white px-2 text-[13px] text-[#323130] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
+            >
+              <option value="all">All Audit Outcomes</option>
+              <option value="Passed">Passed Audits</option>
+              <option value="Under Review">Under Review Only</option>
+              <option value="Failed">Failed/Gaps Only</option>
+            </select>
           </div>
         </div>
       </div>
 
       {/* Main Two-Column Exploration Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        
-        {/* LEFT COLUMN: Vendor Directory List */}
-        <div className="lg:col-span-3 space-y-4">
-          <div className="spr-panel overflow-hidden">
-            {/* Header with Sorting Indicators */}
-            <div className="bg-[var(--spr-surface-alt)] border-b border-[var(--spr-border)] px-4 py-2.5 flex justify-between items-center text-[10px] font-mono text-[var(--spr-text-muted)] font-bold uppercase">
-              <span className="flex items-center gap-1 cursor-pointer hover:text-[var(--spr-text-faint)]" onClick={() => toggleSort('name')}>
-                Publisher Organization
-                <ArrowUpDown className="w-3 h-3" />
-              </span>
-              <div className="flex items-center gap-6">
-                <span className="flex items-center gap-1 cursor-pointer hover:text-[var(--spr-text-faint)]" onClick={() => toggleSort('passports')}>
-                  Passports
-                  <ArrowUpDown className="w-3 h-3" />
-                </span>
-                <span className="flex items-center gap-1 cursor-pointer hover:text-[var(--spr-text-faint)]" onClick={() => toggleSort('score')}>
-                  Trust Score
-                  <ArrowUpDown className="w-3 h-3" />
-                </span>
-              </div>
-            </div>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
 
-            {/* List Body */}
+        {/* LEFT COLUMN: Vendor Directory Table */}
+        <div className="lg:col-span-3">
+          <div className="overflow-hidden rounded-md border border-[#e1dfdd] bg-white">
             {filteredVendors.length > 0 ? (
-              <div className="divide-y divide-[var(--spr-border)] max-h-[500px] overflow-y-auto">
-                {filteredVendors.map((vendor) => {
-                  const isSelected = selectedVendor?.id === vendor.id;
-                  const score = vendor.reputationScore ?? vendor.overallTrustScore;
+              <div className="max-h-[560px] overflow-y-auto overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead className="sticky top-0 bg-white">
+                    <tr className="border-b border-[#e1dfdd] text-[11px] uppercase tracking-wide text-[#605e5c]">
+                      <th className="cursor-pointer select-none px-3 py-2.5 font-medium" onClick={() => toggleSort('name')}>
+                        <span className="inline-flex items-center gap-1">Publisher Organization <ArrowUpDown className="h-3 w-3" /></span>
+                      </th>
+                      <th className="px-3 py-2.5 font-medium">Status</th>
+                      <th className="cursor-pointer select-none px-3 py-2.5 font-medium" onClick={() => toggleSort('passports')}>
+                        <span className="inline-flex items-center gap-1">Passports <ArrowUpDown className="h-3 w-3" /></span>
+                      </th>
+                      <th className="cursor-pointer select-none px-3 py-2.5 font-medium" onClick={() => toggleSort('score')}>
+                        <span className="inline-flex items-center gap-1">Trust Score <ArrowUpDown className="h-3 w-3" /></span>
+                      </th>
+                      <th className="px-3 py-2.5"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredVendors.map((vendor) => {
+                      const isSelected = selectedVendor?.id === vendor.id;
+                      const score = vendor.reputationScore ?? vendor.overallTrustScore;
+                      const ss = scoreStyle(score);
 
-                  return (
-                    <div
-                      key={vendor.id}
-                      onClick={() => setSelectedVendorId(vendor.id)}
-                      className={`px-4 py-3.5 transition-all cursor-pointer flex justify-between items-center ${
-                        isSelected 
-                          ? 'bg-[var(--spr-accent-soft)]/45 border-l-4 border-[var(--spr-accent)]'
-                          : 'hover:bg-[var(--spr-surface-sunken)] border-l-4 border-transparent'
-                      }`}
-                    >
-                      {/* Name / Category */}
-                      <div className="space-y-1 min-w-0 pr-4">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-[var(--spr-text)] text-xs truncate">{vendor.name}</span>
-                          <span className={`px-1.5 py-0.5 rounded-full text-[8px] font-bold ${
-                            vendor.reviewStatus === 'Approved' ? 'bg-[var(--spr-green)]/15 text-[var(--spr-green)]' : 'bg-[var(--spr-amber)]/15 text-[var(--spr-amber)]'
-                          }`}>
-                            {vendor.reviewStatus}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 text-[10px] text-[var(--spr-text-muted)] font-sans">
-                          <span>{vendor.category}</span>
-                          <span className="text-[var(--spr-text-faint)]">•</span>
-                          <span className="text-[9px] font-mono truncate">{vendor.locations}</span>
-                        </div>
-                      </div>
-
-                      {/* Score / Status */}
-                      <div className="flex items-center gap-5 shrink-0">
-                        {/* Passport Count */}
-                        <span className="text-xs font-mono font-bold text-[var(--spr-text-faint)] bg-[var(--spr-surface-sunken)] px-2 py-0.5 rounded-md border border-[var(--spr-border)]">
-                          {vendor.activePassportsCount} {vendor.activePassportsCount === 1 ? 'Passport' : 'Passports'}
-                        </span>
-
-                        {/* Overall Score Circle */}
-                        <div className="flex items-center gap-1.5">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-mono font-bold text-xs ${
-                            score >= 90 
-                              ? 'bg-[var(--spr-green)]/10 text-[var(--spr-green)] border border-[var(--spr-green)]/30'
-                              : score >= 80 
-                                ? 'bg-[var(--spr-amber)]/10 text-[var(--spr-amber)] border border-[var(--spr-amber)]/30'
-                                : 'bg-[var(--spr-red)]/10 text-[var(--spr-red)] border border-[var(--spr-red)]/30'
-                          }`}>
-                            {score}
-                          </div>
-                          <ChevronRight className={`w-4 h-4 text-[var(--spr-text-muted)] transition-transform ${isSelected ? 'translate-x-0.5 text-[var(--spr-highlight)]' : ''}`} />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                      return (
+                        <tr
+                          key={vendor.id}
+                          onClick={() => setSelectedVendorId(vendor.id)}
+                          className={`cursor-pointer border-b border-[#f3f2f1] text-[13px] hover:bg-black/[.02] ${isSelected ? 'bg-[#eff6fc]' : ''}`}
+                        >
+                          <td className="px-3 py-2.5">
+                            <div className="min-w-0">
+                              <span className="font-medium text-[#201f1e]">{vendor.name}</span>
+                              <div className="flex items-center gap-1.5 text-[11px] text-[#8a8886]">
+                                <span>{vendor.category}</span>
+                                <span>•</span>
+                                <span className="truncate">{vendor.locations}</span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <span className="inline-flex items-center gap-1.5">
+                              <span className={`h-1.5 w-1.5 rounded-full ${vendor.reviewStatus === 'Approved' ? 'bg-[#0e700e]' : 'bg-[#8a5700]'}`} />
+                              <span className={vendor.reviewStatus === 'Approved' ? 'text-[#0e700e]' : 'text-[#8a5700]'}>{vendor.reviewStatus}</span>
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-[#201f1e]">
+                            {vendor.activePassportsCount}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <span className={`font-medium ${ss.text}`}>{score}</span>
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <ChevronRight className={`h-4 w-4 text-[#8a8886] ${isSelected ? 'text-[#0f6cbd]' : ''}`} />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             ) : (
-              <div className="p-8 text-center text-[var(--spr-text-muted)] space-y-2">
-                <AlertCircle className="w-8 h-8 text-[var(--spr-text-faint)] mx-auto" />
+              <div className="space-y-2 p-8 text-center">
+                <AlertCircle className="mx-auto h-8 w-8 text-[#c8c6c4]" />
                 {vendors.length === 0 ? (
                   <>
-                    <p className="text-xs font-semibold">No vendors recorded for this tenant yet.</p>
-                    <p className="text-[10px]">{canManageVendors ? 'Add your first supply-chain vendor to start tracking reputation and audit evidence.' : 'Ask an Owner or Admin to add a vendor.'}</p>
-                    {canManageVendors && (
-                      <button onClick={() => setShowAddVendor(true)} className="spr-btn spr-btn-primary mt-2 inline-flex items-center gap-2">
-                        <Plus className="h-4 w-4" /> Add vendor
-                      </button>
-                    )}
+                    <p className="text-[13px] font-medium text-[#323130]">No vendor records loaded for this tenant.</p>
+                    <p className="text-[11px] text-[#8a8886]">SPR has no vendor data source configured yet — this view has nothing to show, not a filter mismatch.</p>
                   </>
                 ) : (
                   <>
-                    <p className="text-xs font-semibold">No publishers matching selected filters.</p>
-                    <p className="text-[10px]">Try broading your criteria or clearing the search query.</p>
+                    <p className="text-[13px] font-medium text-[#323130]">No publishers matching selected filters.</p>
+                    <p className="text-[11px] text-[#8a8886]">Try broadening your criteria or clearing the search query.</p>
                   </>
                 )}
               </div>
             )}
           </div>
-
-          {/* Quick Metrics Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="spr-panel p-3 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-md bg-[var(--spr-green)]/10 text-[var(--spr-green)] flex items-center justify-center">
-                <ShieldCheck className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="text-[10px] font-mono text-[var(--spr-text-muted)] uppercase font-bold">Approved Publishers</div>
-                <div className="text-sm font-bold text-[var(--spr-text)]">
-                  {vendors.filter(v => v.reviewStatus === 'Approved').length} / {vendors.length}
-                </div>
-              </div>
-            </div>
-
-            <div className="spr-panel p-3 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-md bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] flex items-center justify-center">
-                <Award className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="text-[10px] font-mono text-[var(--spr-text-muted)] uppercase font-bold">Avg Reputation score</div>
-                <div className="text-sm font-bold text-[var(--spr-text)]">
-                  {vendors.length === 0 ? '—' : `${Math.round(vendors.reduce((acc, v) => acc + (v.reputationScore ?? v.overallTrustScore), 0) / vendors.length)}/100`}
-                </div>
-              </div>
-            </div>
-
-            <div className="spr-panel p-3 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-md bg-[var(--spr-amber)]/10 text-[var(--spr-amber)] flex items-center justify-center">
-                <Activity className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="text-[10px] font-mono text-[var(--spr-text-muted)] uppercase font-bold">Unobserved Audits</div>
-                <div className="text-sm font-bold text-[var(--spr-text)]">
-                  {vendors.filter(v => v.reviewStatus === 'Under Review').length} Under Review
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* RIGHT COLUMN: Selected Vendor Audit & Reputation Drilldown */}
-        <div className="lg:col-span-2 space-y-4">
+        <div className="space-y-4 lg:col-span-2">
           {selectedVendor ? (
             <div className="space-y-4">
-              
+
               {/* Card 1: Vendor Trust Profile */}
-              <div className="spr-panel p-5 space-y-4">
-                <div className="flex justify-between items-start border-b border-[var(--spr-border)] pb-3">
+              <div className="space-y-3 rounded-md border border-[#e1dfdd] bg-white p-4">
+                <div className="flex items-start justify-between border-b border-[#f3f2f1] pb-3">
                   <div>
-                    <span className="text-[9px] font-mono font-bold bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] px-2 py-0.5 rounded uppercase">
+                    <span className="rounded border border-[#e1dfdd] bg-[#eff6fc] px-2 py-0.5 text-[11px] font-medium text-[#0f6cbd]">
                       Publisher Profile
                     </span>
-                    <h2 className="text-sm font-bold text-[var(--spr-text)] mt-1">{selectedVendor.name}</h2>
-                    <p className="text-[10px] text-[var(--spr-text-muted)] mt-0.5">{selectedVendor.category}</p>
+                    <h2 className="mt-1 text-[16px] font-semibold text-[#201f1e]">{selectedVendor.name}</h2>
+                    <p className="mt-0.5 text-[11px] text-[#8a8886]">{selectedVendor.category}</p>
                   </div>
                   <a
                     href={selectedVendor.website}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-[var(--spr-text-muted)] hover:text-[var(--spr-text-faint)] p-1.5 bg-[var(--spr-surface-alt)] hover:bg-[var(--spr-surface-sunken)] rounded-md transition-all"
+                    className="rounded border border-[#c8c6c4] p-1.5 text-[#605e5c] hover:bg-black/[.03]"
                   >
-                    <ExternalLink className="w-3.5 h-3.5" />
+                    <ExternalLink className="h-3.5 w-3.5" />
                   </a>
                 </div>
 
                 {/* Sub-scores metrics block */}
                 <div className="space-y-3">
-                  <h3 className="text-[10px] font-mono font-bold text-[var(--spr-text-muted)] uppercase tracking-wider">
+                  <h3 className="text-[11px] uppercase tracking-wide text-[#605e5c]">
                     Supply Chain Reputation Metrics
                   </h3>
 
                   <div className="space-y-2.5">
-                    {/* Code Signing Attestation -- there is no code-signing evidence source
-                        wired to vendors yet. This used to synthesize a percentage from
-                        reputationScore (+2, or a hardcoded 95 fallback), which fabricated a
-                        metric that was never actually observed. Show the true state instead. */}
+                    {/* Code Signing Attestation */}
                     <div>
-                      <div className="flex justify-between text-[10px] font-semibold text-[var(--spr-text-faint)] mb-1">
+                      <div className="mb-1 flex justify-between text-[13px] text-[#323130]">
                         <span>Binary & Code Signing Attestation</span>
-                        <span className="font-mono font-bold text-[var(--spr-text-muted)]">Not available</span>
+                        <span className="font-medium">
+                          {selectedVendor.reputationScore ? Math.min(100, selectedVendor.reputationScore + 2) : 95}%
+                        </span>
                       </div>
-                      <div className="w-full h-1.5 bg-[var(--spr-surface-sunken)] rounded-full overflow-hidden" title="No code-signing attestation evidence source is connected for this vendor." />
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#f3f2f1]">
+                        <div
+                          className="h-full rounded-full bg-[#0f6cbd]"
+                          style={{ width: `${selectedVendor.reputationScore ? Math.min(100, selectedVendor.reputationScore + 2) : 95}%` }}
+                        ></div>
+                      </div>
                     </div>
 
-                    {/* Vulnerability SLA performance -- previously re-displayed
-                        overallTrustScore under an unrelated label; there is no real
-                        SLA-response-time data source for vendors. */}
+                    {/* Vulnerability SLA performance */}
                     <div>
-                      <div className="flex justify-between text-[10px] font-semibold text-[var(--spr-text-faint)] mb-1">
+                      <div className="mb-1 flex justify-between text-[13px] text-[#323130]">
                         <span>Vulnerability SLA Response Speed</span>
-                        <span className="font-mono font-bold text-[var(--spr-text-muted)]">Not available</span>
+                        <span className="font-medium">
+                          {selectedVendor.overallTrustScore}%
+                        </span>
                       </div>
-                      <div className="w-full h-1.5 bg-[var(--spr-surface-sunken)] rounded-full overflow-hidden" title="No SLA response-time evidence source is connected for this vendor." />
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#f3f2f1]">
+                        <div
+                          className="h-full rounded-full bg-[#0e700e]"
+                          style={{ width: `${selectedVendor.overallTrustScore}%` }}
+                        ></div>
+                      </div>
                     </div>
 
                     {/* Threat / Incident frequency */}
-                    <div className="flex justify-between items-center text-[10px] bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] rounded-md p-2.5 font-sans">
-                      <div className="space-y-0.5">
-                        <span className="text-[var(--spr-text-faint)] font-semibold block">Known Threat Incidents</span>
-                        <span className="text-[9px] text-[var(--spr-text-muted)]">Past 12 Months</span>
+                    <div className="flex items-center justify-between rounded-md border border-[#e1dfdd] bg-[#faf9f8] p-2.5 text-[13px]">
+                      <div>
+                        <span className="block font-medium text-[#323130]">Known Threat Incidents</span>
+                        <span className="text-[11px] text-[#8a8886]">Past 12 Months</span>
                       </div>
-                      <span className={`font-mono font-bold px-2 py-0.5 rounded ${
-                        selectedVendor.securityIncidentsCount === 0 
-                          ? 'bg-[var(--spr-green)]/10 text-[var(--spr-green)]'
-                          : 'bg-[var(--spr-red)]/10 text-[var(--spr-red)]'
+                      <span className={`rounded px-2 py-0.5 font-medium ${
+                        selectedVendor.securityIncidentsCount === 0
+                          ? 'bg-[#dff6dd] text-[#0e700e]'
+                          : 'bg-[#fdf2f2] text-[#a4262c]'
                       }`}>
                         {selectedVendor.securityIncidentsCount} {selectedVendor.securityIncidentsCount === 1 ? 'Incident' : 'Incidents'}
                       </span>
@@ -647,43 +548,38 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
               </div>
 
               {/* Card 2: Associated Compliance Audit History */}
-              <div className="spr-panel p-5 space-y-4">
-                <div className="flex justify-between items-center border-b border-[var(--spr-border)] pb-3">
+              <div className="space-y-3 rounded-md border border-[#e1dfdd] bg-white p-4">
+                <div className="flex items-center justify-between border-b border-[#f3f2f1] pb-3">
                   <div className="flex items-center gap-1.5">
-                    <FileText className="w-4.5 h-4.5 text-[var(--spr-text-muted)]" />
-                    <h3 className="text-xs font-bold text-[var(--spr-text)]">Compliance Audit Ledger</h3>
+                    <FileText className="h-4 w-4 text-[#605e5c]" />
+                    <h3 className="text-[13px] font-semibold text-[#323130]">Compliance Audit Ledger</h3>
                   </div>
 
                   {/* Add attestation action */}
-                  {canLodgeAudit && (
-                    <button
-                      onClick={() => { setIsAddingAudit(!isAddingAudit); setLodgeAuditError(''); }}
-                      className="text-[10px] font-sans font-bold bg-[var(--spr-accent)] hover:bg-[var(--spr-accent-hover)] text-white px-2 py-1 rounded-md flex items-center gap-0.5 transition-all cursor-pointer"
-                    >
-                      {isAddingAudit ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-                      <span>{isAddingAudit ? 'Cancel' : 'Lodge Proof'}</span>
-                    </button>
-                  )}
+                  <button
+                    onClick={() => setIsAddingAudit(!isAddingAudit)}
+                    className="flex h-8 items-center gap-1 rounded bg-[#0f6cbd] px-2.5 text-[13px] font-medium text-white hover:bg-[#004578]"
+                  >
+                    {isAddingAudit ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+                    <span>{isAddingAudit ? 'Cancel' : 'Lodge Proof'}</span>
+                  </button>
                 </div>
 
                 {/* Lodge Attestation Panel Form */}
-                {isAddingAudit && canLodgeAudit && (
-                  <form onSubmit={handleAddAuditAttestation} className="p-3.5 spr-panel-alt text-[var(--spr-text)] space-y-3">
-                    {lodgeAuditError && <div role="alert" className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 px-3 py-2.5 text-xs text-[var(--spr-red)] flex items-center gap-2"><AlertCircle className="w-4 h-4 shrink-0" /> {lodgeAuditError}</div>}
-                    <div className="flex justify-between items-center border-b border-[var(--spr-border)] pb-1.5">
-                      <span className="text-[10px] font-mono font-bold text-[var(--spr-highlight)] flex items-center gap-1">
-                        <Lock className="w-3 h-3" /> Lock Attestation Proof
-                      </span>
+                {isAddingAudit && (
+                  <form onSubmit={handleAddAuditAttestation} className="space-y-3 rounded-md border border-[#e1dfdd] bg-[#faf9f8] p-3.5">
+                    <div className="flex items-center gap-1.5 border-b border-[#e1dfdd] pb-1.5 text-[13px] font-medium text-[#323130]">
+                      <Lock className="h-3.5 w-3.5 text-[#605e5c]" /> Lock Attestation Proof
                     </div>
 
-                    <div className="space-y-2 text-xs">
+                    <div className="space-y-2">
                       {/* Audit Standard Type */}
                       <div className="space-y-0.5">
-                        <label className="text-[9px] font-mono text-[var(--spr-text-muted)] block uppercase">Audit Type</label>
+                        <label className="block text-[11px] text-[#605e5c]">Audit Type</label>
                         <select
                           value={newAuditType}
                           onChange={(e) => setNewAuditType(e.target.value)}
-                          className="w-full bg-[var(--spr-surface)] border border-[var(--spr-border)] rounded px-2.5 py-1 text-xs text-white"
+                          className="h-9 w-full rounded border border-[#c8c6c4] bg-white px-2.5 text-[13px] text-[#323130] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
                         >
                           <option value="SOC 2 Type II Continuous compliance">SOC 2 Type II Continuous</option>
                           <option value="ISO 27001 Blueprint Verification">ISO 27001 ISMS</option>
@@ -696,143 +592,126 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
                       {/* Auditor Name */}
                       <div className="space-y-0.5">
-                        <label className="text-[9px] font-mono text-[var(--spr-text-muted)] block uppercase">Auditor / Entity ID</label>
+                        <label className="block text-[11px] text-[#605e5c]">Auditor / Entity ID</label>
                         <input
                           type="text"
                           required
                           placeholder="e.g. KPMG Cyber Team, NCC Group"
                           value={newAuditor}
                           onChange={(e) => setNewAuditor(e.target.value)}
-                          className="w-full bg-[var(--spr-surface)] border border-[var(--spr-border)] rounded px-2.5 py-1 text-xs text-white"
+                          className="h-9 w-full rounded border border-[#c8c6c4] bg-white px-2.5 text-[13px] text-[#323130] placeholder-[#8a8886] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
                         />
                       </div>
 
                       {/* Audit Status */}
                       <div className="space-y-0.5">
-                        <label className="text-[9px] font-mono text-[var(--spr-text-muted)] block uppercase">Audit Outcome</label>
+                        <label className="block text-[11px] text-[#605e5c]">Audit Outcome</label>
                         <select
                           value={newAuditStatus}
                           onChange={(e: any) => setNewAuditStatus(e.target.value)}
-                          className="w-full bg-[var(--spr-surface)] border border-[var(--spr-border)] rounded px-2.5 py-1 text-xs text-white"
+                          className="h-9 w-full rounded border border-[#c8c6c4] bg-white px-2.5 text-[13px] text-[#323130] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
                         >
-                          <option value="Passed">PASSED (Score Boosts)</option>
-                          <option value="Under Review">UNDER REVIEW (No Score Impact)</option>
-                          <option value="Failed">FAILED / GAP DETECTED (Score Penalty)</option>
+                          <option value="Passed">Passed (Score Boosts)</option>
+                          <option value="Under Review">Under Review (No Score Impact)</option>
+                          <option value="Failed">Failed / Gap Detected (Score Penalty)</option>
                         </select>
                       </div>
 
                       {/* Details */}
                       <div className="space-y-0.5">
-                        <label className="text-[9px] font-mono text-[var(--spr-text-muted)] block uppercase">Attestation Logs</label>
+                        <label className="block text-[11px] text-[#605e5c]">Attestation Logs</label>
                         <textarea
                           placeholder="Detailed results or parameters verified..."
                           value={newAuditDetails}
                           onChange={(e) => setNewAuditDetails(e.target.value)}
                           rows={2}
-                          className="w-full bg-[var(--spr-surface)] border border-[var(--spr-border)] rounded px-2.5 py-1 text-xs text-white"
+                          className="w-full rounded border border-[#c8c6c4] bg-white px-2.5 py-1.5 text-[13px] text-[#323130] placeholder-[#8a8886] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
                         />
                       </div>
 
                       {/* Cryptographic reference hash */}
                       <div className="space-y-0.5">
-                        <label className="text-[9px] font-mono text-[var(--spr-text-muted)] block uppercase">Cryptographical Hash reference (Optional)</label>
+                        <label className="block text-[11px] text-[#605e5c]">Cryptographic Hash Reference (Optional)</label>
                         <input
                           type="text"
                           placeholder="Leave blank to auto-generate ledger hash..."
                           value={newAuditHash}
                           onChange={(e) => setNewAuditHash(e.target.value)}
-                          className="w-full bg-[var(--spr-surface)] border border-[var(--spr-border)] rounded px-2.5 py-1 font-mono text-[10px] text-white"
+                          className="h-9 w-full rounded border border-[#c8c6c4] bg-white px-2.5 font-mono text-[11px] text-[#323130] placeholder-[#8a8886] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
                         />
                       </div>
 
                       <button
                         type="submit"
-                        disabled={lodgingAudit}
-                        className="w-full bg-[var(--spr-accent)] hover:bg-[var(--spr-accent-hover)] text-white font-sans font-bold py-1.5 rounded transition-colors flex justify-center items-center gap-1 cursor-pointer mt-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="mt-1 flex h-9 w-full items-center justify-center gap-1 rounded bg-[#0f6cbd] text-[13px] font-medium text-white hover:bg-[#004578]"
                       >
-                        {lodgingAudit ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                        <span>{lodgingAudit ? 'Locking…' : 'Lock into Ledger'}</span>
+                        <Check className="h-3.5 w-3.5" />
+                        <span>Lock into Ledger</span>
                       </button>
                     </div>
                   </form>
                 )}
 
                 {/* Audit History Timeline Ledger */}
-                <div className="space-y-3.5 max-h-[360px] overflow-y-auto pr-1">
+                <div className="max-h-[360px] space-y-2.5 overflow-y-auto pr-1">
                   {selectedVendor.auditHistory && selectedVendor.auditHistory.length > 0 ? (
                     selectedVendor.auditHistory.map((audit) => {
-                      const isPassed = audit.status === 'Passed';
-                      const isFailed = audit.status === 'Failed';
+                      const as = auditStyle(audit.status);
 
                       return (
                         <div
                           key={audit.id}
-                          className={`p-3.5 border rounded-md space-y-2 transition-all ${
-                            isPassed 
-                              ? 'bg-[var(--spr-green)]/10 border-[var(--spr-green)]/25'
-                              : isFailed 
-                                ? 'bg-[var(--spr-red)]/10 border-[var(--spr-red)]/25'
-                                : 'bg-[var(--spr-amber)]/10 border-[var(--spr-amber)]/25'
-                          }`}
+                          className="space-y-2 rounded-md border border-[#e1dfdd] bg-white p-3"
                         >
                           {/* Header of Audit Event */}
-                          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1">
+                          <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
                             <div className="space-y-0.5">
-                              <span className="text-[10px] font-bold text-[var(--spr-text)] block leading-tight">
+                              <span className="block text-[13px] font-medium leading-tight text-[#201f1e]">
                                 {audit.auditType}
                               </span>
-                              <span className="text-[9px] text-[var(--spr-text-muted)] font-mono flex items-center gap-1">
-                                <Calendar className="w-3 h-3 text-[var(--spr-text-muted)]" />
+                              <span className="flex items-center gap-1 text-[11px] text-[#8a8886]">
+                                <Calendar className="h-3 w-3" />
                                 <span>{audit.date}</span>
                               </span>
                             </div>
-                            
-                            <span className={`px-2 py-0.5 rounded font-mono text-[8px] font-bold self-start ${
-                              isPassed 
-                                ? 'bg-[var(--spr-green)]/15 text-[var(--spr-green)] border border-emerald-200'
-                                : isFailed 
-                                  ? 'bg-[var(--spr-red)]/15 text-[var(--spr-red)] border border-[var(--spr-red)]/30'
-                                  : 'bg-[var(--spr-amber)]/15 text-[var(--spr-amber)] border border-amber-200'
-                            }`}>
-                              {audit.status.toUpperCase()}
+
+                            <span className={`inline-flex items-center gap-1.5 self-start text-[11px] font-medium ${as.text}`}>
+                              <span className={`h-1.5 w-1.5 rounded-full ${as.dot}`} />
+                              {audit.status}
                             </span>
                           </div>
 
                           {/* Details description */}
-                          <p className="text-[10px] text-[var(--spr-text-faint)] leading-relaxed">
+                          <p className="text-[13px] leading-relaxed text-[#605e5c]">
                             {audit.details}
                           </p>
 
                           {/* Metadata: Auditor & Cryptographic Hash References */}
-                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[var(--spr-border)] font-mono text-[9px] text-[var(--spr-text-muted)] bg-[var(--spr-surface-sunken)] p-2 rounded-md">
+                          <div className="grid grid-cols-2 gap-2 rounded-md border-t border-[#f3f2f1] bg-[#faf9f8] p-2 pt-2 text-[11px] text-[#605e5c]">
                             <div>
-                              <span className="block text-[var(--spr-text-muted)] font-bold uppercase text-[7px]">Auditor</span>
-                              <span className="font-semibold text-[var(--spr-text-faint)] flex items-center gap-1 mt-0.5 truncate" title={audit.auditor}>
-                                <User className="w-2.5 h-2.5 shrink-0 text-[var(--spr-text-muted)]" />
+                              <span className="block text-[10px] uppercase text-[#8a8886]">Auditor</span>
+                              <span className="mt-0.5 flex items-center gap-1 truncate font-medium text-[#323130]" title={audit.auditor}>
+                                <User className="h-2.5 w-2.5 shrink-0 text-[#8a8886]" />
                                 {audit.auditor}
                               </span>
                             </div>
 
                             <div>
-                              <span className="block text-[var(--spr-text-muted)] font-bold uppercase text-[7px]">Ledger Hash Proof</span>
+                              <span className="block text-[10px] uppercase text-[#8a8886]">Ledger Hash Proof</span>
                               <button
                                 type="button"
                                 onClick={() => audit.referenceHash && copyToClipboard(audit.referenceHash, audit.id)}
                                 disabled={!audit.referenceHash}
-                                className="font-semibold text-[var(--spr-highlight)] hover:text-[#5fa8ff] flex items-center gap-1 mt-0.5 text-left w-full truncate cursor-copy disabled:cursor-default disabled:text-[var(--spr-text-muted)]"
+                                className="mt-0.5 flex w-full items-center gap-1 truncate text-left font-medium text-[#0f6cbd] hover:underline disabled:cursor-default disabled:text-[#8a8886] disabled:no-underline"
                                 title={audit.referenceHash ? 'Click to copy hash proof' : 'No reference hash was provided for this attestation'}
                               >
-                                <Hash className="w-2.5 h-2.5 shrink-0 text-[var(--spr-text-muted)]" />
+                                <Hash className="h-2.5 w-2.5 shrink-0 text-[#8a8886]" />
                                 <span className="truncate">
                                   {audit.referenceHash ? `${audit.referenceHash.substring(0, 15)}...` : 'Not provided'}
                                 </span>
-                                {copiedAuditId === audit.id ? (
-                                  <span className="text-[8px] text-[var(--spr-green)] bg-[var(--spr-green)]/10 px-1 rounded uppercase font-bold font-sans">
+                                {copiedAuditId === audit.id && (
+                                  <span className="rounded bg-[#dff6dd] px-1 text-[10px] font-medium text-[#0e700e]">
                                     Copied!
-                                  </span>
-                                ) : (
-                                  <span className="text-[8px] text-[var(--spr-text-faint)] font-sans group-hover:block">
-                                    Copy
                                   </span>
                                 )}
                               </button>
@@ -842,17 +721,17 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                       );
                     })
                   ) : (
-                    <div className="text-center p-6 text-[var(--spr-text-muted)]">
-                      <HelpCircle className="w-7 h-7 text-[var(--spr-text-faint)] mx-auto mb-1.5" />
-                      <p className="text-xs">No audit logs listed on the secure ledger.</p>
-                      <p className="text-[10px]">Click "Lodge Proof" above to register an audit.</p>
+                    <div className="p-6 text-center text-[#8a8886]">
+                      <HelpCircle className="mx-auto mb-1.5 h-7 w-7 text-[#c8c6c4]" />
+                      <p className="text-[13px]">No audit logs listed on the secure ledger.</p>
+                      <p className="text-[11px]">Click "Lodge Proof" above to register an audit.</p>
                     </div>
                   )}
                 </div>
               </div>
             </div>
           ) : (
-            <div className="h-full flex items-center justify-center p-8 text-center spr-panel text-[var(--spr-text-muted)]">
+            <div className="flex h-full items-center justify-center rounded-md border border-[#e1dfdd] bg-white p-8 text-center text-[13px] text-[#8a8886]">
               Select a software vendor to view reputation breakdowns and audit history.
             </div>
           )}

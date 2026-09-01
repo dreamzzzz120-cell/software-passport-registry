@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, ChevronRight, Info, Search, Shield, Trash2, Download } from 'lucide-react';
+import { CheckCircle2, ChevronRight, Info, Search, Trash2, Download } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
 import { EXTENSIONS, type ExtensionDefinition } from '../workflows/extensionRegistry';
 
@@ -72,51 +72,69 @@ export default function ExtensionMarketplace({ onNavigateTab, role = 'Viewer' }:
     }
   };
 
-  return <section className="space-y-6" id="extension-marketplace-view">
-    <header className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6 ">
-      <div className="flex items-start gap-3">
-        <div className="grid h-10 w-10 place-items-center rounded-xl border border-[#c586c0]/40 bg-[var(--spr-accent-soft)] text-[#c586c0]"><Shield size={18} /></div>
-        <div>
-          <div className="text-[10px] font-bold uppercase tracking-[.2em] text-[#c586c0]">Extension system</div>
-          <h1 className="mt-1 text-2xl font-semibold">Capability Marketplace</h1>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--spr-text-muted)]">The catalog describes capabilities and workflow definitions. Installation state is tenant-scoped and persisted through the authenticated backend. It does not present synthetic popularity, activity, deployment, certification, or provider-health claims.</p>
-        </div>
+  return <section className="space-y-4" id="extension-marketplace-view">
+    <div className="flex items-center justify-between gap-4">
+      <div>
+        <h1 className="text-[22px] font-semibold text-[#201f1e]">Capability Marketplace</h1>
+        <p className="mt-1 text-[13px] text-[#605e5c]">Browse and manage the workflow capabilities installed in this workspace.</p>
       </div>
-      {(error) && <div role="alert" className="mt-4 rounded-xl border border-amber-300/20 bg-amber-300/[.05] px-3 py-2 text-xs text-amber-100">{error}</div>}
-    </header>
-
-    <div className="flex flex-wrap gap-3">
-      <label className="flex min-w-[240px] flex-1 items-center gap-2 rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] px-3 py-2">
-        <Search size={16} className="text-[var(--spr-text-muted)]" />
-        <input aria-label="Search extensions" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search extensions" className="w-full bg-transparent text-sm text-[var(--spr-text)] outline-none placeholder:text-[var(--spr-text-faint)]" />
-      </label>
-      <select aria-label="Filter extension category" value={category} onChange={(event) => setCategory(event.target.value)} className="rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface)] px-3 py-2 text-sm text-[var(--spr-text)]">{categories.map((item) => <option key={item}>{item}</option>)}</select>
     </div>
 
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <details className="rounded-md border border-[#e1dfdd] bg-[#faf9f8] text-[13px]">
+      <summary className="cursor-pointer select-none px-3 py-2 font-medium text-[#323130]">&#9432; What is this? &middot; How it works</summary>
+      <div className="px-3 pb-3 text-[#605e5c]">
+        <p>The catalog describes capabilities and workflow definitions. Installation state is tenant-scoped and persisted through the authenticated backend. It does not present synthetic popularity, activity, deployment, certification, or provider-health claims.</p>
+        <ol className="mt-1.5 list-decimal space-y-0.5 pl-4">
+          <li>Search or filter the catalog by category.</li>
+          <li>Open Details to see workflow steps and the routes that own each capability.</li>
+          <li>Install or remove a capability for this tenant (requires Owner, Admin, or Operator).</li>
+        </ol>
+      </div>
+    </details>
+
+    {error && <div role="alert" className="rounded-md border border-[#e1dfdd] bg-[#fff4ce] px-3 py-2 text-[12px] text-[#8a5700]">{error}</div>}
+
+    <div className="flex flex-wrap gap-2">
+      <label className="flex h-9 min-w-[240px] flex-1 items-center gap-2 rounded border border-[#c8c6c4] bg-white px-3 focus-within:border-[#0f6cbd] focus-within:ring-1 focus-within:ring-[#0f6cbd]">
+        <Search size={14} className="text-[#8a8886]" />
+        <input aria-label="Search extensions" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search extensions" className="w-full bg-transparent text-[13px] text-[#323130] outline-none placeholder:text-[#8a8886]" />
+      </label>
+      <select aria-label="Filter extension category" value={category} onChange={(event) => setCategory(event.target.value)} className="h-9 rounded border border-[#c8c6c4] bg-white px-3 text-[13px] text-[#323130] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]">{categories.map((item) => <option key={item}>{item}</option>)}</select>
+    </div>
+
+    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
       {filtered.map((extension) => {
         const installedNow = installed.includes(extension.id);
-        return <article key={extension.id} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5">
+        return <article key={extension.id} className="rounded-md border border-[#e1dfdd] bg-white p-4">
           <div className="flex items-start justify-between gap-4">
-            <div><div className="text-[10px] uppercase tracking-[.16em] text-[var(--spr-text-faint)]">{categoryFor(extension)}</div><h2 className="mt-1 font-semibold">{extension.name}</h2></div>
-            {installedNow && <span className="inline-flex items-center gap-1 rounded-full border border-[var(--spr-green)]/40 bg-[var(--spr-green)]/15 px-2 py-1 text-[10px] font-semibold text-[var(--spr-green)]"><CheckCircle2 size={12} /> Installed</span>}
+            <div><div className="text-[10px] uppercase tracking-wide text-[#8a8886]">{categoryFor(extension)}</div><h2 className="mt-1 text-[13px] font-semibold text-[#201f1e]">{extension.name}</h2></div>
+            {installedNow && <span className="inline-flex items-center gap-1 rounded border border-[#e1dfdd] bg-[#dff6dd] px-1.5 py-0.5 text-[10px] font-semibold text-[#0e700e]"><CheckCircle2 size={11} /> Installed</span>}
           </div>
-          <p className="mt-3 text-sm leading-6 text-[var(--spr-text-muted)]">{extension.description}</p>
-          <div className="mt-4 flex flex-wrap gap-1.5">{extension.steps.map((step) => <span key={step} className="rounded-full border border-[var(--spr-border)] px-2.5 py-1 text-[10px] text-[var(--spr-text-muted)]">{step}</span>)}</div>
-          <div className="mt-4 flex gap-2">
-            <button onClick={() => setSelected(extension)} className="rounded-xl border border-[var(--spr-border)] px-3 py-2 text-xs font-semibold text-[var(--spr-text)]">Details</button>
-            <button disabled={!canManage || busyId === extension.id} title={!canManage ? `Your ${role} role cannot install or remove extensions.` : undefined} onClick={() => void toggleInstallation(extension)} className="inline-flex items-center gap-2 rounded-xl bg-[var(--spr-accent)] px-3 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">{installedNow ? <Trash2 size={13}/> : <Download size={13}/>} {busyId === extension.id ? 'Saving…' : installedNow ? 'Remove' : 'Install'}</button>
+          <p className="mt-2 text-[12px] leading-5 text-[#605e5c]">{extension.description}</p>
+          <div className="mt-3 flex flex-wrap gap-1.5">{extension.steps.map((step) => <span key={step} className="rounded border border-[#e1dfdd] bg-[#f3f2f1] px-2 py-0.5 text-[10px] text-[#605e5c]">{step}</span>)}</div>
+          <div className="mt-3 flex gap-2">
+            <button onClick={() => setSelected(extension)} className="h-8 rounded border border-[#c8c6c4] px-3 text-[12px] font-medium text-[#323130] hover:bg-black/[.03]">Details</button>
+            <button disabled={!canManage || busyId === extension.id} title={!canManage ? `Your ${role} role cannot install or remove extensions.` : undefined} onClick={() => void toggleInstallation(extension)} className="inline-flex h-8 items-center gap-1.5 rounded bg-[#0f6cbd] px-3 text-[12px] font-medium text-white hover:bg-[#004578] disabled:cursor-not-allowed disabled:opacity-50">{installedNow ? <Trash2 size={12}/> : <Download size={12}/>} {busyId === extension.id ? 'Saving…' : installedNow ? 'Remove' : 'Install'}</button>
           </div>
         </article>;
       })}
     </div>
 
-    {selected && <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-5" role="dialog" aria-modal="true" aria-label={`${selected.name} details`}>
-      <div className="w-full max-w-2xl rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-6 shadow-2xl">
-        <div className="flex items-start justify-between gap-4"><div><div className="text-[10px] font-bold uppercase tracking-[.2em] text-[var(--spr-highlight)]">Capability definition</div><h2 className="mt-2 text-2xl font-semibold">{selected.name}</h2></div><button onClick={() => setSelected(null)} aria-label="Close extension details" className="rounded-lg border border-[var(--spr-border)] p-2 text-[var(--spr-text-muted)]">×</button></div>
-        <p className="mt-4 text-sm leading-6 text-[var(--spr-text-muted)]">{selected.description}</p>
-        <div className="mt-5 grid gap-4 md:grid-cols-2"><div><div className="text-[10px] uppercase tracking-[.16em] text-[var(--spr-text-faint)]">Workflow steps</div><div className="mt-2 space-y-2">{selected.steps.map((step, index) => <div key={step} className="flex items-center gap-2 rounded-xl border border-[var(--spr-border)] p-3 text-sm"><span className="grid h-6 w-6 place-items-center rounded-full bg-[var(--spr-surface-alt)] text-xs">{index + 1}</span>{step}</div>)}</div></div><div><div className="text-[10px] uppercase tracking-[.16em] text-[var(--spr-text-faint)]">Owning routes</div><div className="mt-2 space-y-2">{selected.sourceRoutes.map((route) => <button key={route} onClick={() => onNavigateTab?.(route)} className="flex w-full items-center justify-between rounded-xl border border-[var(--spr-border)] p-3 text-left text-sm hover:bg-[var(--spr-surface-alt)]">{route}<ChevronRight size={14} /></button>)}</div></div></div>
-        <div className="mt-5 rounded-md border border-amber-300/10 bg-amber-300/[.04] p-4 text-xs text-amber-100/70"><Info size={14} className="mr-1 inline" /> Tenant-specific activity is shown only from observed backend state.</div>
+    {selected && <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-5" role="dialog" aria-modal="true" aria-label={`${selected.name} details`}>
+      <div className="w-full max-w-2xl rounded-md border border-[#e1dfdd] bg-white p-5">
+        <div className="flex items-start justify-between gap-4"><div><div className="text-[10px] font-semibold uppercase tracking-wide text-[#8a8886]">Capability definition</div><h2 className="mt-1 text-[18px] font-semibold text-[#201f1e]">{selected.name}</h2></div><button onClick={() => setSelected(null)} aria-label="Close extension details" className="rounded border border-[#c8c6c4] p-1.5 text-[#605e5c] hover:bg-black/[.03]">×</button></div>
+        <p className="mt-3 text-[13px] leading-5 text-[#605e5c]">{selected.description}</p>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-[#8a8886]">Workflow steps</div>
+            <div className="mt-2 space-y-1.5">{selected.steps.map((step, index) => <div key={step} className="flex items-center gap-2 rounded-md border border-[#e1dfdd] p-2 text-[12px] text-[#323130]"><span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#f3f2f1] text-[10px] text-[#605e5c]">{index + 1}</span>{step}</div>)}</div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-[#8a8886]">Owning routes</div>
+            <div className="mt-2 space-y-1.5">{selected.sourceRoutes.map((route) => <button key={route} onClick={() => onNavigateTab?.(route)} className="flex w-full items-center justify-between rounded-md border border-[#e1dfdd] p-2 text-left text-[12px] text-[#323130] hover:bg-black/[.02]">{route}<ChevronRight size={13} /></button>)}</div>
+          </div>
+        </div>
+        <div className="mt-4 flex items-start gap-2 rounded-md border border-[#e1dfdd] bg-[#fff4ce] p-3 text-[11px] text-[#8a5700]"><Info size={13} className="mt-0.5 shrink-0" /> Tenant-specific activity is shown only from observed backend state.</div>
       </div>
     </div>}
   </section>;

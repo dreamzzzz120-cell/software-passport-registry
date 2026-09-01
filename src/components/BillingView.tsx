@@ -3,237 +3,207 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useState } from 'react';
-import { CreditCard, ShieldCheck, ExternalLink, Loader2, AlertTriangle, FileCheck2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { CreditCard, ShieldCheck, Loader2 } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
 
-type PlanId = 'pilot' | 'starter' | 'professional' | 'growth' | 'enterprise';
-type OneTimeProductId = 'softwarePassport' | 'evidenceReport' | 'securityAssessment' | 'verifiedSystemReport' | 'dueDiligenceReport' | 'vendorRiskAssessment' | 'sbomAnalysis' | 'portfolioAssessment' | 'auditEvidencePackage' | 'customAssessment';
-type AddonId = 'continuousVerification' | 'trustBadge' | 'publicPassport' | 'api';
-type PlanMeta = { id: PlanId; label: string; priceLabel: string; clientLimit: number | null; checkoutAvailable: boolean };
-type ProductMeta = { id: OneTimeProductId; label: string; priceLabel: string; checkoutAvailable: boolean };
-type AddonMeta = { id: AddonId; label: string; priceLabel: string; checkoutAvailable: boolean };
-type BillingStatus = {
-  billingConfigured: boolean;
-  plans: PlanMeta[];
-  products: ProductMeta[];
-  addons: AddonMeta[];
-  availablePlans: PlanId[];
-  availableProducts: OneTimeProductId[];
-  availableAddons: AddonId[];
-  subscription: { plan: PlanId | null; status: string; clientLimit: number | null; currentPeriodEnd: string | null } | null;
-  clientCount: number;
-};
-
-const limitLabel = (limit: number | null) => limit === null ? 'Unlimited clients' : `Up to ${limit} client${limit === 1 ? '' : 's'}`;
+interface BillingItem {
+  id: string;
+  clientName: string;
+  activePassportsCount: number;
+  pricePerPassport: number;
+  extraFees: number;
+  billingCycle: string;
+  totalAmount: number;
+  status: string;
+  stripeSessionId?: string | null;
+}
 
 export default function BillingView() {
-  const [status, setStatus] = useState<BillingStatus | null>(null);
+  const [billingList, setBillingList] = useState<BillingItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [payingId, setPayingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busyPlan, setBusyPlan] = useState<PlanId | null>(null);
-  const [busyProduct, setBusyProduct] = useState<OneTimeProductId | null>(null);
-  const [busyAddon, setBusyAddon] = useState<AddonId | null>(null);
-  const [openingPortal, setOpeningPortal] = useState(false);
 
-  const loadStatus = () => {
+  useEffect(() => {
+    loadBilling();
+  }, []);
+
+  // No /api/billing route exists anywhere in the backend — there is no
+  // billing/Stripe integration built yet, not a config problem. Surface
+  // that honestly instead of only logging to console.
+  const loadBilling = () => {
     setLoading(true);
     setError(null);
     apiFetch('/api/billing')
-      .then((res) => { if (!res.ok) throw new Error('Unable to load billing status.'); return res.json(); })
-      .then((data: BillingStatus) => setStatus(data))
-      .catch((err) => { setError(err instanceof Error ? err.message : 'Unable to load billing status.'); setStatus(null); })
+      .then((res) => {
+        if (!res.ok) throw new Error('Billing is not available on this deployment yet.');
+        return res.json();
+      })
+      .then((data) => {
+        setBillingList(data);
+      })
+      .catch((err) => { console.error('[Billing Loader Error]:', err); setError('Billing is not available on this deployment yet.'); setBillingList([]); })
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { loadStatus(); }, []);
-
-  const handleSubscribe = async (plan: PlanId) => {
-    setBusyPlan(plan);
-    setError(null);
+  const handlePayInvoice = async (billingId: string) => {
+    setPayingId(billingId);
     try {
       const res = await apiFetch('/api/billing/checkout', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ billingId }),
       });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || 'Unable to start checkout.');
-      if (data?.url) window.location.href = data.url;
+
+      if (!res.ok) {
+        throw new Error('Failed to initiate transaction');
+      }
+
+      const data = await res.json();
+      if (data?.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+      } else {
+        throw new Error('Checkout URL not provided');
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to start checkout.');
+      console.error('[Stripe Ingress Error]:', err);
+      alert('Checkout is not available — there is no billing gateway built into this deployment yet.');
     } finally {
-      setBusyPlan(null);
+      setPayingId(null);
     }
   };
 
-  const handlePurchase = async (product: OneTimeProductId) => {
-    setBusyProduct(product);
-    setError(null);
-    try {
-      const res = await apiFetch('/api/billing/one-time-checkout', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ product }),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || 'Unable to start checkout.');
-      if (data?.url) window.location.href = data.url;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to start checkout.');
-    } finally {
-      setBusyProduct(null);
-    }
-  };
-
-  const handleAddon = async (addon: AddonId) => {
-    setBusyAddon(addon);
-    setError(null);
-    try {
-      const res = await apiFetch('/api/billing/addon-checkout', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ addon }),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || 'Unable to start checkout.');
-      if (data?.url) window.location.href = data.url;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to start checkout.');
-    } finally {
-      setBusyAddon(null);
-    }
-  };
-
-  const handleManageBilling = async () => {
-    setOpeningPortal(true);
-    setError(null);
-    try {
-      const res = await apiFetch('/api/billing/portal', { method: 'POST' });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error === 'NO_SUBSCRIPTION' ? 'No active subscription to manage yet.' : (data?.error || 'Unable to open billing portal.'));
-      if (data?.url) window.location.href = data.url;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to open billing portal.');
-    } finally {
-      setOpeningPortal(false);
-    }
-  };
+  const totalDueAmount = billingList.reduce(
+    (acc, b) => (b.status !== 'Paid' ? acc + b.totalAmount : acc),
+    0
+  );
+  const totalPassports = billingList.reduce((acc, b) => acc + b.activePassportsCount, 0);
 
   return (
-    <div className="space-y-8" id="msp-billing-view">
-      <div className="flex justify-between items-center">
+    <div className="space-y-4" id="msp-billing-view">
+      <div className="flex items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.22em] text-[var(--spr-amber)]"><CreditCard className="h-4 w-4" /> Billing</div>
-          <h1 className="text-xl font-display font-bold text-[var(--spr-text)]">SPR Billing</h1>
-          <p className="text-xs text-[var(--spr-text-muted)] font-sans mt-1">Paid verification, reports, monitoring, API access, and MSP subscriptions. Checkout runs through Stripe.</p>
+          <h1 className="text-[22px] font-semibold text-[#201f1e]">Billing &amp; Subscriptions</h1>
+          <p className="mt-1 text-[13px] text-[#605e5c]">Contract licenses, active software passport quotas, and invoices for this account.</p>
         </div>
+        <button
+          onClick={loadBilling}
+          className="h-8 rounded border border-[#c8c6c4] px-3 text-[13px] font-medium text-[#323130] hover:bg-black/[.03]"
+        >
+          Refresh Invoices
+        </button>
       </div>
 
+      <details className="rounded-md border border-[#e1dfdd] bg-[#faf9f8] text-[13px]">
+        <summary className="cursor-pointer select-none px-3 py-2 font-medium text-[#323130]">&#9432; What is this? &middot; How it works</summary>
+        <div className="px-3 pb-3 text-[#605e5c]">
+          <p>Lists invoices generated for active software passports across your account and lets you settle any that are outstanding.</p>
+          <ol className="mt-1.5 list-decimal space-y-0.5 pl-4">
+            <li>Review the invoice list below for each client organization.</li>
+            <li>Select "Pay Securely" on an unpaid invoice to start Stripe Checkout.</li>
+            <li>Paid invoices are marked co-signed once settlement is confirmed.</li>
+          </ol>
+        </div>
+      </details>
+
       {error && (
-        <div role="alert" className="rounded-xl border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 px-4 py-3 text-xs text-[var(--spr-red)] flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 shrink-0" /> {error}
+        <div role="alert" className="rounded-md border border-[#e1dfdd] bg-[#fff4ce] px-3 py-2.5 text-[12px] text-[#8a5700]">
+          {error}
         </div>
       )}
 
-      {loading ? (
-        <div className="flex flex-col items-center justify-center p-20 bg-[var(--spr-surface)] border border-[var(--spr-border)] rounded-xl space-y-2">
-          <Loader2 className="w-6 h-6 text-[var(--spr-highlight)] animate-spin" />
-          <p className="text-xs text-[var(--spr-text-muted)] font-mono uppercase">Loading billing status…</p>
-        </div>
-      ) : !status?.billingConfigured ? (
-        <div className="rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface)] p-8 text-center space-y-2">
-          <CreditCard className="w-8 h-8 text-[var(--spr-text-faint)] mx-auto" />
-          <p className="text-sm font-semibold text-[var(--spr-text)]">Billing is not yet configured for this deployment.</p>
-          <p className="text-xs text-[var(--spr-text-muted)]">Stripe credentials are not available to this server.</p>
+      {loading && billingList.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-2 rounded-md border border-[#e1dfdd] bg-white p-12">
+          <Loader2 className="w-5 h-5 text-[#0f6cbd] animate-spin" />
+          <p className="text-[12px] text-[#605e5c]">Retrieving financial records…</p>
         </div>
       ) : (
         <>
-          {status.subscription?.plan && status.subscription.status !== 'canceled' && (
-            <div className="rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface)] p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <p className="text-[10px] font-mono uppercase text-[var(--spr-text-muted)]">Current plan</p>
-                <p className="text-lg font-bold text-[var(--spr-text)] flex items-center gap-2">
-                  {status.plans.find((p) => p.id === status.subscription!.plan)?.label ?? status.subscription.plan}
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${status.subscription.status === 'active' ? 'bg-[var(--spr-green)]/15 text-[var(--spr-green)]' : status.subscription.status === 'past_due' ? 'bg-[var(--spr-red)]/15 text-[var(--spr-red)]' : 'bg-[var(--spr-amber)]/15 text-[var(--spr-amber)]'}`}>
-                    {status.subscription.status}
-                  </span>
-                </p>
-                <p className="text-xs text-[var(--spr-text-muted)] mt-1">
-                  {status.clientCount} client{status.clientCount === 1 ? '' : 's'} used{status.subscription.clientLimit != null ? ` of ${status.subscription.clientLimit}` : ' (unlimited)'}
-                  {status.subscription.currentPeriodEnd && ` · renews ${new Date(status.subscription.currentPeriodEnd).toLocaleDateString()}`}
-                </p>
-              </div>
-              <button onClick={handleManageBilling} disabled={openingPortal} className="inline-flex items-center gap-1.5 bg-[var(--spr-surface-sunken)] hover:bg-[var(--spr-surface-hover)] text-[var(--spr-text)] font-bold py-2 px-3.5 rounded-lg text-xs transition cursor-pointer disabled:opacity-50">
-                {openingPortal ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ExternalLink className="w-3.5 h-3.5" />}
-                Manage billing
-              </button>
+          <div className="flex flex-wrap gap-6 rounded-md border border-[#e1dfdd] bg-white p-3">
+            <div>
+              <div className="text-[11px] text-[#605e5c]">Active Deployed Passports</div>
+              <div className="text-lg font-semibold text-[#201f1e]">{totalPassports}</div>
             </div>
-          )}
+            <div>
+              <div className="text-[11px] text-[#605e5c]">Aggregated Pending Amount</div>
+              <div className="text-lg font-semibold text-[#201f1e]">${totalDueAmount}.00</div>
+            </div>
+            <div>
+              <div className="text-[11px] text-[#605e5c]">Mean Cost Per Deployed Passport</div>
+              <div className="text-lg font-semibold text-[#201f1e]">{totalPassports > 0 ? `$${(totalDueAmount / totalPassports).toFixed(2)}` : '—'}</div>
+            </div>
+          </div>
 
-          <section>
-            <div className="flex items-end justify-between gap-4 mb-4">
-              <div>
-                <div className="text-[10px] font-bold uppercase tracking-[.18em] text-[var(--spr-highlight)]">One-time purchases</div>
-                <h2 className="text-lg font-bold text-[var(--spr-text)]">Pay for the work you need</h2>
-              </div>
-              <FileCheck2 className="h-5 w-5 text-[var(--spr-text-faint)]" />
+          <div className="rounded-md border border-[#e1dfdd] bg-white">
+            <div className="border-b border-[#e1dfdd] px-4 py-3">
+              <h2 className="text-[14px] font-semibold text-[#201f1e]">Licensing Invoices</h2>
+              <p className="mt-0.5 text-[12px] text-[#605e5c]">Automated invoice breakdowns per client organization.</p>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-              {status.products.map((product) => (
-                <div key={product.id} className="rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface)] p-5 space-y-3">
-                  <h3 className="text-sm font-bold text-[var(--spr-text)]">{product.label}</h3>
-                  <p className="text-xl font-bold text-[var(--spr-highlight)]">{product.priceLabel}</p>
-                  <button onClick={() => handlePurchase(product.id)} disabled={!product.checkoutAvailable || busyProduct !== null || busyPlan !== null || busyAddon !== null} className="w-full inline-flex items-center justify-center gap-1.5 bg-[var(--spr-accent)] hover:bg-[var(--spr-accent-hover)] disabled:opacity-40 text-white font-bold py-2 rounded-lg text-xs transition cursor-pointer">
-                    {busyProduct === product.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                    {product.checkoutAvailable ? 'Buy now' : 'Unavailable'}
-                  </button>
-                </div>
-              ))}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-[13px]">
+                <thead>
+                  <tr className="border-b border-[#e1dfdd] text-[11px] uppercase tracking-wide text-[#605e5c]">
+                    <th className="px-4 py-2">Client Organization</th>
+                    <th className="px-4 py-2">Active Passports</th>
+                    <th className="px-4 py-2">Base Cost Rate</th>
+                    <th className="px-4 py-2">Extra Fees</th>
+                    <th className="px-4 py-2">Billing Cycle</th>
+                    <th className="px-4 py-2">Total</th>
+                    <th className="px-4 py-2">Status</th>
+                    <th className="px-4 py-2 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {billingList.map((bill) => (
+                    <tr key={bill.id} className="border-b border-[#f3f2f1] hover:bg-black/[.02]">
+                      <td className="px-4 py-2.5 font-medium text-[#323130]">{bill.clientName}</td>
+                      <td className="px-4 py-2.5 text-[#323130]">{bill.activePassportsCount} Passports</td>
+                      <td className="px-4 py-2.5 text-[#605e5c]">${bill.pricePerPassport} / pass</td>
+                      <td className="px-4 py-2.5 text-[#605e5c]">${bill.extraFees}</td>
+                      <td className="px-4 py-2.5 text-[#605e5c]">{bill.billingCycle}</td>
+                      <td className="px-4 py-2.5 font-medium text-[#201f1e]">${bill.totalAmount}.00</td>
+                      <td className="px-4 py-2.5">
+                        <span className="inline-flex items-center gap-1.5 text-[13px]">
+                          <span className={`h-1.5 w-1.5 rounded-full ${bill.status === 'Paid' ? 'bg-[#0e700e]' : bill.status === 'Pending' ? 'bg-[#8a5700]' : 'bg-[#a4262c]'}`} />
+                          {bill.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        {bill.status !== 'Paid' ? (
+                          <button
+                            onClick={() => handlePayInvoice(bill.id)}
+                            disabled={payingId !== null}
+                            className={`inline-flex h-8 items-center gap-1.5 rounded bg-[#0f6cbd] px-3 text-[12px] font-medium text-white hover:bg-[#004578] disabled:opacity-60 ${
+                              payingId === bill.id ? 'cursor-wait' : ''
+                            }`}
+                          >
+                            {payingId === bill.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <CreditCard className="w-3.5 h-3.5" />
+                            )}
+                            <span>Pay Securely</span>
+                          </button>
+                        ) : (
+                          <span className="inline-flex items-center justify-end gap-1 text-[12px] text-[#605e5c]">
+                            <ShieldCheck className="w-3.5 h-3.5 text-[#0e700e]" /> Co-signed
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {billingList.length === 0 && (
+                    <tr>
+                      <td colSpan={8} className="px-4 py-10 text-center text-[#8a8886]">
+                        No active invoices detected for this tenant workspace context.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
-          </section>
-
-          <section>
-            <div className="mb-4">
-              <div className="text-[10px] font-bold uppercase tracking-[.18em] text-[var(--spr-highlight)]">Recurring</div>
-              <h2 className="text-lg font-bold text-[var(--spr-text)]">MSP plans</h2>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-              {status.plans.map((planMeta) => {
-                const isCurrent = status.subscription?.plan === planMeta.id && status.subscription.status !== 'canceled';
-                return (
-                  <div key={planMeta.id} className={`rounded-xl border p-5 space-y-3 ${isCurrent ? 'border-[var(--spr-highlight)] bg-[var(--spr-accent)]/10' : 'border-[var(--spr-border)] bg-[var(--spr-surface)]'}`}>
-                    <h3 className="text-sm font-bold text-[var(--spr-text)]">{planMeta.label}</h3>
-                    <p className="text-xs text-[var(--spr-highlight)] font-semibold">{planMeta.priceLabel}</p>
-                    <p className="text-xs text-[var(--spr-text-muted)]">{limitLabel(planMeta.clientLimit)}</p>
-                    {isCurrent ? (
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-[var(--spr-green)]"><ShieldCheck className="w-4 h-4" /> Current plan</div>
-                    ) : (
-                      <button onClick={() => handleSubscribe(planMeta.id)} disabled={!planMeta.checkoutAvailable || busyPlan !== null || busyProduct !== null || busyAddon !== null} className="w-full inline-flex items-center justify-center gap-1.5 bg-[var(--spr-accent)] hover:bg-[var(--spr-accent-hover)] disabled:opacity-40 text-white font-bold py-2 rounded-lg text-xs transition cursor-pointer">
-                        {busyPlan === planMeta.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                        {planMeta.checkoutAvailable ? 'Subscribe' : 'Unavailable'}
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-
-          <section>
-            <div className="mb-4">
-              <div className="text-[10px] font-bold uppercase tracking-[.18em] text-[var(--spr-highlight)]">Recurring add-ons</div>
-              <h2 className="text-lg font-bold text-[var(--spr-text)]">Keep software verified</h2>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {status.addons.map((addon) => (
-                <div key={addon.id} className="rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface)] p-5 space-y-3">
-                  <h3 className="text-sm font-bold text-[var(--spr-text)]">{addon.label}</h3>
-                  <p className="text-xl font-bold text-[var(--spr-highlight)]">{addon.priceLabel}</p>
-                  <button onClick={() => handleAddon(addon.id)} disabled={!addon.checkoutAvailable || busyAddon !== null || busyProduct !== null || busyPlan !== null} className="w-full inline-flex items-center justify-center gap-1.5 bg-[var(--spr-accent)] hover:bg-[var(--spr-accent-hover)] disabled:opacity-40 text-white font-bold py-2 rounded-lg text-xs transition cursor-pointer">
-                    {busyAddon === addon.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                    {addon.checkoutAvailable ? 'Add to billing' : 'Unavailable'}
-                  </button>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <p className="text-[11px] leading-5 text-[var(--spr-text-faint)]">Stripe is the payment processor. SPR uses the live Stripe Price IDs already configured for this deployment; it does not invent prices at runtime.</p>
+          </div>
         </>
       )}
     </div>

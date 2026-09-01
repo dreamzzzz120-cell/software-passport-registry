@@ -4,150 +4,29 @@
  */
 
 import { Router } from 'express';
-import crypto from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { users } from '../db/schema.ts';
-import { db } from '../db/index.ts';
-import { attachTenantScope } from '../middleware/tenant-scope.ts';
 import { AuthenticatedRequest, requireAuth, requireRole } from '../middleware/security.ts';
 import { adminAuth, setUserCustomClaims } from '../lib/firebase-admin.ts';
 import { appendAuditEntry, verifyAuditChain } from '../security/audit-log.ts';
 import { describeUserAgent, sessionFingerprint } from '../security/session-tracking.ts';
 import { offboardTenantData } from '../db/sync.ts';
-import { canCreateClient, PLAN_CONFIG } from './billing.ts';
-import { normalizeClientRecord, normalizeClientRecords, normalizePassportRecords } from '../lib/clientJsonColumns.ts';
-import { adaptEvidenceForEvaluation } from '../lib/verification/evidenceAdapter.ts';
-import { evaluateVerification } from '../lib/verification/evaluateVerification.ts';
-import { VERIFICATION_POLICY_VERSION } from '../lib/verification/verificationPolicy.ts';
-import { verifySlsaProvenance } from '../utils/slsa-verification.ts';
-import { calculateAndStoreTrustScore } from '../utils/scanner.ts';
+import { INTEGRATION_CATALOG } from '../integrations/catalog.ts';
 
 const INVITABLE_ROLES = ['Admin', 'Technician', 'Viewer', 'Client'] as const;
-// A 'Client'-role invite must name the one client it scopes to; every other
-// role must not carry a clientId (it would be meaningless -- those roles see
-// the whole tenant).
-const inviteSchema = z.object({ email: z.string().trim().email().max(255), role: z.enum(INVITABLE_ROLES), clientId: z.string().trim().min(1).max(255).nullable().optional() }).strict()
-  .refine((body) => (body.role === 'Client') === Boolean(body.clientId), { message: "clientId is required when role is 'Client', and must be omitted otherwise", path: ['clientId'] });
+const inviteSchema = z.object({ email: z.string().trim().email().max(255), role: z.enum(INVITABLE_ROLES) }).strict();
 const roleUpdateSchema = z.object({ role: z.enum(INVITABLE_ROLES) }).strict();
-const createClientSchema = z.object({
-  name: z.string().trim().min(1).max(200),
-  domain: z.string().trim().toLowerCase().min(1).max(255).regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/, 'domain must look like a real domain, e.g. acme.com'),
-  industry: z.string().trim().min(1).max(100),
-}).strict();
 const profileUpdateSchema = z.object({
   displayName: z.string().trim().max(200).optional(),
   roleTitle: z.string().trim().max(200).optional(),
   companyName: z.string().trim().max(200).optional(),
 }).strict();
 const revokeSessionSchema = z.object({ sessionId: z.string().trim().min(1).max(200) }).strict();
-// The raw in-toto/SLSA statement text and the digest the submitter claims for
-// it. hash is independently recomputed and compared server-side
-// (verifySlsaProvenance) -- it is never trusted on its own, matching the
-// self-report + independent re-verification pattern already used for
-// repository-integrity and signature evidence in src/utils/scanner.ts.
-const slsaProvenanceSchema = z.object({
-  statement: z.string().trim().min(1).max(2_000_000),
-  hash: z.string().trim().min(1).max(200),
-  signer: z.string().trim().max(200).optional(),
-}).strict();
-// 300KB base64 comfortably fits a small compressed logo (PNG/JPEG at
-// reasonable dimensions) while keeping a single UPDATE well under any
-// practical row-size or request-body concern.
-const brandingSchema = z.object({
-  companyName: z.string().trim().max(200).nullable().optional(),
-  brandColor: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/, 'brandColor must be a #rrggbb hex color').nullable().optional(),
-  logoDataUrl: z.string().trim().max(300_000).regex(/^data:image\/(png|jpeg|jpg|svg\+xml|webp);base64,/, 'logoDataUrl must be a base64 image data URL').nullable().optional(),
-}).strict();
 
 export function createAuthRouter() {
   const router = Router();
-
-  // Self-service workspace creation. A Firebase account with a verified email
-  // and no SPR membership gets its own new, empty workspace and becomes its
-  // Owner.
-  //
-  // Without this the funnel dead-ended: LoginView's "Create account" button
-  // already creates a Firebase user and sends a verification email, but
-  // nothing ever provisioned an SPR row for it, so every endpoint answered
-  // 403 'User account is not provisioned'. Invites could not close the gap
-  // either -- POST /organization/invite writes the INVITER's tenant, so it
-  // adds members to an existing workspace and can never create a new one.
-  // The only other tenant-minting path, the initial-owner bootstrap, refuses
-  // once any Owner exists. The product therefore had no way to admit a second
-  // customer at all.
-  //
-  // This route deliberately does NOT use requireAuth: requireAuth's job is to
-  // reject a caller with no SPR user row, which is exactly the caller this
-  // route exists to serve. The Firebase ID token is still verified with the
-  // same adminAuth.verifyIdToken(token, true) call requireAuth uses, so
-  // authentication is unchanged -- only the authorization outcome differs.
-  //
-  // Three invariants keep it from becoming an access-control hole:
-  //   1. email_verified must be true, so an unverified address can neither
-  //      mint a workspace nor squat on one.
-  //   2. An existing membership always wins. This never moves a user between
-  //      tenants and never joins an existing one, so an invited user keeps
-  //      the workspace that invited them and no one can self-serve their way
-  //      into somebody else's data.
-  //   3. The insert is ON CONFLICT (uid) DO NOTHING against the users_uid_key
-  //      unique index, so two concurrent sign-ins cannot mint two workspaces
-  //      for one identity.
-  router.post('/auth/workspace', async (req, res, next) => {
-    try {
-      const header = req.headers.authorization;
-      const token = header?.startsWith('Bearer ') ? header.slice(7).trim() : '';
-      if (!token || token.length > 8192) return res.status(401).json({ error: 'Unauthorized: Missing or invalid authorization token' });
-
-      let decoded;
-      try {
-        decoded = await adminAuth.verifyIdToken(token, true);
-      } catch {
-        return res.status(401).json({ error: 'Unauthorized: Invalid or expired security token' });
-      }
-
-      const uid = decoded.uid;
-      if (!uid || typeof uid !== 'string' || uid.length > 256) return res.status(401).json({ error: 'Unauthorized: Invalid security token' });
-      if (decoded.email_verified !== true) return res.status(403).json({ error: 'Verify your email address before creating a workspace.', code: 'EMAIL_NOT_VERIFIED' });
-      const email = typeof decoded.email === 'string' ? decoded.email.trim().toLowerCase() : '';
-      if (!email || email.length > 255) return res.status(400).json({ error: 'A verified email address is required.' });
-
-      const existing = await db.select({ tenantId: users.tenantId, role: users.role }).from(users).where(eq(users.uid, uid)).then(rows => rows[0]);
-      if (existing) return res.status(200).json({ tenantId: existing.tenantId, role: existing.role, created: false });
-
-      const tenantId = `tenant-${crypto.randomUUID()}`;
-      const inserted = await db.execute(sql`
-        INSERT INTO users (uid, email, tenant_id, role, onboarded)
-        VALUES (${uid}, ${email}, ${tenantId}, 'Owner', 0)
-        ON CONFLICT (uid) DO NOTHING
-        RETURNING id, tenant_id AS "tenantId", role
-      `);
-      const created = (inserted as any).rows?.[0];
-      if (!created) {
-        // Lost the race with a concurrent sign-in. That request created the
-        // workspace, so report its result instead of minting a second one.
-        const settled = await db.select({ tenantId: users.tenantId, role: users.role }).from(users).where(eq(users.uid, uid)).then(rows => rows[0]);
-        if (!settled) return res.status(409).json({ error: 'Workspace creation could not be completed. Sign in again.' });
-        return res.status(200).json({ tenantId: settled.tenantId, role: settled.role, created: false });
-      }
-
-      // Claims are a client-side convenience only: requireAuth re-reads the
-      // persisted role and tenant on every request and never trusts them.
-      await setUserCustomClaims(uid, { workspaceId: tenantId, role: 'Owner', clientId: null });
-
-      // Bind app.user_id as well as app.tenant_id: migration 0052 and the
-      // organization provisioning path both read it, so the scope this audit
-      // write runs under must match what every other authenticated request
-      // establishes.
-      const scoped = await attachTenantScope(tenantId, res, Number(created.id));
-      await appendAuditEntry(scoped, { tenantId, action: 'workspace.created', actor: email, payload: { via: 'self-service-signup' } });
-
-      return res.status(201).json({ tenantId, role: 'Owner', created: true });
-    } catch (error) {
-      return next(error);
-    }
-  });
 
   // The Firebase ID token is the sole authentication authority. The database
   // record supplies the tenant/RBAC projection after token verification.
@@ -213,48 +92,6 @@ export function createAuthRouter() {
     }
   });
 
-  // Persistent white-label branding (migration 0030). This is display
-  // packaging only -- it never touches scoring, evidence, or which report
-  // data is included; ReportsView's white-label export already only uses a
-  // client's real, already-loaded software inventory and scores.
-  router.get('/organization/branding', requireAuth, async (req: AuthenticatedRequest, res, next) => {
-    try {
-      const db = req.db!;
-      const result = await db.execute(sql`
-        SELECT company_name AS "companyName", brand_color AS "brandColor", logo_data_url AS "logoDataUrl", updated_at AS "updatedAt"
-        FROM tenant_branding WHERE tenant_id = ${req.user!.tenantId} LIMIT 1
-      `);
-      const row = (result as any).rows?.[0];
-      return res.json(row ?? { companyName: null, brandColor: null, logoDataUrl: null, updatedAt: null });
-    } catch (error) {
-      return next(error);
-    }
-  });
-
-  router.put('/organization/branding', requireAuth, requireRole(['Owner', 'Admin']), async (req: AuthenticatedRequest, res, next) => {
-    try {
-      const db = req.db!;
-      const parsed = brandingSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
-      const tenantId = req.user!.tenantId;
-      const result = await db.execute(sql`
-        INSERT INTO tenant_branding (tenant_id, company_name, brand_color, logo_data_url, updated_at, updated_by)
-        VALUES (${tenantId}, ${parsed.data.companyName ?? null}, ${parsed.data.brandColor ?? null}, ${parsed.data.logoDataUrl ?? null}, CURRENT_TIMESTAMP, ${req.user!.email})
-        ON CONFLICT (tenant_id) DO UPDATE SET
-          company_name = EXCLUDED.company_name,
-          brand_color = EXCLUDED.brand_color,
-          logo_data_url = EXCLUDED.logo_data_url,
-          updated_at = EXCLUDED.updated_at,
-          updated_by = EXCLUDED.updated_by
-        RETURNING company_name AS "companyName", brand_color AS "brandColor", logo_data_url AS "logoDataUrl", updated_at AS "updatedAt"
-      `);
-      await appendAuditEntry(db, { tenantId, action: 'branding.updated', actor: req.user!.email, payload: {} });
-      return res.json((result as any).rows?.[0]);
-    } catch (error) {
-      return next(error);
-    }
-  });
-
   router.post('/organization/invite', requireAuth, requireRole(['Owner', 'Admin']), async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
@@ -265,17 +102,6 @@ export function createAuthRouter() {
       const existing = await db.execute(sql`SELECT id FROM users WHERE tenant_id = ${req.user!.tenantId} AND lower(btrim(email)) = ${email} LIMIT 1`);
       if ((existing as any).rows?.length) return res.status(409).json({ error: 'This email is already a member of your workspace.' });
 
-      // A 'Client'-role invite must name a client that actually belongs to
-      // this tenant -- never trust a client id supplied in the request body
-      // without verifying tenant ownership first (the same class of check
-      // migration 0025's customer-mapping route already applies).
-      let clientId: string | null = null;
-      if (parsed.data.role === 'Client') {
-        const client = await db.execute(sql`SELECT id FROM clients WHERE id = ${parsed.data.clientId} AND tenant_id = ${req.user!.tenantId} LIMIT 1`);
-        if (!(client as any).rows?.length) return res.status(404).json({ error: 'Client not found in this workspace.' });
-        clientId = parsed.data.clientId!;
-      }
-
       let firebaseUser;
       try {
         firebaseUser = await adminAuth.getUserByEmail(email);
@@ -284,16 +110,16 @@ export function createAuthRouter() {
       }
 
       const inserted = await db.execute(sql`
-        INSERT INTO users (uid, email, tenant_id, role, client_id, invited_by, onboarded)
-        VALUES (${firebaseUser.uid}, ${email}, ${req.user!.tenantId}, ${parsed.data.role}, ${clientId}, ${req.user!.email}, 0)
-        RETURNING id, email, role, client_id AS "clientId"
+        INSERT INTO users (uid, email, tenant_id, role, invited_by, onboarded)
+        VALUES (${firebaseUser.uid}, ${email}, ${req.user!.tenantId}, ${parsed.data.role}, ${req.user!.email}, 0)
+        RETURNING id, email, role
       `);
-      await setUserCustomClaims(firebaseUser.uid, { workspaceId: req.user!.tenantId, role: parsed.data.role, clientId });
+      await setUserCustomClaims(firebaseUser.uid, { workspaceId: req.user!.tenantId, role: parsed.data.role });
 
       let inviteLink: string | null = null;
       try { inviteLink = await adminAuth.generatePasswordResetLink(email); } catch { inviteLink = null; }
 
-      await appendAuditEntry(db, { tenantId: req.user!.tenantId, action: 'team.invited', actor: req.user!.email, payload: { invitedEmail: email, role: parsed.data.role, clientId } });
+      await appendAuditEntry(db, { tenantId: req.user!.tenantId, action: 'team.invited', actor: req.user!.email, payload: { invitedEmail: email, role: parsed.data.role } });
       return res.status(201).json({ ...(inserted as any).rows?.[0], inviteLink });
     } catch (error) {
       return next(error);
@@ -503,6 +329,112 @@ export function createAuthRouter() {
     }
   });
 
+  // Owner-only operational health for the command center. Every section reads
+  // from the real tables the corresponding subsystem already writes -- no
+  // second heartbeat, delivery ledger, integration status, or audit verifier
+  // is created here. Sections with no real backing data are omitted rather
+  // than populated with placeholder values; see the `notes` field.
+  router.get('/founder/operations', requireAuth, requireRole('Owner'), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const notes: string[] = [];
+
+      // --- A. Worker/job health ---------------------------------------------
+      // osv-worker.ts claims agent_jobs rows (job_type osv_manifest_scan /
+      // repository_scan). It has no separate heartbeat row; the queue state
+      // itself (locked_at/locked_by, the same 10-minute staleness window the
+      // worker uses to reclaim stuck jobs) is the real signal.
+      const [osvCounts, osvStale, osvFailures, osvActivity] = await Promise.all([
+        db.execute(sql`SELECT job_type AS "jobType", status, COUNT(*)::int AS count FROM agent_jobs WHERE tenant_id=${tenantId} AND job_type IN ('osv_manifest_scan','repository_scan') GROUP BY job_type, status`),
+        db.execute(sql`SELECT COUNT(*)::int AS count FROM agent_jobs WHERE tenant_id=${tenantId} AND job_type IN ('osv_manifest_scan','repository_scan') AND status='Running' AND locked_at < NOW() - INTERVAL '10 minutes'`),
+        db.execute(sql`SELECT id, job_type AS "jobType", error, attempt_count AS "attemptCount", max_attempts AS "maxAttempts", updated_at AS "updatedAt" FROM agent_jobs WHERE tenant_id=${tenantId} AND job_type IN ('osv_manifest_scan','repository_scan') AND status='Failed' ORDER BY updated_at DESC LIMIT 5`),
+        db.execute(sql`SELECT MAX(updated_at) AS "lastActivityAt" FROM agent_jobs WHERE tenant_id=${tenantId} AND job_type IN ('osv_manifest_scan','repository_scan')`),
+      ]);
+
+      // monitoring-worker.ts (the file name this dashboard's spec named) is not
+      // imported by worker.ts and never runs in production -- confirmed dead
+      // code, not a running system. trust-monitoring-worker.ts is the real,
+      // currently-running system that plays the equivalent role (collector_jobs
+      // has an actual heartbeat_at column, unlike agent_jobs).
+      const [monitoringCounts, monitoringHeartbeat, monitoringFailures] = await Promise.all([
+        db.execute(sql`SELECT state, COUNT(*)::int AS count FROM collector_jobs WHERE tenant_id=${tenantId} GROUP BY state`),
+        db.execute(sql`SELECT MAX(heartbeat_at) AS "lastHeartbeatAt" FROM collector_jobs WHERE tenant_id=${tenantId} AND state='running'`),
+        db.execute(sql`SELECT id, collector_id AS "collectorId", safe_error_code AS "errorCode", safe_error_message AS "errorMessage", completed_at AS "completedAt" FROM collector_jobs WHERE tenant_id=${tenantId} AND state IN ('failed','dead_lettered') ORDER BY completed_at DESC NULLS LAST LIMIT 5`),
+      ]);
+      notes.push('monitoring-worker.ts is dead code (never imported by worker.ts); "monitoringWorker" below reflects trust-monitoring-worker.ts, the real running system for the same role.');
+
+      // --- B. Webhook delivery health ----------------------------------------
+      const [webhookCounts, webhookEndpoints, webhookFailures] = await Promise.all([
+        db.execute(sql`SELECT status, COUNT(*)::int AS count FROM spr_webhook_deliveries WHERE tenant_id=${tenantId} AND created_at::timestamptz > NOW() - INTERVAL '7 days' GROUP BY status`),
+        db.execute(sql`SELECT COUNT(*) FILTER (WHERE active)::int AS "activeCount", COUNT(*) FILTER (WHERE NOT active)::int AS "disabledCount" FROM spr_webhooks WHERE tenant_id=${tenantId}`),
+        db.execute(sql`SELECT d.id, d.webhook_id AS "webhookId", w.url, d.event_type AS "eventType", d.safe_error_code AS "errorCode", d.safe_error_message AS "errorMessage", d.completed_at AS "completedAt" FROM spr_webhook_deliveries d JOIN spr_webhooks w ON w.id=d.webhook_id AND w.tenant_id=d.tenant_id WHERE d.tenant_id=${tenantId} AND d.status IN ('failed','dead_lettered') ORDER BY d.completed_at DESC NULLS LAST LIMIT 10`),
+      ]);
+      notes.push('Webhook failures are grouped by destination endpoint (webhookId/url), not "provider" -- SPR webhooks are user-configured destination URLs, not third-party provider connectors; there is no per-provider concept for outbound deliveries.');
+
+      // --- C. Integration health ----------------------------------------------
+      const [credentialRows, integrationRows] = await Promise.all([
+        db.execute(sql`SELECT provider, status, last_tested_at AS "lastTestedAt" FROM integration_credentials WHERE tenant_id=${tenantId}`),
+        db.execute(sql`SELECT name, connected, last_sync_date AS "lastSyncDate" FROM integrations WHERE tenant_id=${tenantId}`),
+      ]);
+      const credentialByProvider = new Map<string, any>((credentialRows as any).rows?.map((r: any) => [r.provider, r]) ?? []);
+      const integrationByName = new Map<string, any>((integrationRows as any).rows?.map((r: any) => [r.name, r]) ?? []);
+      const integrations = INTEGRATION_CATALOG.map((item) => ({
+        provider: item.provider,
+        name: item.name,
+        connected: Boolean(integrationByName.get(item.name)?.connected),
+        lastSyncDate: integrationByName.get(item.name)?.lastSyncDate ?? null,
+        credentialStatus: credentialByProvider.get(item.provider)?.status ?? 'NOT_CONFIGURED',
+        lastTestedAt: credentialByProvider.get(item.provider)?.lastTestedAt ?? null,
+      }));
+
+      // --- D. Audit chain integrity --------------------------------------------
+      // Reuses the exact function GET /api/auth/audit-chain/verify calls --
+      // no second verifier.
+      const auditChain = await verifyAuditChain(db, tenantId);
+
+      // --- E. Scan / job queue --------------------------------------------------
+      const [runningRepoScans, complianceSchedules] = await Promise.all([
+        db.execute(sql`SELECT id, passport_id AS "passportId", status, progress, updated_at AS "updatedAt" FROM agent_jobs WHERE tenant_id=${tenantId} AND job_type='repository_scan' AND status='Running' ORDER BY updated_at DESC LIMIT 10`),
+        db.execute(sql`SELECT id, client_id AS "clientId", frequency, status, last_audit_at AS "lastAuditAt", next_audit_at AS "nextAuditAt" FROM compliance_schedules WHERE tenant_id=${tenantId} ORDER BY COALESCE(last_audit_at, created_at) DESC LIMIT 10`),
+      ]);
+
+      return res.json({
+        generatedAt: new Date().toISOString(),
+        workers: {
+          osv: {
+            countsByStatus: (osvCounts as any).rows ?? [],
+            staleRunningCount: Number((osvStale as any).rows?.[0]?.count ?? 0),
+            recentFailures: (osvFailures as any).rows ?? [],
+            lastActivityAt: (osvActivity as any).rows?.[0]?.lastActivityAt ?? null,
+          },
+          monitoringWorker: {
+            realSource: 'trust-monitoring-worker.ts (collector_jobs)',
+            countsByState: (monitoringCounts as any).rows ?? [],
+            lastHeartbeatAt: (monitoringHeartbeat as any).rows?.[0]?.lastHeartbeatAt ?? null,
+            recentFailures: (monitoringFailures as any).rows ?? [],
+          },
+        },
+        webhooks: {
+          countsByStatusLast7Days: (webhookCounts as any).rows ?? [],
+          activeEndpoints: Number((webhookEndpoints as any).rows?.[0]?.activeCount ?? 0),
+          disabledEndpoints: Number((webhookEndpoints as any).rows?.[0]?.disabledCount ?? 0),
+          recentFailures: (webhookFailures as any).rows ?? [],
+        },
+        integrations,
+        auditChain,
+        queue: {
+          runningRepositoryScans: (runningRepoScans as any).rows ?? [],
+          recentlyFailedJobs: (osvFailures as any).rows ?? [],
+          complianceSchedules: (complianceSchedules as any).rows ?? [],
+        },
+        notes,
+      });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
   // Owner-only self-passport retrieval. Absence of evidence is represented as
   // a 404 instead of a fabricated passport or trust score.
   router.get('/passports/self-passport', requireAuth, requireRole('Owner'), async (req: AuthenticatedRequest, res, next) => {
@@ -539,307 +471,18 @@ export function createAuthRouter() {
   router.get('/user/clients', requireAuth, async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
-      // A 'Client'-role user is scoped to exactly the one client they were
-      // invited under -- they see a list of one, not the MSP's full roster.
-      // Every other role is unrestricted at the client level (tenant RLS is
-      // still the structural backstop either way).
-      const clientScope = req.user!.role === 'Client' ? req.user!.clientId : null;
-      const result = await db.execute(sql`
-        SELECT id, name, domain, industry, trust_score AS "trustScore", risk_level AS "riskLevel", avatar_color AS "avatarColor", subscription_tier AS "subscriptionTier", joined_date AS "joinedDate", team_count AS "teamCount", passport_count AS "passportCount", critical_risks_count AS "criticalRisksCount", compliance_progress AS "complianceProgress", software_inventory AS "softwareInventory", compliance_status AS "complianceStatus", team_members AS "teamMembers", activity_timeline AS "activityTimeline"
-        FROM clients
-        WHERE tenant_id=${req.user!.tenantId} AND (${clientScope}::text IS NULL OR id = ${clientScope})
-        ORDER BY joined_date DESC
-      `);
-      // software_inventory/compliance_status/team_members/activity_timeline
-      // are JSON-stringified TEXT columns. Parse them here so the response
-      // matches the Client type the browser is written against, instead of
-      // shipping raw JSON strings that array methods then blow up on.
-      return res.json(normalizeClientRecords((result as any).rows || []));
+      const result = await db.execute(sql`SELECT id, name, domain, industry, trust_score AS "trustScore", risk_level AS "riskLevel", avatar_color AS "avatarColor", subscription_tier AS "subscriptionTier", joined_date AS "joinedDate", team_count AS "teamCount", passport_count AS "passportCount", critical_risks_count AS "criticalRisksCount", compliance_progress AS "complianceProgress", software_inventory AS "softwareInventory", compliance_status AS "complianceStatus", team_members AS "teamMembers", activity_timeline AS "activityTimeline" FROM clients WHERE tenant_id=${req.user!.tenantId} ORDER BY joined_date DESC`);
+      return res.json((result as any).rows || []);
     } catch (error) {
       return next(error);
     }
-  });
-
-  router.post('/user/clients', requireAuth, requireRole(['Owner', 'Admin']), async (req: AuthenticatedRequest, res, next) => {
-    try {
-      const db = req.db!;
-      const parsed = createClientSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
-      const tenantId = req.user!.tenantId;
-
-      // Entitlement check: informational/fast-fail only. The real,
-      // concurrency-safe enforcement is the spr_client_limit_guard DB
-      // trigger (migration 0043) on the INSERT below -- this check exists
-      // so a normal single request gets the full, honest "what/limit/
-      // usage/upgrade" response the spec requires instead of a bare 500
-      // from the trigger, not to replace the trigger.
-      const entitlement = await canCreateClient(tenantId, db);
-      if (!entitlement.allowed) {
-        await appendAuditEntry(db, { tenantId, action: 'billing.limit.reached', actor: req.user!.email, payload: { capability: 'client_creation', plan: entitlement.plan, clientLimit: entitlement.clientLimit, clientCount: entitlement.clientCount } });
-        return res.status(402).json({
-          error: 'CLIENT_LIMIT_REACHED',
-          message: `You've reached your ${entitlement.plan ? PLAN_CONFIG[entitlement.plan].label : 'current'} plan's Client limit.`,
-          currentUsage: entitlement.clientCount,
-          limit: entitlement.clientLimit,
-          plan: entitlement.plan,
-          upgradeTo: entitlement.nextPlan ? { id: entitlement.nextPlan, ...PLAN_CONFIG[entitlement.nextPlan] } : null,
-        });
-      }
-
-      const newId = `client_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
-      let inserted;
-      try {
-        inserted = await db.execute(sql`
-          INSERT INTO clients (id, tenant_id, name, domain, industry, joined_date)
-          VALUES (${newId}, ${tenantId}, ${parsed.data.name}, ${parsed.data.domain}, ${parsed.data.industry}, ${new Date().toISOString()})
-          RETURNING id, name, domain, industry, trust_score AS "trustScore", risk_level AS "riskLevel", avatar_color AS "avatarColor", subscription_tier AS "subscriptionTier", joined_date AS "joinedDate", team_count AS "teamCount", passport_count AS "passportCount", critical_risks_count AS "criticalRisksCount", compliance_progress AS "complianceProgress", software_inventory AS "softwareInventory", compliance_status AS "complianceStatus", team_members AS "teamMembers", activity_timeline AS "activityTimeline"
-        `);
-      } catch (error: any) {
-        // Real unique constraint (migration 0032), not just an app-level
-        // pre-check -- closes the race where two concurrent creates for the
-        // same domain could otherwise both succeed. db.execute wraps the
-        // real pg error in a DrizzleQueryError, so the actual code lives at
-        // error.cause.code, not error.code -- this check never matched
-        // (confirmed live: a duplicate domain 500'd instead of 409ing).
-        if (error?.code === '23505' || error?.cause?.code === '23505') return res.status(409).json({ error: 'A client with this domain already exists in your workspace.' });
-        // The spr_client_limit_guard trigger (migration 0043) raises this
-        // exact message when a race lets two concurrent requests both pass
-        // the check above -- the second one is correctly rejected here,
-        // not silently allowed past its plan's real limit.
-        if (error?.message?.includes('CLIENT_LIMIT_REACHED') || error?.cause?.message?.includes('CLIENT_LIMIT_REACHED')) {
-          return res.status(402).json({ error: 'CLIENT_LIMIT_REACHED', message: 'Your plan\'s Client limit was reached by a concurrent request.' });
-        }
-        throw error;
-      }
-      const row = (inserted as any).rows?.[0];
-      await appendAuditEntry(db, { tenantId, action: 'client.created', actor: req.user!.email, payload: { clientId: row.id, name: row.name, domain: row.domain } });
-      // Same JSON-array columns as the list route above: a newly created
-      // client is rendered by the same components, so it must arrive in the
-      // same canonical shape.
-      return res.status(201).json(normalizeClientRecord(row));
-    } catch (error) {
-      return next(error);
-    }
-  });
-
-  // The authoritative verification decision for one passport.
-  //
-  // This is the single place a verification decision is produced for any
-  // surface: the dashboard, Passport view, Evidence Explorer and PDF are all
-  // expected to consume this rather than recomputing anything. Presentation
-  // may format the result; it may not reinterpret it.
-  //
-  // Tenant-scoped through req.db (attachTenantScope) and filtered explicitly
-  // by tenant_id, so one tenant's evidence can never influence another's
-  // decision. A 'Client'-role user stays restricted to their own client's
-  // passports, exactly as GET /user/passports does.
-  router.get('/user/passports/:id/verification', requireAuth, async (req: AuthenticatedRequest, res, next) => {
-    try {
-      const db = req.db!;
-      const tenantId = req.user!.tenantId;
-      const clientScope = req.user!.role === 'Client' ? req.user!.clientId : null;
-      const passportId = String(req.params.id);
-
-      const passport = (await db.execute(sql`
-        SELECT id, name, version, publisher, verification_status AS "verificationStatus"
-        FROM passports
-        WHERE id=${passportId} AND tenant_id=${tenantId}
-          AND (${clientScope}::text IS NULL OR client_id = ${clientScope})
-        LIMIT 1
-      `) as any).rows?.[0];
-      // Same not-found response whether the passport is absent or belongs to
-      // another tenant, so this cannot be used to probe for existence.
-      if (!passport) return res.status(404).json({ error: 'Passport not found' });
-
-      const evidenceRows = (await db.execute(sql`
-        SELECT id, name, type, status, signer, timestamp, hash, engine_id AS "engineId"
-        FROM evidence_items
-        WHERE tenant_id=${tenantId} AND asset_id=${passportId}
-      `) as any).rows || [];
-
-      // Open findings mark their evidence as adverse so the evaluator can
-      // return INVESTIGATE rather than quietly verifying around them.
-      const openFindings = (await db.execute(sql`
-        SELECT id FROM scan_findings
-        WHERE tenant_id=${tenantId} AND asset_id=${passportId}
-          AND lower(status) NOT IN ('resolved','closed','verified')
-      `) as any).rows || [];
-
-      const adapted = adaptEvidenceForEvaluation({
-        evidence: evidenceRows,
-        passportVersion: passport.version,
-        openFindingEvidenceIds: openFindings.map((row: any) => String(row.id)),
-      });
-
-      const decision = evaluateVerification({
-        evidence: adapted.evidence,
-        evaluatedAt: Date.now(),
-        targetIdentity: adapted.targetIdentity,
-      });
-
-      res.setHeader('cache-control', 'private, max-age=0, no-store');
-      return res.json({
-        passport: { id: passport.id, name: passport.name, version: passport.version, publisher: passport.publisher },
-        decision,
-        // Observation count is reported separately from unique evidence and
-        // independent sources so repeated scans can never read as verification.
-        counts: {
-          observations: evidenceRows.length,
-          uniqueEvidence: decision.uniqueEvidenceCount,
-          independentSources: decision.independentSourceCount,
-          unmappedRecords: adapted.unmappedCount,
-          undatedRecords: adapted.undatedCount,
-        },
-      });
-    } catch (error) { return next(error); }
-  });
-
-  // Batch verification for every passport visible to the caller.
-  //
-  // A thin orchestration layer only: it batches retrieval and then calls the
-  // SAME evidenceAdapter and evaluateVerification per passport. It contains
-  // no verification logic of its own, so it cannot become a second evaluator.
-  //
-  // Three queries total regardless of passport count - passports, then all
-  // their evidence, then all their open findings - grouped in memory. This
-  // exists specifically so grid surfaces (MSP Command Center) never call the
-  // single-passport endpoint once per row.
-  router.get('/user/verification', requireAuth, async (req: AuthenticatedRequest, res, next) => {
-    try {
-      const db = req.db!;
-      const tenantId = req.user!.tenantId;
-      const clientScope = req.user!.role === 'Client' ? req.user!.clientId : null;
-
-      const passports = (await db.execute(sql`
-        SELECT id, name, version, publisher FROM passports
-        WHERE tenant_id=${tenantId} AND (${clientScope}::text IS NULL OR client_id = ${clientScope})
-        ORDER BY name ASC
-      `) as any).rows || [];
-      if (passports.length === 0) return res.json({ policyVersion: VERIFICATION_POLICY_VERSION, decisions: [] });
-
-      const passportIds = passports.map((row: any) => String(row.id));
-      // Tenant filter stays on every query; ids are additionally constrained
-      // to the set already proven visible above.
-      const evidenceRows = (await db.execute(sql`
-        SELECT id, asset_id AS "assetId", name, type, status, signer, timestamp, hash, engine_id AS "engineId"
-        FROM evidence_items
-        WHERE tenant_id=${tenantId} AND asset_id IN ${passportIds}
-      `) as any).rows || [];
-      const openFindings = (await db.execute(sql`
-        SELECT id, asset_id AS "assetId" FROM scan_findings
-        WHERE tenant_id=${tenantId} AND asset_id IN ${passportIds}
-          AND lower(status) NOT IN ('resolved','closed','verified')
-      `) as any).rows || [];
-
-      const evidenceByPassport = new Map<string, any[]>();
-      for (const row of evidenceRows) {
-        const key = String(row.assetId);
-        if (!evidenceByPassport.has(key)) evidenceByPassport.set(key, []);
-        evidenceByPassport.get(key)!.push(row);
-      }
-      const findingsByPassport = new Map<string, string[]>();
-      for (const row of openFindings) {
-        const key = String(row.assetId);
-        if (!findingsByPassport.has(key)) findingsByPassport.set(key, []);
-        findingsByPassport.get(key)!.push(String(row.id));
-      }
-
-      // One evaluation instant for the whole batch keeps freshness consistent
-      // across every passport in a single response.
-      const evaluatedAt = Date.now();
-      const decisions = passports.map((passport: any) => {
-        const adapted = adaptEvidenceForEvaluation({
-          evidence: evidenceByPassport.get(String(passport.id)) || [],
-          passportVersion: passport.version,
-          openFindingEvidenceIds: findingsByPassport.get(String(passport.id)) || [],
-        });
-        const decision = evaluateVerification({ evidence: adapted.evidence, evaluatedAt, targetIdentity: adapted.targetIdentity });
-        return {
-          passportId: String(passport.id),
-          name: passport.name,
-          decision,
-          counts: {
-            observations: (evidenceByPassport.get(String(passport.id)) || []).length,
-            uniqueEvidence: decision.uniqueEvidenceCount,
-            independentSources: decision.independentSourceCount,
-          },
-        };
-      });
-
-      res.setHeader('cache-control', 'private, max-age=0, no-store');
-      return res.json({ policyVersion: VERIFICATION_POLICY_VERSION, evaluatedAt, decisions });
-    } catch (error) { return next(error); }
   });
 
   router.get('/user/passports', requireAuth, async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
-      // Mirrors GET /user/clients: a 'Client'-role user only sees passports
-      // belonging to their own client, not the MSP's whole portfolio.
-      const clientScope = req.user!.role === 'Client' ? req.user!.clientId : null;
-      const result = await db.execute(sql`SELECT p.id, p.client_id AS "clientId", p.name, p.version, p.publisher, p.category, p.release_date AS "releaseDate", p.license_type AS "licenseType", p.sbom, COALESCE((SELECT json_agg(json_build_object('id', e.id, 'name', e.name, 'type', e.type, 'verified', e.verified, 'status', e.status, 'signer', e.signer, 'timestamp', e.timestamp, 'hash', e.hash, 'engineId', e.engine_id, 'verificationFailureReason', e.verification_failure_reason, 'failureReason', e.verification_failure_reason, 'rawContent', e.raw_content) ORDER BY e.timestamp DESC) FROM evidence_items e WHERE e.tenant_id=p.tenant_id AND e.asset_id=p.id), '[]'::json) AS evidence, COALESCE((SELECT json_agg(json_build_object('id', f.id, 'findingId', f.id, 'severity', f.severity, 'category', f.category, 'title', f.title, 'description', f.description, 'component', f.component, 'fixedVersion', f.fixed_version, 'status', f.status, 'detectedAt', f.detected_at, 'engineId', f.engine_id) ORDER BY f.detected_at DESC) FROM scan_findings f WHERE f.tenant_id=p.tenant_id AND f.asset_id=p.id), '[]'::json) AS vulnerabilities, p.timeline, NULL AS scores, 'not_authoritatively_scored' AS "scoreStatus" FROM passports p WHERE p.tenant_id=${req.user!.tenantId} AND (${clientScope}::text IS NULL OR p.client_id = ${clientScope}) ORDER BY p.name ASC`);
-      // evidence/vulnerabilities are built with json_agg above and are already
-      // real arrays; sbom and timeline are plain text columns holding JSON, so
-      // they need parsing before the browser sees them.
-      return res.json(normalizePassportRecords((result as any).rows || []));
-    } catch (error) {
-      return next(error);
-    }
-  });
-
-  // Accepts a self-reported SLSA/in-toto provenance statement and
-  // independently re-verifies it before recording anything -- this route
-  // never trusts the caller's own claim about the statement's validity.
-  // A prior VERIFIED/FAILED SLSA Provenance Attestation row for this passport
-  // is replaced (not accumulated) so the passport always carries at most one
-  // current result for this evidence slot. Recomputes the passport's trust
-  // score afterward through the single canonical scoring engine, the same
-  // one the real scan pipeline uses, so this evidence genuinely affects the
-  // Trust Vector rather than being purely decorative.
-  router.post('/passports/:id/evidence/slsa-provenance', requireAuth, requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
-    try {
-      const parsed = slsaProvenanceSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
-      const db = req.db!;
-      const tenantId = req.user!.tenantId;
-      const passportId = String(req.params.id);
-      const passport = (await db.execute(sql`SELECT id FROM passports WHERE id=${passportId} AND tenant_id=${tenantId} LIMIT 1`)).rows?.[0];
-      if (!passport) return res.status(404).json({ error: 'Passport not found' });
-
-      const result = verifySlsaProvenance(parsed.data.statement, parsed.data.hash);
-      const evidenceId = `ev_slsa_${crypto.randomUUID().replace(/-/g, '')}`;
-      const timestamp = new Date().toISOString();
-      const normalizedHash = parsed.data.hash.trim().toLowerCase().replace(/^sha256:/, '');
-      const rawContent = JSON.stringify({
-        predicateType: result.predicateType,
-        builderId: result.builderId,
-        buildType: result.buildType,
-        subjectName: result.subjectName,
-        subjectDigestSha256: result.subjectDigestSha256,
-        note: 'SPR independently verified this statement\'s content against its declared hash and confirmed it is a well-formed in-toto/SLSA provenance statement. SPR does not independently verify the Sigstore/DSSE signature chain.',
-      });
-
-      await db.execute(sql`DELETE FROM evidence_items WHERE tenant_id=${tenantId} AND asset_id=${passportId} AND type='Attestation' AND name='SLSA Provenance Attestation'`);
-      await db.execute(sql`
-        INSERT INTO evidence_items (id, tenant_id, asset_id, name, type, verified, status, signer, timestamp, hash, raw_content, engine_id, verification_failure_reason)
-        VALUES (${evidenceId}, ${tenantId}, ${passportId}, 'SLSA Provenance Attestation', 'Attestation', ${result.outcome === 'VERIFIED' ? 1 : 0}, ${result.outcome}, ${parsed.data.signer || result.builderId || 'self-reported'}, ${timestamp}, ${`sha256:${normalizedHash}`}, ${rawContent}, 'provenance-verifier', ${result.failureReason})
-      `);
-
-      await appendAuditEntry(db, {
-        tenantId,
-        action: result.outcome === 'VERIFIED' ? 'evidence.slsa_provenance.verified' : 'evidence.slsa_provenance.failed',
-        actor: req.user!.email,
-        payload: { passportId, evidenceId, predicateType: result.predicateType, builderId: result.builderId, failureReason: result.failureReason },
-      });
-
-      await calculateAndStoreTrustScore(passportId, tenantId);
-
-      const evidenceRows = (await db.execute(sql`
-        SELECT id, name, type, verified, status, signer, timestamp, hash, engine_id AS "engineId", verification_failure_reason AS "verificationFailureReason", verification_failure_reason AS "failureReason", raw_content AS "rawContent"
-        FROM evidence_items WHERE tenant_id=${tenantId} AND asset_id=${passportId} ORDER BY timestamp DESC
-      `)).rows;
-
-      return res.status(201).json({ evidence: evidenceRows, verification: result });
+      const result = await db.execute(sql`SELECT p.id, p.client_id AS "clientId", p.name, p.version, p.publisher, p.category, p.release_date AS "releaseDate", p.license_type AS "licenseType", p.sbom, COALESCE((SELECT json_agg(json_build_object('id', e.id, 'name', e.name, 'type', e.type, 'verified', e.verified, 'status', e.status, 'signer', e.signer, 'timestamp', e.timestamp, 'hash', e.hash, 'engineId', e.engine_id, 'verificationFailureReason', e.verification_failure_reason) ORDER BY e.timestamp DESC) FROM evidence_items e WHERE e.tenant_id=p.tenant_id AND e.asset_id=p.id), '[]'::json) AS evidence, COALESCE((SELECT json_agg(json_build_object('id', f.id, 'findingId', f.id, 'severity', f.severity, 'category', f.category, 'title', f.title, 'description', f.description, 'component', f.component, 'fixedVersion', f.fixed_version, 'status', f.status, 'detectedAt', f.detected_at, 'engineId', f.engine_id) ORDER BY f.detected_at DESC) FROM scan_findings f WHERE f.tenant_id=p.tenant_id AND f.asset_id=p.id), '[]'::json) AS vulnerabilities, p.timeline, NULL AS scores, 'not_authoritatively_scored' AS "scoreStatus" FROM passports p WHERE p.tenant_id=${req.user!.tenantId} ORDER BY p.name ASC`);
+      return res.json((result as any).rows || []);
     } catch (error) {
       return next(error);
     }

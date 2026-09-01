@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { Activity, AlertTriangle, CheckCircle2, Database, FileCheck2, Shield, Users, XCircle } from 'lucide-react';
+import { useMemo } from 'react';
+import { Activity, AlertTriangle, CheckCircle2, FileCheck2, Shield, XCircle } from 'lucide-react';
 import type { Client, Scan, SoftwarePassport } from '../types';
 
 interface CoverageViewProps {
@@ -11,10 +11,10 @@ interface CoverageViewProps {
 
 type CoverageState = 'Observed' | 'Partial' | 'Not observed';
 
-const stateClasses: Record<CoverageState, string> = {
-  Observed: 'border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-green)]',
-  Partial: 'border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-amber)]',
-  'Not observed': 'border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-red)]',
+const stateDot: Record<CoverageState, string> = {
+  Observed: 'bg-[#0e700e]',
+  Partial: 'bg-[#8a5700]',
+  'Not observed': 'bg-[#a4262c]',
 };
 
 function hasArrayValue(value: unknown) {
@@ -27,23 +27,23 @@ function CoverageRow({ label, description, observed, total }: { label: string; d
   const Icon = state === 'Observed' ? CheckCircle2 : state === 'Partial' ? AlertTriangle : XCircle;
 
   return (
-    <div className="spr-panel p-5">
+    <div className="rounded-md border border-[#e1dfdd] bg-white p-3">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="text-sm font-semibold text-[var(--spr-text)]">{label}</div>
-          <div className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">{description}</div>
+          <div className="text-[13px] font-semibold text-[#201f1e]">{label}</div>
+          <div className="mt-0.5 text-[12px] leading-5 text-[#605e5c]">{description}</div>
         </div>
-        <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[.12em] ${stateClasses[state]}`}>
-          <Icon className="h-3.5 w-3.5" /> {state}
+        <span className="inline-flex shrink-0 items-center gap-1.5 text-[12px] font-medium text-[#323130]">
+          <Icon className="h-3.5 w-3.5 text-[#605e5c]" /> {state}
         </span>
       </div>
-      <div className="mt-5 flex items-center gap-3">
-        <div className="h-2 flex-1 overflow-hidden rounded-full bg-[var(--spr-surface-sunken)]">
-          <div className="h-full rounded-full bg-[var(--spr-highlight)] transition-all" style={{ width: `${percentage}%` }} />
+      <div className="mt-3 flex items-center gap-3">
+        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#f3f2f1]">
+          <div className={`h-full rounded-full ${stateDot[state]}`} style={{ width: `${percentage}%` }} />
         </div>
-        <span className="w-12 text-right text-xs font-semibold text-[var(--spr-text)]">{percentage}%</span>
+        <span className="w-10 text-right text-[12px] font-medium text-[#323130]">{percentage}%</span>
       </div>
-      <div className="mt-2 text-[11px] text-[var(--spr-text-faint)]">{observed} of {total} passport records contain this evidence category.</div>
+      <div className="mt-1.5 text-[11px] text-[#8a8886]">{observed} of {total} passport records contain this evidence category.</div>
     </div>
   );
 }
@@ -64,37 +64,46 @@ export default function CoverageView({ clients, scans, passports, onNavigateTab 
   }, [passports, scans]);
 
   return (
-    <div className="space-y-7">
-      <section className="spr-panel p-7 md:p-9">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-3xl">
-            <div className="text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--spr-green)]">01 · Coverage</div>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight text-[var(--spr-text)] md:text-4xl">Know exactly what was observed.</h1>
-            <p className="mt-4 text-sm leading-6 text-[var(--spr-text-muted)]">Coverage is calculated from records currently loaded from the tenant backend. Missing evidence is shown as missing; it is never treated as a positive security or trust signal.</p>
-          </div>
-          <div className="spr-panel-alt px-6 py-5 text-left lg:min-w-56">
-            {/* The count leads, not the percentage. This measures how many
-                passports carry any evidence at all, not how complete that
-                evidence is - a passport counted here can still be
-                "Evidence Incomplete". A headline "100%" derived from 1 of 1
-                record reads as completeness and overstates what was observed. */}
-            <div className="text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--spr-text-faint)]">Passports carrying evidence</div>
-            <div className="mt-2 text-4xl font-semibold text-[var(--spr-text)]">{metrics.evidenceBearing} <span className="text-2xl text-[var(--spr-text-muted)]">of {metrics.total}</span></div>
-            <div className="mt-1 text-xs text-[var(--spr-text-muted)]">Carrying any evidence — not a completeness measure</div>
+    <div className="space-y-4 pb-8">
+      <div className="mb-1">
+        <h1 className="text-[22px] font-semibold text-[#201f1e]">Evidence Coverage</h1>
+        <p className="mt-1 text-[13px] text-[#605e5c]">Know exactly what has been observed for this tenant's software passports.</p>
+      </div>
+
+      <details className="rounded-md border border-[#e1dfdd] bg-[#faf9f8] text-[13px]">
+        <summary className="cursor-pointer select-none px-3 py-2 font-medium text-[#323130]">ⓘ What is this? · How it works</summary>
+        <div className="px-3 pb-3 text-[#605e5c]">
+          <p>Coverage is calculated from records currently loaded from the tenant backend. Missing evidence is shown as missing; it is never treated as a positive security or trust signal.</p>
+          <ol className="mt-1.5 list-decimal space-y-0.5 pl-4">
+            <li>Each passport record is checked for evidence, SBOM, vulnerability, timeline, version and publisher data.</li>
+            <li>Coverage percentages reflect how many records contain each category — nothing is inferred.</li>
+            <li>Use the coverage rows below to find where evidence collection is incomplete.</li>
+          </ol>
+        </div>
+      </details>
+
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-md border border-[#e1dfdd] bg-white p-3">
+        <div className="flex flex-wrap gap-6">
+          <MetricItem label="Passport records" value={metrics.total} />
+          <MetricItem label="With evidence arrays" value={metrics.evidence} />
+          <MetricItem label="Completed scans" value={metrics.completedScans} />
+          <MetricItem label="Client records" value={clients.length} />
+        </div>
+        <div className="text-right">
+          <div className="text-[11px] text-[#605e5c]">Evidence-bearing passports</div>
+          <div className="text-lg font-semibold text-[#201f1e]">{metrics.overall}% <span className="text-[12px] font-normal text-[#605e5c]">({metrics.evidenceBearing} of {metrics.total})</span></div>
+        </div>
+      </div>
+
+      <section className="rounded-md border border-[#e1dfdd] bg-white p-4">
+        <div className="flex items-center gap-2">
+          <Shield className="h-4 w-4 text-[#605e5c]" />
+          <div>
+            <h2 className="text-[14px] font-semibold text-[#201f1e]">Evidence-domain coverage</h2>
+            <p className="mt-0.5 text-[12px] text-[#605e5c]">Coverage is a visibility metric, not a trust score.</p>
           </div>
         </div>
-
-        <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <div className="spr-panel-alt p-4"><Database className="h-4 w-4 text-[var(--spr-highlight)]" /><div className="mt-3 text-2xl font-semibold text-[var(--spr-text)]">{metrics.total}</div><div className="mt-1 text-xs text-[var(--spr-text-muted)]">Passport records observed</div></div>
-          <div className="spr-panel-alt p-4"><FileCheck2 className="h-4 w-4 text-[var(--spr-highlight)]" /><div className="mt-3 text-2xl font-semibold text-[var(--spr-text)]">{metrics.evidence}</div><div className="mt-1 text-xs text-[var(--spr-text-muted)]">With evidence arrays</div></div>
-          <div className="spr-panel-alt p-4"><Activity className="h-4 w-4 text-[var(--spr-highlight)]" /><div className="mt-3 text-2xl font-semibold text-[var(--spr-text)]">{metrics.completedScans}</div><div className="mt-1 text-xs text-[var(--spr-text-muted)]">Completed scans observed</div></div>
-          <div className="spr-panel-alt p-4"><Users className="h-4 w-4 text-[var(--spr-highlight)]" /><div className="mt-3 text-2xl font-semibold text-[var(--spr-text)]">{clients.length}</div><div className="mt-1 text-xs text-[var(--spr-text-muted)]">Client records observed</div></div>
-        </div>
-      </section>
-
-      <section className="spr-panel p-6 md:p-8">
-        <div className="flex items-center gap-3"><Shield className="h-5 w-5 text-[var(--spr-highlight)]" /><div><h2 className="text-lg font-semibold text-[var(--spr-text)]">Evidence-domain coverage</h2><p className="mt-1 text-xs text-[var(--spr-text-muted)]">Coverage is a visibility metric, not a trust score.</p></div></div>
-        <div className="mt-6 grid gap-4 lg:grid-cols-2">
+        <div className="mt-3 grid gap-3 lg:grid-cols-2">
           <CoverageRow label="Core evidence" description="Passport records contain explicit evidence entries." observed={metrics.evidence} total={metrics.total} />
           <CoverageRow label="SBOM" description="Passport records contain component/SBOM observations." observed={metrics.sbom} total={metrics.total} />
           <CoverageRow label="Vulnerability evidence" description="Passport records contain vulnerability observations." observed={metrics.vulnerabilities} total={metrics.total} />
@@ -104,11 +113,32 @@ export default function CoverageView({ clients, scans, passports, onNavigateTab 
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-3">
-        <button onClick={() => onNavigateTab('/passports')} className="spr-panel p-5 text-left transition hover:bg-[var(--spr-surface-sunken)]"><FileCheck2 className="h-5 w-5 text-[var(--spr-highlight)]" /><h2 className="mt-4 text-sm font-semibold text-[var(--spr-text)]">Inspect evidence</h2><p className="mt-2 text-xs leading-5 text-[var(--spr-text-muted)]">Move from coverage percentages to the underlying evidence records.</p></button>
-        <button onClick={() => onNavigateTab('/scans')} className="spr-panel p-5 text-left transition hover:bg-[var(--spr-surface-sunken)]"><Activity className="h-5 w-5 text-[var(--spr-highlight)]" /><h2 className="mt-4 text-sm font-semibold text-[var(--spr-text)]">Run a scan</h2><p className="mt-2 text-xs leading-5 text-[var(--spr-text-muted)]">Collect additional observations instead of guessing about missing coverage.</p></button>
-        <button onClick={() => onNavigateTab('/security')} className="spr-panel p-5 text-left transition hover:bg-[var(--spr-surface-sunken)]"><Shield className="h-5 w-5 text-[var(--spr-highlight)]" /><h2 className="mt-4 text-sm font-semibold text-[var(--spr-text)]">Review security</h2><p className="mt-2 text-xs leading-5 text-[var(--spr-text-muted)]">Security assessment stays downstream from observed evidence.</p></button>
+      <section className="grid gap-3 md:grid-cols-3">
+        <button onClick={() => onNavigateTab('/passports')} className="rounded-md border border-[#e1dfdd] bg-white p-4 text-left hover:bg-black/[.02]">
+          <FileCheck2 className="h-4 w-4 text-[#605e5c]" />
+          <h2 className="mt-2 text-[13px] font-semibold text-[#201f1e]">Inspect evidence</h2>
+          <p className="mt-1 text-[12px] leading-5 text-[#605e5c]">Move from coverage percentages to the underlying evidence records.</p>
+        </button>
+        <button onClick={() => onNavigateTab('/scans')} className="rounded-md border border-[#e1dfdd] bg-white p-4 text-left hover:bg-black/[.02]">
+          <Activity className="h-4 w-4 text-[#605e5c]" />
+          <h2 className="mt-2 text-[13px] font-semibold text-[#201f1e]">Run a scan</h2>
+          <p className="mt-1 text-[12px] leading-5 text-[#605e5c]">Collect additional observations instead of guessing about missing coverage.</p>
+        </button>
+        <button onClick={() => onNavigateTab('/security')} className="rounded-md border border-[#e1dfdd] bg-white p-4 text-left hover:bg-black/[.02]">
+          <Shield className="h-4 w-4 text-[#605e5c]" />
+          <h2 className="mt-2 text-[13px] font-semibold text-[#201f1e]">Review security</h2>
+          <p className="mt-1 text-[12px] leading-5 text-[#605e5c]">Security assessment stays downstream from observed evidence.</p>
+        </button>
       </section>
+    </div>
+  );
+}
+
+function MetricItem({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <div className="text-[11px] text-[#605e5c]">{label}</div>
+      <div className="text-lg font-semibold text-[#201f1e]">{value}</div>
     </div>
   );
 }

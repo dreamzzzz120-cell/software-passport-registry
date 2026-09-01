@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ArrowRight, Building2, CheckCircle2, Clock3, FileSearch, ShieldAlert, User, X } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Building2, CheckCircle2, FileSearch, ShieldAlert, User, X } from 'lucide-react';
 import { Alert, Client } from '../types';
 import { apiFetch } from '../utils/apiClient';
 
@@ -16,9 +16,9 @@ type Assignment = { id: string; client_id: string; technician_display: string; a
 type TeamMember = { id: number; email: string; displayName?: string | null; role: string };
 
 const severityClass = (severity: Alert['severity']) => severity === 'Critical'
-  ? 'bg-rose-500/10 text-rose-300 border-rose-500/25'
-  : severity === 'High' ? 'bg-amber-500/10 text-amber-200 border-amber-500/25'
-  : 'bg-sky-500/10 text-sky-200 border-sky-500/25';
+  ? 'border-[#a4262c]/30 bg-[#fdf2f2] text-[#a4262c]'
+  : severity === 'High' ? 'border-[#8a5700]/30 bg-[#fff4ce] text-[#8a5700]'
+  : 'border-[#0f6cbd]/30 bg-[#eff6fc] text-[#0f6cbd]';
 
 export default function MSPCommandCenter({ clients, alerts, findings, role = 'Viewer', onSelectClient, onNavigate }: Props) {
   const [selected, setSelected] = useState<Alert | null>(null);
@@ -110,99 +110,96 @@ export default function MSPCommandCenter({ clients, alerts, findings, role = 'Vi
     finally { setTaskLoading(false); }
   };
 
-  return <div className="mx-auto max-w-6xl space-y-8 pb-10" id="msp-command-center">
-    <section className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
+  return <section id="msp-command-center" aria-labelledby="msp-command-center-title">
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
       <div>
-        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-indigo-300">MSP command center</p>
-        <h1 className="text-3xl font-bold tracking-tight text-white md:text-4xl">Who needs you today?</h1>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">Prioritized work from the evidence and findings SPR currently has on record. A closed task is not a verified fix.</p>
+        <h1 id="msp-command-center-title" className="text-[22px] font-semibold text-[#201f1e]">Who needs you today?</h1>
+        <p className="mt-1 text-[13px] text-[#605e5c]">Prioritized work from the evidence and findings SPR currently has on record. A closed task is not a verified fix.</p>
       </div>
-      <button onClick={() => onNavigate('clients')} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-sm font-semibold text-slate-100 transition hover:border-slate-500 hover:bg-slate-800">
-        View all clients <ArrowRight className="h-4 w-4" />
+      <button type="button" onClick={() => onNavigate('clients')} className="inline-flex h-8 items-center gap-1.5 rounded border border-[#c8c6c4] px-3 text-[13px] font-medium text-[#323130] hover:bg-black/[.03]">
+        View all clients <ArrowRight className="h-3.5 w-3.5" />
       </button>
-    </section>
+    </div>
 
-    <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-      <Metric label="Clients" value={clients.length} icon={<Building2 />} tone="text-indigo-300" />
-      <Metric label="Healthy" value={Math.max(0, clients.length - criticalClients - attentionClients)} icon={<CheckCircle2 />} tone="text-emerald-300" />
-      <Metric label="Need attention" value={attentionClients} icon={<AlertTriangle />} tone="text-amber-200" />
-      <Metric label="Critical" value={criticalClients} icon={<ShieldAlert />} tone="text-rose-300" />
-    </section>
+    <div className="mb-4 flex flex-wrap gap-6 rounded-md border border-[#e1dfdd] bg-white p-3">
+      <Metric label="Clients" value={clients.length} icon={<Building2 className="h-3.5 w-3.5" />} />
+      <Metric label="Healthy" value={Math.max(0, clients.length - criticalClients - attentionClients)} icon={<CheckCircle2 className="h-3.5 w-3.5 text-[#0e700e]" />} />
+      <Metric label="Need attention" value={attentionClients} icon={<AlertTriangle className="h-3.5 w-3.5 text-[#8a5700]" />} />
+      <Metric label="Critical" value={criticalClients} icon={<ShieldAlert className="h-3.5 w-3.5 text-[#a4262c]" />} />
+    </div>
 
-    <section className="rounded-2xl border border-slate-800 bg-[#0d1322] shadow-2xl shadow-black/20">
-      <div className="flex flex-col gap-3 border-b border-slate-800 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
-        <div><h2 className="text-lg font-bold text-white">Cross-client risk</h2><p className="mt-1 text-sm text-slate-400">Every client ranked by active critical and high findings, with technician assignment.</p></div>
-      </div>
+    <div className="mb-4 rounded-md border border-[#e1dfdd] bg-white">
+      <div className="border-b border-[#e1dfdd] px-4 py-3"><h2 className="text-[14px] font-semibold text-[#201f1e]">Cross-client risk</h2><p className="mt-0.5 text-[12px] text-[#605e5c]">Every client ranked by active critical and high findings, with technician assignment.</p></div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[640px] text-left text-sm">
-          <thead className="border-b border-slate-800 text-[10px] uppercase tracking-[.14em] text-slate-600"><tr><th className="px-5 py-3">Client</th><th className="px-5 py-3">Critical</th><th className="px-5 py-3">High</th><th className="px-5 py-3">Active findings</th><th className="px-5 py-3">Assigned technician</th></tr></thead>
-          <tbody className="divide-y divide-slate-800">
+        <table className="w-full min-w-[640px] text-left text-[13px]">
+          <thead className="border-b border-[#e1dfdd] text-[11px] uppercase tracking-wide text-[#605e5c]"><tr><th className="px-4 py-2">Client</th><th className="px-4 py-2">Critical</th><th className="px-4 py-2">High</th><th className="px-4 py-2">Active findings</th><th className="px-4 py-2">Assigned technician</th></tr></thead>
+          <tbody>
             {clientRiskRollup.map(({ client, activeCount, critical, high, assignment }) => (
-              <tr key={client.id}>
-                <td className="px-5 py-3 font-medium text-slate-100">{client.name}</td>
-                <td className="px-5 py-3">{critical > 0 ? <span className="rounded-md border border-rose-500/25 bg-rose-500/10 px-2 py-0.5 text-xs font-bold text-rose-300">{critical}</span> : <span className="text-slate-600">0</span>}</td>
-                <td className="px-5 py-3">{high > 0 ? <span className="rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-xs font-bold text-amber-200">{high}</span> : <span className="text-slate-600">0</span>}</td>
-                <td className="px-5 py-3 text-slate-300">{activeCount}</td>
-                <td className="px-5 py-3">
+              <tr key={client.id} className="border-b border-[#f3f2f1] hover:bg-black/[.02]">
+                <td className="px-4 py-2.5 font-medium text-[#201f1e]">{client.name}</td>
+                <td className="px-4 py-2.5">{critical > 0 ? <span className="rounded border border-[#a4262c]/30 bg-[#fdf2f2] px-1.5 py-0.5 text-[11px] font-semibold text-[#a4262c]">{critical}</span> : <span className="text-[#8a8886]">0</span>}</td>
+                <td className="px-4 py-2.5">{high > 0 ? <span className="rounded border border-[#8a5700]/30 bg-[#fff4ce] px-1.5 py-0.5 text-[11px] font-semibold text-[#8a5700]">{high}</span> : <span className="text-[#8a8886]">0</span>}</td>
+                <td className="px-4 py-2.5 text-[#323130]">{activeCount}</td>
+                <td className="px-4 py-2.5">
                   {assigningClientId === client.id ? (
-                    <select autoFocus onBlur={() => setAssigningClientId(null)} onChange={(e) => { const member = team.find((m) => String(m.id) === e.target.value); if (member) void assignTechnician(client.id, member); }} className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200">
+                    <select autoFocus onBlur={() => setAssigningClientId(null)} onChange={(e) => { const member = team.find((m) => String(m.id) === e.target.value); if (member) void assignTechnician(client.id, member); }} className="h-8 rounded border border-[#c8c6c4] bg-white px-2 text-[12px] text-[#201f1e] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]">
                       <option value="">Select technician…</option>
                       {team.map((member) => <option key={member.id} value={member.id}>{member.displayName || member.email}</option>)}
                     </select>
                   ) : assignment ? (
-                    <div className="flex items-center gap-2 text-xs text-slate-300"><User className="h-3 w-3 text-slate-500" />{assignment.technician_display}
-                      {canAssign && <button onClick={() => void unassignTechnician(client.id)} className="text-slate-600 hover:text-rose-300">×</button>}
-                      {canAssign && <button onClick={() => setAssigningClientId(client.id)} className="text-cyan-400 hover:text-cyan-300">change</button>}
+                    <div className="flex items-center gap-2 text-[12px] text-[#323130]"><User className="h-3 w-3 text-[#8a8886]" />{assignment.technician_display}
+                      {canAssign && <button type="button" onClick={() => void unassignTechnician(client.id)} className="text-[#8a8886] hover:text-[#a4262c]">×</button>}
+                      {canAssign && <button type="button" onClick={() => setAssigningClientId(client.id)} className="text-[#0f6cbd] hover:text-[#004578]">change</button>}
                     </div>
                   ) : canAssign ? (
-                    <button onClick={() => setAssigningClientId(client.id)} className="rounded-lg border border-slate-700 px-2.5 py-1 text-xs text-slate-400 hover:bg-slate-800">Assign…</button>
-                  ) : <span className="text-xs text-slate-600">Unassigned</span>}
+                    <button type="button" onClick={() => setAssigningClientId(client.id)} className="rounded border border-[#c8c6c4] px-2 py-1 text-[12px] text-[#605e5c] hover:bg-black/[.03]">Assign…</button>
+                  ) : <span className="text-[12px] text-[#8a8886]">Unassigned</span>}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-    </section>
+    </div>
 
-    <section className="rounded-2xl border border-slate-800 bg-[#0d1322] shadow-2xl shadow-black/20">
-      <div className="flex flex-col gap-3 border-b border-slate-800 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
-        <div><h2 className="text-lg font-bold text-white">Clients needing action</h2><p className="mt-1 text-sm text-slate-400">Most urgent first, based on active recorded findings.</p></div>
-        <span className="w-fit rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-medium text-slate-300">{attention.length} active findings</span>
+    <div className="rounded-md border border-[#e1dfdd] bg-white">
+      <div className="flex flex-col gap-2 border-b border-[#e1dfdd] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div><h2 className="text-[14px] font-semibold text-[#201f1e]">Clients needing action</h2><p className="mt-0.5 text-[12px] text-[#605e5c]">Most urgent first, based on active recorded findings.</p></div>
+        <span className="w-fit rounded border border-[#c8c6c4] bg-[#faf9f8] px-2 py-0.5 text-[11px] font-medium text-[#605e5c]">{attention.length} active findings</span>
       </div>
-      {attention.length ? <div className="divide-y divide-slate-800">
+      {attention.length ? <div>
         {attention.map(alert => {
           const client = clients.find(item => item.name === alert.clientName);
-          return <article key={alert.id} className="grid gap-4 px-5 py-5 lg:grid-cols-[minmax(180px,0.8fr)_minmax(260px,1.5fr)_auto] lg:items-center">
+          return <article key={alert.id} className="grid gap-3 border-b border-[#f3f2f1] px-4 py-3 last:border-b-0 lg:grid-cols-[minmax(180px,0.8fr)_minmax(260px,1.5fr)_auto] lg:items-center">
             <div>
-              <p className="font-semibold text-white">{alert.clientName}</p>
-              <p className="mt-1 text-xs text-slate-500">Observed {alert.timestamp}</p>
+              <p className="font-medium text-[#201f1e]">{alert.clientName}</p>
+              <p className="mt-0.5 text-[11px] text-[#8a8886]">Observed {alert.timestamp}</p>
             </div>
             <div>
-              <div className="mb-2 flex flex-wrap gap-2"><span className={`rounded-md border px-2 py-0.5 text-[11px] font-bold ${severityClass(alert.severity)}`}>{alert.severity}</span><span className="rounded-md bg-slate-800 px-2 py-0.5 text-[11px] text-slate-300">{alert.category}</span></div>
-              <p className="font-medium text-slate-100">{alert.title}</p><p className="mt-1 text-sm leading-5 text-slate-400">{alert.description}</p>
+              <div className="mb-1.5 flex flex-wrap gap-1.5"><span className={`rounded border px-1.5 py-0.5 text-[11px] font-semibold ${severityClass(alert.severity)}`}>{alert.severity}</span><span className="rounded bg-[#f3f2f1] px-1.5 py-0.5 text-[11px] text-[#605e5c]">{alert.category}</span></div>
+              <p className="text-[13px] font-medium text-[#201f1e]">{alert.title}</p><p className="mt-0.5 text-[12px] leading-5 text-[#605e5c]">{alert.description}</p>
             </div>
-            <div className="flex gap-2 lg:flex-col"><button onClick={() => setSelected(alert)} className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-500 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-indigo-400">Investigate <ArrowRight className="h-4 w-4" /></button>{client && <button onClick={() => onSelectClient(client.id)} className="rounded-lg border border-slate-700 px-3.5 py-2 text-sm font-medium text-slate-300 transition hover:bg-slate-800">Client</button>}</div>
+            <div className="flex gap-2 lg:flex-col"><button type="button" onClick={() => setSelected(alert)} className="inline-flex h-8 items-center justify-center gap-1.5 rounded bg-[#0f6cbd] px-3 text-[13px] font-medium text-white hover:bg-[#004578]">Investigate <ArrowRight className="h-3.5 w-3.5" /></button>{client && <button type="button" onClick={() => onSelectClient(client.id)} className="h-8 rounded border border-[#c8c6c4] px-3 text-[13px] font-medium text-[#323130] hover:bg-black/[.03]">Client</button>}</div>
           </article>;
         })}
-      </div> : <div className="px-6 py-14 text-center"><CheckCircle2 className="mx-auto h-8 w-8 text-emerald-400" /><h3 className="mt-3 font-semibold text-white">No clients need attention</h3><p className="mt-1 text-sm text-slate-400">Your monitored clients currently have no active recorded findings requiring action.</p></div>}
-    </section>
+      </div> : <div className="px-6 py-10 text-center"><CheckCircle2 className="mx-auto h-6 w-6 text-[#0e700e]" /><h3 className="mt-2 text-[13px] font-semibold text-[#201f1e]">No clients need attention</h3><p className="mt-1 text-[12px] text-[#605e5c]">Your monitored clients currently have no active recorded findings requiring action.</p></div>}
+    </div>
 
-    {selected && <div className="fixed inset-0 z-50 flex items-end bg-slate-950/75 p-0 backdrop-blur-sm md:items-center md:justify-center md:p-6" role="dialog" aria-modal="true" aria-labelledby="finding-title">
-      <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-t-2xl border border-slate-700 bg-[#0d1322] p-6 shadow-2xl md:rounded-2xl"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-300">Finding detail · Explain this</p><h2 id="finding-title" className="mt-2 text-xl font-bold text-white">{selected.title}</h2></div><button onClick={() => setSelected(null)} aria-label="Close finding" className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white"><X className="h-5 w-5" /></button></div>
-        {findingError && <div role="alert" className="mt-6 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-100"><p className="font-semibold">Finding detail unavailable</p><p className="mt-1 text-rose-200">{findingError}</p></div>}
-        {finding && <><div className="mt-6 grid gap-4 sm:grid-cols-2"><Detail label="Client" value={selected.clientName} /><Detail label="Severity and status" value={`${finding.severity} — ${finding.status}`} /><Detail label="First observed" value={formatStoredTime(finding.created_at)} /><Detail label="Last observed" value={formatStoredTime(finding.updated_at)} /></div>
-        <section className="mt-5 rounded-xl border border-slate-800 bg-slate-950/40 p-4"><h3 className="text-sm font-semibold text-white">Observed</h3><p className="mt-2 text-sm leading-6 text-slate-300">{finding.description || 'No observation description is available.'}</p></section><div className="mt-5 grid gap-4 sm:grid-cols-2"><Detail label="Why it matters" value="Review this recorded finding with its evidence before choosing remediation." /><Detail label="What you can do" value="Create a remediation task, then collect a new observation before treating the finding as resolved." /></div>
-        <section className="mt-5 rounded-xl border border-slate-800 bg-slate-950/40 p-4"><h3 className="text-sm font-semibold text-white">Evidence chain</h3><p className="mt-1 text-xs text-slate-500">Finding → observed artifact → source evidence → verification time</p>{evidenceList(finding.evidence_ids).length ? <ul className="mt-4 space-y-2">{evidenceList(finding.evidence_ids).map((id: string) => <li key={id} className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 font-mono text-xs text-slate-300">Evidence reference: {id}</li>)}</ul> : <p className="mt-4 text-sm text-slate-400">Evidence unavailable. This finding has no stored evidence references.</p>}</section></>}
-        {taskError && <p role="alert" className="mt-4 text-sm text-rose-300">{taskError}</p>}
-        {task && <section className="mt-5 rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-4"><p className="text-xs font-semibold uppercase tracking-wider text-indigo-300">Remediation task</p><p className="mt-2 font-semibold text-white">{task.title}</p><p className="mt-1 text-sm text-slate-300">{task.status.replaceAll('_', ' ')} · created {formatStoredTime(task.created_at)}</p>{task.status === 'OPEN' && <button onClick={() => void transitionTask('IN_PROGRESS')} disabled={taskLoading} className="mt-4 rounded-lg bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50">{taskLoading ? 'Updating task…' : 'Start remediation'}</button>}{task.status === 'IN_PROGRESS' && <button onClick={() => void transitionTask('READY_FOR_VERIFICATION')} disabled={taskLoading} className="mt-4 rounded-lg bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50">{taskLoading ? 'Updating task…' : 'Mark ready for verification'}</button>}{task.status === 'READY_FOR_VERIFICATION' && <div className="mt-3"><p className="text-sm text-amber-200">Remediation marked complete. Verification required.</p><p className="mt-1 text-xs text-slate-400">Re-checks the most recent evidence SPR already has on file for this software — this is not a live scan.</p><button onClick={() => void verifyWithLatestEvidence()} disabled={taskLoading} className="mt-3 rounded-lg bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50">{taskLoading ? 'Verifying…' : 'Verify with latest evidence'}</button></div>}{task.status === 'VERIFIED' && <p className="mt-3 text-sm text-emerald-300">Verified against evidence SPR collected. The underlying finding is now marked resolved.</p>}</section>}
-        <div className="mt-6 flex flex-wrap gap-3"><button onClick={() => { setSelected(null); onNavigate('alerts'); }} disabled={!finding} className="inline-flex items-center gap-2 rounded-lg bg-indigo-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50"><FileSearch className="h-4 w-4" /> Show evidence</button>{task ? <span className="rounded-lg border border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-300">Task created</span> : <button onClick={() => void createTask()} disabled={!finding || taskLoading} className="rounded-lg border border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-50">{taskLoading ? 'Creating task…' : 'Create remediation task'}</button>}</div>
+    {selected && <div className="fixed inset-0 z-50 flex items-end bg-black/40 p-0 md:items-center md:justify-center md:p-6" role="dialog" aria-modal="true" aria-labelledby="finding-title">
+      <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-t-md border border-[#e1dfdd] bg-white p-5 md:rounded-md"><div className="flex items-start justify-between gap-4"><div><p className="text-[11px] font-semibold uppercase tracking-wide text-[#605e5c]">Finding detail · Explain this</p><h2 id="finding-title" className="mt-1 text-[18px] font-semibold text-[#201f1e]">{selected.title}</h2></div><button type="button" onClick={() => setSelected(null)} aria-label="Close finding" className="rounded p-1.5 text-[#605e5c] hover:bg-black/[.05]"><X className="h-4 w-4" /></button></div>
+        {findingError && <div role="alert" className="mt-4 rounded-md border border-[#a4262c]/30 bg-[#fdf2f2] p-3 text-[13px] text-[#a4262c]"><p className="font-semibold">Finding detail unavailable</p><p className="mt-0.5">{findingError}</p></div>}
+        {finding && <><div className="mt-4 grid gap-3 sm:grid-cols-2"><Detail label="Client" value={selected.clientName} /><Detail label="Severity and status" value={`${finding.severity} — ${finding.status}`} /><Detail label="First observed" value={formatStoredTime(finding.created_at)} /><Detail label="Last observed" value={formatStoredTime(finding.updated_at)} /></div>
+        <section className="mt-3 rounded-md border border-[#e1dfdd] bg-[#faf9f8] p-3"><h3 className="text-[13px] font-semibold text-[#201f1e]">Observed</h3><p className="mt-1 text-[13px] leading-6 text-[#323130]">{finding.description || 'No observation description is available.'}</p></section><div className="mt-3 grid gap-3 sm:grid-cols-2"><Detail label="Why it matters" value="Review this recorded finding with its evidence before choosing remediation." /><Detail label="What you can do" value="Create a remediation task, then collect a new observation before treating the finding as resolved." /></div>
+        <section className="mt-3 rounded-md border border-[#e1dfdd] bg-[#faf9f8] p-3"><h3 className="text-[13px] font-semibold text-[#201f1e]">Evidence chain</h3><p className="mt-0.5 text-[11px] text-[#8a8886]">Finding → observed artifact → source evidence → verification time</p>{evidenceList(finding.evidence_ids).length ? <ul className="mt-3 space-y-1.5">{evidenceList(finding.evidence_ids).map((id: string) => <li key={id} className="rounded border border-[#e1dfdd] bg-white px-2.5 py-1.5 font-mono text-[11px] text-[#323130]">Evidence reference: {id}</li>)}</ul> : <p className="mt-3 text-[13px] text-[#605e5c]">Evidence unavailable. This finding has no stored evidence references.</p>}</section></>}
+        {taskError && <p role="alert" className="mt-3 text-[13px] text-[#a4262c]">{taskError}</p>}
+        {task && <section className="mt-3 rounded-md border border-[#0f6cbd]/30 bg-[#eff6fc] p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-[#0f6cbd]">Remediation task</p><p className="mt-1 text-[13px] font-semibold text-[#201f1e]">{task.title}</p><p className="mt-0.5 text-[12px] text-[#323130]">{task.status.replaceAll('_', ' ')} · created {formatStoredTime(task.created_at)}</p>{task.status === 'OPEN' && <button type="button" onClick={() => void transitionTask('IN_PROGRESS')} disabled={taskLoading} className="mt-3 inline-flex h-8 items-center rounded bg-[#0f6cbd] px-3 text-[13px] font-medium text-white hover:bg-[#004578] disabled:opacity-50">{taskLoading ? 'Updating task…' : 'Start remediation'}</button>}{task.status === 'IN_PROGRESS' && <button type="button" onClick={() => void transitionTask('READY_FOR_VERIFICATION')} disabled={taskLoading} className="mt-3 inline-flex h-8 items-center rounded bg-[#0f6cbd] px-3 text-[13px] font-medium text-white hover:bg-[#004578] disabled:opacity-50">{taskLoading ? 'Updating task…' : 'Mark ready for verification'}</button>}{task.status === 'READY_FOR_VERIFICATION' && <div className="mt-2"><p className="text-[13px] text-[#8a5700]">Remediation marked complete. Verification required.</p><p className="mt-0.5 text-[11px] text-[#605e5c]">Re-checks the most recent evidence SPR already has on file for this software — this is not a live scan.</p><button type="button" onClick={() => void verifyWithLatestEvidence()} disabled={taskLoading} className="mt-2 inline-flex h-8 items-center rounded bg-[#0f6cbd] px-3 text-[13px] font-medium text-white hover:bg-[#004578] disabled:opacity-50">{taskLoading ? 'Verifying…' : 'Verify with latest evidence'}</button></div>}{task.status === 'VERIFIED' && <p className="mt-2 text-[13px] text-[#0e700e]">Verified against evidence SPR collected. The underlying finding is now marked resolved.</p>}</section>}
+        <div className="mt-4 flex flex-wrap gap-2"><button type="button" onClick={() => { setSelected(null); onNavigate('alerts'); }} disabled={!finding} className="inline-flex h-8 items-center gap-1.5 rounded bg-[#0f6cbd] px-3 text-[13px] font-medium text-white hover:bg-[#004578] disabled:opacity-50"><FileSearch className="h-3.5 w-3.5" /> Show evidence</button>{task ? <span className="inline-flex h-8 items-center rounded border border-[#c8c6c4] px-3 text-[13px] font-medium text-[#323130]">Task created</span> : <button type="button" onClick={() => void createTask()} disabled={!finding || taskLoading} className="inline-flex h-8 items-center rounded border border-[#c8c6c4] px-3 text-[13px] font-medium text-[#323130] hover:bg-black/[.03] disabled:opacity-50">{taskLoading ? 'Creating task…' : 'Create remediation task'}</button>}</div>
       </div>
     </div>}
-  </div>;
+  </section>;
 }
 
-function Metric({ label, value, icon, tone }: { label: string; value: number; icon: React.ReactNode; tone: string }) { return <div className="rounded-2xl border border-slate-800 bg-[#0d1322] p-5"><div className={`mb-4 h-5 w-5 ${tone}`}>{icon}</div><p className="text-3xl font-bold text-white">{value}</p><p className="mt-1 text-sm text-slate-400">{label}</p></div>; }
-function Detail({ label, value }: { label: string; value: string }) { return <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"><p className="text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</p><p className="mt-2 text-sm leading-5 text-slate-200">{value}</p></div>; }
+function Metric({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) { return <div className="flex items-center gap-1.5">{icon}<div><div className="text-[11px] text-[#605e5c]">{label}</div><div className="text-lg font-semibold text-[#201f1e]">{value}</div></div></div>; }
+function Detail({ label, value }: { label: string; value: string }) { return <div className="rounded-md border border-[#e1dfdd] bg-[#faf9f8] p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-[#605e5c]">{label}</p><p className="mt-1 text-[13px] leading-5 text-[#201f1e]">{value}</p></div>; }
 function formatStoredTime(value?: string | null) { return value ? new Date(value).toLocaleString() : 'Not observed'; }
 function evidenceList(value?: string | null) { try { const parsed = JSON.parse(value || '[]'); return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : []; } catch { return []; } }

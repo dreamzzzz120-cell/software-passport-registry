@@ -19,17 +19,11 @@ import {
   ShieldCheck,
   Search,
   Plus,
-  ArrowRight,
   ShieldAlert,
-  AlertTriangle,
   Award,
   ChevronRight,
-  CheckCircle,
   FileText,
   X,
-  TrendingUp,
-  BarChart2,
-  BookOpen,
   Eye,
   Settings
 } from 'lucide-react';
@@ -232,7 +226,7 @@ export default function SoftwareSectorsPanel({
   const sectorMetrics = useMemo(() => {
     const metrics: Record<string, {
       count: number;
-      avgTrust: number | null;
+      avgTrust: number;
       totalCves: number;
       totalSboms: number;
       matchedPassports: SoftwarePassport[];
@@ -241,15 +235,11 @@ export default function SoftwareSectorsPanel({
     allSectors.forEach(sector => {
       // Find matching passports for this category
       const matched = passports.filter(p => p.category.toLowerCase().trim() === sector.name.toLowerCase().trim());
-      
+
       const count = matched.length;
-      // Only passports with a real score contribute to the average -- an
-      // unverified passport (null) isn't a trust score of 0 and must not
-      // drag the average down as if it were.
-      const scored = matched.filter((p): p is typeof p & { overallScore: number } => p.overallScore != null);
-      const avgTrust = scored.length > 0
-        ? Math.round(scored.reduce((acc, p) => acc + p.overallScore, 0) / scored.length)
-        : null;
+      const avgTrust = count > 0
+        ? Math.round(matched.reduce((acc, p) => acc + p.overallScore, 0) / count)
+        : 0;
       const totalCves = matched.reduce((acc, p) => acc + p.vulnerabilities.length, 0);
       const totalSboms = matched.reduce((acc, p) => acc + p.sbom.length, 0);
 
@@ -268,7 +258,7 @@ export default function SoftwareSectorsPanel({
   // Filtered sectors list based on search bar
   const filteredSectors = useMemo(() => {
     if (!searchQuery.trim()) return allSectors;
-    return allSectors.filter(s => 
+    return allSectors.filter(s =>
       s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.vulnerabilityClass.toLowerCase().includes(searchQuery.toLowerCase())
@@ -280,10 +270,9 @@ export default function SoftwareSectorsPanel({
     const totalTrackedPassports = passports.length;
     const sectorsWithActivePassports = (Object.values(sectorMetrics) as { count: number }[]).filter(m => m.count > 0).length;
     const totalCvesAcrossSectors = passports.reduce((acc, p) => acc + p.vulnerabilities.length, 0);
-    const scoredPassports = passports.filter((p): p is typeof p & { overallScore: number } => p.overallScore != null);
-    const overallEcosystemTrust = scoredPassports.length > 0
-      ? Math.round(scoredPassports.reduce((acc, p) => acc + p.overallScore, 0) / scoredPassports.length)
-      : null;
+    const overallEcosystemTrust = passports.length > 0
+      ? Math.round(passports.reduce((acc, p) => acc + p.overallScore, 0) / passports.length)
+      : 90;
 
     return {
       totalTrackedPassports,
@@ -330,82 +319,62 @@ export default function SoftwareSectorsPanel({
   const selectedMetrics = selectedSectorId ? sectorMetrics[selectedSectorId] : null;
 
   return (
-    <div className="space-y-6" id="software-sectors-explorer">
-      
-      {/* Sector Analysis Header Summary Card */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="studio-card p-4.5 flex flex-col justify-between">
-          <div>
-            <span className="text-[9px] font-mono font-bold text-[var(--spr-text-muted)] uppercase tracking-wider block">Tracked Sectors</span>
-            <span className="text-xl font-bold text-[var(--spr-text)] font-mono mt-1 block">{allSectors.length} Sectors</span>
-          </div>
-          <p className="text-[10px] text-[var(--spr-text-muted)] mt-2 font-sans">
-            Comprehensively cataloged software classifications protecting your enterprise pipeline.
-          </p>
-        </div>
+    <div className="space-y-4" id="software-sectors-explorer">
 
-        <div className="studio-card p-4.5 flex flex-col justify-between">
-          <div>
-            <span className="text-[9px] font-mono font-bold text-[var(--spr-text-muted)] uppercase tracking-wider block">Ecosystem Health</span>
-            <span className="text-xl font-bold text-[var(--spr-green)] font-mono mt-1 block">{aggregateStats.overallEcosystemTrust == null ? 'Not verified' : `${aggregateStats.overallEcosystemTrust}/100`}</span>
-          </div>
-          <p className="text-[10px] text-[var(--spr-text-muted)] mt-2 font-sans">
-            Average cryptographic trust rating across all active verified passports.
-          </p>
+      {/* Section header + KPI strip */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-[15px] font-semibold text-[#201f1e]">Software sectors</h2>
+          <p className="mt-0.5 text-[13px] text-[#605e5c]">Technology sector classifications, threat profiles and hardening guidance mapped to your catalog.</p>
         </div>
+      </div>
 
-        <div className="studio-card p-4.5 flex flex-col justify-between">
-          <div>
-            <span className="text-[9px] font-mono font-bold text-[var(--spr-text-muted)] uppercase tracking-wider block">Covered Footprint</span>
-            <span className="text-xl font-bold text-[var(--spr-highlight)] font-mono mt-1 block">
-              {aggregateStats.sectorsWithActivePassports} / {allSectors.length}
-            </span>
-          </div>
-          <p className="text-[10px] text-[var(--spr-text-muted)] mt-2 font-sans">
-            Proportion of technology sectors actively monitored with cryptographic passports.
-          </p>
+      <div className="flex flex-wrap gap-6 rounded-md border border-[#e1dfdd] bg-white p-3">
+        <div>
+          <div className="text-[11px] text-[#605e5c]">Tracked sectors</div>
+          <div className="text-lg font-semibold text-[#201f1e]">{allSectors.length}</div>
         </div>
-
-        <div className="studio-card p-4.5 flex flex-col justify-between">
-          <div>
-            <span className="text-[9px] font-mono font-bold text-[var(--spr-text-muted)] uppercase tracking-wider block">Active Sector CVEs</span>
-            <span className={`text-xl font-bold font-mono mt-1 block ${aggregateStats.totalCvesAcrossSectors > 0 ? 'text-[var(--spr-red)]' : 'text-[var(--spr-green)]'}`}>
-              {aggregateStats.totalCvesAcrossSectors} Threats
-            </span>
-          </div>
-          <p className="text-[10px] text-[var(--spr-text-muted)] mt-2 font-sans">
-            Total open vulnerabilities flagged in tracked software bill-of-materials.
-          </p>
+        <div>
+          <div className="text-[11px] text-[#605e5c]">Ecosystem trust</div>
+          <div className="text-lg font-semibold text-[#0e700e]">{aggregateStats.overallEcosystemTrust}/100</div>
+        </div>
+        <div>
+          <div className="text-[11px] text-[#605e5c]">Covered footprint</div>
+          <div className="text-lg font-semibold text-[#201f1e]">{aggregateStats.sectorsWithActivePassports} / {allSectors.length}</div>
+        </div>
+        <div>
+          <div className="text-[11px] text-[#605e5c]">Active sector findings</div>
+          <div className={`text-lg font-semibold ${aggregateStats.totalCvesAcrossSectors > 0 ? 'text-[#a4262c]' : 'text-[#0e700e]'}`}>{aggregateStats.totalCvesAcrossSectors}</div>
         </div>
       </div>
 
       {/* Directory Control Bar */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="relative w-full sm:max-w-md">
-          <Search className="absolute left-3 top-2.5 w-4 h-4 text-[var(--spr-text-muted)]" />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <label className="flex h-9 w-full items-center gap-2 rounded border border-[#c8c6c4] bg-white px-3 focus-within:border-[#0f6cbd] focus-within:ring-1 focus-within:ring-[#0f6cbd] sm:max-w-md">
+          <Search className="h-3.5 w-3.5 text-[#8a8886]" />
           <input
             type="text"
-            placeholder="Search software sectors, vulnerability classes, compliance standards..."
+            placeholder="Search sectors, vulnerability classes, compliance standards..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] pl-9 pr-4 py-2 rounded-md text-xs text-[var(--spr-text)] placeholder-[var(--spr-text-faint)] focus:outline-none "
+            className="w-full bg-transparent text-[13px] text-[#323130] outline-none placeholder:text-[#8a8886]"
           />
-        </div>
+        </label>
 
         <button
           onClick={() => setShowAddForm(true)}
-          className="px-4 py-2 bg-[var(--spr-accent)] hover:bg-[var(--spr-accent)] text-[var(--spr-text)] font-semibold text-xs rounded-md transition-colors cursor-pointer flex items-center gap-1.5 self-stretch sm:self-auto justify-center"
+          className="flex h-9 shrink-0 items-center justify-center gap-1.5 rounded bg-[#0f6cbd] px-3 text-[13px] font-medium text-white hover:bg-[#004578]"
         >
-          <Plus className="w-4 h-4" />
-          <span>Register Software Sector</span>
+          <Plus className="h-3.5 w-3.5" />
+          <span>Register software sector</span>
         </button>
       </div>
 
       {/* Main Layout Grid: Directories Grid on left, drilldown details on right if selected */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-12">
+
         {/* Sectors Grid */}
-        <div className={`${selectedSectorId ? 'lg:col-span-7' : 'lg:col-span-12'} grid grid-cols-1 md:grid-cols-2 gap-4`}>
+        <div className={`${selectedSectorId ? 'lg:col-span-7' : 'lg:col-span-12'} grid grid-cols-1 gap-3 md:grid-cols-2`}>
           {filteredSectors.map(sector => {
             const Icon = getIconComponent(sector.iconName);
             const metrics = sectorMetrics[sector.id];
@@ -415,58 +384,56 @@ export default function SoftwareSectorsPanel({
               <div
                 key={sector.id}
                 onClick={() => setSelectedSectorId(sector.id === selectedSectorId ? null : sector.id)}
-                className={`studio-card p-4.5 cursor-pointer text-left transition-all relative border flex flex-col justify-between h-48 group ${
-                  isSelected 
-                    ? 'border-[var(--spr-highlight)] bg-[var(--spr-accent-soft)]'
-                    : 'border-[var(--spr-border)] hover:border-[var(--spr-border)]'
+                className={`flex h-44 cursor-pointer flex-col justify-between rounded-md border bg-white p-3 text-left transition-colors ${
+                  isSelected
+                    ? 'border-[#0f6cbd] bg-[#eff6fc]'
+                    : 'border-[#e1dfdd] hover:border-[#c8c6c4]'
                 }`}
               >
                 <div>
-                  <div className="flex justify-between items-start">
-                    <div className="p-2 bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] rounded-md text-[var(--spr-text-faint)] group-hover:bg-[var(--spr-accent-soft)] group-hover:text-[var(--spr-highlight)] group-hover:border-[var(--spr-highlight)] transition-colors">
-                      <Icon className="w-4.5 h-4.5" />
+                  <div className="flex items-start justify-between">
+                    <div className="rounded bg-[#f3f2f1] p-1.5 text-[#605e5c]">
+                      <Icon className="h-4 w-4" />
                     </div>
 
-                    {/* Sector Passport Trust Index pill */}
+                    {/* Sector Passport Trust Index badge */}
                     {metrics.count > 0 ? (
-                      <span className={`text-[9px] font-mono font-bold px-2 py-0.8 rounded-full border ${
-                        metrics.avgTrust == null ? 'bg-[var(--spr-border)]/30 text-[var(--spr-text-muted)] border-[var(--spr-border)]' :
-                        metrics.avgTrust >= 90 ? 'bg-[var(--spr-green)]/15 text-[var(--spr-green)] border-[var(--spr-green)]' :
-                        metrics.avgTrust >= 80 ? 'bg-[var(--spr-amber)]/15 text-[var(--spr-amber)] border-[var(--spr-amber)]' :
-                        'bg-[var(--spr-red)]/15 text-[var(--spr-red)] border-[var(--spr-red)]'
+                      <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${
+                        metrics.avgTrust >= 90 ? 'text-[#0e700e]' :
+                        metrics.avgTrust >= 80 ? 'text-[#8a5700]' :
+                        'text-[#a4262c]'
                       }`}>
-                        {metrics.avgTrust == null ? 'Not verified' : `${metrics.avgTrust}% Avg Trust`}
+                        <span className={`h-1.5 w-1.5 rounded-full ${
+                          metrics.avgTrust >= 90 ? 'bg-[#0e700e]' :
+                          metrics.avgTrust >= 80 ? 'bg-[#8a5700]' :
+                          'bg-[#a4262c]'
+                        }`} />
+                        {metrics.avgTrust}% avg trust
                       </span>
                     ) : (
-                      <span className="text-[8px] font-mono font-bold text-[var(--spr-text-muted)] uppercase bg-[var(--spr-surface-hover)] border border-[var(--spr-border)] px-2 py-0.8 rounded-full">
-                        Empty Sector
-                      </span>
+                      <span className="text-[11px] text-[#8a8886]">Empty sector</span>
                     )}
                   </div>
 
-                  <h3 className="font-bold text-[var(--spr-text)] text-xs mt-3.5 group-hover:text-[var(--spr-highlight)] transition-colors">
+                  <h3 className="mt-2.5 text-[13px] font-semibold text-[#201f1e]">
                     {sector.name}
                   </h3>
-                  <p className="text-[10px] text-[var(--spr-text-muted)] mt-1 leading-relaxed line-clamp-2">
+                  <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-[#8a8886]">
                     {sector.description}
                   </p>
                 </div>
 
-                <div className="flex justify-between items-center border-t border-[var(--spr-border)] pt-2.5 mt-2.5 text-[9px] font-mono text-[var(--spr-text-muted)]">
-                  <div className="flex gap-4">
-                    <span>
-                      PASSPORTS: <strong className="text-[var(--spr-text-faint)] font-bold">{metrics.count}</strong>
-                    </span>
+                <div className="mt-2.5 flex items-center justify-between border-t border-[#f3f2f1] pt-2 text-[11px] text-[#605e5c]">
+                  <div className="flex gap-3">
+                    <span>Passports <strong className="font-semibold text-[#323130]">{metrics.count}</strong></span>
                     {metrics.count > 0 && (
-                      <span>
-                        CVEs: <strong className={`font-bold ${metrics.totalCves > 0 ? 'text-[var(--spr-red)]' : 'text-[var(--spr-green)]'}`}>{metrics.totalCves}</strong>
-                      </span>
+                      <span>Findings <strong className={`font-semibold ${metrics.totalCves > 0 ? 'text-[#a4262c]' : 'text-[#0e700e]'}`}>{metrics.totalCves}</strong></span>
                     )}
                   </div>
 
-                  <span className="text-[var(--spr-highlight)] hover:text-[var(--spr-highlight)] font-bold flex items-center gap-0.5">
-                    <span>Analyze Sector</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
+                  <span className="flex items-center gap-0.5 font-medium text-[#0f6cbd]">
+                    <span>Analyze</span>
+                    <ChevronRight className="h-3.5 w-3.5" />
                   </span>
                 </div>
               </div>
@@ -476,100 +443,100 @@ export default function SoftwareSectorsPanel({
 
         {/* Drilldown Detailed Panel (Sticky-like sidebar) */}
         {selectedSector && selectedMetrics && (
-          <div className="lg:col-span-5 bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] rounded-md p-5 space-y-5 text-left sticky top-4">
-            
-            <div className="flex justify-between items-start">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] border border-[var(--spr-highlight)] rounded-md">
-                  {React.createElement(getIconComponent(selectedSector.iconName), { className: 'w-5 h-5' })}
+          <div className="sticky top-4 space-y-4 rounded-md border border-[#e1dfdd] bg-white p-4 text-left lg:col-span-5">
+
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="rounded bg-[#eff6fc] p-2 text-[#0f6cbd]">
+                  {React.createElement(getIconComponent(selectedSector.iconName), { className: 'w-4 h-4' })}
                 </div>
                 <div>
-                  <h3 className="font-bold text-[var(--spr-text)] text-sm">{selectedSector.name}</h3>
-                  <span className="text-[9px] font-mono text-[var(--spr-text-muted)] uppercase font-bold tracking-wider">Sector ID: {selectedSector.id}</span>
+                  <h3 className="text-[14px] font-semibold text-[#201f1e]">{selectedSector.name}</h3>
+                  <span className="text-[11px] text-[#8a8886]">Sector ID: {selectedSector.id}</span>
                 </div>
               </div>
               <button
                 onClick={() => setSelectedSectorId(null)}
-                className="p-1 text-[var(--spr-text-muted)] hover:text-[var(--spr-text-faint)] hover:bg-[var(--spr-surface-sunken)] rounded-md transition-colors cursor-pointer"
-                title="Close Analysis"
+                className="rounded p-1 text-[#8a8886] hover:bg-black/[.03] hover:text-[#605e5c]"
+                title="Close analysis"
               >
-                <X className="w-4 h-4" />
+                <X className="h-3.5 w-3.5" />
               </button>
             </div>
 
-            <p className="text-xs text-[var(--spr-text-muted)] leading-relaxed bg-[var(--spr-surface-sunken)] p-3 rounded-md border border-[var(--spr-border)]">
+            <p className="rounded-md border border-[#e1dfdd] bg-[#faf9f8] p-3 text-[12px] leading-relaxed text-[#605e5c]">
               {selectedSector.description}
             </p>
 
             {/* Sector Statistics List */}
-            <div className="grid grid-cols-2 gap-3 font-mono text-[9px] text-[var(--spr-text-muted)]">
-              <div className="bg-[var(--spr-surface-sunken)] p-2.5 rounded-md border border-[var(--spr-border)]">
-                <span className="text-[8px] font-bold text-[var(--spr-text-muted)] uppercase tracking-wide block">Active Passports</span>
-                <span className="text-xs font-bold text-[var(--spr-text-faint)] mt-1 block">{selectedMetrics.count} monitored</span>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded border border-[#e1dfdd] bg-[#faf9f8] p-2">
+                <span className="block text-[11px] text-[#8a8886]">Active passports</span>
+                <span className="text-[13px] font-semibold text-[#323130]">{selectedMetrics.count} monitored</span>
               </div>
-              <div className="bg-[var(--spr-surface-sunken)] p-2.5 rounded-md border border-[var(--spr-border)]">
-                <span className="text-[8px] font-bold text-[var(--spr-text-muted)] uppercase tracking-wide block">Total Dependencies</span>
-                <span className="text-xs font-bold text-[var(--spr-text-faint)] mt-1 block">{selectedMetrics.totalSboms} SBOM nodes</span>
+              <div className="rounded border border-[#e1dfdd] bg-[#faf9f8] p-2">
+                <span className="block text-[11px] text-[#8a8886]">Total dependencies</span>
+                <span className="text-[13px] font-semibold text-[#323130]">{selectedMetrics.totalSboms} SBOM nodes</span>
               </div>
             </div>
 
             {/* Profile specifications */}
-            <div className="space-y-3.5 text-xs">
+            <div className="space-y-3">
               <div>
-                <h4 className="font-bold text-[var(--spr-text-faint)] uppercase tracking-wider text-[9px] font-mono border-b border-[var(--spr-border)] pb-1.5 flex items-center gap-1.5">
-                  <ShieldAlert className="w-3.5 h-3.5 text-[var(--spr-highlight)]" /> Major Threat Vector
+                <h4 className="flex items-center gap-1.5 border-b border-[#f3f2f1] pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#605e5c]">
+                  <ShieldAlert className="h-3.5 w-3.5 text-[#0f6cbd]" /> Major threat vector
                 </h4>
-                <p className="text-[11px] text-[var(--spr-text-muted)] leading-relaxed mt-1">{selectedSector.threatProfile}</p>
+                <p className="mt-1 text-[12px] leading-relaxed text-[#605e5c]">{selectedSector.threatProfile}</p>
               </div>
 
               <div>
-                <h4 className="font-bold text-[var(--spr-text-faint)] uppercase tracking-wider text-[9px] font-mono border-b border-[var(--spr-border)] pb-1.5 flex items-center gap-1.5">
-                  <Award className="w-3.5 h-3.5 text-[var(--spr-highlight)]" /> Sector Compliance Target
+                <h4 className="flex items-center gap-1.5 border-b border-[#f3f2f1] pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#605e5c]">
+                  <Award className="h-3.5 w-3.5 text-[#0f6cbd]" /> Sector compliance target
                 </h4>
-                <p className="text-[11px] text-[var(--spr-text-muted)] leading-relaxed mt-1 font-semibold text-[var(--spr-highlight)]">{selectedSector.complianceMandate}</p>
+                <p className="mt-1 text-[12px] font-medium leading-relaxed text-[#0f6cbd]">{selectedSector.complianceMandate}</p>
               </div>
 
               <div>
-                <h4 className="font-bold text-[var(--spr-text-faint)] uppercase tracking-wider text-[9px] font-mono border-b border-[var(--spr-border)] pb-1.5 flex items-center gap-1.5">
-                  <Settings className="w-3.5 h-3.5 text-[var(--spr-highlight)]" /> Security Hardening Blueprint
+                <h4 className="flex items-center gap-1.5 border-b border-[#f3f2f1] pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#605e5c]">
+                  <Settings className="h-3.5 w-3.5 text-[#0f6cbd]" /> Security hardening blueprint
                 </h4>
-                <p className="text-[11px] text-[var(--spr-text-muted)] leading-relaxed mt-1 bg-[var(--spr-accent-soft)] border border-[var(--spr-highlight)] p-2.5 rounded text-[var(--spr-highlight)] font-sans font-medium">{selectedSector.hardeningBlueprint}</p>
+                <p className="mt-1 rounded border border-[#e1dfdd] bg-[#eff6fc] p-2 text-[12px] leading-relaxed text-[#201f1e]">{selectedSector.hardeningBlueprint}</p>
               </div>
             </div>
 
             {/* Matched Passports block */}
-            <div className="space-y-2 border-t border-[var(--spr-border)] pt-4">
-              <span className="text-[9px] font-mono font-bold text-[var(--spr-text-muted)] uppercase tracking-wider block">Verified Passports inside Sector</span>
-              
+            <div className="space-y-2 border-t border-[#f3f2f1] pt-3">
+              <span className="block text-[11px] font-semibold uppercase tracking-wide text-[#8a8886]">Verified passports in sector</span>
+
               {selectedMetrics.count === 0 ? (
-                <div className="text-center py-6 bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] border-dashed rounded-md space-y-2">
-                  <p className="text-[11px] text-[var(--spr-text-muted)] italic">No software passports registered in this category.</p>
+                <div className="space-y-2 rounded-md border border-dashed border-[#e1dfdd] bg-[#faf9f8] py-5 text-center">
+                  <p className="text-[12px] italic text-[#8a8886]">No software passports registered in this category.</p>
                   <button
                     onClick={() => onFilterCategory(selectedSector.name)}
-                    className="px-3 py-1 bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] hover:bg-[var(--spr-accent-soft)] border border-[var(--spr-highlight)] rounded text-[10px] font-semibold cursor-pointer transition-colors"
+                    className="h-8 rounded border border-[#c8c6c4] px-3 text-[12px] font-medium text-[#323130] hover:bg-black/[.03]"
                   >
-                    View Empty Catalog Filter
+                    View empty catalog filter
                   </button>
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {selectedMetrics.matchedPassports.map(p => (
                     <div
                       key={p.id}
                       onClick={() => setSelectedPassportId(p.id)}
-                      className="p-3 bg-[var(--spr-surface-sunken)] hover:bg-[var(--spr-surface-hover)] border border-[var(--spr-border)] hover:border-[var(--spr-border)] rounded-md flex justify-between items-center cursor-pointer transition-all"
+                      className="flex cursor-pointer items-center justify-between rounded border border-[#e1dfdd] bg-[#faf9f8] p-2.5 hover:border-[#c8c6c4]"
                     >
                       <div className="min-w-0">
-                        <h4 className="text-xs font-bold text-[var(--spr-text)] truncate">{p.name}</h4>
-                        <span className="text-[10px] font-mono text-[var(--spr-text-muted)] mt-0.5 block">Version: {p.version} | {p.publisher}</span>
+                        <h4 className="truncate text-[13px] font-medium text-[#201f1e]">{p.name}</h4>
+                        <span className="mt-0.5 block text-[11px] text-[#8a8886]">Version {p.version} · {p.publisher}</span>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className={`w-8 h-8 rounded-full border flex items-center justify-center font-mono text-[9px] font-bold ${
-                          p.overallScore == null ? 'bg-[var(--spr-border)]/30 text-[var(--spr-text-muted)] border-[var(--spr-border)]' : p.overallScore >= 90 ? 'bg-[var(--spr-green)]/15 text-[var(--spr-green)] border-[var(--spr-green)]' : 'bg-[var(--spr-amber)]/15 text-[var(--spr-amber)] border-[var(--spr-amber)]'
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className={`flex h-7 w-7 items-center justify-center rounded-full border text-[11px] font-semibold ${
+                          p.overallScore >= 90 ? 'border-[#0e700e]/30 bg-[#dff6dd] text-[#0e700e]' : 'border-[#8a5700]/30 bg-[#fff4ce] text-[#8a5700]'
                         }`}>
-                          {p.overallScore ?? '—'}
+                          {p.overallScore}
                         </span>
-                        <ChevronRight className="w-4 h-4 text-[var(--spr-text-muted)]" />
+                        <ChevronRight className="h-3.5 w-3.5 text-[#8a8886]" />
                       </div>
                     </div>
                   ))}
@@ -578,13 +545,13 @@ export default function SoftwareSectorsPanel({
             </div>
 
             {/* Action buttons */}
-            <div className="pt-3 border-t border-[var(--spr-border)] flex gap-3">
+            <div className="border-t border-[#f3f2f1] pt-3">
               <button
                 onClick={() => onFilterCategory(selectedSector.name)}
-                className="flex-1 py-2 bg-[var(--spr-accent)] hover:bg-[var(--spr-accent)] text-[var(--spr-text)] font-semibold text-xs rounded-md transition-colors cursor-pointer text-center flex items-center justify-center gap-1.5"
+                className="flex h-9 w-full items-center justify-center gap-1.5 rounded bg-[#0f6cbd] px-3 text-[13px] font-medium text-white hover:bg-[#004578]"
               >
-                <Eye className="w-3.5 h-3.5" />
-                <span>Filter Catalog Grid</span>
+                <Eye className="h-3.5 w-3.5" />
+                <span>Filter catalog grid</span>
               </button>
             </div>
 
@@ -595,45 +562,45 @@ export default function SoftwareSectorsPanel({
 
       {/* Registration Overlay Popup for New Software Sector */}
       {showAddForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--spr-surface)] p-4">
-          <div className="bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] rounded-md max-w-lg w-full p-6 relative">
-            
-            <div className="flex justify-between items-start border-b border-[var(--spr-border)] pb-3">
-              <h3 className="text-sm font-bold text-[var(--spr-text)] font-display flex items-center gap-1.5">
-                <Cpu className="w-5 h-5 text-[var(--spr-highlight)] shrink-0" />
-                <span>Register Custom Software Sector</span>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-md border border-[#e1dfdd] bg-white p-5">
+
+            <div className="flex items-start justify-between border-b border-[#f3f2f1] pb-3">
+              <h3 className="flex items-center gap-1.5 text-[15px] font-semibold text-[#201f1e]">
+                <Cpu className="h-4 w-4 shrink-0 text-[#0f6cbd]" />
+                <span>Register custom software sector</span>
               </h3>
               <button
                 onClick={() => setShowAddForm(false)}
-                className="p-1 text-[var(--spr-text-muted)] hover:text-[var(--spr-text-faint)] rounded-md cursor-pointer transition-colors"
+                className="rounded p-1 text-[#8a8886] hover:bg-black/[.03] hover:text-[#605e5c]"
               >
-                <X className="w-4 h-4" />
+                <X className="h-3.5 w-3.5" />
               </button>
             </div>
 
-            <form onSubmit={handleAddSector} className="space-y-4 text-left mt-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                
+            <form onSubmit={handleAddSector} className="mt-4 space-y-3 text-left">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+
                 {/* Sector Name */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-mono font-bold text-[var(--spr-text-muted)] uppercase block">Sector / Category Name</label>
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-medium text-[#605e5c]">Sector / category name</label>
                   <input
                     type="text"
                     required
                     placeholder="e.g. Identity Providers & IAM"
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
-                    className="w-full bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] px-3 py-1.8 rounded-md text-xs text-[var(--spr-text)] placeholder-[var(--spr-text-faint)] focus:outline-none "
+                    className="h-9 w-full rounded border border-[#c8c6c4] bg-white px-3 text-[13px] text-[#323130] placeholder:text-[#8a8886] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
                   />
                 </div>
 
                 {/* Icon Selection */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-mono font-bold text-[var(--spr-text-muted)] uppercase block">Assigned Sector Icon</label>
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-medium text-[#605e5c]">Assigned sector icon</label>
                   <select
                     value={newIcon}
                     onChange={(e) => setNewIcon(e.target.value)}
-                    className="w-full bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] px-3 py-1.8 rounded-md text-xs text-[var(--spr-text)] focus:outline-none cursor-pointer"
+                    className="h-9 w-full rounded border border-[#c8c6c4] bg-white px-3 text-[13px] text-[#323130] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
                   >
                     <option value="Cpu">Processor (CPU)</option>
                     <option value="Globe">Web / Networking (Globe)</option>
@@ -653,83 +620,83 @@ export default function SoftwareSectorsPanel({
               </div>
 
               {/* Sector Description */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-mono font-bold text-[var(--spr-text-muted)] uppercase block">Sector Description</label>
+              <div className="space-y-1">
+                <label className="block text-[11px] font-medium text-[#605e5c]">Sector description</label>
                 <textarea
                   required
                   rows={2}
                   placeholder="Summarize the technological boundaries and function of this software sector..."
                   value={newDescription}
                   onChange={(e) => setNewDescription(e.target.value)}
-                  className="w-full bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] px-3 py-1.8 rounded-md text-xs text-[var(--spr-text)] placeholder-[var(--spr-text-faint)] focus:outline-none resize-none"
+                  className="w-full resize-none rounded border border-[#c8c6c4] bg-white px-3 py-2 text-[13px] text-[#323130] placeholder:text-[#8a8886] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {/* Threat Profile */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-mono font-bold text-[var(--spr-text-muted)] uppercase block">Primary Threat Vector</label>
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-medium text-[#605e5c]">Primary threat vector</label>
                   <input
                     type="text"
                     placeholder="e.g. Session hijacking, side-channel leakage"
                     value={newThreat}
                     onChange={(e) => setNewThreat(e.target.value)}
-                    className="w-full bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] px-3 py-1.8 rounded-md text-xs text-[var(--spr-text)] placeholder-[var(--spr-text-faint)] focus:outline-none "
+                    className="h-9 w-full rounded border border-[#c8c6c4] bg-white px-3 text-[13px] text-[#323130] placeholder:text-[#8a8886] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
                   />
                 </div>
 
                 {/* Vulnerability Class */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-mono font-bold text-[var(--spr-text-muted)] uppercase block">Core Vulnerability Class</label>
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-medium text-[#605e5c]">Core vulnerability class</label>
                   <input
                     type="text"
                     placeholder="e.g. Memory Corruption, Injection"
                     value={newVulClass}
                     onChange={(e) => setNewVulClass(e.target.value)}
-                    className="w-full bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] px-3 py-1.8 rounded-md text-xs text-[var(--spr-text)] placeholder-[var(--spr-text-faint)] focus:outline-none "
+                    className="h-9 w-full rounded border border-[#c8c6c4] bg-white px-3 text-[13px] text-[#323130] placeholder:text-[#8a8886] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {/* Compliance Target */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-mono font-bold text-[var(--spr-text-muted)] uppercase block">Compliance Mandate Target</label>
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-medium text-[#605e5c]">Compliance mandate target</label>
                   <input
                     type="text"
                     placeholder="e.g. NIST CSF Access Control 3.1"
                     value={newCompliance}
                     onChange={(e) => setNewCompliance(e.target.value)}
-                    className="w-full bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] px-3 py-1.8 rounded-md text-xs text-[var(--spr-text)] placeholder-[var(--spr-text-faint)] focus:outline-none "
+                    className="h-9 w-full rounded border border-[#c8c6c4] bg-white px-3 text-[13px] text-[#323130] placeholder:text-[#8a8886] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
                   />
                 </div>
 
                 {/* Hardening Blueprint */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-mono font-bold text-[var(--spr-text-muted)] uppercase block">Hardening Blueprint</label>
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-medium text-[#605e5c]">Hardening blueprint</label>
                   <input
                     type="text"
                     placeholder="e.g. Mandatory MFA, short-lived tokens"
                     value={newHardening}
                     onChange={(e) => setNewHardening(e.target.value)}
-                    className="w-full bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] px-3 py-1.8 rounded-md text-xs text-[var(--spr-text)] placeholder-[var(--spr-text-faint)] focus:outline-none "
+                    className="h-9 w-full rounded border border-[#c8c6c4] bg-white px-3 text-[13px] text-[#323130] placeholder:text-[#8a8886] focus:border-[#0f6cbd] focus:outline-none focus:ring-1 focus:ring-[#0f6cbd]"
                   />
                 </div>
               </div>
 
-              <div className="mt-6 flex justify-end gap-3 pt-3 border-t border-[var(--spr-border)]">
+              <div className="mt-4 flex justify-end gap-2 border-t border-[#f3f2f1] pt-3">
                 <button
                   type="button"
                   onClick={() => setShowAddForm(false)}
-                  className="px-4 py-2 bg-[var(--spr-surface-hover)] hover:bg-[var(--spr-surface-hover)] text-[var(--spr-text-faint)] text-xs font-semibold rounded-md cursor-pointer transition-colors"
+                  className="h-9 rounded border border-[#c8c6c4] px-3 text-[13px] font-medium text-[#323130] hover:bg-black/[.03]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-[var(--spr-accent)] hover:bg-[var(--spr-accent)] text-[var(--spr-text)] text-xs font-semibold rounded-md cursor-pointer transition-colors"
+                  className="h-9 rounded bg-[#0f6cbd] px-3 text-[13px] font-medium text-white hover:bg-[#004578]"
                 >
-                  Confirm Registration
+                  Confirm registration
                 </button>
               </div>
             </form>

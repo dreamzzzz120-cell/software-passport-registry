@@ -10,12 +10,12 @@ const EMPTY: Snapshot = { passports: null, scans: null, findings: null, clients:
 type MetricProps = { label: string; value: MetricValue; loading: boolean; key?: Key };
 function Metric({ label, value, loading }: MetricProps) {
   const display = loading ? '—' : value === null ? 'Not verified' : value;
-  return <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><div className="text-[10px] font-bold uppercase tracking-[.18em] text-[var(--spr-text-faint)]">{label}</div><div className="mt-2 text-2xl font-semibold tracking-tight text-[var(--spr-text)]">{display}</div></div>;
+  return <div><div className="text-[11px] text-[#605e5c]">{label}</div><div className="mt-1 text-lg font-semibold text-[#201f1e]">{display}</div></div>;
 }
 
 type StepProps = { index: number; label: string; active: boolean; key?: Key };
 function Step({ index, label, active }: StepProps) {
-  return <div className={`flex items-center gap-3 rounded-md border border-[var(--spr-border)] px-3 py-3 ${active ? 'bg-[var(--spr-accent-soft)]' : 'bg-[var(--spr-surface-sunken)]'}`}><span className={`grid h-7 w-7 place-items-center rounded-full text-[10px] font-bold ${active ? 'bg-[var(--spr-accent)] text-white' : 'bg-[var(--spr-surface-hover)] text-[var(--spr-text-muted)]'}`}>{index + 1}</span><span className={active ? 'text-sm text-[var(--spr-text)]' : 'text-sm text-[var(--spr-text-muted)]'}>{label}</span>{active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-[var(--spr-highlight)]" />}</div>;
+  return <div className={`flex items-center gap-3 rounded border px-3 py-2 ${active ? 'border-[#0f6cbd] bg-[#eff6fc]' : 'border-[#e1dfdd] bg-white'}`}><span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${active ? 'bg-[#0f6cbd] text-white' : 'bg-[#f3f2f1] text-[#8a8886]'}`}>{index + 1}</span><span className={`text-[13px] ${active ? 'font-medium text-[#201f1e]' : 'text-[#605e5c]'}`}>{label}</span>{active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-[#0f6cbd]" />}</div>;
 }
 
 export default function ExtensionWorkflow({ id, onNavigate }: Props) {
@@ -68,22 +68,47 @@ export default function ExtensionWorkflow({ id, onNavigate }: Props) {
     return [['Passports', snapshot.passports], ['Scans', snapshot.scans], ['Findings', snapshot.findings]] as const;
   }, [id, snapshot]);
 
-  if (!extension) return <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-8 text-[var(--spr-red)]">Extension not found.</div>;
-  if (unauthorized) return <div className="spr-panel p-8"><div className="text-[10px] font-bold uppercase tracking-[.2em] text-[var(--spr-amber)]">Session expired</div><h1 className="mt-2 text-2xl font-semibold text-[var(--spr-text)]">Re-authentication required</h1><p className="mt-2 text-sm text-[var(--spr-text-muted)]">The extension could not access its protected evidence sources.</p><button onClick={() => onNavigate('/login')} className="spr-btn spr-btn-primary mt-5">Return to sign in</button></div>;
+  if (!extension) return <div className="rounded-md border border-[#e1dfdd] bg-[#fdf2f2] p-4 text-[13px] text-[#a4262c]">Extension not found.</div>;
+  if (unauthorized) return <div className="rounded-md border border-[#e1dfdd] bg-white p-5">
+    <div className="text-[11px] uppercase tracking-wide text-[#8a5700]">Session expired</div>
+    <h1 className="mt-1 text-[20px] font-semibold text-[#201f1e]">Re-authentication required</h1>
+    <p className="mt-1 text-[13px] text-[#605e5c]">The extension could not access its protected evidence sources.</p>
+    <button onClick={() => onNavigate('/login')} className="mt-4 h-9 rounded bg-[#0f6cbd] px-4 text-[13px] font-medium text-white hover:bg-[#004578]">Return to sign in</button>
+  </div>;
 
   const firstRoute = extension.sourceRoutes[0] || '/dashboard';
-  return <section className="space-y-6">
-    <div className="spr-panel p-6 md:p-8">
-      <div><div className="mb-4 flex flex-wrap items-center gap-2"><span className="rounded-sm border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[.18em] text-[#4ec9b0]">Extension workflow</span><span className="rounded-sm border border-[var(--spr-border)] px-2.5 py-1 text-[10px] text-[var(--spr-green)]">Protected evidence surface</span></div><h1 className="max-w-3xl text-3xl font-semibold tracking-tight text-[var(--spr-text)] md:text-4xl">{extension.name}</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--spr-text-muted)]">{extension.description}</p><div className="mt-6 flex flex-wrap gap-3"><button onClick={() => onNavigate(firstRoute)} className="spr-btn spr-btn-primary">Open source workflow</button><button onClick={() => setActiveStep((step) => Math.min(step + 1, extension.steps.length - 1))} className="spr-btn spr-btn-secondary">Advance workflow</button></div></div>
+  return <section className="space-y-4">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <span className="inline-flex items-center gap-1.5 text-[11px] text-[#8a8886]">
+          <span className="rounded bg-[#f3f2f1] px-1.5 py-0.5 uppercase tracking-wide">Extension workflow</span>
+          <span className="text-[#0e700e]">Protected evidence surface</span>
+        </span>
+        <h1 className="mt-1 text-[22px] font-semibold text-[#201f1e]">{extension.name}</h1>
+        <p className="mt-1 max-w-2xl text-[13px] text-[#605e5c]">{extension.description}</p>
+      </div>
+      <div className="flex shrink-0 flex-wrap gap-2">
+        <button onClick={() => onNavigate(firstRoute)} className="h-9 rounded bg-[#0f6cbd] px-3 text-[13px] font-medium text-white hover:bg-[#004578]">Open source workflow</button>
+        <button onClick={() => setActiveStep((step) => Math.min(step + 1, extension.steps.length - 1))} className="h-9 rounded border border-[#c8c6c4] px-3 text-[13px] font-medium text-[#323130] hover:bg-black/[.03]">Advance workflow</button>
+      </div>
     </div>
 
-    {/* Indexed rather than destructured: metrics is a readonly tuple array,
-        which cannot be assigned to a mutable [label, value] parameter. */}
-    <div className="grid gap-3 md:grid-cols-3">{metrics.map((entry) => <Metric key={entry[0]} label={entry[0]} value={entry[1]} loading={loading} />)}</div>
+    <div className="flex flex-wrap gap-6 rounded-md border border-[#e1dfdd] bg-white p-3">{metrics.map(([label, value]) => <Metric key={label} label={label} value={value} loading={loading} />)}</div>
 
-    <div className="grid gap-5 xl:grid-cols-[1.1fr_.9fr]">
-      <div className="spr-panel p-5"><div className="mb-4"><div className="text-sm font-semibold text-[var(--spr-text)]">Workflow</div><div className="mt-1 text-xs text-[var(--spr-text-faint)]">Every extension owns its own operating sequence.</div></div><div className="space-y-2">{extension.steps.map((step, index) => <Step key={step} index={index} label={step} active={index === activeStep} />)}</div></div>
-      <div className="spr-panel p-5"><div className="text-sm font-semibold text-[var(--spr-text)]">Observed evidence surface</div><p className="mt-1 text-xs leading-5 text-[var(--spr-text-faint)]">Counts are displayed only when the protected API returns a recognized collection. Unavailable sources are explicitly marked <span className="text-[var(--spr-text-muted)]">Not verified</span>.</p>{loadFailed && <div className="mt-3 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-3 text-xs text-[var(--spr-red)]">Evidence sources could not be loaded. No values are inferred.</div>}<div className="mt-5 space-y-3 text-xs">{[['Passports', snapshot.passports, '/passports'], ['Scans', snapshot.scans, '/scans'], ['Findings', snapshot.findings, '/alerts'], ['Clients', snapshot.clients, '/clients']].map(([label, value, path]) => <button key={String(label)} onClick={() => onNavigate(String(path))} className="flex w-full items-center justify-between rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-3 text-left hover:bg-[var(--spr-surface-hover)]"><span className="text-[var(--spr-text-muted)]">{label}</span><span className="font-semibold text-[var(--spr-text)]">{loading ? '—' : value === null ? 'Not verified' : String(value)} <span className="ml-2 text-[var(--spr-text-faint)]">→</span></span></button>)}</div></div>
+    <div className="grid gap-4 xl:grid-cols-[1.1fr_.9fr]">
+      <div className="rounded-md border border-[#e1dfdd] bg-white p-4">
+        <div className="mb-3">
+          <div className="text-[13px] font-semibold text-[#201f1e]">Workflow</div>
+          <div className="mt-0.5 text-[11px] text-[#8a8886]">Every extension owns its own operating sequence.</div>
+        </div>
+        <div className="space-y-1.5">{extension.steps.map((step, index) => <Step key={step} index={index} label={step} active={index === activeStep} />)}</div>
+      </div>
+      <div className="rounded-md border border-[#e1dfdd] bg-white p-4">
+        <div className="text-[13px] font-semibold text-[#201f1e]">Observed evidence surface</div>
+        <p className="mt-1 text-[12px] leading-5 text-[#8a8886]">Counts are displayed only when the protected API returns a recognized collection. Unavailable sources are explicitly marked <span className="text-[#605e5c]">Not verified</span>.</p>
+        {loadFailed && <div className="mt-3 rounded border border-[#e1dfdd] bg-[#fdf2f2] p-3 text-[12px] text-[#a4262c]">Evidence sources could not be loaded. No values are inferred.</div>}
+        <div className="mt-3 space-y-1.5">{[['Passports', snapshot.passports, '/passports'], ['Scans', snapshot.scans, '/scans'], ['Findings', snapshot.findings, '/alerts'], ['Clients', snapshot.clients, '/clients']].map(([label, value, path]) => <button key={String(label)} onClick={() => onNavigate(String(path))} className="flex w-full items-center justify-between rounded border border-[#e1dfdd] px-3 py-2 text-left text-[13px] hover:border-[#c8c6c4] hover:bg-black/[.02]"><span className="text-[#605e5c]">{label}</span><span className="font-medium text-[#201f1e]">{loading ? '—' : value === null ? 'Not verified' : String(value)} <span className="ml-2 text-[#8a8886]">→</span></span></button>)}</div>
+      </div>
     </div>
   </section>;
 }

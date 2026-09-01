@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState, type MouseEvent, type WheelEvent } from 'react';
-import { CircleHelp, Filter, Maximize2, Search, Share2, X, ZoomIn, ZoomOut } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { CircleHelp, Filter, Search, X } from 'lucide-react';
 import type { Client, SoftwarePassport } from '../types';
 
 type GraphAsset = { id: string; name?: string; hostName?: string; type?: string; clientId?: string; clientName?: string; version?: string };
@@ -16,14 +16,14 @@ interface TrustGraphViewProps {
 }
 
 const COLORS: Record<GraphKind, string> = {
-  vendor: '#c586c0',
-  client: 'var(--spr-highlight)',
-  passport: '#4ec9b0',
-  component: '#9cdcfe',
-  asset: 'var(--spr-amber)',
-  evidence: 'var(--spr-green)',
-  finding: 'var(--spr-red)',
-  vulnerability: '#d16969',
+  vendor: '#8764b8',
+  client: '#0f6cbd',
+  passport: '#038387',
+  component: '#00b7c3',
+  asset: '#986f0b',
+  evidence: '#0e700e',
+  finding: '#a4262c',
+  vulnerability: '#d13438',
 };
 
 const KIND_ORDER: GraphKind[] = ['vendor', 'client', 'passport', 'component', 'asset', 'evidence', 'finding', 'vulnerability'];
@@ -56,10 +56,6 @@ export default function TrustGraphView({ clients = [], passports = [], assets = 
   const [kindFilter, setKindFilter] = useState<'all' | GraphKind>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeKey, setSelectedEdgeKey] = useState<string | null>(null);
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
-  const [view, setView] = useState({ x: 0, y: 0, k: 1 });
-  const dragRef = useRef<{ x: number; y: number } | null>(null);
-  const draggedRef = useRef(false);
 
   const { nodes, edges } = useMemo(() => {
     const graphNodes: GraphNode[] = [];
@@ -156,180 +152,94 @@ export default function TrustGraphView({ clients = [], passports = [], assets = 
   const selectNode = (id: string) => { setSelectedId(id); setSelectedEdgeKey(null); };
   const selectEdge = (edge: GraphEdge) => { setSelectedEdgeKey(`${edge.source}-${edge.target}-${edge.label}`); setSelectedId(null); };
 
-  // Hovering (or selecting) a node highlights it plus its direct relationships
-  // and dims everything else, so the graph reads as an explorable web of
-  // connections instead of a static diagram.
-  const activeId = hoveredId || selectedId;
-  const activeNeighbors = useMemo(() => {
-    if (!activeId) return null;
-    const set = new Set<string>([activeId]);
-    visibleEdges.forEach((edge) => { if (edge.source === activeId) set.add(edge.target); if (edge.target === activeId) set.add(edge.source); });
-    return set;
-  }, [activeId, visibleEdges]);
-  const connectedEdges = selected ? visibleEdges.filter((edge) => edge.source === selected.id || edge.target === selected.id) : [];
-
-  const clampZoom = (k: number) => Math.min(2.5, Math.max(0.5, k));
-  const zoomBy = (factor: number) => setView((v) => ({ ...v, k: clampZoom(v.k * factor) }));
-  const resetView = () => setView({ x: 0, y: 0, k: 1 });
-  const onWheel = (event: WheelEvent<SVGSVGElement>) => { event.preventDefault(); zoomBy(event.deltaY > 0 ? 0.9 : 1.1); };
-  const onPointerDown = (event: MouseEvent<SVGSVGElement>) => { dragRef.current = { x: event.clientX, y: event.clientY }; draggedRef.current = false; };
-  const onPointerMove = (event: MouseEvent<SVGSVGElement>) => {
-    if (!dragRef.current) return;
-    const dx = event.clientX - dragRef.current.x; const dy = event.clientY - dragRef.current.y;
-    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) draggedRef.current = true;
-    dragRef.current = { x: event.clientX, y: event.clientY };
-    setView((v) => ({ ...v, x: v.x + dx, y: v.y + dy }));
-  };
-  const onPointerUp = () => { dragRef.current = null; };
-
   return (
-    <section className="space-y-6" aria-labelledby="trust-graph-title">
-      <header className="spr-panel p-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[.06em] text-[#9cdcfe]"><Share2 className="h-4 w-4" /> Trust graph</div>
-            <h1 id="trust-graph-title" className="mt-2 text-3xl font-semibold tracking-tight">Observed relationships</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--spr-text-muted)]">Relationships are drawn only when a field on one loaded record matches another. Click a node for its record, or click a relationship line for why it was drawn.</p>
-          </div>
-          <div className="flex flex-wrap gap-2 text-xs text-[var(--spr-text-muted)]"><span>{nodes.length} nodes</span><span>·</span><span>{edges.length} relationships</span></div>
+    <section className="space-y-4" aria-labelledby="trust-graph-title">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h1 id="trust-graph-title" className="text-[22px] font-semibold text-[#201f1e]">Trust graph</h1>
+          <p className="mt-1 text-[13px] text-[#605e5c]">Observed relationships between loaded clients, passports, assets, evidence and findings.</p>
         </div>
-        <div className="mt-5 flex flex-col gap-3 md:flex-row">
-          <label className="relative min-w-0 flex-1"><Search size={16} className="absolute left-3 top-3 text-[var(--spr-text-muted)]" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search loaded records…" className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] py-2.5 pl-9 pr-9 text-sm text-[var(--spr-text)] outline-none placeholder:text-[var(--spr-text-faint)] focus:border-[var(--spr-highlight)]/40" />{query && <button onClick={() => setQuery('')} aria-label="Clear search" className="absolute right-2 top-2 rounded-lg p-1 text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]"><X size={15} /></button>}</label>
-          <label className="flex items-center gap-2 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-3"><Filter size={15} className="text-[var(--spr-text-muted)]" /><select value={kindFilter} onChange={(event) => setKindFilter(event.target.value as typeof kindFilter)} className="bg-transparent py-2.5 text-sm text-[var(--spr-text)] outline-none"><option value="all">All record types</option>{KIND_ORDER.map((kind) => <option key={kind} value={kind}>{kind}</option>)}</select></label>
-        </div>
-      </header>
+        <div className="flex shrink-0 gap-4 text-[12px] text-[#605e5c]"><span>{nodes.length} nodes</span><span>{edges.length} relationships</span></div>
+      </div>
 
-      <div className="overflow-hidden spr-panel relative">
-        <div className="absolute right-3 top-3 z-10 flex gap-1" title="Scroll to zoom, drag to pan">
-          <button onClick={() => zoomBy(1.2)} aria-label="Zoom in" title="Zoom in" className="grid h-7 w-7 place-items-center rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]"><ZoomIn size={14} /></button>
-          <button onClick={() => zoomBy(1 / 1.2)} aria-label="Zoom out" title="Zoom out" className="grid h-7 w-7 place-items-center rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]"><ZoomOut size={14} /></button>
-          <button onClick={resetView} aria-label="Reset view" title="Reset zoom and pan" className="grid h-7 w-7 place-items-center rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]"><Maximize2 size={13} /></button>
+      <details className="rounded-md border border-[#e1dfdd] bg-[#faf9f8] text-[13px]">
+        <summary className="cursor-pointer select-none px-3 py-2 font-medium text-[#323130]">ⓘ What is this? · How it works</summary>
+        <div className="px-3 pb-3 text-[#605e5c]">
+          <p>Relationships are drawn only when a field on one loaded record matches another — nothing here is inferred or assumed.</p>
+          <ol className="mt-1.5 list-decimal space-y-0.5 pl-4">
+            <li>Click a node to see the underlying record it represents.</li>
+            <li>Click a relationship line to see exactly which matched field caused it to be drawn.</li>
+            <li>Use search or the record-type filter to narrow a large graph.</li>
+          </ol>
         </div>
+      </details>
+
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <label className="relative flex h-9 min-w-0 flex-1 items-center rounded border border-[#c8c6c4] bg-white focus-within:border-[#0f6cbd] focus-within:ring-1 focus-within:ring-[#0f6cbd]">
+          <Search className="ml-3 h-3.5 w-3.5 shrink-0 text-[#8a8886]" />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search loaded records…" className="min-w-0 flex-1 bg-transparent px-2 text-[13px] text-[#201f1e] outline-none placeholder:text-[#8a8886]" />
+          {query && <button onClick={() => setQuery('')} aria-label="Clear search" className="mr-2 rounded p-1 text-[#8a8886] hover:text-[#201f1e]"><X className="h-3.5 w-3.5" /></button>}
+        </label>
+        <label className="flex h-9 items-center gap-2 rounded border border-[#c8c6c4] bg-white px-3">
+          <Filter className="h-3.5 w-3.5 text-[#8a8886]" />
+          <select value={kindFilter} onChange={(event) => setKindFilter(event.target.value as typeof kindFilter)} className="bg-transparent text-[13px] text-[#323130] outline-none">
+            <option value="all">All record types</option>
+            {KIND_ORDER.map((kind) => <option key={kind} value={kind}>{kind}</option>)}
+          </select>
+        </label>
+      </div>
+
+      <div className="overflow-hidden rounded-md border border-[#e1dfdd] bg-white">
         <div className="overflow-x-auto">
-          <svg
-            viewBox="0 0 1400 680"
-            role="img"
-            aria-label="Trust graph of loaded tenant records"
-            className="h-[560px] min-w-[1200px] w-full cursor-grab active:cursor-grabbing"
-            onWheel={onWheel}
-            onMouseDown={onPointerDown}
-            onMouseMove={onPointerMove}
-            onMouseUp={onPointerUp}
-            onMouseLeave={onPointerUp}
-          >
-            <defs><pattern id="graph-grid" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M 32 0 L 0 0 0 32" fill="none" stroke="#ffffff" strokeOpacity=".035" /></pattern></defs>
+          <svg viewBox="0 0 1400 680" role="img" aria-label="Trust graph of loaded tenant records" className="h-[560px] min-w-[1200px] w-full">
+            <defs><pattern id="graph-grid" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M 32 0 L 0 0 0 32" fill="none" stroke="#201f1e" strokeOpacity=".04" /></pattern></defs>
             <rect width="1400" height="680" fill="url(#graph-grid)" />
-            <g transform={`translate(${view.x} ${view.y}) scale(${view.k})`}>
             {visibleEdges.map((edge) => {
               const source = nodeById.get(edge.source); const target = nodeById.get(edge.target); if (!source || !target) return null;
               const key = `${edge.source}-${edge.target}-${edge.label}`;
               const isSelected = selectedEdgeKey === key;
-              const touchesActive = activeId ? (edge.source === activeId || edge.target === activeId) : false;
-              const dimmed = activeId ? !touchesActive : false;
               return (
-                <g key={key} role="button" tabIndex={0} onClick={() => { if (!draggedRef.current) selectEdge(edge); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') selectEdge(edge); }} className="cursor-pointer">
-                  <title>{`${source.label} — ${edge.label} → ${target.label}`}</title>
-                  <line x1={source.x} y1={source.y} x2={target.x} y2={target.y} stroke={isSelected || touchesActive ? 'var(--spr-highlight)' : 'var(--spr-gray)'} strokeOpacity={dimmed ? 0.08 : isSelected || touchesActive ? 0.85 : 0.25} strokeWidth={isSelected || touchesActive ? 2 : 1} />
-                  <text x={(source.x + target.x) / 2} y={(source.y + target.y) / 2 - 5} fill={isSelected || touchesActive ? 'var(--spr-highlight)' : 'var(--spr-text-faint)'} fillOpacity={dimmed ? 0.15 : 1} fontSize="9" textAnchor="middle">{edge.label}</text>
+                <g key={key} role="button" tabIndex={0} onClick={() => selectEdge(edge)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') selectEdge(edge); }} className="cursor-pointer">
+                  <line x1={source.x} y1={source.y} x2={target.x} y2={target.y} stroke={isSelected ? '#0f6cbd' : '#8a8886'} strokeOpacity={isSelected ? '.8' : '.35'} strokeWidth={isSelected ? 2 : 1} />
+                  <text x={(source.x + target.x) / 2} y={(source.y + target.y) / 2 - 5} fill={isSelected ? '#0f6cbd' : '#8a8886'} fontSize="9" textAnchor="middle">{edge.label}</text>
                 </g>
               );
             })}
-            {visibleNodes.map((node) => {
-              const isActive = activeId === node.id;
-              const isNeighbor = activeNeighbors ? activeNeighbors.has(node.id) : true;
-              const dimmed = activeId ? !isNeighbor : false;
-              return (
-                <g
-                  key={node.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => { if (!draggedRef.current) selectNode(node.id); }}
-                  onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') selectNode(node.id); }}
-                  onMouseEnter={() => setHoveredId(node.id)}
-                  onMouseLeave={() => setHoveredId(null)}
-                  className="cursor-pointer"
-                  opacity={dimmed ? 0.2 : 1}
-                >
-                  <title>{`${node.kind}: ${node.label} — ${node.detail}`}</title>
-                  <circle cx={node.x} cy={node.y} r={selectedId === node.id ? 23 : isActive ? 21 : 18} fill={COLORS[node.kind]} fillOpacity={isActive ? 0.3 : 0.18} stroke={COLORS[node.kind]} strokeWidth={selectedId === node.id || isActive ? 3 : 1.5} />
-                  <text x={node.x} y={node.y + 3} fill={COLORS[node.kind]} fontSize="9" textAnchor="middle" fontWeight="700">{node.kind.slice(0, 4).toUpperCase()}</text>
-                  <text x={node.x} y={node.y + 34} fill="var(--spr-text)" fontSize="11" textAnchor="middle">{node.label}</text>
-                </g>
-              );
-            })}
-            {!visibleNodes.length && <text x="700" y="340" fill="var(--spr-text-muted)" fontSize="15" textAnchor="middle">No loaded records match this filter.</text>}
-            </g>
+            {visibleNodes.map((node) => <g key={node.id} role="button" tabIndex={0} onClick={() => selectNode(node.id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') selectNode(node.id); }} className="cursor-pointer"><circle cx={node.x} cy={node.y} r={selectedId === node.id ? 23 : 18} fill={COLORS[node.kind]} fillOpacity=".12" stroke={COLORS[node.kind]} strokeWidth={selectedId === node.id ? 3 : 1.5} /><text x={node.x} y={node.y + 3} fill={COLORS[node.kind]} fontSize="9" textAnchor="middle" fontWeight="700">{node.kind.slice(0, 4).toUpperCase()}</text><text x={node.x} y={node.y + 34} fill="#323130" fontSize="11" textAnchor="middle">{node.label}</text></g>)}
+            {!visibleNodes.length && <text x="700" y="340" fill="#8a8886" fontSize="15" textAnchor="middle">No loaded records match this filter.</text>}
           </svg>
         </div>
-        <div className="flex flex-wrap items-center gap-2 border-t border-[var(--spr-border)] px-5 py-4 text-xs text-[var(--spr-text-muted)]">
-          {KIND_ORDER.map((kind) => {
-            const count = nodes.filter((n) => n.kind === kind).length;
-            const isActive = kindFilter === kind;
-            return (
-              <button
-                key={kind}
-                onClick={() => setKindFilter(isActive ? 'all' : kind)}
-                title={`${count} ${kind} node${count === 1 ? '' : 's'} — click to ${isActive ? 'clear this' : 'show only this'} filter`}
-                className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 transition-colors"
-                style={{ borderColor: isActive ? COLORS[kind] : 'var(--spr-border)', backgroundColor: isActive ? `${COLORS[kind]}22` : 'transparent', color: isActive ? COLORS[kind] : 'var(--spr-text-muted)' }}
-              >
-                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: COLORS[kind] }} />{kind}<span className="text-[var(--spr-text-faint)]">{count}</span>
-              </button>
-            );
-          })}
-          <span className="ml-auto inline-flex items-center gap-1 text-[var(--spr-text-muted)]" title="Hover a node to see its direct relationships highlighted; click for full details."><CircleHelp size={14} /> hover to trace connections, click for details</span>
-        </div>
+        <div className="flex flex-wrap gap-4 border-t border-[#e1dfdd] px-4 py-3 text-[12px] text-[#605e5c]">{KIND_ORDER.map((kind) => <span key={kind} className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: COLORS[kind] }} />{kind}</span>)}<span className="ml-auto inline-flex items-center gap-1 text-[#8a8886]"><CircleHelp className="h-3.5 w-3.5" /> click a node or line for details</span></div>
       </div>
 
-      {selected && (
-        <aside className="rounded-md border border-[var(--spr-accent)] bg-[var(--spr-accent-soft)] p-5" aria-label="Selected graph record">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="text-[10px] font-bold uppercase tracking-[.2em]" style={{ color: COLORS[selected.kind] }}>{selected.kind}</div>
-              <h2 className="mt-1 text-lg font-semibold text-[var(--spr-text)]">{selected.label}</h2>
-              <p className="mt-2 text-sm text-[var(--spr-text)]">{selected.detail}</p>
-              {selected.meta && <p className="mt-2 text-xs leading-5 text-[var(--spr-text-muted)]">{selected.meta}</p>}
-            </div>
-            <button onClick={() => setSelectedId(null)} aria-label="Close selected record" className="rounded-lg p-1 text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]"><X size={16} /></button>
+      {selected && <aside className="rounded-md border border-[#0f6cbd] bg-[#eff6fc] p-4" aria-label="Selected graph record">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: COLORS[selected.kind] }}>{selected.kind}</div>
+            <h2 className="mt-1 text-[16px] font-semibold text-[#201f1e]">{selected.label}</h2>
+            <p className="mt-1 text-[13px] text-[#323130]">{selected.detail}</p>
+            {selected.meta && <p className="mt-1 text-[12px] leading-5 text-[#605e5c]">{selected.meta}</p>}
           </div>
-          <div className="mt-4 text-xs text-[var(--spr-text-muted)]">Record ID: <code className="text-[var(--spr-text-muted)]">{selected.id.split(':').slice(1).join(':')}</code></div>
-          {connectedEdges.length > 0 && (
-            <div className="mt-4 border-t border-[var(--spr-accent)] pt-4">
-              <div className="text-[10px] font-semibold uppercase tracking-[.06em] text-[var(--spr-text-muted)]">{connectedEdges.length} connected record{connectedEdges.length === 1 ? '' : 's'}</div>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {connectedEdges.map((edge) => {
-                  const otherId = edge.source === selected.id ? edge.target : edge.source;
-                  const other = nodeById.get(otherId); if (!other) return null;
-                  const direction = edge.source === selected.id ? '→' : '←';
-                  return (
-                    <button key={`${edge.source}-${edge.target}-${edge.label}`} onClick={() => selectNode(other.id)} title={`${edge.label}: jump to ${other.label}`} className="inline-flex items-center gap-1.5 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-2 py-1 text-xs hover:border-[var(--spr-highlight)]/40">
-                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: COLORS[other.kind] }} />
-                      <span className="text-[var(--spr-text-faint)]">{direction} {edge.label}</span>
-                      <span className="text-[var(--spr-text)]">{other.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </aside>
-      )}
+          <button onClick={() => setSelectedId(null)} aria-label="Close selected record" className="rounded p-1 text-[#605e5c] hover:text-[#201f1e]"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="mt-3 text-[12px] text-[#605e5c]">Record ID: <code className="text-[#323130]">{selected.id.split(':').slice(1).join(':')}</code></div>
+      </aside>}
 
       {selectedEdge && (() => {
         const source = nodeById.get(selectedEdge.source); const target = nodeById.get(selectedEdge.target); if (!source || !target) return null;
         return (
-          <aside className="rounded-md border border-[var(--spr-accent)] bg-[var(--spr-accent-soft)] p-5" aria-label="Selected relationship">
+          <aside className="rounded-md border border-[#0f6cbd] bg-[#eff6fc] p-4" aria-label="Selected relationship">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <div className="text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--spr-text-faint)]">Relationship</div>
-                <h2 className="mt-1 text-lg font-semibold text-[var(--spr-text)]">{source.label} <span className="text-[var(--spr-text-muted)]">— {selectedEdge.label} →</span> {target.label}</h2>
-                <p className="mt-2 text-sm text-[var(--spr-text)]">{EDGE_RATIONALE[selectedEdge.label] || 'Drawn because the two records share a matching identifier.'}</p>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] p-3 text-xs"><div className="font-semibold" style={{ color: COLORS[source.kind] }}>{source.kind} · {source.label}</div><div className="mt-1 text-[var(--spr-text-muted)]">{source.detail}</div></div>
-                  <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] p-3 text-xs"><div className="font-semibold" style={{ color: COLORS[target.kind] }}>{target.kind} · {target.label}</div><div className="mt-1 text-[var(--spr-text-muted)]">{target.detail}</div></div>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-[#0f6cbd]">Relationship</div>
+                <h2 className="mt-1 text-[16px] font-semibold text-[#201f1e]">{source.label} <span className="text-[#605e5c]">— {selectedEdge.label} →</span> {target.label}</h2>
+                <p className="mt-1 text-[13px] text-[#323130]">{EDGE_RATIONALE[selectedEdge.label] || 'Drawn because the two records share a matching identifier.'}</p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <div className="rounded-md border border-[#e1dfdd] bg-white p-3 text-[12px]"><div className="font-semibold" style={{ color: COLORS[source.kind] }}>{source.kind} · {source.label}</div><div className="mt-1 text-[#605e5c]">{source.detail}</div></div>
+                  <div className="rounded-md border border-[#e1dfdd] bg-white p-3 text-[12px]"><div className="font-semibold" style={{ color: COLORS[target.kind] }}>{target.kind} · {target.label}</div><div className="mt-1 text-[#605e5c]">{target.detail}</div></div>
                 </div>
               </div>
-              <button onClick={() => setSelectedEdgeKey(null)} aria-label="Close selected relationship" className="rounded-lg p-1 text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]"><X size={16} /></button>
+              <button onClick={() => setSelectedEdgeKey(null)} aria-label="Close selected relationship" className="rounded p-1 text-[#605e5c] hover:text-[#201f1e]"><X className="h-4 w-4" /></button>
             </div>
           </aside>
         );

@@ -1,5 +1,5 @@
-import { useMemo, useState, type ReactNode } from 'react';
-import { AlertTriangle, Filter, Search, ShieldCheck, ShieldAlert, XCircle } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Search, ShieldCheck } from 'lucide-react';
 import type { Client, SoftwarePassport, Vulnerability } from '../types';
 
 interface SecurityCenterViewProps {
@@ -9,18 +9,25 @@ interface SecurityCenterViewProps {
 
 type VulnerabilityRow = Vulnerability & { clientName: string; passportName: string };
 
-const severityStyles: Record<string, string> = {
-  Critical: 'border-[var(--spr-red)]/40 bg-[var(--spr-red)]/15 text-[var(--spr-red)]',
-  High: 'border-amber-300/25 bg-amber-300/10 text-amber-200',
-  Medium: 'border-yellow-300/25 bg-yellow-300/10 text-yellow-200',
-  Low: 'border-[var(--spr-highlight)]/40 bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)]',
+const severityDot: Record<string, string> = {
+  Critical: 'bg-[#a4262c]',
+  High: 'bg-[#8a5700]',
+  Medium: 'bg-[#8a5700]',
+  Low: 'bg-[#0f6cbd]',
 };
 
-const statusStyles: Record<string, string> = {
-  Open: 'border-[var(--spr-red)]/40 bg-[var(--spr-red)]/15/[.06] text-[var(--spr-red)]',
-  Mitigated: 'border-amber-300/20 bg-amber-300/[.06] text-amber-200',
-  Resolved: 'border-[var(--spr-green)]/40 bg-[var(--spr-green)]/15 text-[var(--spr-green)]',
-  Snoozed: 'border-[var(--spr-border)] bg-[var(--spr-surface-alt)] text-[var(--spr-text-muted)]',
+const severityText: Record<string, string> = {
+  Critical: 'text-[#a4262c]',
+  High: 'text-[#8a5700]',
+  Medium: 'text-[#8a5700]',
+  Low: 'text-[#0f6cbd]',
+};
+
+const statusDot: Record<string, string> = {
+  Open: 'bg-[#a4262c]',
+  Mitigated: 'bg-[#8a5700]',
+  Resolved: 'bg-[#0e700e]',
+  Snoozed: 'bg-[#8a8886]',
 };
 
 export default function SecurityCenterView({ clients, passports }: SecurityCenterViewProps) {
@@ -57,88 +64,91 @@ export default function SecurityCenterView({ clients, passports }: SecurityCente
   const mitigated = allVulnerabilities.filter((item) => ['Mitigated', 'Resolved'].includes(item.status)).length;
 
   return (
-    <section className="space-y-6" id="msp-security-center">
-      <header className="rounded-[28px] border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6 md:p-8">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.22em] text-[var(--spr-red)]">
-              <ShieldCheck className="h-4 w-4" /> Security evidence
-            </div>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight text-[var(--spr-text)]">Security posture ledger</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--spr-text-muted)]">
-              Vulnerabilities are rendered from software passport evidence available to this authenticated workspace. No finding is inferred from an empty dataset.
-            </p>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <label className="flex min-w-56 items-center gap-2 rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-3 py-2.5">
-              <Search className="h-4 w-4 text-[var(--spr-text-faint)]" />
-              <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search CVE, package, client" aria-label="Search vulnerability evidence" className="min-w-0 flex-1 bg-transparent text-xs text-[var(--spr-text)] outline-none placeholder:text-[var(--spr-text-faint)]" />
-            </label>
-            <label className="flex items-center gap-2 rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-3 py-2.5 text-xs text-[var(--spr-text-muted)]">
-              <Filter className="h-4 w-4 text-[var(--spr-text-faint)]" />
-              <select value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value)} aria-label="Filter vulnerability severity" className="bg-transparent font-semibold text-[var(--spr-text)] outline-none">
-                <option value="all">All severities</option>
-                <option value="Critical">Critical</option>
-                <option value="High">High</option>
-                <option value="Medium">Medium</option>
-                <option value="Low">Low</option>
-              </select>
-            </label>
-          </div>
-        </div>
-        <div className="mt-7 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Metric icon={<ShieldAlert />} label="Recorded findings" value={allVulnerabilities.length} />
-          <Metric icon={<AlertTriangle />} label="Critical unresolved" value={critical} tone="rose" />
-          <Metric icon={<ShieldCheck />} label="Mitigated or resolved" value={mitigated} tone="emerald" />
-          <Metric icon={<XCircle />} label="Unresolved" value={unresolved.length} tone="amber" />
-        </div>
-      </header>
+    <section className="space-y-4" id="msp-security-center">
+      <div>
+        <h1 className="text-[22px] font-semibold text-[#201f1e]">Security posture ledger</h1>
+        <p className="mt-1 text-[13px] text-[#605e5c]">Vulnerabilities rendered from software passport evidence available to this authenticated workspace. No finding is inferred from an empty dataset.</p>
+      </div>
 
-      <section className="overflow-hidden rounded-[28px] border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] ">
-        <div className="flex flex-col gap-1 border-b border-[var(--spr-border)] px-5 py-4 md:px-6">
-          <h2 className="text-sm font-semibold text-[var(--spr-text)]">Recorded vulnerability observations</h2>
-          <p className="text-xs text-[var(--spr-text-muted)]">{filteredVulnerabilities.length} matching evidence record{filteredVulnerabilities.length === 1 ? '' : 's'}</p>
+      <details className="rounded-md border border-[#e1dfdd] bg-[#faf9f8] text-[13px]">
+        <summary className="cursor-pointer select-none px-3 py-2 font-medium text-[#323130]">ⓘ What is this? · How it works</summary>
+        <div className="px-3 pb-3 text-[#605e5c]">
+          <p>Every row below is a vulnerability observation attached to a software passport's evidence record.</p>
+          <ol className="mt-1.5 list-decimal space-y-0.5 pl-4">
+            <li>Search or filter by severity to narrow the ledger.</li>
+            <li>Status and fix guidance come directly from the recorded evidence — an empty table is not proof software is clear.</li>
+          </ol>
+        </div>
+      </details>
+
+      <div className="flex flex-wrap gap-6 rounded-md border border-[#e1dfdd] bg-white p-3">
+        <div><div className="text-[11px] text-[#605e5c]">Recorded findings</div><div className="text-lg font-semibold text-[#201f1e]">{allVulnerabilities.length}</div></div>
+        <div><div className="text-[11px] text-[#605e5c]">Critical unresolved</div><div className="text-lg font-semibold text-[#201f1e]">{critical}</div></div>
+        <div><div className="text-[11px] text-[#605e5c]">Mitigated or resolved</div><div className="text-lg font-semibold text-[#201f1e]">{mitigated}</div></div>
+        <div><div className="text-[11px] text-[#605e5c]">Unresolved</div><div className="text-lg font-semibold text-[#201f1e]">{unresolved.length}</div></div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="flex h-9 min-w-56 items-center gap-2 rounded border border-[#c8c6c4] bg-white px-3 focus-within:border-[#0f6cbd] focus-within:ring-1 focus-within:ring-[#0f6cbd]">
+          <Search className="h-3.5 w-3.5 text-[#8a8886]" />
+          <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search CVE, package, client" aria-label="Search vulnerability evidence" className="min-w-0 flex-1 bg-transparent text-[13px] text-[#201f1e] outline-none placeholder:text-[#8a8886]" />
+        </label>
+        <label className="flex h-9 items-center gap-2 rounded border border-[#c8c6c4] bg-white px-3">
+          <select value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value)} aria-label="Filter vulnerability severity" className="bg-transparent text-[13px] text-[#323130] outline-none">
+            <option value="all">All severities</option>
+            <option value="Critical">Critical</option>
+            <option value="High">High</option>
+            <option value="Medium">Medium</option>
+            <option value="Low">Low</option>
+          </select>
+        </label>
+      </div>
+
+      <div className="overflow-hidden rounded-md border border-[#e1dfdd] bg-white">
+        <div className="flex flex-col gap-0.5 border-b border-[#e1dfdd] px-4 py-2.5">
+          <h2 className="text-[13px] font-semibold text-[#201f1e]">Recorded vulnerability observations</h2>
+          <p className="text-[12px] text-[#8a8886]">{filteredVulnerabilities.length} matching evidence record{filteredVulnerabilities.length === 1 ? '' : 's'}</p>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] border-collapse text-left text-xs">
+          <table className="w-full min-w-[760px] border-collapse text-left">
             <thead>
-              <tr className="border-b border-[var(--spr-border)] bg-black/15 text-[10px] font-bold uppercase tracking-[.14em] text-[var(--spr-text-faint)]">
-                <th className="px-5 py-3">Finding</th>
-                <th className="px-5 py-3">Software / client</th>
-                <th className="px-5 py-3">Severity</th>
-                <th className="px-5 py-3">CVSS</th>
-                <th className="px-5 py-3">Remediation</th>
-                <th className="px-5 py-3">Status</th>
+              <tr className="border-b border-[#e1dfdd] text-[11px] uppercase tracking-wide text-[#605e5c]">
+                <th className="px-4 py-2.5 font-medium">Finding</th>
+                <th className="px-4 py-2.5 font-medium">Software / client</th>
+                <th className="px-4 py-2.5 font-medium">Severity</th>
+                <th className="px-4 py-2.5 font-medium">CVSS</th>
+                <th className="px-4 py-2.5 font-medium">Remediation</th>
+                <th className="px-4 py-2.5 font-medium">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/[.06]">
+            <tbody>
               {filteredVulnerabilities.map((vulnerability, index) => (
-                <tr key={`${vulnerability.id}-${vulnerability.component}-${index}`} className="transition-colors hover:bg-[var(--spr-surface-alt)]">
-                  <td className="px-5 py-4"><div className="font-mono font-semibold text-[var(--spr-highlight)]">{vulnerability.id}</div><div className="mt-1 max-w-xs text-[11px] text-[var(--spr-text-muted)]">{vulnerability.title}</div></td>
-                  <td className="px-5 py-4"><div className="font-semibold text-[var(--spr-text)]">{vulnerability.passportName}</div><div className="mt-1 text-[11px] text-[var(--spr-text-muted)]">{vulnerability.clientName} · {vulnerability.component}</div></td>
-                  <td className="px-5 py-4"><span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold ${severityStyles[vulnerability.severity] || severityStyles.Low}`}>{vulnerability.severity}</span></td>
-                  <td className="px-5 py-4 font-mono text-[var(--spr-text)]">{vulnerability.cvss ?? 'Not observed'}</td>
-                  <td className="px-5 py-4 text-[var(--spr-text-muted)]">{vulnerability.fixedVersion ? `Upgrade to ${vulnerability.fixedVersion}+` : 'No fixed version observed'}</td>
-                  <td className="px-5 py-4"><span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold ${statusStyles[vulnerability.status] || statusStyles.Open}`}>{vulnerability.status}</span></td>
+                <tr key={`${vulnerability.id}-${vulnerability.component}-${index}`} className="border-b border-[#f3f2f1] text-[13px] hover:bg-black/[.02]">
+                  <td className="px-4 py-2.5"><div className="font-mono font-medium text-[#201f1e]">{vulnerability.id}</div><div className="mt-0.5 max-w-xs text-[11px] text-[#8a8886]">{vulnerability.title}</div></td>
+                  <td className="px-4 py-2.5"><div className="font-medium text-[#201f1e]">{vulnerability.passportName}</div><div className="mt-0.5 text-[11px] text-[#8a8886]">{vulnerability.clientName} · {vulnerability.component}</div></td>
+                  <td className="px-4 py-2.5">
+                    <span className={`inline-flex items-center gap-1.5 ${severityText[vulnerability.severity] || 'text-[#605e5c]'}`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${severityDot[vulnerability.severity] || 'bg-[#8a8886]'}`} />
+                      {vulnerability.severity}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2.5 font-mono text-[#605e5c]">{vulnerability.cvss ?? 'Not observed'}</td>
+                  <td className="px-4 py-2.5 text-[#605e5c]">{vulnerability.fixedVersion ? `Upgrade to ${vulnerability.fixedVersion}+` : 'No fixed version observed'}</td>
+                  <td className="px-4 py-2.5">
+                    <span className="inline-flex items-center gap-1.5 text-[#605e5c]">
+                      <span className={`h-1.5 w-1.5 rounded-full ${statusDot[vulnerability.status] || 'bg-[#8a8886]'}`} />
+                      {vulnerability.status}
+                    </span>
+                  </td>
                 </tr>
               ))}
               {filteredVulnerabilities.length === 0 && (
-                <tr><td colSpan={6} className="px-5 py-14 text-center"><ShieldCheck className="mx-auto h-9 w-9 text-[var(--spr-text-faint)]" /><p className="mt-3 text-sm font-semibold text-[var(--spr-text)]">No recorded vulnerability observations match this view.</p><p className="mt-1 text-xs text-[var(--spr-text-faint)]">An empty result is not evidence that software is clear.</p></td></tr>
+                <tr><td colSpan={6} className="px-4 py-10 text-center"><ShieldCheck className="mx-auto h-6 w-6 text-[#c8c6c4]" /><p className="mt-2 text-[13px] font-medium text-[#323130]">No recorded vulnerability observations match this view.</p><p className="mt-1 text-[12px] text-[#8a8886]">An empty result is not evidence that software is clear.</p></td></tr>
               )}
             </tbody>
           </table>
         </div>
-      </section>
+      </div>
     </section>
   );
-}
-
-function Metric({ icon, label, value, tone = 'cyan' }: { icon: ReactNode; label: string; value: number; tone?: 'cyan' | 'rose' | 'emerald' | 'amber' }) {
-  const tones = {
-    cyan: 'border-[var(--spr-highlight)]/40 bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)]',
-    rose: 'border-[var(--spr-red)]/40 bg-[var(--spr-red)]/15/[.05] text-[var(--spr-red)]',
-    emerald: 'border-[var(--spr-green)]/40 bg-[var(--spr-green)]/15 text-[var(--spr-green)]',
-    amber: 'border-amber-300/15 bg-amber-300/[.05] text-amber-200',
-  };
-  return <div className={`rounded-md border p-4 ${tones[tone]}`}><div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.14em] text-[var(--spr-text-muted)]"><span className="h-4 w-4">{icon}</span>{label}</div><div className="mt-3 text-2xl font-semibold text-[var(--spr-text)]">{value}</div></div>;
 }
