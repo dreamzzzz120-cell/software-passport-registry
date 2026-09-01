@@ -93,7 +93,7 @@ export default function ExtensionWorkflow({ id, onNavigate }: Props) {
       </div>
     </div>
 
-    <div className="flex flex-wrap gap-6 rounded-md border border-[#e1dfdd] bg-white p-3">{metrics.map(([label, value]) => <Metric key={label} label={label} value={value} loading={loading} />)}</div>
+    <div className="flex flex-wrap gap-6 rounded-md border border-[#e1dfdd] bg-white p-3">{metrics.map(([label, value]: readonly [string, MetricValue]) => <Metric key={label} label={label} value={value} loading={loading} />)}</div>
 
     <div className="grid gap-4 xl:grid-cols-[1.1fr_.9fr]">
       <div className="rounded-md border border-[#e1dfdd] bg-white p-4">
