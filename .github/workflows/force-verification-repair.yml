@@ -23,12 +23,12 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import textwrap
           workflow = Path('.github/workflows/apply-final-verification-fix.yml').read_text(encoding='utf-8')
           marker = "          python3 - <<'PY'\n"
           start = workflow.index(marker) + len(marker)
           end = workflow.index("\n          PY", start)
-          script = textwrap.dedent(workflow[start:end])
+          raw = workflow[start:end]
+          script = '\n'.join(line[10:] if line.startswith('          ') else line for line in raw.splitlines())
           exec(compile(script, 'prepared-verification-repair.py', 'exec'), {})
           PY
       - name: Verify repair
