@@ -211,7 +211,7 @@ export default function PassportsView({ passports, selectedPassportId, setSelect
             onNavigateTab={(nextTab, itemId) => onNavigateTab?.(nextTab, itemId)}
             onViewLineage={() => setTab('lineage')}
             canSharePassport={true}
-            verificationDecision={verificationDecision}
+            verificationDecision={verificationDecision?.state}
             verificationExplanation={undefined}
             verificationPolicyVersion={undefined}
             verificationReasonCodes={undefined}
