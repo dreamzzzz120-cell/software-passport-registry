@@ -1,0 +1,47 @@
+name: Force final verification repair
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Execute the prepared repair script
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import textwrap
+          workflow = Path('.github/workflows/apply-final-verification-fix.yml').read_text(encoding='utf-8')
+          marker = "          python3 - <<'PY'\n"
+          start = workflow.index(marker) + len(marker)
+          end = workflow.index("\n          PY", start)
+          script = textwrap.dedent(workflow[start:end])
+          exec(compile(script, 'prepared-verification-repair.py', 'exec'), {})
+          PY
+      - name: Verify repair
+        run: |
+          npm ci --no-audit --no-fund
+          npm run typecheck
+          npx vitest run tests/verification-integration.test.ts tests/security/http-hardening.test.ts
+          npm run build
+      - name: Commit only verified repair
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src .github/workflows
+          git diff --cached --check
+          git commit -m "fix: complete authoritative verification integration" || exit 0
+          git push origin main
