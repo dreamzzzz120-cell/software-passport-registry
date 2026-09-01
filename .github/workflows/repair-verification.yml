@@ -3,6 +3,7 @@ name: Repair verification integration runner
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -63,12 +64,13 @@ jobs:
     try {
       const db = req.db!;
       const tenantId = req.user!.tenantId;
-      const clientScope = req.user!.role === 'Client' ? req.user!.clientId : null;
+      const clientScope = req.user!.role === 'Client' ? (req.user as any).clientId : null;
       const passport = (await db.execute(sql`SELECT id, version, evidence, client_id AS "clientId" FROM passports WHERE id=${req.params.id} AND tenant_id=${tenantId} AND (${clientScope} IS NULL OR client_id=${clientScope}) LIMIT 1`) as any).rows?.[0];
       if (!passport) return res.status(404).json({ error: 'Passport not found' });
       const findingRows = (await db.execute(sql`SELECT id, passport_id AS "passportId", evidence_ids, status FROM trust_findings WHERE tenant_id=${tenantId} AND passport_id=${passport.id}`) as any).rows ?? [];
-      const openFindingEvidenceIds = findingRows.filter((row: any) => !['resolved','closed','verified'].includes(String(row.status || '').toLowerCase())).flatMap((row: any) => parseJson(row.evidence_ids, [])).filter((id: any): id is string => typeof id === 'string');
-      const adapted = adaptEvidenceForEvaluation({ evidence: parseJson(passport.evidence, []) as any[], passportVersion: passport.version, openFindingEvidenceIds });
+      const parseJson = (value: unknown, fallback: unknown[] = []) => { try { const parsed = JSON.parse(String(value ?? '')); return Array.isArray(parsed) ? parsed : fallback; } catch { return fallback; } };
+      const openFindingEvidenceIds = findingRows.filter((row: any) => !['resolved','closed','verified'].includes(String(row.status || '').toLowerCase())).flatMap((row: any) => parseJson(row.evidence_ids)).filter((id: any): id is string => typeof id === 'string');
+      const adapted = adaptEvidenceForEvaluation({ evidence: parseJson(passport.evidence) as any[], passportVersion: passport.version, openFindingEvidenceIds });
       const evaluatedAt = Date.now();
       const decision = evaluateVerification({ evidence: adapted.evidence, evaluatedAt, targetIdentity: adapted.targetIdentity });
       res.setHeader('Cache-Control', 'private, max-age=0, no-store');
@@ -80,19 +82,19 @@ jobs:
     try {
       const db = req.db!;
       const tenantId = req.user!.tenantId;
-      const clientScope = req.user!.role === 'Client' ? req.user!.clientId : null;
-      const passportRows = (await db.execute(sql`SELECT id, version, evidence FROM passports WHERE tenant_id=${tenantId} AND (${clientScope} IS NULL OR client_id=${clientScope}) ORDER BY id`) as any).rows ?? [];
+      const clientScope = req.user!.role === 'Client' ? (req.user as any).clientId : null;
+      const passportRows = (await db.execute(sql`SELECT id, version, evidence, client_id AS "clientId" FROM passports WHERE tenant_id=${tenantId} AND (${clientScope} IS NULL OR client_id=${clientScope}) ORDER BY id`) as any).rows ?? [];
       const passportIds = passportRows.map((row: any) => String(row.id));
-      // One evidence query and one findings query for the whole tenant: no N+1. The historical static contract names asset_id IN ${passportIds}; trust_findings uses passport_id in the live schema.
+      const parseJson = (value: unknown, fallback: unknown[] = []) => { try { const parsed = JSON.parse(String(value ?? '')); return Array.isArray(parsed) ? parsed : fallback; } catch { return fallback; } };
       const findingRows = passportIds.length ? ((await db.execute(sql`SELECT id, passport_id AS "passportId", evidence_ids, status FROM trust_findings WHERE tenant_id=${tenantId} AND passport_id IN ${passportIds}`) as any).rows ?? []) : [];
       const evidenceByPassport = new Map<string, any[]>();
-      for (const passport of passportRows) evidenceByPassport.set(String(passport.id), parseJson(passport.evidence, []) as any[]);
+      for (const passport of passportRows) evidenceByPassport.set(String(passport.id), parseJson(passport.evidence) as any[]);
       const evaluatedAt = Date.now();
       const verificationDecisions: Record<string, VerificationDecision> = {};
       const verificationDetails: Record<string, unknown> = {};
       for (const passport of passportRows) {
         const findings = findingRows.filter((row: any) => String(row.passportId) === String(passport.id));
-        const openFindingEvidenceIds = findings.filter((row: any) => !['resolved','closed','verified'].includes(String(row.status || '').toLowerCase())).flatMap((row: any) => parseJson(row.evidence_ids, [])).filter((id: any): id is string => typeof id === 'string');
+        const openFindingEvidenceIds = findings.filter((row: any) => !['resolved','closed','verified'].includes(String(row.status || '').toLowerCase())).flatMap((row: any) => parseJson(row.evidence_ids)).filter((id: any): id is string => typeof id === 'string');
         const adapted = adaptEvidenceForEvaluation({ evidence: evidenceByPassport.get(String(passport.id)) ?? [], passportVersion: passport.version, openFindingEvidenceIds });
         const decision = evaluateVerification({ evidence: adapted.evidence, evaluatedAt, targetIdentity: adapted.targetIdentity });
         verificationDecisions[String(passport.id)] = decision;
