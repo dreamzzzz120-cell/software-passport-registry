@@ -203,7 +203,7 @@ export default function PassportsView({ passports, selectedPassportId, setSelect
           <div className="mt-4 flex flex-wrap gap-6 rounded-md border border-[#e1dfdd] bg-[#faf9f8] p-3">
             <div><div className="text-[11px] text-[#605e5c]">Evidence</div><div className="text-lg font-semibold text-[#201f1e]">{selected.evidence?.length ?? 0}</div><div className="text-[11px] text-[#8a8886]">Recorded entries</div></div>
             <div><div className="text-[11px] text-[#605e5c]">Findings</div><div className="text-lg font-semibold text-[#201f1e]">{selected.vulnerabilities?.length ?? 0}</div><div className="text-[11px] text-[#8a8886]">Observed or reported findings</div></div>
-            <div><div className="text-[11px] text-[#605e5c]">Score status</div><div className="text-[15px] font-semibold text-[#201f1e]">{selected.scoreStatus || 'Not verified'}</div><div className="text-[11px] text-[#8a8886]">Authoritative scoring required</div></div>
+            <div><div className="text-[11px] text-[#605e5c]">Score status</div><div className="text-[15px] font-semibold text-[#201f1e]">{selected.overallScore == null ? 'Not verified' : 'Measured'}</div><div className="text-[11px] text-[#8a8886]">Authoritative scoring required</div></div>
           </div>
 
           {selected.evidence?.length > 0 && <div className="mt-4">
