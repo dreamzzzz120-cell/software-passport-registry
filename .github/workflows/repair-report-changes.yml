@@ -34,7 +34,7 @@ jobs:
       const passportId = req.params.passportId;
       const clientScope = req.user!.role === 'Client' ? req.user!.clientId : null;
       const type = typeof req.query.type === 'string' ? req.query.type : 'executive';
-      const rows = await db.execute(sql`SELECT id,report_type,generated_at,score,confidence_basis_points,completeness_basis_points,evidence_ids,finding_ids,canonical_payload_hash FROM trust_report_snapshots WHERE tenant_id=${tenantId} AND passport_id=${passportId} AND report_type=${type} AND (${clientScope}::text IS NULL OR client_id = ${clientScope}) ORDER BY generated_at DESC LIMIT 2`);
+      const rows = await db.execute(sql`SELECT trs.id,trs.report_type,trs.generated_at,trs.score,trs.confidence_basis_points,trs.completeness_basis_points,trs.evidence_ids,trs.finding_ids,trs.canonical_payload_hash FROM trust_report_snapshots trs JOIN passports p ON p.id=trs.passport_id AND p.tenant_id=trs.tenant_id WHERE trs.tenant_id=${tenantId} AND trs.passport_id=${passportId} AND trs.report_type=${type} AND (${clientScope}::text IS NULL OR client_id = ${clientScope}) ORDER BY trs.generated_at DESC LIMIT 2`);
       const snapshots = (rows as any).rows || [];
       const current = snapshots[0];
       const previous = snapshots[1];
