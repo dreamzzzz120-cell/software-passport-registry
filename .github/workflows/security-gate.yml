@@ -22,7 +22,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          # gitleaks scans <commit>^..<commit> on pull_request events, so the
+          # parent commit has to be in the clone. With fetch-depth: 1 it is not,
+          # and the action fails with "unknown revision" before scanning a byte.
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4

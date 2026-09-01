@@ -95,12 +95,17 @@ jobs:
           set -euo pipefail
           create_user() {
             local uid="$1" email="$2" out="$3" verify="$4"
-            curl --fail --silent --show-error -X POST -H 'content-type: application/json' -d "{\"localId\":\"${uid}\",\"email\":\"${email}\",\"password\":\"SecurityTest-Only-123!\",\"returnSecureToken\":true}" "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo-spr-security" > "$out"
+            # The UIDs must stay deterministic: tests/security/seed-authz-fixtures.sql
+            # seeds users.uid with these exact values, and they must match the sub
+            # claim in the ID token. Setting localId requires the emulator privileged
+            # bearer token; without it signUp answers 400 and the whole job dies
+            # before a single route-security test runs.
+            curl --fail-with-body --silent --show-error -X POST -H 'content-type: application/json' -H 'Authorization: Bearer owner' -d "{\"localId\":\"${uid}\",\"email\":\"${email}\",\"password\":\"SecurityTest-Only-123!\",\"returnSecureToken\":true}" "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo-spr-security" > "$out"
             if [ "$verify" = 'true' ]; then
               local token
               token=$(node -p "require('$out').idToken")
-              curl --fail --silent --show-error -X POST -H 'content-type: application/json' -d "{\"idToken\":\"${token}\",\"emailVerified\":true}" "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:update?key=demo-spr-security" >/dev/null
-              curl --fail --silent --show-error -X POST -H 'content-type: application/json' -d "{\"email\":\"${email}\",\"password\":\"SecurityTest-Only-123!\",\"returnSecureToken\":true}" "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo-spr-security" > "$out"
+              curl --fail-with-body --silent --show-error -X POST -H 'content-type: application/json' -d "{\"idToken\":\"${token}\",\"emailVerified\":true}" "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:update?key=demo-spr-security" >/dev/null
+              curl --fail-with-body --silent --show-error -X POST -H 'content-type: application/json' -d "{\"email\":\"${email}\",\"password\":\"SecurityTest-Only-123!\",\"returnSecureToken\":true}" "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo-spr-security" > "$out"
             fi
           }
           create_user tenant-a-test-user tenant-a@security.test /tmp/a.json true

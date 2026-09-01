@@ -1,0 +1,35 @@
+# The repository stores text as LF. Without this, a Windows checkout with
+# core.autocrlf=true materialises CRLF in the working tree, and every contract
+# test that asserts on a multi-line literal (toContain / indexOf against a
+# source or .sql file) fails locally while passing in CI on Linux.
+* text=auto eol=lf
+
+*.ts    text eol=lf
+*.tsx   text eol=lf
+*.js    text eol=lf
+*.jsx   text eol=lf
+*.json  text eol=lf
+*.sql   text eol=lf
+*.css   text eol=lf
+*.html  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.md    text eol=lf
+*.sh    text eol=lf
+*.toml  text eol=lf
+
+# Windows-native scripts genuinely need CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.webp  binary
+*.woff  binary
+*.woff2 binary
+*.db     binary
+*.sqlite binary
