@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   repair:
-    if: ${{ !contains(github.event.head_commit.message, 'repair: production typecheck') }}
+    if: "!contains(github.event.head_commit.message, 'repair: production typecheck')"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,96 +17,76 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
       - name: Apply production typecheck fixes
-        shell: python
         run: |
+          python3 - <<'PY'
           from pathlib import Path
 
           def replace(path, old, new):
               p = Path(path)
               s = p.read_text(encoding='utf-8')
               if old not in s:
-                  raise SystemExit(f'Expected text not found in {path}: {old[:120]!r}')
-              p.write_text(s.replace(old, new), encoding='utf-8')
+                  raise SystemExit(f'Expected text not found in {path}: {old[:160]!r}')
+              p.write_text(s.replace(old, new, 1), encoding='utf-8')
 
-          # TS2345: metrics is an array of readonly tuples because of `as const`.
           replace(
               'src/components/ExtensionWorkflow.tsx',
               "{metrics.map(([label, value]) => <Metric key={label} label={label} value={value} loading={loading} />)}",
               "{metrics.map((metric) => { const [label, value] = metric; return <Metric key={label} label={label} value={value} loading={loading} />; })}"
           )
 
-          # SoftwarePassport has authoritative score fields but no scoreStatus field.
           replace(
               'src/components/PassportsView.tsx',
               "{selected.scoreStatus || 'Not verified'}",
               "{selected.verificationStatus === 'verified' ? 'Verified' : selected.verificationStatus === 'partial' ? 'Partially verified' : 'Not verified'}"
           )
 
-          # Scores are intentionally nullable; null must not be treated as a measurement.
           replace(
               'src/components/SoftwareSectorsPanel.tsx',
-              "? Math.round(matched.reduce((acc, p) => acc + p.overallScore, 0) / count)\n        : 0;",
-              "? Math.round(matched.reduce((acc, p) => acc + (p.overallScore ?? 0), 0) / count)\n        : 0;"
-          )
-          replace(
-              'src/components/SoftwareSectorsPanel.tsx',
-              "? Math.round(passports.reduce((acc, p) => acc + p.overallScore, 0) / passports.length)\n      : 90;",
-              "? Math.round(passports.reduce((acc, p) => acc + (p.overallScore ?? 0), 0) / passports.length)\n      : 90;"
-          )
-          replace(
-              'src/components/SoftwareSectorsPanel.tsx',
-              "p.overallScore >= 90 ? 'border-[#0e700e]/30 bg-[#dff6dd] text-[#0e700e]' : 'border-[#8a5700]/30 bg-[#fff4ce] text-[#8a5700]'",
-              "(p.overallScore ?? -1) >= 90 ? 'border-[#0e700e]/30 bg-[#dff6dd] text-[#0e700e]' : 'border-[#8a5700]/30 bg-[#fff4ce] text-[#8a5700]'"
+              "const avgTrust = count > 0\n        ? Math.round(matched.reduce((acc, p) => acc + p.overallScore, 0) / count)\n        : 0;",
+              "const measuredScores = matched.map((p) => p.overallScore).filter((score): score is number => score != null);\n      const avgTrust = measuredScores.length > 0\n        ? Math.round(measuredScores.reduce((acc, score) => acc + score, 0) / measuredScores.length)\n        : 0;"
           )
 
-          # HTTP hardening test needs a real CONNECT socket rejection helper and app export.
+          replace(
+              'src/components/SoftwareSectorsPanel.tsx',
+              "const overallEcosystemTrust = passports.length > 0\n      ? Math.round(passports.reduce((acc, p) => acc + p.overallScore, 0) / passports.length)\n      : 90;",
+              "const measuredScores = passports.map((p) => p.overallScore).filter((score): score is number => score != null);\n    const overallEcosystemTrust = measuredScores.length > 0\n      ? Math.round(measuredScores.reduce((acc, score) => acc + score, 0) / measuredScores.length)\n      : 0;"
+          )
+
           p = Path('server.ts')
           s = p.read_text(encoding='utf-8')
           if 'export function rejectConnectTunnels' not in s:
               anchor = "export function normalizeAllowedOrigins(origins: string[]): string[] {\n"
               helper = "export function rejectConnectTunnels<T extends ReturnType<typeof app.listen>>(server: T): T {\n  server.on('connect', (_req, socket) => {\n    socket.end('HTTP/1.1 405 Method Not Allowed\\r\\nConnection: close\\r\\nContent-Length: 0\\r\\n\\r\\n');\n  });\n  return server;\n}\n\n"
+              if anchor not in s:
+                  raise SystemExit('server.ts anchor not found')
               s = s.replace(anchor, helper + anchor, 1)
           if 'export { app };' not in s:
-              s += "\nexport { app };\n"
+              s += '\nexport { app };\n'
           p.write_text(s, encoding='utf-8')
 
-          # The test server is definitely initialized by beforeAll; tell TS that explicitly.
           replace('tests/security/http-hardening.test.ts', 'const address = server.address();', 'const address = server!.address();')
 
-          # Restore the report-risk helpers expected by the regression suite.
           p = Path('src/routes/trust-loop.ts')
           s = p.read_text(encoding='utf-8')
           if 'export type ReportPassportRow' not in s:
-              s += """
-
-export type ReportPassportRow = {
-  overall_score: number | null;
-  security_score: number | null;
-  compliance_score: number | null;
-  verification_status: 'unverified' | 'partial' | 'verified' | null;
-  confidence_score: number | null;
-  evidence_completeness: number | null;
-};
-
-export function deriveReportRiskFields(passport: ReportPassportRow) {
-  return {
-    canonicalScore: passport.overall_score,
-    verificationStatus: passport.verification_status ?? 'unverified',
-    confidenceBasisPoints: passport.confidence_score == null ? null : Math.round(passport.confidence_score * 100),
-    completenessBasisPoints: passport.evidence_completeness == null ? null : Math.round(passport.evidence_completeness * 100),
-  };
-}
-"""
+              s += '''\n\nexport type ReportPassportRow = {\n  overall_score: number | null;\n  security_score: number | null;\n  compliance_score: number | null;\n  verification_status: 'unverified' | 'partial' | 'verified' | null;\n  confidence_score: number | null;\n  evidence_completeness: number | null;\n};\n\nexport function deriveReportRiskFields(passport: ReportPassportRow) {\n  return {\n    canonicalScore: passport.overall_score,\n    verificationStatus: passport.verification_status ?? 'unverified',\n    confidenceBasisPoints: passport.confidence_score == null ? null : Math.round(passport.confidence_score * 100),\n    completenessBasisPoints: passport.evidence_completeness == null ? null : Math.round(passport.evidence_completeness * 100),\n  };\n}\n'''
           p.write_text(s, encoding='utf-8')
+          PY
 
-      - name: Verify TypeScript
-        run: npm ci && npm run typecheck
+      - name: Verify
+        run: npm ci && npm run typecheck && npm test && npm run build
 
-      - name: Commit and push repair
+      - name: Commit verified repair
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src server.ts tests .github/workflows/repair-production-typecheck.yml
+          git add src server.ts tests
+          git diff --cached --check
           git commit -m "repair: production typecheck" || exit 0
           git push origin main
