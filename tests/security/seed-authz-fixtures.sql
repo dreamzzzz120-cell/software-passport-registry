@@ -2,8 +2,8 @@ BEGIN;
 
 INSERT INTO users (uid,email,tenant_id,role,company_name,onboarded,mfa_enabled)
 VALUES
-  ('tenant-a-test-user','tenant-a@security.test','tenant-a','Admin','Security Test A',1,0),
-  ('tenant-b-test-user','tenant-b@security.test','tenant-b','Admin','Security Test B',1,0)
+  (:'tenant_a_uid','tenant-a@security.test','tenant-a','Admin','Security Test A',1,0),
+  (:'tenant_b_uid','tenant-b@security.test','tenant-b','Admin','Security Test B',1,0)
 ON CONFLICT (uid) DO UPDATE SET tenant_id=EXCLUDED.tenant_id, role=EXCLUDED.role, onboarded=1;
 
 INSERT INTO clients (id,tenant_id,name,domain,industry,joined_date)
