@@ -1,0 +1,73 @@
+name: repair-contracts
+on:
+  push:
+    branches: [repair/full-contracts-20260901]
+permissions:
+  contents: write
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Cherry-pick known-good contract repairs
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "SPR Repair Bot"
+          git config user.email "actions@users.noreply.github.com"
+          commits=(
+            0c2c1b1533d4e9cad68758060e2689c63c84b6d3
+            3e6a1c252451e801941a045ebec67d87c11a8c56
+            58d513bb1213117036013727e12087cb4af8300a
+            1e21d0c5cd02183bb59682c53cd42c6bb1a8042f
+            19c7efa541f8b3412bb79bcc7ef7fc11dabbdad4
+            2df17d8ba280fee94cb24301c4012f02af1ecf72
+            704868257237872aa3bca38efc70903d899cee14
+            8056a537e2857aa16dbf272514130e5150564e68
+            eef7d82ca744e11ba268d6bd1316df3af897f08d
+            aa8a2a1bf033341701b9d3b8ba75be2f094a7748
+            aeda36a1bc7f4ea64cf019c91e15528e95a2feee
+            cf1763d676b7137c4e6d238f17344d2e53150f16
+          )
+          for sha in "${commits[@]}"; do
+            if git merge-base --is-ancestor "$sha" HEAD; then
+              echo "already in history: $sha"
+              continue
+            fi
+            echo "cherry-picking $sha"
+            if git cherry-pick "$sha"; then
+              continue
+            fi
+            echo "conflict while cherry-picking $sha"
+            git status --short
+            conflicted=$(git diff --name-only --diff-filter=U)
+            if [ -z "$conflicted" ]; then
+              git cherry-pick --abort
+              exit 1
+            fi
+            while IFS= read -r file; do
+              case "$file" in
+                src/components/PassportsView.tsx)
+                  git checkout --ours -- "$file" ;;
+                *)
+                  git checkout --theirs -- "$file" ;;
+              esac
+              git add -- "$file"
+            done <<< "$conflicted"
+            git -c core.editor=true cherry-pick --continue
+          done
+          git rm -f .github/workflows/repair-contracts.yml
+          git commit -m "chore: remove temporary contract repair workflow" || true
+      - name: Install dependencies
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Tests
+        run: npm test -- --run
+      - name: Build
+        run: npm run build
+      - name: Push repaired branch
+        shell: bash
+        run: git push origin HEAD:repair/full-contracts-20260901
