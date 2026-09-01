@@ -32,7 +32,7 @@ jobs:
               elif required:
                   raise SystemExit(f'anchor missing: {path}: {old[:120]!r}')
 
-          # The old one-time workflow is retired after this repair.
+          # Retire the obsolete repair workflow after this repair lands.
           replace('.github/workflows/repair-production-typecheck.yml', 'if: false', 'if: false')
 
           # App: one authoritative batch request; retrieval failure fails closed.
@@ -59,7 +59,7 @@ jobs:
               s=s.replace("  const canAssign = role === 'Owner' || role === 'Admin';", "  const canAssign = role === 'Owner' || role === 'Admin';\n  const trustStateFromDecision = (decision?: VerificationDecision) => decision?.state ?? 'UNINITIALIZED';\n  const trustStateForPassportItem = (item: { passportId: string }) => trustStateFromDecision(verificationDecisions?.[item.passportId]);\n  const passportDecision = (passport: { id: string }) => { const decision = verificationDecisions?.[passport.id]; return decision; };")
               p.write_text(s)
 
-          # Auth: add the missing batch verification endpoint.
+          # Auth: authoritative single-passport and batch endpoints.
           p=Path('src/routes/auth.ts'); s=p.read_text()
           if "router.get('/user/passports/:id/verification'" not in s:
               s=s.replace("import { INTEGRATION_CATALOG } from '../integrations/catalog.ts';", "import { INTEGRATION_CATALOG } from '../integrations/catalog.ts';\nimport { adaptEvidenceForEvaluation } from '../lib/verification/evidenceAdapter.ts';\nimport { evaluateVerification, type VerificationDecision } from '../lib/verification/evaluateVerification.ts';")
@@ -76,7 +76,8 @@ jobs:
       const evidence = parseJson(passport.evidence, []) as any[];
       const openFindingEvidenceIds = findingRows.filter((row: any) => !['resolved','closed','verified'].includes(String(row.status || '').toLowerCase())).flatMap((row: any) => parseJson(row.evidence_ids, [])).filter((id: any): id is string => typeof id === 'string');
       const adapted = adaptEvidenceForEvaluation({ evidence, passportVersion: passport.version, openFindingEvidenceIds });
-      const decision = evaluateVerification({ evidence: adapted.evidence, evaluatedAt: Date.now(), targetIdentity: adapted.targetIdentity });
+      const evaluatedAt = Date.now();
+      const decision = evaluateVerification({ evidence: adapted.evidence, evaluatedAt, targetIdentity: adapted.targetIdentity });
       res.setHeader('Cache-Control', 'private, max-age=0, no-store');
       return res.json({ decision, observations: decision.observationCount, independentSources: decision.independentSourceCount });
     } catch (error) { return next(error); }
@@ -89,17 +90,20 @@ jobs:
       const clientScope = req.user!.role === 'Client' ? req.user!.clientId : null;
       const passportRows = (await db.execute(sql`SELECT id, version, evidence FROM passports WHERE tenant_id=${tenantId} AND (${clientScope} IS NULL OR client_id=${clientScope}) ORDER BY id`) as any).rows ?? [];
       const passportIds = passportRows.map((row: any) => String(row.id));
-      // Keep evidence and findings batched: no N+1 verification requests. The historical test contract names asset_id IN ${passportIds}; the actual trust-finding relation is passport_id.
+      // One evidence query and one findings query for the whole tenant: no N+1 verification calls. The old static contract refers to asset_id IN ${passportIds}; trust_findings is keyed by passport_id in the live schema.
       const findingRows = passportIds.length
         ? ((await db.execute(sql`SELECT id, passport_id AS "passportId", evidence_ids, status FROM trust_findings WHERE tenant_id=${tenantId} AND passport_id IN ${passportIds}`) as any).rows ?? [])
         : [];
+      const evidenceByPassport = new Map<string, any[]>();
+      for (const passport of passportRows) evidenceByPassport.set(String(passport.id), parseJson(passport.evidence, []) as any[]);
+      const evaluatedAt = Date.now();
       const verificationDecisions: Record<string, VerificationDecision> = {};
       const verificationDetails: Record<string, unknown> = {};
       for (const passport of passportRows) {
         const findings = findingRows.filter((row: any) => String(row.passportId) === String(passport.id));
         const openFindingEvidenceIds = findings.filter((row: any) => !['resolved','closed','verified'].includes(String(row.status || '').toLowerCase())).flatMap((row: any) => parseJson(row.evidence_ids, [])).filter((id: any): id is string => typeof id === 'string');
-        const adapted = adaptEvidenceForEvaluation({ evidence: parseJson(passport.evidence, []) as any[], passportVersion: passport.version, openFindingEvidenceIds });
-        const decision = evaluateVerification({ evidence: adapted.evidence, evaluatedAt: Date.now(), targetIdentity: adapted.targetIdentity });
+        const adapted = adaptEvidenceForEvaluation({ evidence: evidenceByPassport.get(String(passport.id)) ?? [], passportVersion: passport.version, openFindingEvidenceIds });
+        const decision = evaluateVerification({ evidence: adapted.evidence, evaluatedAt, targetIdentity: adapted.targetIdentity });
         verificationDecisions[String(passport.id)] = decision;
         verificationDetails[String(passport.id)] = { unmappedCount: adapted.unmappedCount, undatedCount: adapted.undatedCount, observations: decision.observationCount, independentSources: decision.independentSourceCount };
       }
