@@ -18,6 +18,9 @@
 *.sh    text eol=lf
 *.toml  text eol=lf
 
+# Patch files are byte-sensitive: leave them exactly as committed.
+*.patch -text
+
 # Windows-native scripts genuinely need CRLF.
 *.bat text eol=crlf
 *.cmd text eol=crlf
