@@ -8,6 +8,11 @@ on:
 permissions:
   contents: read
   security-events: write
+  # gitleaks-action's ScanPullRequest path calls the REST API to enumerate the
+  # PR's commits. Without pull-requests: read that call returns "Resource not
+  # accessible by integration" and the action throws before scanning anything --
+  # so the secret gate was failing loudly without ever inspecting a commit.
+  pull-requests: read
 
 concurrency:
   group: security-${{ github.workflow }}-${{ github.ref }}
