@@ -36,6 +36,7 @@ import AuditLogView from './components/AuditLogView';
 import MonitoringView from './components/MonitoringView';
 import SecurityCenterView from './components/SecurityCenterView';
 import MSPCommandCenter from './components/MSPCommandCenter';
+import ImportClientSystemView from './components/ImportClientSystemView';
 import MspPricingView from './components/MspPricingView';
 import MspLandingView from './components/MspLandingView';
 import HomePage from './components/HomePage';
@@ -378,6 +379,9 @@ export default function App() {
     case '/security': view = <SecurityCenterView clients={clients} passports={passports} />; break;
     case '/compliance': view = <ComplianceView clients={clients} role={role} />; break;
     case '/msp': view = <MSPCommandCenter clients={clients} alerts={alerts} passports={passports} role={role} onSelectClient={setSelectedClientId} onSelectPassport={setSelectedPassportId} onNavigate={navigate} verificationDecisions={verificationDecisions} />; break;
+    // Guided wrapper around the existing Universal Intake endpoints. It adds no
+    // API surface of its own; see src/components/ImportClientSystemView.tsx.
+    case '/import-system': view = <ImportClientSystemView onNavigate={navigate} onSelectClient={setSelectedClientId} preselectedClientId={selectedClientId} />; break;
     case '/agent-trust': view = <AgentTrustView />; break;
     case '/ai-trust-center': view = <AITrustCenterView role={role} />; break;
     case '/enterprise-readiness': view = <EnterpriseReadinessView clients={clients} />; break;
