@@ -7,7 +7,9 @@ interface FreeReviewFinding {
 }
 interface FreeReviewStatus {
   passportId: string;
-  scanStatus: 'scanning' | 'complete' | 'partial';
+  scanStatus: 'scanning' | 'complete' | 'partial' | 'failed';
+  /** Customer-safe explanation when every engine failed. Null otherwise. */
+  failureReason?: string | null;
   passport: { name: string; version: string; publisher: string; verificationStatus: string } | null;
   summary: { openFindings: number; criticalOrHigh: number; evidenceCount: number };
   findings: FreeReviewFinding[];
@@ -84,7 +86,7 @@ export default function FreeReviewView({ onSignUp, initialResult }: FreeReviewVi
   const pollAttempt = useRef(0);
 
   useEffect(() => {
-    if (!statusUrl || result?.scanStatus === 'complete' || result?.scanStatus === 'partial') return;
+    if (!statusUrl || ['complete','partial','failed'].includes(result?.scanStatus ?? '')) return;
     let cancelled = false;
     let timer: number | undefined;
 
@@ -117,7 +119,7 @@ export default function FreeReviewView({ onSignUp, initialResult }: FreeReviewVi
         } else {
           const data = await response.json() as FreeReviewStatus;
           setResult(data);
-          if (data.scanStatus === 'complete' || data.scanStatus === 'partial') return;
+          if (['complete','partial','failed'].includes(data.scanStatus)) return;
           pollAttempt.current += 1;
         }
         const delay = POLL_BASE_MS + Math.min(pollAttempt.current * 1000, 10_000) + Math.random() * 1000;
@@ -202,7 +204,30 @@ export default function FreeReviewView({ onSignUp, initialResult }: FreeReviewVi
             {(!result || result.scanStatus === 'scanning') && (<div className="flex items-center gap-3 text-sm text-[var(--spr-text-muted)]"><Loader className="h-5 w-5 animate-spin" /> Scanning {displayName}... this usually takes under a minute.</div>)}
             {result && result.scanStatus !== 'scanning' && (
               <div>
-                <div className="flex items-center gap-2 text-sm font-semibold"><CheckCircle2 className="h-5 w-5 text-[var(--spr-highlight)]" /> Review complete{result.scanStatus === 'partial' ? ' (one scan engine did not finish)' : ''}</div>
+                {/* A run where every engine failed scanned nothing. Showing a
+                    green tick, "Review complete", and three zeros told the
+                    customer SPR had looked and found nothing clean -- when it had
+                    never read the repository at all. Zero findings and zero
+                    evidence are only a result if a scan actually ran. */}
+                {result.scanStatus === 'failed' ? (
+                  <div role="alert">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-[#f48771]"><AlertCircle className="h-5 w-5" /> We couldn&rsquo;t scan this repository</div>
+                    <p className="mt-2 text-sm leading-6 text-[var(--spr-text-muted)]">{result.failureReason || 'The scan could not be completed. No evidence was collected.'}</p>
+                    <p className="mt-3 rounded-lg border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] p-3 text-xs leading-5 text-[var(--spr-text-faint)]">
+                      No engine ran, so SPR has nothing to report about this repository. This is <strong>not</strong> a clean result &mdash; it means nothing was examined.
+                    </p>
+                    <button onClick={() => { setResult(null); setStatusUrl(''); setError(''); }} className="mt-5 w-full rounded-xl border border-[var(--spr-border)] px-4 py-3 text-sm font-semibold text-[var(--spr-text)] hover:bg-[var(--spr-surface-hover)]">Try another repository</button>
+                  </div>
+                ) : (
+                <>
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  {result.scanStatus === 'partial'
+                    ? <><AlertCircle className="h-5 w-5 text-[var(--spr-amber,#d7ba7d)]" /> Review incomplete &mdash; some engines did not finish</>
+                    : <><CheckCircle2 className="h-5 w-5 text-[var(--spr-highlight)]" /> Review complete</>}
+                </div>
+                {result.scanStatus === 'partial' && (
+                  <p className="mt-2 text-xs leading-5 text-[var(--spr-text-faint)]">The counts below cover only the engines that finished. Treat them as incomplete, not as a clean result.</p>
+                )}
                 <div className="mt-4 grid grid-cols-3 gap-3 text-center text-sm">
                   <div className="rounded-xl border border-[var(--spr-border)] p-3"><div className="text-2xl font-bold">{result.summary.openFindings}</div><div className="text-[var(--spr-text-muted)]">Open findings</div></div>
                   <div className="rounded-xl border border-[var(--spr-border)] p-3"><div className="text-2xl font-bold">{result.summary.criticalOrHigh}</div><div className="text-[var(--spr-text-muted)]">Critical/High</div></div>
@@ -210,11 +235,20 @@ export default function FreeReviewView({ onSignUp, initialResult }: FreeReviewVi
                 </div>
                 {result.findings.length > 0 && (<ul className="mt-4 space-y-2 text-sm">{result.findings.slice(0, 20).map((f) => (<li key={f.id} className="rounded-lg border border-[var(--spr-border)] p-3"><span className="font-semibold uppercase text-[#f48771]">{f.severity}</span> {f.title}{f.component ? ` — ${f.component}` : ''}</li>))}</ul>)}
                 <button onClick={onSignUp} className="mt-6 w-full rounded-xl bg-[var(--spr-accent)] px-4 py-3.5 font-bold text-white"><ShieldCheck className="mr-2 inline h-4 w-4" />Sign up to claim this Passport &amp; get continuous monitoring</button>
+                </>
+                )}
               </div>
             )}
           </div>
         )}
-        <p className="mt-6 text-center text-xs text-[var(--spr-text-faint)]">SPR reports observed evidence only. An empty result means no issues were found by these engines, not a guarantee of safety.</p>
+        {/* This line explains what an empty result means, and is only true when
+            a scan actually ran. Shown unconditionally it asserted "no issues were
+            found by these engines" for a run in which no engine executed. */}
+        <p className="mt-6 text-center text-xs text-[var(--spr-text-faint)]">
+          {result?.scanStatus === 'failed'
+            ? 'SPR reports observed evidence only. Nothing was scanned here, so there is nothing to report either way.'
+            : 'SPR reports observed evidence only. An empty result means no issues were found by these engines, not a guarantee of safety.'}
+        </p>
       </div>
     </div>
   );

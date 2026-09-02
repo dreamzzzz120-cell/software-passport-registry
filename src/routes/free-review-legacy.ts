@@ -75,14 +75,38 @@ export function createLegacyFreeReviewRouter() {
       if (jobs.length === 0) return res.status(404).json({ error: 'Free Review submission not found' });
       const pending = jobs.some((j: any) => ['Pending', 'Running'].includes(j.status));
       const anyFailed = jobs.some((j: any) => j.status === 'Failed');
-      const scanStatus = pending ? 'scanning' : anyFailed ? 'partial' : 'complete';
+      // A run where EVERY engine failed is not a partial review, it is no review
+      // at all: nothing was fetched, nothing was scanned, and the zero counts
+      // below describe absence of a scan rather than absence of findings.
+      // Collapsing that into "partial" is what let the UI show a green "Review
+      // complete" with 0 findings and 0 evidence for a repository SPR never
+      // managed to read -- exactly the fabricated assurance this product exists
+      // to prevent.
+      const allFailed = jobs.length > 0 && jobs.every((j: any) => j.status === 'Failed');
+      const scanStatus = pending ? 'scanning' : allFailed ? 'failed' : anyFailed ? 'partial' : 'complete';
+      // The reason is already selected above and was being discarded. These codes
+      // describe the caller's own input, so returning them tells the customer
+      // something actionable without disclosing anything internal. Anything
+      // unrecognized is deliberately generalized rather than echoed back.
+      const FAILURE_REASONS: Record<string, string> = {
+        REPOSITORY_NOT_FOUND: 'That repository could not be found on GitHub. Check the owner and repository name.',
+        REPOSITORY_REF_NOT_FOUND: 'That repository exists, but its default branch could not be read.',
+        REPOSITORY_ACCESS_DENIED: 'That repository is private or not publicly accessible. Free Review only scans public repositories.',
+        REPOSITORY_ACQUISITION_FAILED: 'The repository could not be downloaded for scanning.',
+        REPOSITORY_PATH_INVALID: 'The requested path inside that repository is not valid.',
+        REPOSITORY_CONNECTION_NOT_FOUND: 'This review is no longer available. Start a new Free Review.',
+      };
+      const rawReason = jobs.find((j: any) => j.status === 'Failed' && j.error)?.error;
+      const failureReason = rawReason
+        ? FAILURE_REASONS[String(rawReason).trim()] || 'The scan could not be completed. No evidence was collected.'
+        : null;
       const passport = (await scopedDb.execute(sql`SELECT id, name, version, publisher, category, verification_status AS "verificationStatus" FROM passports WHERE id=${passportId} AND tenant_id=${FREE_REVIEW_TENANT_ID} LIMIT 1`) as any).rows?.[0] || null;
       const findings = (await scopedDb.execute(sql`SELECT id, severity, category, title, description, component, fixed_version AS "fixedVersion", status, detected_at AS "detectedAt", engine_id AS "engineId" FROM scan_findings WHERE tenant_id=${FREE_REVIEW_TENANT_ID} AND asset_id=${passportId} ORDER BY detected_at DESC`) as any).rows || [];
       const evidence = (await scopedDb.execute(sql`SELECT id, name, type, verified, status, signer, timestamp, engine_id AS "engineId" FROM evidence_items WHERE tenant_id=${FREE_REVIEW_TENANT_ID} AND asset_id=${passportId} ORDER BY timestamp DESC`) as any).rows || [];
       const openFindings = findings.filter((f: any) => !['resolved', 'closed', 'verified'].includes(String(f.status).toLowerCase()));
       const criticalOrHigh = openFindings.filter((f: any) => ['critical', 'high'].includes(String(f.severity).toLowerCase()));
       res.setHeader('cache-control', 'private, max-age=0, no-store');
-      return res.json({ passportId, scanStatus, passport, summary: { openFindings: openFindings.length, criticalOrHigh: criticalOrHigh.length, evidenceCount: evidence.length }, findings, evidence, policy: { rule: 'SPR reports observed evidence only. A scan still in progress reports scanStatus "scanning", never a placeholder result.' } });
+      return res.json({ passportId, scanStatus, failureReason, passport, summary: { openFindings: openFindings.length, criticalOrHigh: criticalOrHigh.length, evidenceCount: evidence.length }, findings, evidence, policy: { rule: 'SPR reports observed evidence only. A scan still in progress reports scanStatus "scanning", never a placeholder result. A scan where every engine failed reports "failed", and its zero counts mean nothing was scanned -- not that nothing was found.' } });
     } catch (error) { return next(error); }
   });
   return router;
