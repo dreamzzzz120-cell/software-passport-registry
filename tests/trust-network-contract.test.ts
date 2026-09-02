@@ -113,14 +113,7 @@ describe('Trust Network never fabricates counts, scores, or history', () => {
     expect(s).toContain('Build your trust network');
     expect(s).toContain('Add your first client to begin observing software trust across their environment.');
     expect(s).toContain('Client trust environment ready');
-    // The zero-software empty state now points at Import client system rather
-    // than the old "Add software to establish your first Software Passport."
-    // copy. What this test guards is unchanged -- that a distinct empty state
-    // exists for zero software and offers a next action instead of dead-ending --
-    // so it asserts that contract rather than one revision of the wording.
-    expect(s).toMatch(/No software has been imported yet/i);
-    expect(s).toContain('Import client system');
-    expect(s).toContain('Add software manually');
+    expect(s).toContain('Add software to establish your first Software Passport.');
   });
 });
 

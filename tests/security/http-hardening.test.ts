@@ -83,6 +83,20 @@ suite('HTTP hardening', () => {
     expect(connectSrc).toContain("'self'");
   });
 
+  // Production carried CSP, HSTS, nosniff, frame-deny and referrer-policy but no
+  // Permissions-Policy, so powerful browser capabilities were left at their
+  // defaults for any script running on the page.
+  it('denies browser capabilities the client does not use', async () => {
+    const response = await fetch(`${baseUrl}/health`);
+    const policy = response.headers.get('permissions-policy') ?? '';
+    for (const denied of ['camera=()', 'microphone=()', 'geolocation=()', 'usb=()', 'serial=()', 'bluetooth=()']) {
+      expect(policy).toContain(denied);
+    }
+    // Stripe Checkout is reached from this origin, so payment stays self rather
+    // than being denied outright.
+    expect(policy).toContain('payment=(self)');
+  });
+
   it('rejects TRACE', async () => {
     const response = await rawRequest(`${baseUrl}/health`, 'TRACE');
     expect(response.status).toBe(405);

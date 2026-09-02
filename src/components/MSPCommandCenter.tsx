@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ArrowRight, Building2, CheckCircle2, Clock3, Database, FileCheck2, FileSearch, Layers, Network, Plus, Radio, ShieldAlert, ShieldQuestion, User, X } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Building2, CheckCircle2, Clock3, Database, FileCheck2, FileSearch, Layers, Network, Radio, ShieldAlert, ShieldQuestion, User, X } from 'lucide-react';
 import { Alert, Client, SoftwarePassport } from '../types';
 import { apiFetch } from '../utils/apiClient';
 import TrustNetworkMap, { type NetworkClientNode } from './trust/TrustNetworkMap';
@@ -268,26 +268,6 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
         <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-[#c586c0]"><Network className="h-4 w-4" /> MSP control plane</div>
         <h1 className="text-3xl font-bold tracking-tight text-[var(--spr-text)] md:text-4xl">Trust Network</h1>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--spr-text-muted)]">A live view of software trust across your client environment. Observe clients, software, evidence, and trust states from one system.</p>
-        {/* The one obvious way in. "Add client" creates the organization record;
-            "Import client system" brings that client's software evidence into SPR.
-            Both are stated so the difference is readable without training. */}
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
-          <button
-            onClick={() => onNavigate('/import-system')}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--spr-accent)] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[var(--spr-accent-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--spr-highlight)]"
-          >
-            <Plus className="h-4 w-4" aria-hidden="true" /> Import client system
-          </button>
-          <button
-            onClick={() => onNavigate('/clients')}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-5 py-3 text-sm font-semibold text-[var(--spr-text)] transition hover:bg-[var(--spr-surface-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--spr-highlight)]"
-          >
-            <Plus className="h-4 w-4" aria-hidden="true" /> Add client
-          </button>
-        </div>
-        <p className="mt-3 max-w-2xl text-xs leading-5 text-[var(--spr-text-faint)]">
-          <strong className="text-[var(--spr-text-muted)]">Import client system</strong> brings a client&rsquo;s software evidence — SBOMs, software files, security and compliance documents — into SPR and organizes it into one trust view. <strong className="text-[var(--spr-text-muted)]">Add client</strong> just creates the organization record.
-        </p>
       </div>
       <div className="flex items-center gap-2">
         <div className="relative">
@@ -344,11 +324,8 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
       <section className="rounded-md border border-dashed border-[var(--spr-border)] bg-[var(--spr-surface-deep)] py-20 text-center">
         <Layers className="mx-auto h-9 w-9 text-[var(--spr-text-faint)]" />
         <h2 className="mt-4 text-xl font-bold text-[var(--spr-text)]">Client trust environment ready</h2>
-        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[var(--spr-text-muted)]">No software has been imported yet. Bring this client&rsquo;s software evidence into SPR and it will be organized into software assets, evidence and Software Passports.</p>
-        <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <button onClick={() => onNavigate('/import-system')} className="inline-flex items-center gap-2 rounded-xl bg-[var(--spr-accent)] px-5 py-2.5 text-sm font-bold text-white hover:bg-[var(--spr-accent-hover)]"><Plus className="h-4 w-4" aria-hidden="true" /> Import client system</button>
-          <button onClick={() => onNavigate('passports')} className="inline-flex items-center gap-2 rounded-xl border border-[var(--spr-border)] px-5 py-2.5 text-sm font-semibold text-[var(--spr-text)] hover:bg-[var(--spr-surface-hover)]">Add software manually <ArrowRight className="h-4 w-4" aria-hidden="true" /></button>
-        </div>
+        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[var(--spr-text-muted)]">Add software to establish your first Software Passport.</p>
+        <button onClick={() => onNavigate('passports')} className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[var(--spr-accent)] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[var(--spr-accent-hover)]">Add software <ArrowRight className="h-4 w-4" /></button>
       </section>
     ) : <>
 

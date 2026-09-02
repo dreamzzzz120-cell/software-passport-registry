@@ -82,6 +82,18 @@ const connectSrc = ["'self'", ...(appOrigin ? [appOrigin] : []), ...FIREBASE_AUT
 const VERCEL_TEAM_PREVIEW_ORIGIN = /^https:\/\/[a-z0-9-]+-sprteam\.vercel\.app$/i;
 const corsOrigin = (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) => { if (!origin) return callback(null, true); try { const normalizedOrigin = new URL(origin).origin; if (allowedOrigins.has(normalizedOrigin)) return callback(null, true); if (VERCEL_TEAM_PREVIEW_ORIGIN.test(normalizedOrigin)) return callback(null, true); } catch (_) {} return callback(new Error('CORS origin denied')); };
 app.use(helmet({ contentSecurityPolicy: { useDefaults: false, directives: { defaultSrc: ["'self'"], baseUri: ["'self'"], objectSrc: ["'none'"], frameAncestors: ["'none'"], formAction: ["'self'"], scriptSrc: ["'self'", "'sha256-kWQT+628v4D1A4MJk9hTD6a0W1AdPlPKtzhPlYKIpZc='"], styleSrc: ["'self'", "'unsafe-inline'"], imgSrc: ["'self'", 'data:', 'blob:', 'https:'], fontSrc: ["'self'", 'data:', 'https:'], connectSrc, frameSrc: ["'self'", 'https:'], workerSrc: ["'self'", 'blob:'], manifestSrc: ["'self'"], upgradeInsecureRequests: [] } }, crossOriginEmbedderPolicy: false, frameguard: { action: 'deny' }, referrerPolicy: { policy: 'no-referrer' } }));
+// helmet does not emit Permissions-Policy, and production carried no such header.
+// SPR's browser client uses none of these capabilities, so denying them removes a
+// class of abuse from any script that does end up running on the page -- including
+// one injected through a dependency. payment and fullscreen stay 'self' because
+// Stripe Checkout is reached from this origin; everything else is denied outright.
+const PERMISSIONS_POLICY = [
+  'accelerometer=()', 'autoplay=()', 'bluetooth=()', 'camera=()', 'display-capture=()',
+  'encrypted-media=()', 'geolocation=()', 'gyroscope=()', 'magnetometer=()', 'microphone=()',
+  'midi=()', 'usb=()', 'serial=()', 'xr-spatial-tracking=()',
+  'fullscreen=(self)', 'payment=(self)',
+].join(', ');
+app.use((_req, res, next) => { res.setHeader('Permissions-Policy', PERMISSIONS_POLICY); next(); });
 app.use(cors({ origin: corsOrigin, credentials: true, methods: ['GET','HEAD','POST','PUT','PATCH','DELETE','OPTIONS'], allowedHeaders: ['Authorization','Content-Type','X-Request-ID','X-API-Key'] }));
 app.use((req, res, next) => { if (req.method === 'TRACE' || req.method === 'CONNECT') return res.status(405).json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'HTTP method is not allowed.' } }); if (req.headers['content-length'] && !/^\d+$/.test(String(req.headers['content-length']))) return res.status(400).json({ error: { code: 'INVALID_CONTENT_LENGTH', message: 'Invalid Content-Length header.' } }); return next(); });
 app.post('/api/billing/webhook', express.raw({ type: 'application/json', limit: requestBodyLimit }), stripeWebhookHandler);
