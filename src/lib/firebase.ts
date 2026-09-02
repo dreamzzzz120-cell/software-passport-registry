@@ -6,19 +6,20 @@
 import { initializeApp } from 'firebase/app';
 import { GoogleAuthProvider, connectAuthEmulator, getAuth, signInWithPopup, signOut, type User } from 'firebase/auth';
 
-// Firebase browser configuration is public configuration. Prefer Vite environment
-// variables, but fall back to a harmless demo config (rather than a real production
-// project) so a missing Vercel build variable cannot blank the entire React application
-// or silently point local/dev builds at the production Firebase project.
+// Firebase browser configuration is public configuration. Production must use
+// the Vercel VITE_FIREBASE_* values; never silently point a real deployment at
+// a fake/demo Firebase project. LoginView already blocks auth operations when
+// firebaseConfigured is false, so a missing production variable is surfaced
+// as a configuration error instead of an opaque Firebase API-key failure.
 export function resolveFirebaseConfig(env: Record<string, string | undefined>) {
   const fallbackConfig = {
-    apiKey: 'demo-api-key',
-    authDomain: 'demo-project.firebaseapp.com',
-    projectId: 'demo-project',
-    storageBucket: 'demo-project.appspot.com',
+    apiKey: 'spr-missing-firebase-config',
+    authDomain: 'spr-missing-firebase-config.invalid',
+    projectId: 'spr-missing-firebase-config',
+    storageBucket: 'spr-missing-firebase-config.invalid',
     messagingSenderId: '0000000000',
-    appId: '1:0000000000:web:demo',
-    measurementId: 'G-DEMO123',
+    appId: 'spr-missing-firebase-config',
+    measurementId: 'G-MISSINGCONFIG',
   };
 
   return {
@@ -36,7 +37,7 @@ const env = import.meta.env;
 const envConfig = resolveFirebaseConfig(env);
 
 if (!env.VITE_FIREBASE_API_KEY || !env.VITE_FIREBASE_PROJECT_ID || !env.VITE_FIREBASE_AUTH_DOMAIN || !env.VITE_FIREBASE_APP_ID) {
-  console.warn('[Firebase Config] Missing required VITE_FIREBASE_* environment variables; using safe demo config in the browser.');
+  console.error('[Firebase Config] Missing required VITE_FIREBASE_* environment variables. Authentication is disabled until the Vercel Production variables are configured.');
 }
 
 const firebaseConfig = envConfig;
@@ -50,7 +51,7 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
 // Local development only: point the client SDK at a local Auth emulator
-// instead of the real spr4-c2c65 project. Never set VITE_FIREBASE_AUTH_EMULATOR_HOST
+// instead of the real SPR Firebase project. Never set VITE_FIREBASE_AUTH_EMULATOR_HOST
 // in a deployed environment.
 const emulatorHost = env.VITE_FIREBASE_AUTH_EMULATOR_HOST;
 if (emulatorHost) connectAuthEmulator(auth, `http://${emulatorHost}`, { disableWarnings: true });
