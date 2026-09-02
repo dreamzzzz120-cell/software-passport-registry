@@ -8,7 +8,8 @@ import LegalPageLayout from './LegalPageLayout';
 export default function PrivacyPolicyView() {
   return (
     <LegalPageLayout title="Privacy Policy" lastUpdated="September 2, 2026">
-      <p>This Privacy Policy describes how <strong>Software Passport Registry (SPR)</strong> ("SPR", "we", "us", or "our") handles information in connection with the Service. SPR is an independent software trust and evidence platform.</p>
+      <p>This Privacy Policy describes how <strong>Software Passport Registry Ltd.</strong> ("SPR", "we", "us", or "our") handles information in connection with the Software Passport Registry service (the "Service").</p>
+      <p>SPR is an independent software trust and evidence platform. SPR is not a government passport service, government registry, certification authority, or government-affiliated system.</p>
       <p>SPR does not represent that this Policy creates a certification or legal determination of compliance with any particular privacy law. Where a jurisdiction grants additional privacy rights, those rights remain applicable to the extent required by law.</p>
       <section><h2>1. Information We Collect</h2><p><strong>Account information.</strong> When you or your organization create an account, we collect information such as name, email address, company name, and role.</p><p><strong>Software, repository, and evidence information.</strong> The Service is designed around software inventory and evidence: information you or your organization submits about software assets, clients, software bills of materials, vulnerability scan results, repository metadata, and provenance/attestation statements. Where you connect a third-party source, we collect the data that integration provides in order to generate evidence and trust outputs.</p><p><strong>Technical and log information.</strong> We automatically collect certain technical information needed to operate and secure the Service, including IP address, browser/user-agent information, request timestamps, and records of actions taken in your workspace.</p></section>
       <section><h2>2. Cookies and Local Storage</h2><p>The Service does not set third-party advertising or tracking cookies. Authentication is managed by Firebase Authentication. The Service uses browser local storage for limited interface preferences on your device; these preferences are not used by SPR to track you across unrelated websites.</p></section>
@@ -21,7 +22,7 @@ export default function PrivacyPolicyView() {
       <section><h2>9. International Data Handling</h2><p>Our service providers may process information in countries other than your own. Where applicable law requires safeguards for cross-border processing, SPR will use appropriate mechanisms or otherwise process information as permitted by law.</p></section>
       <section><h2>10. Children's Privacy</h2><p>The Service is intended for business use and is not directed to children. We do not knowingly collect personal information from children under 16 through the Service.</p></section>
       <section><h2>11. Changes to This Policy</h2><p>We may update this Privacy Policy from time to time. Material changes will be reflected by updating the date above and, where appropriate, providing additional notice.</p></section>
-      <section><h2>12. Contact</h2><p>Privacy questions and requests: <strong>contact@softwarepassportregistry.com</strong>.</p></section>
+      <section><h2>12. Contact</h2><p>Privacy questions and requests: <strong>Software Passport Registry Ltd.</strong>, <strong>contact@softwarepassportregistry.com</strong>.</p></section>
     </LegalPageLayout>
   );
 }
