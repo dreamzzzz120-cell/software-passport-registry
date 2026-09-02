@@ -4,6 +4,7 @@ import { AlertCircle, ArrowRight, CheckCircle2, Eye, EyeOff, Loader, ShieldCheck
 import { auth, googleAuthProvider, firebaseConfigured } from '../lib/firebase';
 import { consumeAuthNotice, notProvisionedMessage } from '../lib/authNotice';
 import { beginSignupTransition, endSignupTransition } from '../lib/signupTransition';
+import { apiFetch } from '../utils/apiClient';
 
 interface LoginViewProps { onLoginSuccess: (user: { uid: string; email: string | null; displayName: string; token: string; emailVerified: boolean; onboarded: 0 }) => void; }
 const STAGED_KEY = 'spr-universal-intake-v1';
@@ -36,10 +37,22 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
     refreshStaged(); window.addEventListener('storage', refreshStaged); return () => window.removeEventListener('storage', refreshStaged);
   }, []);
 
+  const claimIntake = async () => {
+    try {
+      const raw = sessionStorage.getItem(STAGED_KEY); if (!raw) return;
+      const data = JSON.parse(raw); if (typeof data?.sessionId !== 'string') return;
+      const response = await apiFetch('/api/intake/claim', { method: 'POST', body: JSON.stringify({ sessionId: data.sessionId }) });
+      if (response.ok) { sessionStorage.removeItem(STAGED_KEY); setStagedCount(0); setStagedRepo(''); setNotice('Your intake has been claimed into your SPR workspace.'); }
+      else if (response.status !== 410 && response.status !== 404) { const body = await response.json().catch(() => null); console.warn('[SPR] Intake claim did not complete:', body?.error || response.status); }
+    } catch (err) { console.warn('[SPR] Intake claim unavailable:', err); }
+  };
+
   const complete = async (user: User) => {
     if (!auth) throw new Error('Firebase authentication is not initialized.'); await reload(user);
     if (!user.emailVerified) { try { await sendEmailVerification(user); } catch {} await signOut(auth); setNotice('Verify your email before entering SPR. We sent a fresh verification email. Then sign in again.'); return; }
-    const token = await user.getIdToken(true); onLoginSuccess({ uid: user.uid, email: user.email, displayName: user.displayName || user.email?.split('@')[0] || 'User', token, emailVerified: true, onboarded: 0 });
+    const token = await user.getIdToken(true);
+    await claimIntake();
+    onLoginSuccess({ uid: user.uid, email: user.email, displayName: user.displayName || user.email?.split('@')[0] || 'User', token, emailVerified: true, onboarded: 0 });
   };
 
   useEffect(() => {
@@ -51,7 +64,7 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
   }, []);
 
   const submit = async (event: React.FormEvent) => { event.preventDefault(); if (loading || googleLoading) return; if (!auth || !firebaseConfigured) { setError('Firebase browser configuration is missing. Add the VITE_FIREBASE_* Production variables in Vercel and redeploy.'); return; } setLoading(true); setError(''); setNotice(''); try { const result = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password); await complete(result.user); } catch (err: any) { const message = authMessage(err, 'Sign-in failed.'); if (message) setError(message); } finally { setLoading(false); } };
-  const register = async () => { if (loading || googleLoading) return; if (!auth || !firebaseConfigured) { setError('Firebase browser configuration is missing. Add the VITE_FIREBASE_* Production variables in Vercel and redeploy.'); return; } setLoading(true); setError(''); setNotice(''); beginSignupTransition(); try { const result = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), password); await sendEmailVerification(result.user); await signOut(auth); setNotice('Account created. Check your email, verify it, then sign in. Your staged intake will remain available in this browser.'); } catch (err: any) { setError(authMessage(err, 'Account creation failed.')); } finally { endSignupTransition(); setLoading(false); } };
+  const register = async () => { if (loading || googleLoading) return; if (!auth || !firebaseConfigured) { setError('Firebase browser configuration is missing. Add the VITE_FIREBASE_* Production variables in Vercel and redeploy.'); return; } setLoading(true); setError(''); setNotice(''); beginSignupTransition(); try { const result = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), password); await sendEmailVerification(result.user); await signOut(auth); setNotice('Account created. Check your email, verify it, then sign in. Your secure intake remains available for 24 hours.'); } catch (err: any) { setError(authMessage(err, 'Account creation failed.')); } finally { endSignupTransition(); setLoading(false); } };
   const google = async () => { if (loading || googleLoading) return; if (!auth || !firebaseConfigured) { setError('Firebase browser configuration is missing. Add the VITE_FIREBASE_* Production variables in Vercel and redeploy.'); return; } setGoogleLoading(true); setError(''); setNotice('Opening secure Google sign-in…'); try { const result = await signInWithPopup(auth, googleAuthProvider); await complete(result.user); } catch (err: any) { if (['auth/popup-blocked','auth/operation-not-supported-in-this-environment'].includes(err?.code)) { try { await signInWithRedirect(auth, googleAuthProvider); return; } catch (redirectError: any) { const message = authMessage(redirectError, 'Google sign-in failed.'); if (message) setError(message); else setNotice(''); setGoogleLoading(false); return; } } const message = authMessage(err, 'Google sign-in failed.'); if (message) setError(message); else setNotice(''); setGoogleLoading(false); } };
   const reset = async () => { if (!email.trim()) { setError('Enter your email first.'); return; } if (!auth || !firebaseConfigured) { setError('Firebase browser configuration is missing.'); return; } setLoading(true); setError(''); setNotice(''); try { await sendPasswordResetEmail(auth, email.trim().toLowerCase()); setNotice('Password reset email sent.'); } catch (err: any) { setError(authMessage(err, 'Could not send the reset email.')); } finally { setLoading(false); } };
   const resendVerification = async () => { const currentUser = auth?.currentUser; if (!currentUser || currentUser.emailVerified) return; setLoading(true); setError(''); setNotice(''); try { await sendEmailVerification(currentUser); setNotice('A fresh verification email has been sent.'); } catch (err: any) { setError(authMessage(err, 'Could not resend the verification email.')); } finally { setLoading(false); } };
@@ -59,7 +72,7 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
 
   return <div className="min-h-screen flex items-center justify-center bg-[var(--spr-surface)] p-6 text-[var(--spr-text)]"><form onSubmit={submit} className="w-full max-w-md space-y-5 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-7 shadow-2xl" noValidate>
     <div className="text-center"><img src="/brand/spr-logo.jpg" alt="Software Passport Registry" className="mx-auto h-12 w-auto" /><h1 className="mt-5 text-3xl font-semibold">Sign in to SPR</h1><p className="mt-2 text-sm text-[var(--spr-text-muted)]">Use your work email or continue with Google.</p></div>
-    {stagedCount > 0 || stagedRepo ? <div className="rounded-xl border border-[var(--spr-highlight)]/30 bg-[var(--spr-accent-soft)]/10 p-4"><div className="flex gap-3"><Upload className="h-5 w-5 shrink-0 text-[var(--spr-highlight)]" /><div><div className="text-sm font-semibold">Your intake is waiting</div><p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">{stagedCount > 0 ? `${stagedCount} file(s)` : 'No files'}{stagedRepo ? ` + repository ${stagedRepo}` : ''} staged in this browser. Sign in or create your account to continue.</p></div></div></div> : null}
+    {stagedCount > 0 || stagedRepo ? <div className="rounded-xl border border-[var(--spr-highlight)]/30 bg-[var(--spr-accent-soft)]/10 p-4"><div className="flex gap-3"><Upload className="h-5 w-5 shrink-0 text-[var(--spr-highlight)]" /><div><div className="text-sm font-semibold">Your intake is waiting</div><p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">{stagedCount > 0 ? `${stagedCount} file(s)` : 'No files'}{stagedRepo ? ` + repository ${stagedRepo}` : ''} is secured in quarantine. Sign in to claim it.</p></div></div></div> : null}
     {error && <div role="alert" className="rounded-xl border border-red-400/20 bg-red-400/10 p-3 text-sm text-red-200"><AlertCircle className="mr-2 inline h-4 w-4" />{error}</div>}
     {notice && <div role="status" className="rounded-xl border border-[var(--spr-highlight)]/40 bg-[var(--spr-accent-soft)] p-3 text-sm text-cyan-100"><CheckCircle2 className="mr-2 inline h-4 w-4" />{notice}</div>}
     <label className="block text-sm font-semibold">Email<input className="mt-2 w-full rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-4 py-3 text-[var(--spr-text)] outline-none focus:border-[var(--spr-highlight)]/40" type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} required /></label>
