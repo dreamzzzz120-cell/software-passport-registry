@@ -6,7 +6,17 @@ import { z } from 'zod';
 import { db } from '../db/index.ts';
 import { AuthenticatedRequest, requireAuth } from '../middleware/security.ts';
 
-const MAX_FILE_SIZE = 100 * 1024 * 1024;
+// 100MB was never reachable: production logs (after #71/#72 added the logging
+// needed to see it) show createBucket rejected with a Supabase StorageApiError
+// 400 "The object exceeded the maximum allowed size" for a fileSizeLimit of
+// 104857600. That is Supabase's own project-wide storage cap rejecting the
+// bucket's requested per-bucket limit, not anything this app controls. 50MB is
+// Supabase's documented platform default global file size limit (raisable by
+// the project owner in Dashboard -> Settings -> Storage, up to 5GB on paid
+// plans) and the strongest evidenced value short of that dashboard setting
+// being changed. If it is still rejected, the project's real cap is lower than
+// even the platform default and the exact number will show in the same log line.
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
 const MAX_FILES_PER_SESSION = 100;
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const BUCKET = process.env.SPR_INTAKE_BUCKET?.trim() || 'spr-intake';
@@ -127,7 +137,7 @@ export function createUniversalIntakeRouter() {
       const countResult = await db.execute(sql`SELECT COUNT(*)::int AS count FROM intake_items WHERE session_id=${session.id}`);
       const count = Number((countResult as any).rows?.[0]?.count || 0);
       if (count >= MAX_FILES_PER_SESSION) return res.status(413).json({ error: 'The intake has reached its 100-file limit.' });
-      if (file.data.size > MAX_FILE_SIZE) return res.status(413).json({ error: 'File exceeds the 100 MB intake limit.' });
+      if (file.data.size > MAX_FILE_SIZE) return res.status(413).json({ error: 'File exceeds the 50 MB intake limit.' });
       const itemId = id('item');
       const storagePath = `${session.id}/${itemId}/${safeName(file.data.name)}`;
       const client = await ensureBucket();
