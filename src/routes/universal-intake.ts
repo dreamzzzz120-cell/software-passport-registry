@@ -46,8 +46,25 @@ async function ensureBucket() {
   const client = supabaseAdmin();
   const { data, error } = await client.storage.getBucket(BUCKET);
   if (!data && error) {
-    const created = await client.storage.createBucket(BUCKET, { public: false, fileSizeLimit: `${MAX_FILE_SIZE}B` });
+    // fileSizeLimit was previously passed as `${MAX_FILE_SIZE}B` ("104857600B").
+    // Supabase parses that string with the `bytes` library, and the bucket ended
+    // up with a limit far below the intended 100MB -- production rejected an
+    // 11-byte upload with 400 "The object exceeded the maximum allowed size".
+    // A plain number is unambiguous: Supabase treats it as bytes.
+    const created = await client.storage.createBucket(BUCKET, { public: false, fileSizeLimit: MAX_FILE_SIZE });
     if (created.error && !/already exists/i.test(created.error.message)) throw created.error;
+    return client;
+  }
+  // A bucket created by the earlier code still carries the bad limit, and
+  // createBucket is never reached once it exists. Reconcile it to the documented
+  // ceiling. Only the size limit is touched: the bucket stays private, so this
+  // cannot widen access. Failures here are logged, not thrown -- a limit that is
+  // already correct, or a key without bucket-admin rights, must not take the
+  // upload path down.
+  if (data && data.file_size_limit !== MAX_FILE_SIZE) {
+    const updated = await client.storage.updateBucket(BUCKET, { public: false, fileSizeLimit: MAX_FILE_SIZE });
+    if (updated.error) console.error(`[Intake] Could not reconcile bucket size limit (currently ${String(data.file_size_limit)}): ${updated.error.message}`);
+    else console.info(`[Intake] Bucket size limit reconciled from ${String(data.file_size_limit)} to ${MAX_FILE_SIZE} bytes.`);
   }
   return client;
 }
