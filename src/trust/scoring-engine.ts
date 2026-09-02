@@ -81,7 +81,12 @@ function clamp(value: number): number {
 export function calculateCanonicalScores(input: CanonicalScoreInput): CanonicalScoreResult {
   const totalUnits = Math.max(0, Math.round(input.evidence.totalUnits));
   const knownUnits = Math.max(0, Math.min(totalUnits, Math.round(input.evidence.knownUnits)));
-  const evidenceCompleteness = totalUnits > 0 ? Math.round((knownUnits / totalUnits) * 100) : 0;
+  // No evidence is a distinct state from "0% of expected evidence is known".
+  // Keep the latter as 0% when evidence units exist, but never manufacture a
+  // numeric completeness score for a passport that has no evidence universe
+  // to measure. This prevents downstream UI from turning "nothing observed"
+  // into a false zero assessment.
+  const evidenceCompleteness = totalUnits > 0 ? Math.round((knownUnits / totalUnits) * 100) : null;
 
   // No evidence at all, or evidence exists but none of it has actually been
   // resolved yet -- there is nothing legitimate to score.
@@ -90,7 +95,7 @@ export function calculateCanonicalScores(input: CanonicalScoreInput): CanonicalS
   }
 
   const freshness = Math.max(0, Math.min(1, input.evidence.freshness ?? 1));
-  const confidenceScore = Math.round(evidenceCompleteness * freshness);
+  const confidenceScore = Math.round((evidenceCompleteness ?? 0) * freshness);
 
   let securityScore = 100;
   let complianceScore = 100;
