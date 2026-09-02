@@ -122,6 +122,9 @@ jobs:
                 cat "$out" >&2
                 return 1
               fi
+              echo "DIAG: accounts:update response for ${email}:" >&2
+              cat "$out" >&2
+              echo >&2
             fi
           }
           create_user tenant-a@security.test /tmp/a.json true
