@@ -131,15 +131,29 @@ export function createUniversalIntakeRouter() {
       const itemId = id('item');
       const storagePath = `${session.id}/${itemId}/${safeName(file.data.name)}`;
       const client = await ensureBucket();
-      const signed = await client.storage.from(BUCKET).createSignedUploadUrl(storagePath);
+      // Production returned 400 "The object exceeded the maximum allowed size"
+      // for an 11-byte file, and NEITHER the "resolves with { error }" branch
+      // below NOR ensureBucket's own logging ever fired for it -- confirmed live,
+      // twice, after each was instrumented in turn. supabase-js does not always
+      // resolve to { error } on failure; some failures reject the call instead
+      // (the reconciliation branch above already assumes this for updateBucket,
+      // but this call was never given the same assumption). An error that
+      // rejects here previously reached the client with no [Intake] line at all.
+      let signed: { data: { token: string; signedUrl: string } | null; error: { message: string; name?: string; status?: number; statusCode?: string | number } | null };
+      try {
+        signed = await client.storage.from(BUCKET).createSignedUploadUrl(storagePath);
+      } catch (err) {
+        const e = err as { message?: string; name?: string; status?: number; statusCode?: string | number };
+        console.error(`[Intake] createSignedUploadUrl threw for bucket "${BUCKET}" (declared size ${file.data.size} bytes): name=${e?.name ?? 'unknown'} status=${e?.status ?? e?.statusCode ?? 'unknown'} message=${e?.message ?? String(err)}`);
+        throw err;
+      }
       if (signed.error || !signed.data) {
-        // Production returned 400 "The object exceeded the maximum allowed size"
-        // for an 11-byte file and nothing recorded which call produced it. Name
-        // the call and the declared size so the next failure is explicable from
-        // the logs rather than only from the customer's screen. The storage path
-        // is derived from ids we generated, not from the uploaded filename, so
-        // it discloses nothing about the user.
-        console.error(`[Intake] createSignedUploadUrl failed for bucket "${BUCKET}" (declared size ${file.data.size} bytes): ${signed.error?.message ?? 'no data returned'}`);
+        // Name the call and the declared size so the next failure is explicable
+        // from the logs rather than only from the customer's screen. The storage
+        // path is derived from ids we generated, not from the uploaded filename,
+        // so it discloses nothing about the user.
+        const e = signed.error;
+        console.error(`[Intake] createSignedUploadUrl failed for bucket "${BUCKET}" (declared size ${file.data.size} bytes): name=${e?.name ?? 'unknown'} status=${e?.status ?? e?.statusCode ?? 'unknown'} message=${e?.message ?? 'no data returned'}`);
         throw signed.error || new Error('Could not create secure upload URL.');
       }
       await db.execute(sql`INSERT INTO intake_items (id,session_id,name,size,content_type,kind,storage_bucket,storage_path,status,created_at) VALUES (${itemId},${session.id},${file.data.name},${file.data.size},${file.data.contentType},${file.data.kind},${BUCKET},${storagePath},'AWAITING_UPLOAD',NOW())`);
