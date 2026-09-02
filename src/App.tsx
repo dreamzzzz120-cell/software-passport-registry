@@ -133,6 +133,15 @@ export default function App() {
   const [selectedClientId, setSelectedClientId] = useState('');
   const [selectedPassportId, setSelectedPassportId] = useState<string | null>(null);
   const [assets, setAssets] = useState<any[]>([]);
+  // Trust Network read its data straight out of state that starts empty, with no
+  // notion of "still loading" and no else-branch on any failed response. An
+  // existing customer therefore saw "Build your trust network -- add your first
+  // client" on first paint, and saw exactly the same screen if the API failed:
+  // the page asserted the customer had no clients when it simply did not know
+  // yet. Status is tracked here, where the fetch lives, rather than being
+  // inferred downstream from an empty array.
+  const [dataStatus, setDataStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [reloadKey, setReloadKey] = useState(0);
   const [clients, setClients] = useState<Client[]>(EMPTY_CLIENTS);
   const [passports, setPassports] = useState<SoftwarePassport[]>(EMPTY_PASSPORTS);
   const [vendors, setVendors] = useState<Vendor[]>(EMPTY_VENDORS);
@@ -246,6 +255,7 @@ export default function App() {
         endSignupTransition();
       }
 
+      if (!cancelled) setDataStatus('loading');
       const responses = await Promise.all([
         apiFetch('/api/user/me'), apiFetch('/api/scans'), apiFetch('/api/trust-loop/findings'), apiFetch('/api/user/passports'), apiFetch('/api/user/clients'), apiFetch('/api/integrations'), apiFetch('/api/vendors'),
       ]);
@@ -286,10 +296,17 @@ export default function App() {
           }
         }
       } catch { if (!cancelled) { setVerificationDecisions({}); setVerificationDetails({}); } }
+
+      // Trust Network's two load-bearing collections. If either could not be
+      // read, the page must say so rather than render an empty estate as fact.
+      if (!cancelled) setDataStatus(clientsResponse.ok && passportsResponse.ok ? 'ready' : 'error');
     };
-    void load().catch((error) => console.warn('[SPR command center load]', error));
+    void load().catch((error) => {
+      console.warn('[SPR command center load]', error);
+      if (!cancelled) setDataStatus('error');
+    });
     return () => { cancelled = true; };
-  }, [user]);
+  }, [user, reloadKey]);
 
   useEffect(() => {
     const refresh = () => { if (user) window.location.reload(); };
@@ -377,7 +394,10 @@ export default function App() {
     case '/monitoring': view = <MonitoringView role={role} passports={passports} clients={clients} />; break;
     case '/security': view = <SecurityCenterView clients={clients} passports={passports} />; break;
     case '/compliance': view = <ComplianceView clients={clients} role={role} />; break;
-    case '/msp': view = <MSPCommandCenter clients={clients} alerts={alerts} passports={passports} role={role} onSelectClient={setSelectedClientId} onSelectPassport={setSelectedPassportId} onNavigate={navigate} verificationDecisions={verificationDecisions} />; break;
+    case '/msp': view = <MSPCommandCenter clients={clients} alerts={alerts} passports={passports} role={role} onSelectClient={setSelectedClientId} onSelectPassport={setSelectedPassportId} onNavigate={navigate} verificationDecisions={verificationDecisions} dataStatus={dataStatus} onRetry={() => setReloadKey((n) => n + 1)} />; break;
+    // Guided wrapper around the existing Universal Intake endpoints. It adds no
+    // API surface of its own; see src/components/ImportClientSystemView.tsx.
+    case '/import-system': view = <ImportClientSystemView onNavigate={navigate} onSelectClient={setSelectedClientId} preselectedClientId={selectedClientId} />; break;
     case '/agent-trust': view = <AgentTrustView />; break;
     case '/ai-trust-center': view = <AITrustCenterView role={role} />; break;
     case '/enterprise-readiness': view = <EnterpriseReadinessView clients={clients} />; break;
