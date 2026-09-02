@@ -23,19 +23,24 @@ describe('calculateCanonicalScores', () => {
     expect(result.verificationStatus).toBe('unverified');
   });
 
-  it('does not report a perfect score from sparse evidence, and marks it partial', () => {
+  it('never publishes a numeric score from sparse partial evidence', () => {
     const result = calculateCanonicalScores({ findings: [], evidence: { totalUnits: 20, knownUnits: 2, freshness: 1 } });
-    expect(result.overallScore).not.toBeNull();
+    expect(result.overallScore).toBeNull();
+    expect(result.securityScore).toBeNull();
+    expect(result.complianceScore).toBeNull();
+    expect(result.vendorReputationScore).toBeNull();
     expect(result.evidenceCompleteness).toBe(10);
     expect(result.confidenceScore).toBe(10);
     expect(result.verificationStatus).toBe('partial');
   });
 
-  it('reaches verified status once completeness meets the threshold', () => {
+  it('reaches verified status once completeness meets the threshold and then publishes scores', () => {
     const atThreshold = calculateCanonicalScores({ findings: [], evidence: { totalUnits: 100, knownUnits: VERIFIED_COMPLETENESS_THRESHOLD, freshness: 1 } });
     expect(atThreshold.verificationStatus).toBe('verified');
+    expect(atThreshold.overallScore).not.toBeNull();
     const justBelow = calculateCanonicalScores({ findings: [], evidence: { totalUnits: 100, knownUnits: VERIFIED_COMPLETENESS_THRESHOLD - 1, freshness: 1 } });
     expect(justBelow.verificationStatus).toBe('partial');
+    expect(justBelow.overallScore).toBeNull();
   });
 
   it('scores security and compliance independently from their own findings', () => {
@@ -59,7 +64,7 @@ describe('calculateCanonicalScores', () => {
   it('is deterministic for identical evidence', () => {
     const input: CanonicalScoreInput = {
       findings: [{ severity: 'high', category: 'security', open: true }, { severity: 'medium', category: 'compliance', open: true }],
-      evidence: { totalUnits: 15, knownUnits: 12, freshness: 0.9, hasValidSignature: true, hasAuditReport: false },
+      evidence: { totalUnits: 100, knownUnits: 80, freshness: 0.9, hasValidSignature: true, hasAuditReport: false },
     };
     const first = calculateCanonicalScores(input);
     const second = calculateCanonicalScores(structuredClone(input));
@@ -67,7 +72,7 @@ describe('calculateCanonicalScores', () => {
   });
 
   it('lowers the score when a new open finding is added, and only reports 100 when evidence actually supports it', () => {
-    const cleanEvidence = { totalUnits: 10, knownUnits: 10, hasValidSignature: true, hasAuditReport: true };
+    const cleanEvidence = { totalUnits: 100, knownUnits: 100, hasValidSignature: true, hasAuditReport: true };
     const clean = calculateCanonicalScores({ findings: [], evidence: cleanEvidence });
     expect(clean.securityScore).toBe(100);
     expect(clean.verificationStatus).toBe('verified');
@@ -88,7 +93,7 @@ describe('calculateCanonicalScores', () => {
   it('clamps every dimension score to the 0-100 range', () => {
     const result = calculateCanonicalScores({
       findings: Array.from({ length: 10 }, () => ({ severity: 'critical' as const, category: 'security' as const, open: true })),
-      evidence: { totalUnits: 5, knownUnits: 5 },
+      evidence: { totalUnits: 100, knownUnits: 100 },
     });
     expect(result.securityScore).toBe(0);
     expect(result.securityScore).toBeGreaterThanOrEqual(0);
