@@ -4,29 +4,48 @@ import { readFileSync } from 'node:fs';
 // The spr-worker service crash-looped in production on
 //   [Worker] Fatal startup error: password authentication failed for user "spr_worker_runtime"
 // while WORKER_DATABASE_URL and WORKER_RUNTIME_DB_PASSWORD agreed with each
-// other in Railway. The passwords in Postgres had never been rotated to match,
+// other in Railway. The password in Postgres had never been rotated to match,
 // because scripts/provision-runtime-roles.ts performs that rotation and was
-// never actually running: railway.toml chained it onto the migration with
-// "&&" inside a single pre-deploy entry, and Railway runs each entry directly
-// rather than through a shell. node took the "&&" and everything after it as
-// extra argv and ignored it, so the migration ran, the provisioner did not, and
-// the deploy reported success with nothing in the log to show for it.
+// never running.
+//
+// Two dead ends got there first, both worth pinning against:
+//   1. "node dist/migrate.cjs && node dist/provision-runtime-roles.cjs" as a
+//      single entry. Railway executes the entry directly, not through a shell,
+//      so node received "&&" and the rest as extra argv and ignored them. The
+//      migration ran, the provisioner did not, and the deploy went green.
+//   2. Splitting it into two array entries. Railway rejects that outright:
+//      "deploy.preDeployCommand: Too big: expected array to have <=1 items",
+//      failing at SNAPSHOT_CODE before anything runs.
+// One entry that invokes npm satisfies both constraints, because npm runs its
+// script through a shell.
 const read = (relativePath: string) =>
   readFileSync(new URL(`../${relativePath}`, import.meta.url), 'utf8');
 
+const preDeployEntries = (railwayConfig: string): string[] => {
+  const raw = /preDeployCommand\s*=\s*\[(.*)\]/.exec(railwayConfig)?.[1] ?? '';
+  return raw.split(',').map(entry => entry.trim().replace(/^"|"$/g, '')).filter(Boolean);
+};
+
 describe('runtime role provisioning survives a deploy', () => {
-  it('gives the provisioner its own pre-deploy entry instead of a shell chain', () => {
-    const railwayConfig = read('railway.toml');
-    const preDeploy = /preDeployCommand\s*=\s*\[(.*)\]/.exec(railwayConfig)?.[1] ?? '';
-    expect(preDeploy).toContain('dist/migrate.cjs');
-    expect(preDeploy).toContain('dist/provision-runtime-roles.cjs');
-    // The failure mode this pins: a shell operator in an entry that never
-    // reaches a shell.
-    expect(preDeploy).not.toContain('&&');
-    expect(preDeploy.split(',')).toHaveLength(2);
+  it('uses exactly one pre-deploy entry, since Railway rejects more than one', () => {
+    expect(preDeployEntries(read('railway.toml'))).toHaveLength(1);
+    expect(preDeployEntries(read('railway.worker.toml')).length).toBeLessThanOrEqual(1);
   });
 
-  it('builds the provisioner into dist, so the pre-deploy entry has something to run', () => {
+  it('routes that entry through a shell instead of chaining with a bare &&', () => {
+    const [entry] = preDeployEntries(read('railway.toml'));
+    expect(entry).toBe('npm run release');
+    // A bare "a && b" here never reaches a shell, so the second half is dropped.
+    expect(entry).not.toContain('&&');
+  });
+
+  it('runs both the migration and the provisioner from the release script', () => {
+    const packageJson = JSON.parse(read('package.json')) as { scripts: Record<string, string> };
+    expect(packageJson.scripts.release).toContain('dist/migrate.cjs');
+    expect(packageJson.scripts.release).toContain('dist/provision-runtime-roles.cjs');
+  });
+
+  it('builds the provisioner into dist, so the release script has something to run', () => {
     const packageJson = JSON.parse(read('package.json')) as { scripts: Record<string, string> };
     expect(packageJson.scripts.build).toContain('provision-runtime-roles.ts');
     expect(packageJson.scripts.build).toContain('dist/provision-runtime-roles.cjs');
