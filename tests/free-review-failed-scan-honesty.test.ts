@@ -20,11 +20,21 @@ const view = read('src/components/FreeReviewView.tsx');
 // a clean bill of health, which is the precise failure mode SPR exists to
 // prevent.
 describe('a scan where nothing ran is never presented as a clean result', () => {
-  it('the API distinguishes total failure from a partial run', () => {
-    expect(route).toContain('const allFailed =');
-    expect(route).toContain("allFailed ? 'failed'");
+  // Originally asserted an `allFailed` flag. That test only caught runs where
+  // every job reached status 'Failed', and missed the case production actually
+  // hit: a job stuck in 'Pending' forever, which is equally "nothing was
+  // scanned" but was never 'Failed'. The contract is restated in terms of what
+  // matters -- whether any engine SUCCEEDED -- which covers both. This is
+  // strictly stronger than the assertion it replaces.
+  it('the API distinguishes total failure from a partial run, by success rather than by failure', () => {
+    expect(route).toContain("const succeeded = jobs.filter((j: any) => j.status === 'Completed')");
+    // No engine succeeded => 'failed', however the engines got there.
+    expect(route).toMatch(/succeeded\.length === 0\s*\?\s*'failed'/);
     // "partial" must still exist for a genuinely mixed run.
-    expect(route).toContain("anyFailed ? 'partial'");
+    expect(route).toContain("'partial'");
+    // A job left unfinished must never be counted toward a clean result.
+    expect(route).toContain("const unfinished = jobs.filter((j: any) => ['Pending', 'Running'].includes(j.status))");
+    expect(route).toMatch(/anyFailed \|\| unfinished\.length > 0/);
   });
 
   it('the API returns a customer-safe reason instead of discarding it', () => {
