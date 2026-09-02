@@ -46,38 +46,8 @@ async function ensureBucket() {
   const client = supabaseAdmin();
   const { data, error } = await client.storage.getBucket(BUCKET);
   if (!data && error) {
-    // fileSizeLimit was passed as `${MAX_FILE_SIZE}B` -- "104857600B". Supabase
-    // parses that string with the `bytes` library, and the bucket was created
-    // with a limit far below the intended 100MB, which is why production
-    // rejected an 11-byte upload with 400 "The object exceeded the maximum
-    // allowed size". A plain number is unambiguous: Supabase reads it as bytes.
-    const created = await client.storage.createBucket(BUCKET, { public: false, fileSizeLimit: MAX_FILE_SIZE });
+    const created = await client.storage.createBucket(BUCKET, { public: false, fileSizeLimit: `${MAX_FILE_SIZE}B` });
     if (created.error && !/already exists/i.test(created.error.message)) throw created.error;
-    console.info(`[Intake] Created bucket "${BUCKET}" with fileSizeLimit=${MAX_FILE_SIZE}.`);
-    return client;
-  }
-  // A bucket created by the earlier code still carries the bad limit, and
-  // createBucket is never reached once the bucket exists -- so the broken limit
-  // survives every deploy until something reconciles it.
-  //
-  // The limit is logged either way. It is the one number that explains the 400
-  // and it is not otherwise observable from here: the Railway API returns the
-  // Supabase keys redacted, so the bucket cannot be inspected directly.
-  //
-  // Reconciliation is best effort and fully contained: repairing a bucket must
-  // never be the reason an upload fails. supabase-js raises for some failures
-  // rather than returning { error }, and an uncaught raise here would surface as
-  // the request's own error -- which is the shape of the failure already seen.
-  const currentLimit = (data as { file_size_limit?: number | null } | null)?.file_size_limit ?? null;
-  if (data && currentLimit !== MAX_FILE_SIZE) {
-    console.info(`[Intake] Bucket "${BUCKET}" file_size_limit=${String(currentLimit)}; intended ${MAX_FILE_SIZE}. Reconciling.`);
-    try {
-      const updated = await client.storage.updateBucket(BUCKET, { public: false, fileSizeLimit: MAX_FILE_SIZE });
-      if (updated.error) console.error(`[Intake] Could not reconcile bucket size limit: ${updated.error.message}`);
-      else console.info(`[Intake] Bucket size limit reconciled to ${MAX_FILE_SIZE} bytes.`);
-    } catch (err) {
-      console.error(`[Intake] updateBucket threw while reconciling (limit stays ${String(currentLimit)}): ${err instanceof Error ? err.message : String(err)}`);
-    }
   }
   return client;
 }
@@ -118,16 +88,7 @@ export function createUniversalIntakeRouter() {
       const storagePath = `${session.id}/${itemId}/${safeName(file.data.name)}`;
       const client = await ensureBucket();
       const signed = await client.storage.from(BUCKET).createSignedUploadUrl(storagePath);
-      if (signed.error || !signed.data) {
-        // Production returned 400 "The object exceeded the maximum allowed size"
-        // for an 11-byte file and nothing recorded which call produced it. Name
-        // the call and the declared size so the next failure is explicable from
-        // the logs rather than only from the customer's screen. The storage path
-        // is derived from ids we generated, not from the uploaded filename, so
-        // it discloses nothing about the user.
-        console.error(`[Intake] createSignedUploadUrl failed for bucket "${BUCKET}" (declared size ${file.data.size} bytes): ${signed.error?.message ?? 'no data returned'}`);
-        throw signed.error || new Error('Could not create secure upload URL.');
-      }
+      if (signed.error || !signed.data) throw signed.error || new Error('Could not create secure upload URL.');
       await db.execute(sql`INSERT INTO intake_items (id,session_id,name,size,content_type,kind,storage_bucket,storage_path,status,created_at) VALUES (${itemId},${session.id},${file.data.name},${file.data.size},${file.data.contentType},${file.data.kind},${BUCKET},${storagePath},'AWAITING_UPLOAD',NOW())`);
       return res.status(201).json({ itemId, path: storagePath, token: signed.data.token, signedUrl: signed.data.signedUrl, expiresAt: session.expiresAt });
     } catch (error) { return next(error); }
