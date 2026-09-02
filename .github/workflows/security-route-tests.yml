@@ -97,7 +97,7 @@ jobs:
           # it forward instead: it is exported here and substituted into the seed
           # SQL, so users.uid still matches the sub claim in the ID token.
           create_user() {
-            local email="$1" out="$2" verify="$3" code
+            local email="$1" out="$2" verify="$3" code localId
             code=$(curl --silent --show-error -o "$out" -w '%{http_code}' -X POST -H 'content-type: application/json' -d "{\"email\":\"${email}\",\"password\":\"SecurityTest-Only-123!\",\"returnSecureToken\":true}" "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo-spr-security")
             if [ "$code" != '200' ]; then
               echo "signUp for ${email} failed with HTTP ${code}:" >&2
@@ -105,26 +105,37 @@ jobs:
               return 1
             fi
             if [ "$verify" = 'true' ]; then
-              local token
-              token=$(node -p "require('$out').idToken")
-              # A diagnostic run (decoding the exported token's own claims rather
-              # than trusting the emulator's HTTP 200) showed email_verified=false
-              # reaching the app even though this update call succeeds -- the
-              # follow-up accounts:signInWithPassword this used to make (fetching
-              # a "fresh" token from a second, separate call) does not carry the
-              # update forward on this emulator. accounts:update accepts
-              # returnSecureToken itself and mints a token that reflects the
-              # change directly in the same response, so ask it to and use that
-              # token -- there is nothing left for a second signIn to accomplish.
-              code=$(curl --silent --show-error -o "$out" -w '%{http_code}' -X POST -H 'content-type: application/json' -d "{\"idToken\":\"${token}\",\"emailVerified\":true,\"returnSecureToken\":true}" "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:update?key=demo-spr-security")
+              # A public accounts:update call (API key + idToken) cannot set
+              # emailVerified on this emulator: reading firebase-tools'
+              # own emulator source (setAccountInfoImpl in
+              # src/emulator/auth/operations.ts) shows emailVerified is only
+              # copied from the request body when the call is `privileged`
+              # (an OAuth2/admin-style call) -- a plain API-key call is
+              # accepted with HTTP 200 but the field is silently dropped,
+              # which is what a diagnostic run of this job proved: the
+              # request sent emailVerified:true and the emulator's own
+              # response echoed emailVerified:false back. The Admin SDK's
+              # updateUser always makes a privileged call, which is the
+              # supported way to do this from a test/CI context. A `demo-`
+              # project id needs no real credentials against the emulator.
+              localId=$(node -p "require('$out').localId")
+              node -e "
+                const admin = require('firebase-admin');
+                admin.initializeApp({ projectId: 'demo-spr-security' });
+                admin.auth().updateUser('${localId}', { emailVerified: true })
+                  .then(() => process.exit(0))
+                  .catch((err) => { console.error(err); process.exit(1); });
+              "
+              # The idToken from signUp was minted before the update above and
+              # will not reflect it -- JWTs are not live-updated -- so a fresh
+              # sign-in is still required to obtain a token whose email_verified
+              # claim actually matches the now-updated record.
+              code=$(curl --silent --show-error -o "$out" -w '%{http_code}' -X POST -H 'content-type: application/json' -d "{\"email\":\"${email}\",\"password\":\"SecurityTest-Only-123!\",\"returnSecureToken\":true}" "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo-spr-security")
               if [ "$code" != '200' ]; then
-                echo "emailVerified update for ${email} failed with HTTP ${code}:" >&2
+                echo "signIn for ${email} failed with HTTP ${code}:" >&2
                 cat "$out" >&2
                 return 1
               fi
-              echo "DIAG: accounts:update response for ${email}:" >&2
-              cat "$out" >&2
-              echo >&2
             fi
           }
           create_user tenant-a@security.test /tmp/a.json true
