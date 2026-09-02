@@ -1,0 +1,13 @@
+name: Scanner Patch Test
+on:
+  push:
+    branches:
+      - main
+permissions:
+  contents: write
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo scanner-workflow-ok
