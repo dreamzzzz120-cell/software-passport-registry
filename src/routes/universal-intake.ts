@@ -52,7 +52,21 @@ async function ensureBucket() {
     // rejected an 11-byte upload with 400 "The object exceeded the maximum
     // allowed size". A plain number is unambiguous: Supabase reads it as bytes.
     const created = await client.storage.createBucket(BUCKET, { public: false, fileSizeLimit: MAX_FILE_SIZE });
-    if (created.error && !/already exists/i.test(created.error.message)) throw created.error;
+    if (created.error && !/already exists/i.test(created.error.message)) {
+      // This throw previously carried no logging of its own, so a bucket that
+      // failed to CREATE looked identical, from the logs, to one that never got
+      // asked for -- both were silent. Production kept returning "The object
+      // exceeded the maximum allowed size" for an 11-byte file after the string
+      // "104857600B" bug was already fixed, and there was nothing here to say
+      // why: whether Supabase rejected the 100MB request outright (a project
+      // storage plan can cap this below what a bucket asks for) or something
+      // else. `name`/`status` are logged alongside `message` because
+      // supabase-js's own message text is not always specific enough on its own
+      // to tell those cases apart.
+      const err = created.error as { message: string; name?: string; status?: number; statusCode?: string | number };
+      console.error(`[Intake] createBucket failed for "${BUCKET}" (requested fileSizeLimit=${MAX_FILE_SIZE}): name=${err.name ?? 'unknown'} status=${err.status ?? err.statusCode ?? 'unknown'} message=${err.message}`);
+      throw created.error;
+    }
     console.info(`[Intake] Created bucket "${BUCKET}" with fileSizeLimit=${MAX_FILE_SIZE}.`);
     return client;
   }
