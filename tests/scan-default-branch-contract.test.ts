@@ -48,3 +48,27 @@ describe('repository scans resolve the real default branch', () => {
     expect(worker).toContain('[REDACTED_TOKEN]');
   });
 });
+
+// The worker fallback alone was not enough: Free Review stored the literal
+// string 'main' as requested_ref, so `source.requested_ref || defaultBranch`
+// always short-circuited on 'main' and the repository's real default branch was
+// never consulted. Both halves are required for a master-default repo to scan.
+describe('Free Review does not pin every scan to "main"', () => {
+  const route = read('src/routes/free-review-legacy.ts');
+
+  it('does not default the requested ref, so the worker can resolve it', () => {
+    expect(route).not.toContain("ref: z.string().min(1).max(200).default('main')");
+    expect(route).toContain('ref: z.string().min(1).max(200).optional()');
+  });
+
+  it('stores null rather than a guessed branch name', () => {
+    expect(route).toContain('const requestedRef = ref ?? null;');
+    expect(route).toContain('${requestedRef}');
+    // The raw optional value must never reach the insert.
+    expect(route).not.toContain(",${ref},''");
+  });
+
+  it('still lets a caller pin an explicit ref', () => {
+    expect(route).toMatch(/ref: z\.string\(\)\.min\(1\)\.max\(200\)\.optional\(\)/);
+  });
+});
