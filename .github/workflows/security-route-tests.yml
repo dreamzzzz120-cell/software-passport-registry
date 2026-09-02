@@ -118,11 +118,17 @@ jobs:
               # updateUser always makes a privileged call, which is the
               # supported way to do this from a test/CI context. A `demo-`
               # project id needs no real credentials against the emulator.
+              # firebase-admin ^14 ships no default-export `.auth()` (its
+              # namespaced API was dropped) -- the app's own src/lib/firebase-admin.ts
+              # already uses the modular `firebase-admin/app` + `firebase-admin/auth`
+              # imports for this reason, so this mirrors that rather than the
+              # legacy pattern that fails with "admin.auth is not a function".
               localId=$(node -p "require('$out').localId")
               node -e "
-                const admin = require('firebase-admin');
-                admin.initializeApp({ projectId: 'demo-spr-security' });
-                admin.auth().updateUser('${localId}', { emailVerified: true })
+                const { initializeApp } = require('firebase-admin/app');
+                const { getAuth } = require('firebase-admin/auth');
+                const app = initializeApp({ projectId: 'demo-spr-security' });
+                getAuth(app).updateUser('${localId}', { emailVerified: true })
                   .then(() => process.exit(0))
                   .catch((err) => { console.error(err); process.exit(1); });
               "
