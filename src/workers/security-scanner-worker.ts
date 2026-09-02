@@ -92,9 +92,36 @@ async function processSecurityJob(pool: Pool, job: any) {
   }
 }
 
+// Scrub anything credential-shaped before a failure reason reaches the logs.
+// Reasons come from GitHub/network/syft errors, which can carry a URL; none
+// should ever carry a token, but a log line is the wrong place to find out.
+function safeFailureReason(raw: string): string {
+  return raw
+    .replace(/gh[pousr]_[A-Za-z0-9]{10,}/g, '[REDACTED_TOKEN]')
+    .replace(/(authorization|bearer|token|key|secret)[=: ]+\S+/gi, '$1 [REDACTED]')
+    .replace(/https?:\/\/[^@\s]*@/g, 'https://[REDACTED]@')
+    .slice(0, 200);
+}
+
 async function fail(pool: Pool, job: any, error: unknown) {
   const code = error instanceof Error ? error.message : 'SCAN_WORKER_ERROR';
   const retry = Number(job.attempt_count) < Number(job.max_attempts);
+  // This worker had exactly one console statement in the whole file -- the
+  // startup line -- and fail() had none. A failed production scan wrote its
+  // reason to agent_jobs.error and nothing else, so the customer saw
+  // scanStatus "partial" with zero evidence while Railway logs showed an idle
+  // worker and Sentry saw nothing. The failure was real but invisible, which is
+  // why it could not be diagnosed from outside the database.
+  console.error(JSON.stringify({
+    event: 'security_scan_failed',
+    workerId: WORKER_ID,
+    jobId: job.id,
+    tenantId: job.tenant_id,
+    attempt: Number(job.attempt_count) + 1,
+    maxAttempts: Number(job.max_attempts),
+    willRetry: retry,
+    reason: safeFailureReason(code),
+  }));
   await pool.query(`UPDATE agent_jobs SET status=$2,progress=CASE WHEN $2='Failed' THEN 100 ELSE progress END,error=$3,next_attempt_at=CASE WHEN $2='Pending' THEN NOW()+INTERVAL '30 seconds' ELSE next_attempt_at END,locked_at=NULL,locked_by=NULL,completed_at=CASE WHEN $2='Failed' THEN NOW() ELSE completed_at END,updated_at=NOW() WHERE id=$1 AND tenant_id=$4 AND locked_by=$5`, [job.id, retry ? 'Pending' : 'Failed', code.slice(0,200), job.tenant_id, WORKER_ID]);
 }
 
