@@ -4,13 +4,15 @@ dockerfilePath = "Dockerfile"
 
 [deploy]
 startCommand = "npm start"
-# Config as Code overrides whatever is set in the Railway dashboard, so the
-# provisioner has to be listed here or it silently stops running. It is what
-# rotates the spr_app_runtime / spr_worker_runtime passwords in Postgres to
-# match APP_RUNTIME_DB_PASSWORD / WORKER_RUNTIME_DB_PASSWORD, and while it was
-# missing the worker crash-looped on "password authentication failed for user
-# spr_worker_runtime". Both steps are idempotent.
-preDeployCommand = ["node dist/migrate.cjs && node dist/provision-runtime-roles.cjs"]
+# Two array entries, never one string joined by "&&". Railway runs each
+# pre-deploy entry directly rather than through a shell, so "a && b" hands the
+# "&&" and everything after it to node as extra argv, which node ignores: the
+# migration ran, the provisioner never did, and the deploy still went green.
+# That is how spr_worker_runtime's password rotation silently stopped happening
+# and left the worker crash-looping on "password authentication failed for user
+# spr_worker_runtime" with nothing in the deploy log to show for it.
+# Both entries are idempotent.
+preDeployCommand = ["node dist/migrate.cjs", "node dist/provision-runtime-roles.cjs"]
 healthcheckPath = "/health"
 healthcheckTimeout = 180
 restartPolicyType = "ALWAYS"

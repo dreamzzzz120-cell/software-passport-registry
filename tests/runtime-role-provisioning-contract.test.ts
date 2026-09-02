@@ -4,23 +4,29 @@ import { readFileSync } from 'node:fs';
 // The spr-worker service crash-looped in production on
 //   [Worker] Fatal startup error: password authentication failed for user "spr_worker_runtime"
 // while WORKER_DATABASE_URL and WORKER_RUNTIME_DB_PASSWORD agreed with each
-// other in Railway. The passwords in Postgres had simply never been rotated to
-// match, because scripts/provision-runtime-roles.ts is what performs that
-// rotation and it had stopped running: railway.toml is Config as Code and
-// overrides the dashboard's pre-deploy command, and it listed only the
-// migration step. The dashboard's copy included the provisioner, which is why
-// this looked configured to anyone reading the Railway UI.
+// other in Railway. The passwords in Postgres had never been rotated to match,
+// because scripts/provision-runtime-roles.ts performs that rotation and was
+// never actually running: railway.toml chained it onto the migration with
+// "&&" inside a single pre-deploy entry, and Railway runs each entry directly
+// rather than through a shell. node took the "&&" and everything after it as
+// extra argv and ignored it, so the migration ran, the provisioner did not, and
+// the deploy reported success with nothing in the log to show for it.
 const read = (relativePath: string) =>
   readFileSync(new URL(`../${relativePath}`, import.meta.url), 'utf8');
 
 describe('runtime role provisioning survives a deploy', () => {
-  it('runs the provisioner from railway.toml, not only from the dashboard', () => {
+  it('gives the provisioner its own pre-deploy entry instead of a shell chain', () => {
     const railwayConfig = read('railway.toml');
-    expect(railwayConfig).toContain('dist/migrate.cjs');
-    expect(railwayConfig).toContain('dist/provision-runtime-roles.cjs');
+    const preDeploy = /preDeployCommand\s*=\s*\[(.*)\]/.exec(railwayConfig)?.[1] ?? '';
+    expect(preDeploy).toContain('dist/migrate.cjs');
+    expect(preDeploy).toContain('dist/provision-runtime-roles.cjs');
+    // The failure mode this pins: a shell operator in an entry that never
+    // reaches a shell.
+    expect(preDeploy).not.toContain('&&');
+    expect(preDeploy.split(',')).toHaveLength(2);
   });
 
-  it('builds the provisioner into dist, so the pre-deploy command has something to run', () => {
+  it('builds the provisioner into dist, so the pre-deploy entry has something to run', () => {
     const packageJson = JSON.parse(read('package.json')) as { scripts: Record<string, string> };
     expect(packageJson.scripts.build).toContain('provision-runtime-roles.ts');
     expect(packageJson.scripts.build).toContain('dist/provision-runtime-roles.cjs');
