@@ -196,7 +196,13 @@ async function processJob(pool: Pool, job: ClaimedJob) {
   });
 
   let findingCount = 0;
-  for (const component of components) {
+  // OSV components are queried serially (persistProviderResult writes findings
+  // under one transaction per component, so there is no batching to lean on).
+  // Each query is individually bounded by PROVIDER_TIMEOUT_MS, but a manifest
+  // with many components can still take minutes end to end -- this makes that
+  // visible as progress instead of one long silence.
+  console.log(JSON.stringify({ event: 'scan_job_stage', workerId: WORKER_ID, jobId: job.id, jobType: job.job_type, tenantId: job.tenant_id, stage: 'osv_component_loop_started', componentCount: components.length }));
+  for (const [index, component] of components.entries()) {
     const provider = await fetchOsv(component);
     const client = await pool.connect();
     try {
@@ -207,6 +213,9 @@ async function processJob(pool: Pool, job: ClaimedJob) {
       await client.query('ROLLBACK');
       throw error;
     } finally { client.release(); }
+    if ((index + 1) % 5 === 0 || index === components.length - 1) {
+      console.log(JSON.stringify({ event: 'scan_job_stage', workerId: WORKER_ID, jobId: job.id, jobType: job.job_type, tenantId: job.tenant_id, stage: 'osv_component_progress', processed: index + 1, total: components.length }));
+    }
   }
 
   const completedAt = new Date().toISOString();
@@ -379,47 +388,72 @@ async function processRepositoryJob(pool: Pool, job: ClaimedJob) {
 
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), `spr-repo-${job.id}-`));
   let cleanupSucceeded = false; const scannerStartedAt = new Date();
+  // Ticks independently of whatever the job is currently awaiting. If a stage
+  // never completes, this keeps proving the process itself is still alive and
+  // names the last stage it reached, every 15s, until something changes.
+  let lastStage = 'acquisition_started';
+  const heartbeatStartedAt = Date.now();
+  const heartbeat = setInterval(() => {
+    console.log(JSON.stringify({ event: 'scan_job_heartbeat', workerId: WORKER_ID, jobId: job.id, jobType: job.job_type, tenantId: job.tenant_id, lastStage, elapsedMs: Date.now() - heartbeatStartedAt }));
+  }, 15_000);
+  const mark = (name: string, extra?: Record<string, unknown>) => { lastStage = name; stage(job, name, extra); };
   try {
+    mark('acquisition_started');
     const repoUrl = `${GITHUB_API_ORIGIN}/repos/${encodeURIComponent(source.repository_owner)}/${encodeURIComponent(source.repository_name)}`;
     const suppliedImmutableSha = typeof source.requested_ref === 'string' && /^[a-f0-9]{40}$/i.test(source.requested_ref);
     const metadata = suppliedImmutableSha ? null : await fetchJson(repoUrl, 'REPOSITORY_NOT_FOUND');
+    mark('metadata_fetched', { hasMetadata: !!metadata });
     if (metadata?.private) throw new Error('REPOSITORY_ACCESS_DENIED');
     const requestedRef = source.requested_ref || metadata?.default_branch; if (!requestedRef) throw new Error('REPOSITORY_REF_NOT_FOUND');
     const commitSha = suppliedImmutableSha ? requestedRef.toLowerCase() : (await fetchJson(`${repoUrl}/commits/${encodeURIComponent(requestedRef)}`, 'REPOSITORY_REF_NOT_FOUND'))?.sha;
     if (typeof commitSha !== 'string' || !/^[a-f0-9]{40}$/i.test(commitSha)) throw new Error('REPOSITORY_REF_NOT_FOUND');
+    mark('commit_resolved');
     const descriptor = { provider:'github', owner:source.repository_owner, repository:source.repository_name, requestedRef, resolvedCommitSha:commitSha, subdirectory:source.repository_subdirectory, defaultBranch:metadata?.default_branch || null, visibility:metadata?.visibility || 'public', connectionId:source.connection_id, tenantId:job.tenant_id };
     const archivePath = path.join(tempRoot,'repository.zip'); const extractPath = path.join(tempRoot,'extracted'); const archiveExecutable = process.platform === 'win32' ? 'tar.exe' : 'unzip';
     await mkdir(extractPath);
     await downloadArchive(`${GITHUB_CODELOAD_ORIGIN}/${encodeURIComponent(source.repository_owner)}/${encodeURIComponent(source.repository_name)}/zip/${commitSha}`, archivePath);
+    mark('archive_downloaded');
     const listing = await runBounded(archiveExecutable, process.platform === 'win32' ? ['-tf',archivePath] : ['-Z1',archivePath], ACQUISITION_TIMEOUT_MS, 10 * 1024 * 1024);
     if (listing.code !== 0) throw new Error('REPOSITORY_ACQUISITION_FAILED');
     const entries = listing.stdout.toString('utf8').split(/\r?\n/).filter(Boolean); validateArchiveEntries(entries);
+    mark('archive_listed', { entryCount: entries.length });
     const extraction = await runBounded(archiveExecutable, process.platform === 'win32' ? ['-xf',archivePath,'-C',extractPath] : ['-q',archivePath,'-d',extractPath], ACQUISITION_TIMEOUT_MS);
     if (extraction.code !== 0) throw new Error('REPOSITORY_ACQUISITION_FAILED');
+    mark('archive_extracted');
     const roots = await readdir(extractPath,{withFileTypes:true}); const archiveRoot = roots.find(entry => entry.isDirectory()); if (!archiveRoot) throw new Error('REPOSITORY_ACQUISITION_FAILED');
     const repositoryRoot = path.join(extractPath,archiveRoot.name); const scanRoot = source.repository_subdirectory ? path.resolve(repositoryRoot,source.repository_subdirectory) : repositoryRoot;
     if (!scanRoot.startsWith(path.resolve(repositoryRoot) + path.sep) && scanRoot !== path.resolve(repositoryRoot)) throw new Error('REPOSITORY_PATH_INVALID');
     const scanRootStat = await lstat(scanRoot).catch(() => null); if (!scanRootStat?.isDirectory()) throw new Error('REPOSITORY_PATH_INVALID');
-    const manifests = await inspectTree(scanRoot); const syftPath = await locateSyft(); const generated = await generateRepositorySbom(scanRoot,syftPath); const scannerEndedAt = new Date();
+    const manifests = await inspectTree(scanRoot); mark('manifest_inspected', { manifestCount: manifests.length });
+    const syftPath = await locateSyft(); mark('syft_located');
+    const generated = await generateRepositorySbom(scanRoot,syftPath); const scannerEndedAt = new Date();
+    mark('sbom_generated', { componentCount: generated.components.length });
     const sbom = generated.document; const components = generated.components; const osvComponents = components.filter(component => component.version); if (osvComponents.length === 0) throw new Error('SBOM_EMPTY');
     const acquiredAt = new Date(); const sourceHash = sha256(JSON.stringify(descriptor)); const manifestHash = sha256(JSON.stringify(manifests)); const rawSbomHash = sha256(generated.raw); const componentsHash = sha256(JSON.stringify(components));
     const sbomEvidencePayload = JSON.stringify({format:'CycloneDX JSON',componentCount:components.length,rawSbomHash,normalizedComponentsHash:componentsHash});
     await pool.query(`UPDATE repository_scan_sources SET resolved_commit_sha=$2, default_branch=$3, visibility=$4, acquired_at=$5, source_descriptor_hash=$6, manifest_paths=$7, manifest_inventory_hash=$8, raw_sbom_hash=$9, sbom_document=$10, normalized_components=$11, normalized_components_hash=$12, scanner_name='Syft', scanner_version=$13, scanner_mode='directory CycloneDX JSON', scanner_started_at=$14, scanner_ended_at=$15, scanner_exit_code=0, scanner_error_category=NULL WHERE job_id=$1 AND tenant_id=$16`, [job.id,commitSha,descriptor.defaultBranch,descriptor.visibility,acquiredAt,sourceHash,JSON.stringify(manifests),manifestHash,rawSbomHash,JSON.stringify(sbom),JSON.stringify(components),componentsHash,SYFT_VERSION,scannerStartedAt,scannerEndedAt,job.tenant_id]);
+    mark('sbom_persisted');
     // Trust assessment is explicitly pending at this point (SBOM generated,
     // nothing scored yet) -- scores are NULL/'unverified', not a fabricated
     // 0, which would render as "confirmed untrustworthy" rather than "not
     // yet evaluated". The canonical scorer (src/trust/scoring-engine.ts)
     // is the only place that ever assigns a real, non-null score.
     await pool.query(`INSERT INTO passports (id,tenant_id,name,version,publisher,category,overall_score,security_score,compliance_score,vendor_reputation_score,verification_status,release_date,file_hash,license_type,ai_summary,sbom,evidence,vulnerabilities,timeline) VALUES ($1,$2,$3,$4,$5,'Repository',NULL,NULL,NULL,NULL,'unverified',$6,$7,'Unknown',$8,$9,'[]','[]','[]') ON CONFLICT (id) DO UPDATE SET version=EXCLUDED.version,file_hash=EXCLUDED.file_hash,sbom=EXCLUDED.sbom,overall_score=NULL,security_score=NULL,compliance_score=NULL,vendor_reputation_score=NULL,verification_status='unverified' WHERE passports.tenant_id=$2`, [job.passport_id,job.tenant_id,source.repository_name,commitSha,source.repository_owner,acquiredAt.toISOString().slice(0,10),sourceHash,'Repository acquired and SBOM generated. Trust assessment remains pending.',JSON.stringify(osvComponents)]);
+    mark('passport_upserted');
     const repoEvidenceId = deterministicId('ev-repo',`${job.id}|${sourceHash}`); const manifestEvidenceId = deterministicId('ev-manifest',`${job.id}|${manifestHash}`); const sbomEvidenceId = deterministicId('ev-sbom',`${job.id}|${rawSbomHash}|${componentsHash}`);
     await pool.query(`INSERT INTO evidence_items (id,tenant_id,asset_id,name,type,verified,signer,timestamp,hash,raw_content,engine_id) VALUES ($1,$2,$3,'Repository source descriptor','Attestation',0,'github.com',$4,$5,$6,'repository-worker'),($7,$2,$3,'Manifest inventory','Build Log',0,'repository-worker',$4,$8,$9,'repository-worker'),($10,$2,$3,'Syft CycloneDX SBOM summary','Build Log',0,'Syft 1.49.0',$4,$11,$12,'repository-worker') ON CONFLICT (id) DO NOTHING`, [repoEvidenceId,job.tenant_id,job.passport_id,acquiredAt.toISOString(),`sha256:${sourceHash}`,JSON.stringify(descriptor),manifestEvidenceId,`sha256:${manifestHash}`,JSON.stringify(manifests),sbomEvidenceId,`sha256:${sha256(sbomEvidencePayload)}`,sbomEvidencePayload]);
+    mark('evidence_persisted');
+    mark('osv_query_started', { componentCount: osvComponents.length });
     await processJob(pool,job);
+    mark('osv_query_completed');
     const findings = (await pool.query('SELECT title,component,status,detected_at FROM scan_findings WHERE job_id=$1 AND tenant_id=$2 ORDER BY id',[job.id,job.tenant_id])).rows;
     await pool.query('UPDATE repository_scan_sources SET final_findings_hash=$2 WHERE job_id=$1 AND tenant_id=$3',[job.id,sha256(JSON.stringify(findings)),job.tenant_id]);
+    mark('findings_hash_persisted');
   } catch (error: any) {
     await pool.query(`UPDATE repository_scan_sources SET scanner_ended_at=NOW(), scanner_exit_code=COALESCE(scanner_exit_code,-1), scanner_error_category=$2 WHERE job_id=$1 AND tenant_id=$3`,[job.id,String(error?.message || 'REPOSITORY_SCAN_FAILED').slice(0,100),job.tenant_id]);
     throw error;
   } finally {
+    clearInterval(heartbeat);
     try { await rm(tempRoot,{recursive:true,force:true}); cleanupSucceeded = true; } finally {
       await pool.query('UPDATE repository_scan_sources SET temporary_directory_removed=$2 WHERE job_id=$1 AND tenant_id=$3',[job.id,cleanupSucceeded ? 1 : 0,job.tenant_id]);
     }
@@ -429,6 +463,17 @@ async function processRepositoryJob(pool: Pool, job: ClaimedJob) {
 // Mirrors the security scanner's redaction. A failure reason is written to logs,
 // so a token or credential that leaked into an error message must not travel with
 // it. Truncated to match the 200-char column the same code is stored in.
+// A stalled repository_scan job previously left NOTHING in the logs -- not
+// even a wrong answer, just silence -- because every await inside
+// processRepositoryJob is bounded by its own timeout EXCEPT the possibility
+// that one of those timeouts itself never fires (a blocked event loop, an
+// exotic subprocess/socket state). Stage markers turn "silent, unknown stall"
+// into "the last stage this job reached was X", which is the only way to
+// locate a hang that static reading of the timeout code cannot rule out.
+function stage(job: ClaimedJob, name: string, extra?: Record<string, unknown>) {
+  console.log(JSON.stringify({ event: 'scan_job_stage', workerId: WORKER_ID, jobId: job.id, jobType: job.job_type, tenantId: job.tenant_id, stage: name, ...extra }));
+}
+
 function safeFailureReason(raw: string): string {
   return raw
     .replace(/gh[pousr]_[A-Za-z0-9]{10,}/g, '[REDACTED_TOKEN]')
