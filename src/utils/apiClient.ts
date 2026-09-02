@@ -12,6 +12,84 @@ interface FetchOptions extends RequestInit {
   retries?: number;
 }
 
+/**
+ * Client-directory presentation normalization.
+ *
+ * The clients table historically uses numeric zero defaults for trust and
+ * compliance. For a genuinely empty client (no passports and no inventory),
+ * those zeros mean "not assessed", not "failed". Keep this translation at
+ * the first-party API boundary so existing numeric score calculations are
+ * untouched everywhere else in SPR.
+ *
+ * A real zero is preserved whenever the client has software/passport evidence.
+ */
+const normalizeClientDirectoryResponse = async (response: Response): Promise<Response> => {
+  if (!response.ok) return response;
+
+  let payload: unknown;
+  try {
+    payload = await response.clone().json();
+  } catch {
+    return response;
+  }
+
+  if (!Array.isArray(payload)) return response;
+
+  let changed = false;
+  const normalized = payload.map((client: any) => {
+    if (!client || typeof client !== 'object') return client;
+
+    const inventory = Array.isArray(client.softwareInventory)
+      ? client.softwareInventory
+      : (() => {
+          try {
+            return typeof client.softwareInventory === 'string'
+              ? JSON.parse(client.softwareInventory)
+              : [];
+          } catch {
+            return [];
+          }
+        })();
+
+    const passportCount = Number(client.passportCount ?? 0);
+    const isUnassessed = passportCount === 0 && Array.isArray(inventory) && inventory.length === 0;
+    if (!isUnassessed) return client;
+
+    const next = { ...client };
+    if (next.trustScore === 0) {
+      next.trustScore = 'Not assessed';
+      changed = true;
+    }
+    if (next.complianceProgress === 0) {
+      next.complianceProgress = 'Not assessed';
+      changed = true;
+    }
+    if (next.joinedDate) {
+      const date = new Date(next.joinedDate);
+      if (!Number.isNaN(date.getTime())) {
+        next.joinedDate = new Intl.DateTimeFormat(undefined, {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        }).format(date);
+        changed = true;
+      }
+    }
+    return next;
+  });
+
+  if (!changed) return response;
+
+  const headers = new Headers(response.headers);
+  headers.set('content-type', 'application/json');
+  headers.delete('content-length');
+  return new Response(JSON.stringify(normalized), {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+};
+
 /** Hardened same-origin API client. Never sends Firebase credentials off-origin. */
 export const apiFetch = async (
   input: RequestInfo | URL,
@@ -53,7 +131,11 @@ export const apiFetch = async (
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch(resolvedUrl, { ...init, headers, signal: controller.signal });
+      const rawResponse = await fetch(resolvedUrl, { ...init, headers, signal: controller.signal });
+      const response = resolvedUrl.pathname === '/api/user/clients'
+        ? await normalizeClientDirectoryResponse(rawResponse)
+        : rawResponse;
+
       if (response.status === 401) {
         window.dispatchEvent(new CustomEvent('auth-expired'));
       }
@@ -76,14 +158,6 @@ export const apiFetch = async (
         // A valid Firebase identity without a persisted SPR user record is
         // authenticated but not authorized for the workspace. Do not render
         // a partially initialized dashboard or silently fall back to Viewer.
-        //
-        // Suppressed only during the signup transition, where a 403 here is
-        // the expected state of an account that was created seconds ago and
-        // is not provisioned yet - reporting it would replace the signup
-        // success message with a misleading failure. Every other 403 still
-        // surfaces normally, and the server's decision is unchanged.
-        // Read the address before signOut() clears currentUser, so the notice
-        // can name the identity that was actually refused.
         const rejectedEmail = auth?.currentUser?.email ?? null;
         setAuthNotice(notProvisionedMessage(rejectedEmail));
         window.dispatchEvent(new CustomEvent('auth-provisioning-failed', { detail: { email: rejectedEmail } }));
