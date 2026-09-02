@@ -1,0 +1,58 @@
+{
+  "_comment": [
+    "Single source of truth for per-route public page metadata.",
+    "",
+    "Read by scripts/prerender-public-routes.mjs at build time and by",
+    "tests/seo-metadata-contract.test.ts. Plain JSON so the build step needs no",
+    "TypeScript toolchain, and so the test and the generator can never disagree",
+    "about what a page claims.",
+    "",
+    "Every path here must be a genuinely public route (a member of PUBLIC_PATHS",
+    "in src/App.tsx) and must match public/sitemap.xml exactly -- a contract test",
+    "enforces both directions. Titles and descriptions describe only what the",
+    "page actually contains: no ratings, prices, certifications, compliance",
+    "attestations or safety claims the product cannot evidence.",
+    "",
+    "origin is the apex domain because www.softwarepassportregistry.com answers",
+    "307 -> apex in production; the canonical must name the domain that actually",
+    "serves the page."
+  ],
+  "origin": "https://softwarepassportregistry.com",
+  "pages": [
+    {
+      "path": "/",
+      "title": "Software Passport Registry — Verify Software Before You Buy",
+      "description": "Software trust and evidence verification for buyers and businesses. SPR gives software a persistent identity and reports observed evidence, not inferred safety."
+    },
+    {
+      "path": "/free-review",
+      "title": "Free Software Review — Software Passport Registry",
+      "description": "Submit a public GitHub repository and see what SPR can actually observe about it. No account required, and the review reports observed evidence only."
+    },
+    {
+      "path": "/passport/demo",
+      "title": "Sample Software Passport — Software Passport Registry",
+      "description": "A static sample Software Passport showing how SPR records identity, evidence and unknowns. Demo data only: it reads no customer or tenant data."
+    },
+    {
+      "path": "/pricing",
+      "title": "Software Passport Registry Pricing — Software Verification",
+      "description": "Pay for the software trust work you use. Compare SPR subscription plans, one-time verification reports and add-ons for MSPs and software teams."
+    },
+    {
+      "path": "/msp",
+      "title": "Software Passport Registry for MSPs — Software Trust & Risk Visibility",
+      "description": "Software Passport Registry for MSPs. Track software inventory and evidence across every client, with risk visibility and client-facing trust reporting."
+    },
+    {
+      "path": "/terms",
+      "title": "Terms of Service — Software Passport Registry",
+      "description": "The terms governing use of Software Passport Registry, covering account responsibilities, acceptable use, and restrictions on accessing other tenants' data."
+    },
+    {
+      "path": "/privacy",
+      "title": "Privacy Policy — Software Passport Registry",
+      "description": "How Software Passport Registry collects and uses account, repository, evidence and log data, and how tenant and client data isolation is enforced."
+    }
+  ]
+}

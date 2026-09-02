@@ -10,12 +10,22 @@
     <title>Software Passport Registry</title>
 
     <!--
-      Site-level social metadata. A canonical link element is deliberately
-      omitted: this single shell is served for every route, so a fixed
-      canonical would point /free-review, /pricing and /msp all at the
-      homepage and risk collapsing them out of the index. Per-route
-      canonical and per-route titles require server-rendered metadata,
-      which this client-rendered Vite SPA cannot produce.
+      Site-level social metadata, and the fallback shell for any route that is
+      not prerendered. A canonical link element is deliberately omitted HERE:
+      this shell is what the SPA catch-all rewrite serves for every unlisted
+      route, so a fixed canonical would point them all at the homepage.
+
+      Per-route metadata is not missing -- it is generated. At build time
+      scripts/prerender-public-routes.mjs writes one static HTML file per
+      public route (src/seo/public-pages.json) with that route's own title,
+      description, canonical, Open Graph and Twitter tags, and its own WebPage
+      node in the JSON-LD graph. Vercel resolves those static files before the
+      catch-all rewrite, so /pricing and /msp serve their own <head> to search
+      and social crawlers, which never execute the JavaScript bundle.
+
+      Consequence for edits: the tags below are the substitution targets. The
+      prerender fails the build if any of them is missing or duplicated, rather
+      than silently publishing pages that all claim the homepage title.
     -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Software Passport Registry" />
@@ -26,6 +36,7 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Software Passport Registry" />
     <meta name="twitter:description" content="Evidence-first software trust infrastructure. Observed evidence, explicit unknowns, no inferred safety." />
+    <meta name="twitter:url" content="https://softwarepassportregistry.com/" />
     <meta name="twitter:image" content="https://softwarepassportregistry.com/brand/spr-logo.jpg" />
 
     <!--

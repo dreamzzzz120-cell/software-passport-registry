@@ -9,7 +9,7 @@
   "packageManager": "npm@10.9.2",
   "scripts": {
     "dev": "cross-env NODE_ENV=development node --import tsx server.ts",
-    "build": "cross-env NODE_ENV=production vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/server.cjs && esbuild worker.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/worker.cjs && esbuild scripts/migrate.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/migrate.cjs && esbuild scripts/provision-runtime-roles.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/provision-runtime-roles.cjs",
+    "build": "cross-env NODE_ENV=production vite build && node scripts/prerender-public-routes.mjs && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/server.cjs && esbuild worker.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/worker.cjs && esbuild scripts/migrate.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/migrate.cjs && esbuild scripts/provision-runtime-roles.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/provision-runtime-roles.cjs",
     "build:owner-bootstrap": "esbuild scripts/bootstrap-initial-owner.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/bootstrap-initial-owner.cjs",
     "start": "cross-env NODE_ENV=production node dist/server.cjs",
     "release": "node dist/migrate.cjs && node dist/provision-runtime-roles.cjs",
