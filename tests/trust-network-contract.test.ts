@@ -124,6 +124,62 @@ describe('Trust Network never fabricates counts, scores, or history', () => {
   });
 });
 
+describe('Trust Network distinguishes "no data" from "not loaded yet"', () => {
+  const source = () => read('src/components/MSPCommandCenter.tsx');
+  const appSource = () => read('src/App.tsx');
+
+  // The page read straight out of state that starts empty, with no notion of
+  // loading and no else-branch on a failed response. An existing customer saw
+  // "Build your trust network -- add your first client" on first paint, and the
+  // identical screen if the API failed: the page asserted the customer had no
+  // clients when it simply did not know yet.
+  it('App tracks a real load status instead of inferring emptiness from an empty array', () => {
+    const s = appSource();
+    expect(s).toContain("useState<'loading' | 'ready' | 'error'>('loading')");
+    // Status is decided by the two collections Trust Network actually depends on.
+    expect(s).toContain("setDataStatus(clientsResponse.ok && passportsResponse.ok ? 'ready' : 'error')");
+    // A thrown load must not leave the page claiming an empty estate.
+    expect(s).toContain("if (!cancelled) setDataStatus('error');");
+    expect(s).toContain('dataStatus={dataStatus}');
+  });
+
+  it('renders a skeleton while loading, never a zero count', () => {
+    const s = source();
+    const loadingBlock = s.slice(s.indexOf("dataStatus === 'loading'"), s.indexOf("dataStatus === 'error'"));
+    expect(loadingBlock).toContain('aria-busy="true"');
+    expect(loadingBlock).toContain('animate-pulse');
+    expect(loadingBlock).toContain('Loading your trust network');
+    // No metric may be rendered in the loading branch.
+    expect(loadingBlock).not.toContain('<Metric');
+  });
+
+  it('the empty states are only reachable once the estate has actually been read', () => {
+    const s = source();
+    const loadingIdx = s.indexOf("dataStatus === 'loading'");
+    const errorIdx = s.indexOf("dataStatus === 'error'");
+    const emptyIdx = s.indexOf('!hasClients ? (');
+    expect(loadingIdx).toBeGreaterThan(-1);
+    expect(errorIdx).toBeGreaterThan(loadingIdx);
+    // Both status branches must be evaluated before the zero-client empty state.
+    expect(emptyIdx).toBeGreaterThan(errorIdx);
+  });
+
+  it('the error state offers a retry and discloses nothing about the failure', () => {
+    const s = source();
+    const errorBlock = s.slice(s.indexOf("dataStatus === 'error'"), s.indexOf('!hasClients ? ('));
+    expect(errorBlock).toContain('role="alert"');
+    expect(errorBlock).toContain('Try again');
+    // The apostrophe is written as the &rsquo; entity in the JSX source.
+    expect(errorBlock).toMatch(/couldn(&rsquo;|&#8217;|['’])t load/i);
+    // Check what actually reaches the customer, not the commentary explaining
+    // why nothing does -- the prose above legitimately uses the word "status".
+    const rendered = errorBlock.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/\/\/[^\n]*/g, '');
+    for (const leak of ['status', 'HTTP', 'stack', 'apiFetch', 'error.message', '/api/']) {
+      expect(rendered).not.toContain(leak);
+    }
+  });
+});
+
 describe('TrustNetworkMap renders real relationships only, as accessible DOM', () => {
   const source = () => read('src/components/trust/TrustNetworkMap.tsx');
 

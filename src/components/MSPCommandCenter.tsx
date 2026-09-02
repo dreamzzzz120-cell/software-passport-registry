@@ -20,6 +20,13 @@ interface Props {
    * renders UNINITIALIZED rather than falling back to the legacy column.
    */
   verificationDecisions?: Record<string, VerificationDecisionState>;
+  /**
+   * Whether the estate has actually been read yet. Without this the page cannot
+   * tell "no clients" from "not loaded", and rendered the zero-client empty
+   * state to existing customers on first paint and on any API failure.
+   */
+  dataStatus?: 'loading' | 'ready' | 'error';
+  onRetry?: () => void;
 }
 
 type Assignment = { id: string; client_id: string; technician_display: string; assigned_by: string; updated_at: string };
@@ -49,7 +56,7 @@ const NETWORK_NAV = [
   { id: 'reports', label: 'Reports', path: '/reports' },
 ];
 
-export default function MSPCommandCenter({ clients, alerts, passports, role = 'Viewer', onSelectClient, onSelectPassport, onNavigate, verificationDecisions }: Props) {
+export default function MSPCommandCenter({ clients, alerts, passports, role = 'Viewer', onSelectClient, onSelectPassport, onNavigate, verificationDecisions, dataStatus = 'ready', onRetry }: Props) {
   const [selected, setSelected] = useState<Alert | null>(null);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [team, setTeam] = useState<TeamMember[]>([]);
@@ -303,7 +310,30 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
       </div>
     </section>
 
-    {!hasClients ? (
+    {dataStatus === 'loading' ? (
+      // Skeleton rather than zeros. Rendering 0 Clients / 0 Software while the
+      // estate is still being read states something false about the customer's
+      // account, and the zero-client empty state below states it emphatically.
+      <section aria-busy="true" aria-live="polite" className="space-y-6">
+        <span className="sr-only">Loading your trust network…</span>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => <div key={i} className="h-28 animate-pulse rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)]" />)}
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {[0, 1, 2, 3, 4].map((i) => <div key={i} className="h-24 animate-pulse rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)]" />)}
+        </div>
+        <div className="h-72 animate-pulse rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)]" />
+      </section>
+    ) : dataStatus === 'error' ? (
+      <section role="alert" className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-surface-deep)] py-16 text-center">
+        <AlertTriangle className="mx-auto h-9 w-9 text-[var(--spr-red)]" aria-hidden="true" />
+        <h2 className="mt-4 text-xl font-bold text-[var(--spr-text)]">Trust Network couldn&rsquo;t load</h2>
+        {/* Deliberately says nothing about the underlying failure: no status
+            code, no URL, no message from the server. */}
+        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[var(--spr-text-muted)]">We couldn&rsquo;t retrieve the latest trust information. Your data has not changed.</p>
+        {onRetry && <button onClick={onRetry} className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[var(--spr-accent)] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[var(--spr-accent-hover)]">Try again</button>}
+      </section>
+    ) : !hasClients ? (
       <section className="rounded-md border border-dashed border-[var(--spr-border)] bg-[var(--spr-surface-deep)] py-20 text-center">
         <Network className="mx-auto h-9 w-9 text-[var(--spr-text-faint)]" />
         <h2 className="mt-4 text-xl font-bold text-[var(--spr-text)]">Build your trust network</h2>
