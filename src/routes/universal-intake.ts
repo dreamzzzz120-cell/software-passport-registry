@@ -25,8 +25,21 @@ function safeName(value: string) {
 }
 function supabaseAdmin() {
   const url = process.env.SUPABASE_URL?.trim();
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-  if (!url || !key) throw Object.assign(new Error('Universal intake storage is not configured.'), { status: 503 });
+  // Supabase renamed the server-side key: projects created through the current
+  // dashboard issue a "secret key" (SUPABASE_SECRET_KEY), while older ones issue
+  // a service_role JWT (SUPABASE_SERVICE_ROLE_KEY). Production had the former and
+  // this read only the latter, so every upload-url request answered
+  // 503 "Universal intake storage is not configured" -- a visitor could stage
+  // files through the homepage's headline feature and then hit a hard failure.
+  // Accept either name rather than depending on which vintage a project is.
+  const key = process.env.SUPABASE_SECRET_KEY?.trim() || process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!url || !key) {
+    // Name what is missing. The previous message said only that storage was not
+    // configured, which is why a variable-name mismatch survived a deploy.
+    const missing = [!url && 'SUPABASE_URL', !key && 'SUPABASE_SECRET_KEY (or SUPABASE_SERVICE_ROLE_KEY)'].filter(Boolean).join(' and ');
+    console.error(`[Intake] Storage unavailable: ${missing} is not set.`);
+    throw Object.assign(new Error(`Universal intake storage is not configured: ${missing} is not set.`), { status: 503 });
+  }
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 async function ensureBucket() {
