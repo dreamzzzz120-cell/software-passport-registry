@@ -7,6 +7,14 @@ import { freeReviewResultPath, freeReviewStatusApiPath } from '../src/components
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (r: string) => fs.readFileSync(path.join(root, r), 'utf8');
 const app = read('src/App.tsx');
+// Commit a4775a0 split src/routes/free-review.ts into a composer that mounts two
+// routers. The Free Review implementation these contracts describe moved intact
+// to free-review-legacy.ts, so the assertions below follow it there rather than
+// being relaxed. The composer is asserted separately in "the implementation is
+// actually mounted", so both "the guarantee exists" and "the guarantee is
+// reachable" stay covered -- neither was checked before the split.
+const freeReviewImpl = read('src/routes/free-review-legacy.ts');
+const freeReviewComposer = read('src/routes/free-review.ts');
 // These files explain their guarantees in prose, naming the very APIs they
 // avoid. Assert against code only.
 const stripComments = (s) => s.split(String.fromCharCode(10))
@@ -66,18 +74,18 @@ describe('5-8. malformed, missing and mismatched tokens', () => {
     expect(view).not.toMatch(/exps*[<>=]/);
     // The server-side verifier remains the single gate.
     expect(read('src/routes/public-connect.ts')).toContain('export function verifyFreeReviewStatusToken');
-    expect(read('src/routes/free-review.ts')).toContain('verifyFreeReviewStatusToken(req.params.token, passportId)');
+    expect(freeReviewImpl).toContain('verifyFreeReviewStatusToken(req.params.token, passportId)');
   });
 
   it('an expired or tampered token fails at the API with a non-probing 401', () => {
-    const route = read('src/routes/free-review.ts');
+    const route = freeReviewImpl;
     expect(route).toContain("if (!payload) return res.status(401).json({ error: 'Invalid or expired Free Review status link' })");
   });
 });
 
 describe('9-12. no privilege, tenant or secret exposure', () => {
   it('the result route reads only the fixed Free Review system tenant', () => {
-    const route = read('src/routes/free-review.ts');
+    const route = freeReviewImpl;
     expect(route).toContain('attachTenantScope(FREE_REVIEW_TENANT_ID, res)');
     expect(route).toContain('tenant_id=${FREE_REVIEW_TENANT_ID}');
     // A passport id alone is never sufficient - the token is required.
@@ -87,7 +95,7 @@ describe('9-12. no privilege, tenant or secret exposure', () => {
   it('an authenticated Passport cannot become public through this route', () => {
     // The status route only ever queries the Free Review system tenant, so a
     // real customer passport id cannot resolve through it.
-    const route = read('src/routes/free-review.ts');
+    const route = freeReviewImpl;
     const handler = route.slice(route.indexOf("router.get('/free-review/scan/:passportId/status/:token'"));
     expect(handler).not.toContain('req.user');
     expect(handler).toContain('FREE_REVIEW_TENANT_ID');
@@ -96,9 +104,19 @@ describe('9-12. no privilege, tenant or secret exposure', () => {
   it('no authentication is bypassed - the route was never authenticated', () => {
     // Neither route registers auth middleware; the file's header comment
     // merely explains that.
-    expect(stripComments(read('src/routes/free-review.ts'))).not.toContain('requireAuth');
+    expect(stripComments(freeReviewImpl)).not.toContain('requireAuth');
     // App still guards every non-public path.
     expect(app).toContain('!isPublicPath(path)');
+  });
+
+  it('the implementation is actually mounted, not just present on disk', () => {
+    // Guards the failure mode the split could have introduced: the legacy router
+    // could keep every guarantee above and still never be reached.
+    expect(freeReviewComposer).toContain("from './free-review-legacy.ts'");
+    expect(freeReviewComposer).toContain('router.use(createLegacyFreeReviewRouter())');
+    expect(freeReviewImpl).toContain('export function createLegacyFreeReviewRouter');
+    // The composer itself must stay a composer: no auth middleware, no handlers.
+    expect(stripComments(freeReviewComposer)).not.toContain('requireAuth');
   });
 
   it('tokenized result links are kept out of crawlers and the sitemap', () => {
@@ -110,7 +128,7 @@ describe('9-12. no privilege, tenant or secret exposure', () => {
 describe('13-14. existing behaviour intact', () => {
   it('the plain /free-review entry point still works', () => {
     expect(app).toContain("if (!user && path === '/free-review') return <FreeReviewView");
-    expect(read('src/routes/free-review.ts')).toContain("router.post('/free-review/scan'");
+    expect(freeReviewImpl).toContain("router.post('/free-review/scan'");
   });
 
   it('the result page adds no verification logic of its own', () => {

@@ -129,6 +129,10 @@ export function validateConfiguration() {
   if (!config.trustProxy) missing.push('TRUST_PROXY=true');
   if (config.allowIframe) missing.push('ALLOW_IFRAME=false');
   if (!config.database.isConfigured) missing.push('DATABASE_URL or SQL_HOST/SQL_USER/SQL_PASSWORD/SQL_DB_NAME');
+  // appConnectionString falls back to DATABASE_URL, so an unset APP_DATABASE_URL would
+  // silently reconnect the whole HTTP API as the owner role -- which is BYPASSRLS -- with
+  // no error and no readiness failure. Tenant isolation must not degrade quietly.
+  if (!parsedEnv.APP_DATABASE_URL) missing.push('APP_DATABASE_URL (least-privileged spr_app_runtime connection; without it the API would run as the owner role and bypass RLS)');
   if (!config.database.ssl) missing.push('SQL_SSL=true/require/verify/verify-full');
   if (config.database.sslVerify && !config.database.sslCa && !['verify-full', 'verify'].includes(parsedEnv.SQL_SSL ?? '')) missing.push('SQL_SSL_CA for certificate verification');
   if (!config.redis.url) missing.push('REDIS_URL');

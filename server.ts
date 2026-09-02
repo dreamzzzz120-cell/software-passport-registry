@@ -3,9 +3,10 @@ import cors from 'cors';
 import helmet from 'helmet';
 import * as Sentry from '@sentry/node';
 import path from 'node:path';
+import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { config, validateConfiguration } from './src/config.ts';
-import { checkDatabaseHealth, closeDatabase, db } from './src/db/index.ts';
+import { appPool, checkDatabaseHealth, closeDatabase, db } from './src/db/index.ts';
 import { sql } from 'drizzle-orm';
 import { AuthenticatedRequest, rateLimiter, requireAuth, requireRole } from './src/middleware/security.ts';
 import { createAuthRouter } from './src/routes/auth.ts';
@@ -66,7 +67,10 @@ app.use(express.urlencoded({ extended: false, limit: requestBodyLimit }));
 app.use((req, res, next) => { const supplied = req.headers['x-request-id']; const requestId = typeof supplied === 'string' && /^[A-Za-z0-9._:-]{1,100}$/.test(supplied) ? supplied : `req_${randomUUID()}`; res.setHeader('X-Request-ID', requestId); res.setHeader('Cache-Control', req.path.startsWith('/api/') ? 'no-store, max-age=0' : 'public, max-age=0, must-revalidate'); res.locals.requestId = requestId; next(); });
 app.use((req, res, next) => { if (config.isProduction && config.enforceHttps && !req.secure && req.path !== '/health' && req.path !== '/ready' && req.path !== '/api/health') { if (!appOrigin) return res.status(503).json({ error: { code: 'HTTPS_CONFIGURATION_ERROR', message: 'HTTPS redirect target is not configured.' } }); return res.redirect(308, `${appOrigin}${req.originalUrl}`); } return next(); });
 app.get('/health', (_req, res) => res.status(200).json({ status: 'ok', service: 'spr-app', uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000) }));
-app.get('/ready', async (_req, res) => { const database = await checkDatabaseHealth(); let rls = true; if (database.ok) { try { await db.execute(sql`SELECT spr_assert_tenant_rls()`); } catch { rls = false; } } const ready = database.ok && rls; res.status(ready ? 200 : 503).json({ status: ready ? 'ready' : 'not_ready', checks: { database: database.ok ? database : { ok: false, latencyMs: database.latencyMs, error: 'DATABASE_UNAVAILABLE' }, tenantRls: { ok: rls } }, uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000) }); });
+// runtimeRole is reported, not gated: it makes a silent fallback to the owner connection
+// (see validateConfiguration's APP_DATABASE_URL check) visible to an operator without
+// giving the healthcheck a new way to fail a deploy.
+app.get('/ready', async (_req, res) => { const database = await checkDatabaseHealth(); let rls = true; if (database.ok) { try { await db.execute(sql`SELECT spr_assert_tenant_rls()`); } catch { rls = false; } } let runtimeRole: string | null = null; if (database.ok) { try { const scoped = await appPool.query('SELECT current_user AS role'); runtimeRole = scoped.rows?.[0]?.role ?? null; } catch { runtimeRole = null; } } const ready = database.ok && rls; res.status(ready ? 200 : 503).json({ status: ready ? 'ready' : 'not_ready', checks: { database: database.ok ? database : { ok: false, latencyMs: database.latencyMs, error: 'DATABASE_UNAVAILABLE' }, tenantRls: { ok: rls }, runtimeRole: { role: runtimeRole, leastPrivilege: runtimeRole === 'spr_app_runtime' } }, uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000) }); });
 app.get('/api/health', async (_req, res) => { const database = await checkDatabaseHealth(); res.status(database.ok ? 200 : 503).json({ status: database.ok ? 'ok' : 'degraded', database: database.ok ? database : { ok: false, latencyMs: database.latencyMs, error: 'DATABASE_UNAVAILABLE' } }); });
 app.use('/api', rateLimiter);
 app.use('/api', createAuthRouter());
@@ -96,9 +100,53 @@ const mcpBearer = process.env.SPR_MCP_BEARER_TOKEN;
 if (mcpBearer) { const mcpTransport = createMcpTransport({ expectedBearer: mcpBearer, executeTool: async (tool, args) => executePublicMcpTool(tool, args) }); app.post('/mcp', async (req, res) => { const response = await mcpTransport(new Request(`${config.appUrl || 'https://localhost'}/mcp`, { method: 'POST', headers: req.headers as Record<string, string>, body: JSON.stringify(req.body) })); res.status(response.status); response.headers.forEach((value, key) => res.setHeader(key, value)); res.send(Buffer.from(await response.arrayBuffer())); }); }
 app.use('/api', createScansRouter());
 app.use('/api/compliance', createComplianceRouter());
-const publicDir = path.resolve(process.cwd());
-app.use(express.static(publicDir, { index: false, maxAge: config.isProduction ? '1y' : 0 }));
-app.get('/*splat', (req, res, next) => { if (req.path.startsWith('/api/') || req.path === '/mcp') return next(); return res.sendFile(path.join(publicDir, 'index.html'), error => error ? next(error) : undefined); });
+// `vite build` writes the client bundle to dist/, and scripts/prerender-public-routes.mjs
+// writes dist/<route>/index.html on top of it. Serving process.cwd() instead served the
+// repository's *source* index.html, whose script tag is "/src/main.tsx" -- a path that does
+// not exist in the runtime image. The browser then received text/html for a module request,
+// strict MIME checking rejected it, and every page in production rendered blank.
+// Prefer dist/ whenever it has been built; fall back to cwd for `npm run dev`, where Vite
+// serves the client itself and this process is API-only.
+const distDir = path.join(process.cwd(), 'dist');
+const publicDir = fs.existsSync(path.join(distDir, 'index.html')) ? distDir : path.resolve(process.cwd());
+const spaShell = path.join(publicDir, 'index.html');
+// Fail fast rather than serving a shell that cannot boot. A production image whose
+// client build is missing should never reach the healthcheck: better to fail the
+// deploy and keep the previous release than to answer 200 with a blank page.
+if (config.isProduction && publicDir !== distDir) {
+  console.error('[SPR] FATAL: dist/index.html is missing. The client bundle was not built into this image; refusing to serve the source shell.');
+  process.exit(1);
+}
+// Hashed assets are immutable and safe to cache for a year. HTML is not: a year-long
+// max-age on index.html would pin a broken deploy into users' browsers.
+// redirect:false keeps serve-static from answering a directory request such as /privacy
+// with a 301 to /privacy/. Prerendered routes are resolved explicitly below instead, so
+// they keep their canonical URLs.
+app.use(express.static(publicDir, {
+  index: false,
+  redirect: false,
+  maxAge: config.isProduction ? '1y' : 0,
+  setHeaders: (res, filePath) => { if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate'); },
+}));
+// Express 5's named wildcard does not match the bare root, so '/' fell through to the
+// framework's default 404 ("Cannot GET /") -- the first thing any visitor loaded.
+//
+// scripts/prerender-public-routes.mjs writes dist/<route>/index.html with per-route title
+// and description. Prefer that file when it exists so public pages keep their own metadata
+// for crawlers and link unfurls; otherwise fall back to the generic SPA shell and let the
+// client router take over. The candidate path is confined to publicDir so a crafted URL
+// cannot escape the served directory.
+const sendSpaShell = (req: Request, res: Response, next: NextFunction) => {
+  if (req.path.startsWith('/api/') || req.path === '/mcp') return next();
+  const relative = decodeURIComponent(req.path).replace(/^\/+/, '');
+  const candidate = path.resolve(publicDir, relative, 'index.html');
+  const withinPublicDir = candidate === spaShell || candidate.startsWith(path.resolve(publicDir) + path.sep);
+  const file = withinPublicDir && fs.existsSync(candidate) ? candidate : spaShell;
+  res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+  return res.sendFile(file, error => error ? next(error) : undefined);
+};
+app.get('/', sendSpaShell);
+app.get('/*splat', sendSpaShell);
 app.use((req, res, next) => { if (req.path.startsWith('/api/') || req.path === '/mcp') return res.status(404).json({ error: 'Route not found.', code: 'NOT_FOUND', requestId: res.locals.requestId }); return next(); });
 app.use((err: any, req: Request, res: Response, next: NextFunction) => { if (res.headersSent) return next(err); const requestId = res.locals.requestId || `req_${randomUUID()}`; const status = Number.isInteger(err?.status) && err.status >= 400 && err.status < 600 ? err.status : 500; console.error('[HTTP_ERROR]', { requestId, status, method: req.method, path: req.path, message: err?.message || String(err) }); if (config.sentry.dsn) Sentry.captureException(err, { tags: { requestId } }); return res.status(status).json({ error: status === 500 ? 'An unexpected server error occurred.' : err?.message || 'Request failed.', code: status === 500 ? 'INTERNAL_SERVER_ERROR' : 'REQUEST_FAILED', requestId }); });
 export function rejectConnectTunnels(target: ReturnType<typeof app.listen>) { target.on('connect', (_req, socket) => { socket.end('HTTP/1.1 405 Method Not Allowed\r\nContent-Length: 0\r\nConnection: close\r\n\r\n'); }); return target; }
