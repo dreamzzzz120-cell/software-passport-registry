@@ -4,15 +4,15 @@ dockerfilePath = "Dockerfile"
 
 [deploy]
 startCommand = "npm start"
-# Two array entries, never one string joined by "&&". Railway runs each
-# pre-deploy entry directly rather than through a shell, so "a && b" hands the
-# "&&" and everything after it to node as extra argv, which node ignores: the
-# migration ran, the provisioner never did, and the deploy still went green.
-# That is how spr_worker_runtime's password rotation silently stopped happening
-# and left the worker crash-looping on "password authentication failed for user
-# spr_worker_runtime" with nothing in the deploy log to show for it.
-# Both entries are idempotent.
-preDeployCommand = ["node dist/migrate.cjs", "node dist/provision-runtime-roles.cjs"]
+# Railway accepts exactly one pre-deploy entry and executes it directly rather
+# than through a shell, so the two steps cannot be an array of two, and they
+# cannot be chained with "&&" in a bare string either: node takes the "&&" and
+# everything after it as extra argv and silently ignores it, which is how
+# provision-runtime-roles stopped running while deploys stayed green and
+# spr_worker_runtime's password drifted out of sync.
+# "npm run release" is one entry, and npm runs its script through a shell, so
+# the chain works. Both steps are idempotent.
+preDeployCommand = ["npm run release"]
 healthcheckPath = "/health"
 healthcheckTimeout = 180
 restartPolicyType = "ALWAYS"
