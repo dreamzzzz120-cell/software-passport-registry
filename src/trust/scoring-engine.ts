@@ -5,17 +5,14 @@ import { passports } from '../db/schema.ts';
 // The single authoritative passport-scoring calculation. Previously
 // src/utils/scanner.ts and src/trust/trust-loop.ts each computed and wrote
 // passports.overallScore/securityScore/complianceScore/vendorReputationScore
-// with their own independent formulas -- trust-loop.ts wrote the exact same
-// number into all three dimensions, and (having no findings to penalize when
-// it had collected almost no evidence) could legitimately produce a "perfect"
-// 100 for software that was barely checked at all. Both pipelines now
-// normalize their own data into CanonicalScoreInput and call the one
-// function below; neither maintains a competing formula.
+// with their own independent formulas. Both pipelines now normalize their
+// data into CanonicalScoreInput and call this one function.
 //
-// Core rule: a score is only ever a real measurement of evidence that was
-// actually resolved (PASS/FAIL), never a default for evidence that is
-// missing or still UNKNOWN. "No findings" is not evidence of a clean bill of
-// health unless there was something to check in the first place.
+// Core rule: a score is only ever a settled measurement of evidence that was
+// actually resolved (PASS/FAIL). Missing or unresolved evidence cannot become
+// a default score, and partial evidence cannot be published as a settled
+// numeric trust score. "No findings" is not evidence of a clean bill of health
+// unless there was enough evidence to justify the conclusion.
 
 export type CanonicalSeverity = 'critical' | 'high' | 'medium' | 'low' | 'informational';
 export type CanonicalFindingCategory = 'security' | 'compliance' | 'vendor';
@@ -26,16 +23,16 @@ export interface CanonicalFinding {
   category: CanonicalFindingCategory;
   /** true = still open and counts against the score; false = resolved/passed, no penalty. */
   open: boolean;
-  /** Multiplies this finding's severity weight for this dimension only (e.g. a signature failure hitting security harder than compliance). Defaults to 1. */
+  /** Multiplies this finding's severity weight for this dimension only. Defaults to 1. */
   weightMultiplier?: number;
 }
 
 export interface CanonicalEvidenceSummary {
-  /** Total evidence/observation units considered (evidence_items rows, ControlObservations, etc). */
+  /** Total evidence/observation units considered. */
   totalUnits: number;
-  /** How many of those units were actually resolved to PASS/FAIL rather than left UNKNOWN/unavailable. */
+  /** Units actually resolved to PASS/FAIL rather than UNKNOWN/unavailable. */
   knownUnits: number;
-  /** 0..1 average freshness across known units. Pipelines without per-item freshness tracking pass 1. */
+  /** 0..1 average freshness across known units. */
   freshness?: number;
   hasValidSignature?: boolean;
   hasInvalidSignature?: boolean;
@@ -67,11 +64,7 @@ const AUDIT_BONUS = 3;
 const MISSING_AUDIT_PENALTY = 8;
 
 // A passport needs at least this much of its evidence actually resolved
-// (not UNKNOWN) before its score is presented as a settled "verified"
-// conclusion rather than a provisional one. Below this floor the score is
-// still calculated from what is known (partial evidence is still real
-// evidence), but the verification status makes clear the conclusion could
-// change materially as more evidence comes in.
+// (not UNKNOWN) before a numeric score is a settled conclusion.
 export const VERIFIED_COMPLETENESS_THRESHOLD = 70;
 
 function clamp(value: number): number {
@@ -82,13 +75,9 @@ export function calculateCanonicalScores(input: CanonicalScoreInput): CanonicalS
   const totalUnits = Math.max(0, Math.round(input.evidence.totalUnits));
   const knownUnits = Math.max(0, Math.min(totalUnits, Math.round(input.evidence.knownUnits)));
   // No evidence is a distinct state from "0% of expected evidence is known".
-  // Keep the latter as 0% when evidence units exist, but never manufacture a
-  // numeric completeness score for a passport that has no evidence universe
-  // to measure. This prevents downstream UI from turning "nothing observed"
-  // into a false zero assessment.
   const evidenceCompleteness = totalUnits > 0 ? Math.round((knownUnits / totalUnits) * 100) : null;
 
-  // No evidence at all, or evidence exists but none of it has actually been
+  // No evidence at all, or evidence exists but none has actually been
   // resolved yet -- there is nothing legitimate to score.
   if (totalUnits === 0 || knownUnits === 0) {
     return { overallScore: null, securityScore: null, complianceScore: null, vendorReputationScore: null, confidenceScore: null, evidenceCompleteness, verificationStatus: 'unverified' };
@@ -97,12 +86,17 @@ export function calculateCanonicalScores(input: CanonicalScoreInput): CanonicalS
   const freshness = Math.max(0, Math.min(1, input.evidence.freshness ?? 1));
   const confidenceScore = Math.round((evidenceCompleteness ?? 0) * freshness);
 
+  // Partial evidence remains useful for completeness/confidence and for the
+  // verification workflow, but it must never publish a settled numeric trust
+  // score. Otherwise a clean-looking subset could render as 95/100 or 100/100
+  // while 30%+ of the evidence universe is still unknown. The score becomes a
+  // numeric claim only once the verification completeness threshold is met.
+  if (evidenceCompleteness < VERIFIED_COMPLETENESS_THRESHOLD) {
+    return { overallScore: null, securityScore: null, complianceScore: null, vendorReputationScore: null, confidenceScore, evidenceCompleteness, verificationStatus: 'partial' };
+  }
+
   let securityScore = 100;
   let complianceScore = 100;
-  // Vendor reputation starts from vendor-audit pass/fail evidence (if any)
-  // rather than a flat 100 -- this must happen BEFORE the findings loop
-  // below so a vendor-category finding's penalty is applied on top of it,
-  // not overwritten by it.
   const vendorPassCount = input.evidence.vendorPassCount ?? 0;
   const vendorFailCount = input.evidence.vendorFailCount ?? 0;
   let vendorReputationScore = vendorPassCount > 0 || vendorFailCount > 0 ? 100 - vendorFailCount * 20 + vendorPassCount * 3 : 100;
@@ -127,12 +121,10 @@ export function calculateCanonicalScores(input: CanonicalScoreInput): CanonicalS
   vendorReputationScore = clamp(vendorReputationScore);
   const overallScore = clamp(securityScore * 0.4 + complianceScore * 0.4 + vendorReputationScore * 0.2);
 
-  const verificationStatus: VerificationStatus = evidenceCompleteness >= VERIFIED_COMPLETENESS_THRESHOLD ? 'verified' : 'partial';
-
-  return { overallScore, securityScore, complianceScore, vendorReputationScore, confidenceScore, evidenceCompleteness, verificationStatus };
+  return { overallScore, securityScore, complianceScore, vendorReputationScore, confidenceScore, evidenceCompleteness, verificationStatus: 'verified' };
 }
 
-/** Calculates and persists the canonical score. The only function that should ever write these six passport columns. */
+/** Calculates and persists the canonical score. The only function that should ever write these passport score columns. */
 export async function calculateAndPersistPassportScore(tenantId: string, passportId: string, input: CanonicalScoreInput): Promise<CanonicalScoreResult> {
   const result = calculateCanonicalScores(input);
   await db.update(passports)
