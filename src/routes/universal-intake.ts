@@ -58,13 +58,31 @@ async function ensureBucket() {
   // A bucket created by the earlier code still carries the bad limit, and
   // createBucket is never reached once it exists. Reconcile it to the documented
   // ceiling. Only the size limit is touched: the bucket stays private, so this
-  // cannot widen access. Failures here are logged, not thrown -- a limit that is
-  // already correct, or a key without bucket-admin rights, must not take the
-  // upload path down.
-  if (data && data.file_size_limit !== MAX_FILE_SIZE) {
-    const updated = await client.storage.updateBucket(BUCKET, { public: false, fileSizeLimit: MAX_FILE_SIZE });
-    if (updated.error) console.error(`[Intake] Could not reconcile bucket size limit (currently ${String(data.file_size_limit)}): ${updated.error.message}`);
-    else console.info(`[Intake] Bucket size limit reconciled from ${String(data.file_size_limit)} to ${MAX_FILE_SIZE} bytes.`);
+  // cannot widen access.
+  //
+  // Production still answers 400 "The object exceeded the maximum allowed size"
+  // for an 11-byte file, and the previous reconcile logged neither success nor
+  // failure. That absence is the evidence: it did not return an { error }, it
+  // threw. supabase-js raises StorageApiError rather than returning it for some
+  // failures, and raising a bucket's limit above the project's own global upload
+  // limit is one of them. A throw here propagated straight out of ensureBucket
+  // and became the request's 400.
+  //
+  // Repairing the bucket is best effort and must never be why an upload fails,
+  // so it is fully contained. The bucket's real limit is logged either way --
+  // that number is the one piece of evidence needed to finish this diagnosis,
+  // and it is not otherwise observable, because the Railway API returns the
+  // Supabase keys redacted and the bucket cannot be inspected from here.
+  const currentLimit = (data as { file_size_limit?: number | null } | null)?.file_size_limit ?? null;
+  if (data && currentLimit !== MAX_FILE_SIZE) {
+    console.info(`[Intake] Bucket "${BUCKET}" reports file_size_limit=${String(currentLimit)}; intended ${MAX_FILE_SIZE}.`);
+    try {
+      const updated = await client.storage.updateBucket(BUCKET, { public: false, fileSizeLimit: MAX_FILE_SIZE });
+      if (updated.error) console.error(`[Intake] Could not reconcile bucket size limit: ${updated.error.message}`);
+      else console.info(`[Intake] Bucket size limit reconciled to ${MAX_FILE_SIZE} bytes.`);
+    } catch (error) {
+      console.error(`[Intake] updateBucket threw while reconciling (limit stays ${String(currentLimit)}): ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
   return client;
 }
