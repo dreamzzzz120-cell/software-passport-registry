@@ -10,16 +10,8 @@ import {
   Layers,
   ArrowRight,
   ArrowLeft,
-  CheckCircle2,
-  Cpu,
-  Sparkles,
-  Zap,
-  Globe,
   FileCheck,
-  ChevronRight,
-  X,
-  Lock,
-  Play
+  X
 } from 'lucide-react';
 
 interface TrustOSTutorialProps {

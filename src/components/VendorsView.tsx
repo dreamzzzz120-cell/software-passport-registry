@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { fuzzyMatch, filterData } from '../utils/filter';
+import { filterData } from '../utils/filter';
 import { apiFetch } from '../utils/apiClient';
 import {
   Factory,

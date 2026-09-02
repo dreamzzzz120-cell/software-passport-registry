@@ -39,8 +39,6 @@ jobs:
       DATABASE_URL: postgresql://spr_test:spr_test_only@127.0.0.1:5432/spr_security_test
       SPR_TEST_FIREBASE_PROJECT_ID: demo-spr-security
       FIREBASE_PROJECT_ID: demo-spr-security
-      SPR_TEST_TENANT_A_UID: tenant-a-test-user
-      SPR_TEST_TENANT_B_UID: tenant-b-test-user
       FIREBASE_AUTH_EMULATOR_HOST: 127.0.0.1:9099
     steps:
       - uses: actions/checkout@v4
@@ -93,22 +91,46 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # The emulator's public signUp endpoint refuses a caller-supplied
+          # localId with a bare 400, which is what killed this job on every pull
+          # request it has ever run on. Let the emulator assign the uid and carry
+          # it forward instead: it is exported here and substituted into the seed
+          # SQL, so users.uid still matches the sub claim in the ID token.
           create_user() {
-            local uid="$1" email="$2" out="$3" verify="$4"
-            curl --fail --silent --show-error -X POST -H 'content-type: application/json' -d "{\"localId\":\"${uid}\",\"email\":\"${email}\",\"password\":\"SecurityTest-Only-123!\",\"returnSecureToken\":true}" "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo-spr-security" > "$out"
+            local email="$1" out="$2" verify="$3" code
+            code=$(curl --silent --show-error -o "$out" -w '%{http_code}' -X POST -H 'content-type: application/json' -d "{\"email\":\"${email}\",\"password\":\"SecurityTest-Only-123!\",\"returnSecureToken\":true}" "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo-spr-security")
+            if [ "$code" != '200' ]; then
+              echo "signUp for ${email} failed with HTTP ${code}:" >&2
+              cat "$out" >&2
+              return 1
+            fi
             if [ "$verify" = 'true' ]; then
               local token
               token=$(node -p "require('$out').idToken")
-              curl --fail --silent --show-error -X POST -H 'content-type: application/json' -d "{\"idToken\":\"${token}\",\"emailVerified\":true}" "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:update?key=demo-spr-security" >/dev/null
-              curl --fail --silent --show-error -X POST -H 'content-type: application/json' -d "{\"email\":\"${email}\",\"password\":\"SecurityTest-Only-123!\",\"returnSecureToken\":true}" "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo-spr-security" > "$out"
+              code=$(curl --silent --show-error -o /tmp/verify.json -w '%{http_code}' -X POST -H 'content-type: application/json' -d "{\"idToken\":\"${token}\",\"emailVerified\":true}" "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:update?key=demo-spr-security")
+              if [ "$code" != '200' ]; then
+                echo "emailVerified update for ${email} failed with HTTP ${code}:" >&2
+                cat /tmp/verify.json >&2
+                return 1
+              fi
+              code=$(curl --silent --show-error -o "$out" -w '%{http_code}' -X POST -H 'content-type: application/json' -d "{\"email\":\"${email}\",\"password\":\"SecurityTest-Only-123!\",\"returnSecureToken\":true}" "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo-spr-security")
+              if [ "$code" != '200' ]; then
+                echo "signIn for ${email} failed with HTTP ${code}:" >&2
+                cat "$out" >&2
+                return 1
+              fi
             fi
           }
-          create_user tenant-a-test-user tenant-a@security.test /tmp/a.json true
-          create_user tenant-b-test-user tenant-b@security.test /tmp/b.json true
-          create_user unverified-test-user unverified@security.test /tmp/u.json false
-          echo "SPR_TEST_TENANT_A_ID_TOKEN=$(node -p \"require('/tmp/a.json').idToken\")" >> "$GITHUB_ENV"
-          echo "SPR_TEST_TENANT_B_ID_TOKEN=$(node -p \"require('/tmp/b.json').idToken\")" >> "$GITHUB_ENV"
-          echo "SPR_TEST_UNVERIFIED_ID_TOKEN=$(node -p \"require('/tmp/u.json').idToken\")" >> "$GITHUB_ENV"
+          create_user tenant-a@security.test /tmp/a.json true
+          create_user tenant-b@security.test /tmp/b.json true
+          create_user unverified@security.test /tmp/u.json false
+          {
+            echo "SPR_TEST_TENANT_A_UID=$(node -p "require('/tmp/a.json').localId")"
+            echo "SPR_TEST_TENANT_B_UID=$(node -p "require('/tmp/b.json').localId")"
+            echo "SPR_TEST_TENANT_A_ID_TOKEN=$(node -p "require('/tmp/a.json').idToken")"
+            echo "SPR_TEST_TENANT_B_ID_TOKEN=$(node -p "require('/tmp/b.json').idToken")"
+            echo "SPR_TEST_UNVERIFIED_ID_TOKEN=$(node -p "require('/tmp/u.json').idToken")"
+          } >> "$GITHUB_ENV"
       - name: Apply database migrations
         run: |
           for migration in migrations/*.sql; do
@@ -116,7 +138,7 @@ jobs:
           done
       - name: Seed isolated Tenant A/B resources
         run: |
-          PGPASSWORD=spr_test_only psql "$SPR_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/security/seed-authz-fixtures.sql
+          PGPASSWORD=spr_test_only psql "$SPR_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -v tenant_a_uid="$SPR_TEST_TENANT_A_UID" -v tenant_b_uid="$SPR_TEST_TENANT_B_UID" -f tests/security/seed-authz-fixtures.sql
           echo 'SPR_TEST_TENANT_A_RESOURCE_ID=security-passport-a' >> "$GITHUB_ENV"
           echo 'SPR_TEST_TENANT_B_RESOURCE_ID=security-passport-b' >> "$GITHUB_ENV"
       - name: Run route security tests

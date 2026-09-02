@@ -120,7 +120,7 @@ export function generateRealSbom(workspacePath = '.'): {
           license = 'MIT'; // Fallback standard OSI license
         }
 
-        const encodedName = name.includes('/') ? name.replace('@', '%40') : name;
+        const encodedName = name.includes('/') ? name.replace(/@/g, '%40') : name;
         const purl = `pkg:npm/${encodedName}@${version}`;
         const integrity = pkgData.integrity || '';
         const resolved = pkgData.resolved || '';
