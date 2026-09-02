@@ -426,10 +426,37 @@ async function processRepositoryJob(pool: Pool, job: ClaimedJob) {
   }
 }
 
+// Mirrors the security scanner's redaction. A failure reason is written to logs,
+// so a token or credential that leaked into an error message must not travel with
+// it. Truncated to match the 200-char column the same code is stored in.
+function safeFailureReason(raw: string): string {
+  return raw
+    .replace(/gh[pousr]_[A-Za-z0-9]{10,}/g, '[REDACTED_TOKEN]')
+    .replace(/(authorization|bearer|token|key|secret)[=: ]+\S+/gi, '$1 [REDACTED]')
+    .replace(/https?:\/\/[^@\s]*@/g, 'https://[REDACTED]@')
+    .slice(0, 200);
+}
+
 async function failJob(pool: Pool, job: ClaimedJob, error: unknown) {
   const code = error instanceof Error ? error.message : 'SCAN_WORKER_ERROR';
   const retry = job.attempt_count < job.max_attempts;
   const next = retry ? Math.min(60 * Math.pow(2, Math.max(0, job.attempt_count - 1)), 3600) : 0;
+  // This worker owns repository_scan, the job behind the Free Review's repository
+  // half, and it previously failed in total silence: no console output, no Sentry.
+  // A Free Review that never produced a passport left nothing anywhere to explain
+  // why, which is why the cause had to be inferred instead of read.
+  console.error(JSON.stringify({
+    event: 'scan_job_failed',
+    workerId: WORKER_ID,
+    jobId: job.id,
+    jobType: job.job_type,
+    tenantId: job.tenant_id,
+    attempt: job.attempt_count,
+    maxAttempts: job.max_attempts,
+    willRetry: retry,
+    retryInSeconds: next,
+    reason: safeFailureReason(code),
+  }));
   await pool.query(`UPDATE agent_jobs SET status=$2, progress=CASE WHEN $2='Failed' THEN 100 ELSE 0 END, error=$3, next_attempt_at=CASE WHEN $2='Pending' THEN NOW() + ($4 * INTERVAL '1 second') ELSE next_attempt_at END, locked_at=NULL, locked_by=NULL, completed_at=CASE WHEN $2='Failed' THEN NOW() ELSE completed_at END, updated_at=NOW() WHERE id=$1 AND tenant_id=$5 AND status='Running' AND locked_by=$6`,[job.id,retry ? 'Pending' : 'Failed',code.slice(0,200),next,job.tenant_id,WORKER_ID]);
 }
 

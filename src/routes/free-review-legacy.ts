@@ -14,6 +14,9 @@ import { signFreeReviewStatusToken, verifyFreeReviewStatusToken } from './public
 export const FREE_REVIEW_TENANT_ID = 'tenant-free-review-system';
 const STATUS_TOKEN_TTL_SECONDS = 60 * 60 * 2;
 const DAILY_SUBMISSIONS_PER_IP = 5;
+// A Free Review stops calling itself "scanning" after this long. It bounds the
+// visitor's wait; it does not cancel the job, and it never invents a result.
+const FREE_REVIEW_DEADLINE_MS = 4 * 60 * 1000;
 
 const submitSchema = z.object({
   owner: z.string().regex(/^[A-Za-z0-9_.-]{1,100}$/),
@@ -71,23 +74,47 @@ export function createLegacyFreeReviewRouter() {
       const payload = verifyFreeReviewStatusToken(req.params.token, passportId);
       if (!payload) return res.status(401).json({ error: 'Invalid or expired Free Review status link' });
       const scopedDb = await attachTenantScope(FREE_REVIEW_TENANT_ID, res);
-      const jobs = (await scopedDb.execute(sql`SELECT job_type, status, error FROM agent_jobs WHERE tenant_id=${FREE_REVIEW_TENANT_ID} AND passport_id=${passportId}`) as any).rows || [];
+      const jobs = (await scopedDb.execute(sql`SELECT job_type, status, error, created_at AS "createdAt" FROM agent_jobs WHERE tenant_id=${FREE_REVIEW_TENANT_ID} AND passport_id=${passportId}`) as any).rows || [];
       if (jobs.length === 0) return res.status(404).json({ error: 'Free Review submission not found' });
-      const pending = jobs.some((j: any) => ['Pending', 'Running'].includes(j.status));
+      // A Free Review is bounded. The two engines retry on different schedules --
+      // the security scanner on a flat 30s backoff, the repository scanner on an
+      // exponential one that reaches an hour -- so a job can sit in 'Pending'
+      // long after the review is, in every sense the visitor cares about, over.
+      // Reporting 'scanning' until the slowest retry chain gives up is what made
+      // the page appear to load forever.
+      //
+      // Past the deadline SPR stops claiming to be scanning and reports what it
+      // actually has. This never invents a result: a review that produced
+      // evidence still reports it, and one that produced none is reported as
+      // failed, not as a clean scan.
+      const oldestStartedAt = jobs.reduce((oldest: number, j: any) => {
+        const started = new Date(j.createdAt ?? Date.now()).getTime();
+        return Number.isFinite(started) && started < oldest ? started : oldest;
+      }, Date.now());
+      const pastDeadline = Date.now() - oldestStartedAt > FREE_REVIEW_DEADLINE_MS;
+      const pending = !pastDeadline && jobs.some((j: any) => ['Pending', 'Running'].includes(j.status));
+      // 'Completed' is the workers' terminal success status. A job left Pending or
+      // Running past the deadline did not succeed, so it is counted as unfinished
+      // rather than silently folded into a clean result.
+      const succeeded = jobs.filter((j: any) => j.status === 'Completed');
+      const unfinished = jobs.filter((j: any) => ['Pending', 'Running'].includes(j.status));
       const anyFailed = jobs.some((j: any) => j.status === 'Failed');
-      // A run where EVERY engine failed is not a partial review, it is no review
-      // at all: nothing was fetched, nothing was scanned, and the zero counts
-      // below describe absence of a scan rather than absence of findings.
-      // Collapsing that into "partial" is what let the UI show a green "Review
-      // complete" with 0 findings and 0 evidence for a repository SPR never
-      // managed to read -- exactly the fabricated assurance this product exists
-      // to prevent.
-      const allFailed = jobs.length > 0 && jobs.every((j: any) => j.status === 'Failed');
-      const scanStatus = pending ? 'scanning' : allFailed ? 'failed' : anyFailed ? 'partial' : 'complete';
-      // The reason is already selected above and was being discarded. These codes
-      // describe the caller's own input, so returning them tells the customer
-      // something actionable without disclosing anything internal. Anything
-      // unrecognized is deliberately generalized rather than echoed back.
+      // A run where NO engine succeeded is not a partial review, it is no review at
+      // all: nothing was fetched, nothing was scanned, and the zero counts below
+      // describe absence of a scan rather than absence of findings. Collapsing that
+      // into "partial" is what let the UI show a green "Review complete" with 0
+      // findings and 0 evidence for a repository SPR never managed to read --
+      // exactly the fabricated assurance this product exists to prevent.
+      const scanStatus = pending
+        ? 'scanning'
+        : succeeded.length === 0
+          ? 'failed'
+          : (anyFailed || unfinished.length > 0)
+            ? 'partial'
+            : 'complete';
+      // These codes describe the caller's own input, so returning them tells the
+      // customer something actionable without disclosing anything internal.
+      // Anything unrecognized is deliberately generalized rather than echoed back.
       const FAILURE_REASONS: Record<string, string> = {
         REPOSITORY_NOT_FOUND: 'That repository could not be found on GitHub. Check the owner and repository name.',
         REPOSITORY_REF_NOT_FOUND: 'That repository exists, but its default branch could not be read.',
@@ -97,9 +124,16 @@ export function createLegacyFreeReviewRouter() {
         REPOSITORY_CONNECTION_NOT_FOUND: 'This review is no longer available. Start a new Free Review.',
       };
       const rawReason = jobs.find((j: any) => j.status === 'Failed' && j.error)?.error;
-      const failureReason = rawReason
-        ? FAILURE_REASONS[String(rawReason).trim()] || 'The scan could not be completed. No evidence was collected.'
-        : null;
+      // Only reported once the review has actually settled. Returning a reason
+      // beside scanStatus 'scanning' told the visitor the run had failed while the
+      // UI was still spinning -- two contradictory answers in one payload.
+      const failureReason = pending
+        ? null
+        : rawReason
+          ? FAILURE_REASONS[String(rawReason).trim()] || 'The scan could not be completed. No evidence was collected.'
+          : unfinished.length > 0
+            ? 'The scan did not finish in time. No result was produced, so nothing here should be read as a clean review.'
+            : null;
       const passport = (await scopedDb.execute(sql`SELECT id, name, version, publisher, category, verification_status AS "verificationStatus" FROM passports WHERE id=${passportId} AND tenant_id=${FREE_REVIEW_TENANT_ID} LIMIT 1`) as any).rows?.[0] || null;
       const findings = (await scopedDb.execute(sql`SELECT id, severity, category, title, description, component, fixed_version AS "fixedVersion", status, detected_at AS "detectedAt", engine_id AS "engineId" FROM scan_findings WHERE tenant_id=${FREE_REVIEW_TENANT_ID} AND asset_id=${passportId} ORDER BY detected_at DESC`) as any).rows || [];
       const evidence = (await scopedDb.execute(sql`SELECT id, name, type, verified, status, signer, timestamp, engine_id AS "engineId" FROM evidence_items WHERE tenant_id=${FREE_REVIEW_TENANT_ID} AND asset_id=${passportId} ORDER BY timestamp DESC`) as any).rows || [];
