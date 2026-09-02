@@ -8,7 +8,8 @@ import LegalPageLayout from './LegalPageLayout';
 export default function TermsView() {
   return (
     <LegalPageLayout title="Terms of Service" lastUpdated="September 2, 2026">
-      <p>These Terms of Service ("Terms") govern access to and use of Software Passport Registry (the "Service"), operated as the independent software product <strong>Software Passport Registry (SPR)</strong>.</p>
+      <p>These Terms of Service ("Terms") govern access to and use of the Service operated by <strong>Software Passport Registry Ltd.</strong> ("SPR", "we", "us", or "our").</p>
+      <p>SPR is an independent software trust and evidence platform. SPR is not a government passport service, government registry, certification authority, or government-affiliated system.</p>
       <p>These Terms describe the Service and its limitations. They are not a security certification, legal opinion, or guarantee of future software behavior.</p>
       <section><h2>1. Acceptance</h2><p>By creating an account, accessing, or using the Service, you agree to these Terms. If you use the Service for an organization, you represent that you have authority to do so.</p></section>
       <section><h2>2. Service Description</h2><p>SPR is a software evidence-and-trust platform. It helps users inventory software, collect and organize evidence such as SBOMs, vulnerability results, repository signals and provenance information, and present evidence as trust states, reports and dashboards.</p><p><strong>SPR does not certify, warrant, guarantee, or attest that software, a vendor, or an organization is secure, compliant, or free of vulnerabilities.</strong> A trust state or "Verified" label reflects evidence available to SPR at the time it was computed and is not an independent security audit, legal opinion, or formal certification.</p></section>
@@ -25,7 +26,7 @@ export default function TermsView() {
       <section><h2>13. Governing Law</h2><p>No specific governing-law jurisdiction is asserted by this public version of the Terms. Where a customer agreement or applicable law establishes a governing jurisdiction, that agreement or law controls to the extent applicable.</p></section>
       <section><h2>14. Privacy</h2><p>Our handling of personal information is described in the <a href="/privacy">Privacy Policy</a>.</p></section>
       <section><h2>15. Changes</h2><p>We may update these Terms from time to time. Material changes will be reflected by an updated date and, where appropriate, additional notice.</p></section>
-      <section><h2>16. Contact</h2><p>Questions about these Terms can be directed to <strong>contact@softwarepassportregistry.com</strong>.</p></section>
+      <section><h2>16. Contact</h2><p>Questions about these Terms can be directed to <strong>Software Passport Registry Ltd.</strong> at <strong>contact@softwarepassportregistry.com</strong>.</p></section>
     </LegalPageLayout>
   );
 }
