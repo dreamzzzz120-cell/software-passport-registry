@@ -66,6 +66,23 @@ suite('HTTP hardening', () => {
     expect(response.headers.get('x-powered-by')).toBeNull();
   });
 
+  // Regression guard. connect-src was 'self' plus the app origin only, which
+  // blocked the Firebase Auth SDK from reaching Google. The fetch never left the
+  // browser, so sign-in did nothing and surfaced no error -- the whole
+  // authenticated product was unreachable while every server-side check looked
+  // healthy. Asserted on the real response header, not on the source.
+  it('allows the browser to reach Firebase Auth, without widening connect-src', async () => {
+    const response = await fetch(`${baseUrl}/health`);
+    const csp = response.headers.get('content-security-policy') ?? '';
+    const connectSrc = csp.split(';').map((d) => d.trim()).find((d) => d.startsWith('connect-src')) ?? '';
+    expect(connectSrc).toContain('https://identitytoolkit.googleapis.com');
+    expect(connectSrc).toContain('https://securetoken.googleapis.com');
+    // Bounding exfiltration is the entire point of connect-src: a blanket
+    // https: would allow any destination and defeat it.
+    expect(connectSrc.split(/\s+/)).not.toContain('https:');
+    expect(connectSrc).toContain("'self'");
+  });
+
   it('rejects TRACE', async () => {
     const response = await rawRequest(`${baseUrl}/health`, 'TRACE');
     expect(response.status).toBe(405);
