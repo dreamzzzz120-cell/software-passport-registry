@@ -91,7 +91,9 @@ export function calculateCanonicalScores(input: CanonicalScoreInput): CanonicalS
   // score. Otherwise a clean-looking subset could render as 95/100 or 100/100
   // while 30%+ of the evidence universe is still unknown. The score becomes a
   // numeric claim only once the verification completeness threshold is met.
-  if (evidenceCompleteness < VERIFIED_COMPLETENESS_THRESHOLD) {
+  // Explicitly handle null here as well as the threshold so TypeScript can
+  // prove that every later use of evidenceCompleteness is numeric.
+  if (evidenceCompleteness === null || evidenceCompleteness < VERIFIED_COMPLETENESS_THRESHOLD) {
     return { overallScore: null, securityScore: null, complianceScore: null, vendorReputationScore: null, confidenceScore, evidenceCompleteness, verificationStatus: 'partial' };
   }
 
