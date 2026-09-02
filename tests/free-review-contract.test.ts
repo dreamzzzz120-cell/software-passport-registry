@@ -13,7 +13,7 @@ describe('Free Review contracts', () => {
     expect(publicConnect).toContain("kind: 'free_review_status'");
     expect(publicConnect).toContain('function verifyFreeReviewStatusToken');
     expect(publicConnect).toContain("payload.kind !== 'free_review_status'");
-    const freeReview = read('src/routes/free-review.ts');
+    const freeReview = read('src/routes/free-review-legacy.ts');
     expect(freeReview).toContain('verifyFreeReviewStatusToken(req.params.token, passportId)');
   });
 
@@ -26,7 +26,7 @@ describe('Free Review contracts', () => {
   });
 
   it('never pre-inserts a passports row -- the repository-scan worker creates it from acquired metadata', () => {
-    const freeReview = read('src/routes/free-review.ts');
+    const freeReview = read('src/routes/free-review-legacy.ts');
     expect(freeReview).not.toMatch(/INSERT INTO passports/);
     expect(freeReview).toContain("INSERT INTO agent_jobs");
     expect(freeReview).toContain("'repository_scan'");
@@ -34,13 +34,13 @@ describe('Free Review contracts', () => {
   });
 
   it('scopes every query to the fixed system tenant, not a caller-supplied tenant', () => {
-    const freeReview = read('src/routes/free-review.ts');
+    const freeReview = read('src/routes/free-review-legacy.ts');
     expect(freeReview).toContain("export const FREE_REVIEW_TENANT_ID = 'tenant-free-review-system';");
     expect(freeReview).toContain('attachTenantScope(FREE_REVIEW_TENANT_ID, res)');
   });
 
   it('enforces a daily per-IP submission cap before creating a new scan job', () => {
-    const freeReview = read('src/routes/free-review.ts');
+    const freeReview = read('src/routes/free-review-legacy.ts');
     const capIndex = freeReview.indexOf('recentCount');
     expect(capIndex).toBeGreaterThan(-1);
     expect(freeReview.slice(capIndex, capIndex + 300)).toContain('DAILY_SUBMISSIONS_PER_IP');
@@ -49,7 +49,7 @@ describe('Free Review contracts', () => {
   });
 
   it('reads evidence directly and never calls publicTrustResponse, which would silently report UNKNOWN for every result', () => {
-    const freeReview = read('src/routes/free-review.ts');
+    const freeReview = read('src/routes/free-review-legacy.ts');
     expect(freeReview).not.toContain('publicTrustResponse(');
     expect(freeReview).not.toMatch(/import\s*\{[^}]*publicTrustResponse/);
     expect(freeReview).toContain('FROM evidence_items WHERE tenant_id=${FREE_REVIEW_TENANT_ID} AND asset_id=${passportId}');
@@ -57,12 +57,12 @@ describe('Free Review contracts', () => {
   });
 
   it('routes both the submit and status endpoints through a path containing "/scan", guaranteeing the expensive rate-limit bucket regardless of ID format', () => {
-    const freeReview = read('src/routes/free-review.ts');
+    const freeReview = read('src/routes/free-review-legacy.ts');
     expect(freeReview).toContain("router.post('/free-review/scan'");
     expect(freeReview).toContain("router.get('/free-review/scan/:passportId/status/:token'");
   });
 
-  it('the new table carries the standard tenant-scoped RLS + grant boilerplate and a tenant_id CHECK invariant', () => {
+  it('keeps the new free-review table tenant-scoped with RLS and runtime grants', () => {
     const migration = read('migrations/0044_free_review_submissions.sql');
     expect(migration).toContain("CHECK (tenant_id = 'tenant-free-review-system')");
     expect(migration).toContain('ALTER TABLE free_review_submissions ENABLE ROW LEVEL SECURITY');
