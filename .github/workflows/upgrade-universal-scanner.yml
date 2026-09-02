@@ -2,7 +2,8 @@ name: Upgrade Universal Software Scanner
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -16,24 +17,22 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Apply universal scanner upgrade
-        shell: python
         run: |
+          python3 <<'PY'
           from pathlib import Path
 
           scans = Path('src/routes/scans.ts')
           text = scans.read_text()
-
-          marker = "  router.post('/scans/source-file', requireRole(['Owner','Admin','Operator']), async (req: AuthenticatedRequest, res, next) => {"
-          if marker not in text:
+          if "router.post('/scans/source-file'" not in text:
               anchor = "  router.post('/scans/repository', requireRole(['Owner','Admin','Operator']), async (req: AuthenticatedRequest, res, next) => {"
-              route = r'''  router.post('/scans/source-file', requireRole(['Owner','Admin','Operator']), async (req: AuthenticatedRequest, res, next) => {
+              route = '''  router.post('/scans/source-file', requireRole(['Owner','Admin','Operator']), async (req: AuthenticatedRequest, res, next) => {
     try {
       const body = req.body as { passportId?: unknown; fileName?: unknown; content?: unknown; clientName?: unknown };
       const passportId = String(body.passportId || '').trim();
       const fileName = String(body.fileName || 'software-file').trim().slice(0, 300);
       const content = String(body.content || '');
       if (!passportId || !content) return res.status(400).json({ error: 'passportId and file content are required.' });
-      if (content.length > 1_500_000) return res.status(413).json({ error: 'File is too large for direct ingestion. Use the GitHub repository scanner for complete projects.' });
+      if (Buffer.byteLength(content, 'utf8') > 1_500_000) return res.status(413).json({ error: 'File is too large for direct ingestion. Use the GitHub repository scanner for complete projects.' });
       const db = req.db!;
       const passport = (await db.execute(sql`SELECT id FROM passports WHERE id=${passportId} AND tenant_id=${req.user!.tenantId} LIMIT 1`)).rows?.[0] as any;
       if (!passport) return res.status(404).json({ error: 'Passport not found' });
@@ -54,83 +53,71 @@ jobs:
 '''
               if anchor not in text:
                   raise SystemExit('repository route anchor not found')
-              text = text.replace(anchor, route + anchor, 1)
-              scans.write_text(text)
+              scans.write_text(text.replace(anchor, route + anchor, 1))
 
           ui = Path('src/components/ScansView.tsx')
           text = ui.read_text()
-
-          # Expand the native file picker so complete project files can be ingested.
           text = text.replace('accept=".json,.sbom,.spdx,.cyclonedx"', 'accept="*/*"', 1)
 
-          # Add GitHub repository input state immediately after scanner passport state.
           state_marker = "  const [selectedPassportId, setSelectedPassportId] = useState('');"
-          state_insert = state_marker + "\n  const [repositoryUrl, setRepositoryUrl] = useState('');\n  const [repositoryRef, setRepositoryRef] = useState('main');\n  const [repositoryBusy, setRepositoryBusy] = useState(false);"
           if 'const [repositoryUrl, setRepositoryUrl]' not in text:
               if state_marker not in text:
                   raise SystemExit('scanner state marker not found')
-              text = text.replace(state_marker, state_insert, 1)
+              text = text.replace(state_marker, state_marker + "\n  const [repositoryUrl, setRepositoryUrl] = useState('');\n  const [repositoryRef, setRepositoryRef] = useState('main');\n  const [repositoryBusy, setRepositoryBusy] = useState(false);", 1)
 
-          # Replace SBOM-only file parsing with universal source-file ingestion.
           old = """      if (sbomFile) {\n        if (sbomFile.size > 5_000_000) {\n          throw new Error('SBOM file is too large. Files must be 5 MB or smaller.');\n        }\n        sbom = await sbomFile.text();\n        let document: unknown;\n        try {\n          document = JSON.parse(sbom);\n        } catch {\n          throw new Error('SBOM file must contain valid JSON.');\n        }\n        const components = Array.isArray((document as { components?: unknown })?.components)\n          ? (document as { components: unknown[] }).components\n          : Array.isArray((document as { packages?: unknown })?.packages)\n            ? (document as { packages: unknown[] }).packages\n            : [];\n        if (components.length === 0) {\n          throw new Error('JSON does not contain a versioned SBOM component list.');\n        }\n      }\n      const response = await apiFetch('/api/agent-jobs', {"""
-          new = """      if (sbomFile) {\n        if (sbomFile.size > 1_500_000) {\n          throw new Error('This direct file upload is too large. Use the GitHub repository scanner for complete projects.');\n        }\n        const source = await sbomFile.text();\n        const sourceResponse = await apiFetch('/api/scans/source-file', {\n          method: 'POST',\n          headers: { 'Content-Type': 'application/json' },\n          body: JSON.stringify({ passportId: matchedPassport.id, fileName: sbomFile.name, content: source, clientName: chosenClient })\n        });\n        if (!sourceResponse.ok) {\n          const error = await sourceResponse.json().catch(() => null);\n          throw new Error(typeof error?.error === 'string' ? error.error : 'File ingestion failed.');\n        }\n        const queued = await sourceResponse.json();\n        const response = new Response(JSON.stringify(queued), { status: 202, headers: { 'Content-Type': 'application/json' } });\n        if (response.ok) {\n          const job = await response.json();\n          setScanLogs(l => [...l, `[INFO] Accepted complete file: ${sbomFile.name}`, `[INFO] SHA-256 evidence recorded: ${job.sha256}`, `[INFO] Universal source analysis queued.`]);\n          setIsScanning(false);\n          setScanCompleted(true);\n          const refresh = await apiFetch('/api/scans');\n          if (refresh.ok) { const updated = await refresh.json(); if (updated[0]) onTriggerNewScan(updated[0]); }\n          return;\n        }\n      }\n      const response = await apiFetch('/api/agent-jobs', {"""
-          if old not in text:
-              raise SystemExit('SBOM validation block not found')
-          text = text.replace(old, new, 1)
+          new = """      if (sbomFile) {\n        if (sbomFile.size > 1_500_000) {\n          throw new Error('This direct file upload is too large. Use the GitHub repository scanner for complete projects.');\n        }\n        const sourceResponse = await apiFetch('/api/scans/source-file', {\n          method: 'POST',\n          headers: { 'Content-Type': 'application/json' },\n          body: JSON.stringify({ passportId: matchedPassport.id, fileName: sbomFile.name, content: await sbomFile.text(), clientName: chosenClient })\n        });\n        if (!sourceResponse.ok) {\n          const error = await sourceResponse.json().catch(() => null);\n          throw new Error(typeof error?.error === 'string' ? error.error : 'File ingestion failed.');\n        }\n        const job = await sourceResponse.json();\n        setScanLogs(l => [...l, `[INFO] Accepted complete file: ${sbomFile.name}`, `[INFO] SHA-256 evidence recorded: ${job.sha256}`, '[INFO] Universal source analysis queued.']);\n        setIsScanning(false);\n        setScanCompleted(true);\n        return;\n      }\n      const response = await apiFetch('/api/agent-jobs', {"""
+          if old in text:
+              text = text.replace(old, new, 1)
 
-          # Inject a repository dispatch helper before the existing runActualScan function.
-          fn_marker = "  // Executing actual backend AI Agent scanner with real-time logs polling\n  const runActualScan = async"
-          helper = r'''  const runRepositoryScan = async () => {
+          if 'const runRepositoryScan = async' not in text:
+              fn_marker = "  // Executing actual backend AI Agent scanner with real-time logs polling\n  const runActualScan = async"
+              helper = '''  const runRepositoryScan = async () => {
     const value = repositoryUrl.trim();
-    const match = value.match(/^https?:\/\/github\.com\/([^/]+)\/([^/#?]+)(?:[#?].*)?$/i);
+    const match = value.match(/^https?:\\/\\/github\\.com\\/([^/]+)\\/([^/#?]+)(?:[#?].*)?$/i);
     if (!match) { setScanLogs(['[ERROR] Enter a valid public GitHub repository URL.']); return; }
     const passport = (passports || []).find(p => p.id === selectedPassportId) || (passports || [])[0];
     if (!passport) { setScanLogs(['[ERROR] Select a Software Passport target first.']); return; }
     setRepositoryBusy(true); setIsScanning(true); setScanCompleted(false); setScanProgress(0);
     const [, owner, repository] = match;
     try {
-      const response = await apiFetch('/api/scans/repository', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ passportId: passport.id, owner, repository: repository.replace(/\.git$/i, ''), ref: repositoryRef.trim() || 'main', subdirectory: '' }) });
+      const response = await apiFetch('/api/scans/repository', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ passportId: passport.id, owner, repository: repository.replace(/\\.git$/i, ''), ref: repositoryRef.trim() || 'main', subdirectory: '' }) });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(typeof data?.error === 'string' ? data.error : 'Repository scan could not be queued.');
       setScanLogs([`[INFO] GitHub repository accepted: ${owner}/${repository}`, `[INFO] Pinned ref: ${repositoryRef.trim() || 'main'}`, '[INFO] Queued repository acquisition + SBOM + OSV + security engines.', `[INFO] Repository job: ${data.repositoryJobId}`, `[INFO] Security job: ${data.securityJobId}`]);
       setScanProgress(5);
-      setScanCompleted(false);
     } catch (error) { setScanLogs([`[ERROR] ${error instanceof Error ? error.message : 'Repository scan failed.'}`]); setIsScanning(false); }
     finally { setRepositoryBusy(false); }
   };
 
 '''
-          if 'const runRepositoryScan = async' not in text:
               if fn_marker not in text:
                   raise SystemExit('runActualScan marker not found')
               text = text.replace(fn_marker, helper + fn_marker, 1)
 
-          # Insert a simple repository control immediately before the scanner upload zone.
-          render_marker = "      <div"
-          if 'Connect a GitHub repository' not in text:
-              insert_ui = r'''      <div className="mb-5 rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface)] p-4">
-        <div className="text-sm font-semibold text-[var(--spr-text)]">Verify a complete GitHub repository</div>
-        <div className="mt-1 text-xs text-[var(--spr-text-muted)]">Paste a public repository. SPR will acquire the pinned source, discover manifests, generate/validate SBOM evidence, and queue the security pipeline.</div>
-        <div className="mt-3 flex flex-col gap-2 md:flex-row">
-          <input value={repositoryUrl} onChange={e => setRepositoryUrl(e.target.value)} placeholder="https://github.com/owner/repository" className="spr-input flex-1" aria-label="GitHub repository URL" />
-          <input value={repositoryRef} onChange={e => setRepositoryRef(e.target.value)} placeholder="main" className="spr-input md:w-28" aria-label="GitHub ref" />
-          <button type="button" onClick={() => void runRepositoryScan()} disabled={repositoryBusy || isScanning || !repositoryUrl.trim()} className="spr-btn spr-btn-primary whitespace-nowrap">{repositoryBusy ? 'Queueing…' : 'Verify Repository'}</button>
-        </div>
-      </div>
-
-'''
-              # Find the first scanner content div after the sub-tab area.
-              idx = text.find(render_marker)
-              if idx == -1: raise SystemExit('render marker not found')
-              text = text[:idx] + insert_ui + text[idx:]
+          if 'Verify a complete GitHub repository' not in text:
+              marker = "  // Executing actual backend AI Agent scanner with real-time logs polling"
+              ui = '''  <div className="mb-5 rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface)] p-4">
+    <div className="text-sm font-semibold text-[var(--spr-text)]">Verify a complete GitHub repository</div>
+    <div className="mt-1 text-xs text-[var(--spr-text-muted)]">Paste a public repository. SPR will acquire the pinned source, discover manifests, and queue the real security pipeline.</div>
+    <div className="mt-3 flex flex-col gap-2 md:flex-row">
+      <input value={repositoryUrl} onChange={e => setRepositoryUrl(e.target.value)} placeholder="https://github.com/owner/repository" className="spr-input flex-1" aria-label="GitHub repository URL" />
+      <input value={repositoryRef} onChange={e => setRepositoryRef(e.target.value)} placeholder="main" className="spr-input md:w-28" aria-label="GitHub ref" />
+      <button type="button" onClick={() => void runRepositoryScan()} disabled={repositoryBusy || isScanning || !repositoryUrl.trim()} className="spr-btn spr-btn-primary whitespace-nowrap">{repositoryBusy ? 'Queueing…' : 'Verify Repository'}</button>
+    </div>
+  </div>\n\n'''
+              if marker not in text:
+                  raise SystemExit('scanner UI marker not found')
+              text = text.replace(marker, ui + marker, 1)
 
           ui.write_text(text)
+          print('Universal scanner upgrade applied.')
+          PY
 
       - name: Typecheck
         run: npm run typecheck
 
       - name: Commit upgrade
-        shell: bash
         run: |
           if git diff --quiet; then
             echo "No changes needed."
