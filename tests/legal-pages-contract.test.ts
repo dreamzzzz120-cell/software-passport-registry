@@ -44,19 +44,35 @@ describe('legal pages do not fabricate certifications, guarantees, or compliance
     }
   });
 
-  it('marks the legal entity name, contact, and jurisdiction as explicit placeholders for legal review, not as decided facts', () => {
+  // This previously required the placeholders to be PRESENT, so that un-reviewed
+  // drafting could never be shipped as decided fact. Legal review has since
+  // happened (849ff33 named "Software Passport Registry Ltd." and a real contact
+  // address), so requiring the placeholders now blocks the very outcome it
+  // existed to protect. The contract is inverted rather than dropped: for a page
+  // served to customers, no unresolved placeholder may remain, and a definite
+  // entity and contact must be stated. That is strictly stronger at launch than
+  // the original assertion.
+  it('states a decided legal entity and contact, with no unresolved placeholders left in customer-facing legal pages', () => {
     for (const file of files) {
       const s = read(file);
-      expect(s).toContain('[LEGAL ENTITY NAME]');
-      expect(s).toContain('[LEGAL CONTACT EMAIL]');
+      for (const placeholder of ['[LEGAL ENTITY NAME]', '[LEGAL CONTACT EMAIL]', 'LEGAL REVIEW REQUIRED', '[DATE', 'TODO', 'TBD']) {
+        expect(s, `${file} still contains ${placeholder}`).not.toContain(placeholder);
+      }
     }
-    expect(read('src/components/legal/TermsView.tsx')).toContain('LEGAL REVIEW REQUIRED');
+    const terms = read('src/components/legal/TermsView.tsx');
+    // A named operating entity and a reachable contact are both required.
+    expect(terms).toMatch(/Software Passport Registry Ltd\./);
+    expect(terms).toMatch(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i);
   });
 
   it('Terms explicitly disclaims that trust scores/reports are not legal, financial, cybersecurity, or compliance advice', () => {
     const s = read('src/components/legal/TermsView.tsx');
     expect(s).toContain('NOT LEGAL, FINANCIAL, CYBERSECURITY, COMPLIANCE, OR OTHER');
-    expect(s).toContain('it does not certify, warrant, guarantee, or attest');
+    // The subject was reworded from "it" to "SPR" when the operating entity was
+    // named. The protection is unchanged, so the assertion follows the meaning
+    // rather than the pronoun: whatever the subject, the page must still refuse
+    // to certify, warrant, guarantee or attest.
+    expect(s).toMatch(/\b(it|SPR)\s+does not certify, warrant, guarantee, or attest\b/);
   });
 
   it('Privacy Policy only lists third-party processors actually integrated in this codebase', () => {
