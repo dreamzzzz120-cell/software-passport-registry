@@ -91,42 +91,45 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # The emulator's public signUp endpoint refuses a caller-supplied
-          # localId with a bare 400, which is what killed this job on every pull
-          # request it has ever run on. Let the emulator assign the uid and carry
-          # it forward instead: it is exported here and substituted into the seed
-          # SQL, so users.uid still matches the sub claim in the ID token.
+          # Use the Admin SDK for provisioning because the emulator's public
+          # accounts:update endpoint deliberately ignores emailVerified/localId
+          # changes from an ordinary API-key caller. The Admin SDK is privileged
+          # and produces deterministic verified/unverified identities for the
+          # authorization tests. ID tokens are still obtained through the public
+          # signInWithPassword endpoint so the tests exercise the real JWT path.
           create_user() {
-            local email="$1" out="$2" verify="$3" code
-            code=$(curl --silent --show-error -o "$out" -w '%{http_code}' -X POST -H 'content-type: application/json' -d "{\"email\":\"${email}\",\"password\":\"SecurityTest-Only-123!\",\"returnSecureToken\":true}" "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo-spr-security")
+            local email="$1" verify="$2"
+            node --input-type=module - "$email" "$verify" <<'NODE'
+          import { initializeApp, cert } from 'firebase-admin/app';
+          import { getAuth } from 'firebase-admin/auth';
+          const [email, verify] = process.argv.slice(2);
+          initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID });
+          const auth = getAuth();
+          try { await auth.deleteUser((await auth.getUserByEmail(email)).uid); } catch (error) {
+            if (error?.code !== 'auth/user-not-found') throw error;
+          }
+          const user = await auth.createUser({ email, password: 'SecurityTest-Only-123!', emailVerified: verify === 'true' });
+          process.stdout.write(user.uid);
+          NODE
+          }
+          token_for() {
+            local email="$1" out="$2" code
+            code=$(curl --silent --show-error -o "$out" -w '%{http_code}' -X POST -H 'content-type: application/json' -d "{\"email\":\"${email}\",\"password\":\"SecurityTest-Only-123!\",\"returnSecureToken\":true}" "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo-spr-security")
             if [ "$code" != '200' ]; then
-              echo "signUp for ${email} failed with HTTP ${code}:" >&2
+              echo "signIn for ${email} failed with HTTP ${code}:" >&2
               cat "$out" >&2
               return 1
             fi
-            if [ "$verify" = 'true' ]; then
-              local token
-              token=$(node -p "require('$out').idToken")
-              code=$(curl --silent --show-error -o /tmp/verify.json -w '%{http_code}' -X POST -H 'content-type: application/json' -d "{\"idToken\":\"${token}\",\"emailVerified\":true}" "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:update?key=demo-spr-security")
-              if [ "$code" != '200' ]; then
-                echo "emailVerified update for ${email} failed with HTTP ${code}:" >&2
-                cat /tmp/verify.json >&2
-                return 1
-              fi
-              code=$(curl --silent --show-error -o "$out" -w '%{http_code}' -X POST -H 'content-type: application/json' -d "{\"email\":\"${email}\",\"password\":\"SecurityTest-Only-123!\",\"returnSecureToken\":true}" "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo-spr-security")
-              if [ "$code" != '200' ]; then
-                echo "signIn for ${email} failed with HTTP ${code}:" >&2
-                cat "$out" >&2
-                return 1
-              fi
-            fi
           }
-          create_user tenant-a@security.test /tmp/a.json true
-          create_user tenant-b@security.test /tmp/b.json true
-          create_user unverified@security.test /tmp/u.json false
+          uid_a=$(create_user tenant-a@security.test true)
+          uid_b=$(create_user tenant-b@security.test true)
+          uid_u=$(create_user unverified@security.test false)
+          token_for tenant-a@security.test /tmp/a.json
+          token_for tenant-b@security.test /tmp/b.json
+          token_for unverified@security.test /tmp/u.json
           {
-            echo "SPR_TEST_TENANT_A_UID=$(node -p "require('/tmp/a.json').localId")"
-            echo "SPR_TEST_TENANT_B_UID=$(node -p "require('/tmp/b.json').localId")"
+            echo "SPR_TEST_TENANT_A_UID=$uid_a"
+            echo "SPR_TEST_TENANT_B_UID=$uid_b"
             echo "SPR_TEST_TENANT_A_ID_TOKEN=$(node -p "require('/tmp/a.json').idToken")"
             echo "SPR_TEST_TENANT_B_ID_TOKEN=$(node -p "require('/tmp/b.json').idToken")"
             echo "SPR_TEST_UNVERIFIED_ID_TOKEN=$(node -p "require('/tmp/u.json').idToken")"
