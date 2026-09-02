@@ -107,15 +107,18 @@ jobs:
             if [ "$verify" = 'true' ]; then
               local token
               token=$(node -p "require('$out').idToken")
-              code=$(curl --silent --show-error -o /tmp/verify.json -w '%{http_code}' -X POST -H 'content-type: application/json' -d "{\"idToken\":\"${token}\",\"emailVerified\":true}" "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:update?key=demo-spr-security")
+              # A diagnostic run (decoding the exported token's own claims rather
+              # than trusting the emulator's HTTP 200) showed email_verified=false
+              # reaching the app even though this update call succeeds -- the
+              # follow-up accounts:signInWithPassword this used to make (fetching
+              # a "fresh" token from a second, separate call) does not carry the
+              # update forward on this emulator. accounts:update accepts
+              # returnSecureToken itself and mints a token that reflects the
+              # change directly in the same response, so ask it to and use that
+              # token -- there is nothing left for a second signIn to accomplish.
+              code=$(curl --silent --show-error -o "$out" -w '%{http_code}' -X POST -H 'content-type: application/json' -d "{\"idToken\":\"${token}\",\"emailVerified\":true,\"returnSecureToken\":true}" "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:update?key=demo-spr-security")
               if [ "$code" != '200' ]; then
                 echo "emailVerified update for ${email} failed with HTTP ${code}:" >&2
-                cat /tmp/verify.json >&2
-                return 1
-              fi
-              code=$(curl --silent --show-error -o "$out" -w '%{http_code}' -X POST -H 'content-type: application/json' -d "{\"email\":\"${email}\",\"password\":\"SecurityTest-Only-123!\",\"returnSecureToken\":true}" "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo-spr-security")
-              if [ "$code" != '200' ]; then
-                echo "signIn for ${email} failed with HTTP ${code}:" >&2
                 cat "$out" >&2
                 return 1
               fi
