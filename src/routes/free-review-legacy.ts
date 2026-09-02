@@ -18,7 +18,14 @@ const DAILY_SUBMISSIONS_PER_IP = 5;
 const submitSchema = z.object({
   owner: z.string().regex(/^[A-Za-z0-9_.-]{1,100}$/),
   repository: z.string().regex(/^[A-Za-z0-9_.-]{1,100}$/),
-  ref: z.string().min(1).max(200).default('main'),
+  // Deliberately NOT defaulted to 'main'. This default was stored verbatim in
+  // repository_scan_sources.requested_ref, so the worker's own
+  // `source.requested_ref || defaultBranch` fallback could never fire for a Free
+  // Review: the value was always the literal string 'main'. Every repository on
+  // master, trunk or develop failed with REPOSITORY_REF_NOT_FOUND. Left absent,
+  // the worker resolves the repository's real default branch from the metadata
+  // it already fetches. A caller may still pin an explicit ref.
+  ref: z.string().min(1).max(200).optional(),
 }).strict();
 
 function id(prefix: string) { return `${prefix}_${crypto.randomUUID().replace(/-/g, '')}`; }
@@ -36,6 +43,8 @@ export function createLegacyFreeReviewRouter() {
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
       if (!config.publicPassport.secret) return res.status(503).json({ error: 'Free Review is not configured on this deployment' });
       const { owner, repository, ref } = parsed.data;
+      // null, not 'main': the worker resolves the repository's real default branch.
+      const requestedRef = ref ?? null;
       const ipHash = hashIp(req);
       const scopedDb = await attachTenantScope(FREE_REVIEW_TENANT_ID, res);
       const recentCount = Number((await scopedDb.execute(sql`SELECT count(*)::int AS count FROM free_review_submissions WHERE tenant_id=${FREE_REVIEW_TENANT_ID} AND ip_hash=${ipHash} AND created_at > NOW() - INTERVAL '24 hours'`) as any).rows?.[0]?.count || 0);
@@ -47,8 +56,8 @@ export function createLegacyFreeReviewRouter() {
       const repositoryJobId = id('job');
       const securityJobId = id('job');
       await scopedDb.execute(sql`INSERT INTO agent_jobs (id,tenant_id,agent_id,passport_id,job_type,status,progress,next_attempt_at,created_at,updated_at) VALUES (${repositoryJobId},${FREE_REVIEW_TENANT_ID},'repository-scanner',${passportId},'repository_scan','Pending',0,NOW(),NOW(),NOW()),(${securityJobId},${FREE_REVIEW_TENANT_ID},'security-scanner',${passportId},'repository_security_scan','Pending',0,NOW(),NOW(),NOW())`);
-      await scopedDb.execute(sql`INSERT INTO repository_scan_sources (id,job_id,tenant_id,connection_id,provider,repository_owner,repository_name,requested_ref,repository_subdirectory,created_at) VALUES (${id('source')},${repositoryJobId},${FREE_REVIEW_TENANT_ID},${connectionId},'github',${owner},${repository},${ref},'',NOW())`);
-      await scopedDb.execute(sql`INSERT INTO repository_scan_sources (id,job_id,tenant_id,connection_id,provider,repository_owner,repository_name,requested_ref,repository_subdirectory,created_at) VALUES (${id('source')},${securityJobId},${FREE_REVIEW_TENANT_ID},${connectionId},'github',${owner},${repository},${ref},'',NOW())`);
+      await scopedDb.execute(sql`INSERT INTO repository_scan_sources (id,job_id,tenant_id,connection_id,provider,repository_owner,repository_name,requested_ref,repository_subdirectory,created_at) VALUES (${id('source')},${repositoryJobId},${FREE_REVIEW_TENANT_ID},${connectionId},'github',${owner},${repository},${requestedRef},'',NOW())`);
+      await scopedDb.execute(sql`INSERT INTO repository_scan_sources (id,job_id,tenant_id,connection_id,provider,repository_owner,repository_name,requested_ref,repository_subdirectory,created_at) VALUES (${id('source')},${securityJobId},${FREE_REVIEW_TENANT_ID},${connectionId},'github',${owner},${repository},${requestedRef},'',NOW())`);
       await scopedDb.execute(sql`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES (${repositoryJobId},'repository-scanner','Queued Free Review GitHub acquisition + Syft SBOM + OSV dependency scan.','Info'),(${securityJobId},'security-scanner','Queued Free Review secret, IaC/configuration, license and OSV scan.','Info')`);
       await scopedDb.execute(sql`INSERT INTO free_review_submissions (id,tenant_id,passport_id,repository_owner,repository_name,ip_hash,status) VALUES (${id('freereview')},${FREE_REVIEW_TENANT_ID},${passportId},${owner},${repository},${ipHash},'Pending')`);
       const expiresAt = Math.floor(Date.now() / 1000) + STATUS_TOKEN_TTL_SECONDS;

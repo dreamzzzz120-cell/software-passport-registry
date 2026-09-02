@@ -34,12 +34,24 @@ async function processSecurityJob(pool: Pool, job: any) {
 
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), `spr-sec-${job.id}-`));
   try {
-    const requestedRef = source.requested_ref || 'main';
     const repoApi = `https://api.github.com/repos/${encodeURIComponent(source.repository_owner)}/${encodeURIComponent(source.repository_name)}`;
     const metadataResponse = await fetch(repoApi, { redirect: 'error', headers: { accept: 'application/vnd.github+json', 'user-agent': 'spr-security-worker/1.0' } });
     if (!metadataResponse.ok) throw new Error(metadataResponse.status === 404 ? 'REPOSITORY_NOT_FOUND' : 'REPOSITORY_ACCESS_DENIED');
     const metadata: any = await metadataResponse.json();
     if (metadata.private) throw new Error('REPOSITORY_ACCESS_DENIED');
+    // The ref used to default to the literal string 'main', so every repository
+    // whose default branch is anything else -- master, trunk, develop -- failed
+    // with REPOSITORY_REF_NOT_FOUND. Free Review then reported scanStatus
+    // "partial" with no evidence and no passport, and until the failure was
+    // logged there was nothing to say why. Verified in production against
+    // octocat/Hello-World, whose default branch is master.
+    //
+    // GitHub already tells us the answer in the metadata response fetched
+    // immediately above, so this needs no extra request: prefer an explicitly
+    // requested ref, then the repository's real default branch, and keep 'main'
+    // only as a last resort for a malformed metadata payload.
+    const defaultBranch = typeof metadata.default_branch === 'string' && metadata.default_branch.trim() ? metadata.default_branch.trim() : '';
+    const requestedRef = source.requested_ref || defaultBranch || 'main';
     const commitResponse = await fetch(`${repoApi}/commits/${encodeURIComponent(requestedRef)}`, { redirect: 'error', headers: { accept: 'application/vnd.github+json', 'user-agent': 'spr-security-worker/1.0' } });
     if (!commitResponse.ok) throw new Error('REPOSITORY_REF_NOT_FOUND');
     const commit: any = await commitResponse.json();
