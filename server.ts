@@ -56,9 +56,32 @@ app.disable('x-powered-by');
 if (config.sentry.dsn) Sentry.init({ dsn: config.sentry.dsn, environment: config.nodeEnv, tracesSampleRate: config.isProduction ? 0.1 : 1.0 });
 const allowedOrigins = new Set(normalizeAllowedOrigins(config.allowedOrigins));
 const appOrigin = config.appUrl ? new URL(config.appUrl).origin : undefined;
+
+// connect-src was 'self' plus the app origin only, which silently broke the two
+// things the browser genuinely has to reach off-origin:
+//
+//   1. Firebase Authentication. The SDK calls identitytoolkit for sign-in,
+//      sign-up and password reset, and securetoken to refresh ID tokens. With
+//      those blocked the fetch never left the browser, so clicking "Sign in"
+//      did nothing at all -- no request, and no error surfaced to the user.
+//   2. Universal Intake uploads. src/components/UniversalIntakeView.tsx PUTs
+//      the file straight to the Supabase signed URL returned by
+//      /api/intake/upload-url, so that origin has to be reachable too.
+//
+// Listed explicitly rather than widened to `https:` -- the point of connect-src
+// is to bound where a compromised script may exfiltrate to, and 'https:' would
+// give that away for no benefit. The Supabase origin is derived from the same
+// SUPABASE_URL the intake route uses, so it cannot drift between environments.
+const FIREBASE_AUTH_ORIGINS = ['https://identitytoolkit.googleapis.com', 'https://securetoken.googleapis.com'];
+const supabaseOrigin = (() => {
+  const raw = process.env.SUPABASE_URL?.trim();
+  if (!raw) return undefined;
+  try { return new URL(raw).origin; } catch { console.error('[SPR] SUPABASE_URL is not a valid URL; intake uploads will be blocked by CSP.'); return undefined; }
+})();
+const connectSrc = ["'self'", ...(appOrigin ? [appOrigin] : []), ...FIREBASE_AUTH_ORIGINS, ...(supabaseOrigin ? [supabaseOrigin] : [])];
 const VERCEL_TEAM_PREVIEW_ORIGIN = /^https:\/\/[a-z0-9-]+-sprteam\.vercel\.app$/i;
 const corsOrigin = (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) => { if (!origin) return callback(null, true); try { const normalizedOrigin = new URL(origin).origin; if (allowedOrigins.has(normalizedOrigin)) return callback(null, true); if (VERCEL_TEAM_PREVIEW_ORIGIN.test(normalizedOrigin)) return callback(null, true); } catch (_) {} return callback(new Error('CORS origin denied')); };
-app.use(helmet({ contentSecurityPolicy: { useDefaults: false, directives: { defaultSrc: ["'self'"], baseUri: ["'self'"], objectSrc: ["'none'"], frameAncestors: ["'none'"], formAction: ["'self'"], scriptSrc: ["'self'", "'sha256-kWQT+628v4D1A4MJk9hTD6a0W1AdPlPKtzhPlYKIpZc='"], styleSrc: ["'self'", "'unsafe-inline'"], imgSrc: ["'self'", 'data:', 'blob:', 'https:'], fontSrc: ["'self'", 'data:', 'https:'], connectSrc: ["'self'", ...(appOrigin ? [appOrigin] : [])], frameSrc: ["'self'", 'https:'], workerSrc: ["'self'", 'blob:'], manifestSrc: ["'self'"], upgradeInsecureRequests: [] } }, crossOriginEmbedderPolicy: false, frameguard: { action: 'deny' }, referrerPolicy: { policy: 'no-referrer' } }));
+app.use(helmet({ contentSecurityPolicy: { useDefaults: false, directives: { defaultSrc: ["'self'"], baseUri: ["'self'"], objectSrc: ["'none'"], frameAncestors: ["'none'"], formAction: ["'self'"], scriptSrc: ["'self'", "'sha256-kWQT+628v4D1A4MJk9hTD6a0W1AdPlPKtzhPlYKIpZc='"], styleSrc: ["'self'", "'unsafe-inline'"], imgSrc: ["'self'", 'data:', 'blob:', 'https:'], fontSrc: ["'self'", 'data:', 'https:'], connectSrc, frameSrc: ["'self'", 'https:'], workerSrc: ["'self'", 'blob:'], manifestSrc: ["'self'"], upgradeInsecureRequests: [] } }, crossOriginEmbedderPolicy: false, frameguard: { action: 'deny' }, referrerPolicy: { policy: 'no-referrer' } }));
 app.use(cors({ origin: corsOrigin, credentials: true, methods: ['GET','HEAD','POST','PUT','PATCH','DELETE','OPTIONS'], allowedHeaders: ['Authorization','Content-Type','X-Request-ID','X-API-Key'] }));
 app.use((req, res, next) => { if (req.method === 'TRACE' || req.method === 'CONNECT') return res.status(405).json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'HTTP method is not allowed.' } }); if (req.headers['content-length'] && !/^\d+$/.test(String(req.headers['content-length']))) return res.status(400).json({ error: { code: 'INVALID_CONTENT_LENGTH', message: 'Invalid Content-Length header.' } }); return next(); });
 app.post('/api/billing/webhook', express.raw({ type: 'application/json', limit: requestBodyLimit }), stripeWebhookHandler);
@@ -70,7 +93,12 @@ app.get('/health', (_req, res) => res.status(200).json({ status: 'ok', service: 
 // runtimeRole is reported, not gated: it makes a silent fallback to the owner connection
 // (see validateConfiguration's APP_DATABASE_URL check) visible to an operator without
 // giving the healthcheck a new way to fail a deploy.
-app.get('/ready', async (_req, res) => { const database = await checkDatabaseHealth(); let rls = true; if (database.ok) { try { await db.execute(sql`SELECT spr_assert_tenant_rls()`); } catch { rls = false; } } let runtimeRole: string | null = null; if (database.ok) { try { const scoped = await appPool.query('SELECT current_user AS role'); runtimeRole = scoped.rows?.[0]?.role ?? null; } catch { runtimeRole = null; } } const ready = database.ok && rls; res.status(ready ? 200 : 503).json({ status: ready ? 'ready' : 'not_ready', checks: { database: database.ok ? database : { ok: false, latencyMs: database.latencyMs, error: 'DATABASE_UNAVAILABLE' }, tenantRls: { ok: rls }, runtimeRole: { role: runtimeRole, leastPrivilege: runtimeRole === 'spr_app_runtime' } }, uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000) }); });
+// rls starts null, not true: when the database is unreachable the assertion is
+// never run, and reporting {"tenantRls":{"ok":true}} would claim a check that
+// did not happen. null means "not checked" -- the same distinction between
+// unknown and passing that the product makes everywhere else. Readiness still
+// requires an explicit true.
+app.get('/ready', async (_req, res) => { const database = await checkDatabaseHealth(); let rls: boolean | null = null; if (database.ok) { try { await db.execute(sql`SELECT spr_assert_tenant_rls()`); rls = true; } catch { rls = false; } } let runtimeRole: string | null = null; if (database.ok) { try { const scoped = await appPool.query('SELECT current_user AS role'); runtimeRole = scoped.rows?.[0]?.role ?? null; } catch { runtimeRole = null; } } const ready = database.ok && rls === true; res.status(ready ? 200 : 503).json({ status: ready ? 'ready' : 'not_ready', checks: { database: database.ok ? database : { ok: false, latencyMs: database.latencyMs, error: 'DATABASE_UNAVAILABLE' }, tenantRls: { ok: rls }, runtimeRole: { role: runtimeRole, leastPrivilege: runtimeRole === 'spr_app_runtime' } }, uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000) }); });
 app.get('/api/health', async (_req, res) => { const database = await checkDatabaseHealth(); res.status(database.ok ? 200 : 503).json({ status: database.ok ? 'ok' : 'degraded', database: database.ok ? database : { ok: false, latencyMs: database.latencyMs, error: 'DATABASE_UNAVAILABLE' } }); });
 app.use('/api', rateLimiter);
 app.use('/api', createAuthRouter());

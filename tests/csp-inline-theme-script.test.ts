@@ -20,6 +20,23 @@ describe('inline theme script is allowed by hash, not by unsafe-inline', () => {
     expect(scriptSrc).not.toContain("'unsafe-inline'");
   });
 
+  // The behavioural version of this lives in tests/security/http-hardening.test.ts,
+  // which asserts the real response header -- but that suite only runs with
+  // NODE_ENV=test. This keeps a regression from reaching main through the
+  // default gate, because the failure mode is silent: the browser blocks the
+  // request, the server logs nothing, and sign-in simply does nothing.
+  it('connect-src reaches Firebase Auth and the intake store, and is not widened to https:', () => {
+    const server = read('server.ts');
+    expect(server).toContain('https://identitytoolkit.googleapis.com');
+    expect(server).toContain('https://securetoken.googleapis.com');
+    // The Supabase origin is derived from SUPABASE_URL rather than hardcoded,
+    // so assert the derivation exists rather than a literal host.
+    expect(server).toContain('supabaseOrigin');
+    const connectSrc = server.match(/const connectSrc = \[[^\]]*\]/)?.[0] ?? '';
+    expect(connectSrc).toContain("'self'");
+    expect(connectSrc).not.toMatch(/['"]https:['"]/);
+  });
+
   it('the helmet CSP carries the same quoted hash and never unsafe-inline', () => {
     const server = read('server.ts');
     const scriptSrc = server.match(/scriptSrc: \[[^\]]*\]/)?.[0] ?? '';

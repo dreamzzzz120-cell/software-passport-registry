@@ -114,8 +114,16 @@ describe('readiness keeps asserting the tenant RLS invariant', () => {
   it('runs spr_assert_tenant_rls() in the readiness handler and fails readiness when it throws', () => {
     const server = read('server.ts');
     expect(server).toContain('SELECT spr_assert_tenant_rls()');
-    expect(server).toContain('const ready = database.ok && rls;');
+    // The readiness gate was tightened from `database.ok && rls` to
+    // `database.ok && rls === true`, because rls is now tri-state: it starts
+    // null so that an unreachable database reports {"tenantRls":{"ok":null}}
+    // -- "not checked" -- instead of claiming a passing assertion that never
+    // ran. Requiring an explicit true keeps null and false both un-ready, so
+    // this is strictly stronger than the expression it replaces.
+    expect(server).toContain('const ready = database.ok && rls === true;');
     expect(server).toContain('tenantRls: { ok: rls }');
+    // null must never be able to satisfy readiness.
+    expect(server).not.toMatch(/const ready = database\.ok && rls;/);
   });
 
   it('ships a migration that forces RLS, so the assertion is satisfiable rather than aspirational', () => {

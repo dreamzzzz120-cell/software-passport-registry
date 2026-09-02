@@ -13,6 +13,17 @@ startCommand = "npm start"
 # "npm run release" is one entry, and npm runs its script through a shell, so
 # the chain works. Both steps are idempotent.
 preDeployCommand = ["npm run release"]
-healthcheckPath = "/health"
+# /health is deliberately shallow -- it returns 200 on uptime alone and checks
+# nothing. Pointing Railway at it meant the platform kept routing traffic to an
+# application that was telling anyone who asked that it was NOT ready: production
+# served 503 from /ready with {"tenantRls":{"ok":false}} for hours while the
+# deployment showed healthy, which is how the intake RLS gap went unnoticed.
+#
+# /ready is the deep probe: database reachability plus spr_assert_tenant_rls().
+# Verified to fail closed before this switch was made -- with the database
+# unreachable /health still answers 200 while /ready answers 503
+# {"database":{"ok":false,"error":"DATABASE_UNAVAILABLE"}}, so a dependency
+# failure now fails the deployment instead of being declared healthy.
+healthcheckPath = "/ready"
 healthcheckTimeout = 180
 restartPolicyType = "ALWAYS"
