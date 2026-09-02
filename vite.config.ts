@@ -15,6 +15,26 @@ export default defineConfig(({ mode }) => {
     measurementId: env('VITE_FIREBASE_MEASUREMENT_ID') ?? env('measurementId'),
   };
 
+  // These values are inlined into the client bundle below. If they are absent the
+  // build still succeeds and the app still renders -- it just reports
+  // "Authentication is disabled" in the console and nobody can sign in. That is
+  // exactly how a deploy shipped with sign-in silently dead.
+  //
+  // Opt-in rather than always-on: CI and local builds legitimately run without
+  // Firebase credentials, so only a build that declares it is producing a
+  // deployable image (the Dockerfile sets this) is held to the requirement.
+  if (env('SPR_REQUIRE_FIREBASE_CONFIG') === 'true') {
+    const required = { apiKey: 'VITE_FIREBASE_API_KEY', authDomain: 'VITE_FIREBASE_AUTH_DOMAIN', projectId: 'VITE_FIREBASE_PROJECT_ID', appId: 'VITE_FIREBASE_APP_ID' } as const;
+    const absent = (Object.keys(required) as Array<keyof typeof required>).filter((key) => !firebaseEnv[key]);
+    if (absent.length) {
+      throw new Error(
+        `Refusing to build a deployable bundle without Firebase browser configuration. Missing: ${absent
+          .map((key) => required[key])
+          .join(', ')}. Pass them as Docker build args; without them the shipped app renders but sign-in is disabled.`,
+      );
+    }
+  }
+
   return {
     define: {
       'import.meta.env.VITE_FIREBASE_API_KEY': JSON.stringify(firebaseEnv.apiKey ?? ''),
