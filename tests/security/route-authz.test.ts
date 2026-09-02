@@ -37,6 +37,22 @@ describeRoute('authenticated tenant authorization boundaries', () => {
     expect(passportA).not.toBe(passportB);
   });
 
+  it('DIAGNOSTIC: print the actual 403 body', async () => {
+    const response = await fetch(`${baseUrl}/api/trust-loop/findings?passportId=${encodeURIComponent(passportB!)}`, { headers: auth(tokenA!) });
+    const bodyText = await response.text();
+    console.log('DIAG_STATUS=' + response.status);
+    console.log('DIAG_BODY=' + bodyText);
+    // Also print what the token itself decodes to, and what's actually in the
+    // users table, so a mismatch between them is visible directly rather than
+    // inferred.
+    const [, payloadB64] = tokenA!.split('.');
+    const payload = JSON.parse(Buffer.from(payloadB64, 'base64').toString('utf8'));
+    console.log('DIAG_TOKEN_UID=' + payload.user_id);
+    console.log('DIAG_TOKEN_EMAIL=' + payload.email);
+    console.log('DIAG_TOKEN_EMAIL_VERIFIED=' + payload.email_verified);
+    console.log('DIAG_SEEDED_UID=' + process.env.SPR_TEST_TENANT_A_UID);
+  });
+
   it('Tenant A cannot observe Tenant B findings', async () => {
     const response = await fetch(`${baseUrl}/api/trust-loop/findings?passportId=${encodeURIComponent(passportB!)}`, { headers: auth(tokenA!) });
     expect(response.status).toBe(200);
