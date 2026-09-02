@@ -1,4 +1,4 @@
-FROM node:22-slim AS builder
+FROM node:26-slim AS builder
 WORKDIR /app
 ENV NODE_ENV=development
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false
@@ -46,7 +46,7 @@ RUN test -f dist/index.html || (echo 'FATAL: vite build produced no dist/index.h
 RUN npm run build:owner-bootstrap
 RUN npm prune --omit=dev --no-audit --no-fund
 
-FROM node:22-slim AS runtime
+FROM node:26-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false
