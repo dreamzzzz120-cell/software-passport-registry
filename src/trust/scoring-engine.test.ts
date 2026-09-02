@@ -4,28 +4,25 @@ import { calculateCanonicalScores, type CanonicalScoreInput, VERIFIED_COMPLETENE
 const noEvidence: CanonicalScoreInput = { findings: [], evidence: { totalUnits: 0, knownUnits: 0 } };
 
 describe('calculateCanonicalScores', () => {
-  // Test A / B: a passport with zero evidence must not be scored 100 (looks
-  // perfect) or 0 (looks like a confirmed failure) -- both fabricate a
-  // conclusion nothing was actually checked to support.
-  it('assigns null scores and unverified status when there is no evidence at all', () => {
+  it('assigns null scores and null completeness when there is no evidence at all', () => {
     const result = calculateCanonicalScores(noEvidence);
     expect(result.overallScore).toBeNull();
     expect(result.securityScore).toBeNull();
     expect(result.complianceScore).toBeNull();
     expect(result.vendorReputationScore).toBeNull();
     expect(result.confidenceScore).toBeNull();
-    expect(result.evidenceCompleteness).toBe(0);
+    expect(result.evidenceCompleteness).toBeNull();
     expect(result.verificationStatus).toBe('unverified');
   });
 
-  it('also treats evidence that exists but was never resolved (all UNKNOWN) as unverified', () => {
+  it('keeps 0% completeness distinct from no evidence when evidence exists but is all UNKNOWN', () => {
     const result = calculateCanonicalScores({ findings: [], evidence: { totalUnits: 10, knownUnits: 0 } });
+    expect(result.evidenceCompleteness).toBe(0);
     expect(result.overallScore).toBeNull();
+    expect(result.confidenceScore).toBeNull();
     expect(result.verificationStatus).toBe('unverified');
   });
 
-  // Test C: sparse evidence must not falsely read as a clean 100, and must
-  // carry a visible confidence/completeness figure with a provisional status.
   it('does not report a perfect score from sparse evidence, and marks it partial', () => {
     const result = calculateCanonicalScores({ findings: [], evidence: { totalUnits: 20, knownUnits: 2, freshness: 1 } });
     expect(result.overallScore).not.toBeNull();
@@ -41,8 +38,6 @@ describe('calculateCanonicalScores', () => {
     expect(justBelow.verificationStatus).toBe('partial');
   });
 
-  // Test D: security and compliance must come from their own findings, not
-  // both mirror one generic penalty (the original trust-loop.ts bug).
   it('scores security and compliance independently from their own findings', () => {
     const clean = { hasValidSignature: true, hasAuditReport: true };
     const securityOnly = calculateCanonicalScores({
@@ -61,7 +56,6 @@ describe('calculateCanonicalScores', () => {
     expect(complianceOnly.securityScore).toBe(100);
   });
 
-  // Test F: identical input must always produce identical output.
   it('is deterministic for identical evidence', () => {
     const input: CanonicalScoreInput = {
       findings: [{ severity: 'high', category: 'security', open: true }, { severity: 'medium', category: 'compliance', open: true }],
@@ -72,8 +66,6 @@ describe('calculateCanonicalScores', () => {
     expect(second).toEqual(first);
   });
 
-  // Test G: evidence must be able to move the score, and "no open findings"
-  // is only a real 100 when there was enough evidence to justify it.
   it('lowers the score when a new open finding is added, and only reports 100 when evidence actually supports it', () => {
     const cleanEvidence = { totalUnits: 10, knownUnits: 10, hasValidSignature: true, hasAuditReport: true };
     const clean = calculateCanonicalScores({ findings: [], evidence: cleanEvidence });
