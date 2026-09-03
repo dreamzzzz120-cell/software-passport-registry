@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type Key } from 'react';
 import { apiFetch } from '../utils/apiClient';
 import { EXTENSION_BY_ID, type ExtensionDefinition } from '../workflows/extensionRegistry';
+import NewReviewIntake from './NewReviewIntake';
 
 type Props = { id: string; onNavigate: (path: string) => void };
 type MetricValue = number | null;
@@ -27,6 +28,7 @@ export default function ExtensionWorkflow({ id, onNavigate }: Props) {
   const [activeStep, setActiveStep] = useState(0);
 
   useEffect(() => {
+    if (id === 'new-review') { setLoading(false); return; }
     let cancelled = false;
     const load = async () => {
       setLoading(true);
@@ -69,6 +71,7 @@ export default function ExtensionWorkflow({ id, onNavigate }: Props) {
   }, [id, snapshot]);
 
   if (!extension) return <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-8 text-[var(--spr-red)]">Extension not found.</div>;
+  if (id === 'new-review') return <NewReviewIntake />;
   if (unauthorized) return <div className="spr-panel p-8"><div className="text-[10px] font-bold uppercase tracking-[.2em] text-[var(--spr-amber)]">Session expired</div><h1 className="mt-2 text-2xl font-semibold text-[var(--spr-text)]">Re-authentication required</h1><p className="mt-2 text-sm text-[var(--spr-text-muted)]">The extension could not access its protected evidence sources.</p><button onClick={() => onNavigate('/login')} className="spr-btn spr-btn-primary mt-5">Return to sign in</button></div>;
 
   const firstRoute = extension.sourceRoutes[0] || '/dashboard';
@@ -76,11 +79,7 @@ export default function ExtensionWorkflow({ id, onNavigate }: Props) {
     <div className="spr-panel p-6 md:p-8">
       <div><div className="mb-4 flex flex-wrap items-center gap-2"><span className="rounded-sm border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[.18em] text-[#4ec9b0]">Extension workflow</span><span className="rounded-sm border border-[var(--spr-border)] px-2.5 py-1 text-[10px] text-[var(--spr-green)]">Protected evidence surface</span></div><h1 className="max-w-3xl text-3xl font-semibold tracking-tight text-[var(--spr-text)] md:text-4xl">{extension.name}</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--spr-text-muted)]">{extension.description}</p><div className="mt-6 flex flex-wrap gap-3"><button onClick={() => onNavigate(firstRoute)} className="spr-btn spr-btn-primary">Open source workflow</button><button onClick={() => setActiveStep((step) => Math.min(step + 1, extension.steps.length - 1))} className="spr-btn spr-btn-secondary">Advance workflow</button></div></div>
     </div>
-
-    {/* Indexed rather than destructured: metrics is a readonly tuple array,
-        which cannot be assigned to a mutable [label, value] parameter. */}
     <div className="grid gap-3 md:grid-cols-3">{metrics.map((entry) => <Metric key={entry[0]} label={entry[0]} value={entry[1]} loading={loading} />)}</div>
-
     <div className="grid gap-5 xl:grid-cols-[1.1fr_.9fr]">
       <div className="spr-panel p-5"><div className="mb-4"><div className="text-sm font-semibold text-[var(--spr-text)]">Workflow</div><div className="mt-1 text-xs text-[var(--spr-text-faint)]">Every extension owns its own operating sequence.</div></div><div className="space-y-2">{extension.steps.map((step, index) => <Step key={step} index={index} label={step} active={index === activeStep} />)}</div></div>
       <div className="spr-panel p-5"><div className="text-sm font-semibold text-[var(--spr-text)]">Observed evidence surface</div><p className="mt-1 text-xs leading-5 text-[var(--spr-text-faint)]">Counts are displayed only when the protected API returns a recognized collection. Unavailable sources are explicitly marked <span className="text-[var(--spr-text-muted)]">Not verified</span>.</p>{loadFailed && <div className="mt-3 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-3 text-xs text-[var(--spr-red)]">Evidence sources could not be loaded. No values are inferred.</div>}<div className="mt-5 space-y-3 text-xs">{[['Passports', snapshot.passports, '/passports'], ['Scans', snapshot.scans, '/scans'], ['Findings', snapshot.findings, '/alerts'], ['Clients', snapshot.clients, '/clients']].map(([label, value, path]) => <button key={String(label)} onClick={() => onNavigate(String(path))} className="flex w-full items-center justify-between rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-3 text-left hover:bg-[var(--spr-surface-hover)]"><span className="text-[var(--spr-text-muted)]">{label}</span><span className="font-semibold text-[var(--spr-text)]">{loading ? '—' : value === null ? 'Not verified' : String(value)} <span className="ml-2 text-[var(--spr-text-faint)]">→</span></span></button>)}</div></div>
