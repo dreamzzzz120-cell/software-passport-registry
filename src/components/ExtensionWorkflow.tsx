@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type Key } from 'react';
 import { apiFetch } from '../utils/apiClient';
 import { EXTENSION_BY_ID, type ExtensionDefinition } from '../workflows/extensionRegistry';
 import NewReviewIntake from './NewReviewIntake';
+import MSPStackCommandCenter from './MSPStackCommandCenter';
 
 type Props = { id: string; onNavigate: (path: string) => void };
 type MetricValue = number | null;
@@ -28,7 +29,7 @@ export default function ExtensionWorkflow({ id, onNavigate }: Props) {
   const [activeStep, setActiveStep] = useState(0);
 
   useEffect(() => {
-    if (id === 'new-review') { setLoading(false); return; }
+    if (id === 'new-review' || id === 'msp-command-center') { setLoading(false); return; }
     let cancelled = false;
     const load = async () => {
       setLoading(true);
@@ -63,7 +64,6 @@ export default function ExtensionWorkflow({ id, onNavigate }: Props) {
   }, [id]);
 
   const metrics = useMemo(() => {
-    if (id === 'msp-compliance') return [['Clients', snapshot.clients], ['Findings', snapshot.findings], ['Passports', snapshot.passports]] as const;
     if (id === 'integrations') return [['Sources', snapshot.integrations], ['Passports', snapshot.passports], ['Scans', snapshot.scans]] as const;
     if (id === 'vendor-risk') return [['Passports / assets', snapshot.passports], ['Findings', snapshot.findings], ['Clients', snapshot.clients]] as const;
     if (id === 'agent-trust') return [['Agent evidence', snapshot.findings], ['Passports / assets', snapshot.passports], ['Scans', snapshot.scans]] as const;
@@ -72,6 +72,7 @@ export default function ExtensionWorkflow({ id, onNavigate }: Props) {
 
   if (!extension) return <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-8 text-[var(--spr-red)]">Extension not found.</div>;
   if (id === 'new-review') return <NewReviewIntake />;
+  if (id === 'msp-command-center') return <MSPStackCommandCenter onNavigate={onNavigate} />;
   if (unauthorized) return <div className="spr-panel p-8"><div className="text-[10px] font-bold uppercase tracking-[.2em] text-[var(--spr-amber)]">Session expired</div><h1 className="mt-2 text-2xl font-semibold text-[var(--spr-text)]">Re-authentication required</h1><p className="mt-2 text-sm text-[var(--spr-text-muted)]">The extension could not access its protected evidence sources.</p><button onClick={() => onNavigate('/login')} className="spr-btn spr-btn-primary mt-5">Return to sign in</button></div>;
 
   const firstRoute = extension.sourceRoutes[0] || '/dashboard';
