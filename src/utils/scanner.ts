@@ -875,7 +875,7 @@ Respond with ONLY a JSON object, no markdown code fences, matching exactly this 
         overallScore: calculatedScores.overallScore ?? 0,
         securityScore: calculatedScores.securityScore ?? 0,
         complianceScore: calculatedScores.complianceScore ?? 0,
-        vendorReputationScore: calculatedScores.vendorScore ?? 0 ?? 0
+        vendorReputationScore: calculatedScores.vendorScore ?? 0
       })
       .where(and(eq(passports.id, passportId), eq(passports.tenantId, tenantId)));
 
