@@ -21,6 +21,7 @@ import { z } from 'zod';
 import { verifyEvidenceIntegrity } from './evidence-integrity.ts';
 import { config } from '../config.ts';
 import { calculateAndPersistPassportScore, type CanonicalFinding } from '../trust/scoring-engine.ts';
+import { guardAIClaims } from '../security/ai-claim-guard.ts';
 
 // Structured, validated shape required from the Gemini evidence-reasoning
 // call below - see the MODULE 8 comment for why this exists.
@@ -799,8 +800,44 @@ Respond with ONLY a JSON object, no markdown code fences, matching exactly this 
           throw new Error('AI_OUTPUT_UNSUPPORTED_EVIDENCE: Gemini cited an evidence/finding id that was not present in the supplied snapshot.');
         }
 
-        aiSummaryText = parsed.data.summary;
-        await logJobStep(jobId, 'ai-evidence-reasoning', 'Gemini Reasoning complete. Executive audit successfully compiled.');
+        const groundedSummary = parsed.data.summary;
+        const guardResult = guardAIClaims(groundedSummary, {
+          evidenceIds: [...allowedEvidenceIds],
+          vulnerabilityIds: collectedFindings
+            .filter(f => f.category === 'Vulnerability')
+            .map(f => `${f.title} ${f.description}`),
+          vendors: [passport.publisher].filter(Boolean),
+          dependencies: sbomComponents.map((c: any) => `${c.name ?? ''} ${c.version ?? ''}`),
+          scores: {
+            overall: calculatedScores.overallScore,
+            security: calculatedScores.securityScore,
+            compliance: calculatedScores.complianceScore,
+            vendor: calculatedScores.vendorScore,
+          },
+          assessedFrameworks: [],
+          verifiedCertifications: [],
+        }, { unknowns: ['AI claims are limited to collected evidence and derived metrics.'], provenancePresent: true });
+
+        if (!guardResult.ok) {
+          await addPostgresAuditLog(tenantId, 'AI_SUMMARY_REJECTED_UNSUPPORTED_CLAIM', 'ai-evidence-reasoning', {
+            passportId,
+            jobId,
+            violations: guardResult.violations,
+            withheldStatementCount: guardResult.withheldStatementCount,
+          });
+          throw new Error(`AI_OUTPUT_REJECTED_BY_CLAIM_GUARD: ${guardResult.violations.join(',')}`);
+        }
+
+        aiSummaryText = groundedSummary;
+        await addPostgresAuditLog(tenantId, 'AI_SUMMARY_PUBLISHED', 'ai-evidence-reasoning', {
+          passportId,
+          jobId,
+          model: 'gemini-3.5-flash',
+          promptVersion: 'scanner-ai-evidence-v3',
+          evidenceIds: parsed.data.citedIds,
+          generatedAt: new Date().toISOString(),
+        });
+        await logJobStep(jobId, 'ai-evidence-reasoning', 'Gemini Reasoning complete. Executive audit successfully compiled and claim-guard verified.');
       } catch (geminiError: any) {
         console.error('[Gemini Reasoning Failed]', geminiError instanceof Error ? geminiError.message : 'unknown error');
         await logJobStep(jobId, 'ai-evidence-reasoning', 'Gemini API call timed out, failed, or returned unsupported output. Falling back to secure static compiler.', 'Warning');
@@ -808,13 +845,27 @@ Respond with ONLY a JSON object, no markdown code fences, matching exactly this 
     }
 
     if (!aiSummaryText) {
-      // High fidelity heuristic summary based on real findings
+      // Deterministic evidence-only fallback. Never assert certification/framework
+      // compliance or absence of findings that the evidence does not establish.
       aiSummaryText = `Executive Security Trust Report for ${passport.name} (v${passport.version}):\n\n` +
-        `• **Audit Lineage**: Calculated a mathematically derived Software Trust Score of **${calculatedScores.overallScore}/100** based on ${collectedFindings.length} open findings and ${collectedEvidence.length} collected evidence records (self-reported unless independently verified).\n` +
-        `• **Security Profile**: Calculated security rating of **${calculatedScores.securityScore}/100**. ${collectedFindings.filter(f => f.category === 'Vulnerability').length} active vulnerabilities were recorded from this passport's self-reported entries.\n` +
-        `• **Compliance Attestation**: Evaluated compliance rating of **${calculatedScores.complianceScore}/100** against NIST SP 800-218 and SOC 2 guidelines. Verified signature: ${signatureVerified ? 'YES' : 'NO'}.\n` +
-        `• **Mitigation Plan**: Enforce immediate remediation for any critical or high findings. Apply network isolation and pin dependencies in CI/CD pipeline registers.`;
-    }
+        `• **Evidence status**: ${collectedEvidence.length} evidence records and ${collectedFindings.length} findings were collected. Claims not directly established by these records remain UNKNOWN / NOT VERIFIED.\n` +
+        `• **Derived scores**: Overall ${calculatedScores.overallScore}/100; Security ${calculatedScores.securityScore}/100; Compliance ${calculatedScores.complianceScore}/100; Vendor ${calculatedScores.vendorScore}/100. These are derived SPR metrics, not external certifications.\n` +
+        `• **Verification**: Cryptographic signature status is ${signatureVerified ? 'VERIFIED from supplied evidence' : 'NOT VERIFIED'}. No external compliance certification is asserted by this report.\n` +
+        `• **Recommendations**: Remediate Critical and High findings identified in this scan and collect additional evidence where assurance remains UNKNOWN.\n` +
+        `• **Provenance**: Deterministic fallback; generated from the collected evidence/findings snapshot at ${new Date().toISOString()}.`;
+
+      const fallbackGuard = guardAIClaims(aiSummaryText, {
+        evidenceIds: [...new Set([...collectedEvidence.map(e => String(e.id)), ...collectedFindings.map(f => String(f.id))])],
+        scores: {
+          overall: calculatedScores.overallScore,
+          security: calculatedScores.securityScore,
+          compliance: calculatedScores.complianceScore,
+          vendor: calculatedScores.vendorScore,
+        },
+      }, { unknowns: ['External certifications and framework compliance are not established by this scan.'], provenancePresent: true });
+      if (!fallbackGuard.ok) {
+        throw new Error(`AI_FALLBACK_REJECTED_BY_CLAIM_GUARD: ${fallbackGuard.violations.join(',')}`);
+      }
 
     // Write final summary and calculated scores back to database
     await db.update(passports)
