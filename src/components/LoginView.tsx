@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { createUserWithEmailAndPassword, onAuthStateChanged, reload, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithPopup, signInWithRedirect, signOut, type User } from 'firebase/auth';
-import { AlertCircle, ArrowRight, CheckCircle2, Eye, EyeOff, Loader, ShieldCheck, Upload } from 'lucide-react';
+import { AlertCircle, ArrowRight, CheckCircle2, Eye, EyeOff, Loader, ShieldCheck, Upload, KeyRound } from 'lucide-react';
 import { auth, googleAuthProvider, firebaseConfigured } from '../lib/firebase';
 import { consumeAuthNotice, notProvisionedMessage } from '../lib/authNotice';
 import { beginSignupTransition, endSignupTransition } from '../lib/signupTransition';
 import { apiFetch } from '../utils/apiClient';
+import { getTotpResolver, resolveTotpSignIn } from '../lib/mfa';
 
 interface LoginViewProps { onLoginSuccess: (user: { uid: string; email: string | null; displayName: string; token: string; emailVerified: boolean; onboarded: 0 }) => void; }
 const STAGED_KEY = 'spr-universal-intake-v1';
@@ -31,6 +32,9 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
   const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false); const [googleLoading, setGoogleLoading] = useState(false); const [error, setError] = useState(''); const [notice, setNotice] = useState('');
   const [stagedCount, setStagedCount] = useState(0); const [stagedRepo, setStagedRepo] = useState('');
+  const [mfaResolver, setMfaResolver] = useState<ReturnType<typeof getTotpResolver>>(null);
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaLoading, setMfaLoading] = useState(false);
 
   useEffect(() => {
     const refreshStaged = () => { try { const raw = sessionStorage.getItem(STAGED_KEY); if (!raw) return; const data = JSON.parse(raw); setStagedCount(Array.isArray(data?.items) ? data.items.length : 0); setStagedRepo(typeof data?.repo === 'string' ? data.repo : ''); } catch { setStagedCount(0); setStagedRepo(''); } };
@@ -55,6 +59,34 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
     onLoginSuccess({ uid: user.uid, email: user.email, displayName: user.displayName || user.email?.split('@')[0] || 'User', token, emailVerified: true, onboarded: 0 });
   };
 
+  const handleMfaRequired = (err: unknown) => {
+    const resolver = getTotpResolver(err);
+    if (!resolver) return false;
+    if (!resolver.hints.some((hint) => hint.factorId === 'totp')) {
+      setError('Your account requires a second factor that this login screen cannot process. Contact your workspace administrator.');
+      return true;
+    }
+    setMfaResolver(resolver);
+    setMfaCode('');
+    setError('');
+    setNotice('Enter the 6-digit code from your authenticator app.');
+    return true;
+  };
+
+  const submitMfa = async () => {
+    if (!mfaResolver || mfaLoading) return;
+    setMfaLoading(true); setError('');
+    try {
+      const hint = mfaResolver.hints.find((item) => item.factorId === 'totp');
+      if (!hint) throw new Error('No TOTP factor is available for this account.');
+      const result = await resolveTotpSignIn(mfaResolver, hint.uid, mfaCode);
+      setMfaResolver(null); setMfaCode(''); setNotice('Second factor verified.');
+      await complete(result.user);
+    } catch (err: any) {
+      setError(err?.code === 'auth/invalid-verification-code' ? 'That authenticator code is invalid or expired. Enter the current 6-digit code.' : authMessage(err, 'Second-factor verification failed.'));
+    } finally { setMfaLoading(false); }
+  };
+
   useEffect(() => {
     const pendingNotice = consumeAuthNotice(); if (pendingNotice) setError(pendingNotice);
     if (!auth) { setNotice('Authentication is temporarily unavailable. The frontend loaded, but Firebase browser configuration is missing from this deployment.'); return; }
@@ -63,12 +95,14 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
     window.addEventListener('auth-provisioning-failed', onProvisioningFailure); return () => { unsubscribe(); window.removeEventListener('auth-provisioning-failed', onProvisioningFailure); };
   }, []);
 
-  const submit = async (event: React.FormEvent) => { event.preventDefault(); if (loading || googleLoading) return; if (!auth || !firebaseConfigured) { setError('Firebase browser configuration is missing. Add the VITE_FIREBASE_* Production variables in Vercel and redeploy.'); return; } setLoading(true); setError(''); setNotice(''); try { const result = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password); await complete(result.user); } catch (err: any) { const message = authMessage(err, 'Sign-in failed.'); if (message) setError(message); } finally { setLoading(false); } };
-  const register = async () => { if (loading || googleLoading) return; if (!auth || !firebaseConfigured) { setError('Firebase browser configuration is missing. Add the VITE_FIREBASE_* Production variables in Vercel and redeploy.'); return; } setLoading(true); setError(''); setNotice(''); beginSignupTransition(); try { const result = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), password); await sendEmailVerification(result.user); await signOut(auth); setNotice('Account created. Check your email, verify it, then sign in. Your secure intake remains available for 24 hours.'); } catch (err: any) { setError(authMessage(err, 'Account creation failed.')); } finally { endSignupTransition(); setLoading(false); } };
-  const google = async () => { if (loading || googleLoading) return; if (!auth || !firebaseConfigured) { setError('Firebase browser configuration is missing. Add the VITE_FIREBASE_* Production variables in Vercel and redeploy.'); return; } setGoogleLoading(true); setError(''); setNotice('Opening secure Google sign-in…'); try { const result = await signInWithPopup(auth, googleAuthProvider); await complete(result.user); } catch (err: any) { if (['auth/popup-blocked','auth/operation-not-supported-in-this-environment'].includes(err?.code)) { try { await signInWithRedirect(auth, googleAuthProvider); return; } catch (redirectError: any) { const message = authMessage(redirectError, 'Google sign-in failed.'); if (message) setError(message); else setNotice(''); setGoogleLoading(false); return; } } const message = authMessage(err, 'Google sign-in failed.'); if (message) setError(message); else setNotice(''); setGoogleLoading(false); } };
+  const submit = async (event: React.FormEvent) => { event.preventDefault(); if (loading || googleLoading || mfaLoading) return; if (!auth || !firebaseConfigured) { setError('Firebase browser configuration is missing. Add the VITE_FIREBASE_* Production variables in Vercel and redeploy.'); return; } setLoading(true); setError(''); setNotice(''); try { const result = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password); await complete(result.user); } catch (err: any) { if (!handleMfaRequired(err)) { const message = authMessage(err, 'Sign-in failed.'); if (message) setError(message); } } finally { setLoading(false); } };
+  const register = async () => { if (loading || googleLoading || mfaLoading) return; if (!auth || !firebaseConfigured) { setError('Firebase browser configuration is missing. Add the VITE_FIREBASE_* Production variables in Vercel and redeploy.'); return; } setLoading(true); setError(''); setNotice(''); beginSignupTransition(); try { const result = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), password); await sendEmailVerification(result.user); await signOut(auth); setNotice('Account created. Check your email, verify it, then sign in. Your secure intake remains available for 24 hours.'); } catch (err: any) { setError(authMessage(err, 'Account creation failed.')); } finally { endSignupTransition(); setLoading(false); } };
+  const google = async () => { if (loading || googleLoading || mfaLoading) return; if (!auth || !firebaseConfigured) { setError('Firebase browser configuration is missing. Add the VITE_FIREBASE_* Production variables in Vercel and redeploy.'); return; } setGoogleLoading(true); setError(''); setNotice('Opening secure Google sign-in…'); try { const result = await signInWithPopup(auth, googleAuthProvider); await complete(result.user); } catch (err: any) { if (handleMfaRequired(err)) { setGoogleLoading(false); return; } if (['auth/popup-blocked','auth/operation-not-supported-in-this-environment'].includes(err?.code)) { try { await signInWithRedirect(auth, googleAuthProvider); return; } catch (redirectError: any) { const message = authMessage(redirectError, 'Google sign-in failed.'); if (message) setError(message); else setNotice(''); setGoogleLoading(false); return; } } const message = authMessage(err, 'Google sign-in failed.'); if (message) setError(message); else setNotice(''); setGoogleLoading(false); } };
   const reset = async () => { if (!email.trim()) { setError('Enter your email first.'); return; } if (!auth || !firebaseConfigured) { setError('Firebase browser configuration is missing.'); return; } setLoading(true); setError(''); setNotice(''); try { await sendPasswordResetEmail(auth, email.trim().toLowerCase()); setNotice('Password reset email sent.'); } catch (err: any) { setError(authMessage(err, 'Could not send the reset email.')); } finally { setLoading(false); } };
   const resendVerification = async () => { const currentUser = auth?.currentUser; if (!currentUser || currentUser.emailVerified) return; setLoading(true); setError(''); setNotice(''); try { await sendEmailVerification(currentUser); setNotice('A fresh verification email has been sent.'); } catch (err: any) { setError(authMessage(err, 'Could not resend the verification email.')); } finally { setLoading(false); } };
-  const busy = loading || googleLoading;
+  const busy = loading || googleLoading || mfaLoading;
+
+  if (mfaResolver) return <div className="min-h-screen flex items-center justify-center bg-[var(--spr-surface)] p-6 text-[var(--spr-text)]"><div className="w-full max-w-md space-y-5 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-7 shadow-2xl"><div className="text-center"><div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-[var(--spr-highlight)]/40 bg-[var(--spr-accent-soft)]"><KeyRound className="h-8 w-8 text-[var(--spr-highlight)]" /></div><h1 className="mt-5 text-2xl font-semibold">Verify your identity</h1><p className="mt-2 text-sm text-[var(--spr-text-muted)]">Open your authenticator app and enter the current 6-digit code.</p></div><label className="block text-sm font-semibold">Authenticator code<input autoFocus inputMode="numeric" autoComplete="one-time-code" maxLength={6} pattern="[0-9]{6}" value={mfaCode} onChange={e => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))} className="mt-2 w-full rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-4 py-4 text-center text-2xl tracking-[.45em] text-[var(--spr-text)] outline-none focus:border-[var(--spr-highlight)]/40" /></label>{error && <div role="alert" className="rounded-xl border border-red-400/20 bg-red-400/10 p-3 text-sm text-red-200"><AlertCircle className="mr-2 inline h-4 w-4" />{error}</div>}<button type="button" disabled={mfaLoading || mfaCode.length !== 6} onClick={submitMfa} className="w-full rounded-xl bg-[var(--spr-accent)] px-4 py-3.5 font-bold text-white disabled:opacity-50">{mfaLoading ? <Loader className="mx-auto h-5 w-5 animate-spin" /> : <>Verify and continue <ArrowRight className="ml-1 inline h-4 w-4" /></>}</button><button type="button" disabled={mfaLoading} onClick={() => { setMfaResolver(null); setMfaCode(''); setError(''); setNotice(''); }} className="w-full rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-4 py-3 text-sm font-semibold">Cancel sign-in</button></div></div>;
 
   return <div className="min-h-screen flex items-center justify-center bg-[var(--spr-surface)] p-6 text-[var(--spr-text)]"><form onSubmit={submit} className="w-full max-w-md space-y-5 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-7 shadow-2xl" noValidate>
     <div className="text-center"><img src="/brand/spr-logo.jpg" alt="Software Passport Registry" className="mx-auto h-28 w-auto drop-shadow-[0_4px_20px_rgba(0,0,0,0.35)]" /><h1 className="mt-5 text-3xl font-semibold">Sign in to SPR</h1><p className="mt-2 text-sm text-[var(--spr-text-muted)]">Use your work email or continue with Google.</p></div>
