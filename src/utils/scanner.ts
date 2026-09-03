@@ -866,6 +866,7 @@ Respond with ONLY a JSON object, no markdown code fences, matching exactly this 
       if (!fallbackGuard.ok) {
         throw new Error(`AI_FALLBACK_REJECTED_BY_CLAIM_GUARD: ${fallbackGuard.violations.join(',')}`);
       }
+    }
 
     // Write final summary and calculated scores back to database
     await db.update(passports)
