@@ -31,6 +31,16 @@ export const EXTENSIONS: ExtensionDefinition[] = [
     sourceRoutes: ['/scans'],
   },
   {
+    id: 'msp-command-center',
+    name: 'MSP Stack Command Center',
+    shortName: 'MSP Command',
+    description: 'Unify the protected SPR views for clients, software, findings, evidence, monitoring, remediation, team and integrations without replacing the MSP systems of record.',
+    accent: 'violet',
+    steps: ['Connect sources', 'Verify connectivity', 'Review client estate', 'Act on findings', 'Export / report'],
+    entryPath: '/extensions/msp-command-center',
+    sourceRoutes: ['/msp', '/clients', '/assets', '/passports', '/evidence-explorer', '/alerts', '/compliance', '/monitoring', '/integrations', '/reports', '/audit-log', '/billing'],
+  },
+  {
     id: 'msp-compliance',
     name: 'MSP Compliance',
     shortName: 'MSP',
