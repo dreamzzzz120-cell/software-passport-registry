@@ -7,6 +7,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Radar, Upload, Clock, CheckCircle2, AlertCircle, FileCode, Sliders, Play, Calendar, Shield, ShieldCheck, Plus, Trash2, Pause, TrendingUp, Activity, Info } from 'lucide-react';
 import { Scan, Client } from '../types';
 import { apiFetch } from '../utils/apiClient';
+import NewReviewIntake from './NewReviewIntake';
 
 export interface ScanSchedule {
   id: string;
@@ -413,6 +414,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
 
   return (
     <div className="space-y-6" id="msp-scans-uploader">
+      <NewReviewIntake />
       {/* Page Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>

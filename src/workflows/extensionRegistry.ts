@@ -21,6 +21,16 @@ export const EXTENSIONS: ExtensionDefinition[] = [
     sourceRoutes: ['/passports', '/scans', '/registry'],
   },
   {
+    id: 'new-review',
+    name: 'New Software Review',
+    shortName: 'New Review',
+    description: 'Submit a GitHub repository or upload software evidence files and send them into the SPR analysis pipeline.',
+    accent: 'emerald',
+    steps: ['Choose repository or files', 'Submit evidence', 'Verify upload', 'Run analysis', 'Review results'],
+    entryPath: '/extensions/new-review',
+    sourceRoutes: ['/scans'],
+  },
+  {
     id: 'msp-compliance',
     name: 'MSP Compliance',
     shortName: 'MSP',
