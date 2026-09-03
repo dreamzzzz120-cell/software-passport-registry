@@ -53,6 +53,7 @@ jobs:
           if old_handler not in text:
               raise SystemExit('Onboarding verify handler not found')
           text = text.replace(old_handler, new_handler, 1)
+          text = text.replace('{mfaSecret}', '{mfaSecret?.secretKey || \'Generating...\'}', 1)
           onboarding.write_text(text)
           PY
 
