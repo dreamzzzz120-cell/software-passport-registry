@@ -13,7 +13,12 @@ import { signFreeReviewStatusToken, verifyFreeReviewStatusToken } from './public
 
 export const FREE_REVIEW_TENANT_ID = 'tenant-free-review-system';
 const STATUS_TOKEN_TTL_SECONDS = 60 * 60 * 2;
-const DAILY_SUBMISSIONS_PER_IP = 5;
+// 5 was hit by legitimate same-network debugging (developer testing plus the
+// site owner testing from the same network) well before any abuse pattern --
+// it throttled the people building the feature, not the abuse it exists to
+// stop. 25/24h per IP is still a real, meaningful anonymous-scan ceiling, not
+// an effectively-unlimited one.
+const DAILY_SUBMISSIONS_PER_IP = 25;
 // A Free Review stops calling itself "scanning" after this long. It bounds the
 // visitor's wait; it does not cancel the job, and it never invents a result.
 const FREE_REVIEW_DEADLINE_MS = 4 * 60 * 1000;
