@@ -49,7 +49,7 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks: {
             react: ['react', 'react-dom'],
-            firebase: ['firebase', 'firebase-admin'],
+            firebase: ['firebase/app', 'firebase/auth'],
             charts: ['d3', 'recharts'],
             documents: ['jspdf', 'jspdf-autotable', 'html2canvas'],
             ui: ['lucide-react', 'motion'],
