@@ -13,18 +13,23 @@ const MAX_FILENAME_LENGTH = 180;
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const BUCKET = process.env.SPR_INTAKE_BUCKET?.trim() || 'spr-intake';
 
-const ALLOWED_EXTENSIONS = new Set([
-  'json', 'xml', 'spdx', 'yaml', 'yml', 'toml', 'lock',
-  'js', 'jsx', 'ts', 'tsx', 'py', 'go', 'rs', 'java', 'cs', 'cpp', 'c', 'rb', 'php',
-  'md', 'txt', 'pdf', 'doc', 'docx',
-  'zip', 'tar', 'gz', 'tgz',
-]);
-const ALLOWED_MIME_TYPES = new Set([
-  'application/json', 'application/xml', 'text/xml', 'application/spdx+json',
-  'text/plain', 'text/markdown', 'application/pdf',
+// Source/config extensions (js..toml below) have no standardized MIME type --
+// browsers guess wildly and inconsistently across OS/vendor (a .ts file is
+// notoriously reported as 'video/mp2t' by some browsers, .py/.go/.rs/.toml
+// are often reported blank). The extension allowlist plus size/filename
+// checks below are the real gate for these; DOCUMENT_MIME_TYPES is the
+// stricter, meaningful check reserved for formats where a MIME mismatch is
+// actually a useful signal (documents and archives).
+const SOURCE_EXTENSIONS = new Set(['json', 'xml', 'spdx', 'yaml', 'yml', 'toml', 'lock', 'js', 'jsx', 'ts', 'tsx', 'py', 'go', 'rs', 'java', 'cs', 'cpp', 'c', 'rb', 'php', 'md', 'txt']);
+const DOCUMENT_EXTENSIONS = new Set(['pdf', 'doc', 'docx', 'zip', 'tar', 'gz', 'tgz']);
+const ALLOWED_EXTENSIONS = new Set([...SOURCE_EXTENSIONS, ...DOCUMENT_EXTENSIONS]);
+const DOCUMENT_MIME_TYPES = new Set([
+  'application/pdf',
   'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/zip', 'application/gzip', 'application/x-gzip', 'application/x-tar',
-  'application/octet-stream', 'text/yaml', 'application/x-yaml',
+  'application/zip', 'application/x-zip-compressed', 'multipart/x-zip',
+  'application/gzip', 'application/x-gzip', 'application/x-compressed',
+  'application/x-tar',
+  'application/octet-stream',
 ]);
 
 const fileSchema = z.object({
@@ -40,14 +45,20 @@ function extensionOf(name: string) {
   const match = /\.([A-Za-z0-9]{1,12})$/.exec(base);
   return match?.[1]?.toLowerCase() || '';
 }
-function validateFilePolicy(file: { name: string; size: number; contentType: string; kind: string }) {
+export function validateFilePolicy(file: { name: string; size: number; contentType: string; kind: string }) {
   if (file.size > MAX_FILE_SIZE) return 'File exceeds the 50 MB intake limit.';
   const normalized = file.name.normalize('NFKC');
   if (normalized !== file.name || /[\0\\/]/.test(file.name)) return 'Filename contains unsupported characters.';
   if (file.name.length > MAX_FILENAME_LENGTH) return 'Filename is too long.';
   const ext = extensionOf(file.name);
   if (!ext || !ALLOWED_EXTENSIONS.has(ext)) return 'File type is not supported for SPR intake.';
-  if (file.contentType && !ALLOWED_MIME_TYPES.has(file.contentType.toLowerCase())) return 'File content type is not supported for SPR intake.';
+  // Only document/archive extensions get a strict MIME check -- a mismatch
+  // there (e.g. an .exe renamed to .pdf) is a real signal. Source/config
+  // extensions accept whatever the browser reported, since there's no
+  // standardized MIME type to check it against.
+  if (DOCUMENT_EXTENSIONS.has(ext) && file.contentType && !DOCUMENT_MIME_TYPES.has(file.contentType.toLowerCase())) {
+    return 'File content type is not supported for SPR intake.';
+  }
   if (file.kind === 'archive' && !['zip', 'tar', 'gz', 'tgz'].includes(ext)) return 'Archive type does not match its filename.';
   if (file.kind === 'sbom' && !['json', 'xml', 'spdx'].includes(ext)) return 'SBOM type does not match its filename.';
   return null;
