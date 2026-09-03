@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { auth } from '../lib/firebase';
 import { apiFetch } from '../utils/apiClient';
+import MfaSettingsPanel from './MfaSettingsPanel';
 
 interface SettingsViewProps {
   theme: 'light' | 'dark';
@@ -20,7 +21,6 @@ interface SettingsViewProps {
 
 export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps) {
   const [activeSubTab, setActiveSubTab] = useState<'configurations' | 'bible' | 'organization' | 'guide'>('configurations');
-  const [mfaEnabled, setMfaEnabled] = useState(true);
   const [slaTarget, setSlaTarget] = useState(85);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [offboarding, setOffboarding] = useState(false);
@@ -1039,20 +1039,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
               </h3>
 
               <div className="space-y-3.5 text-xs">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <span className="font-semibold text-[var(--spr-text)] block">Enforce Multi-Factor Authentication (MFA)</span>
-                    <p className="text-[10px] text-[var(--spr-text-faint)] leading-snug">All MSP users must provide TOTP codes on logon.</p>
-                  </div>
-                  <button
-                    onClick={() => setMfaEnabled(!mfaEnabled)}
-                    className={`px-3 py-1 text-xs font-bold rounded-md border cursor-pointer transition-colors ${
-                      mfaEnabled ? 'bg-[var(--spr-surface-sunken)] border-[var(--spr-border)] text-[var(--spr-green)]' : 'bg-[var(--spr-surface-sunken)] border-[var(--spr-border)] text-[var(--spr-text-muted)]'
-                    }`}
-                  >
-                    {mfaEnabled ? 'MFA Enabled' : 'MFA Disabled'}
-                  </button>
-                </div>
+                <MfaSettingsPanel currentUser={auth.currentUser} />
 
                 <div className="flex justify-between items-center border-t border-[var(--spr-border)] pt-3">
                   <div>

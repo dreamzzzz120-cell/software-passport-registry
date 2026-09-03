@@ -4,68 +4,16 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import QRCode from 'qrcode';
 import {
   ShieldCheck, ArrowRight, Building2, User2, Sliders, KeyRound, Check, RefreshCw, Sparkles, LogOut, CheckCircle2
 } from 'lucide-react';
 import { auth } from '../lib/firebase';
 import { apiFetch } from '../utils/apiClient';
+import { beginTotpEnrollment, finishTotpEnrollment } from '../lib/mfa';
 
 interface OnboardingWizardProps {
   user: any;
   onOnboardingComplete: (updatedUser: any) => void;
-}
-
-// Base32 decode and standard RFC 6238 TOTP generator
-async function generateTOTPCode(base32Secret: string, timeOffset: number = 0): Promise<string> {
-  const cleanSecret = base32Secret.replace(/\s+/g, '').toUpperCase();
-  const base32chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-  let bits = '';
-  for (let i = 0; i < cleanSecret.length; i++) {
-    const val = base32chars.indexOf(cleanSecret.charAt(i));
-    if (val === -1) continue;
-    bits += val.toString(2).padStart(5, '0');
-  }
-  const bytes = new Uint8Array(Math.floor(bits.length / 8));
-  for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = parseInt(bits.substring(i * 8, i * 8 + 8), 2);
-  }
-
-  const counter = Math.floor(Date.now() / 1000 / 30) + timeOffset;
-  const counterBuffer = new ArrayBuffer(8);
-  const counterView = new DataView(counterBuffer);
-  counterView.setUint32(0, 0, false);
-  counterView.setUint32(4, counter, false);
-
-  const cryptoKey = await window.crypto.subtle.importKey(
-    'raw',
-    bytes,
-    { name: 'HMAC', hash: 'SHA-1' },
-    false,
-    ['sign']
-  );
-  const signature = await window.crypto.subtle.sign('HMAC', cryptoKey, counterBuffer);
-  const hmac = new Uint8Array(signature);
-
-  const offset = hmac[hmac.length - 1] & 0x0f;
-  const binary =
-    ((hmac[offset] & 0x7f) << 24) |
-    ((hmac[offset + 1] & 0xff) << 16) |
-    ((hmac[offset + 2] & 0xff) << 8) |
-    (hmac[offset + 3] & 0xff);
-
-  return (binary % 1000000).toString().padStart(6, '0');
-}
-
-async function verifyTOTPCode(base32Secret: string, inputCode: string): Promise<boolean> {
-  const code = inputCode.trim();
-  if (!/^\d{6}$/.test(code)) return false;
-  
-  for (const offset of [0, -1, 1]) {
-    const valid = await generateTOTPCode(base32Secret, offset);
-    if (valid === code) return true;
-  }
-  return false;
 }
 
 export default function OnboardingWizard({ user, onOnboardingComplete }: OnboardingWizardProps) {
@@ -80,19 +28,7 @@ export default function OnboardingWizard({ user, onOnboardingComplete }: Onboard
   const [clientCount, setClientCount] = useState('12');
   const [primaryUseCase, setPrimaryUseCase] = useState('NIST Mapping & Risk Assessments');
   const [mfaEnabled, setMfaEnabled] = useState(true);
-  const [mfaSecret, setMfaSecret] = useState(() => {
-    // Generate a cryptographically secure Base32 TOTP secret key
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-    const randomBytes = new Uint8Array(16);
-    if (typeof window !== 'undefined' && window.crypto) {
-      window.crypto.getRandomValues(randomBytes);
-    }
-    let secret = '';
-    for (let i = 0; i < 16; i++) {
-      secret += chars.charAt(randomBytes[i] % chars.length);
-    }
-    return secret.match(/.{1,4}/g)?.join(' ') || secret;
-  });
+  const [mfaSecret, setMfaSecret] = useState<Awaited<ReturnType<typeof beginTotpEnrollment>> | null>(null);
 
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [totpCodeInput, setTotpCodeInput] = useState<string>('');
@@ -101,37 +37,37 @@ export default function OnboardingWizard({ user, onOnboardingComplete }: Onboard
   const [totpError, setTotpError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!mfaEnabled || !auth.currentUser || mfaSecret) return;
+    beginTotpEnrollment(auth.currentUser)
+      .then(secret => setMfaSecret(secret))
+      .catch(err => setTotpError(err?.message || 'Could not start authenticator enrollment.'));
+  }, [mfaEnabled, mfaSecret]);
+
+  useEffect(() => {
     if (mfaEnabled && mfaSecret) {
-      const cleanSecret = mfaSecret.replace(/\s+/g, '');
-      const otpauth = `otpauth://totp/SoftwarePassportRegistry:${encodeURIComponent(companyName || 'User')}?secret=${cleanSecret}&issuer=SoftwarePassportRegistry`;
-      QRCode.toDataURL(otpauth, { margin: 1, width: 160 })
+      const otpauth = mfaSecret.generateQrCodeUrl(auth.currentUser?.email || 'User', 'Software Passport Registry');
+      import('qrcode').then(({ default: QRCode }) => QRCode.toDataURL(otpauth, { margin: 1, width: 160 }))
         .then(url => setQrDataUrl(url))
-        .catch(err => console.error('Failed to generate local QR code:', err));
+        .catch(err => console.error('Failed to generate enrollment QR code:', err));
+    } else {
+      setQrDataUrl('');
     }
-  }, [mfaEnabled, mfaSecret, companyName]);
+  }, [mfaEnabled, mfaSecret]);
 
   const handleVerifyTotp = async () => {
+    if (!auth.currentUser || !mfaSecret) {
+      setTotpError('Authenticator enrollment is not ready. Please wait a moment and try again.');
+      return;
+    }
     setTotpVerifying(true);
     setTotpError(null);
     try {
-      const res = await apiFetch('/api/organization/security/verify-mfa', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          code: totpCodeInput,
-          secret: mfaSecret
-        })
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setIsTotpVerified(true);
-      } else {
-        setIsTotpVerified(false);
-        setTotpError(data.error || 'Invalid 6-digit TOTP code. Please check your authenticator app time and enter the current code.');
-      }
+      await finishTotpEnrollment(auth.currentUser, mfaSecret, totpCodeInput, 'SPR authenticator');
+      setIsTotpVerified(true);
+      setTotpError(null);
     } catch (err: any) {
       setIsTotpVerified(false);
-      setTotpError(err?.message || 'Verification error. Please enter a valid 6-digit numeric code.');
+      setTotpError(err?.code === 'auth/requires-recent-login' ? 'For security, sign in again before enabling MFA.' : err?.message || 'Invalid 6-digit TOTP code. Please check your authenticator app time and enter the current code.');
     } finally {
       setTotpVerifying(false);
     }
@@ -436,7 +372,7 @@ export default function OnboardingWizard({ user, onOnboardingComplete }: Onboard
                   <div className="space-y-1">
                     <span className="text-xs text-[var(--spr-text-muted)] block">Manual setup key</span>
                     <span className="font-mono text-xs text-[var(--spr-text)] tracking-widest font-bold bg-[var(--spr-surface-sunken)] px-2 py-1 rounded border border-[var(--spr-border)] select-all block">
-                      {mfaSecret}
+                      {mfaSecret?.secretKey || 'Generating...'}
                     </span>
                     <p className="text-[9px] text-[var(--spr-text-muted)]">
                       Scan the QR code, or enter this key in your authenticator app.
