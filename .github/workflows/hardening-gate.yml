@@ -31,11 +31,12 @@ jobs:
           p = Path('src/utils/scanner.ts')
           s = p.read_text()
           marker = "\n    // Write final summary and calculated scores back to database"
-          if marker in s:
-              before, after = s.split(marker, 1)
-              if not before.rstrip().endswith('}'):
-                  s = before + "\n    }" + marker + after
-                  p.write_text(s)
+          needle = "      if (!fallbackGuard.ok) {\n        throw new Error(`AI_FALLBACK_REJECTED_BY_CLAIM_GUARD: ${fallbackGuard.violations.join(',')}`);\n      }\n\n    // Write final summary and calculated scores back to database"
+          if needle in s:
+              s = s.replace(needle, "      if (!fallbackGuard.ok) {\n        throw new Error(`AI_FALLBACK_REJECTED_BY_CLAIM_GUARD: ${fallbackGuard.violations.join(',')}`);\n      }\n    }\n\n    // Write final summary and calculated scores back to database", 1)
+              p.write_text(s)
+          if marker not in s:
+              raise SystemExit('scanner marker not found')
           if "from '../security/ai-claim-guard.ts'" not in s:
               raise SystemExit('AI claim guard import missing')
           if 'AI_SUMMARY_REJECTED_UNSUPPORTED_CLAIM' not in s:
