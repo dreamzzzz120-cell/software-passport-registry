@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: hardening-${{ github.workflow }}-${{ github.ref }}
@@ -21,30 +21,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          persist-credentials: true
-
-      - name: Normalize nullable score values in scanner
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, '[ai-score-null-fix]') }}
-        shell: python
-        run: |
-          from pathlib import Path
-          p = Path('src/utils/scanner.ts')
-          s = p.read_text()
-          s = s.replace('?? 0 ?? 0', '?? 0')
-          p.write_text(s)
-      - name: Commit nullable score fix
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, '[ai-score-null-fix]') }}
-        run: |
-          git diff --check
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src/utils/scanner.ts
-          if git diff --cached --quiet; then
-            echo 'No score changes required.'
-          else
-            git commit -m 'fix: normalize nullable AI scores [ai-score-null-fix]'
-            git push
-          fi
+          persist-credentials: false
 
       - name: Setup Node 22
         uses: actions/setup-node@v5
