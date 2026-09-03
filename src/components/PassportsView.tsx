@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, FileCheck2, Search, ShieldCheck, TriangleAlert } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
 import SoftwareLineageTracker from './SoftwareLineageTracker';
@@ -45,6 +45,9 @@ export default function PassportsView({ passports, selectedPassportId, setSelect
   const [localQuery, setLocalQuery] = useState('');
   const [auditText, setAuditText] = useState<string | null>(null);
   const [auditBusy, setAuditBusy] = useState(false);
+  const [auditJob, setAuditJob] = useState<{ id: string; status: string; progress: number; result?: any } | null>(null);
+  const [auditLogs, setAuditLogs] = useState<{ id: number; level: string; message: string }[]>([]);
+  const auditPollRef = useRef<number | undefined>(undefined);
   const [remediationBusy, setRemediationBusy] = useState<string | null>(null);
 
   const selected = useMemo(() => passports.find((p) => p.id === selectedPassportId) ?? null, [passports, selectedPassportId]);
@@ -57,15 +60,45 @@ export default function PassportsView({ passports, selectedPassportId, setSelect
   const evidenceCount = passports.filter((passport) => passport.evidence?.length > 0).length;
   const findingCount = passports.reduce((total, passport) => total + (passport.vulnerabilities?.length || 0), 0);
 
+  const stopAuditPolling = () => {
+    if (auditPollRef.current !== undefined) { window.clearInterval(auditPollRef.current); auditPollRef.current = undefined; }
+  };
+
+  // Job status/logs come from the same GET /api/agent-jobs/:id and
+  // /api/agent-jobs/:id/logs endpoints the background scanner writes to as
+  // it works, so this reflects real progress rather than a static
+  // "queued" message that never updates.
+  const pollAuditJob = async (jobId: string) => {
+    try {
+      const [jobResponse, logsResponse] = await Promise.all([
+        apiFetch(`/api/agent-jobs/${encodeURIComponent(jobId)}`),
+        apiFetch(`/api/agent-jobs/${encodeURIComponent(jobId)}/logs`),
+      ]);
+      if (jobResponse.ok) {
+        const job = await jobResponse.json();
+        setAuditJob(job);
+        if (!['Pending', 'Running'].includes(job.status)) stopAuditPolling();
+      }
+      if (logsResponse.ok) setAuditLogs(await logsResponse.json());
+    } catch {
+      // A single dropped poll isn't a job failure -- the interval keeps running.
+    }
+  };
+
+  useEffect(() => stopAuditPolling, []);
+
   const runAudit = async () => {
     if (!selected) return;
-    setAuditBusy(true); setAuditText(null);
+    stopAuditPolling();
+    setAuditBusy(true); setAuditText(null); setAuditJob(null); setAuditLogs([]);
     try {
       const response = await apiFetch('/api/agent-jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ passportId: selected.id, agentId: 'comprehensive_scanner', jobType: 'osv_manifest_scan' }) });
       const data = await response.json().catch(() => ({}));
-      setAuditText(response.ok
-        ? `Live audit queued successfully. Job ${data.id ?? 'created'} is being processed by the background scanner.`
-        : data.error?.message || data.error || 'Not verified: audit request was rejected.');
+      if (!response.ok) { setAuditText(data.error?.message || data.error || 'Not verified: audit request was rejected.'); return; }
+      const jobId = String(data.id ?? '');
+      if (!jobId) { setAuditText('Not verified: audit request did not return a job id.'); return; }
+      await pollAuditJob(jobId);
+      auditPollRef.current = window.setInterval(() => void pollAuditJob(jobId), 2000);
     } catch {
       setAuditText('Not verified: audit request failed.');
     } finally { setAuditBusy(false); }
@@ -106,6 +139,22 @@ export default function PassportsView({ passports, selectedPassportId, setSelect
         </div>
         <div className="mt-7 grid gap-3 sm:grid-cols-3"><PassportMetric icon={<FileCheck2 />} label="Passport records" value={passports.length} /><PassportMetric icon={<CheckCircle2 />} label="With evidence" value={evidenceCount} /><PassportMetric icon={<TriangleAlert />} label="Recorded findings" value={findingCount} /></div>
         {auditText && <div className="mt-5 spr-panel-alt p-4 text-sm leading-6 text-[var(--spr-text)] whitespace-pre-wrap">{auditText}</div>}
+        {auditJob && (
+          <div className="mt-5 spr-panel-alt p-4">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-semibold text-[var(--spr-text)]">Live audit: {auditJob.status}{['Pending', 'Running'].includes(auditJob.status) ? '…' : ''}</span>
+              <span className="text-xs text-[var(--spr-text-muted)]">{auditJob.progress ?? 0}%</span>
+            </div>
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--spr-surface-sunken)]">
+              <div className="h-full rounded-full bg-[var(--spr-accent)] transition-all" style={{ width: `${Math.max(0, Math.min(100, auditJob.progress ?? 0))}%` }} />
+            </div>
+            {auditLogs.length > 0 && (
+              <ul className="mt-4 max-h-40 space-y-1 overflow-y-auto font-mono text-[11px] leading-5 text-[var(--spr-text-muted)]">
+                {auditLogs.map((log) => <li key={log.id}><span className="text-[var(--spr-text-faint)]">[{log.level}]</span> {log.message}</li>)}
+              </ul>
+            )}
+          </div>
+        )}
       </header>
 
       <div className="flex flex-wrap items-center gap-2">

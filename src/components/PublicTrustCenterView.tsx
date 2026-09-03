@@ -6,10 +6,10 @@ interface Props {
 }
 
 const sections = [
-  ['about', 'About SPR'],
-  ['methodology', 'Methodology'],
-  ['security', 'Security'],
-  ['trust', 'Trust Center'],
+  ['about', 'About SPR', '/about/'],
+  ['methodology', 'Methodology', '/methodology/'],
+  ['security', 'Security', '/security-center/'],
+  ['trust', 'Trust Center', '/trust/'],
 ] as const;
 
 export default function PublicTrustCenterView({ section, onNavigate }: Props) {
@@ -27,7 +27,7 @@ export default function PublicTrustCenterView({ section, onNavigate }: Props) {
 
       <nav className="border-b border-[var(--spr-border)]">
         <div className="mx-auto flex max-w-6xl flex-wrap gap-1 px-6 py-3">
-          {sections.map(([key, label]) => <button key={key} onClick={() => onNavigate(`/${key}`)} className={`rounded px-3 py-2 text-xs font-semibold ${section === key ? 'bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)]' : 'text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]'}`}>{label}</button>)}
+          {sections.map(([key, label, path]) => <button key={key} onClick={() => onNavigate(path)} className={`rounded px-3 py-2 text-xs font-semibold ${section === key ? 'bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)]' : 'text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]'}`}>{label}</button>)}
           <button onClick={() => onNavigate('/terms')} className="rounded px-3 py-2 text-xs font-semibold text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]">Terms</button>
           <button onClick={() => onNavigate('/privacy')} className="rounded px-3 py-2 text-xs font-semibold text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]">Privacy</button>
         </div>

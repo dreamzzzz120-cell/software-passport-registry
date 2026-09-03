@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, AlertOctagon, ArrowUpRight, Box, Bug, CheckCircle2, ChevronRight, Cloud, Code2, Command, Database, FileCheck2, Layers3, Link2, LockKeyhole, Network, PlayCircle, Radio, Rocket, Scale, Search, ShieldCheck, Sparkles, Terminal, UserPlus, X } from 'lucide-react';
+import { Activity, AlertOctagon, ArrowUpRight, Box, Bug, CheckCircle2, ChevronRight, Cloud, Code2, Command, Database, FileCheck2, Layers3, Link2, LockKeyhole, Network, PlayCircle, Radio, Scale, Search, ShieldCheck, Sparkles, Terminal, X } from 'lucide-react';
 import type { Alert, Client, Scan, SoftwarePassport } from '../types';
+import PilotOnboardingChecklist from './PilotOnboardingChecklist';
 
 interface Props { clients: Client[]; alerts: Alert[]; scans: Scan[]; passports: SoftwarePassport[]; findings?: unknown[]; onNavigateTab: (path: string, itemId?: string) => void; onOpenQuickAction: (actionType: 'add-client' | 'register-passport' | 'scan-sbom') => void; }
 
@@ -69,22 +70,13 @@ export default function EvidenceDashboardView({ clients, alerts, scans, passport
 
   return <div className="space-y-6 pb-10">
     {clients.length === 0 && (
-      <section className="spr-panel border-[var(--spr-highlight)]/40 bg-[var(--spr-accent-soft)]/15 p-6 md:p-7">
-        <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-start gap-3">
-            <div className="mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-md border border-[var(--spr-highlight)]/40 bg-[var(--spr-accent-soft)]"><Rocket className="h-5 w-5 text-[var(--spr-highlight)]" /></div>
-            <div>
-              <div className="text-xs font-bold uppercase tracking-[.18em] text-[var(--spr-highlight)]">Get started</div>
-              <h2 className="mt-1 text-lg font-semibold text-[var(--spr-text)]">Add your first client to start building software passports.</h2>
-              <p className="mt-1.5 max-w-xl text-sm leading-6 text-[var(--spr-text-muted)]">No clients yet — this workspace has no software, evidence, or trust data to show. Add a client, then register the software they run to begin evidence-first trust scoring.</p>
-            </div>
-          </div>
-          <div className="flex shrink-0 flex-wrap gap-2.5 md:flex-col">
-            <button onClick={() => onOpenQuickAction('add-client')} className="spr-btn spr-btn-primary inline-flex items-center justify-center gap-2 !text-xs"><UserPlus className="h-4 w-4" /> Add first client</button>
-            <button onClick={() => onNavigateTab('/integrations')} className="spr-btn spr-btn-secondary inline-flex items-center justify-center gap-2 !text-xs"><Link2 className="h-4 w-4" /> Connect systems</button>
-          </div>
-        </div>
-      </section>
+      <PilotOnboardingChecklist
+        clientsCount={clients.length}
+        passportsCount={passports.length}
+        scansCount={scans.length}
+        onOpenQuickAction={onOpenQuickAction}
+        onNavigateTab={onNavigateTab}
+      />
     )}
     <section className="spr-panel p-6 md:p-9">
       <div className="grid gap-8 xl:grid-cols-[1.35fr_.65fr] xl:items-end"><div>

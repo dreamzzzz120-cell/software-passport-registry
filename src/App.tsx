@@ -44,6 +44,7 @@ import DemoPassport from './components/DemoPassport';
 import ViewErrorBoundary from './components/ViewErrorBoundary';
 import { normalizeClientRecord, toJsonArrayColumn } from './lib/clientJsonColumns';
 import TermsView from './components/legal/TermsView';
+import PublicTrustCenterView from './components/PublicTrustCenterView';
 import PrivacyPolicyView from './components/legal/PrivacyPolicyView';
 import ReportsView from './components/ReportsView';
 import TrustGraphView from './components/TrustGraphView';
@@ -363,6 +364,15 @@ export default function App() {
   // the unrelated internal Privacy Governance tool and must not be replaced.
   if (path === '/terms') return <TermsView />;
   if (!user && path === '/privacy') return <PrivacyPolicyView />;
+  // Public trust center. Always reachable regardless of auth state -- these
+  // are the exact paths LegalFooterLinks has linked to from every public
+  // page all along (/trust/, /about/, /methodology/), which had no matching
+  // route until now. /security-center/ (not /security/) deliberately avoids
+  // colliding with the authenticated internal '/security' route below.
+  if (path === '/trust/') return <PublicTrustCenterView section="trust" onNavigate={navigate} />;
+  if (path === '/about/') return <PublicTrustCenterView section="about" onNavigate={navigate} />;
+  if (path === '/methodology/') return <PublicTrustCenterView section="methodology" onNavigate={navigate} />;
+  if (path === '/security-center/') return <PublicTrustCenterView section="security" onNavigate={navigate} />;
   // Static sample Passport. Reads no database and no tenant - see
   // DemoPassport.tsx. Public by design and explicitly labelled DEMO.
   if (path === '/passport/demo') return <DemoPassport onRunFreeReview={() => navigate('/free-review')} onHome={() => navigate('/')} />;
