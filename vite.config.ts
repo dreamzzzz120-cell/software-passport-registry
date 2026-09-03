@@ -47,13 +47,15 @@ export default defineConfig(({ mode }) => {
       chunkSizeWarningLimit: 1000,
       rollupOptions: {
         output: {
+          // Keep the browser graph limited to actual client dependencies. Database,
+          // queue, and ORM packages are server infrastructure and must never be
+          // intentionally grouped into a client chunk.
           manualChunks: {
             react: ['react', 'react-dom'],
             firebase: ['firebase/app', 'firebase/auth'],
             charts: ['d3', 'recharts'],
             documents: ['jspdf', 'jspdf-autotable', 'html2canvas'],
             ui: ['lucide-react', 'motion'],
-            data: ['drizzle-orm', 'pg', 'ioredis'],
           },
         },
       },
