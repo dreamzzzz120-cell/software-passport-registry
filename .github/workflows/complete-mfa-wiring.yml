@@ -1,0 +1,72 @@
+name: Complete real MFA wiring
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Patch settings and onboarding
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          settings = Path('src/components/SettingsView.tsx')
+          text = settings.read_text()
+          text = text.replace("import { apiFetch } from '../utils/apiClient';", "import { apiFetch } from '../utils/apiClient';\nimport MfaSettingsPanel from './MfaSettingsPanel';")
+          text = text.replace("  const [mfaEnabled, setMfaEnabled] = useState(true);\n", "")
+          old = '''                <div className="flex justify-between items-center">\n                  <div>\n                    <span className="font-semibold text-[var(--spr-text)] block">Enforce Multi-Factor Authentication (MFA)</span>\n                    <p className="text-[10px] text-[var(--spr-text-faint)] leading-snug">All MSP users must provide TOTP codes on logon.</p>\n                  </div>\n                  <button\n                    onClick={() => setMfaEnabled(!mfaEnabled)}\n                    className={`px-3 py-1 text-xs font-bold rounded-md border cursor-pointer transition-colors ${\n                      mfaEnabled ? 'bg-[var(--spr-surface-sunken)] border-[var(--spr-border)] text-[var(--spr-green)]' : 'bg-[var(--spr-surface-sunken)] border-[var(--spr-border)] text-[var(--spr-text-muted)]'\n                    }`}\n                  >\n                    {mfaEnabled ? 'MFA Enabled' : 'MFA Disabled'}\n                  </button>\n                </div>'''
+          new = '''                <MfaSettingsPanel currentUser={auth.currentUser} />'''
+          if old not in text:
+              raise SystemExit('Settings MFA block not found')
+          text = text.replace(old, new, 1)
+          settings.write_text(text)
+
+          onboarding = Path('src/components/OnboardingWizard.tsx')
+          text = onboarding.read_text()
+          text = text.replace("import QRCode from 'qrcode';\n", "")
+          text = text.replace("import { apiFetch } from '../utils/apiClient';", "import { apiFetch } from '../utils/apiClient';\nimport { beginTotpEnrollment, finishTotpEnrollment } from '../lib/mfa';")
+          start = text.index('// Base32 decode and standard RFC 6238 TOTP generator')
+          end = text.index('\nexport default function OnboardingWizard', start)
+          text = text[:start] + text[end+1:]
+          old_state = '''  const [mfaEnabled, setMfaEnabled] = useState(true);\n  const [mfaSecret, setMfaSecret] = useState(() => {\n    // Generate a cryptographically secure Base32 TOTP secret key\n    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';\n    const randomBytes = new Uint8Array(16);\n    if (typeof window !== 'undefined' && window.crypto) {\n      window.crypto.getRandomValues(randomBytes);\n    }\n    let secret = '';\n    for (let i = 0; i < 16; i++) {\n      secret += chars.charAt(randomBytes[i] % chars.length);\n    }\n    return secret.match(/.{1,4}/g)?.join(' ') || secret;\n  });'''
+          if old_state not in text:
+              raise SystemExit('Onboarding MFA state block not found')
+          text = text.replace(old_state, "  const [mfaEnabled, setMfaEnabled] = useState(true);\n  const [mfaSecret, setMfaSecret] = useState<Awaited<ReturnType<typeof beginTotpEnrollment>> | null>(null);", 1)
+          old_effect = '''  useEffect(() => {\n    if (mfaEnabled && mfaSecret) {\n      const cleanSecret = mfaSecret.replace(/\\s+/g, '');\n      const otpauth = `otpauth://totp/SoftwarePassportRegistry:${encodeURIComponent(companyName || 'User')}?secret=${cleanSecret}&issuer=SoftwarePassportRegistry`;\n      QRCode.toDataURL(otpauth, { margin: 1, width: 160 })\n        .then(url => setQrDataUrl(url))\n        .catch(err => console.error('Failed to generate local QR code:', err));\n    }\n  }, [mfaEnabled, mfaSecret, companyName]);'''
+          new_effect = '''  useEffect(() => {\n    if (!mfaEnabled || !auth.currentUser || mfaSecret) return;\n    beginTotpEnrollment(auth.currentUser)\n      .then(secret => setMfaSecret(secret))\n      .catch(err => setTotpError(err?.message || 'Could not start authenticator enrollment.'));\n  }, [mfaEnabled, mfaSecret]);\n\n  useEffect(() => {\n    if (mfaEnabled && mfaSecret) {\n      const otpauth = mfaSecret.generateQrCodeUrl(auth.currentUser?.email || 'User', 'Software Passport Registry');\n      import('qrcode').then(({ default: QRCode }) => QRCode.toDataURL(otpauth, { margin: 1, width: 160 }))\n        .then(url => setQrDataUrl(url))\n        .catch(err => console.error('Failed to generate enrollment QR code:', err));\n    } else {\n      setQrDataUrl('');\n    }\n  }, [mfaEnabled, mfaSecret]);'''
+          if old_effect not in text:
+              raise SystemExit('Onboarding QR effect not found')
+          text = text.replace(old_effect, new_effect, 1)
+          old_handler = '''  const handleVerifyTotp = async () => {\n    setTotpVerifying(true);\n    setTotpError(null);\n    try {\n      const res = await apiFetch('/api/organization/security/verify-mfa', {\n        method: 'POST',\n        headers: { 'Content-Type': 'application/json' },\n        body: JSON.stringify({\n          code: totpCodeInput,\n          secret: mfaSecret\n        })\n      });\n      const data = await res.json();\n      if (res.ok && data.success) {\n        setIsTotpVerified(true);\n      } else {\n        setIsTotpVerified(false);\n        setTotpError(data.error || 'Invalid 6-digit TOTP code. Please check your authenticator app time and enter the current code.');\n      }\n    } catch (err: any) {\n      setIsTotpVerified(false);\n      setTotpError(err?.message || 'Verification error. Please enter a valid 6-digit numeric code.');\n    } finally {\n      setTotpVerifying(false);\n    }\n  };'''
+          new_handler = '''  const handleVerifyTotp = async () => {\n    if (!auth.currentUser || !mfaSecret) {\n      setTotpError('Authenticator enrollment is not ready. Please wait a moment and try again.');\n      return;\n    }\n    setTotpVerifying(true);\n    setTotpError(null);\n    try {\n      await finishTotpEnrollment(auth.currentUser, mfaSecret, totpCodeInput, 'SPR authenticator');\n      setIsTotpVerified(true);\n      setTotpError(null);\n    } catch (err: any) {\n      setIsTotpVerified(false);\n      setTotpError(err?.code === 'auth/requires-recent-login' ? 'For security, sign in again before enabling MFA.' : err?.message || 'Invalid 6-digit TOTP code. Please check your authenticator app time and enter the current code.');\n    } finally {\n      setTotpVerifying(false);\n    }\n  };'''
+          if old_handler not in text:
+              raise SystemExit('Onboarding verify handler not found')
+          text = text.replace(old_handler, new_handler, 1)
+          onboarding.write_text(text)
+          PY
+
+      - name: Typecheck changed code
+        run: |
+          npm ci --no-audit --no-fund
+          npm run typecheck
+
+      - name: Commit wiring and remove one-time workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          rm -f .github/workflows/complete-mfa-wiring.yml
+          git add src/components/SettingsView.tsx src/components/OnboardingWizard.tsx .github/workflows/complete-mfa-wiring.yml
+          git diff --cached --quiet && exit 0
+          git commit -m 'Wire real Firebase TOTP MFA into settings and onboarding'
+          git push
