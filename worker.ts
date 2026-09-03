@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import * as Sentry from '@sentry/node';
 import { runWorkerLoop } from './src/workers/osv-worker.ts';
 import { runWebhookWorkerLoop } from './src/workers/webhook-worker.ts';
 import { runSecurityScannerLoop } from './src/workers/security-scanner-worker.ts';
@@ -6,6 +7,15 @@ import { runTrustMonitoringWorkerLoop } from './src/workers/trust-monitoring-wor
 import { runNotificationWorkerLoop } from './src/workers/notification-worker.ts';
 import { runRetentionWorkerLoop } from './src/workers/retention-worker.ts';
 import { createWorkerPool, assertWorkerDatabase } from './src/workers/worker-db.ts';
+import { config } from './src/config.ts';
+
+if (config.sentry.dsn) {
+  Sentry.init({
+    dsn: config.sentry.dsn,
+    environment: config.nodeEnv,
+    tracesSampleRate: config.isProduction ? 0.1 : 1.0,
+  });
+}
 
 let ready = false;
 function normalizeWorkerDatabaseEnv() {
@@ -19,7 +29,7 @@ function startHealthServer() {
     if (request.url === '/health' && request.method === 'GET') { response.writeHead(ready ? 200 : 503, { 'content-type': 'application/json', 'cache-control': 'no-store' }); response.end(JSON.stringify({ ok: ready, service: 'spr-worker', ready })); return; }
     response.writeHead(404, { 'content-type': 'application/json', 'cache-control': 'no-store' }); response.end(JSON.stringify({ error: 'Not found' }));
   });
-  server.on('error', error => { console.error('[Worker] Health server error:', error); process.exit(1); });
+  server.on('error', error => { console.error('[Worker] Health server error:', error); if (config.sentry.dsn) Sentry.captureException(error); process.exit(1); });
   server.listen(port, '0.0.0.0', () => console.log(`[Worker] Health endpoint listening on 0.0.0.0:${port}`));
 }
 async function verifyDatabase() { const pool = createWorkerPool(); try { await assertWorkerDatabase(pool); } finally { await pool.end(); } }
@@ -27,7 +37,11 @@ async function supervise(name: string, run: () => Promise<void>) {
   let delay = 1000;
   while (true) {
     try { await run(); delay = 1000; }
-    catch (error) { console.error(`[Worker] ${name} loop failure:`, error instanceof Error ? error.message : String(error)); await new Promise(resolve => setTimeout(resolve, delay)); delay = Math.min(delay * 2, 30_000); }
+    catch (error) {
+      console.error(`[Worker] ${name} loop failure:`, error instanceof Error ? error.message : String(error));
+      if (config.sentry.dsn) Sentry.captureException(error, { tags: { worker_loop: name } });
+      await new Promise(resolve => setTimeout(resolve, delay)); delay = Math.min(delay * 2, 30_000);
+    }
   }
 }
 normalizeWorkerDatabaseEnv(); startHealthServer();
@@ -42,4 +56,12 @@ async function main() {
     supervise('retention', runRetentionWorkerLoop),
   ]);
 }
-main().catch(error => { ready = false; console.error('[Worker] Fatal startup error:', error instanceof Error ? error.message : String(error)); process.exit(1); });
+main().catch(async error => {
+  ready = false;
+  console.error('[Worker] Fatal startup error:', error instanceof Error ? error.message : String(error));
+  if (config.sentry.dsn) {
+    Sentry.captureException(error, { tags: { worker_startup: 'true' } });
+    await Sentry.flush(2_000).catch(() => undefined);
+  }
+  process.exit(1);
+});
