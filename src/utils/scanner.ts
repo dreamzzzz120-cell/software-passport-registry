@@ -809,10 +809,10 @@ Respond with ONLY a JSON object, no markdown code fences, matching exactly this 
           vendors: [passport.publisher].filter(Boolean),
           dependencies: sbomComponents.map((c: any) => `${c.name ?? ''} ${c.version ?? ''}`),
           scores: {
-            overall: calculatedScores.overallScore,
-            security: calculatedScores.securityScore,
-            compliance: calculatedScores.complianceScore,
-            vendor: calculatedScores.vendorScore,
+            overall: calculatedScores.overallScore ?? 0,
+            security: calculatedScores.securityScore ?? 0,
+            compliance: calculatedScores.complianceScore ?? 0,
+            vendor: calculatedScores.vendorScore ?? 0,
           },
           assessedFrameworks: [],
           verifiedCertifications: [],
@@ -857,10 +857,10 @@ Respond with ONLY a JSON object, no markdown code fences, matching exactly this 
       const fallbackGuard = guardAIClaims(aiSummaryText, {
         evidenceIds: [...new Set([...collectedEvidence.map(e => String(e.id)), ...collectedFindings.map(f => String(f.id))])],
         scores: {
-          overall: calculatedScores.overallScore,
-          security: calculatedScores.securityScore,
-          compliance: calculatedScores.complianceScore,
-          vendor: calculatedScores.vendorScore,
+          overall: calculatedScores.overallScore ?? 0,
+          security: calculatedScores.securityScore ?? 0,
+          compliance: calculatedScores.complianceScore ?? 0,
+          vendor: calculatedScores.vendorScore ?? 0,
         },
       }, { unknowns: ['External certifications and framework compliance are not established by this scan.'], provenancePresent: true });
       if (!fallbackGuard.ok) {
@@ -872,10 +872,10 @@ Respond with ONLY a JSON object, no markdown code fences, matching exactly this 
     await db.update(passports)
       .set({
         aiSummary: aiSummaryText,
-        overallScore: calculatedScores.overallScore,
-        securityScore: calculatedScores.securityScore,
-        complianceScore: calculatedScores.complianceScore,
-        vendorReputationScore: calculatedScores.vendorScore
+        overallScore: calculatedScores.overallScore ?? 0,
+        securityScore: calculatedScores.securityScore ?? 0,
+        complianceScore: calculatedScores.complianceScore ?? 0,
+        vendorReputationScore: calculatedScores.vendorScore ?? 0
       })
       .where(and(eq(passports.id, passportId), eq(passports.tenantId, tenantId)));
 
