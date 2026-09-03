@@ -10,11 +10,17 @@ import { scanFindingIdentity } from '../security/scan-finding-identity.ts';
 
 const WORKER_ID = `${os.hostname()}:${process.pid}:security`;
 const MAX_ARCHIVE_BYTES = 50 * 1024 * 1024;
+const JOB_LEASE_MS = 10 * 60 * 1000;
+
+async function recoverStaleJobs(pool: Pool) {
+  await pool.query(`UPDATE agent_jobs SET status=CASE WHEN attempt_count < max_attempts THEN 'Pending' ELSE 'Failed' END, error=CASE WHEN attempt_count < max_attempts THEN NULL ELSE 'SECURITY_SCAN_LEASE_EXPIRED' END, next_attempt_at=CASE WHEN attempt_count < max_attempts THEN NOW() ELSE next_attempt_at END, locked_at=NULL, locked_by=NULL, updated_at=NOW(), completed_at=CASE WHEN attempt_count >= max_attempts THEN NOW() ELSE completed_at END WHERE job_type='repository_security_scan' AND status='Running' AND locked_at < NOW() - ($1 * INTERVAL '1 millisecond')`, [JOB_LEASE_MS]);
+}
 
 async function claimJob(pool: Pool) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await client.query(`UPDATE agent_jobs SET status=CASE WHEN attempt_count < max_attempts THEN 'Pending' ELSE 'Failed' END, error=CASE WHEN attempt_count < max_attempts THEN NULL ELSE 'SECURITY_SCAN_LEASE_EXPIRED' END, next_attempt_at=CASE WHEN attempt_count < max_attempts THEN NOW() ELSE next_attempt_at END, locked_at=NULL, locked_by=NULL, updated_at=NOW(), completed_at=CASE WHEN attempt_count >= max_attempts THEN NOW() ELSE completed_at END WHERE job_type='repository_security_scan' AND status='Running' AND locked_at < NOW() - ($1 * INTERVAL '1 millisecond')`, [JOB_LEASE_MS]);
     const result = await client.query(`SELECT id, tenant_id, passport_id, attempt_count, max_attempts FROM agent_jobs WHERE status='Pending' AND job_type='repository_security_scan' AND (next_attempt_at IS NULL OR next_attempt_at <= NOW()) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1`);
     const job = result.rows[0];
     if (!job) { await client.query('COMMIT'); return null; }
@@ -39,17 +45,6 @@ async function processSecurityJob(pool: Pool, job: any) {
     if (!metadataResponse.ok) throw new Error(metadataResponse.status === 404 ? 'REPOSITORY_NOT_FOUND' : 'REPOSITORY_ACCESS_DENIED');
     const metadata: any = await metadataResponse.json();
     if (metadata.private) throw new Error('REPOSITORY_ACCESS_DENIED');
-    // The ref used to default to the literal string 'main', so every repository
-    // whose default branch is anything else -- master, trunk, develop -- failed
-    // with REPOSITORY_REF_NOT_FOUND. Free Review then reported scanStatus
-    // "partial" with no evidence and no passport, and until the failure was
-    // logged there was nothing to say why. Verified in production against
-    // octocat/Hello-World, whose default branch is master.
-    //
-    // GitHub already tells us the answer in the metadata response fetched
-    // immediately above, so this needs no extra request: prefer an explicitly
-    // requested ref, then the repository's real default branch, and keep 'main'
-    // only as a last resort for a malformed metadata payload.
     const defaultBranch = typeof metadata.default_branch === 'string' && metadata.default_branch.trim() ? metadata.default_branch.trim() : '';
     const requestedRef = source.requested_ref || defaultBranch || 'main';
     const commitResponse = await fetch(`${repoApi}/commits/${encodeURIComponent(requestedRef)}`, { redirect: 'error', headers: { accept: 'application/vnd.github+json', 'user-agent': 'spr-security-worker/1.0' } });
@@ -76,64 +71,30 @@ async function processSecurityJob(pool: Pool, job: any) {
 
     await pool.query(`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES ($1,$2,$3,'Info')`, [job.id, 'security-scanner', `Acquired GitHub commit ${commit.sha}`]);
     await pool.query(`UPDATE agent_jobs SET progress=25,updated_at=NOW() WHERE id=$1 AND tenant_id=$2`, [job.id, job.tenant_id]);
-
     const generated = await generateRepositorySbom(scanRoot, process.env.SYFT_PATH || 'syft');
     await pool.query(`UPDATE agent_jobs SET progress=55,updated_at=NOW() WHERE id=$1 AND tenant_id=$2`, [job.id, job.tenant_id]);
     const scanned = await runRealRepositoryScanners(scanRoot, generated.document);
     const findings = scanned.findings;
-
     for (const finding of findings) {
-      const findingKey = sha256(scanFindingIdentity({
-        tenantId: job.tenant_id,
-        passportId: job.passport_id,
-        engineId: finding.engineId,
-        category: finding.category,
-        title: finding.title,
-        component: finding.component,
-      }));
+      const findingKey = sha256(scanFindingIdentity({ tenantId: job.tenant_id, passportId: job.passport_id, engineId: finding.engineId, category: finding.category, title: finding.title, component: finding.component }));
       await pool.query(`INSERT INTO scan_findings (id,tenant_id,asset_id,job_id,severity,category,title,description,component,status,detected_at,engine_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'Open',NOW(),$10) ON CONFLICT DO NOTHING`, [`finding-${findingKey}`, job.tenant_id, job.passport_id, job.id, finding.severity, finding.category, finding.title, finding.description, finding.component || null, finding.engineId]);
     }
-
     const evidencePayload = JSON.stringify({ repository: `${source.repository_owner}/${source.repository_name}`, requestedRef, resolvedCommitSha: commit.sha, engines: ['Syft','OSV','spr-secret-scanner-v1','spr-iac-config-scanner-v1','spr-license-scanner-v1'], findingCount: findings.length, limitations: ['OSV results are provider observations, not cryptographic verification.','Secret/config rules are deterministic pattern scanners and can produce false positives/negatives.'] });
     const evidenceHash = sha256(evidencePayload);
     await pool.query(`INSERT INTO evidence_items (id,tenant_id,asset_id,name,type,verified,status,signer,timestamp,hash,raw_content,engine_id) VALUES ($1,$2,$3,'Multi-engine repository security scan','Security Scan',0,'OBSERVED','SPR scanner',NOW(),$4,$5,'spr-security-orchestrator-v1') ON CONFLICT DO NOTHING`, [`ev-security-${job.id}-${evidenceHash.slice(0,24)}`, job.tenant_id, job.passport_id, `sha256:${evidenceHash}`, evidencePayload]);
     await pool.query(`INSERT INTO scans (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name) VALUES ($1,$2,$3,'Multi-engine repository security scan',$4,'Completed',0,$5,NOW(),$6) ON CONFLICT DO NOTHING`, [`scan-security-${job.id}-${commit.sha.slice(0,16)}`, job.tenant_id, `${source.repository_owner}/${source.repository_name}@${commit.sha.slice(0,12)}`, WORKER_ID, findings.length, source.repository_owner]);
     await pool.query(`UPDATE agent_jobs SET status='Completed',progress=100,result=$2,error=NULL,completed_at=NOW(),locked_at=NULL,locked_by=NULL,updated_at=NOW() WHERE id=$1 AND tenant_id=$3 AND status='Running' AND locked_by=$4`, [job.id, JSON.stringify({ engines: ['Syft','OSV','Secret','IaC/Config','License'], findings: findings.length, commitSha: commit.sha, evidenceHash: `sha256:${evidenceHash}` }), job.tenant_id, WORKER_ID]);
-  } finally {
-    await rm(tempRoot, { recursive: true, force: true });
-  }
+  } finally { await rm(tempRoot, { recursive: true, force: true }); }
 }
 
-// Scrub anything credential-shaped before a failure reason reaches the logs.
-// Reasons come from GitHub/network/syft errors, which can carry a URL; none
-// should ever carry a token, but a log line is the wrong place to find out.
 function safeFailureReason(raw: string): string {
-  return raw
-    .replace(/gh[pousr]_[A-Za-z0-9]{10,}/g, '[REDACTED_TOKEN]')
-    .replace(/(authorization|bearer|token|key|secret)[=: ]+\S+/gi, '$1 [REDACTED]')
-    .replace(/https?:\/\/[^@\s]*@/g, 'https://[REDACTED]@')
-    .slice(0, 200);
+  return raw.replace(/gh[pousr]_[A-Za-z0-9]{10,}/g, '[REDACTED_TOKEN]').replace(/(authorization|bearer|token|key|secret)[=: ]+\S+/gi, '$1 [REDACTED]').replace(/https?:\/\/[^@\s]*@/g, 'https://[REDACTED]@').slice(0, 200);
 }
 
 async function fail(pool: Pool, job: any, error: unknown) {
   const code = error instanceof Error ? error.message : 'SCAN_WORKER_ERROR';
   const retry = Number(job.attempt_count) < Number(job.max_attempts);
-  // This worker had exactly one console statement in the whole file -- the
-  // startup line -- and fail() had none. A failed production scan wrote its
-  // reason to agent_jobs.error and nothing else, so the customer saw
-  // scanStatus "partial" with zero evidence while Railway logs showed an idle
-  // worker and Sentry saw nothing. The failure was real but invisible, which is
-  // why it could not be diagnosed from outside the database.
-  console.error(JSON.stringify({
-    event: 'security_scan_failed',
-    workerId: WORKER_ID,
-    jobId: job.id,
-    tenantId: job.tenant_id,
-    attempt: Number(job.attempt_count) + 1,
-    maxAttempts: Number(job.max_attempts),
-    willRetry: retry,
-    reason: safeFailureReason(code),
-  }));
+  console.error(JSON.stringify({ event: 'security_scan_failed', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, attempt: Number(job.attempt_count) + 1, maxAttempts: Number(job.max_attempts), willRetry: retry, reason: safeFailureReason(code) }));
   await pool.query(`UPDATE agent_jobs SET status=$2,progress=CASE WHEN $2='Failed' THEN 100 ELSE progress END,error=$3,next_attempt_at=CASE WHEN $2='Pending' THEN NOW()+INTERVAL '30 seconds' ELSE next_attempt_at END,locked_at=NULL,locked_by=NULL,completed_at=CASE WHEN $2='Failed' THEN NOW() ELSE completed_at END,updated_at=NOW() WHERE id=$1 AND tenant_id=$4 AND locked_by=$5`, [job.id, retry ? 'Pending' : 'Failed', code.slice(0,200), job.tenant_id, WORKER_ID]);
 }
 
@@ -150,7 +111,7 @@ export async function runSecurityScannerLoop() {
   let stopping = false;
   const stop = () => { stopping = true; };
   process.once('SIGINT', stop); process.once('SIGTERM', stop);
-  console.log(JSON.stringify({ event: 'security_scanner_started', workerId: WORKER_ID }));
-  try { while (!stopping) { const processed = await runSecurityScannerOnce(pool); if (!processed) await new Promise(resolve => setTimeout(resolve, 2000)); } }
+  console.log(JSON.stringify({ event: 'security_scanner_started', workerId: WORKER_ID, leaseMs: JOB_LEASE_MS }));
+  try { while (!stopping) { await recoverStaleJobs(pool); const processed = await runSecurityScannerOnce(pool); if (!processed) await new Promise(resolve => setTimeout(resolve, 2000)); } }
   finally { await pool.end(); }
 }
