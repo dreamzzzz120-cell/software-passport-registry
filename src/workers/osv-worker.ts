@@ -196,26 +196,67 @@ async function processJob(pool: Pool, job: ClaimedJob) {
   });
 
   let findingCount = 0;
-  // OSV components are queried serially (persistProviderResult writes findings
-  // under one transaction per component, so there is no batching to lean on).
-  // Each query is individually bounded by PROVIDER_TIMEOUT_MS, but a manifest
-  // with many components can still take minutes end to end -- this makes that
-  // visible as progress instead of one long silence.
+  // Was serial: one OSV HTTP round-trip per component, awaited in order. Each
+  // call is individually bounded by PROVIDER_TIMEOUT_MS, but that bound is
+  // per-call, not for the loop -- a real repository's manifest routinely has
+  // dozens of components, and 40 components at up to 15s each is minutes, not
+  // seconds. That's what actually happened scanning this project's own repo:
+  // the security engine (a single orchestrated call) finished in seconds while
+  // this loop was still going when the customer-facing deadline hit, reporting
+  // "did not finish in time" for a job that was simply too slow to finish
+  // serially. Fetches now run concurrently (network I/O only, no DB pool
+  // involved); persistence stays serial afterward since worker-db.ts caps the
+  // pool at 4 connections and writes were never the slow part.
   console.log(JSON.stringify({ event: 'scan_job_stage', workerId: WORKER_ID, jobId: job.id, jobType: job.job_type, tenantId: job.tenant_id, stage: 'osv_component_loop_started', componentCount: components.length }));
-  for (const [index, component] of components.entries()) {
-    const provider = await fetchOsv(component);
+  const OSV_FETCH_CONCURRENCY = 8;
+  let fetchesCompleted = 0;
+  const logFetchProgress = () => {
+    fetchesCompleted++;
+    if (fetchesCompleted % 5 === 0 || fetchesCompleted === components.length) {
+      console.log(JSON.stringify({ event: 'scan_job_stage', workerId: WORKER_ID, jobId: job.id, jobType: job.job_type, tenantId: job.tenant_id, stage: 'osv_component_progress', processed: fetchesCompleted, total: components.length }));
+    }
+  };
+  const providerResults: Array<{ component: (typeof components)[number]; response: unknown } | null> = new Array(components.length).fill(null);
+  let nextComponentIndex = 0;
+  async function fetchWorker() {
+    while (true) {
+      const index = nextComponentIndex++;
+      if (index >= components.length) return;
+      const component = components[index];
+      try {
+        const provider = await fetchOsv(component);
+        providerResults[index] = { component, response: provider.response };
+      } catch (error) {
+        // One slow or failing dependency must not take the rest of a real
+        // manifest down with it. Left null here; counted and surfaced below
+        // rather than persisted as if OSV had actually answered for it.
+        console.error(JSON.stringify({ event: 'osv_component_query_failed', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, component: `${component.name}@${component.version}`, reason: safeFailureReason(error instanceof Error ? error.message : String(error)) }));
+      } finally {
+        logFetchProgress();
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(OSV_FETCH_CONCURRENCY, components.length) }, fetchWorker));
+
+  const failedComponentCount = providerResults.filter((result) => result === null).length;
+  // A repository where OSV genuinely answered for nothing (provider outage,
+  // network egress blocked, etc.) must not be allowed to look like a clean
+  // scan with zero findings -- that is exactly the fabricated-assurance
+  // failure mode this project exists to prevent. A handful of individual
+  // timeouts among many successes is a normal, tolerable partial result.
+  if (components.length > 0 && failedComponentCount === components.length) throw new Error('OSV_ALL_QUERIES_FAILED');
+
+  for (const result of providerResults) {
+    if (!result) continue;
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      findingCount += await persistProviderResult(client, job, component, provider.response);
+      findingCount += await persistProviderResult(client, job, result.component, result.response);
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
     } finally { client.release(); }
-    if ((index + 1) % 5 === 0 || index === components.length - 1) {
-      console.log(JSON.stringify({ event: 'scan_job_stage', workerId: WORKER_ID, jobId: job.id, jobType: job.job_type, tenantId: job.tenant_id, stage: 'osv_component_progress', processed: index + 1, total: components.length }));
-    }
   }
 
   const completedAt = new Date().toISOString();
