@@ -126,7 +126,7 @@ export default function CommandCenter({ children, path, userEmail, role, onNavig
             title="Go to the Overview dashboard."
             className="mb-3 flex items-center gap-2.5 rounded-md border border-[var(--spr-border)] p-2 text-left hover:bg-[var(--spr-surface-alt)] focus:outline-none focus:ring-2 focus:ring-[var(--spr-highlight)]/40"
           >
-            <img src="/brand/spr-icon.png" alt="SPR" className="h-9 w-9 shrink-0 rounded-md border border-[var(--spr-border)] bg-white object-contain p-1" />
+            <img src="/brand/spr-icon.png" alt="SPR" className="h-11 w-11 shrink-0 rounded-md border border-[var(--spr-border)] object-contain" />
             <span className="min-w-0">
               <span className="block text-[13px] font-semibold leading-tight">Software Passport Registry</span>
               <span className="block text-[10px] leading-tight text-[var(--spr-text-faint)]">Software Trust OS</span>
@@ -170,7 +170,7 @@ export default function CommandCenter({ children, path, userEmail, role, onNavig
                 title="Go to the Overview dashboard."
                 className="rounded-md border border-[var(--spr-border)] focus:outline-none focus:ring-2 focus:ring-[var(--spr-highlight)]/40 lg:hidden"
               >
-                <img src="/brand/spr-icon.png" alt="SPR" className="h-7 w-7 rounded-md bg-white object-contain p-0.5" />
+                <img src="/brand/spr-icon.png" alt="SPR" className="h-9 w-9 rounded-md object-contain" />
               </button>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5 text-[11px] text-[var(--spr-text-faint)]">

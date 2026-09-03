@@ -45,7 +45,7 @@ export default function HomePage({ onCreatePassport, onExploreTrustNetwork, onVi
     <div className="min-h-screen bg-[var(--spr-surface)] text-[#cccccc]">
       <section className="mx-auto flex max-w-7xl flex-col items-center gap-14 px-6 py-20 lg:flex-row lg:items-center lg:py-28">
         <div className="max-w-2xl">
-          <img src="/brand/spr-logo.jpg" alt="Software Passport Registry" className="mb-6 h-10 w-auto" />
+          <img src="/brand/spr-logo.jpg" alt="Software Passport Registry" className="mb-6 h-24 w-auto drop-shadow-[0_4px_20px_rgba(0,0,0,0.35)]" />
           <div className="mb-5 flex flex-wrap items-center gap-3">
             <span className="text-[11px] font-bold uppercase tracking-[.22em] text-[var(--spr-highlight)]">Software Trust Infrastructure</span>
             <span className="rounded-full border border-[var(--spr-amber)]/40 bg-[var(--spr-amber)]/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[.14em] text-[var(--spr-amber)]">Limited early access</span>

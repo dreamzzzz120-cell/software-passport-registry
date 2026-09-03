@@ -18,7 +18,7 @@ export default function PublicTrustCenterView({ section, onNavigate }: Props) {
       <header className="border-b border-[var(--spr-border)] bg-[var(--spr-surface-deep)]">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-6 px-6 py-5">
           <button onClick={() => onNavigate('/')} className="flex items-center gap-3 text-left">
-            <img src="/brand/spr-icon.png" alt="SPR" className="h-9 w-9 rounded-md border border-[var(--spr-border)] bg-white object-contain p-1" />
+            <img src="/brand/spr-icon.png" alt="SPR" className="h-11 w-11 rounded-md border border-[var(--spr-border)] object-contain" />
             <div><div className="text-sm font-semibold">Software Passport Registry</div><div className="text-[10px] uppercase tracking-[.16em] text-[var(--spr-text-faint)]">Independent software trust infrastructure</div></div>
           </button>
           <button onClick={() => onNavigate('/free-review')} className="rounded-[3px] bg-[var(--spr-accent)] px-4 py-2 text-xs font-semibold text-white hover:bg-[var(--spr-accent-hover)]">Run a Free Review</button>

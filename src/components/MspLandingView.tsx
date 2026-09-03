@@ -30,6 +30,7 @@ export default function MspLandingView({ onEnter, onViewPricing }: Props) {
   return (
     <div className="min-h-screen bg-[var(--spr-surface)] text-[var(--spr-text)]">
       <div className="mx-auto max-w-5xl px-6 py-20">
+        <img src="/brand/spr-logo.jpg" alt="Software Passport Registry" className="mb-6 h-20 w-auto drop-shadow-[0_4px_20px_rgba(0,0,0,0.35)]" />
         <div className="text-[10px] font-semibold uppercase tracking-[.15em] text-[var(--spr-highlight)]">Software Passport Registry for MSPs</div>
         <h1 className="mt-4 max-w-3xl text-3xl font-bold tracking-tight md:text-5xl">
           Give every client a living, evidence-backed software trust report.

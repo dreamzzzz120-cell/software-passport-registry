@@ -178,6 +178,7 @@ export default function FreeReviewView({ onSignUp, initialResult }: FreeReviewVi
     <div className="min-h-screen bg-[var(--spr-surface)] px-6 py-16 text-[var(--spr-text)]">
       <div className="mx-auto max-w-2xl">
         <div className="text-center">
+          <img src="/brand/spr-logo.jpg" alt="Software Passport Registry" className="mx-auto mb-6 h-20 w-auto drop-shadow-[0_4px_20px_rgba(0,0,0,0.35)]" />
           <div className="text-[10px] font-semibold uppercase tracking-[.15em] text-[var(--spr-highlight)]">Software Passport Registry</div>
           <h1 className="mt-3 text-3xl font-semibold">Free software review</h1>
           <p className="mt-3 text-sm leading-6 text-[var(--spr-text-muted)]">Enter a public GitHub repository. SPR runs a real dependency and secret scan against it and shows you exactly what it found - no account required.</p>
