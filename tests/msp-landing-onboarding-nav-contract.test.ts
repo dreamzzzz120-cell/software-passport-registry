@@ -38,13 +38,20 @@ describe('first-run onboarding banner on the dashboard', () => {
     expect(s).toContain('{clients.length === 0 && (');
   });
 
-  it('is actionable through the existing onOpenQuickAction/onNavigateTab handlers, not a dead button', () => {
+  it('passes its own real onOpenQuickAction/onNavigateTab handlers into PilotOnboardingChecklist, not stubs', () => {
     const s = source();
     const bannerStart = s.indexOf('{clients.length === 0 && (');
     const bannerEnd = s.indexOf(')}\n    <section className="spr-panel p-6 md:p-9">');
     const banner = s.slice(bannerStart, bannerEnd);
-    expect(banner).toContain("onOpenQuickAction('add-client')");
-    expect(banner).toContain("onNavigateTab('/integrations')");
+    expect(banner).toContain('<PilotOnboardingChecklist');
+    expect(banner).toContain('onOpenQuickAction={onOpenQuickAction}');
+    expect(banner).toContain('onNavigateTab={onNavigateTab}');
+  });
+
+  it('PilotOnboardingChecklist actually calls the handlers it is given, so the banner is not a dead button', () => {
+    const s = read('src/components/PilotOnboardingChecklist.tsx');
+    expect(s).toContain("onOpenQuickAction('add-client')");
+    expect(s).toContain("onNavigateTab(activeTab === 'integrations' ? '/integrations' : '/billing')");
   });
 });
 

@@ -153,7 +153,25 @@ export function createUniversalIntakeRouter() {
       if (!Number.isFinite(observedSize) || observedSize !== Number(item.size)) {
         return res.status(422).json({ error: 'Uploaded object size does not match the declared size.' });
       }
-      const result = await db.execute(sql`UPDATE intake_items SET status='UPLOADED', sha256=${parsed.data.sha256 ?? null}, uploaded_at=NOW() WHERE id=${parsed.data.itemId} AND session_id=${session.id} AND status='AWAITING_UPLOAD' RETURNING id, name, size, content_type AS "contentType", kind, storage_bucket AS "bucket", storage_path AS "path", sha256, status`);
+      // The client-reported sha256 (if any) is never trusted as the record of
+      // truth -- SPR's own evidence-integrity claim requires the hash to
+      // describe the bytes SPR itself observed, not a value the uploader
+      // could have miscomputed or falsified. Download the object and hash it
+      // server-side; log (but do not reject on) a mismatch against what the
+      // client reported, since that's a useful integrity signal on its own.
+      const downloaded = await client.storage.from(item.bucket).download(item.path);
+      if (downloaded.error || !downloaded.data) {
+        return res.status(422).json({ error: 'Could not read the uploaded object to verify its contents.' });
+      }
+      const bytes = Buffer.from(await downloaded.data.arrayBuffer());
+      if (bytes.length !== Number(item.size)) {
+        return res.status(422).json({ error: 'Uploaded object size does not match the declared size.' });
+      }
+      const serverSha256 = crypto.createHash('sha256').update(bytes).digest('hex');
+      if (parsed.data.sha256 && parsed.data.sha256 !== serverSha256) {
+        console.warn(`[Intake] Client-reported sha256 for item ${parsed.data.itemId} did not match the server-computed hash; the server-computed value is what was persisted.`);
+      }
+      const result = await db.execute(sql`UPDATE intake_items SET status='UPLOADED', sha256=${serverSha256}, uploaded_at=NOW() WHERE id=${parsed.data.itemId} AND session_id=${session.id} AND status='AWAITING_UPLOAD' RETURNING id, name, size, content_type AS "contentType", kind, storage_bucket AS "bucket", storage_path AS "path", sha256, status`);
       const updated = (result as any).rows?.[0];
       if (!updated) return res.status(409).json({ error: 'Intake item changed before completion.' });
       return res.status(200).json(updated);

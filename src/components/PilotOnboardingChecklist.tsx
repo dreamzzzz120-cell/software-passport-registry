@@ -365,12 +365,20 @@ export default function PilotOnboardingChecklist({
                 {activeTab === 'integrations' ? 'Advanced Repositories & Databases Integration Center' : 'MSP Tenant Usage Limits & Billing Panel'}
               </span>
             </h3>
-            <button
-              onClick={() => setActiveTab('none')}
-              className="text-[10px] font-mono text-[var(--spr-text-muted)] hover:text-[var(--spr-text)] underline"
-            >
-              Close Configurator
-            </button>
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => onNavigateTab(activeTab === 'integrations' ? '/integrations' : '/billing')}
+                className="text-[10px] font-mono text-[var(--spr-highlight)] hover:underline"
+              >
+                {activeTab === 'integrations' ? 'View full Integrations page →' : 'View full Billing page →'}
+              </button>
+              <button
+                onClick={() => setActiveTab('none')}
+                className="text-[10px] font-mono text-[var(--spr-text-muted)] hover:text-[var(--spr-text)] underline"
+              >
+                Close Configurator
+              </button>
+            </div>
           </div>
 
           {/* Tab Content: Integrations */}
