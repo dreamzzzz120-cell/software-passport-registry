@@ -6,11 +6,10 @@ on:
   pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   verify:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -29,42 +28,6 @@ jobs:
       - name: Verify lockfile is clean
         run: git diff --exit-code -- package-lock.json
 
-      - name: Apply final hardening patches
-        shell: python
-        run: |
-          from pathlib import Path
-
-          p = Path('src/integrations/adapters.ts')
-          s = p.read_text()
-          marker = "  const mapped = h.match(/^::ffff:("
-          pos = s.find(marker)
-          if pos >= 0 and 'mappedHexPrefix' not in s:
-              end = s.find('\n', pos)
-              if end < 0:
-                  raise SystemExit('could not locate mapped IPv6 line')
-              line = s[pos:end]
-              if 'mapped && net.isIP(mapped[1]) === 4' not in line:
-                  raise SystemExit('unexpected mapped IPv6 check')
-              insertion = "  const mappedHexPrefix = ipv6ToBigInt('::ffff:0:0');\n  const mappedHexValue = ipv6ToBigInt(h);\n  if (mappedHexPrefix !== undefined && mappedHexValue !== undefined && (mappedHexValue >> 32n) === (mappedHexPrefix >> 32n)) {\n    const v4 = Number(mappedHexValue & 0xffffffffn);\n    const dotted = `${v4 >>> 24}.${(v4 >>> 16) & 255}.${(v4 >>> 8) & 255}.${v4 & 255}`;\n    return blockPrivateAddress(dotted);\n  }\n"
-              p.write_text(s[:end+1] + insertion + s[end+1:])
-
-          p = Path('src/routes/billing.ts')
-          s = p.read_text()
-          old = """    const inserted = await db.execute(sql`INSERT INTO billing_webhook_events (id, event_type) VALUES (${event.id}, ${event.type}) ON CONFLICT (id) DO NOTHING RETURNING id`);\n    if (!(inserted as any).rows?.length) return res.status(200).json({ received: true, duplicate: true });\n"""
-          new = """    const inserted = await db.execute(sql`\n      INSERT INTO billing_webhook_events (id, event_type, processing_attempts, last_error)\n      VALUES (${event.id}, ${event.type}, 1, NULL)\n      ON CONFLICT (id) DO UPDATE SET\n        processing_attempts = billing_webhook_events.processing_attempts + 1\n      WHERE billing_webhook_events.processed_at IS NULL\n      RETURNING id, processed_at\n    `);\n    const webhookRow = (inserted as any).rows?.[0];\n    if (!webhookRow) return res.status(200).json({ received: true, duplicate: true });\n"""
-          if old in s:
-              s = s.replace(old, new, 1)
-          elif 'processing_attempts = billing_webhook_events.processing_attempts + 1' not in s:
-              raise SystemExit('webhook idempotency block not found')
-
-          old = """    return res.status(200).json({ received: true });\n  } catch (error) {\n    console.error('[Billing] Webhook event handling failed:', error instanceof Error ? error.message : String(error));\n    return res.status(500).json({ error: 'WEBHOOK_PROCESSING_FAILED' });\n  }\n}"""
-          new = """    await db.execute(sql`\n      UPDATE billing_webhook_events\n      SET processed_at = CURRENT_TIMESTAMP, last_error = NULL\n      WHERE id = ${event.id} AND processed_at IS NULL\n    `);\n    return res.status(200).json({ received: true });\n  } catch (error) {\n    const message = error instanceof Error ? error.message : String(error);\n    console.error('[Billing] Webhook event handling failed:', message);\n    await db.execute(sql`\n      UPDATE billing_webhook_events\n      SET last_error = ${message.slice(0, 1000)}\n      WHERE id = ${event.id} AND processed_at IS NULL\n    `).catch(() => undefined);\n    return res.status(500).json({ error: 'WEBHOOK_PROCESSING_FAILED' });\n  }\n}"""
-          if old in s:
-              s = s.replace(old, new, 1)
-          elif 'SET processed_at = CURRENT_TIMESTAMP, last_error = NULL' not in s:
-              raise SystemExit('webhook success/catch block not found')
-          p.write_text(s)
-
       - name: Typecheck
         run: npm run typecheck
 
@@ -73,13 +36,3 @@ jobs:
 
       - name: Production build
         run: npm run build
-
-      - name: Commit hardening patch
-        if: github.event_name == 'push'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/routes/billing.ts src/integrations/adapters.ts
-          git diff --cached --quiet && exit 0
-          git commit -m "fix: finalize billing retry recovery and mapped IPv6 SSRF hardening"
-          git push
