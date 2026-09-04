@@ -1,0 +1,117 @@
+name: Apply hardened scan UX integration
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Integrate live scan progress UI
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          scans = Path('src/components/ScansView.tsx')
+          text = scans.read_text()
+
+          if "./ScanProgressExperience" not in text:
+              text = text.replace(
+                  "import NewReviewIntake from './NewReviewIntake';",
+                  "import NewReviewIntake from './NewReviewIntake';\nimport ScanProgressExperience from './ScanProgressExperience';"
+              )
+
+          if "const [currentJobId, setCurrentJobId]" not in text:
+              text = text.replace(
+                  "  const [scanCompleted, setScanCompleted] = useState(false);",
+                  "  const [scanCompleted, setScanCompleted] = useState(false);\n  const [currentJobId, setCurrentJobId] = useState<string | null>(() => {\n    try { return window.localStorage.getItem('spr.activeScanJobId'); } catch { return null; }\n  });\n  const [currentScanTarget, setCurrentScanTarget] = useState('');"
+              )
+
+          if "spr.activeScanJobId" not in text[text.find("const [currentJobId"):text.find("const [currentJobId") + 1000]:
+              raise SystemExit('localStorage state insertion failed')
+
+          # Remove the legacy 1.5s polling loop. The hardened component owns polling.
+          pattern = re.compile(
+              r"\n      // Start periodic real-evidence state polling.*?\n\n    } catch \(err: unknown\) {",
+              re.S,
+          )
+          replacement = """
+      setCurrentJobId(jobId);
+      setCurrentScanTarget(matchedPassport.name);
+      try { window.localStorage.setItem('spr.activeScanJobId', jobId); } catch {}
+
+    } catch (err: unknown) {"""
+          text, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit('legacy polling block not found')
+
+          # Replace the legacy terminal console with the real 21-stage progress experience.
+          start = "          {/* Scanner Console / Progress indicator */}"
+          end = "        {/* Right Column: Scan History List */}"
+          if start in text and end in text:
+              a = text.index(start)
+              b = text.index(end, a)
+              new_console = """          {currentJobId && (
+            <ScanProgressExperience
+              jobId={currentJobId}
+              targetName={currentScanTarget}
+              onComplete={async () => {
+                setIsScanning(false);
+                setScanCompleted(true);
+                setCurrentJobId(null);
+                try { window.localStorage.removeItem('spr.activeScanJobId'); } catch {}
+                const refreshScansRes = await apiFetch('/api/scans');
+                if (refreshScansRes.ok) {
+                  const updatedScans = await refreshScansRes.json();
+                  const compiledScan = updatedScans[0];
+                  if (compiledScan) onTriggerNewScan(compiledScan);
+                }
+              }}
+            />
+          )}
+
+"""
+              text = text[:a] + new_console + text[b:]
+          else:
+              raise SystemExit('legacy console markers not found')
+
+          # Persist an in-flight job across navigation/reload and restore active state.
+          marker = "  useEffect(() => {\n    fetchSchedules();\n  }, []);"
+          if marker in text and "Restore an in-flight scan" not in text:
+              text = text.replace(marker, marker + "\n\n  // Restore an in-flight scan after navigation/reload; the job remains server-side.\n  useEffect(() => {\n    if (!currentJobId) return;\n    setIsScanning(true);\n    setScanCompleted(false);\n  }, [currentJobId]);\n")
+
+          # Clear the persisted job when the user explicitly dismisses completion.
+          text = text.replace(
+              "setScanProgress(0);\n                    }}",
+              "setScanProgress(0);\n                      setCurrentJobId(null);\n                      try { window.localStorage.removeItem('spr.activeScanJobId'); } catch {}\n                    }}"
+          )
+
+          scans.write_text(text)
+
+      - name: Typecheck and test
+        run: |
+          npm ci
+          npm run typecheck
+          npm test -- --runInBand
+
+      - name: Commit integration
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/ScansView.tsx
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "feat: wire hardened scan progress into scanner"
+          git push
