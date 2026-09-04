@@ -3,93 +3,85 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
-import { Check, ShieldCheck } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Check, ShieldCheck, Loader2, AlertTriangle } from 'lucide-react';
 import LegalFooterLinks from './legal/LegalFooterLinks';
+import { apiFetch } from '../utils/apiClient';
 
 interface Props {
   isAuthenticated: boolean;
   onPrimaryAction: () => void;
 }
 
-// Public MSP pricing is intentionally framed around the recurring service an
-// MSP can deliver to its clients: client coverage, software assets, evidence,
-// monitoring, white-label delivery, and portfolio operations.
-const TIERS: { name: string; tagline: string; priceLabel: string; features: string[]; highlight?: boolean }[] = [
-  {
-    name: 'Free',
-    tagline: 'See SPR before you sell it',
-    priceLabel: '$0',
+type PlanId = 'pilot' | 'starter' | 'professional' | 'growth' | 'enterprise';
+type CatalogPlan = {
+  id: PlanId;
+  label: string;
+  priceLabel: string | null;
+  clientLimit: number | null;
+  checkoutAvailable: boolean;
+};
+
+// Every figure on this page that costs money, or that SPR will actually
+// enforce, comes from GET /api/billing/catalog -- the same catalogue the
+// Subscribe button in Billing checks out against, with each amount read from
+// the live Stripe Price. Only the positioning copy lives here. This page used
+// to carry its own hardcoded monthly prices and client counts, which drifted
+// away from what billing charged and enforced; a visitor could be quoted one
+// price on this page and charged another at checkout.
+const PLAN_COPY: Record<PlanId, { tagline: string; features: string[]; highlight?: boolean }> = {
+  pilot: {
+    tagline: 'Run a white-label pilot before committing',
     features: [
-      '1 software review',
-      'Basic software identity and risk assessment',
-      'Limited evidence view',
-      'BUY / INVESTIGATE / AVOID result',
-      'Sample client-ready report',
+      'Software Passports and evidence',
+      'SBOM + vulnerability evidence',
+      'Trust scoring and BUY / INVESTIGATE / AVOID',
+      'White-label reports and MSP branding',
+      'Client-ready reporting',
     ],
   },
-  {
-    name: 'MSP Starter',
+  starter: {
     tagline: 'Start offering software trust as an MSP service',
-    priceLabel: '$99/month',
     features: [
-      'Up to 5 managed clients',
-      'Up to 25 software assets',
       'Software Passports and evidence',
       'SBOM + vulnerability evidence',
       'Trust scoring and BUY / INVESTIGATE / AVOID',
       'Evidence Explorer and evidence history',
-      '5 client-ready reports/month',
-      'Monthly monitoring and email alerts',
-      '2 MSP users',
+      'Client-ready reports',
+      'Monitoring and email alerts',
     ],
   },
-  {
-    name: 'MSP Professional',
+  professional: {
     tagline: 'Turn SPR into a recurring client service',
-    priceLabel: '$299/month',
     highlight: true,
     features: [
-      'Up to 25 managed clients',
-      'Up to 150 software assets',
-      'Everything in Starter',
-      'Weekly continuous verification',
+      'Everything in MSP Starter',
+      'Continuous verification',
       'Change and risk alerts',
       'White-label reports and MSP branding',
       'Client-specific workspaces and portal',
-      '25 client-ready reports/month',
       'Scheduled executive + technical reports',
       'Compliance-oriented evidence mapping',
-      '10 MSP users',
       'Full MSP Command Center',
     ],
   },
-  {
-    name: 'MSP Business',
+  growth: {
     tagline: 'Run software trust across your full client portfolio',
-    priceLabel: '$599/month',
     features: [
-      'Up to 100 managed clients',
-      'Up to 500 software assets',
-      'Everything in Professional',
+      'Everything in MSP Growth',
       'Continuous automated monitoring',
       'Advanced risk and evidence alerts',
-      'Unlimited client-ready reports',
       'Portfolio-wide risk and client ranking',
       'Advanced MSP Command Center',
       'Scheduled client reporting and bulk operations',
       'API access and webhooks',
-      'Unlimited MSP users',
       'Priority support and guided onboarding',
     ],
   },
-  {
-    name: 'Enterprise',
+  enterprise: {
     tagline: 'For large MSPs, MSSPs and enterprise programs',
-    priceLabel: 'Custom',
     features: [
-      'Custom client and asset limits',
-      'Everything in Business',
+      'Everything in MSP Scale',
       'Advanced API and custom integrations',
       'SSO and advanced RBAC',
       'Custom evidence retention',
@@ -98,9 +90,42 @@ const TIERS: { name: string; tagline: string; priceLabel: string; features: stri
       'SLA options and custom contracts',
     ],
   },
-];
+};
+
+// The free entry point is not a Stripe plan and never goes through checkout,
+// so it is stated here rather than read from the billing catalogue.
+const FREE_TIER = {
+  name: 'Free',
+  tagline: 'See SPR before you sell it',
+  features: [
+    '1 software review',
+    'Basic software identity and risk assessment',
+    'Limited evidence view',
+    'BUY / INVESTIGATE / AVOID result',
+    'Sample client-ready report',
+  ],
+};
+
+const limitLabel = (limit: number | null) =>
+  limit === null ? 'Client coverage agreed by contract' : `Up to ${limit} managed client${limit === 1 ? '' : 's'}`;
 
 export default function MspPricingView({ isAuthenticated, onPrimaryAction }: Props) {
+  const [plans, setPlans] = useState<CatalogPlan[] | null>(null);
+  const [catalogError, setCatalogError] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    apiFetch('/api/billing/catalog')
+      .then((res) => { if (!res.ok) throw new Error('catalog unavailable'); return res.json(); })
+      .then((data: { plans: CatalogPlan[] }) => { if (active) setPlans(data.plans); })
+      .catch(() => { if (active) { setCatalogError(true); setPlans([]); } });
+    return () => { active = false; };
+  }, []);
+
+  // Used in the worked example below. Quoting a subscription cost in that
+  // example is only honest while the real price of that plan is known.
+  const featured = plans?.find((plan) => PLAN_COPY[plan.id]?.highlight) ?? null;
+
   return (
     <div className="mx-auto max-w-7xl px-6 py-16 text-[var(--spr-text)]">
       <div className="text-center">
@@ -111,25 +136,61 @@ export default function MspPricingView({ isAuthenticated, onPrimaryAction }: Pro
         </p>
       </div>
 
-      <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-5">
-        {TIERS.map((tier) => (
-          <div key={tier.name} className={`rounded-md border p-6 ${tier.highlight ? 'border-[var(--spr-highlight)] bg-[var(--spr-accent)]/10' : 'border-[var(--spr-border)] bg-[var(--spr-surface-alt)]'}`}>
-            {tier.highlight && <div className="mb-3 inline-flex items-center gap-1 rounded-full border border-[var(--spr-highlight)]/40 bg-[var(--spr-highlight)]/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--spr-highlight)]">Most popular</div>}
-            <h2 className="text-xl font-bold text-[var(--spr-text)]">{tier.name}</h2>
-            <p className="mt-1 text-sm text-[var(--spr-text-muted)]">{tier.tagline}</p>
-            <p className="mt-4 text-2xl font-bold text-[var(--spr-text)]">{tier.priceLabel}</p>
-            <ul className="mt-5 space-y-2.5">
-              {tier.features.map((feature) => (
-                <li key={feature} className="flex items-start gap-2 text-sm text-[var(--spr-text)]">
-                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-[var(--spr-green)]" /> {feature}
-                </li>
-              ))}
-            </ul>
-            <button onClick={onPrimaryAction} className="spr-btn spr-btn-primary mt-6 w-full">
-              {isAuthenticated ? 'Open billing' : tier.name === 'Free' ? 'Try SPR free' : 'Get started'}
-            </button>
+      {catalogError && (
+        <div role="alert" className="mx-auto mt-8 flex max-w-2xl items-start gap-2 rounded-md border border-[var(--spr-amber)]/40 bg-[var(--spr-amber)]/10 p-3 text-xs leading-5 text-[var(--spr-amber)]">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          Current subscription prices could not be loaded from Stripe just now, so they are not shown below. Open Billing to see live pricing.
+        </div>
+      )}
+
+      <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6">
+          <h2 className="text-xl font-bold text-[var(--spr-text)]">{FREE_TIER.name}</h2>
+          <p className="mt-1 text-sm text-[var(--spr-text-muted)]">{FREE_TIER.tagline}</p>
+          <p className="mt-4 text-2xl font-bold text-[var(--spr-text)]">$0</p>
+          <ul className="mt-5 space-y-2.5">
+            {FREE_TIER.features.map((feature) => (
+              <li key={feature} className="flex items-start gap-2 text-sm text-[var(--spr-text)]">
+                <Check className="mt-0.5 h-4 w-4 shrink-0 text-[var(--spr-green)]" /> {feature}
+              </li>
+            ))}
+          </ul>
+          <button onClick={onPrimaryAction} className="spr-btn spr-btn-primary mt-6 w-full">
+            {isAuthenticated ? 'Open billing' : 'Try SPR free'}
+          </button>
+        </div>
+
+        {plans === null ? (
+          <div className="flex items-center justify-center gap-2 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6 text-xs text-[var(--spr-text-muted)] sm:col-span-1 lg:col-span-2">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading current plans and prices…
           </div>
-        ))}
+        ) : plans.map((plan) => {
+          const copy = PLAN_COPY[plan.id];
+          if (!copy) return null;
+          return (
+            <div key={plan.id} className={`rounded-md border p-6 ${copy.highlight ? 'border-[var(--spr-highlight)] bg-[var(--spr-accent)]/10' : 'border-[var(--spr-border)] bg-[var(--spr-surface-alt)]'}`}>
+              {copy.highlight && <div className="mb-3 inline-flex items-center gap-1 rounded-full border border-[var(--spr-highlight)]/40 bg-[var(--spr-highlight)]/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--spr-highlight)]">Most popular</div>}
+              <h2 className="text-xl font-bold text-[var(--spr-text)]">{plan.label}</h2>
+              <p className="mt-1 text-sm text-[var(--spr-text-muted)]">{copy.tagline}</p>
+              <p className={`mt-4 text-2xl font-bold ${plan.priceLabel ? 'text-[var(--spr-text)]' : 'text-[var(--spr-text-muted)]'}`}>
+                {plan.priceLabel ?? 'Contact us for pricing'}
+              </p>
+              <ul className="mt-5 space-y-2.5">
+                <li className="flex items-start gap-2 text-sm text-[var(--spr-text)]">
+                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-[var(--spr-green)]" /> {limitLabel(plan.clientLimit)}
+                </li>
+                {copy.features.map((feature) => (
+                  <li key={feature} className="flex items-start gap-2 text-sm text-[var(--spr-text)]">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-[var(--spr-green)]" /> {feature}
+                  </li>
+                ))}
+              </ul>
+              <button onClick={onPrimaryAction} className="spr-btn spr-btn-primary mt-6 w-full">
+                {isAuthenticated ? 'Open billing' : plan.checkoutAvailable ? 'Get started' : 'Talk to us'}
+              </button>
+            </div>
+          );
+        })}
       </div>
 
       <div className="mx-auto mt-10 max-w-4xl rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] p-5">
@@ -146,7 +207,8 @@ export default function MspPricingView({ isAuthenticated, onPrimaryAction }: Pro
           <div>
             <h2 className="text-base font-semibold text-[var(--spr-text)]">Simple MSP economics</h2>
             <p className="mt-3 text-sm leading-5 text-[var(--spr-text-muted)]">
-              An MSP can bundle SPR into its own managed service. For example, 10 clients at $150/month creates $1,500/month in client revenue against a $299/month SPR Professional subscription, before the MSP's own service and support costs.
+              An MSP can bundle SPR into its own managed service: what it bills its own clients each month, less its SPR subscription, before the MSP's own service and support costs.
+              {featured?.priceLabel && ` ${featured.label} currently costs ${featured.priceLabel}.`}
             </p>
           </div>
         </div>
@@ -155,7 +217,7 @@ export default function MspPricingView({ isAuthenticated, onPrimaryAction }: Pro
       <div className="mx-auto mt-8 flex max-w-4xl items-start gap-3 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] p-4 text-xs leading-5 text-[var(--spr-text-muted)]">
         <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[var(--spr-highlight)]" />
         <p>
-          Recurring plans are billed through Stripe inside SPR Billing. Enterprise pricing and limits are contractual. White-label and advanced capabilities are subject to the plan and configured account entitlements.
+          Recurring plans are billed through Stripe inside SPR Billing, and every price above is read from the live Stripe price that checkout charges against. Enterprise pricing and limits are contractual. White-label and advanced capabilities are subject to the plan and configured account entitlements.
         </p>
       </div>
 

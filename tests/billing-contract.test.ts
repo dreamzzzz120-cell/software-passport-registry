@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PLAN_CLIENT_LIMITS, PLAN_CONFIG } from '../src/routes/billing.ts';
+import { ADDON_CONFIG, ONE_TIME_CONFIG, PLAN_CLIENT_LIMITS, PLAN_CONFIG } from '../src/routes/billing.ts';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (relative: string) => fs.readFileSync(path.join(root, relative), 'utf8');
@@ -11,10 +11,11 @@ const read = (relative: string) => fs.readFileSync(path.join(root, relative), 'u
 // STRIPE_SECRET_KEY/STRIPE_WEBHOOK_SECRET configured but never imported
 // anywhere -- no checkout, no webhooks, no entitlements existed at all.
 // 5-tier plan model (Pilot/Starter/Professional/Growth/Enterprise), per the
-// commercial monetization spec -- price *labels* are real, user-facing
-// display text the spec itself specifies, not a Stripe object SPR invents;
-// the actual charge amount always comes from the real Stripe Price ID
-// configured via env var (see planPriceId), never from this label.
+// commercial monetization spec. Plan *identity* and client limits live in
+// PLAN_CONFIG; the amount is not restated here at all. Both the Price ID
+// checkout uses and the figure the customer is shown come from Stripe -- the
+// ID from configuration (see planPriceId), the amount from the Price object
+// itself (see resolvePrices) -- so there is no second copy to drift.
 describe('billing plan definitions', () => {
   it('defines exactly the 5 specified tiers with their specified client limits', () => {
     expect(PLAN_CLIENT_LIMITS).toEqual({ pilot: 2, starter: 10, professional: 50, growth: 150, enterprise: null });
@@ -32,9 +33,48 @@ describe('billing plan definitions', () => {
   it('PLAN_CONFIG is the single source of truth PLAN_CLIENT_LIMITS is derived from, never maintained twice', () => {
     const source = read('src/routes/billing.ts');
     expect(source).toContain('Object.fromEntries(');
-    expect(PLAN_CONFIG.starter.priceLabel).toBe('$499/month');
-    expect(PLAN_CONFIG.professional.priceLabel).toBe('$1,000/month');
-    expect(PLAN_CONFIG.growth.priceLabel).toBe('$2,500/month');
+  });
+
+  // Price *labels* used to be hardcoded here as well, and drifted away from
+  // both the public pricing page and the Stripe Prices checkout actually
+  // charges. No plan, product or add-on may carry a price of its own now.
+  it('carries no hardcoded price for any plan, product or add-on', () => {
+    for (const entry of [...Object.values(PLAN_CONFIG), ...Object.values(ONE_TIME_CONFIG), ...Object.values(ADDON_CONFIG)]) {
+      expect(entry).not.toHaveProperty('priceLabel');
+    }
+    expect(read('src/routes/billing.ts')).not.toMatch(/priceLabel: '\$/);
+  });
+});
+
+describe('prices are read from Stripe, never restated in SPR', () => {
+  const source = () => read('src/routes/billing.ts');
+
+  it('reads each configured price from the Stripe Price object itself', () => {
+    const s = source();
+    expect(s).toContain('await stripe.prices.retrieve(id)');
+    expect(s).toContain('price.unit_amount');
+  });
+
+  it('quotes nothing for a price it could not read, rather than a remembered figure', () => {
+    const s = source();
+    expect(s).toContain('priceLabel: price?.priceLabel ?? null');
+    // A tiered/metered Price has no single amount to quote.
+    expect(s).toContain('if (price.unit_amount == null || !price.active) return null;');
+  });
+
+  it('never offers checkout at a price it cannot state', () => {
+    expect(source()).toContain('checkoutAvailable: Boolean(priceId) && price !== null');
+  });
+
+  it('serves one catalogue to both the pricing page and Billing', () => {
+    const s = source();
+    expect(s).toContain("router.get('/catalog'");
+    expect(s).toContain('const catalog = await buildCatalog();');
+    expect(read('src/components/MspPricingView.tsx')).toContain("apiFetch('/api/billing/catalog')");
+  });
+
+  it('keeps a Stripe read off the critical path of every page load', () => {
+    expect(source()).toContain('PRICE_CACHE_TTL_MS');
   });
 });
 

@@ -54,16 +54,29 @@ describe('SPR MSP pricing — packaging separated from live billing', () => {
 
   it('is honest that checkout runs through Stripe, not a fabricated in-page flow', () => {
     const s = source();
-    expect(s).toContain('Actual checkout runs through Stripe inside SPR Billing.');
+    expect(s).toContain('billed through Stripe inside SPR Billing');
   });
 
-  it('shows the real, specified prices for each tier, matching PLAN_CONFIG', () => {
+  // This page used to restate the monthly prices as literals. They drifted:
+  // it advertised $99/$299/$599 while billing charged against an entirely
+  // different plan catalogue, so a visitor could be quoted one price here and
+  // charged another at checkout. Prices now come from the billing catalogue,
+  // which reads each amount from the live Stripe Price.
+  it('states no monetary amount of its own, other than the free tier', () => {
+    const amounts = [...source().matchAll(/\$[\d,]+/g)].map((m) => m[0]);
+    expect(amounts.filter((amount) => amount !== '$0')).toEqual([]);
+  });
+
+  it('takes its prices and client limits from the same catalogue billing charges against', () => {
     const s = source();
-    expect(s).toContain("priceLabel: '$500/month'");
-    expect(s).toContain("priceLabel: '$499/month'");
-    expect(s).toContain("priceLabel: '$1,000/month'");
-    expect(s).toContain("priceLabel: '$2,500/month'");
-    expect(s).toContain("priceLabel: '$5,000+/month'");
+    expect(s).toContain("apiFetch('/api/billing/catalog')");
+    expect(s).toContain('plan.priceLabel');
+    expect(s).toContain('plan.clientLimit');
+  });
+
+  it('shows no price at all rather than a made-up one when the real price is unknown', () => {
+    const s = source();
+    expect(s).toContain("plan.priceLabel ?? 'Contact us for pricing'");
   });
 
   it('does not fabricate a live Stripe price or plan id', () => {
