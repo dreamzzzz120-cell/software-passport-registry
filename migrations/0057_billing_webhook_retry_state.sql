@@ -11,4 +11,5 @@ CREATE INDEX IF NOT EXISTS billing_webhook_events_unprocessed_idx
   ON billing_webhook_events (processed_at, received_at)
   WHERE processed_at IS NULL;
 
+-- Trigger the one-time repository patch after this migration exists.
 COMMIT;
