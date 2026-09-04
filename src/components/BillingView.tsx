@@ -10,9 +10,12 @@ import { apiFetch } from '../utils/apiClient';
 type PlanId = 'pilot' | 'starter' | 'professional' | 'growth' | 'enterprise';
 type OneTimeProductId = 'softwarePassport' | 'evidenceReport' | 'securityAssessment' | 'verifiedSystemReport' | 'dueDiligenceReport' | 'vendorRiskAssessment' | 'sbomAnalysis' | 'portfolioAssessment' | 'auditEvidencePackage' | 'customAssessment';
 type AddonId = 'continuousVerification' | 'trustBadge' | 'publicPassport' | 'api';
-type PlanMeta = { id: PlanId; label: string; priceLabel: string; clientLimit: number | null; checkoutAvailable: boolean };
-type ProductMeta = { id: OneTimeProductId; label: string; priceLabel: string; checkoutAvailable: boolean };
-type AddonMeta = { id: AddonId; label: string; priceLabel: string; checkoutAvailable: boolean };
+// priceLabel is nullable on purpose: it comes from the real Stripe Price and
+// is null when that price could not be read, which the UI must show as an
+// unavailable price rather than as a figure of its own.
+type PlanMeta = { id: PlanId; label: string; priceLabel: string | null; clientLimit: number | null; checkoutAvailable: boolean };
+type ProductMeta = { id: OneTimeProductId; label: string; priceLabel: string | null; checkoutAvailable: boolean };
+type AddonMeta = { id: AddonId; label: string; priceLabel: string | null; checkoutAvailable: boolean };
 type BillingStatus = {
   billingConfigured: boolean;
   plans: PlanMeta[];
@@ -177,7 +180,7 @@ export default function BillingView() {
               {status.products.map((product) => (
                 <div key={product.id} className="rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface)] p-5 space-y-3">
                   <h3 className="text-sm font-bold text-[var(--spr-text)]">{product.label}</h3>
-                  <p className="text-xl font-bold text-[var(--spr-highlight)]">{product.priceLabel}</p>
+                  <p className={`text-xl font-bold ${product.priceLabel ? 'text-[var(--spr-highlight)]' : 'text-[var(--spr-text-faint)]'}`}>{product.priceLabel ?? 'Price unavailable'}</p>
                   <button onClick={() => handlePurchase(product.id)} disabled={!product.checkoutAvailable || busyProduct !== null || busyPlan !== null || busyAddon !== null} className="w-full inline-flex items-center justify-center gap-1.5 bg-[var(--spr-accent)] hover:bg-[var(--spr-accent-hover)] disabled:opacity-40 text-white font-bold py-2 rounded-lg text-xs transition cursor-pointer">
                     {busyProduct === product.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
                     {product.checkoutAvailable ? 'Buy now' : 'Unavailable'}
@@ -198,7 +201,7 @@ export default function BillingView() {
                 return (
                   <div key={planMeta.id} className={`rounded-xl border p-5 space-y-3 ${isCurrent ? 'border-[var(--spr-highlight)] bg-[var(--spr-accent)]/10' : 'border-[var(--spr-border)] bg-[var(--spr-surface)]'}`}>
                     <h3 className="text-sm font-bold text-[var(--spr-text)]">{planMeta.label}</h3>
-                    <p className="text-xs text-[var(--spr-highlight)] font-semibold">{planMeta.priceLabel}</p>
+                    <p className={`text-xs font-semibold ${planMeta.priceLabel ? 'text-[var(--spr-highlight)]' : 'text-[var(--spr-text-faint)]'}`}>{planMeta.priceLabel ?? 'Price unavailable'}</p>
                     <p className="text-xs text-[var(--spr-text-muted)]">{limitLabel(planMeta.clientLimit)}</p>
                     {isCurrent ? (
                       <div className="flex items-center gap-1.5 text-xs font-bold text-[var(--spr-green)]"><ShieldCheck className="w-4 h-4" /> Current plan</div>
@@ -223,7 +226,7 @@ export default function BillingView() {
               {status.addons.map((addon) => (
                 <div key={addon.id} className="rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface)] p-5 space-y-3">
                   <h3 className="text-sm font-bold text-[var(--spr-text)]">{addon.label}</h3>
-                  <p className="text-xl font-bold text-[var(--spr-highlight)]">{addon.priceLabel}</p>
+                  <p className={`text-xl font-bold ${addon.priceLabel ? 'text-[var(--spr-highlight)]' : 'text-[var(--spr-text-faint)]'}`}>{addon.priceLabel ?? 'Price unavailable'}</p>
                   <button onClick={() => handleAddon(addon.id)} disabled={!addon.checkoutAvailable || busyAddon !== null || busyProduct !== null || busyPlan !== null} className="w-full inline-flex items-center justify-center gap-1.5 bg-[var(--spr-accent)] hover:bg-[var(--spr-accent-hover)] disabled:opacity-40 text-white font-bold py-2 rounded-lg text-xs transition cursor-pointer">
                     {busyAddon === addon.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
                     {addon.checkoutAvailable ? 'Add to billing' : 'Unavailable'}
@@ -233,7 +236,7 @@ export default function BillingView() {
             </div>
           </section>
 
-          <p className="text-[11px] leading-5 text-[var(--spr-text-faint)]">Stripe is the payment processor. SPR uses the live Stripe Price IDs already configured for this deployment; it does not invent prices at runtime.</p>
+          <p className="text-[11px] leading-5 text-[var(--spr-text-faint)]">Stripe is the payment processor. Every amount shown is read from the live Stripe Price the checkout button charges against, so a plan whose price cannot be read is shown as unavailable rather than priced from memory.</p>
         </>
       )}
     </div>

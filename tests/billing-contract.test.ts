@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PLAN_CLIENT_LIMITS, PLAN_CONFIG } from '../src/routes/billing.ts';
+import { ADDON_CONFIG, ONE_TIME_CONFIG, PLAN_CLIENT_LIMITS, PLAN_CONFIG } from '../src/routes/billing.ts';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (relative: string) => fs.readFileSync(path.join(root, relative), 'utf8');
@@ -11,10 +11,11 @@ const read = (relative: string) => fs.readFileSync(path.join(root, relative), 'u
 // STRIPE_SECRET_KEY/STRIPE_WEBHOOK_SECRET configured but never imported
 // anywhere -- no checkout, no webhooks, no entitlements existed at all.
 // 5-tier plan model (Pilot/Starter/Professional/Growth/Enterprise), per the
-// commercial monetization spec -- price *labels* are real, user-facing
-// display text the spec itself specifies, not a Stripe object SPR invents;
-// the actual charge amount always comes from the real Stripe Price ID
-// configured via env var (see planPriceId), never from this label.
+// commercial monetization spec. Plan *identity* and client limits live in
+// PLAN_CONFIG; the amount is not restated here at all. Both the Price ID
+// checkout uses and the figure the customer is shown come from Stripe -- the
+// ID from configuration (see planPriceId), the amount from the Price object
+// itself (see resolvePrices) -- so there is no second copy to drift.
 describe('billing plan definitions', () => {
   it('defines exactly the 5 specified tiers with their specified client limits', () => {
     expect(PLAN_CLIENT_LIMITS).toEqual({ pilot: 2, starter: 5, professional: 25, growth: 100, enterprise: null });
@@ -32,17 +33,55 @@ describe('billing plan definitions', () => {
   it('PLAN_CONFIG is the single source of truth PLAN_CLIENT_LIMITS is derived from, never maintained twice', () => {
     const source = read('src/routes/billing.ts');
     expect(source).toContain('Object.fromEntries(');
-    // These labels are the public MSP tiers, and each one was checked against
-    // the live Stripe Price the plan's priceKey resolves to before this test
-    // was moved onto them: starter -> $149/month, professional -> $399/month,
-    // growth -> $799/month, all active recurring prices. The label is display
-    // text only -- planPriceId still takes the amount from the configured
-    // Stripe Price ID -- but a label that disagreed with that price would
-    // advertise one number and charge another, which is what this asserts
-    // against.
-    expect(PLAN_CONFIG.starter.priceLabel).toBe('$149/month');
-    expect(PLAN_CONFIG.professional.priceLabel).toBe('$399/month');
-    expect(PLAN_CONFIG.growth.priceLabel).toBe('$799/month');
+  });
+
+  // Price *labels* used to be hardcoded here as well, and drifted away from
+  // both the public pricing page and the Stripe Prices checkout actually
+  // charges. No plan, product or add-on may carry a price of its own now.
+  it('carries no hardcoded price for any plan, product or add-on', () => {
+    for (const entry of [...Object.values(PLAN_CONFIG), ...Object.values(ONE_TIME_CONFIG), ...Object.values(ADDON_CONFIG)]) {
+      expect(entry).not.toHaveProperty('priceLabel');
+    }
+    expect(read('src/routes/billing.ts')).not.toMatch(/priceLabel: '\$/);
+  });
+});
+
+describe('prices are read from Stripe, never restated in SPR', () => {
+  const source = () => read('src/routes/billing.ts');
+
+  it('reads each configured price from the Stripe Price object itself', () => {
+    const s = source();
+    expect(s).toContain('await stripe.prices.retrieve(id)');
+    expect(s).toContain('price.unit_amount');
+  });
+
+  it('quotes nothing for a price it could not read, rather than a remembered figure', () => {
+    const s = source();
+    expect(s).toContain('priceLabel: price?.priceLabel ?? null');
+    // A tiered/metered Price has no single amount to quote.
+    expect(s).toContain('if (price.unit_amount == null || !price.active) return null;');
+  });
+
+  it('never offers checkout at a price it cannot state', () => {
+    expect(source()).toContain('checkoutAvailable: Boolean(priceId) && price !== null');
+  });
+
+  it('serves one catalogue to both the pricing page and Billing', () => {
+    const s = source();
+    expect(s).toContain("router.get('/catalog'");
+    expect(s).toContain('const catalog = await buildCatalog();');
+    expect(read('src/components/MspPricingView.tsx')).toContain("apiFetch('/api/billing/catalog')");
+  });
+
+  // The labels these plans used to carry were checked once, by hand, against
+  // the live Stripe Prices their priceKeys resolve to (starter $149/month,
+  // professional $399/month, growth $799/month, all active recurring prices).
+  // Reading them from Stripe on every refresh makes that check continuous
+  // instead of a snapshot: a price changed in the Stripe dashboard tomorrow is
+  // reflected here without a code change, and cannot silently disagree with
+  // what the Subscribe button charges.
+  it('keeps a Stripe read off the critical path of every page load', () => {
+    expect(source()).toContain('PRICE_CACHE_TTL_MS');
   });
 });
 
@@ -81,6 +120,28 @@ describe('Stripe webhook handling', () => {
     expect(s).toContain('INSERT INTO billing_webhook_events (id, event_type) VALUES (${event.id}');
     expect(s).toContain('ON CONFLICT (id) DO NOTHING');
     expect(s).toContain('duplicate: true');
+  });
+
+  // An add-on is a separate Stripe subscription that carries the same
+  // tenantId in its metadata as the plan. Keying the plan-row update on
+  // tenantId alone wrote the add-on's status onto the plan: a Trust Badge
+  // going past_due flipped a fully paid MSP plan to past_due and
+  // enforcePaidAccess denied the entire workspace at 402.
+  it('never writes an add-on subscription\'s status onto the tenant\'s plan row', () => {
+    const s = source();
+    const branchStart = s.indexOf("case 'customer.subscription.created':");
+    const branchEnd = s.indexOf("case 'customer.subscription.deleted':");
+    const branch = s.slice(branchStart, branchEnd);
+    expect(branchStart).toBeGreaterThan(-1);
+    // The add-on is recognised and returned on before any UPDATE runs.
+    expect(branch).toContain('if (addon && ADDON_CONFIG[addon]) {');
+    expect(branch.indexOf('if (addon && ADDON_CONFIG[addon]) {')).toBeLessThan(branch.indexOf('UPDATE tenant_subscriptions'));
+    // The by-tenant update is reachable only for a genuine plan.
+    expect(branch).toContain('tenantId && plan && PLAN_CONFIG[plan]');
+  });
+
+  it('records an add-on that was actually bought, not only one that was started', () => {
+    expect(source()).toContain("action: 'billing.addon.completed'");
   });
 
   it('is mounted with the raw body before the global JSON parser, not after', () => {

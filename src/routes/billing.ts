@@ -15,36 +15,44 @@ import { appendAuditEntry } from '../security/audit-log.ts';
 // Subscription plans are mapped only to real Stripe Price IDs supplied by
 // deployment configuration. SPR never invents prices or creates Stripe
 // Products/Prices at runtime.
+//
+// No price *label* lives here either, and that is the point. Hardcoded labels
+// drifted: the public pricing page advertised one set of monthly figures while
+// these constants named another, and neither was necessarily what the Stripe
+// Price behind the checkout button would actually charge. Every amount SPR
+// displays is now read from the Stripe Price object itself (see resolvePrices),
+// so a plan whose real price cannot be read is reported as having no price
+// rather than being labelled with a number nobody verified.
 export const PLAN_CONFIG = {
-  pilot: { label: 'MSP White-Label Pilot', priceLabel: '$500/month', clientLimit: 2, priceKey: 'mspPilot' as const },
-  starter: { label: 'MSP Starter', priceLabel: '$149/month', clientLimit: 5, priceKey: 'starter' as const },
-  professional: { label: 'MSP Professional', priceLabel: '$399/month', clientLimit: 25, priceKey: 'professional' as const },
-  growth: { label: 'MSP Business', priceLabel: '$799/month', clientLimit: 100, priceKey: 'growth' as const },
-  enterprise: { label: 'Enterprise', priceLabel: 'Custom', clientLimit: null as number | null, priceKey: 'enterprise' as const },
+  pilot: { label: 'MSP White-Label Pilot', clientLimit: 2, priceKey: 'mspPilot' as const },
+  starter: { label: 'MSP Starter', clientLimit: 5, priceKey: 'starter' as const },
+  professional: { label: 'MSP Professional', clientLimit: 25, priceKey: 'professional' as const },
+  growth: { label: 'MSP Business', clientLimit: 100, priceKey: 'growth' as const },
+  enterprise: { label: 'Enterprise', clientLimit: null as number | null, priceKey: 'enterprise' as const },
 } as const;
 export type PlanId = keyof typeof PLAN_CONFIG;
 const PLAN_IDS = Object.keys(PLAN_CONFIG) as PlanId[];
 
 export const ONE_TIME_CONFIG = {
-  softwarePassport: { label: 'Software Passport', priceLabel: '$49', priceKey: 'softwarePassport' as const },
-  evidenceReport: { label: 'Evidence Report', priceLabel: '$99', priceKey: 'evidenceReport' as const },
-  securityAssessment: { label: 'Security Assessment', priceLabel: '$199', priceKey: 'securityAssessment' as const },
-  verifiedSystemReport: { label: 'Verified System Report', priceLabel: '$499', priceKey: 'verifiedSystemReport' as const },
-  dueDiligenceReport: { label: 'Software Due-Diligence Report', priceLabel: '$799', priceKey: 'dueDiligenceReport' as const },
-  vendorRiskAssessment: { label: 'Vendor Risk Assessment', priceLabel: '$999', priceKey: 'vendorRiskAssessment' as const },
-  sbomAnalysis: { label: 'SBOM Analysis', priceLabel: '$199', priceKey: 'sbomAnalysis' as const },
-  portfolioAssessment: { label: 'Portfolio Assessment', priceLabel: '$1,499', priceKey: 'portfolioAssessment' as const },
-  auditEvidencePackage: { label: 'Audit Evidence Package', priceLabel: '$999', priceKey: 'auditEvidencePackage' as const },
-  customAssessment: { label: 'Custom Assessment', priceLabel: '$1,500', priceKey: 'customAssessment' as const },
+  softwarePassport: { label: 'Software Passport', priceKey: 'softwarePassport' as const },
+  evidenceReport: { label: 'Evidence Report', priceKey: 'evidenceReport' as const },
+  securityAssessment: { label: 'Security Assessment', priceKey: 'securityAssessment' as const },
+  verifiedSystemReport: { label: 'Verified System Report', priceKey: 'verifiedSystemReport' as const },
+  dueDiligenceReport: { label: 'Software Due-Diligence Report', priceKey: 'dueDiligenceReport' as const },
+  vendorRiskAssessment: { label: 'Vendor Risk Assessment', priceKey: 'vendorRiskAssessment' as const },
+  sbomAnalysis: { label: 'SBOM Analysis', priceKey: 'sbomAnalysis' as const },
+  portfolioAssessment: { label: 'Portfolio Assessment', priceKey: 'portfolioAssessment' as const },
+  auditEvidencePackage: { label: 'Audit Evidence Package', priceKey: 'auditEvidencePackage' as const },
+  customAssessment: { label: 'Custom Assessment', priceKey: 'customAssessment' as const },
 } as const;
 export type OneTimeProductId = keyof typeof ONE_TIME_CONFIG;
 const ONE_TIME_IDS = Object.keys(ONE_TIME_CONFIG) as OneTimeProductId[];
 
 export const ADDON_CONFIG = {
-  continuousVerification: { label: 'Continuous Verification', priceLabel: '$149/month', priceKey: 'continuousVerification' as const },
-  trustBadge: { label: 'Trust Badge', priceLabel: '$49/month', priceKey: 'trustBadge' as const },
-  publicPassport: { label: 'Public Software Passport', priceLabel: '$49/month', priceKey: 'publicPassport' as const },
-  api: { label: 'SPR API', priceLabel: '$199/month', priceKey: 'api' as const },
+  continuousVerification: { label: 'Continuous Verification', priceKey: 'continuousVerification' as const },
+  trustBadge: { label: 'Trust Badge', priceKey: 'trustBadge' as const },
+  publicPassport: { label: 'Public Software Passport', priceKey: 'publicPassport' as const },
+  api: { label: 'SPR API', priceKey: 'api' as const },
 } as const;
 export type AddonId = keyof typeof ADDON_CONFIG;
 const ADDON_IDS = Object.keys(ADDON_CONFIG) as AddonId[];
@@ -76,12 +84,118 @@ function stripeClient(): Stripe {
   return new Stripe(config.stripe.secretKey);
 }
 
+// --- Real prices, read from Stripe -----------------------------------------
+//
+// The only honest source for "what does this cost" is the Stripe Price that
+// checkout will actually charge against. Prices are read from Stripe and
+// cached briefly: a catalogue read is not worth a round trip on every page
+// load, but it must not go stale for long either. A lookup that fails leaves
+// the previously resolved value in place rather than replacing a true price
+// with a blank one, and a price that was never resolved stays null — the UI
+// says the price is unavailable instead of showing a number SPR made up.
+export type ResolvedPrice = { priceLabel: string; unitAmount: number; currency: string; interval: string | null };
+const PRICE_CACHE_TTL_MS = 5 * 60 * 1000;
+const resolvedPrices = new Map<string, ResolvedPrice>();
+let priceCacheRefreshedAt = 0;
+let priceRefreshInFlight: Promise<void> | null = null;
+
+function describePrice(price: Stripe.Price): ResolvedPrice | null {
+  // A tiered or metered Price carries no single unit_amount. There is no one
+  // number to quote for it, so SPR quotes none rather than inventing one.
+  if (price.unit_amount == null || !price.active) return null;
+  const currency = price.currency.toUpperCase();
+  const major = price.unit_amount / 100;
+  const formatted = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: Number.isInteger(major) ? 0 : 2,
+  }).format(major);
+  const recurring = price.recurring;
+  const interval = recurring ? (recurring.interval_count > 1 ? `${recurring.interval_count} ${recurring.interval}s` : recurring.interval) : null;
+  return { priceLabel: interval ? `${formatted}/${interval}` : formatted, unitAmount: price.unit_amount, currency: price.currency, interval };
+}
+
+async function refreshPrices(): Promise<void> {
+  const stripe = stripeClient();
+  const ids = [...new Set(Object.values(config.stripe.prices).filter((id): id is string => Boolean(id)))];
+  await Promise.all(ids.map(async (id) => {
+    try {
+      const described = describePrice(await stripe.prices.retrieve(id));
+      if (described) resolvedPrices.set(id, described);
+      else resolvedPrices.delete(id);
+    } catch (error) {
+      // Keep whatever was last known good for this id; a transient Stripe
+      // failure must not silently blank a price that is genuinely configured.
+      console.error(`[Billing] Could not read Stripe price ${id}:`, error instanceof Error ? error.message : String(error));
+    }
+  }));
+  priceCacheRefreshedAt = Date.now();
+}
+
+async function loadPrices(): Promise<Map<string, ResolvedPrice>> {
+  if (!config.stripe.secretKey) return resolvedPrices;
+  if (Date.now() - priceCacheRefreshedAt < PRICE_CACHE_TTL_MS) return resolvedPrices;
+  if (!priceRefreshInFlight) {
+    priceRefreshInFlight = refreshPrices().finally(() => { priceRefreshInFlight = null; });
+  }
+  try { await priceRefreshInFlight; } catch { /* resolvedPrices keeps its last known good contents */ }
+  return resolvedPrices;
+}
+
+type CatalogEntry = {
+  id: string;
+  label: string;
+  priceLabel: string | null;
+  unitAmount: number | null;
+  currency: string | null;
+  interval: string | null;
+  checkoutAvailable: boolean;
+};
+
+function catalogEntry(id: string, label: string, priceId: string | undefined, prices: Map<string, ResolvedPrice>): CatalogEntry {
+  const price = priceId ? prices.get(priceId) ?? null : null;
+  return {
+    id,
+    label,
+    priceLabel: price?.priceLabel ?? null,
+    unitAmount: price?.unitAmount ?? null,
+    currency: price?.currency ?? null,
+    interval: price?.interval ?? null,
+    // A configured Price ID is what checkout needs; the label is what the
+    // customer needs. Both must hold before anything is offered for sale, so
+    // nobody is ever asked to buy at a price SPR could not state.
+    checkoutAvailable: Boolean(priceId) && price !== null,
+  };
+}
+
+export async function buildCatalog() {
+  const prices = await loadPrices();
+  return {
+    billingConfigured: Boolean(config.stripe.secretKey),
+    plans: PLAN_IDS.map((id) => ({
+      ...catalogEntry(id, PLAN_CONFIG[id].label, planPriceId(id), prices),
+      clientLimit: PLAN_CONFIG[id].clientLimit,
+    })),
+    products: ONE_TIME_IDS.map((id) => catalogEntry(id, ONE_TIME_CONFIG[id].label, oneTimePriceId(id), prices)),
+    addons: ADDON_IDS.map((id) => catalogEntry(id, ADDON_CONFIG[id].label, addonPriceId(id), prices)),
+  };
+}
+
 const checkoutSchema = z.object({ plan: z.enum(PLAN_IDS as [PlanId, ...PlanId[]]) }).strict();
 const oneTimeCheckoutSchema = z.object({ product: z.enum(ONE_TIME_IDS as [OneTimeProductId, ...OneTimeProductId[]]) }).strict();
 const addonCheckoutSchema = z.object({ addon: z.enum(ADDON_IDS as [AddonId, ...AddonId[]]) }).strict();
 
 export function createBillingRouter() {
   const router = Router();
+
+  // The plan/price catalogue carries no tenant data — it is the same public
+  // price list the marketing pricing page shows — so it is readable without a
+  // session. Serving it from the billing router keeps one catalogue behind
+  // both surfaces: the price a visitor is quoted and the price the Subscribe
+  // button charges can no longer be maintained separately and disagree.
+  router.get('/catalog', async (_req, res, next) => {
+    try { return res.json(await buildCatalog()); } catch (error) { return next(error); }
+  });
 
   router.get('/', requireAuth, async (req: AuthenticatedRequest, res, next) => {
     try {
@@ -92,14 +206,12 @@ export function createBillingRouter() {
         FROM tenant_subscriptions WHERE tenant_id = ${tenantId} LIMIT 1
       `);
       const clientCountResult = await scopedDb.execute(sql`SELECT count(*)::int AS count FROM clients WHERE tenant_id = ${tenantId}`);
+      const catalog = await buildCatalog();
       return res.json({
-        billingConfigured: Boolean(config.stripe.secretKey),
-        plans: PLAN_IDS.map((id) => ({ id, ...PLAN_CONFIG[id], checkoutAvailable: Boolean(planPriceId(id)) })),
-        availablePlans: PLAN_IDS.filter((plan) => Boolean(planPriceId(plan))),
-        products: ONE_TIME_IDS.map((id) => ({ id, ...ONE_TIME_CONFIG[id], checkoutAvailable: Boolean(oneTimePriceId(id)) })),
-        availableProducts: ONE_TIME_IDS.filter((id) => Boolean(oneTimePriceId(id))),
-        addons: ADDON_IDS.map((id) => ({ id, ...ADDON_CONFIG[id], checkoutAvailable: Boolean(addonPriceId(id)) })),
-        availableAddons: ADDON_IDS.filter((id) => Boolean(addonPriceId(id))),
+        ...catalog,
+        availablePlans: catalog.plans.filter((plan) => plan.checkoutAvailable).map((plan) => plan.id),
+        availableProducts: catalog.products.filter((product) => product.checkoutAvailable).map((product) => product.id),
+        availableAddons: catalog.addons.filter((addon) => addon.checkoutAvailable).map((addon) => addon.id),
         subscription: (subResult as any).rows?.[0] ?? null,
         clientCount: (clientCountResult as any).rows?.[0]?.count ?? 0,
       });
@@ -247,6 +359,13 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
           await appendAuditEntry(db, { tenantId, action: 'billing.subscription.activated', actor: 'stripe-webhook', payload: { plan, stripeEventId: event.id, stripeSubscriptionId: String(session.subscription), stripeCustomerId: customerId ?? null } });
         } else if (tenantId && session.mode === 'payment') {
           await appendAuditEntry(db, { tenantId, action: 'billing.purchase.completed', actor: 'stripe-webhook', payload: { product: session.metadata?.product ?? null, stripeEventId: event.id, checkoutSessionId: session.id } });
+        } else if (tenantId && session.metadata?.addon) {
+          // An add-on checkout completing left no trace at all: it is a
+          // subscription, so it missed the plan branch above, and it is not a
+          // payment, so it missed the one-time branch. Only billing.addon.initiated
+          // was ever recorded, which cannot distinguish an add-on somebody
+          // bought from one they abandoned at the Stripe page.
+          await appendAuditEntry(db, { tenantId, action: 'billing.addon.completed', actor: 'stripe-webhook', payload: { addon: session.metadata.addon, stripeEventId: event.id, checkoutSessionId: session.id, stripeSubscriptionId: session.subscription ? String(session.subscription) : null } });
         }
         break;
       }
@@ -256,8 +375,24 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
         const currentPeriodEndSeconds = subscription.items.data[0]?.current_period_end;
         const periodEnd = currentPeriodEndSeconds ? new Date(currentPeriodEndSeconds * 1000).toISOString() : null;
         const tenantId = subscription.metadata?.tenantId;
-        const updated = tenantId
+        const addon = subscription.metadata?.addon as AddonId | undefined;
+        // An add-on is its own Stripe subscription, and it carries the same
+        // tenantId in its metadata as the plan does. Matching on tenantId
+        // alone therefore wrote the ADD-ON's status onto the tenant's PLAN
+        // row: a Trust Badge going past_due or cancelled flipped a fully paid
+        // MSP plan to past_due/canceled and enforcePaidAccess started denying
+        // the whole workspace, while an active add-on could equally mask a
+        // plan that had genuinely lapsed. The plan row is only ever written
+        // for a subscription that is actually a plan.
+        if (addon && ADDON_CONFIG[addon]) {
+          if (tenantId) await appendAuditEntry(db, { tenantId, action: 'billing.addon.status_changed', actor: 'stripe-webhook', payload: { addon, status: subscription.status, stripeEventId: event.id, stripeSubscriptionId: subscription.id } });
+          break;
+        }
+        const plan = subscription.metadata?.plan as PlanId | undefined;
+        const updated = tenantId && plan && PLAN_CONFIG[plan]
           ? (await db.execute(sql`UPDATE tenant_subscriptions SET status = ${subscription.status}, current_period_end = ${periodEnd}, updated_at = CURRENT_TIMESTAMP WHERE tenant_id = ${tenantId} RETURNING tenant_id`) as any).rows?.[0]
+          // No plan in the metadata: fall back to the subscription id, which
+          // matches the plan row and nothing else.
           : (await db.execute(sql`UPDATE tenant_subscriptions SET status = ${subscription.status}, current_period_end = ${periodEnd}, updated_at = CURRENT_TIMESTAMP WHERE stripe_subscription_id = ${subscription.id} RETURNING tenant_id`) as any).rows?.[0];
         if (updated?.tenant_id) await appendAuditEntry(db, { tenantId: updated.tenant_id, action: 'billing.subscription.status_changed', actor: 'stripe-webhook', payload: { status: subscription.status, stripeEventId: event.id } });
         break;

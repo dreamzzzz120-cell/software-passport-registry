@@ -14,7 +14,15 @@ const sitemapMarkup = stripComments(sitemap);
 const indexMarkup = stripComments(indexHtml);
 const PUBLIC_INDEXABLE = ['/', '/free-review', '/passport/demo', '/pricing', '/msp', '/terms', '/privacy'];
 const AUTHENTICATED_ROUTES = ['/dashboard', '/registry', '/passports', '/clients', '/evidence-explorer', '/reports', '/monitoring', '/settings', '/team', '/billing', '/audit-log', '/trust-graph', '/vendors', '/governance', '/security', '/compliance'];
-const SITE = 'https://www.softwarepassportregistry.com';
+// Taken from the shipped robots.txt rather than restated here. A second
+// hardcoded copy of the canonical host is exactly what let the sitemap move to
+// www while this test still asserted the apex, each self-consistent and the
+// pair wrong -- one of the six failures that blocked five production deploys.
+const SITE = (() => {
+  const match = robots.match(/^Sitemap: (https:\/\/[^/]+)\/sitemap\.xml$/m);
+  if (!match) throw new Error('robots.txt declares no Sitemap line to take the canonical origin from');
+  return match[1];
+})();
 
 describe('sitemap contains only genuinely public URLs', () => {
   it('lists every public route', () => {
@@ -42,7 +50,12 @@ describe('robots policy protects the authenticated application', () => {
   it('disallows every authenticated route, including the misleadingly named /registry', () => { for (const route of AUTHENTICATED_ROUTES) expect(robots).toContain(`Disallow: ${route}`); });
   it('disallows the API, which includes signed public share links', () => { expect(robots).toContain('Disallow: /api/'); });
   it('allows the public marketing surfaces', () => { for (const route of ['/free-review', '/pricing', '/msp', '/terms', '/privacy']) expect(robots).toContain(`Allow: ${route}`); });
-  it('points at the sitemap', () => { expect(robots).toContain(`Sitemap: ${SITE}/sitemap.xml`); });
+  it('points at the sitemap, and every indexed URL sits on that one origin', () => {
+    expect(robots).toContain(`Sitemap: ${SITE}/sitemap.xml`);
+    // A sitemap that mixes apex and www hosts splits the site's ranking across
+    // two origins -- the disagreement the derived SITE above just caught.
+    for (const loc of [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1])) expect(loc.startsWith(`${SITE}/`)).toBe(true);
+  });
   it('states that it is not a security boundary', () => { expect(robots).toMatch(/NOT a security boundary/i); });
 });
 
