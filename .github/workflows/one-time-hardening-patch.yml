@@ -1,0 +1,76 @@
+name: one-time hardening patch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - migrations/0057_billing_webhook_retry_state.sql
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Apply hardened webhook and IPv4-mapped IPv6 fixes
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          billing = Path('src/routes/billing.ts')
+          text = billing.read_text()
+
+          old = '''    const inserted = await db.execute(sql`INSERT INTO billing_webhook_events (id, event_type) VALUES (${event.id}, ${event.type}) ON CONFLICT (id) DO NOTHING RETURNING id`);
+    if (!(inserted as any).rows?.length) return res.status(200).json({ received: true, duplicate: true });'''
+          new = '''    const inserted = await db.execute(sql`\
+      INSERT INTO billing_webhook_events (id, event_type, processing_attempts, last_error)
+      VALUES (${event.id}, ${event.type}, 1, NULL)
+      ON CONFLICT (id) DO UPDATE SET
+        processing_attempts = billing_webhook_events.processing_attempts + 1
+      WHERE billing_webhook_events.processed_at IS NULL
+      RETURNING id, processed_at
+    `);
+    const webhookRow = (inserted as any).rows?.[0];
+    if (!webhookRow) return res.status(200).json({ received: true, duplicate: true });'''
+          if old not in text:
+              raise SystemExit('billing insertion block not found')
+          text = text.replace(old, new, 1)
+
+          marker = "    return res.status(200).json({ received: true });"
+          if marker not in text:
+              raise SystemExit('billing success marker not found')
+          replacement = "    await db.execute(sql`UPDATE billing_webhook_events SET processed_at = CURRENT_TIMESTAMP, last_error = NULL WHERE id = ${event.id} AND processed_at IS NULL`);\n    return res.status(200).json({ received: true });"
+          text = text.replace(marker, replacement, 1)
+
+          # Replace only the outer webhook-processing catch: it is the catch
+          # immediately following the switch that begins after the idempotency
+          # insert. Keep its existing logging/500 response intact, but make a
+          # failed delivery retryable instead of permanently consumed.
+          needle = "  } catch (error) {\n    console.error('[Billing] Webhook processing failed:'"
+          if needle not in text:
+              raise SystemExit('billing processing catch not found')
+          text = text.replace(needle, "  } catch (error) {\n    await db.execute(sql`UPDATE billing_webhook_events SET last_error = ${error instanceof Error ? error.message.slice(0, 1000) : String(error).slice(0, 1000)} WHERE id = ${event.id} AND processed_at IS NULL`).catch(() => undefined);\n    console.error('[Billing] Webhook processing failed:'", 1)
+          billing.write_text(text)
+
+          adapters = Path('src/integrations/adapters.ts')
+          text = adapters.read_text()
+          old = "  const mapped = h.match(/^::ffff:(\\d+\\.\\d+\\.\\d+\\.\\d+)$/); if (mapped && net.isIP(mapped[1]) === 4) return blockPrivateAddress(mapped[1]);\n  return [['::', 128], ['::1', 128], ['fc00::', 7], ['fe80::', 10], ['fec0::', 10], ['ff00::', 8], ['2001:db8::', 32], ['2001:2::', 48], ['2001:10::', 28]].some(([base, bits]) => inIpv6Range(h, base as string, bits as number));"
+          new = "  const mapped = h.match(/^::ffff:(\\d+\\.\\d+\\.\\d+\\.\\d+)$/); if (mapped && net.isIP(mapped[1]) === 4) return blockPrivateAddress(mapped[1]);\n  // IPv4-mapped IPv6 may also be written entirely in hexadecimal, e.g.\n  // ::ffff:7f00:1 == 127.0.0.1. Normalize the low 32 bits before the\n  // IPv6 range checks so the IPv4 private/reserved policy cannot be bypassed.\n  const value = ipv6ToBigInt(h);\n  const mappedPrefix = ipv6ToBigInt('::ffff:0:0');\n  if (value !== undefined && mappedPrefix !== undefined && (value >> 32n) === (mappedPrefix >> 32n)) {\n    const v4 = Number(value & 0xffffffffn);\n    const dotted = `${v4 >>> 24}.${(v4 >>> 16) & 255}.${(v4 >>> 8) & 255}.${v4 & 255}`;\n    return blockPrivateAddress(dotted);\n  }\n  return [['::', 128], ['::1', 128], ['fc00::', 7], ['fe80::', 10], ['fec0::', 10], ['ff00::', 8], ['2001:db8::', 32], ['2001:2::', 48], ['2001:10::', 28]].some(([base, bits]) => inIpv6Range(h, base as string, bits as number));"
+          if old not in text:
+              raise SystemExit('IPv6 mapped block not found')
+          text = text.replace(old, new, 1)
+          adapters.write_text(text)
+      - name: Commit hardening changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/routes/billing.ts src/integrations/adapters.ts
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: harden webhook retries and mapped IPv6 SSRF checks"
+          git push
