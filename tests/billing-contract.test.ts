@@ -117,9 +117,17 @@ describe('Stripe webhook handling', () => {
 
   it('deduplicates redelivered events by Stripe event id before applying them', () => {
     const s = source();
-    expect(s).toContain('INSERT INTO billing_webhook_events (id, event_type) VALUES (${event.id}');
-    expect(s).toContain('ON CONFLICT (id) DO NOTHING');
-    expect(s).toContain('duplicate: true');
+    // Asserted as the guarantee rather than as one exact INSERT: the statement
+    // grew retry state (processing_attempts/last_error) and now upserts instead
+    // of DO NOTHING, so a previously FAILED event may be retried -- but the row
+    // is still keyed on Stripe's own event id, the conflict is still resolved on
+    // that id, and an event that already reached processed_at still returns no
+    // row and short-circuits as a duplicate rather than being applied twice.
+    expect(s).toContain('INSERT INTO billing_webhook_events (id, event_type');
+    expect(s).toContain('VALUES (${event.id}, ${event.type}');
+    expect(s).toContain('ON CONFLICT (id) DO');
+    expect(s).toContain('WHERE billing_webhook_events.processed_at IS NULL');
+    expect(s).toContain('if (!webhookRow) return res.status(200).json({ received: true, duplicate: true });');
   });
 
   // An add-on is a separate Stripe subscription that carries the same
