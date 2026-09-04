@@ -45,8 +45,25 @@ if (!SEVERITIES.includes(level)) {
   process.exit(1);
 }
 
-const attempts = Number(process.env.AUDIT_RETRY_ATTEMPTS ?? 5);
+const attempts = Number(process.env.AUDIT_RETRY_ATTEMPTS ?? 4);
 const baseDelayMs = Number(process.env.AUDIT_RETRY_BASE_DELAY_MS ?? 5000);
+
+// This wrapper owns its own clock, and the budget is well inside the tightest
+// job timeout-minutes: 15 in security-gate.yml and hardening-gate.yml. The
+// first version did not, and it is worth being precise about why, because the
+// failure was subtle. npm runs its own retry ladder underneath each audit call
+// with a five-minute fetch timeout, so while the registry was sick a single
+// `npm audit` sat there for minutes; four of those plus backoff walked straight
+// past the job timeout, and GitHub reported both gates as CANCELLED at exactly
+// 15m00s. A gate cancelled by the runner is worse than one that fails: it
+// states nothing at all, and it does so in the step whose entire purpose is to
+// state something. So each attempt is killed at PER_ATTEMPT_TIMEOUT_MS, npm's
+// own retrying is disabled so the time budget here is the real one, and the
+// whole run gives up at TOTAL_BUDGET_MS with an explicit failure of its own.
+const PER_ATTEMPT_TIMEOUT_MS = Number(process.env.AUDIT_ATTEMPT_TIMEOUT_MS ?? 90_000);
+const TOTAL_BUDGET_MS = Number(process.env.AUDIT_TOTAL_BUDGET_MS ?? 480_000);
+const startedAt = Date.now();
+const elapsedMs = () => Date.now() - startedAt;
 
 // Transport symptoms, not vulnerability findings. Kept deliberately narrow: any
 // output that does not match one of these and does not parse as a report is
@@ -65,7 +82,7 @@ const TRANSPORT_PATTERNS = [
 const isWindows = process.platform === 'win32';
 const npmCommand = isWindows ? 'npm.cmd' : 'npm';
 
-const run = (args) => new Promise((resolve) => {
+const run = (args, timeoutMs) => new Promise((resolve) => {
   let child;
   try {
     child = spawn(npmCommand, args, { shell: isWindows });
@@ -75,10 +92,34 @@ const run = (args) => new Promise((resolve) => {
   }
   let stdout = '';
   let stderr = '';
+  let timedOut = false;
+  let settled = false;
+  const finish = (result) => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+    clearTimeout(killTimer);
+    resolve(result);
+  };
+  let killTimer;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    // Signal, then stop waiting. Waiting for 'close' would hand the clock back
+    // to the process being timed out: on Windows `shell: true` means the signal
+    // reaches cmd.exe rather than npm underneath it, and the pipes stay open
+    // until the grandchild exits on its own -- measured at 46s against an
+    // 8s attempt timeout. Whatever is left is unref'd and cannot hold the gate
+    // open; this attempt is over when this script says it is.
+    try { child.kill('SIGTERM'); } catch { /* already gone */ }
+    killTimer = setTimeout(() => { try { child.kill('SIGKILL'); } catch { /* already gone */ } }, 2_000);
+    killTimer.unref?.();
+    child.unref?.();
+    finish({ code: -1, stdout, stderr, timedOut: true });
+  }, timeoutMs);
   child.stdout.on('data', (chunk) => { stdout += chunk; });
   child.stderr.on('data', (chunk) => { stderr += chunk; });
-  child.on('error', (error) => resolve({ code: -1, stdout, stderr: `${stderr}\n${error.message}` }));
-  child.on('close', (code) => resolve({ code, stdout, stderr }));
+  child.on('error', (error) => finish({ code: -1, stdout, stderr: `${stderr}\n${error.message}`, timedOut }));
+  child.on('close', (code) => finish({ code, stdout, stderr, timedOut }));
 });
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -106,14 +147,26 @@ function atOrAboveLevel(counts) {
 }
 
 function looksTransient(result) {
+  if (result.timedOut) return true;
   const combined = `${result.stdout}\n${result.stderr}`;
   return TRANSPORT_PATTERNS.some((pattern) => pattern.test(combined));
 }
 
-const auditArgs = ['audit', '--json', ...passthrough];
+// --fetch-retries=0 and the short --fetch-timeout stop npm from running its own
+// multi-minute retry ladder inside each attempt, which is what made the elapsed
+// time here unpredictable. Retrying is this script's job, and it is the layer
+// that knows the remaining budget.
+const auditArgs = ['audit', '--json', '--fetch-retries=0', '--fetch-timeout=30000', ...passthrough];
 
 for (let attempt = 1; attempt <= attempts; attempt += 1) {
-  const result = await run(auditArgs);
+  if (elapsedMs() > TOTAL_BUDGET_MS) {
+    console.error(`Dependency audit FAILED: gave up after ${Math.round(elapsedMs() / 1000)}s without a report.`);
+    console.error('  The npm audit endpoint stayed unreachable for the whole time budget. Failing here, deliberately,');
+    console.error('  rather than letting the job run into its timeout and be reported as cancelled.');
+    process.exit(1);
+  }
+  const remainingMs = TOTAL_BUDGET_MS - elapsedMs();
+  const result = await run(auditArgs, Math.max(10_000, Math.min(PER_ATTEMPT_TIMEOUT_MS, remainingMs)));
   const report = parseReport(result.stdout);
 
   if (report?.counts) {
@@ -135,7 +188,9 @@ for (let attempt = 1; attempt <= attempts; attempt += 1) {
   const reason = report?.endpointError
     ? ([report.endpointError.code, report.endpointError.summary, report.endpointError.detail]
         .filter(Boolean).join(' ').trim() || stderrTail || 'audit endpoint returned an error')
-    : (stderrTail || `npm exited ${result.code}`);
+    : (result.timedOut
+        ? `no response within ${Math.round(PER_ATTEMPT_TIMEOUT_MS / 1000)}s`
+        : (stderrTail || `npm exited ${result.code}`));
 
   if (!transient) {
     console.error('Dependency audit FAILED: npm audit produced no readable report and the failure does not look like a registry outage.');
@@ -153,6 +208,6 @@ for (let attempt = 1; attempt <= attempts; attempt += 1) {
   await sleep(delay);
 }
 
-console.error(`Dependency audit FAILED: the npm audit endpoint was unreachable across all ${attempts} attempts.`);
+console.error(`Dependency audit FAILED: the npm audit endpoint was unreachable across all ${attempts} attempts in ${Math.round(elapsedMs() / 1000)}s.`);
 console.error('  No audit report was produced, so this run proves nothing about the dependency tree and is not treated as a pass.');
 process.exit(1);

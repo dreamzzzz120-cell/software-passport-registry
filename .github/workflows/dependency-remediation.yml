@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: dependency-remediation-${{ github.event.pull_request.number || github.ref }}
@@ -52,14 +53,34 @@ jobs:
           npm run typecheck
           npm test
           npm run build
-      - name: Commit dependency and lockfile changes
+      # `npm audit fix --force` is explicitly allowed to take major versions, so
+      # this job can rewrite the dependency tree in ways no human asked for.
+      # Pushing that straight to main meant a breaking upgrade could land
+      # unreviewed; the verification above catches a tree that no longer builds
+      # or passes, but not one that quietly changed behaviour. It opens a pull
+      # request instead, so the change is still automatic and still fast, but a
+      # person sees the diff before it is main.
+      - name: Open a pull request with the dependency changes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
         run: |
+          set -euo pipefail
           if git diff --quiet -- package.json package-lock.json; then
             echo 'No dependency changes were necessary.'
             exit 0
           fi
+          BRANCH="dependency-remediation/$(date -u +%Y%m%d-%H%M%S)"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git checkout -b "$BRANCH"
           git add package.json package-lock.json
           git commit -m 'security: remediate vulnerable dependencies'
-          git push origin main
+          git push origin "$BRANCH"
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title 'security: remediate vulnerable dependencies' \
+            --body 'Opened automatically by the Dependency Remediation workflow from `npm audit fix --force`.
+
+`npm audit --audit-level=high`, `npm run typecheck`, `npm test` and `npm run build` all passed on this branch before the pull request was opened. Review the version changes before merging: `--force` is permitted to take major versions.'

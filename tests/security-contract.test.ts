@@ -65,8 +65,13 @@ describe('SPR security release contracts', () => {
     expect(workflow).toContain('node scripts/audit-with-retry.mjs --audit-level=high');
     expect(workflow).not.toMatch(/audit[^\n]*\|\|\s*true/);
     const wrapper = read('scripts/audit-with-retry.mjs');
-    expect(wrapper).toContain("const auditArgs = ['audit', '--json', ...passthrough];");
+    expect(wrapper).toMatch(/const auditArgs = \['audit', '--json',[^\]]*\.\.\.passthrough\];/);
     expect(wrapper).not.toMatch(/\|\|\s*true/);
+    // The wrapper must own its clock. Without a budget of its own it ran past
+    // timeout-minutes and both gates were reported CANCELLED rather than
+    // failing, which states nothing at all.
+    expect(wrapper).toContain('TOTAL_BUDGET_MS');
+    expect(wrapper).toContain('PER_ATTEMPT_TIMEOUT_MS');
   });
 
   it('pins every GitHub Action to a commit, never to a movable tag', () => {
@@ -101,6 +106,16 @@ describe('SPR security release contracts', () => {
       }
     }
     expect(offenders, `installs that would run package scripts: ${offenders.join(' | ')}`).toEqual([]);
+  });
+
+  it('never pushes an automated dependency rewrite straight to main', () => {
+    // `npm audit fix --force` may take major versions. The verify step catches a
+    // tree that stops building or testing, not one that quietly changed
+    // behaviour, so the result goes to a pull request for a human to look at.
+    const workflow = read('.github/workflows/dependency-remediation.yml');
+    expect(workflow).not.toMatch(/git push origin main/);
+    expect(workflow).toContain('gh pr create');
+    expect(workflow).toContain('--base main');
   });
 
   it('never lets a dependency audit step pass on a failure', () => {
