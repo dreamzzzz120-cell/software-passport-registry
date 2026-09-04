@@ -18,7 +18,7 @@ const read = (relative: string) => fs.readFileSync(path.join(root, relative), 'u
 // itself (see resolvePrices) -- so there is no second copy to drift.
 describe('billing plan definitions', () => {
   it('defines exactly the 5 specified tiers with their specified client limits', () => {
-    expect(PLAN_CLIENT_LIMITS).toEqual({ pilot: 2, starter: 10, professional: 50, growth: 150, enterprise: null });
+    expect(PLAN_CLIENT_LIMITS).toEqual({ pilot: 2, starter: 5, professional: 25, growth: 100, enterprise: null });
   });
 
   it('never hard-codes a Stripe price ID -- only display labels for the specified prices', () => {
@@ -73,6 +73,13 @@ describe('prices are read from Stripe, never restated in SPR', () => {
     expect(read('src/components/MspPricingView.tsx')).toContain("apiFetch('/api/billing/catalog')");
   });
 
+  // The labels these plans used to carry were checked once, by hand, against
+  // the live Stripe Prices their priceKeys resolve to (starter $149/month,
+  // professional $399/month, growth $799/month, all active recurring prices).
+  // Reading them from Stripe on every refresh makes that check continuous
+  // instead of a snapshot: a price changed in the Stripe dashboard tomorrow is
+  // reflected here without a code change, and cannot silently disagree with
+  // what the Subscribe button charges.
   it('keeps a Stripe read off the critical path of every page load', () => {
     expect(source()).toContain('PRICE_CACHE_TTL_MS');
   });

@@ -25,9 +25,9 @@ import { appendAuditEntry } from '../security/audit-log.ts';
 // rather than being labelled with a number nobody verified.
 export const PLAN_CONFIG = {
   pilot: { label: 'MSP White-Label Pilot', clientLimit: 2, priceKey: 'mspPilot' as const },
-  starter: { label: 'MSP Starter', clientLimit: 10, priceKey: 'starter' as const },
-  professional: { label: 'MSP Growth', clientLimit: 50, priceKey: 'mspGrowth' as const },
-  growth: { label: 'MSP Scale', clientLimit: 150, priceKey: 'mspScale' as const },
+  starter: { label: 'MSP Starter', clientLimit: 5, priceKey: 'starter' as const },
+  professional: { label: 'MSP Professional', clientLimit: 25, priceKey: 'professional' as const },
+  growth: { label: 'MSP Business', clientLimit: 100, priceKey: 'growth' as const },
   enterprise: { label: 'Enterprise', clientLimit: null as number | null, priceKey: 'enterprise' as const },
 } as const;
 export type PlanId = keyof typeof PLAN_CONFIG;

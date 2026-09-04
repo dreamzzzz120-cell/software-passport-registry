@@ -43,6 +43,7 @@ const PLAN_COPY: Record<PlanId, { tagline: string; features: string[]; highlight
   starter: {
     tagline: 'Start offering software trust as an MSP service',
     features: [
+      'Up to 50 software assets',
       'Software Passports and evidence',
       'SBOM + vulnerability evidence',
       'Trust scoring and BUY / INVESTIGATE / AVOID',
@@ -55,8 +56,9 @@ const PLAN_COPY: Record<PlanId, { tagline: string; features: string[]; highlight
     tagline: 'Turn SPR into a recurring client service',
     highlight: true,
     features: [
+      'Up to 250 software assets',
       'Everything in MSP Starter',
-      'Continuous verification',
+      'Weekly continuous verification',
       'Change and risk alerts',
       'White-label reports and MSP branding',
       'Client-specific workspaces and portal',
@@ -68,7 +70,8 @@ const PLAN_COPY: Record<PlanId, { tagline: string; features: string[]; highlight
   growth: {
     tagline: 'Run software trust across your full client portfolio',
     features: [
-      'Everything in MSP Growth',
+      'Up to 1,000 software assets',
+      'Everything in MSP Professional',
       'Continuous automated monitoring',
       'Advanced risk and evidence alerts',
       'Portfolio-wide risk and client ranking',
@@ -81,7 +84,7 @@ const PLAN_COPY: Record<PlanId, { tagline: string; features: string[]; highlight
   enterprise: {
     tagline: 'For large MSPs, MSSPs and enterprise programs',
     features: [
-      'Everything in MSP Scale',
+      'Everything in MSP Business',
       'Advanced API and custom integrations',
       'SSO and advanced RBAC',
       'Custom evidence retention',
