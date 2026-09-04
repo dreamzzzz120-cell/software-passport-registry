@@ -17,9 +17,6 @@ describe('SPR MSP Command Center — software verification metrics', () => {
 
   it('counts verified vs unknown software from the real verificationStatus field, not a fabricated default', () => {
     const s = source();
-    // Superseded: verification truth moved from the legacy verification_status
-    // column to the authoritative evaluator. Intent preserved - counts must come
-    // from real data, never a fabricated default.
     expect(s).toContain("const decision = verificationDecisions?.[passport.id]");
     expect(s).not.toContain("passport.verificationStatus === 'verified'");
     expect(s).not.toContain('verified: true');
@@ -54,16 +51,15 @@ describe('SPR MSP pricing — packaging separated from live billing', () => {
 
   it('is honest that checkout runs through Stripe, not a fabricated in-page flow', () => {
     const s = source();
-    expect(s).toContain('Actual checkout runs through Stripe inside SPR Billing.');
+    expect(s).toContain('Recurring plans are billed through Stripe inside SPR Billing.');
   });
 
   it('shows the real, specified prices for each tier, matching PLAN_CONFIG', () => {
     const s = source();
-    expect(s).toContain("priceLabel: '$500/month'");
-    expect(s).toContain("priceLabel: '$499/month'");
-    expect(s).toContain("priceLabel: '$1,000/month'");
-    expect(s).toContain("priceLabel: '$2,500/month'");
-    expect(s).toContain("priceLabel: '$5,000+/month'");
+    expect(s).toContain("priceLabel: '$149/month'");
+    expect(s).toContain("priceLabel: '$399/month'");
+    expect(s).toContain("priceLabel: '$799/month'");
+    expect(s).toContain("priceLabel: 'Custom'");
   });
 
   it('does not fabricate a live Stripe price or plan id', () => {
