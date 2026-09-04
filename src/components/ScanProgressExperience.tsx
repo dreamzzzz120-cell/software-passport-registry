@@ -53,14 +53,24 @@ export default function ScanProgressExperience({ jobId, targetName, onComplete, 
   const [connectionLost, setConnectionLost] = useState(false);
   const completedRef = useRef(false);
   const backoffRef = useRef(1500);
+  const onCompleteRef = useRef(onComplete);
+
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   useEffect(() => {
     let cancelled = false;
     let timer: number | undefined;
     let inFlight = false;
+    let finished = false;
+
+    const schedule = () => {
+      if (!cancelled && !finished) timer = window.setTimeout(poll, backoffRef.current);
+    };
 
     const poll = async () => {
-      if (cancelled || inFlight) return;
+      if (cancelled || inFlight || finished) return;
       inFlight = true;
       try {
         const response = await apiFetch(`/api/agent-jobs/${encodeURIComponent(jobId)}`);
@@ -71,9 +81,10 @@ export default function ScanProgressExperience({ jobId, targetName, onComplete, 
         setConnectionLost(false);
         backoffRef.current = 1500;
         if (terminal.has(next.status)) {
+          finished = true;
           if (!completedRef.current) {
             completedRef.current = true;
-            onComplete?.(next);
+            onCompleteRef.current?.(next);
           }
           return;
         }
@@ -82,15 +93,17 @@ export default function ScanProgressExperience({ jobId, targetName, onComplete, 
         backoffRef.current = Math.min(10000, Math.round(backoffRef.current * 1.6));
       } finally {
         inFlight = false;
-        if (!cancelled && !(job && terminal.has(job.status))) {
-          timer = window.setTimeout(poll, backoffRef.current);
-        }
+        schedule();
       }
     };
 
     void poll();
-    return () => { cancelled = true; if (timer) window.clearTimeout(timer); };
-  }, [jobId, onComplete]);
+    return () => {
+      cancelled = true;
+      finished = true;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [jobId]);
 
   const progress = clamp(Number(job?.progress || 0));
   const activeStage = stageIndex(job);
