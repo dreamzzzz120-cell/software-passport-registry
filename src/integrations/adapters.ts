@@ -31,6 +31,13 @@ export function blockPrivateAddress(address: string): boolean {
   if (net.isIP(h) === 4) return [['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8], ['169.254.0.0', 16], ['172.16.0.0', 12], ['192.0.0.0', 24], ['192.0.2.0', 24], ['192.168.0.0', 16], ['198.18.0.0', 15], ['198.51.100.0', 24], ['203.0.113.0', 24], ['224.0.0.0', 4], ['240.0.0.0', 4]].some(([base, bits]) => inIpv4Range(h, base as string, bits as number));
   if (net.isIP(h) !== 6) return false;
   const mapped = h.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/); if (mapped && net.isIP(mapped[1]) === 4) return blockPrivateAddress(mapped[1]);
+  const mappedHexPrefix = ipv6ToBigInt('::ffff:0:0');
+  const mappedHexValue = ipv6ToBigInt(h);
+  if (mappedHexPrefix !== undefined && mappedHexValue !== undefined && (mappedHexValue >> 32n) === (mappedHexPrefix >> 32n)) {
+    const v4 = Number(mappedHexValue & 0xffffffffn);
+    const dotted = `${v4 >>> 24}.${(v4 >>> 16) & 255}.${(v4 >>> 8) & 255}.${v4 & 255}`;
+    return blockPrivateAddress(dotted);
+  }
   return [['::', 128], ['::1', 128], ['fc00::', 7], ['fe80::', 10], ['fec0::', 10], ['ff00::', 8], ['2001:db8::', 32], ['2001:2::', 48], ['2001:10::', 28]].some(([base, bits]) => inIpv6Range(h, base as string, bits as number));
 }
 async function validateOutboundUrl(raw: string): Promise<{ url: URL; pinnedIp: string }> { let url: URL; try { url = new URL(raw); } catch { throw new Error('PROVIDER_URL_INVALID'); } if (url.protocol !== 'https:') throw new Error('PROVIDER_URL_MUST_USE_HTTPS'); if (url.username || url.password) throw new Error('PROVIDER_URL_CREDENTIALS_FORBIDDEN'); const host = url.hostname.toLowerCase(); if (BLOCKED_HOSTS.has(host) || blockPrivateAddress(host)) throw new Error('PROVIDER_URL_BLOCKED'); const records = await dns.lookup(host, { all: true, verbatim: true }); if (!records.length || records.some(r => blockPrivateAddress(r.address))) throw new Error('PROVIDER_URL_RESOLVES_PRIVATE'); return { url, pinnedIp: records[0].address }; }

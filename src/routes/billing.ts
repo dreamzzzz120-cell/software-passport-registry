@@ -333,8 +333,16 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
   }
 
   try {
-    const inserted = await db.execute(sql`INSERT INTO billing_webhook_events (id, event_type) VALUES (${event.id}, ${event.type}) ON CONFLICT (id) DO NOTHING RETURNING id`);
-    if (!(inserted as any).rows?.length) return res.status(200).json({ received: true, duplicate: true });
+    const inserted = await db.execute(sql`
+      INSERT INTO billing_webhook_events (id, event_type, processing_attempts, last_error)
+      VALUES (${event.id}, ${event.type}, 1, NULL)
+      ON CONFLICT (id) DO UPDATE SET
+        processing_attempts = billing_webhook_events.processing_attempts + 1
+      WHERE billing_webhook_events.processed_at IS NULL
+      RETURNING id, processed_at
+    `);
+    const webhookRow = (inserted as any).rows?.[0];
+    if (!webhookRow) return res.status(200).json({ received: true, duplicate: true });
   } catch (err) {
     console.error('[Billing] Webhook idempotency check failed:', err instanceof Error ? err.message : String(err));
     return res.status(500).json({ error: 'IDEMPOTENCY_CHECK_FAILED' });
@@ -416,9 +424,20 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
       default:
         break;
     }
+    await db.execute(sql`
+      UPDATE billing_webhook_events
+      SET processed_at = CURRENT_TIMESTAMP, last_error = NULL
+      WHERE id = ${event.id} AND processed_at IS NULL
+    `);
     return res.status(200).json({ received: true });
   } catch (error) {
-    console.error('[Billing] Webhook event handling failed:', error instanceof Error ? error.message : String(error));
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[Billing] Webhook event handling failed:', message);
+    await db.execute(sql`
+      UPDATE billing_webhook_events
+      SET last_error = ${message.slice(0, 1000)}
+      WHERE id = ${event.id} AND processed_at IS NULL
+    `).catch(() => undefined);
     return res.status(500).json({ error: 'WEBHOOK_PROCESSING_FAILED' });
   }
 }
