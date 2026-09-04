@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
-import { ArrowRight, CheckCircle2, FileArchive, Github, Loader2, ShieldCheck, Upload } from 'lucide-react';
+import { ArrowRight, CheckCircle2, FileArchive, Loader2, ShieldCheck, Upload } from 'lucide-react';
+import { Github } from 'lucide-react-base';
 import { apiFetch } from '../utils/apiClient';
 
 const MAX_FILES = 100;

@@ -6,9 +6,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Plug, CheckCircle2, RefreshCw, KeyRound, AlertCircle,
-  Slack, Github, Monitor, Briefcase, FileText, Key,
+  Monitor, Briefcase, FileText, Key,
   ShieldCheck, Ticket, BookOpen, CloudLightning, Copy, Send, Trash2, Webhook, XCircle,
 } from 'lucide-react';
+import { Slack, Github } from 'lucide-react-base';
 import type { Client, SoftwarePassport } from '../types';
 import { apiFetch } from '../utils/apiClient';
 import { CREDENTIAL_FIELDS, WEBHOOK_EVENT_TYPES } from '../integrations/credentialFields';

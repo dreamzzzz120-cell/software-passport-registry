@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Archive, ArrowRight, CheckCircle2, FileText, FolderOpen, Github, HardDriveUpload, Loader, ShieldCheck, Sparkles, X } from 'lucide-react';
+import { Archive, ArrowRight, CheckCircle2, FileText, FolderOpen, HardDriveUpload, Loader, ShieldCheck, Sparkles, X } from 'lucide-react';
+import { Github } from 'lucide-react-base';
 import { apiFetch } from '../utils/apiClient';
 
 const MAX_FILES = 100;

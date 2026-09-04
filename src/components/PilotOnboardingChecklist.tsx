@@ -5,10 +5,11 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  CheckSquare, Square, CheckCircle2, ChevronRight, Github, Gitlab, Database,
+  CheckSquare, Square, CheckCircle2, ChevronRight, Database,
   ArrowRight, ShieldCheck, Key, Settings, HelpCircle, Layers, Info, Sparkles,
   RefreshCw, Lock, AlertTriangle, ExternalLink, Zap, Monitor, Globe, Network, Cpu, BadgePercent
 } from 'lucide-react';
+import { Github, Gitlab } from 'lucide-react-base';
 import { apiFetch } from '../utils/apiClient';
 
 interface PilotOnboardingChecklistProps {
