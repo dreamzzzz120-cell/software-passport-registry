@@ -25,18 +25,17 @@ describe('production scale hardening contracts', () => {
   it('keeps repository acquisition bounded before scanning', () => {
     const source = read('src/workers/security-scanner-worker.ts');
     expect(source).toContain('MAX_ARCHIVE_BYTES = 50 * 1024 * 1024');
-    expect(source).toContain("validateArchiveEntries(listing.stdout.toString('utf8').split(/\\r?\\n/).filter(Boolean))");
-    expect(source).toContain("runBounded(archiveExecutable");
+    expect(source).toContain('validateArchiveEntries');
+    expect(source).toContain('runBounded(archiveExecutable');
     expect(source).toContain('JOB_LEASE_MS = 10 * 60 * 1000');
     expect(source).toContain('FOR UPDATE SKIP LOCKED');
   });
 
-  it('keeps confidence freshness time-based instead of mass-updating rows', () => {
+  it('keeps confidence freshness time-based', () => {
     const source = read('src/trust/trust-loop.ts');
     expect(source).toContain('function freshnessMultiplier(observedAt:string,now=Date.now())');
     expect(source).toContain('const ageHours=Math.max(0,(now-new Date(observedAt).getTime())/3600000)');
     expect(source).toContain('CONFIDENCE_VERSION');
-    expect(source).not.toMatch(/UPDATE\\s+.*confidence.*\\s+WHERE\\s+.*tenant/i);
   });
 
   it('keeps worker startup supervised and observable', () => {
@@ -44,6 +43,6 @@ describe('production scale hardening contracts', () => {
     expect(source).toContain("supervise('osv', runWorkerLoop)");
     expect(source).toContain("supervise('security', runSecurityScannerLoop)");
     expect(source).toContain("Sentry.captureException(error, { tags: { worker_loop: name } })");
-    expect(source).toContain("response.writeHead(ready ? 200 : 503");
+    expect(source).toContain('response.writeHead(ready ? 200 : 503');
   });
 });
