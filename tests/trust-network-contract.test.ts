@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const read = (relative: string) => fs.readFileSync(path.join(root, relative), 'utf8');
+import { readCode as read } from './helpers/source-contract.ts';
 
 describe('Trust Network (MSP Command Center rebuild) preserves existing functionality', () => {
   const source = () => read('src/components/MSPCommandCenter.tsx');

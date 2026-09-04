@@ -18,11 +18,27 @@ const AUTHENTICATED_ROUTES = ['/dashboard', '/registry', '/passports', '/clients
 // hardcoded copy of the canonical host is exactly what let the sitemap move to
 // www while this test still asserted the apex, each self-consistent and the
 // pair wrong -- one of the six failures that blocked five production deploys.
+// Taken from src/seo/public-pages.json rather than from robots.txt. Deriving it
+// from robots.txt removed the drift between the test and the files, but not the
+// case that matters more: robots.txt and sitemap.xml moving to the wrong host
+// together would still be self-consistent, and the test would still pass.
+// public-pages.json is the origin the prerender step canonicalises every page to
+// and the one tests/seo-metadata-contract.test.ts pins, so it is the host the
+// site actually claims. robots.txt is then checked against it below rather than
+// being the thing that defines it.
 const SITE = (() => {
-  const match = robots.match(/^Sitemap: (https:\/\/[^/]+)\/sitemap\.xml$/m);
-  if (!match) throw new Error('robots.txt declares no Sitemap line to take the canonical origin from');
-  return match[1];
+  const { origin } = JSON.parse(read('src/seo/public-pages.json')) as { origin?: string };
+  if (!origin) throw new Error('src/seo/public-pages.json declares no canonical origin');
+  return origin.replace(/\/$/, '');
 })();
+
+describe('every public surface agrees on one canonical origin', () => {
+  it('robots.txt points at the sitemap on the canonical origin, not a second host', () => {
+    const declared = robots.match(/^Sitemap: (https:\/\/[^/]+)\/sitemap\.xml$/m);
+    expect(declared, 'robots.txt declares no Sitemap line').not.toBeNull();
+    expect(declared![1]).toBe(SITE);
+  });
+});
 
 describe('sitemap contains only genuinely public URLs', () => {
   it('lists every public route', () => {

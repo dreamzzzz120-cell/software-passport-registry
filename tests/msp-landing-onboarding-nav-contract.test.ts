@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const read = (relative: string) => fs.readFileSync(path.join(root, relative), 'utf8');
+import { readCode as read } from './helpers/source-contract.ts';
 
 describe('public /msp landing page reuses existing pricing and billing, without duplicating either', () => {
   it('MspLandingView exists and links its CTAs into the existing login/pricing flow, not a new one', () => {
