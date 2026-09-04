@@ -31,10 +31,10 @@ const TIERS: { name: string; tagline: string; priceLabel: string; features: stri
   {
     name: 'MSP Starter',
     tagline: 'Start offering software trust as an MSP service',
-    priceLabel: '$99/month',
+    priceLabel: '$149/month',
     features: [
       'Up to 5 managed clients',
-      'Up to 25 software assets',
+      'Up to 50 software assets',
       'Software Passports and evidence',
       'SBOM + vulnerability evidence',
       'Trust scoring and BUY / INVESTIGATE / AVOID',
@@ -47,11 +47,11 @@ const TIERS: { name: string; tagline: string; priceLabel: string; features: stri
   {
     name: 'MSP Professional',
     tagline: 'Turn SPR into a recurring client service',
-    priceLabel: '$299/month',
+    priceLabel: '$399/month',
     highlight: true,
     features: [
       'Up to 25 managed clients',
-      'Up to 150 software assets',
+      'Up to 250 software assets',
       'Everything in Starter',
       'Weekly continuous verification',
       'Change and risk alerts',
@@ -67,10 +67,10 @@ const TIERS: { name: string; tagline: string; priceLabel: string; features: stri
   {
     name: 'MSP Business',
     tagline: 'Run software trust across your full client portfolio',
-    priceLabel: '$599/month',
+    priceLabel: '$799/month',
     features: [
       'Up to 100 managed clients',
-      'Up to 500 software assets',
+      'Up to 1,000 software assets',
       'Everything in Professional',
       'Continuous automated monitoring',
       'Advanced risk and evidence alerts',
@@ -146,7 +146,7 @@ export default function MspPricingView({ isAuthenticated, onPrimaryAction }: Pro
           <div>
             <h2 className="text-base font-semibold text-[var(--spr-text)]">Simple MSP economics</h2>
             <p className="mt-3 text-sm leading-5 text-[var(--spr-text-muted)]">
-              An MSP can bundle SPR into its own managed service. For example, 10 clients at $150/month creates $1,500/month in client revenue against a $299/month SPR Professional subscription, before the MSP's own service and support costs.
+              An MSP can bundle SPR into its own managed service. For example, 10 clients at $150/month creates $1,500/month in client revenue against a $399/month SPR Professional subscription, before the MSP's own service and support costs.
             </p>
           </div>
         </div>
