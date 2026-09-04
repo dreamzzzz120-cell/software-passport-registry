@@ -66,4 +66,4 @@ Disallow: /free-review/result
 # is a time-boxed bearer token; it must not be crawled, cached or indexed.
 Disallow: /api/
 
-Sitemap: https://softwarepassportregistry.com/sitemap.xml
+Sitemap: https://www.softwarepassportregistry.com/sitemap.xml
