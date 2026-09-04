@@ -17,7 +17,7 @@ const read = (relative: string) => fs.readFileSync(path.join(root, relative), 'u
 // configured via env var (see planPriceId), never from this label.
 describe('billing plan definitions', () => {
   it('defines exactly the 5 specified tiers with their specified client limits', () => {
-    expect(PLAN_CLIENT_LIMITS).toEqual({ pilot: 2, starter: 10, professional: 50, growth: 150, enterprise: null });
+    expect(PLAN_CLIENT_LIMITS).toEqual({ pilot: 2, starter: 5, professional: 25, growth: 100, enterprise: null });
   });
 
   it('never hard-codes a Stripe price ID -- only display labels for the specified prices', () => {
@@ -32,9 +32,17 @@ describe('billing plan definitions', () => {
   it('PLAN_CONFIG is the single source of truth PLAN_CLIENT_LIMITS is derived from, never maintained twice', () => {
     const source = read('src/routes/billing.ts');
     expect(source).toContain('Object.fromEntries(');
-    expect(PLAN_CONFIG.starter.priceLabel).toBe('$499/month');
-    expect(PLAN_CONFIG.professional.priceLabel).toBe('$1,000/month');
-    expect(PLAN_CONFIG.growth.priceLabel).toBe('$2,500/month');
+    // These labels are the public MSP tiers, and each one was checked against
+    // the live Stripe Price the plan's priceKey resolves to before this test
+    // was moved onto them: starter -> $149/month, professional -> $399/month,
+    // growth -> $799/month, all active recurring prices. The label is display
+    // text only -- planPriceId still takes the amount from the configured
+    // Stripe Price ID -- but a label that disagreed with that price would
+    // advertise one number and charge another, which is what this asserts
+    // against.
+    expect(PLAN_CONFIG.starter.priceLabel).toBe('$149/month');
+    expect(PLAN_CONFIG.professional.priceLabel).toBe('$399/month');
+    expect(PLAN_CONFIG.growth.priceLabel).toBe('$799/month');
   });
 });
 
