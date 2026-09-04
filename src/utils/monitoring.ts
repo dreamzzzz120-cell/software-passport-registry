@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import dns from 'node:dns/promises';
 import net from 'node:net';
-import { Agent } from 'undici';
+import { Agent, fetch as undiciFetch } from 'undici';
 
 export type CollectorStatus = 'succeeded' | 'failed' | 'timed_out' | 'unavailable' | 'unsupported';
 export type JobState = 'queued' | 'claimed' | 'running' | 'succeeded' | 'failed' | 'timed_out' | 'cancelled' | 'dead_lettered';
@@ -31,28 +31,8 @@ export function nextFailureState(attemptNumber:number,maximumAttempts:number):Jo
 const BLOCKED_HOSTNAMES=new Set(['localhost','localhost.localdomain','metadata.google.internal']);
 export function isBlockedIp(address:string){const family=net.isIP(address);if(family===4){const octets=address.split('.').map(Number);const[a,b]=octets;return a===0||a===10||a===127||(a===169&&b===254)||(a===172&&b>=16&&b<=31)||(a===192&&b===168)||(a===100&&b>=64&&b<=127)||a>=224;}if(family===6){const normalized=address.toLowerCase();return normalized==='::'||normalized==='::1'||normalized.startsWith('fc')||normalized.startsWith('fd')||/^fe[89ab]/.test(normalized)||normalized.startsWith('ff')||normalized.startsWith('::ffff:127.')||normalized.startsWith('::ffff:10.')||normalized.startsWith('::ffff:169.254.')||normalized.startsWith('::ffff:192.168.');}return true;}
 export async function assertPublicNetworkTarget(rawUrl:string,resolver=dns.lookup){let target:URL;try{target=new URL(rawUrl);}catch{throw new Error('TARGET_URL_INVALID');}if(!['http:','https:'].includes(target.protocol))throw new Error('TARGET_PROTOCOL_BLOCKED');if(target.username||target.password)throw new Error('TARGET_CREDENTIALS_BLOCKED');const hostname=target.hostname.toLowerCase().replace(/\.$/,'');if(BLOCKED_HOSTNAMES.has(hostname)||hostname.endsWith('.local')||hostname.endsWith('.internal'))throw new Error('TARGET_HOST_BLOCKED');const results=await resolver(hostname,{all:true,verbatim:true});if(results.length===0||results.some(result=>isBlockedIp(result.address)))throw new Error('TARGET_NETWORK_BLOCKED');return{url:target,addresses:results.map(result=>result.address)};}
-// Resolving DNS separately from the actual request (as the previous version
-// did -- validate rawUrl's hostname, then let fetch() re-resolve it itself)
-// is a classic DNS-rebinding TOCTOU gap: an attacker-controlled domain with a
-// short TTL can answer the validation lookup with a public IP and the real
-// connection's lookup with an internal one (e.g. 169.254.169.254, or another
-// service on this project's private network), walking straight past
-// assertPublicNetworkTarget. Pinning the connection to the exact address
-// already validated -- via an undici Agent whose connect.lookup ignores the
-// hostname and always returns that address -- closes the gap: whatever IP
-// was checked is the only IP the socket can ever be opened to. This is
-// re-validated and re-pinned on every redirect hop, matching the existing
-// per-hop assertPublicNetworkTarget call.
-export async function safeNetworkFetch(rawUrl:string,options:{timeoutMs?:number;maxRedirects?:number;maxBytes?:number;expectedContentTypes?:string[];resolver?:typeof dns.lookup}={}){const timeoutMs=options.timeoutMs??15000,maxRedirects=options.maxRedirects??3,maxBytes=options.maxBytes??1048576;let current=rawUrl;for(let redirect=0;redirect<=maxRedirects;redirect+=1){const{addresses}=await assertPublicNetworkTarget(current,options.resolver);const pinnedAddress=addresses[0];const dispatcher=new Agent({connect:{lookup:(_hostname:string,opts:{all?:boolean},callback:any)=>{
-  // undici's connector invokes this with options.all=true and expects the
-  // dns.lookup "all" callback shape (an array of {address,family}) --
-  // confirmed live: the original single-address positional callback form
-  // made every real request through this dispatcher fail with "fetch
-  // failed" / "Invalid IP address: undefined", silently turning every
-  // uptime/tls/domain_dns collector run into a false UNKNOWN result
-  // instead of ever reaching the target. Both callback shapes are handled
-  // here since which one undici asks for isn't part of its public contract.
-  const family=net.isIP(pinnedAddress) as number;
-  if(opts&&opts.all)return callback(null,[{address:pinnedAddress,family}]);
-  callback(null,pinnedAddress,family);
-}}});const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),timeoutMs);let response:Response;try{response=await fetch(current,{redirect:'manual',signal:controller.signal,dispatcher}as RequestInit&{dispatcher:Agent});}finally{clearTimeout(timeout);await dispatcher.close();}if(response.status>=300&&response.status<400){const location=response.headers.get('location');if(!location||redirect===maxRedirects)throw new Error('REDIRECT_LIMIT_EXCEEDED');current=new URL(location,current).toString();continue;}const contentType=response.headers.get('content-type')?.split(';')[0].trim()||'';if(options.expectedContentTypes?.length&&!options.expectedContentTypes.includes(contentType))throw new Error('UNSUPPORTED_CONTENT_TYPE');const declaredLength=Number(response.headers.get('content-length')||0);if(declaredLength>maxBytes)throw new Error('RESPONSE_TOO_LARGE');const reader=response.body?.getReader();const chunks:Uint8Array[]=[];let size=0;while(reader){const{done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>maxBytes){await reader.cancel();throw new Error('RESPONSE_TOO_LARGE');}chunks.push(value);}return{response,body:Buffer.concat(chunks).toString('utf8'),finalUrl:current};}throw new Error('REDIRECT_LIMIT_EXCEEDED');}
+// Validate the hostname and then pin the actual connection to the exact
+// address that was validated. The userland undici fetch must be paired with
+// its own Agent; Node's built-in fetch and a userland undici dispatcher have
+// incompatible handler contracts and can fail with "invalid onRequestStart".
+export async function safeNetworkFetch(rawUrl:string,options:{timeoutMs?:number;maxRedirects?:number;maxBytes?:number;expectedContentTypes?:string[];resolver?:typeof dns.lookup}={}){const timeoutMs=options.timeoutMs??15000,maxRedirects=options.maxRedirects??3,maxBytes=options.maxBytes??1048576;let current=rawUrl;for(let redirect=0;redirect<=maxRedirects;redirect+=1){const{addresses}=await assertPublicNetworkTarget(current,options.resolver);const pinnedAddress=addresses[0];const dispatcher=new Agent({connect:{lookup:(_hostname:string,opts:{all?:boolean},callback:any)=>{const family=net.isIP(pinnedAddress) as number;if(opts&&opts.all)return callback(null,[{address:pinnedAddress,family}]);callback(null,pinnedAddress,family);}}});const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),timeoutMs);let response:Response;try{response=await undiciFetch(current,{redirect:'manual',signal:controller.signal,dispatcher} as RequestInit&{dispatcher:Agent});}finally{clearTimeout(timeout);await dispatcher.close();}if(response.status>=300&&response.status<400){const location=response.headers.get('location');if(!location||redirect===maxRedirects)throw new Error('REDIRECT_LIMIT_EXCEEDED');current=new URL(location,current).toString();continue;}const contentType=response.headers.get('content-type')?.split(';')[0].trim()||'';if(options.expectedContentTypes?.length&&!options.expectedContentTypes.includes(contentType))throw new Error('UNSUPPORTED_CONTENT_TYPE');const declaredLength=Number(response.headers.get('content-length')||0);if(declaredLength>maxBytes)throw new Error('RESPONSE_TOO_LARGE');const reader=response.body?.getReader();const chunks:Uint8Array[]=[];let size=0;while(reader){const{done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>maxBytes){await reader.cancel();throw new Error('RESPONSE_TOO_LARGE');}chunks.push(value);}return{response,body:Buffer.concat(chunks).toString('utf8'),finalUrl:current};}throw new Error('REDIRECT_LIMIT_EXCEEDED');}
