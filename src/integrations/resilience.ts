@@ -26,7 +26,26 @@ export function isRetryableStatus(status: number): boolean {
 export function backoffMs(attempt: number, retryAfter?: number, random = Math.random()): number {
   if (retryAfter !== undefined) return retryAfter;
   const exponential = Math.min(MAX_BACKOFF_MS, 250 * 2 ** Math.max(0, attempt - 1));
-  return Math.round(exponential * (0.75 + random * 0.5));
+  return Math.round(exponential * (0.75 + Math.max(0, Math.min(1, random)) * 0.5));
+}
+
+function errorMessage(error: unknown): string {
+  return String((error as any)?.message || error || 'UNKNOWN');
+}
+
+function statusFromError(message: string): number {
+  return Number(message.match(/PROVIDER_HTTP_(\d{3})/)?.[1] || 0);
+}
+
+function retryAfterFromError(message: string): number | undefined {
+  const value = message.match(/PROVIDER_HTTP_429:([^\s]+)/)?.[1];
+  return value ? retryAfterMs(value) : undefined;
+}
+
+function isRetryableError(error: unknown): boolean {
+  const message = errorMessage(error);
+  return isRetryableStatus(statusFromError(message)) ||
+    /PROVIDER_TIMEOUT|ECONNRESET|ECONNREFUSED|UND_ERR_CONNECT_TIMEOUT|UND_ERR_SOCKET/i.test(message);
 }
 
 export async function withConnectorRetry<T>(
@@ -41,23 +60,22 @@ export async function withConnectorRetry<T>(
       return await operation(attempt);
     } catch (error) {
       lastError = error;
-      const status = Number(String((error as any)?.message || '').match(/PROVIDER_HTTP_(\d{3})/)?.[1] || 0);
-      const retryable = isRetryableStatus(status) || /PROVIDER_TIMEOUT|ECONNRESET|ECONNREFUSED|UND_ERR_CONNECT_TIMEOUT/i.test(String((error as any)?.message || ''));
-      if (!retryable || attempt === attempts) throw error;
-      await sleep(backoffMs(attempt, undefined, options.random?.() ?? Math.random()));
+      if (!isRetryableError(error) || attempt === attempts) throw error;
+      const message = errorMessage(error);
+      await sleep(backoffMs(attempt, retryAfterFromError(message), options.random?.() ?? Math.random()));
     }
   }
   throw lastError;
 }
 
 export function classifyConnectorFailure(provider: string, error: unknown): ConnectorFailure {
-  const message = String((error as any)?.message || error || 'UNKNOWN');
-  const status = Number(message.match(/PROVIDER_HTTP_(\d{3})/)?.[1] || 0);
+  const message = errorMessage(error);
+  const status = statusFromError(message);
   return {
     provider,
     code: message.split(':')[0],
-    retryable: isRetryableStatus(status) || /PROVIDER_TIMEOUT|ECONNRESET|ECONNREFUSED|UND_ERR_CONNECT_TIMEOUT/i.test(message),
+    retryable: isRetryableError(error),
+    retryAfterMs: status === 429 ? retryAfterFromError(message) : undefined,
     observedAt: new Date().toISOString(),
-    ...(status === 429 ? {} : {}),
   };
 }
