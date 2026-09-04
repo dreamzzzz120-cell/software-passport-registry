@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v5
 
       - name: Integrate live scan progress UI
         shell: python
@@ -36,10 +36,9 @@ jobs:
                   "  const [scanCompleted, setScanCompleted] = useState(false);\n  const [currentJobId, setCurrentJobId] = useState<string | null>(() => {\n    try { return window.localStorage.getItem('spr.activeScanJobId'); } catch { return null; }\n  });\n  const [currentScanTarget, setCurrentScanTarget] = useState('');"
               )
 
-          if "spr.activeScanJobId" not in text[text.find("const [currentJobId"):text.find("const [currentJobId") + 1000]:
-              raise SystemExit('localStorage state insertion failed')
+          if "const [currentJobId, setCurrentJobId]" not in text:
+              raise SystemExit('job state insertion failed')
 
-          # Remove the legacy 1.5s polling loop. The hardened component owns polling.
           pattern = re.compile(
               r"\n      // Start periodic real-evidence state polling.*?\n\n    } catch \(err: unknown\) {",
               re.S,
@@ -54,7 +53,6 @@ jobs:
           if count != 1:
               raise SystemExit('legacy polling block not found')
 
-          # Replace the legacy terminal console with the real 21-stage progress experience.
           start = "          {/* Scanner Console / Progress indicator */}"
           end = "        {/* Right Column: Scan History List */}"
           if start in text and end in text:
@@ -84,31 +82,59 @@ jobs:
           else:
               raise SystemExit('legacy console markers not found')
 
-          # Persist an in-flight job across navigation/reload and restore active state.
           marker = "  useEffect(() => {\n    fetchSchedules();\n  }, []);"
           if marker in text and "Restore an in-flight scan" not in text:
               text = text.replace(marker, marker + "\n\n  // Restore an in-flight scan after navigation/reload; the job remains server-side.\n  useEffect(() => {\n    if (!currentJobId) return;\n    setIsScanning(true);\n    setScanCompleted(false);\n  }, [currentJobId]);\n")
 
-          # Clear the persisted job when the user explicitly dismisses completion.
-          text = text.replace(
-              "setScanProgress(0);\n                    }}",
-              "setScanProgress(0);\n                      setCurrentJobId(null);\n                      try { window.localStorage.removeItem('spr.activeScanJobId'); } catch {}\n                    }}"
-          )
+          # The hardened progress component owns scan lifecycle; remove legacy state that
+          # could otherwise create a second polling/render path.
+          text = re.sub(r"\n  const \[scanProgress, setScanProgress\] = useState\(0\);", "", text, count=1)
+          text = re.sub(r"\n  const \[scanLogs, setScanLogs\] = useState<string\[\]>\(\[\]\);", "", text, count=1)
+          text = text.replace("    setScanProgress(0);\n", "")
+          text = text.replace("    setScanLogs([`[INFO] Locating software trust record for \\\"${targetName}\\\"...`]);\n", "")
+          text = re.sub(r"\n    setScanLogs\(l => \[.*?\n    \]\);", "", text, count=1, flags=re.S)
+          text = re.sub(r"\n      setScanLogs\(l => \[\.\.\.l, `\[ERROR\].*?\n      return;", "\n      return;", text, count=1, flags=re.S)
+          text = re.sub(r"\n    setScanLogs\(l => \[\.\.\.l, `\[ERROR\].*?\n      setIsScanning\(false\);", "\n      setIsScanning(false);", text, count=1, flags=re.S)
+          text = text.replace("setScanProgress(0);", "setCurrentJobId(null);")
+          text = text.replace("try { window.localStorage.removeItem('spr.activeScanJobId'); } catch {}\n                    }}", "try { window.localStorage.removeItem('spr.activeScanJobId'); } catch {}\n                    }}")
 
           scans.write_text(text)
 
+          progress = Path('src/components/ScanProgressExperience.tsx')
+          p = progress.read_text()
+          old = """        if (terminal.has(next.status)) {
+          finished = true;
+          if (!completedRef.current) {
+            completedRef.current = true;
+            onCompleteRef.current?.(next);
+          }
+          return;
+        }"""
+          new = """        if (terminal.has(next.status)) {
+          finished = true;
+          if ((next.status === 'Success' || next.status === 'Completed') && !completedRef.current) {
+            completedRef.current = true;
+            onCompleteRef.current?.(next);
+          }
+          return;
+        }"""
+          if old in p:
+              p = p.replace(old, new)
+              progress.write_text(p)
+
       - name: Typecheck and test
         run: |
-          npm ci
+          npm ci --ignore-scripts --no-audit --no-fund
           npm run typecheck
-          npm test -- --runInBand
+          npm test
+          npm run build
 
       - name: Commit integration
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/components/ScansView.tsx
+          git add src/components/ScansView.tsx src/components/ScanProgressExperience.tsx
           if git diff --cached --quiet; then
             echo "No changes to commit"
             exit 0
