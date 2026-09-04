@@ -30,7 +30,7 @@ export function backoffMs(attempt: number, retryAfter?: number, random = Math.ra
 }
 
 function errorMessage(error: unknown): string {
-  return String((error as any)?.message || error || 'UNKNOWN');
+  return String((error as { message?: unknown })?.message || error || 'UNKNOWN');
 }
 
 function statusFromError(message: string): number {
@@ -38,8 +38,8 @@ function statusFromError(message: string): number {
 }
 
 function retryAfterFromError(message: string): number | undefined {
-  const value = message.match(/PROVIDER_HTTP_429:([^\s]+)/)?.[1];
-  return value ? retryAfterMs(value) : undefined;
+  const value = message.match(/^PROVIDER_HTTP_429:(.+)$/)?.[1];
+  return value ? retryAfterMs(value.trim()) : undefined;
 }
 
 function isRetryableError(error: unknown): boolean {
