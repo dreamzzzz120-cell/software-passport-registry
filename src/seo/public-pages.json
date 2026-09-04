@@ -13,11 +13,11 @@
     "page actually contains: no ratings, prices, certifications, compliance",
     "attestations or safety claims the product cannot evidence.",
     "",
-    "origin is the apex domain because www.softwarepassportregistry.com answers",
-    "307 -> apex in production; the canonical must name the domain that actually",
-    "serves the page."
+    "origin is the www production hostname, which is the final destination of",
+    "the apex -> www redirect. Canonicals should name the preferred public host.",
+    ""
   ],
-  "origin": "https://softwarepassportregistry.com",
+  "origin": "https://www.softwarepassportregistry.com",
   "pages": [
     {
       "path": "/",
