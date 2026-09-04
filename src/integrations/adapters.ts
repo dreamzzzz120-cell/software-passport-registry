@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import dns from 'node:dns/promises';
 import { Agent } from 'undici';
+import { withConnectorRetry } from './resilience.ts';
 
 export type Provider =
   | 'gitlab' | 'bitbucket' | 'azure-devops' | 'jira' | 'confluence' | 'slack'
@@ -39,18 +40,9 @@ async function validateOutboundUrl(raw: string): Promise<{ url: URL; pinnedIp: s
   if (BLOCKED_HOSTS.has(host) || blockPrivateAddress(host)) throw new Error('PROVIDER_URL_BLOCKED');
   const records = await dns.lookup(host, { all: true, verbatim: true });
   if (!records.length || records.some(r => blockPrivateAddress(r.address))) throw new Error('PROVIDER_URL_RESOLVES_PRIVATE');
-  // Pin the connection to the exact address just validated instead of letting
-  // the HTTP client re-resolve DNS a second time, which would reopen a
-  // DNS-rebinding window between validation and the actual request.
   return { url, pinnedIp: records[0].address };
 }
 
-// A fresh undici Agent per call, whose connector is pinned to the exact IP
-// `validateOutboundUrl` already resolved and vetted. This is what actually
-// closes the DNS-rebinding window: the previous version passed the validated
-// URL straight to `fetch()`, which re-resolves the hostname itself, so a
-// rebinding DNS server could return a public IP for validation and a private
-// one moments later for the real connection.
 function pinnedDispatcher(ip: string) {
   if (blockPrivateAddress(ip)) throw new Error('PROVIDER_URL_BLOCKED');
   const family = ip.includes(':') ? 6 : 4;
@@ -58,40 +50,41 @@ function pinnedDispatcher(ip: string) {
 }
 
 export async function safeRequestJson(url: string, init: RequestInit = {}) {
-  const { url: safeUrl, pinnedIp } = await validateOutboundUrl(url);
-  const dispatcher = pinnedDispatcher(pinnedIp);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const response = await fetch(safeUrl, { ...init, redirect: 'error', signal: controller.signal, dispatcher, headers: { accept: 'application/json', ...(init.headers || {}) } } as any);
-    if (response.status >= 300 && response.status < 400) throw new Error('PROVIDER_URL_BLOCKED');
-    const contentLength = Number(response.headers.get('content-length') || 0);
-    if (contentLength > MAX_RESPONSE_BYTES) throw new Error('PROVIDER_RESPONSE_TOO_LARGE');
-    const text = await response.text();
-    if (Buffer.byteLength(text, 'utf8') > MAX_RESPONSE_BYTES) throw new Error('PROVIDER_RESPONSE_TOO_LARGE');
-    if (!response.ok) throw new Error(`PROVIDER_HTTP_${response.status}`);
-    let body: unknown;
-    try { body = JSON.parse(text); } catch { body = { text: text.slice(0, MAX_RESPONSE_BYTES) }; }
-    return { body, text };
-  } catch (error: any) {
-    if (error?.name === 'AbortError') throw new Error('PROVIDER_TIMEOUT');
-    if (error?.cause?.code === 'UND_ERR_REDIRECT' || /redirect/i.test(String(error?.message || ''))) throw new Error('PROVIDER_URL_BLOCKED');
-    throw error;
-  } finally {
-    clearTimeout(timer);
-    void dispatcher.close().catch(() => undefined);
-  }
+  return withConnectorRetry(async () => {
+    const { url: safeUrl, pinnedIp } = await validateOutboundUrl(url);
+    const dispatcher = pinnedDispatcher(pinnedIp);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    try {
+      const response = await fetch(safeUrl, { ...init, redirect: 'error', signal: controller.signal, dispatcher, headers: { accept: 'application/json', ...(init.headers || {}) } } as any);
+      if (response.status >= 300 && response.status < 400) throw new Error('PROVIDER_URL_BLOCKED');
+      const contentLength = Number(response.headers.get('content-length') || 0);
+      if (contentLength > MAX_RESPONSE_BYTES) throw new Error('PROVIDER_RESPONSE_TOO_LARGE');
+      const text = await response.text();
+      if (Buffer.byteLength(text, 'utf8') > MAX_RESPONSE_BYTES) throw new Error('PROVIDER_RESPONSE_TOO_LARGE');
+      if (!response.ok) {
+        const retryAfter = response.headers.get('retry-after');
+        const suffix = retryAfter ? `:${retryAfter}` : '';
+        throw new Error(`PROVIDER_HTTP_${response.status}${suffix}`);
+      }
+      let body: unknown;
+      try { body = JSON.parse(text); } catch { body = { text: text.slice(0, MAX_RESPONSE_BYTES) }; }
+      return { body, text };
+    } catch (error: any) {
+      if (error?.name === 'AbortError') throw new Error('PROVIDER_TIMEOUT');
+      if (error?.cause?.code === 'UND_ERR_REDIRECT' || /redirect/i.test(String(error?.message || ''))) throw new Error('PROVIDER_URL_BLOCKED');
+      throw error;
+    } finally {
+      clearTimeout(timer);
+      void dispatcher.close().catch(() => undefined);
+    }
+  });
 }
 
 function sha256(value: string) { return `sha256:${crypto.createHash('sha256').update(value, 'utf8').digest('hex')}`; }
 function canonicalJson(value: unknown): string { if (value === null || typeof value !== 'object') return JSON.stringify(value); if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`; return `{${Object.keys(value as Record<string, unknown>).sort().map(k => `${JSON.stringify(k)}:${canonicalJson((value as Record<string, unknown>)[k])}`).join(',')}}`; }
 export function bearer(credentials: ProviderCredentials) { if (!credentials.accessToken) throw new Error('CREDENTIAL_MISSING_ACCESS_TOKEN'); return { Authorization: `Bearer ${credentials.accessToken}` }; }
 function base64url(input: Buffer | string): string { return (Buffer.isBuffer(input) ? input : Buffer.from(input)).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
-// Google service-account keys don't work as a bearer token directly -- they
-// must sign a short-lived JWT and exchange it for a real access token
-// (RFC 7523 / Google's server-to-server OAuth2 flow). Split out from the
-// network call so the JWT construction itself is unit-testable without a
-// real Google credential.
 export function buildGoogleServiceAccountJwt(serviceAccountKeyJson: string, scope: string, nowSeconds: number = Math.floor(Date.now() / 1000)): { jwt: string; tokenUri: string } {
   let key: any;
   try { key = JSON.parse(serviceAccountKeyJson); } catch { throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY_INVALID_JSON'); }
