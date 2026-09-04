@@ -37,15 +37,29 @@ function publisherCompatible(observed: string, expected: string): boolean {
 }
 
 export function normalizeSoftware(observation: SoftwareObservation): NormalizedSoftware {
-  const raw = clean(observation.name);
+  const raw = clean(observation?.name);
+  const publisher = observation?.publisher?.trim() || null;
+  const version = observation?.version?.trim() || null;
+  if (!raw) {
+    return {
+      canonicalName: 'Unknown software',
+      publisher,
+      version,
+      confidence: 0,
+      disposition: 'unknown',
+      matchedBy: [],
+      aliases: [],
+    };
+  }
+
   const direct = ALIASES[raw];
   if (direct) {
-    const publisherOk = publisherCompatible(observation.publisher || '', direct.publisher);
+    const publisherOk = publisherCompatible(publisher || '', direct.publisher);
     const confidence = publisherOk ? 0.97 : 0.78;
     return {
       canonicalName: direct.canonicalName,
       publisher: direct.publisher,
-      version: observation.version || null,
+      version,
       confidence,
       disposition: confidence >= 0.9 ? 'matched' : 'review',
       matchedBy: ['normalized-alias', ...(publisherOk ? ['publisher'] : [])],
@@ -53,12 +67,11 @@ export function normalizeSoftware(observation: SoftwareObservation): NormalizedS
     };
   }
 
-  const publisher = observation.publisher?.trim() || null;
-  if (publisher && raw) {
+  if (publisher) {
     return {
       canonicalName: observation.name.trim(),
       publisher,
-      version: observation.version || null,
+      version,
       confidence: 0.72,
       disposition: 'review',
       matchedBy: ['publisher-plus-name'],
@@ -69,7 +82,7 @@ export function normalizeSoftware(observation: SoftwareObservation): NormalizedS
   return {
     canonicalName: observation.name.trim(),
     publisher,
-    version: observation.version || null,
+    version,
     confidence: 0.35,
     disposition: 'unknown',
     matchedBy: [],
