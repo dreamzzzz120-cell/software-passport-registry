@@ -98,12 +98,11 @@ describe('every required public route gets its own metadata', () => {
     }
   });
 
-  it('canonicalises to the apex domain, which is what production actually serves', () => {
-    // www.softwarepassportregistry.com answers 307 -> apex, so the canonical
-    // must not name www or it would point at a redirect.
-    expect(origin).toBe('https://softwarepassportregistry.com');
+  it('canonicalises to the www production domain', () => {
+    expect(origin).toBe('https://www.softwarepassportregistry.com');
     for (const page of pages) {
-      expect(canonicalUrl(origin, page.path)).not.toContain('//www.');
+      expect(canonicalUrl(origin, page.path)).toContain('https://www.softwarepassportregistry.com');
+      expect(canonicalUrl(origin, page.path)).not.toContain('https://softwarepassportregistry.com/');
     }
   });
 });
@@ -240,6 +239,6 @@ describe('private application routes are never made indexable', () => {
       expect(robots).toContain(`Disallow: ${route}`);
     }
     expect(robots).toContain('Disallow: /api/');
-    expect(robots).toContain('Sitemap: https://softwarepassportregistry.com/sitemap.xml');
+    expect(robots).toContain('Sitemap: https://www.softwarepassportregistry.com/sitemap.xml');
   });
 });
