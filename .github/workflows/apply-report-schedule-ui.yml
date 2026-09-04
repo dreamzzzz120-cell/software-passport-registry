@@ -1,0 +1,58 @@
+name: apply-report-schedule-ui
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.head_commit.message != 'feat: add scheduled report management UI'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8f4b7f84864484a7bf31766abe9204da3cbe65b3
+        with:
+          fetch-depth: 0
+
+      - name: Integrate schedule panel
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('src/components/ReportsView.tsx')
+          s = p.read_text()
+          import_line = "import ReportSchedulePanel from './ReportSchedulePanel';"
+          if import_line not in s:
+              marker = "import PlainEnglishReport from './PlainEnglishReport';"
+              if marker not in s:
+                  raise SystemExit('ReportsView import marker not found')
+              s = s.replace(marker, marker + "\n" + import_line, 1)
+          render = "      <ReportSchedulePanel passports={passports} role={role} />\n\n"
+          marker = "      <div className=\"rounded-md border border-[var(--spr-amber)]/30"
+          if render not in s:
+              if marker not in s:
+                  raise SystemExit('ReportsView capability-boundary marker not found')
+              s = s.replace(marker, render + marker, 1)
+          p.write_text(s)
+
+      - name: Verify
+        run: |
+          node --version
+          npm --version
+          npm ci
+          npm run typecheck
+          npm test -- --run
+          npm run build
+
+      - name: Commit integration and remove temporary workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/apply-report-schedule-ui.yml
+          git add src/components/ReportsView.tsx src/components/ReportSchedulePanel.tsx
+          git diff --cached --check
+          git commit -m "feat: add scheduled report management UI"
+          git push
