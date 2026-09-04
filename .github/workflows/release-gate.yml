@@ -9,9 +9,11 @@ on:
 permissions:
   contents: read
 
+# A release verification run is evidence. Do not cancel it because another
+# commit lands while it is running; the result must be observable.
 concurrency:
   group: release-gate-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   migration-safety:

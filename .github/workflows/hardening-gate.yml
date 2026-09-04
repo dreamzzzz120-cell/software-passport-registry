@@ -9,9 +9,12 @@ on:
 permissions:
   contents: read
 
+# Never cancel an in-flight hardening run just because another hardening-triggering
+# commit arrived. A cancelled install step is not a security result and must not be
+# mistaken for a passing release verification.
 concurrency:
   group: hardening-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   hardening:
