@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import dns from 'node:dns/promises';
 import net from 'node:net';
-import { Agent } from 'undici';
+import { Agent, fetch as undiciFetch, type Response as UndiciResponse } from 'undici';
 
 export type CollectorStatus = 'succeeded' | 'failed' | 'timed_out' | 'unavailable' | 'unsupported';
 export type JobState = 'queued' | 'claimed' | 'running' | 'succeeded' | 'failed' | 'timed_out' | 'cancelled' | 'dead_lettered';
@@ -43,6 +43,13 @@ export async function assertPublicNetworkTarget(rawUrl:string,resolver=dns.looku
 // was checked is the only IP the socket can ever be opened to. This is
 // re-validated and re-pinned on every redirect hop, matching the existing
 // per-hop assertPublicNetworkTarget call.
+// The request itself goes through undici's own fetch, not the global one.
+// Node ships its own bundled copy of undici behind globalThis.fetch, and this
+// project depends on a newer standalone undici; handing a dispatcher built by
+// one copy to the fetch of the other is rejected at dispatch time
+// (InvalidArgumentError: invalid onRequestStart method), so every pinned
+// request failed as a bare "fetch failed". Keeping both halves on the same
+// undici is what makes the pinning above actually reach the network.
 export async function safeNetworkFetch(rawUrl:string,options:{timeoutMs?:number;maxRedirects?:number;maxBytes?:number;expectedContentTypes?:string[];resolver?:typeof dns.lookup}={}){const timeoutMs=options.timeoutMs??15000,maxRedirects=options.maxRedirects??3,maxBytes=options.maxBytes??1048576;let current=rawUrl;for(let redirect=0;redirect<=maxRedirects;redirect+=1){const{addresses}=await assertPublicNetworkTarget(current,options.resolver);const pinnedAddress=addresses[0];const dispatcher=new Agent({connect:{lookup:(_hostname:string,opts:{all?:boolean},callback:any)=>{
   // undici's connector invokes this with options.all=true and expects the
   // dns.lookup "all" callback shape (an array of {address,family}) --
@@ -55,4 +62,4 @@ export async function safeNetworkFetch(rawUrl:string,options:{timeoutMs?:number;
   const family=net.isIP(pinnedAddress) as number;
   if(opts&&opts.all)return callback(null,[{address:pinnedAddress,family}]);
   callback(null,pinnedAddress,family);
-}}});const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),timeoutMs);let response:Response;try{response=await fetch(current,{redirect:'manual',signal:controller.signal,dispatcher}as RequestInit&{dispatcher:Agent});}finally{clearTimeout(timeout);await dispatcher.close();}if(response.status>=300&&response.status<400){const location=response.headers.get('location');if(!location||redirect===maxRedirects)throw new Error('REDIRECT_LIMIT_EXCEEDED');current=new URL(location,current).toString();continue;}const contentType=response.headers.get('content-type')?.split(';')[0].trim()||'';if(options.expectedContentTypes?.length&&!options.expectedContentTypes.includes(contentType))throw new Error('UNSUPPORTED_CONTENT_TYPE');const declaredLength=Number(response.headers.get('content-length')||0);if(declaredLength>maxBytes)throw new Error('RESPONSE_TOO_LARGE');const reader=response.body?.getReader();const chunks:Uint8Array[]=[];let size=0;while(reader){const{done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>maxBytes){await reader.cancel();throw new Error('RESPONSE_TOO_LARGE');}chunks.push(value);}return{response,body:Buffer.concat(chunks).toString('utf8'),finalUrl:current};}throw new Error('REDIRECT_LIMIT_EXCEEDED');}
+}}});const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),timeoutMs);let response:UndiciResponse;try{response=await undiciFetch(current,{redirect:'manual',signal:controller.signal,dispatcher});}finally{clearTimeout(timeout);await dispatcher.close();}if(response.status>=300&&response.status<400){const location=response.headers.get('location');if(!location||redirect===maxRedirects)throw new Error('REDIRECT_LIMIT_EXCEEDED');current=new URL(location,current).toString();continue;}const contentType=response.headers.get('content-type')?.split(';')[0].trim()||'';if(options.expectedContentTypes?.length&&!options.expectedContentTypes.includes(contentType))throw new Error('UNSUPPORTED_CONTENT_TYPE');const declaredLength=Number(response.headers.get('content-length')||0);if(declaredLength>maxBytes)throw new Error('RESPONSE_TOO_LARGE');const reader=response.body?.getReader();const chunks:Uint8Array[]=[];let size=0;while(reader){const{done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>maxBytes){await reader.cancel();throw new Error('RESPONSE_TOO_LARGE');}chunks.push(value);}return{response,body:Buffer.concat(chunks).toString('utf8'),finalUrl:current};}throw new Error('REDIRECT_LIMIT_EXCEEDED');}

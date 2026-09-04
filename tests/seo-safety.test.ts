@@ -27,6 +27,16 @@ const indexMarkup = stripComments(indexHtml);
 // public, and no authenticated route may ever appear here.
 const PUBLIC_INDEXABLE = ['/', '/free-review', '/passport/demo', '/pricing', '/msp', '/terms', '/privacy'];
 
+// The canonical origin is www (see the seo commits that moved sitemap, robots
+// and JSON-LD onto it together). It is read from the shipped robots.txt rather
+// than restated here: a second hardcoded copy is exactly what let the sitemap
+// and this test disagree about the host while both looked self-consistent.
+const CANONICAL_ORIGIN = (() => {
+  const match = robots.match(/^Sitemap: (https:\/\/[^/]+)\/sitemap\.xml$/m);
+  if (!match) throw new Error('robots.txt declares no Sitemap line to take the canonical origin from');
+  return match[1];
+})();
+
 // Authenticated views rendering tenant-scoped customer data. /registry is
 // included on purpose: despite the name it is an alias of the authenticated
 // /passports view, NOT a public registry.
@@ -39,14 +49,14 @@ const AUTHENTICATED_ROUTES = [
 describe('sitemap contains only genuinely public URLs', () => {
   it('lists every public route', () => {
     for (const route of PUBLIC_INDEXABLE) {
-      const url = route === '/' ? 'https://softwarepassportregistry.com/' : `https://softwarepassportregistry.com${route}`;
+      const url = route === '/' ? `${CANONICAL_ORIGIN}/` : `${CANONICAL_ORIGIN}${route}`;
       expect(sitemap).toContain(`<loc>${url}</loc>`);
     }
   });
 
   it('never lists an authenticated route', () => {
     for (const route of AUTHENTICATED_ROUTES) {
-      expect(sitemap).not.toContain(`<loc>https://softwarepassportregistry.com${route}</loc>`);
+      expect(sitemap).not.toContain(`<loc>${CANONICAL_ORIGIN}${route}</loc>`);
     }
   });
 
@@ -92,7 +102,12 @@ describe('robots policy protects the authenticated application', () => {
   });
 
   it('points at the sitemap', () => {
-    expect(robots).toContain('Sitemap: https://softwarepassportregistry.com/sitemap.xml');
+    expect(robots).toContain(`Sitemap: ${CANONICAL_ORIGIN}/sitemap.xml`);
+    // Every indexed URL must sit on that same origin -- a sitemap that mixes
+    // apex and www hosts splits the site's ranking across two origins.
+    for (const loc of [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1])) {
+      expect(loc.startsWith(`${CANONICAL_ORIGIN}/`)).toBe(true);
+    }
   });
 
   it('states that it is not a security boundary', () => {

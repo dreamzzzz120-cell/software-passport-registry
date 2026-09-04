@@ -100,7 +100,25 @@ describe('SPR security release contracts', () => {
 
   it('keeps dependency fixes at or above the patched versions', () => {
     const manifest = JSON.parse(read('package.json')) as { dependencies?: Record<string, string>; overrides?: Record<string, string> };
-    expect(manifest.dependencies?.dompurify).toBe('^3.4.13');
-    expect(manifest.overrides?.['brace-expansion']).toBe('5.0.9');
+    // "at or above", not "exactly": pinning the equality made a routine patch
+    // bump (dompurify 3.4.13 -> 3.4.14) fail the security gate even though it
+    // moves further past the advisory, which is the opposite of what this
+    // check is for. A version BELOW the patched one must still fail.
+    const atLeast = (declared: string | undefined, patched: string) => {
+      expect(declared).toBeDefined();
+      const parts = (raw: string) => raw.replace(/^[^0-9]*/, '').split('.').map(Number);
+      const [actual, minimum] = [parts(declared!), parts(patched)];
+      expect(actual.every((n) => Number.isInteger(n))).toBe(true);
+      expect(actual.length).toBe(minimum.length);
+      for (let i = 0; i < minimum.length; i += 1) {
+        if (actual[i] !== minimum[i]) return expect(actual[i]).toBeGreaterThan(minimum[i]);
+      }
+      return expect(actual).toEqual(minimum);
+    };
+    // dompurify's caret range must stay on the patched major, so the advisory
+    // fix cannot be dropped by a range that also admits an older major.
+    expect(manifest.dependencies?.dompurify?.startsWith('^3.')).toBe(true);
+    atLeast(manifest.dependencies?.dompurify, '3.4.13');
+    atLeast(manifest.overrides?.['brace-expansion'], '5.0.9');
   });
 });
