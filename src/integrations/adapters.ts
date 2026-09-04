@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import dns from 'node:dns/promises';
+import net from 'node:net';
 import { Agent } from 'undici';
 import { withConnectorRetry } from './resilience.ts';
 
@@ -23,12 +24,62 @@ const TIMEOUT_MS = 15_000;
 const MAX_RESPONSE_BYTES = 2_000_000;
 const BLOCKED_HOSTS = new Set(['localhost', 'localhost.localdomain', 'metadata.google.internal']);
 
+function ipv4ToNumber(address: string): number {
+  return address.split('.').reduce((value, part) => ((value * 256) + Number(part)) >>> 0, 0);
+}
+
+function inIpv4Range(address: string, base: string, maskBits: number): boolean {
+  const value = ipv4ToNumber(address);
+  const baseValue = ipv4ToNumber(base);
+  const mask = maskBits === 0 ? 0 : (0xffffffff << (32 - maskBits)) >>> 0;
+  return (value & mask) === (baseValue & mask);
+}
+
+function ipv6ToBigInt(address: string): bigint | undefined {
+  let normalized = address.toLowerCase().replace(/^\[|\]$/g, '');
+  if (normalized.includes('.')) {
+    const lastColon = normalized.lastIndexOf(':');
+    if (lastColon < 0) return undefined;
+    const v4 = normalized.slice(lastColon + 1);
+    if (net.isIP(v4) !== 4) return undefined;
+    const n = ipv4ToNumber(v4);
+    normalized = `${normalized.slice(0, lastColon)}:${((n >>> 16) & 0xffff).toString(16)}:${(n & 0xffff).toString(16)}`;
+  }
+  const halves = normalized.split('::');
+  if (halves.length > 2) return undefined;
+  const left = halves[0] ? halves[0].split(':').filter(Boolean) : [];
+  const right = halves.length === 2 && halves[1] ? halves[1].split(':').filter(Boolean) : [];
+  if (left.length + right.length > 8) return undefined;
+  const groups = halves.length === 2 ? [...left, ...Array(8 - left.length - right.length).fill('0'), ...right] : left;
+  if (groups.length !== 8 || groups.some(group => !/^[0-9a-f]{1,4}$/.test(group))) return undefined;
+  return groups.reduce((value, group) => (value << 16n) | BigInt(parseInt(group, 16)), 0n);
+}
+
+function inIpv6Range(address: string, base: string, prefixBits: number): boolean {
+  const value = ipv6ToBigInt(address);
+  const prefix = ipv6ToBigInt(base);
+  if (value === undefined || prefix === undefined) return false;
+  const shift = BigInt(128 - prefixBits);
+  return (value >> shift) === (prefix >> shift);
+}
+
 export function blockPrivateAddress(address: string): boolean {
-  const h = address.toLowerCase().replace(/^\[|\]$/g, '');
-  if (h === '::1' || h === '::' || h.startsWith('fc') || h.startsWith('fd') || h.startsWith('fe80:')) return true;
-  const p = h.split('.').map(Number);
-  if (p.length !== 4 || p.some(n => !Number.isInteger(n) || n < 0 || n > 255)) return false;
-  return p[0] === 0 || p[0] === 10 || p[0] === 127 || (p[0] === 169 && p[1] === 254) || (p[0] === 172 && p[1] >= 16 && p[1] <= 31) || (p[0] === 192 && p[1] === 168);
+  const h = address.toLowerCase().replace(/^\[|\]$/g, '').replace(/%.*$/, '');
+  if (net.isIP(h) === 4) {
+    return [
+      ['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8],
+      ['169.254.0.0', 16], ['172.16.0.0', 12], ['192.0.0.0', 24], ['192.0.2.0', 24],
+      ['192.168.0.0', 16], ['198.18.0.0', 15], ['198.51.100.0', 24], ['203.0.113.0', 24],
+      ['224.0.0.0', 4], ['240.0.0.0', 4],
+    ].some(([base, bits]) => inIpv4Range(h, base as string, bits as number));
+  }
+  if (net.isIP(h) !== 6) return false;
+  const mappedIpv4 = h.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  if (mappedIpv4 && net.isIP(mappedIpv4[1]) === 4) return blockPrivateAddress(mappedIpv4[1]);
+  return [
+    ['::', 128], ['::1', 128], ['fc00::', 7], ['fe80::', 10], ['fec0::', 10],
+    ['ff00::', 8], ['2001:db8::', 32], ['2001:2::', 48], ['2001:10::', 28],
+  ].some(([base, bits]) => inIpv6Range(h, base as string, bits as number));
 }
 
 async function validateOutboundUrl(raw: string): Promise<{ url: URL; pinnedIp: string }> {
