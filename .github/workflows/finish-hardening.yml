@@ -19,13 +19,9 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
-          import re
 
           p = Path('src/integrations/adapters.ts')
           s = p.read_text()
-          needle = "  const mapped = h.match(/^::ffff:(\\\\d+\\\\.\\\\d+\\\\.\\\\d+\\\\.\\\\d+)$/); if (mapped && net.isIP(mapped[1]) === 4) return blockPrivateAddress(mapped[1]);\n"
-          # The source is one-line-heavy; locate the exact mapped-address statement
-          # without depending on escaping in the workflow YAML.
           marker = "  const mapped = h.match(/^::ffff:("
           pos = s.find(marker)
           if pos < 0:
@@ -38,8 +34,7 @@ jobs:
               raise SystemExit('unexpected mapped check')
           insertion = "  const mappedHexPrefix = ipv6ToBigInt('::ffff:0:0');\n  const mappedHexValue = ipv6ToBigInt(h);\n  if (mappedHexPrefix !== undefined && mappedHexValue !== undefined && (mappedHexValue >> 32n) === (mappedHexPrefix >> 32n)) {\n    const v4 = Number(mappedHexValue & 0xffffffffn);\n    const dotted = `${v4 >>> 24}.${(v4 >>> 16) & 255}.${(v4 >>> 8) & 255}.${v4 & 255}`;\n    return blockPrivateAddress(dotted);\n  }\n"
           if 'mappedHexPrefix' not in s:
-              s = s[:end+1] + insertion + s[end+1:]
-              p.write_text(s)
+              p.write_text(s[:end+1] + insertion + s[end+1:])
 
           p = Path('src/routes/billing.ts')
           s = p.read_text()
