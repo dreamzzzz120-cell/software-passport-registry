@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { backoffMs, isRetryableStatus, withConnectorRetry } from './resilience.ts';
+import { backoffMs, isRetryableStatus, retryAfterMs, withConnectorRetry } from './resilience.ts';
+import { blockPrivateAddress } from './adapters.ts';
 import { normalizeSoftware, shouldAutoMatch } from './software-normalization.ts';
 import { buildExecutiveSummary } from '../reports/executive-summary.ts';
 
@@ -23,7 +24,25 @@ describe('connector resilience', () => {
     expect(isRetryableStatus(429)).toBe(true);
     expect(isRetryableStatus(503)).toBe(true);
     expect(isRetryableStatus(400)).toBe(false);
-    expect(backoffMs(1, undefined, () => 0)).toBe(188);
+    expect(backoffMs(1, undefined, 0)).toBe(188);
+  });
+  it('parses Retry-After safely and caps provider-directed delays', () => {
+    expect(retryAfterMs('2')).toBe(2000);
+    expect(retryAfterMs('999999')).toBe(8000);
+    expect(retryAfterMs('not-a-delay')).toBeUndefined();
+  });
+});
+
+describe('outbound SSRF protection', () => {
+  it.each([
+    '127.0.0.1', '10.0.0.1', '172.16.0.1', '192.168.1.1', '169.254.169.254',
+    '100.64.0.1', '198.18.0.1', '::1', 'fc00::1', 'fd12:3456::1', 'fe80::1',
+    '::ffff:127.0.0.1', '::ffff:169.254.169.254',
+  ])('blocks non-public address %s', (address) => {
+    expect(blockPrivateAddress(address)).toBe(true);
+  });
+  it.each(['8.8.8.8', '1.1.1.1', '2001:4860:4860::8888'])('allows public address %s', (address) => {
+    expect(blockPrivateAddress(address)).toBe(false);
   });
 });
 
