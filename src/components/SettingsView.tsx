@@ -2139,10 +2139,14 @@ function GettingStartedGuide() {
           <p className="leading-relaxed">Settings → Team & Profile → invite teammates by email and role (Owner/Admin/Technician/Viewer/Client). Only Owner/Admin can invite, change roles, or remove members.</p>
         </div>
 
+        <div className="spr-panel p-5 space-y-3">
+          <h4 className="text-[11px] font-bold text-[var(--spr-text)] uppercase tracking-wide">Billing</h4>
+          <p className="leading-relaxed">Real Stripe Checkout for MSP plans, one-time reports and recurring add-ons, with the Stripe billing portal for payment methods, invoices and cancellation. Every price shown is read from the live Stripe price that checkout charges against — a price SPR cannot read is shown as unavailable rather than guessed. Your plan's client limit is enforced server-side when you add a client.</p>
+        </div>
+
         <div className="spr-panel p-5 space-y-3 border-dashed">
           <h4 className="text-[11px] font-bold text-[var(--spr-amber)] uppercase tracking-wide flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> Not available yet</h4>
           <ul className="space-y-1.5 list-disc list-inside leading-relaxed">
-            <li><strong className="text-[var(--spr-text)]">Billing</strong> — no backend exists yet; the Billing page says so rather than showing fake data.</li>
             <li><strong className="text-[var(--spr-text)]">Custom domains</strong> — not implemented.</li>
             <li><strong className="text-[var(--spr-text)]">Branding on the public passport / emails</strong> — your saved branding currently only feeds the Reports PDF export, not yet the public passport page itself.</li>
           </ul>

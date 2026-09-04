@@ -19,8 +19,17 @@ describe('Settings "Getting Started" guide stays honest about real gaps', () => 
     expect(s).toContain('<GettingStartedGuide />');
   });
 
-  it('still discloses billing has no backend', () => {
-    expect(source()).toContain('no backend exists yet');
+  // Billing was listed here as having no backend. It has one -- real Stripe
+  // Checkout, the billing portal, signature-verified webhooks and server-side
+  // client-limit enforcement -- so the honest entry is a description of what
+  // it does, not a disclaimer. The guarantee this test protects is that the
+  // guide describes billing truthfully either way: it must not go silent, and
+  // it must not still claim the backend is missing once it exists.
+  it('describes the billing backend that exists, and no longer claims there is none', () => {
+    const s = source();
+    expect(s).not.toContain('no backend exists yet');
+    expect(s).toContain('Billing</h4>');
+    expect(s).toContain('Real Stripe Checkout');
   });
 
   it('still discloses custom domains are not implemented', () => {
