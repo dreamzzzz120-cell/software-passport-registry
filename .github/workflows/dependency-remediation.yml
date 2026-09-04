@@ -81,6 +81,4 @@ jobs:
             --base main \
             --head "$BRANCH" \
             --title 'security: remediate vulnerable dependencies' \
-            --body 'Opened automatically by the Dependency Remediation workflow from `npm audit fix --force`.
-
-`npm audit --audit-level=high`, `npm run typecheck`, `npm test` and `npm run build` all passed on this branch before the pull request was opened. Review the version changes before merging: `--force` is permitted to take major versions.'
+            --body 'Opened automatically by the Dependency Remediation workflow from npm audit fix --force. The high-level audit, typecheck, test suite and production build all passed on this branch before this pull request was opened. Review the version changes before merging: --force is permitted to take major versions.'
