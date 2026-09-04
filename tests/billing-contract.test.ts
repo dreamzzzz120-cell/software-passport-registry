@@ -115,6 +115,28 @@ describe('Stripe webhook handling', () => {
     expect(s).toContain('duplicate: true');
   });
 
+  // An add-on is a separate Stripe subscription that carries the same
+  // tenantId in its metadata as the plan. Keying the plan-row update on
+  // tenantId alone wrote the add-on's status onto the plan: a Trust Badge
+  // going past_due flipped a fully paid MSP plan to past_due and
+  // enforcePaidAccess denied the entire workspace at 402.
+  it('never writes an add-on subscription\'s status onto the tenant\'s plan row', () => {
+    const s = source();
+    const branchStart = s.indexOf("case 'customer.subscription.created':");
+    const branchEnd = s.indexOf("case 'customer.subscription.deleted':");
+    const branch = s.slice(branchStart, branchEnd);
+    expect(branchStart).toBeGreaterThan(-1);
+    // The add-on is recognised and returned on before any UPDATE runs.
+    expect(branch).toContain('if (addon && ADDON_CONFIG[addon]) {');
+    expect(branch.indexOf('if (addon && ADDON_CONFIG[addon]) {')).toBeLessThan(branch.indexOf('UPDATE tenant_subscriptions'));
+    // The by-tenant update is reachable only for a genuine plan.
+    expect(branch).toContain('tenantId && plan && PLAN_CONFIG[plan]');
+  });
+
+  it('records an add-on that was actually bought, not only one that was started', () => {
+    expect(source()).toContain("action: 'billing.addon.completed'");
+  });
+
   it('is mounted with the raw body before the global JSON parser, not after', () => {
     const serverSource = read('server.ts');
     const webhookIndex = serverSource.indexOf("app.post('/api/billing/webhook'");

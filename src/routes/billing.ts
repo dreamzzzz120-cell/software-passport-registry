@@ -359,6 +359,13 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
           await appendAuditEntry(db, { tenantId, action: 'billing.subscription.activated', actor: 'stripe-webhook', payload: { plan, stripeEventId: event.id, stripeSubscriptionId: String(session.subscription), stripeCustomerId: customerId ?? null } });
         } else if (tenantId && session.mode === 'payment') {
           await appendAuditEntry(db, { tenantId, action: 'billing.purchase.completed', actor: 'stripe-webhook', payload: { product: session.metadata?.product ?? null, stripeEventId: event.id, checkoutSessionId: session.id } });
+        } else if (tenantId && session.metadata?.addon) {
+          // An add-on checkout completing left no trace at all: it is a
+          // subscription, so it missed the plan branch above, and it is not a
+          // payment, so it missed the one-time branch. Only billing.addon.initiated
+          // was ever recorded, which cannot distinguish an add-on somebody
+          // bought from one they abandoned at the Stripe page.
+          await appendAuditEntry(db, { tenantId, action: 'billing.addon.completed', actor: 'stripe-webhook', payload: { addon: session.metadata.addon, stripeEventId: event.id, checkoutSessionId: session.id, stripeSubscriptionId: session.subscription ? String(session.subscription) : null } });
         }
         break;
       }
@@ -368,8 +375,24 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
         const currentPeriodEndSeconds = subscription.items.data[0]?.current_period_end;
         const periodEnd = currentPeriodEndSeconds ? new Date(currentPeriodEndSeconds * 1000).toISOString() : null;
         const tenantId = subscription.metadata?.tenantId;
-        const updated = tenantId
+        const addon = subscription.metadata?.addon as AddonId | undefined;
+        // An add-on is its own Stripe subscription, and it carries the same
+        // tenantId in its metadata as the plan does. Matching on tenantId
+        // alone therefore wrote the ADD-ON's status onto the tenant's PLAN
+        // row: a Trust Badge going past_due or cancelled flipped a fully paid
+        // MSP plan to past_due/canceled and enforcePaidAccess started denying
+        // the whole workspace, while an active add-on could equally mask a
+        // plan that had genuinely lapsed. The plan row is only ever written
+        // for a subscription that is actually a plan.
+        if (addon && ADDON_CONFIG[addon]) {
+          if (tenantId) await appendAuditEntry(db, { tenantId, action: 'billing.addon.status_changed', actor: 'stripe-webhook', payload: { addon, status: subscription.status, stripeEventId: event.id, stripeSubscriptionId: subscription.id } });
+          break;
+        }
+        const plan = subscription.metadata?.plan as PlanId | undefined;
+        const updated = tenantId && plan && PLAN_CONFIG[plan]
           ? (await db.execute(sql`UPDATE tenant_subscriptions SET status = ${subscription.status}, current_period_end = ${periodEnd}, updated_at = CURRENT_TIMESTAMP WHERE tenant_id = ${tenantId} RETURNING tenant_id`) as any).rows?.[0]
+          // No plan in the metadata: fall back to the subscription id, which
+          // matches the plan row and nothing else.
           : (await db.execute(sql`UPDATE tenant_subscriptions SET status = ${subscription.status}, current_period_end = ${periodEnd}, updated_at = CURRENT_TIMESTAMP WHERE stripe_subscription_id = ${subscription.id} RETURNING tenant_id`) as any).rows?.[0];
         if (updated?.tenant_id) await appendAuditEntry(db, { tenantId: updated.tenant_id, action: 'billing.subscription.status_changed', actor: 'stripe-webhook', payload: { status: subscription.status, stripeEventId: event.id } });
         break;
