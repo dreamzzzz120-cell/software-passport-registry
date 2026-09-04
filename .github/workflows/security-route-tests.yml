@@ -41,10 +41,10 @@ jobs:
       FIREBASE_PROJECT_ID: demo-spr-security
       FIREBASE_AUTH_EMULATOR_HOST: 127.0.0.1:9099
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
           cache: npm
@@ -76,7 +76,11 @@ jobs:
             exit 1
           fi
       - name: Install Firebase CLI
-        run: npm install --global firebase-tools@latest
+        # Pinned rather than @latest: this CLI is installed globally with its
+        # install scripts and then provisions the emulator identities these
+        # authorization tests trust, so "whatever npm serves today" is an
+        # unreviewed dependency sitting inside a security gate.
+        run: npm install --global firebase-tools@15.29.0
       - name: Start Firebase Auth emulator
         run: firebase emulators:start --only auth --project demo-spr-security > /tmp/firebase-emulator.log 2>&1 &
       - name: Wait for Auth emulator

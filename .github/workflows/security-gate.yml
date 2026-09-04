@@ -25,7 +25,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           # gitleaks scans <commit>^..<commit> on pull_request events, so the
           # parent commit has to be in the clone. With fetch-depth: 1 it is not,
@@ -33,13 +33,13 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
           cache: npm
 
       - name: Install locked dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Verify lockfile is clean
         run: git diff --exit-code -- package-lock.json npm-shrinkwrap.json yarn.lock pnpm-lock.yaml
@@ -54,7 +54,7 @@ jobs:
         run: node scripts/audit-with-retry.mjs --audit-level=high
 
       - name: Secret scan
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

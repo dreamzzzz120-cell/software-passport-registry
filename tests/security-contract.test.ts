@@ -69,6 +69,40 @@ describe('SPR security release contracts', () => {
     expect(wrapper).not.toMatch(/\|\|\s*true/);
   });
 
+  it('pins every GitHub Action to a commit, never to a movable tag', () => {
+    // A tag is a pointer its owner can move. `gitleaks/gitleaks-action@v2` runs
+    // third-party code inside the security gate with GITHUB_TOKEN and
+    // security-events: write, and `@v2` retargeted upstream would execute there
+    // with no change to this repository at all. A 40-hex commit cannot be
+    // retargeted, so an upgrade becomes a reviewable diff instead of a silent
+    // substitution.
+    const dir = path.join(root, '.github/workflows');
+    const unpinned: string[] = [];
+    for (const file of fs.readdirSync(dir).filter((name) => name.endsWith('.yml'))) {
+      for (const [, ref] of read(`.github/workflows/${file}`).matchAll(/uses:\s*(\S+)/g)) {
+        if (!/@[0-9a-f]{40}$/.test(ref)) unpinned.push(`${file}: ${ref}`);
+      }
+    }
+    expect(unpinned, `actions pinned to a movable ref: ${unpinned.join(', ')}`).toEqual([]);
+  });
+
+  it('never runs dependency install scripts in a workflow', () => {
+    // `npm ci` runs every transitive package's postinstall. In CI that is
+    // arbitrary code from the dependency tree executing on a runner with the
+    // repository checked out, before any gate has judged the tree. The Dockerfile
+    // has always installed with --ignore-scripts; the workflows now match it.
+    const dir = path.join(root, '.github/workflows');
+    const offenders: string[] = [];
+    for (const file of fs.readdirSync(dir).filter((name) => name.endsWith('.yml'))) {
+      for (const line of read(`.github/workflows/${file}`).split('\n')) {
+        if (/\bnpm (ci|install)\b/.test(line) && !line.includes('--ignore-scripts') && !line.includes('--global')) {
+          offenders.push(`${file}: ${line.trim()}`);
+        }
+      }
+    }
+    expect(offenders, `installs that would run package scripts: ${offenders.join(' | ')}`).toEqual([]);
+  });
+
   it('never lets a dependency audit step pass on a failure', () => {
     // continue-on-error on any audit step would turn every gate below into
     // decoration, and is the most likely way an outage gets "fixed" under time
