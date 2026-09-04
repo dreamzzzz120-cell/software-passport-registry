@@ -56,7 +56,28 @@ describe('SPR security release contracts', () => {
     const sql = read('migrations/0004_tenant_resource_integrity.sql'); expect(sql).toContain('tenant_id'); expect(sql).toContain('BEFORE INSERT OR UPDATE'); expect(sql).toContain('monitoring_configurations'); expect(sql).toContain('collector_jobs');
   });
   it('keeps high-severity dependency auditing in the security gate', () => {
-    const workflow = read('.github/workflows/security-gate.yml'); expect(workflow).toContain('npm audit --audit-level=high');
+    // The gate now runs the audit through scripts/audit-with-retry.mjs, which
+    // retries an unreachable npm audit endpoint but never a finding. Assert the
+    // whole chain rather than one literal: the gate asks for the high level, the
+    // wrapper really invokes npm audit at the level it was asked for, and
+    // neither end has been given a way to report success without a report.
+    const workflow = read('.github/workflows/security-gate.yml');
+    expect(workflow).toContain('node scripts/audit-with-retry.mjs --audit-level=high');
+    expect(workflow).not.toMatch(/audit[^\n]*\|\|\s*true/);
+    const wrapper = read('scripts/audit-with-retry.mjs');
+    expect(wrapper).toContain("const auditArgs = ['audit', '--json', ...passthrough];");
+    expect(wrapper).not.toMatch(/\|\|\s*true/);
+  });
+
+  it('never lets a dependency audit step pass on a failure', () => {
+    // continue-on-error on any audit step would turn every gate below into
+    // decoration, and is the most likely way an outage gets "fixed" under time
+    // pressure.
+    for (const file of ['security-gate.yml', 'security-hardening.yml', 'hardening-gate.yml', 'dependency-remediation.yml']) {
+      const workflow = read(`.github/workflows/${file}`);
+      expect(workflow, `${file} must not skip audit failures`).not.toContain('continue-on-error: true');
+      expect(workflow, `${file} must audit through the fail-closed wrapper`).toContain('node scripts/audit-with-retry.mjs');
+    }
   });
   it('keeps dependency fixes at or above the patched versions', () => {
     const manifest = JSON.parse(read('package.json')) as { dependencies?: Record<string, string>; overrides?: Record<string, string> };

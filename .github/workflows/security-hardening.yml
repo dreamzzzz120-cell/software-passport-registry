@@ -35,5 +35,7 @@ jobs:
       - name: Production build
         run: npm run build
 
+      # See scripts/audit-with-retry.mjs: retries only an unreachable npm audit
+      # endpoint, never a finding, and fails closed if no report is produced.
       - name: Dependency audit
-        run: npm audit --omit=dev --audit-level=high
+        run: node scripts/audit-with-retry.mjs --omit=dev --audit-level=high

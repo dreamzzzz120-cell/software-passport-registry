@@ -44,8 +44,14 @@ jobs:
       - name: Verify lockfile is clean
         run: git diff --exit-code -- package-lock.json npm-shrinkwrap.json yarn.lock pnpm-lock.yaml
 
+      # Runs `npm audit --audit-level=high` and fails on any advisory at or
+      # above high. The wrapper exists because npm returns exit code 1 both for
+      # a real finding and for its own audit endpoint being unreachable, and a
+      # registry outage failed this gate on three consecutive commits. Only the
+      # unreachable case is retried; a finding fails on the first attempt, and
+      # an audit that never completed still fails.
       - name: Dependency audit
-        run: npm audit --audit-level=high
+        run: node scripts/audit-with-retry.mjs --audit-level=high
 
       - name: Secret scan
         uses: gitleaks/gitleaks-action@v2

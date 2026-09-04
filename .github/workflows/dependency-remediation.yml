@@ -27,12 +27,28 @@ jobs:
           node-version: 22
           cache: npm
       - name: Regenerate dependencies from npm audit remediation
+        shell: bash
         run: |
+          set -euo pipefail
           npm install --no-audit --no-fund
-          npm audit fix --force
+          # `npm audit fix` talks to the same audit endpoint that returned 503
+          # and 400 for the better part of an hour on 2026-09-04 and failed this
+          # job outright. Retry the remediation itself, then let the verify step
+          # below decide whether the tree is actually clean.
+          for attempt in 1 2 3 4 5; do
+            if npm audit fix --force; then
+              exit 0
+            fi
+            if [ "$attempt" = "5" ]; then
+              echo "npm audit fix did not succeed in 5 attempts."
+              exit 1
+            fi
+            echo "npm audit fix attempt ${attempt} failed; retrying in $((attempt * 15))s."
+            sleep $((attempt * 15))
+          done
       - name: Verify dependency remediation
         run: |
-          npm audit --audit-level=high
+          node scripts/audit-with-retry.mjs --audit-level=high
           npm run typecheck
           npm test
           npm run build
