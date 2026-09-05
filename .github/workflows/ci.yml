@@ -31,6 +31,9 @@ jobs:
       - name: Verify license manifest
         run: npm run verify:license
 
+      - name: Verify GitHub Actions are pinned
+        run: npm run verify:actions
+
       - name: Verify lockfile is clean
         run: git diff --exit-code -- package-lock.json
 
