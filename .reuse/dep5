@@ -1,0 +1,6 @@
+# SPR repository-owned artifacts
+Files: package.json
+       package-lock.json
+       .github/workflows/*
+Copyright: 2026 Software Passport Registry
+License: LicenseRef-SPR-Proprietary
