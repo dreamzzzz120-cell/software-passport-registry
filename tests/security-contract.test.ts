@@ -12,10 +12,13 @@ const migrationVersions = () => fs.readdirSync(path.join(root, 'migrations'))
 describe('SPR security release contracts', () => {
   it('has an enabled restrictive CSP and browser security headers', () => {
     const source = read('server.ts');
-    expect(source).toContain('Content-Security-Policy');
-    expect(source).toContain('X-Content-Type-Options');
+    expect(source).toContain('helmet({');
+    expect(source).toContain('contentSecurityPolicy:');
     expect(source).toContain('defaultSrc');
     expect(source).toContain('objectSrc');
+    expect(source).toContain('frameAncestors');
+    expect(source).toContain('referrerPolicy');
+    expect(source).toContain("frameguard: { action: 'deny' }");
   });
 
   it('uses an explicit normalized CORS allowlist and never implicitly trusts a platform hostname', () => {
@@ -82,7 +85,8 @@ describe('SPR security release contracts', () => {
     expect(versions).toContain(45);
     expect(versions).toContain(59);
     expect(versions).toContain(60);
-    expect(versions[versions.length - 1]).toBeGreaterThanOrEqual(60);
+    expect(versions).toContain(61);
+    expect(versions[versions.length - 1]).toBeGreaterThanOrEqual(61);
   });
 
   it('keeps tenant-scoped deletion/integrity controls in the database layer', () => {
