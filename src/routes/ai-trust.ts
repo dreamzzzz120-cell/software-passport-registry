@@ -52,6 +52,7 @@ function extractJson(text: string): unknown {
 
 const AI_PROMPT_VERSION = 'spr.ai.explanation.v1';
 const AI_MODEL = process.env.AI_MODEL || 'openai/gpt-5.4';
+const AI_TRUST_READ_ROLES = ['Owner', 'Admin', 'Operator'] as const;
 
 function buildEvidenceContext(passport: any, observations: any[], findings: any[], evidence: any[]): string {
   return JSON.stringify({
@@ -88,7 +89,9 @@ export function createAiTrustRouter() {
   // no mechanism to detect AI usage on its own, so every field here is what the
   // tenant declared, and every UI surface for it must say so rather than imply
   // authoritative observation the way passport evidence does.
-  router.get('/systems', async (req: AuthenticatedRequest, res, next) => {
+  // ai_systems currently has no client_id ownership boundary, so tenant-wide
+  // reads fail closed to operator roles instead of exposing cross-client data.
+  router.get('/systems', requireRole([...AI_TRUST_READ_ROLES]), async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
       const rows = ((await db.execute(sql`SELECT * FROM ai_systems WHERE tenant_id=${req.user!.tenantId} ORDER BY updated_at DESC`) as any).rows || []).map((row: any) => ({ ...row, tool_access: parseJson(row.tool_access, []), permissions: parseJson(row.permissions, []) }));
@@ -150,7 +153,7 @@ export function createAiTrustRouter() {
     } catch (error) { return next(error); }
   });
 
-  router.get('/systems/:id/observations', async (req: AuthenticatedRequest, res, next) => {
+  router.get('/systems/:id/observations', requireRole([...AI_TRUST_READ_ROLES]), async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
       const tenantId = req.user!.tenantId;
@@ -184,7 +187,7 @@ export function createAiTrustRouter() {
   // against the exact evidence snapshot supplied to it before the response is
   // accepted. Unsupported claims therefore fail closed instead of becoming
   // authoritative SPR state.
-  router.post('/explain-passport', async (req: AuthenticatedRequest, res, next) => {
+  router.post('/explain-passport', requireRole([...AI_TRUST_READ_ROLES]), async (req: AuthenticatedRequest, res, next) => {
     const passportId = typeof req.body?.passportId === 'string' ? req.body.passportId.trim() : '';
     if (!passportId) return res.status(400).json({ error: 'PASSPORT_ID_REQUIRED' });
     if (!process.env.AI_GATEWAY_API_KEY) return res.status(503).json({ error: 'AI_NOT_CONFIGURED', message: 'AI explanation is unavailable until AI_GATEWAY_API_KEY is configured.' });
