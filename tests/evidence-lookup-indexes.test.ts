@@ -4,14 +4,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const migration = fs.readFileSync(path.join(root, 'migrations/0045_evidence_finding_lookup_indexes.sql'), 'utf8');
+const migration = fs.readFileSync(path.join(root, 'migrations/0061_evidence_finding_lookup_indexes.sql'), 'utf8');
 const baseSchema = fs.readFileSync(path.join(root, 'migrations/0000_base_application_schema.sql'), 'utf8');
 const authRoutes = fs.readFileSync(path.join(root, 'src/routes/auth.ts'), 'utf8');
 
-// evidence_items and scan_findings had no index beyond their id primary key,
-// while every hot read filters them by (tenant_id, asset_id). That made the
-// two correlated json_agg subqueries in GET /api/user/passports scan both
-// tables in full, once per passport - measured at ~4.3s in production.
 describe('evidence/finding lookup indexes', () => {
   it('indexes the exact (tenant_id, asset_id) predicate the passport query uses', () => {
     expect(migration).toContain('CREATE INDEX IF NOT EXISTS evidence_items_tenant_asset_idx');
@@ -28,8 +24,6 @@ describe('evidence/finding lookup indexes', () => {
   it('is transactional and idempotent, like every other migration here', () => {
     expect(migration.trimStart().startsWith('BEGIN;')).toBe(true);
     expect(migration.trimEnd().endsWith('COMMIT;')).toBe(true);
-    // Strip -- comments first: the rationale block above the statements
-    // discusses CREATE INDEX in prose and would otherwise match.
     const statements = migration
       .split('\n')
       .filter((line) => !line.trimStart().startsWith('--'))
@@ -50,8 +44,6 @@ describe('evidence/finding lookup indexes', () => {
   });
 
   it('the query these indexes serve still filters on the indexed columns', () => {
-    // If the passport query is ever rewritten away from this predicate the
-    // indexes stop helping, so pin the shape the indexes were built for.
     expect(authRoutes).toContain('FROM evidence_items e WHERE e.tenant_id=p.tenant_id AND e.asset_id=p.id');
     expect(authRoutes).toContain('FROM scan_findings f WHERE f.tenant_id=p.tenant_id AND f.asset_id=p.id');
   });
