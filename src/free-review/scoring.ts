@@ -45,6 +45,20 @@ export interface ScoringEvidence {
 export interface ScoringInput {
   /** True only when the security engine reached its terminal success status. */
   securityEngineCompleted: boolean;
+  /**
+   * True only when the repository engine reached its terminal success status.
+   * The repository engine is what produces the SBOM, so it gates licensing for
+   * the same reason the security engine gates security: a run that died partway
+   * leaves a partial component list behind, and measuring licence coverage
+   * against a partial denominator invents a ratio.
+   *
+   * Found in production: a Free Review where BOTH engines ended Failed still
+   * scored licensing 0 of 9 components and published "35 / 100 -- HIGH RISK".
+   * The repository was never fully read; that verdict was an artefact of a
+   * broken scan, and it is exactly the fabricated assurance -- in the negative
+   * direction -- that this model exists to prevent.
+   */
+  repositoryEngineCompleted: boolean;
   findings: ScoringFinding[];
   /** Components in the generated SBOM. null when no SBOM was produced. */
   sbomComponentCount: number | null;
@@ -121,6 +135,9 @@ export function scoreSecurity(input: ScoringInput): CategoryResult {
  * not a zero.
  */
 export function scoreLicensing(input: ScoringInput): CategoryResult {
+  if (!input.repositoryEngineCompleted) {
+    return { status: 'not_observed', reason: 'The repository engine did not complete, so the component list is incomplete and licence coverage could not be measured.' };
+  }
   const total = input.sbomComponentCount;
   if (total === null || !Number.isFinite(total) || total <= 0) {
     return { status: 'not_observed', reason: 'No SBOM was produced, so licence coverage could not be measured.' };
@@ -152,6 +169,11 @@ export function scoreSupplyChain(input: ScoringInput): CategoryResult {
   const evidence = input.evidence;
   if (evidence.length === 0) {
     return { status: 'not_observed', reason: 'No evidence items were collected, so evidence coverage could not be measured.' };
+  }
+  // Evidence a failed run happened to leave behind is not coverage. Scoring it
+  // rewarded a broken scan for the rows it managed to write before dying.
+  if (!input.securityEngineCompleted && !input.repositoryEngineCompleted) {
+    return { status: 'not_observed', reason: 'No engine completed, so the evidence collected is partial and coverage could not be measured.' };
   }
   const engines = new Set(evidence.map((item) => String(item.engineId || '')).filter(Boolean));
   const attestations = evidence.filter((item) => String(item.type).toLowerCase() === 'attestation').length;

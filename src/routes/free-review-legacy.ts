@@ -221,6 +221,7 @@ export function createLegacyFreeReviewRouter() {
       // being able to reconstruct the report from the JSON.
       const assessment = assessTrust({
         securityEngineCompleted: jobs.some((j: any) => String(j.job_type) === 'repository_security_scan' && j.status === 'Completed'),
+        repositoryEngineCompleted: jobs.some((j: any) => String(j.job_type) === 'repository_scan' && j.status === 'Completed'),
         findings: findings.map((f: any) => ({ severity: String(f.severity), category: String(f.category), status: String(f.status) })),
         sbomComponentCount,
         evidence: evidence.map((e: any) => ({ type: String(e.type), verified: e.verified, engineId: e.engineId })),

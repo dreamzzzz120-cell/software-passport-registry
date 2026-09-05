@@ -12,6 +12,7 @@ import {
 
 const base: ScoringInput = {
   securityEngineCompleted: true,
+  repositoryEngineCompleted: true,
   findings: [],
   sbomComponentCount: null,
   evidence: [],
@@ -90,6 +91,20 @@ describe('licensing score', () => {
     expect(scoreLicensing({ ...base, sbomComponentCount: null }).status).toBe('not_observed');
     expect(scoreLicensing({ ...base, sbomComponentCount: 0 }).status).toBe('not_observed');
   });
+
+  // Found in production: a run where both engines ended Failed still scored
+  // licensing 0 of 9 components and published "35 / 100 -- HIGH RISK". A partial
+  // component list is not a denominator.
+  it('is not observed when the repository engine did not complete, even with components on hand', () => {
+    const result = scoreLicensing({
+      ...base,
+      repositoryEngineCompleted: false,
+      sbomComponentCount: 9,
+      findings: Array.from({ length: 13 }, () => finding('medium', 'License')),
+    });
+    expect(result.status).toBe('not_observed');
+    expect(result).not.toHaveProperty('score');
+  });
 });
 
 describe('supply chain / buyer readiness score', () => {
@@ -130,6 +145,7 @@ describe('overall assessment', () => {
     // security 100, licensing 80, supply chain 20 -> mean of three = 67
     const assessment = assessTrust({
       securityEngineCompleted: true,
+      repositoryEngineCompleted: true,
       findings: [finding('medium', 'License'), finding('medium', 'License')],
       sbomComponentCount: 10,
       evidence: [evidence('Build Log', 0, 'a')],
@@ -154,7 +170,31 @@ describe('overall assessment', () => {
   });
 
   it('reports no score at all when nothing could be observed', () => {
-    const assessment = assessTrust({ ...base, securityEngineCompleted: false });
+    const assessment = assessTrust({ ...base, securityEngineCompleted: false, repositoryEngineCompleted: false });
+    expect(assessment.score).toBeNull();
+    expect(assessment.verdict).toBeNull();
+    expect(assessment.observedAreas).toBe(0);
+  });
+
+  // The exact production payload that exposed the defect: a Free Review of
+  // expressjs/express on 2026-09-05 where both jobs ended Failed, yet 15
+  // evidence items and 14 findings had been written before they died. It
+  // published "35 / 100 -- HIGH RISK". A failed scan has no verdict.
+  it('publishes no verdict for a run where every engine failed, however many rows it left behind', () => {
+    const assessment = assessTrust({
+      securityEngineCompleted: false,
+      repositoryEngineCompleted: false,
+      sbomComponentCount: 9,
+      findings: [
+        ...Array.from({ length: 13 }, () => finding('medium', 'License')),
+        finding('high', 'Secret'),
+      ],
+      evidence: [
+        ...Array.from({ length: 10 }, () => evidence('Security Scan', 0, 'osv-worker')),
+        ...Array.from({ length: 4 }, () => evidence('Build Log', 0, 'repository-worker')),
+        evidence('Attestation', 0, 'spr-security-orchestrator-v1'),
+      ],
+    });
     expect(assessment.score).toBeNull();
     expect(assessment.verdict).toBeNull();
     expect(assessment.observedAreas).toBe(0);
@@ -204,6 +244,7 @@ describe('severity breakdown', () => {
 describe('a real production scan shape (expressjs/express)', () => {
   const realScan: ScoringInput = {
     securityEngineCompleted: true,
+    repositoryEngineCompleted: true,
     findings: [
       ...Array.from({ length: 13 }, () => finding('medium', 'License')),
       finding('high', 'Secret'),
