@@ -5,6 +5,10 @@ BEGIN;
 -- is reused as the included Active Passport allowance so billing semantics stay
 -- compatible with already-issued Stripe plans while the public meter moves from
 -- "clients" to the actually monitored assets.
+CREATE INDEX IF NOT EXISTS idx_monitoring_active_passports
+  ON monitoring_configurations (tenant_id, passport_id)
+  WHERE subject_type = 'integration_provider' AND enabled = true;
+
 CREATE OR REPLACE FUNCTION spr_enforce_active_passport_limit()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -19,15 +23,22 @@ BEGIN
     RETURN NEW;
   END IF;
 
+  -- Serialize concurrent activations for one tenant. Without this lock two
+  -- requests could both observe one free slot and create two new passports.
   PERFORM pg_advisory_xact_lock(hashtextextended('spr:active-passports:' || NEW.tenant_id, 0));
 
   SELECT status, client_limit INTO subscription_status, active_limit
   FROM tenant_subscriptions WHERE tenant_id = NEW.tenant_id LIMIT 1;
 
+  -- Preserve the platform's existing default-access behavior for a tenant that
+  -- has no subscription row or is still incomplete.
   IF subscription_status IS NULL OR subscription_status = 'incomplete' THEN
     RETURN NEW;
   END IF;
 
+  -- Active/trialing/past_due retain their paid entitlement. A NULL limit means
+  -- unlimited only for a currently entitled subscription. Lapsed subscriptions
+  -- fail closed even if their historical plan was Enterprise/unlimited.
   IF subscription_status IN ('active', 'trialing', 'past_due') AND active_limit IS NULL THEN
     RETURN NEW;
   END IF;
