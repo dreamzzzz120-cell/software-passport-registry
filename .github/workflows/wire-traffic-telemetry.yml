@@ -9,7 +9,7 @@ jobs:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@8f4b7c0e2f5e8c2f1f6d4e4f6e7f1f5f0d5f7f3a # v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           fetch-depth: 1
       - name: Wire route
@@ -39,4 +39,11 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add server.ts
           git diff --cached --quiet || git commit -m 'feat: wire first-party traffic telemetry'
+          git push
+      - name: Remove temporary workflow
+        if: success()
+        run: |
+          rm -f .github/workflows/wire-traffic-telemetry.yml
+          git add .github/workflows/wire-traffic-telemetry.yml
+          git diff --cached --quiet || git commit -m 'chore: remove temporary traffic wiring workflow'
           git push
