@@ -16,13 +16,16 @@ function id(prefix: string) { return `${prefix}_${crypto.randomUUID().replaceAll
 export function createMspRouter() {
   const router = Router();
 
-  // Cross-client assignment list: who is responsible for which client. Every
-  // metric this feeds (workload per technician, unassigned clients) is a
-  // direct read of this table, not an inferred rollup.
+  // Cross-client assignment list for MSP staff. Client principals must only
+  // receive assignments belonging to their authenticated client boundary.
   router.get('/assignments', async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
-      const rows = await db.execute(sql`SELECT id, client_id, technician_user_id, technician_display, assigned_by, created_at, updated_at FROM client_assignments WHERE tenant_id=${req.user!.tenantId} ORDER BY updated_at DESC`);
+      const tenantId = req.user!.tenantId;
+      const isClient = req.user!.role === 'Client';
+      const clientId = req.user!.clientId;
+      if (isClient && !clientId) return res.status(403).json({ error: 'Client account has invalid client configuration' });
+      const rows = await db.execute(sql`SELECT id, client_id, technician_user_id, technician_display, assigned_by, created_at, updated_at FROM client_assignments WHERE tenant_id=${tenantId} AND (${isClient ? sql`client_id = ${clientId}` : sql`TRUE`}) ORDER BY updated_at DESC`);
       return res.json({ assignments: (rows as any).rows || [] });
     } catch (error) { return next(error); }
   });
