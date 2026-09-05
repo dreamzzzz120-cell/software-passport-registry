@@ -56,43 +56,13 @@ app.disable('x-powered-by');
 if (config.sentry.dsn) Sentry.init({ dsn: config.sentry.dsn, environment: config.nodeEnv, tracesSampleRate: config.isProduction ? 0.1 : 1.0 });
 const allowedOrigins = new Set(normalizeAllowedOrigins(config.allowedOrigins));
 const appOrigin = config.appUrl ? new URL(config.appUrl).origin : undefined;
-
-// connect-src was 'self' plus the app origin only, which silently broke the two
-// things the browser genuinely has to reach off-origin:
-//
-//   1. Firebase Authentication. The SDK calls identitytoolkit for sign-in,
-//      sign-up and password reset, and securetoken to refresh ID tokens. With
-//      those blocked the fetch never left the browser, so clicking "Sign in"
-//      did nothing at all -- no request, and no error surfaced to the user.
-//   2. Universal Intake uploads. src/components/UniversalIntakeView.tsx PUTs
-//      the file straight to the Supabase signed URL returned by
-//      /api/intake/upload-url, so that origin has to be reachable too.
-//
-// Listed explicitly rather than widened to `https:` -- the point of connect-src
-// is to bound where a compromised script may exfiltrate to, and 'https:' would
-// give that away for no benefit. The Supabase origin is derived from the same
-// SUPABASE_URL the intake route uses, so it cannot drift between environments.
 const FIREBASE_AUTH_ORIGINS = ['https://identitytoolkit.googleapis.com', 'https://securetoken.googleapis.com'];
-const supabaseOrigin = (() => {
-  const raw = process.env.SUPABASE_URL?.trim();
-  if (!raw) return undefined;
-  try { return new URL(raw).origin; } catch { console.error('[SPR] SUPABASE_URL is not a valid URL; intake uploads will be blocked by CSP.'); return undefined; }
-})();
+const supabaseOrigin = (() => { const raw = process.env.SUPABASE_URL?.trim(); if (!raw) return undefined; try { return new URL(raw).origin; } catch { console.error('[SPR] SUPABASE_URL is not a valid URL; intake uploads will be blocked by CSP.'); return undefined; } })();
 const connectSrc = ["'self'", ...(appOrigin ? [appOrigin] : []), ...FIREBASE_AUTH_ORIGINS, ...(supabaseOrigin ? [supabaseOrigin] : [])];
 const VERCEL_TEAM_PREVIEW_ORIGIN = /^https:\/\/[a-z0-9-]+-sprteam\.vercel\.app$/i;
 const corsOrigin = (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) => { if (!origin) return callback(null, true); try { const normalizedOrigin = new URL(origin).origin; if (allowedOrigins.has(normalizedOrigin)) return callback(null, true); if (VERCEL_TEAM_PREVIEW_ORIGIN.test(normalizedOrigin)) return callback(null, true); } catch (_) {} return callback(new Error('CORS origin denied')); };
 app.use(helmet({ contentSecurityPolicy: { useDefaults: false, directives: { defaultSrc: ["'self'"], baseUri: ["'self'"], objectSrc: ["'none'"], frameAncestors: ["'none'"], formAction: ["'self'"], scriptSrc: ["'self'", "'sha256-kWQT+628v4D1A4MJk9hTD6a0W1AdPlPKtzhPlYKIpZc='"], styleSrc: ["'self'", "'unsafe-inline'"], imgSrc: ["'self'", 'data:', 'blob:', 'https:'], fontSrc: ["'self'", 'data:', 'https:'], connectSrc, frameSrc: ["'self'", 'https:'], workerSrc: ["'self'", 'blob:'], manifestSrc: ["'self'"], upgradeInsecureRequests: [] } }, crossOriginEmbedderPolicy: false, frameguard: { action: 'deny' }, referrerPolicy: { policy: 'no-referrer' } }));
-// helmet does not emit Permissions-Policy, and production carried no such header.
-// SPR's browser client uses none of these capabilities, so denying them removes a
-// class of abuse from any script that does end up running on the page -- including
-// one injected through a dependency. payment and fullscreen stay 'self' because
-// Stripe Checkout is reached from this origin; everything else is denied outright.
-const PERMISSIONS_POLICY = [
-  'accelerometer=()', 'autoplay=()', 'bluetooth=()', 'camera=()', 'display-capture=()',
-  'encrypted-media=()', 'geolocation=()', 'gyroscope=()', 'magnetometer=()', 'microphone=()',
-  'midi=()', 'usb=()', 'serial=()', 'xr-spatial-tracking=()',
-  'fullscreen=(self)', 'payment=(self)',
-].join(', ');
+const PERMISSIONS_POLICY = ['accelerometer=()', 'autoplay=()', 'bluetooth=()', 'camera=()', 'display-capture=()', 'encrypted-media=()', 'geolocation=()', 'gyroscope=()', 'magnetometer=()', 'microphone=()', 'midi=()', 'usb=()', 'serial=()', 'xr-spatial-tracking=()', 'fullscreen=(self)', 'payment=(self)'].join(', ');
 app.use((_req, res, next) => { res.setHeader('Permissions-Policy', PERMISSIONS_POLICY); next(); });
 app.use(cors({ origin: corsOrigin, credentials: true, methods: ['GET','HEAD','POST','PUT','PATCH','DELETE','OPTIONS'], allowedHeaders: ['Authorization','Content-Type','X-Request-ID','X-API-Key'] }));
 app.use((req, res, next) => { if (req.method === 'TRACE' || req.method === 'CONNECT') return res.status(405).json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'HTTP method is not allowed.' } }); if (req.headers['content-length'] && !/^\d+$/.test(String(req.headers['content-length']))) return res.status(400).json({ error: { code: 'INVALID_CONTENT_LENGTH', message: 'Invalid Content-Length header.' } }); return next(); });
@@ -102,15 +72,7 @@ app.use(express.urlencoded({ extended: false, limit: requestBodyLimit }));
 app.use((req, res, next) => { const supplied = req.headers['x-request-id']; const requestId = typeof supplied === 'string' && /^[A-Za-z0-9._:-]{1,100}$/.test(supplied) ? supplied : `req_${randomUUID()}`; res.setHeader('X-Request-ID', requestId); res.setHeader('Cache-Control', req.path.startsWith('/api/') ? 'no-store, max-age=0' : 'public, max-age=0, must-revalidate'); res.locals.requestId = requestId; next(); });
 app.use((req, res, next) => { if (config.isProduction && config.enforceHttps && !req.secure && req.path !== '/health' && req.path !== '/ready' && req.path !== '/api/health') { if (!appOrigin) return res.status(503).json({ error: { code: 'HTTPS_CONFIGURATION_ERROR', message: 'HTTPS redirect target is not configured.' } }); return res.redirect(308, `${appOrigin}${req.originalUrl}`); } return next(); });
 app.get('/health', (_req, res) => res.status(200).json({ status: 'ok', service: 'spr-app', uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000) }));
-// runtimeRole is reported, not gated: it makes a silent fallback to the owner connection
-// (see validateConfiguration's APP_DATABASE_URL check) visible to an operator without
-// giving the healthcheck a new way to fail a deploy.
-// rls starts null, not true: when the database is unreachable the assertion is
-// never run, and reporting {"tenantRls":{"ok":true}} would claim a check that
-// did not happen. null means "not checked" -- the same distinction between
-// unknown and passing that the product makes everywhere else. Readiness still
-// requires an explicit true.
-app.get('/ready', async (_req, res) => { const database = await checkDatabaseHealth(); let rls: boolean | null = null; if (database.ok) { try { await db.execute(sql`SELECT spr_assert_tenant_rls()`); rls = true; } catch { rls = false; } } let runtimeRole: string | null = null; if (database.ok) { try { const scoped = await appPool.query('SELECT current_user AS role'); runtimeRole = scoped.rows?.[0]?.role ?? null; } catch { runtimeRole = null; } } const ready = database.ok && rls === true; res.status(ready ? 200 : 503).json({ status: ready ? 'ready' : 'not_ready', checks: { database: database.ok ? database : { ok: false, latencyMs: database.latencyMs, error: 'DATABASE_UNAVAILABLE' }, tenantRls: { ok: rls }, runtimeRole: { role: runtimeRole, leastPrivilege: runtimeRole === 'spr_app_runtime' } }, uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000) }); });
+app.get('/ready', async (_req, res) => { const database = await checkDatabaseHealth(); let rls: boolean | null = null; if (database.ok) { try { await db.execute(sql`SELECT spr_assert_tenant_rls()`); rls = true; } catch { rls = false; } } let runtimeRole: string | null = null; if (database.ok) { try { const scoped = await appPool.query('SELECT current_user AS role'); runtimeRole = scoped.rows?.[0]?.role ?? null; } catch { runtimeRole = null; } } const leastPrivilege = runtimeRole === 'spr_app_runtime'; const ready = database.ok && rls === true && leastPrivilege; res.status(ready ? 200 : 503).json({ status: ready ? 'ready' : 'not_ready', checks: { database: database.ok ? database : { ok: false, latencyMs: database.latencyMs, error: 'DATABASE_UNAVAILABLE' }, tenantRls: { ok: rls }, runtimeRole: { role: runtimeRole, leastPrivilege } }, uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000) }); });
 app.get('/api/health', async (_req, res) => { const database = await checkDatabaseHealth(); res.status(database.ok ? 200 : 503).json({ status: database.ok ? 'ok' : 'degraded', database: database.ok ? database : { ok: false, latencyMs: database.latencyMs, error: 'DATABASE_UNAVAILABLE' } }); });
 app.use('/api', rateLimiter);
 app.use('/api', createAuthRouter());
@@ -140,51 +102,12 @@ const mcpBearer = process.env.SPR_MCP_BEARER_TOKEN;
 if (mcpBearer) { const mcpTransport = createMcpTransport({ expectedBearer: mcpBearer, executeTool: async (tool, args) => executePublicMcpTool(tool, args) }); app.post('/mcp', async (req, res) => { const response = await mcpTransport(new Request(`${config.appUrl || 'https://localhost'}/mcp`, { method: 'POST', headers: req.headers as Record<string, string>, body: JSON.stringify(req.body) })); res.status(response.status); response.headers.forEach((value, key) => res.setHeader(key, value)); res.send(Buffer.from(await response.arrayBuffer())); }); }
 app.use('/api', createScansRouter());
 app.use('/api/compliance', createComplianceRouter());
-// `vite build` writes the client bundle to dist/, and scripts/prerender-public-routes.mjs
-// writes dist/<route>/index.html on top of it. Serving process.cwd() instead served the
-// repository's *source* index.html, whose script tag is "/src/main.tsx" -- a path that does
-// not exist in the runtime image. The browser then received text/html for a module request,
-// strict MIME checking rejected it, and every page in production rendered blank.
-// Prefer dist/ whenever it has been built; fall back to cwd for `npm run dev`, where Vite
-// serves the client itself and this process is API-only.
 const distDir = path.join(process.cwd(), 'dist');
 const publicDir = fs.existsSync(path.join(distDir, 'index.html')) ? distDir : path.resolve(process.cwd());
 const spaShell = path.join(publicDir, 'index.html');
-// Fail fast rather than serving a shell that cannot boot. A production image whose
-// client build is missing should never reach the healthcheck: better to fail the
-// deploy and keep the previous release than to answer 200 with a blank page.
-if (config.isProduction && publicDir !== distDir) {
-  console.error('[SPR] FATAL: dist/index.html is missing. The client bundle was not built into this image; refusing to serve the source shell.');
-  process.exit(1);
-}
-// Hashed assets are immutable and safe to cache for a year. HTML is not: a year-long
-// max-age on index.html would pin a broken deploy into users' browsers.
-// redirect:false keeps serve-static from answering a directory request such as /privacy
-// with a 301 to /privacy/. Prerendered routes are resolved explicitly below instead, so
-// they keep their canonical URLs.
-app.use(express.static(publicDir, {
-  index: false,
-  redirect: false,
-  maxAge: config.isProduction ? '1y' : 0,
-  setHeaders: (res, filePath) => { if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate'); },
-}));
-// Express 5's named wildcard does not match the bare root, so '/' fell through to the
-// framework's default 404 ("Cannot GET /") -- the first thing any visitor loaded.
-//
-// scripts/prerender-public-routes.mjs writes dist/<route>/index.html with per-route title
-// and description. Prefer that file when it exists so public pages keep their own metadata
-// for crawlers and link unfurls; otherwise fall back to the generic SPA shell and let the
-// client router take over. The candidate path is confined to publicDir so a crafted URL
-// cannot escape the served directory.
-const sendSpaShell = (req: Request, res: Response, next: NextFunction) => {
-  if (req.path.startsWith('/api/') || req.path === '/mcp') return next();
-  const relative = decodeURIComponent(req.path).replace(/^\/+/, '');
-  const candidate = path.resolve(publicDir, relative, 'index.html');
-  const withinPublicDir = candidate === spaShell || candidate.startsWith(path.resolve(publicDir) + path.sep);
-  const file = withinPublicDir && fs.existsSync(candidate) ? candidate : spaShell;
-  res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
-  return res.sendFile(file, error => error ? next(error) : undefined);
-};
+if (config.isProduction && publicDir !== distDir) { console.error('[SPR] FATAL: dist/index.html is missing. The client bundle was not built into this image; refusing to serve the source shell.'); process.exit(1); }
+app.use(express.static(publicDir, { index: false, redirect: false, maxAge: config.isProduction ? '1y' : 0, setHeaders: (res, filePath) => { if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate'); } }));
+const sendSpaShell = (req: Request, res: Response, next: NextFunction) => { if (req.path.startsWith('/api/') || req.path === '/mcp') return next(); const relative = decodeURIComponent(req.path).replace(/^\/+/, ''); const candidate = path.resolve(publicDir, relative, 'index.html'); const withinPublicDir = candidate === spaShell || candidate.startsWith(path.resolve(publicDir) + path.sep); const file = withinPublicDir && fs.existsSync(candidate) ? candidate : spaShell; res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate'); return res.sendFile(file, error => error ? next(error) : undefined); };
 app.get('/', sendSpaShell);
 app.get('/*splat', sendSpaShell);
 app.use((req, res, next) => { if (req.path.startsWith('/api/') || req.path === '/mcp') return res.status(404).json({ error: 'Route not found.', code: 'NOT_FOUND', requestId: res.locals.requestId }); return next(); });
