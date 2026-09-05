@@ -4,7 +4,7 @@
  */
 
 import { relations } from 'drizzle-orm';
-import { integer, pgTable, serial, text, timestamp } from 'drizzle-orm/pg-core';
+import { integer, pgTable, serial, text, timestamp, doublePrecision } from 'drizzle-orm/pg-core';
 
 // 1. Users Table (for Auth with RBAC role and multi-tenant mapping)
 export const users = pgTable('users', {
@@ -600,6 +600,20 @@ export const scanFindings = pgTable('scan_findings', {
   status: text('status').notNull().default('Open'), // Open, Mitigated, Resolved, Snoozed
   detectedAt: text('detected_at').notNull(),
   engineId: text('engine_id').notNull(), // Module that discovered it
+  // Reachability, VEX and the claim/verification state machine (migration 0067).
+  // Vocabularies are CHECK-constrained in the database and mirrored in
+  // src/trust/finding-state.ts, which owns the legal transitions -- notably that
+  // nothing reaches a verified state except from under_verification, so a human
+  // claim can never be written straight in as a verified fact.
+  vexStatus: text('vex_status').notNull().default('under_investigation'), // not_affected, affected, fixed, under_investigation
+  reachability: text('reachability').notNull().default('not_analyzed'), // reachable, unreachable, unknown, not_analyzed
+  confidence: doublePrecision('confidence').notNull().default(0.5), // probability in [0,1], not a percentage
+  state: text('state').notNull().default('detected'),
+  psaTicketId: text('psa_ticket_id'), // unique per tenant where present
+  lastPsaSyncAt: timestamp('last_psa_sync_at', { withTimezone: true }),
+  humanClaimBy: text('human_claim_by'),
+  humanClaimReason: text('human_claim_reason'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const repositoryConnections = pgTable('repository_connections', {
