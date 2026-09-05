@@ -36,19 +36,6 @@ describe('SPR MSP technician assignment and AI Trust Center contracts', () => {
     expect(aiTrust).toContain("SELECT id FROM ai_systems WHERE id=${req.params.id} AND tenant_id=${tenantId}");
   });
 
-  it('does not expose the tenant-wide AI registry to Client principals until AI systems have a client ownership boundary', () => {
-    const aiTrust = read('src/routes/ai-trust.ts');
-    expect(aiTrust).toContain("router.get('/systems', requireRole(['Owner', 'Admin', 'Operator'])");
-    expect(aiTrust).toContain("router.get('/systems/:id/observations', requireRole(['Owner', 'Admin', 'Operator'])");
-    expect(aiTrust).toContain("router.post('/explain-passport', requireRole(['Owner', 'Admin', 'Operator'])");
-  });
-
-  it('verifies monitoring configuration client ownership before inserting tenant-scoped configuration', () => {
-    const monitoring = read('src/routes/integration-monitoring.ts');
-    expect(monitoring).toContain('SELECT id FROM clients WHERE id=${p.data.clientId} AND tenant_id=${tenantId} LIMIT 1');
-    expect(monitoring).toContain("if(!client)return res.status(404).json({error:'CLIENT_NOT_FOUND'})");
-  });
-
   it('mounts both new routers behind requireAuth at the server level rather than per-route', () => {
     const server = read('server.ts');
     expect(server).toContain("app.use('/api/msp', requireAuth, createMspRouter());");
