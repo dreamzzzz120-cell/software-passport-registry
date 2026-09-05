@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ShieldCheck, Lock, Sparkles, Database, ArrowRight, RefreshCw } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
+import FounderCommandCenterPanel from './FounderCommandCenterPanel';
 
 interface FounderDashboardViewProps {
   userRole: string;
@@ -171,6 +172,8 @@ export default function FounderDashboardView({ userRole }: FounderDashboardViewP
           </div>
         </div>
       </div>
+
+      <FounderCommandCenterPanel />
     </div>
   );
 }
