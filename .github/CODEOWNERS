@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: LicenseRef-SPR-Proprietary
+# Copyright (c) 2026 Software Passport Registry. All rights reserved.
+
+# Security-sensitive automation must receive owner review.
+/.github/workflows/ @dreamzzzz120-cell
+/.github/CODEOWNERS @dreamzzzz120-cell
+
+# Production/security configuration.
+/scripts/ @dreamzzzz120-cell
+/migrations/ @dreamzzzz120-cell
