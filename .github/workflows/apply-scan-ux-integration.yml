@@ -12,6 +12,49 @@ permissions:
   contents: write
 
 jobs:
+  wire_traffic:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v5
+      - name: Wire first-party traffic endpoint
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('server.ts')
+          s=p.read_text()
+          imp="import { createTrafficRouter } from './src/routes/traffic.ts';"
+          if imp not in s:
+              marker="import { createMcpTransport } from './src/mcp/transport.ts';"
+              if marker not in s: raise SystemExit('server import marker missing')
+              s=s.replace(marker, imp+'\n'+marker, 1)
+          mount="app.use('/api/traffic', createTrafficRouter());"
+          if mount not in s:
+              marker="app.use('/api', createScansRouter());"
+              if marker not in s: raise SystemExit('server route marker missing')
+              s=s.replace(marker, mount+'\n'+marker, 1)
+          p.write_text(s)
+      - name: Validate traffic implementation
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run typecheck
+      - name: Commit traffic implementation
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server.ts src/analytics.ts src/routes/traffic.ts migrations/0059_traffic_telemetry.sql
+          if git diff --cached --quiet; then echo "Traffic implementation already wired"; exit 0; fi
+          git commit -m "feat: wire first-party traffic telemetry"
+          git push
+      - name: Remove temporary traffic workflow
+        run: |
+          if [ -f .github/workflows/wire-traffic-telemetry.yml ]; then
+            git rm .github/workflows/wire-traffic-telemetry.yml
+            git commit -m "chore: remove temporary traffic wiring workflow"
+            git push
+          fi
+
   integrate:
     runs-on: ubuntu-latest
     steps:
@@ -97,7 +140,6 @@ jobs:
           text = re.sub(r"\n      setScanLogs\(l => \[\.\.\.l, `\[ERROR\].*?\n      return;", "\n      return;", text, count=1, flags=re.S)
           text = re.sub(r"\n    setScanLogs\(l => \[\.\.\.l, `\[ERROR\].*?\n      setIsScanning\(false\);", "\n      setIsScanning(false);", text, count=1, flags=re.S)
           text = text.replace("setScanProgress(0);", "setCurrentJobId(null);")
-          text = text.replace("try { window.localStorage.removeItem('spr.activeScanJobId'); } catch {}\n                    }}", "try { window.localStorage.removeItem('spr.activeScanJobId'); } catch {}\n                    }}")
 
           scans.write_text(text)
 
