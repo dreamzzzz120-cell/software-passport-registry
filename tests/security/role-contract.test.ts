@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const securitySource = readFileSync(resolve(process.cwd(), 'src/middleware/security.ts'), 'utf8');
+const integrationsSource = readFileSync(resolve(process.cwd(), 'src/routes/integrations-live.ts'), 'utf8');
 
 describe('authentication role boundary contract', () => {
   it('uses an explicit finite role allowlist matching deployed RBAC roles', () => {
@@ -16,5 +17,12 @@ describe('authentication role boundary contract', () => {
 
   it('does not treat a database role string as authorization by itself', () => {
     expect(securitySource).toContain('allowedRoles.includes(req.user.role)');
+  });
+
+  it('scopes provider customer enumeration to the authenticated Client', () => {
+    expect(integrationsSource).toContain("const isClient = req.user!.role === 'Client';");
+    expect(integrationsSource).toContain('const clientId = req.user!.clientId;');
+    expect(integrationsSource).toContain('pc.client_id = ${clientId}');
+    expect(integrationsSource).toContain('AND (${isClient ? sql`pc.client_id = ${clientId}` : sql`TRUE`})');
   });
 });
