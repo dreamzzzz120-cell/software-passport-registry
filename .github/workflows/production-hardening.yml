@@ -18,6 +18,11 @@ concurrency:
 
 jobs:
   verify:
+    # Named explicitly because SPR CI's job is also called `verify`, and both
+    # workflows run on pull requests. Two check runs sharing a name make a
+    # required status check ambiguous: the branch ruleset asks for "verify" and
+    # cannot say which workflow is meant to satisfy it.
+    name: Production Hardening
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
