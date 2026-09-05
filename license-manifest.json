@@ -1,0 +1,39 @@
+{
+  "schema": "spr-license-manifest/v1",
+  "project": {
+    "name": "software-passport-registry",
+    "license": "LicenseRef-SPR-Proprietary",
+    "licenseFile": "LICENSE"
+  },
+  "repositoryArtifacts": {
+    "package-lock.json": "LicenseRef-SPR-Proprietary",
+    ".github/workflows/*": "LicenseRef-SPR-Proprietary"
+  },
+  "thirdParty": {
+    "npm:limiter": {
+      "license": "MIT",
+      "source": "https://www.npmjs.com/package/limiter"
+    },
+    "github-action:actions/checkout": {
+      "license": "MIT",
+      "source": "https://github.com/actions/checkout"
+    },
+    "github-action:actions/setup-node": {
+      "license": "MIT",
+      "source": "https://github.com/actions/setup-node"
+    },
+    "github-action:actions/upload-artifact": {
+      "license": "MIT",
+      "source": "https://github.com/actions/upload-artifact"
+    },
+    "github-action:github/codeql-action": {
+      "license": "MIT",
+      "additionalTerms": "The underlying CodeQL CLI is separately governed by GitHub CodeQL Terms and Conditions.",
+      "source": "https://github.com/github/codeql-action"
+    },
+    "github-action:gitleaks/gitleaks-action@v2": {
+      "license": "LicenseRef-Gitleaks-Action-EULA",
+      "source": "https://github.com/gitleaks/gitleaks-action"
+    }
+  }
+}
