@@ -181,6 +181,24 @@ export function createMonitoringRouter() {
       // db.insert(...) wraps the real pg error in a DrizzleQueryError --
       // the actual code lives at error.cause.code, not error.code.
       if (error?.code === '23505' || error?.cause?.code === '23505') return res.status(409).json({ error: 'MONITORING_CONFIGURATION_EXISTS' });
+      // The Active Passport entitlement guard (migration 0064) raises P0001 with
+      // 'ACTIVE_PASSPORT_LIMIT_REACHED:<active>:<limit>'. Only 23505 was handled
+      // here, so hitting the plan ceiling through the UI rethrew and the customer
+      // saw a 500 -- a paying user told their own product was broken at the exact
+      // moment it should have offered them a larger plan. Answered with the same
+      // shape /api/integration-monitoring already returns, so one client
+      // interceptor covers both routes.
+      const raised = String(error?.message ?? error?.cause?.message ?? '');
+      const capacity = /ACTIVE_PASSPORT_LIMIT_REACHED:(\d+):(\d+)/.exec(raised);
+      if (capacity) {
+        return res.status(409).json({
+          error: 'ACTIVE_PASSPORT_LIMIT_REACHED',
+          billingUnit: 'active_passport',
+          activePassports: Number(capacity[1]),
+          includedActivePassports: Number(capacity[2]),
+          upgradeRequired: true,
+        });
+      }
       throw error;
     }
   });

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Activity, AlertCircle, CheckCircle2, Clock3, Loader2, Play, Plus, RefreshCw, XCircle } from 'lucide-react';
+import { Activity, AlertCircle, CheckCircle2, Clock3, Loader2, Lock, Play, Plus, RefreshCw, XCircle } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
+import { capacityLimitFrom, capacityMessage, type CapacityLimit } from '../lib/capacityLimit.ts';
 import type { Client, SoftwarePassport } from '../types';
 
 type Configuration = { id: string; clientId: string; passportId: string; collectorId: string; subjectType: string; subjectIdentifier: string; scheduleSeconds: number; enabled: boolean; lastStatus: string; lastObservedAt?: string | null; nextScheduledAt: string; };
@@ -36,6 +37,7 @@ export default function MonitoringView({ role = 'Viewer', passports = [], client
   const [collectorDefs, setCollectorDefs] = useState<CollectorDefinition[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [capacityLimit, setCapacityLimit] = useState<CapacityLimit | null>(null);
   const [running, setRunning] = useState<string | null>(null);
   const [monitoringDisabled, setMonitoringDisabled] = useState(false);
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -117,6 +119,12 @@ export default function MonitoringView({ role = 'Viewer', passports = [], client
         }),
       });
       const data = await response.json().catch(() => null);
+      // Reaching the plan ceiling is a commercial outcome, not a failure. It is
+      // shown as an upgrade prompt with the customer's real numbers rather than
+      // as red error text, which is what it looked like before -- and before
+      // that, the route rethrew and it was a 500.
+      const limit = capacityLimitFrom(response.status, data);
+      if (limit) { setCapacityLimit(limit); setEnrolling(false); return; }
       if (!response.ok) throw new Error(data?.error === 'MONITORING_CONFIGURATION_EXISTS' ? 'This exact source is already being monitored.' : (data?.error?.message || data?.error || 'Unable to enable monitoring.'));
       setEnrollSuccess('Monitoring enabled.');
       setEnrollSubject('');
@@ -179,6 +187,29 @@ export default function MonitoringView({ role = 'Viewer', passports = [], client
             <button onClick={() => setShowEnroll(false)} aria-label="Close" className="rounded-md p-1.5 text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)] hover:text-[var(--spr-text)]"><XCircle className="h-4 w-4" /></button>
           </div>
           <form onSubmit={handleEnroll} className="mt-5 space-y-3.5">
+            {/* The plan ceiling is a commercial outcome, not a failure, so it is
+                not rendered in the error style. The numbers are the ones the
+                server actually counted, and the action is the one that resolves
+                it -- previously this route rethrew and the customer got a 500. */}
+            {capacityLimit && (() => {
+              const message = capacityMessage(capacityLimit);
+              return (
+                <div role="status" className="rounded-md border border-[var(--spr-highlight)]/40 bg-[var(--spr-accent)]/10 px-4 py-3.5">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-[var(--spr-text)]">
+                    <Lock className="h-4 w-4 shrink-0" />{message.headline}
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-[var(--spr-text-muted)]">{message.detail}</p>
+                  <div className="mt-2 text-xs tabular-nums text-[var(--spr-text-muted)]">
+                    {capacityLimit.activePassports} active Passport{capacityLimit.activePassports === 1 ? '' : 's'}
+                    {capacityLimit.includedActivePassports > 0 ? ` of ${capacityLimit.includedActivePassports} included` : ''}
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <a href="/billing" className="rounded-md bg-[var(--spr-accent)] px-3 py-2 text-xs font-semibold text-white">{message.cta}</a>
+                    <button type="button" onClick={() => setCapacityLimit(null)} className="rounded-md border border-[var(--spr-border)] px-3 py-2 text-xs font-semibold text-[var(--spr-text)]">Not now</button>
+                  </div>
+                </div>
+              );
+            })()}
             {enrollError && <div role="alert" className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 px-3 py-2.5 text-xs text-[var(--spr-red)] flex items-center gap-2"><AlertCircle className="w-4 h-4 shrink-0" /> {enrollError}</div>}
             {enrollSuccess && <div className="rounded-md border border-[var(--spr-green)]/40 bg-[var(--spr-green)]/10 px-3 py-2.5 text-xs text-[var(--spr-green)] flex items-center gap-2"><CheckCircle2 className="w-4 h-4 shrink-0" /> {enrollSuccess}</div>}
 
