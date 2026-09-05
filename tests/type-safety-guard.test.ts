@@ -39,20 +39,20 @@ describe('the error boundaries use no type escape hatches', () => {
       expect(source, file).not.toContain('as unknown as');
       expect(source, file).not.toContain('@ts-ignore');
       expect(source, file).not.toContain('@ts-expect-error');
+      expect(source, file).not.toMatch(/:\s*any\b/);
     }
   });
 
   it('reads children from props rather than a constructor snapshot', () => {
-    const boundary = read('src/components/ViewErrorBoundary.tsx');
-    expect(boundary).toContain('this.props.children');
-    expect(boundary).not.toContain('constructor(props');
+    const lazyApp = read('src/LazyApp.tsx');
+    expect(lazyApp).toContain('return this.props.children');
+    expect(lazyApp).not.toMatch(/private\s+readonly\s+children/);
+    expect(read('src/components/ViewErrorBoundary.tsx')).toContain('return this.props.children');
   });
 
   it('both boundaries still declare the React error-boundary contract', () => {
     for (const file of boundaries) {
-      const source = read(file);
-      expect(source, file).toContain('Component<');
-      expect(source, file).toContain('componentDidCatch');
+      expect(read(file), file).toContain('static getDerivedStateFromError');
     }
   });
 });
