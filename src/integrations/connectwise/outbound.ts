@@ -16,8 +16,6 @@
 // category. A PSA ticket is visible to everyone on the service board, and the
 // full description, affected component and evidence are the paid Passport.
 
-import { sql } from 'drizzle-orm';
-import type { ScopedDb } from '../../middleware/tenant-scope.ts';
 import { ConnectWiseError } from './types.ts';
 import type { ConnectWiseClient } from './client.ts';
 
@@ -49,12 +47,19 @@ export function buildTicketRequest(finding: TicketableFinding) {
 }
 
 /**
- * Create the ticket and record its id, inside the caller's tenant-scoped
- * connection so the write stays within the tenant's RLS boundary.
+ * Records the ticket id against the finding. Supplied by the caller so this
+ * module works from both the HTTP side (Drizzle, tenant-scoped) and the
+ * background workers (raw pg pool with explicit tenant filters) without either
+ * storage style leaking in here.
+ */
+export type StampTicketId = (findingId: string, ticketId: string) => Promise<void>;
+
+/**
+ * Create the ticket and record its id. The write happens through the caller's
+ * own tenant-scoped path, so this never widens a tenant boundary.
  */
 export async function produceTicketForFinding(
-  scoped: ScopedDb,
-  tenantId: string,
+  stampTicketId: StampTicketId,
   finding: TicketableFinding,
   client: ConnectWiseClient,
 ): Promise<ProduceOutcome> {
@@ -76,13 +81,6 @@ export async function produceTicketForFinding(
     throw error;
   }
 
-  await scoped.execute(sql`
-    UPDATE scan_findings
-    SET psa_ticket_id = ${String(ticketId)},
-        last_psa_sync_at = NOW(),
-        updated_at = NOW()
-    WHERE tenant_id = ${tenantId} AND id = ${finding.id} AND psa_ticket_id IS NULL
-  `);
-
+  await stampTicketId(finding.id, String(ticketId));
   return { produced: true, ticketId: String(ticketId) };
 }

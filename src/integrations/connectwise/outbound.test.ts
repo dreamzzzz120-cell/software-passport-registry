@@ -30,13 +30,10 @@ function stubTransport(reply: { ok: boolean; status: number; body: string }) {
   return { calls, fetchImpl };
 }
 
-/** Captures UPDATE statements instead of touching a database. */
-function stubScopedDb() {
-  const statements: string[] = [];
-  return {
-    statements,
-    db: { execute: async (query: any) => { statements.push(String(query?.queryChunks ? 'UPDATE scan_findings' : query)); return { rows: [] }; } } as any,
-  };
+/** Captures stamped ticket ids instead of touching a database. */
+function stubStamp() {
+  const statements: Array<{ findingId: string; ticketId: string }> = [];
+  return { statements, stamp: async (findingId: string, ticketId: string) => { statements.push({ findingId, ticketId }); } };
 }
 
 describe('ConnectWise auth and endpoint construction', () => {
@@ -104,8 +101,8 @@ describe('the client never invents a ticket id', () => {
 describe('the producer only stamps psa_ticket_id on a real ticket', () => {
   it('writes the id ConnectWise returned', async () => {
     const { fetchImpl } = stubTransport({ ok: true, status: 201, body: '{"id":424242}' });
-    const { db, statements } = stubScopedDb();
-    const outcome = await produceTicketForFinding(db, 'tenant-a', finding, new ConnectWiseClient(creds, fetchImpl));
+    const { stamp, statements } = stubStamp();
+    const outcome = await produceTicketForFinding(stamp, finding, new ConnectWiseClient(creds, fetchImpl));
     expect(outcome).toEqual({ produced: true, ticketId: '424242' });
     expect(statements).toHaveLength(1);
   });
@@ -120,8 +117,8 @@ describe('the producer only stamps psa_ticket_id on a real ticket', () => {
       { ok: true, status: 201, body: '{}' },
     ]) {
       const { fetchImpl } = stubTransport(reply);
-      const { db, statements } = stubScopedDb();
-      const outcome = await produceTicketForFinding(db, 'tenant-a', finding, new ConnectWiseClient(creds, fetchImpl));
+      const { stamp, statements } = stubStamp();
+      const outcome = await produceTicketForFinding(stamp, finding, new ConnectWiseClient(creds, fetchImpl));
       expect(outcome.produced, JSON.stringify(reply)).toBe(false);
       expect(statements, 'no database write may happen on failure').toHaveLength(0);
     }
@@ -129,8 +126,8 @@ describe('the producer only stamps psa_ticket_id on a real ticket', () => {
 
   it('never tickets the same finding twice', async () => {
     const { fetchImpl } = stubTransport({ ok: true, status: 201, body: '{"id":1}' });
-    const { db, statements } = stubScopedDb();
-    const outcome = await produceTicketForFinding(db, 'tenant-a', { ...finding, psaTicketId: '999' }, new ConnectWiseClient(creds, fetchImpl));
+    const { stamp, statements } = stubStamp();
+    const outcome = await produceTicketForFinding(stamp, { ...finding, psaTicketId: '999' }, new ConnectWiseClient(creds, fetchImpl));
     expect(outcome).toMatchObject({ produced: false, code: 'ALREADY_TICKETED' });
     expect(statements).toHaveLength(0);
   });
