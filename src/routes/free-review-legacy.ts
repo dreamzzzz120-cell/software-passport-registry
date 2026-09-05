@@ -162,7 +162,11 @@ export function createLegacyFreeReviewRouter() {
       };
       const jobIds = jobs.map((j: any) => String(j.id));
       const logRows = jobIds.length === 0 ? [] : ((await scopedDb.execute(
-        sql`SELECT message, created_at AS "createdAt" FROM agent_logs WHERE job_id IN ${jobIds} ORDER BY created_at DESC LIMIT 1`,
+        // agent_logs timestamps its rows in a column called `timestamp`, not
+        // `created_at` (see migrations/0000_base_application_schema.sql). Getting
+        // that wrong took the whole status endpoint to a 500, which is worse than
+        // the missing progress it was added to fix.
+        sql`SELECT message, timestamp FROM agent_logs WHERE job_id IN ${jobIds} ORDER BY timestamp DESC LIMIT 1`,
       ) as any).rows || []);
       const stepPercent = (job: any) => {
         if (job.status === 'Completed') return 100;
