@@ -15,7 +15,7 @@ DECLARE
   active_count integer;
   passport_already_active boolean;
 BEGIN
-  IF NEW.enabled IS DISTINCT FROM true THEN
+  IF NEW.enabled IS DISTINCT FROM true OR NEW.subject_type IS DISTINCT FROM 'integration_provider' THEN
     RETURN NEW;
   END IF;
 
@@ -48,6 +48,7 @@ BEGIN
     INTO active_count
   FROM monitoring_configurations
   WHERE tenant_id = NEW.tenant_id
+    AND subject_type = 'integration_provider'
     AND enabled = true
     AND id <> NEW.id;
 
@@ -55,6 +56,7 @@ BEGIN
     SELECT 1
     FROM monitoring_configurations
     WHERE tenant_id = NEW.tenant_id
+      AND subject_type = 'integration_provider'
       AND passport_id = NEW.passport_id
       AND enabled = true
       AND id <> NEW.id
@@ -71,7 +73,7 @@ $$;
 
 DROP TRIGGER IF EXISTS spr_active_passport_limit ON monitoring_configurations;
 CREATE TRIGGER spr_active_passport_limit
-BEFORE INSERT OR UPDATE OF enabled, passport_id ON monitoring_configurations
+BEFORE INSERT OR UPDATE OF enabled, passport_id, subject_type ON monitoring_configurations
 FOR EACH ROW EXECUTE FUNCTION spr_enforce_active_passport_limit();
 
 COMMIT;
