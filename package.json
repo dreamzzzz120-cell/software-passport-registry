@@ -24,6 +24,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "verify:license": "node scripts/verify-license-manifest.mjs",
+    "verify:actions": "node scripts/verify-actions-pinned.mjs",
     "zip:full": "node scripts/make-full-zip.js"
   },
   "dependencies": {
@@ -52,8 +53,7 @@
     "motion": "^13.1.1",
     "pg": "^8.23.0",
     "qrcode": "^1.5.4",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
+    "qrcode": "^1.5.4",
     "recharts": "^3.10.1",
     "stripe": "^22.6.0",
     "undici": "^8.10.0",
@@ -67,7 +67,6 @@
     "@types/express": "^5.0.6",
     "@types/node": "^22.14.0",
     "@types/pg": "^8.23.1",
-    "@types/qrcode": "^1.5.6",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.5",
     "drizzle-kit": "^0.31.10",
