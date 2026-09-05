@@ -24,9 +24,11 @@ describe('SPR MSP technician assignment and AI Trust Center contracts', () => {
 
   it('scopes every client_assignments query to the requesting tenant and gates mutation to Owner/Admin', () => {
     const msp = read('src/routes/msp.ts');
-    expect(msp).toContain('tenant_id=${req.user!.tenantId}');
+    expect(msp).toContain('tenant_id=${tenantId}');
     expect(msp).toContain("router.put('/assignments', requireRole(['Owner', 'Admin'])");
     expect(msp).toContain("router.delete('/assignments/:clientId', requireRole(['Owner', 'Admin'])");
+    expect(msp).toContain("const isClient = req.user!.role === 'Client';");
+    expect(msp).toContain('client_id = ${clientId}');
   });
 
   it('verifies AI system ownership before accepting or listing observations for it, not just checking the id exists globally', () => {
