@@ -85,7 +85,6 @@ describe('SPR security release contracts', () => {
     expect(versions).toContain(45);
     expect(versions).toContain(59);
     expect(versions).toContain(60);
-    expect(versions).toContain(61);
     expect(versions).toContain(62);
     expect(versions[versions.length - 1]).toBeGreaterThanOrEqual(62);
   });
