@@ -105,6 +105,49 @@ function navigate(path: string) {
   window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
+// Where to send someone after they sign in.
+//
+// Sign-in used to land everyone on /dashboard, which meant a visitor who had
+// just watched SPR scan their repository and pressed "Claim your Passport"
+// arrived at a bare login form and then a generic dashboard, with the scan they
+// came for silently dropped. The result already has a durable, shareable
+// address, so the CTA carries it as ?next= and login returns them to it.
+//
+// The parameter is attacker-supplied, so it is validated as a same-origin path
+// and nothing else. A value that is absolute, protocol-relative ("//evil.test"),
+// backslash-prefixed, or otherwise not a plain in-app path is discarded in
+// favour of the dashboard -- an open redirect out of a login screen is a
+// phishing primitive, and this one would be handed out to anyone who can get a
+// prospect to click a Free Review link.
+export const DEFAULT_POST_LOGIN_PATH = '/dashboard';
+
+export function safeReturnPath(raw: string | null | undefined): string {
+  if (!raw) return DEFAULT_POST_LOGIN_PATH;
+  let candidate = raw;
+  try {
+    candidate = decodeURIComponent(raw);
+  } catch {
+    return DEFAULT_POST_LOGIN_PATH;
+  }
+  // Must be a single-slash-prefixed path. Rejects "https://evil.test",
+  // "//evil.test", "/\evil.test" and anything carrying a scheme or authority.
+  if (!/^\/(?!\/)/.test(candidate)) return DEFAULT_POST_LOGIN_PATH;
+  if (candidate.startsWith('/\\')) return DEFAULT_POST_LOGIN_PATH;
+  if (/[\x00-\x1f]/.test(candidate)) return DEFAULT_POST_LOGIN_PATH;
+  // Sending someone back to /login after logging in is a loop, not a return.
+  if (candidate === '/login' || candidate.startsWith('/login?')) return DEFAULT_POST_LOGIN_PATH;
+  return candidate;
+}
+
+/** The ?next= destination on the current URL, already validated. */
+function returnPathFromLocation(): string {
+  try {
+    return safeReturnPath(new URLSearchParams(window.location.search).get('next'));
+  } catch {
+    return DEFAULT_POST_LOGIN_PATH;
+  }
+}
+
 function usePath() {
   const [path, setPath] = useState(() => window.location.pathname || '/');
   useEffect(() => {
@@ -356,7 +399,7 @@ export default function App() {
 
   if (!authReady) return <AuthLoading />;
   if (path === '/') return <HomePage onCreatePassport={() => navigate('/login')} onExploreTrustNetwork={() => navigate('/free-review')} onViewSamplePassport={() => navigate('/passport/demo')} />;
-  if (path === '/login') return <LoginView onLoginSuccess={() => navigate('/dashboard')} />;
+  if (path === '/login') return <LoginView onLoginSuccess={() => navigate(returnPathFromLocation())} />;
   // Public legal documents -- always reachable regardless of auth state,
   // since /terms has no existing authenticated route to preserve. /privacy
   // is intentionally only handled here for signed-out visitors: the existing
@@ -388,7 +431,20 @@ export default function App() {
   // Nothing about the scan itself was ever tied to the account: the API writes
   // into the dedicated Free Review tenant and rate-limits on a hashed IP, never
   // on an identity. This is purely about which shell the page renders in.
-  const freeReviewSignUpTarget = user ? '/passports' : '/login';
+  // "Claim your Passport" used to drop the scan: signed-out visitors landed on a
+  // bare /login and then a generic /dashboard, with no trace of the repository
+  // they had just watched SPR scan, and signed-in ones were sent to /passports,
+  // which is not where anyone can actually buy anything.
+  //
+  // A completed review already has a durable address, so it is carried through
+  // sign-in as ?next= and the visitor comes back to their own result. Signed-in
+  // users go to /billing, which is the only screen that can start checkout.
+  const freeReviewReturnPath = freeReviewResult
+    ? `/free-review/result/${encodeURIComponent(freeReviewResult.passportId)}/${encodeURIComponent(freeReviewResult.token)}`
+    : '/free-review';
+  const freeReviewSignUpTarget = user
+    ? '/billing'
+    : `/login?next=${encodeURIComponent(freeReviewReturnPath)}`;
   if (path === '/free-review') return <FreeReviewView onSignUp={() => navigate(freeReviewSignUpTarget)} />;
   if (freeReviewResult) return <FreeReviewView onSignUp={() => navigate(freeReviewSignUpTarget)} initialResult={freeReviewResult} />;
   if (!user && path === '/pricing') return <MspPricingView isAuthenticated={false} onPrimaryAction={() => navigate('/login')} />;

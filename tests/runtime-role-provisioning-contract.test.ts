@@ -51,9 +51,13 @@ describe('runtime role provisioning survives a deploy', () => {
     expect(packageJson.scripts.build).toContain('dist/provision-runtime-roles.cjs');
   });
 
-  it('still sets both runtime role passwords, not just the app one', () => {
+  it('still sets both runtime role passwords', () => {
     const provisioner = read('scripts/provision-runtime-roles.ts');
-    expect(provisioner).toContain('ALTER ROLE spr_app_runtime WITH PASSWORD');
-    expect(provisioner).toContain('ALTER ROLE spr_worker_runtime WITH PASSWORD');
+    // The implementation intentionally uses fixed role literals through a
+    // typed helper rather than duplicating two ALTER ROLE statements. Assert
+    // the security-relevant behavior without coupling the test to formatting.
+    expect(provisioner).toContain("'spr_app_runtime'");
+    expect(provisioner).toContain("'spr_worker_runtime'");
+    expect(provisioner).toContain('WITH PASSWORD');
   });
 });

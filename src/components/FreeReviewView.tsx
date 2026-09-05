@@ -1,9 +1,28 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { AlertCircle, ArrowRight, CheckCircle2, Loader, ShieldCheck } from 'lucide-react';
+import { AlertCircle, ArrowRight, CheckCircle2, Loader, Lock, ShieldCheck } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
 
-interface FreeReviewFinding {
-  id: string; severity: string; title: string; component: string | null; status: string;
+// Preview-safe shapes. The API deliberately does not send finding titles,
+// descriptions, affected components, evidence records or remediation to a free
+// caller, so there is nothing here to accidentally render.
+type CategoryId = 'security' | 'licensing' | 'supplyChain' | 'reliability' | 'maintainability';
+
+type CategoryResult =
+  | { status: 'scored'; score: number; detail: string; facts: Record<string, number> }
+  | { status: 'not_observed'; reason: string };
+
+interface FreeReviewAssessment {
+  score: number | null;
+  verdict: string | null;
+  observedAreas: number;
+  totalAreas: number;
+  categories: Record<CategoryId, CategoryResult>;
+}
+
+interface FreeReviewTeaser {
+  category: string;
+  severity: string;
+  count: number;
 }
 interface FreeReviewStatus {
   passportId: string;
@@ -12,7 +31,12 @@ interface FreeReviewStatus {
   failureReason?: string | null;
   passport: { name: string; version: string; publisher: string; verificationStatus: string } | null;
   summary: { openFindings: number; criticalOrHigh: number; evidenceCount: number };
-  findings: FreeReviewFinding[];
+  assessment?: FreeReviewAssessment | null;
+  findings?: { total: number; elevated: number; bySeverity: Record<string, number>; teasers: FreeReviewTeaser[] } | null;
+  evidence?: { total: number; verified: number; unverified: number; byType: Record<string, number> } | null;
+  sbom?: { componentCount: number | null } | null;
+  verifiedCapabilities?: string[] | null;
+  locked?: { detailedFindings: number; evidenceRecords: number; remediation: boolean; componentLocations: boolean } | null;
   /** Real worker progress. Every value is recorded by the scan, never estimated. */
   progress?: {
     percent: number;
@@ -297,13 +321,156 @@ export default function FreeReviewView({ onSignUp, initialResult }: FreeReviewVi
                 {result.scanStatus === 'partial' && (
                   <p className="mt-2 text-xs leading-5 text-[var(--spr-text-faint)]">The counts below cover only the engines that finished. Treat them as incomplete, not as a clean result.</p>
                 )}
-                <div className="mt-4 grid grid-cols-3 gap-3 text-center text-sm">
-                  <div className="rounded-xl border border-[var(--spr-border)] p-3"><div className="text-2xl font-bold">{result.summary.openFindings}</div><div className="text-[var(--spr-text-muted)]">Open findings</div></div>
-                  <div className="rounded-xl border border-[var(--spr-border)] p-3"><div className="text-2xl font-bold">{result.summary.criticalOrHigh}</div><div className="text-[var(--spr-text-muted)]">Critical/High</div></div>
-                  <div className="rounded-xl border border-[var(--spr-border)] p-3"><div className="text-2xl font-bold">{result.summary.evidenceCount}</div><div className="text-[var(--spr-text-muted)]">Evidence items</div></div>
+                {/* SOFTWARE PASSPORT header. The score, the verdict and the
+                    observed-area count are whatever the scoring model returned
+                    for this scan; when nothing could be observed there is no
+                    number and the page says so rather than printing a zero. */}
+                <div className="mt-5 rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-6 py-8 text-center">
+                  <div className="text-[10px] font-semibold uppercase tracking-[.2em] text-[var(--spr-text-muted)]">Software Passport</div>
+                  {result.assessment?.score !== null && result.assessment?.score !== undefined ? (
+                    <>
+                      <div className="mt-3 text-6xl font-bold leading-none tracking-tight text-[var(--spr-text)]">
+                        {result.assessment.score}<span className="text-2xl font-semibold text-[var(--spr-text-muted)]"> / 100</span>
+                      </div>
+                      <div className="mt-3 text-lg font-bold tracking-wide text-[var(--spr-text)]">{result.assessment.verdict}</div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="mt-3 text-3xl font-bold tracking-tight text-[var(--spr-text)]">No score</div>
+                      <p className="mx-auto mt-2 max-w-md text-xs leading-5 text-[var(--spr-text-faint)]">
+                        No trust area could be observed for this repository, so SPR reports no score. That is an absence of evidence, not a poor result.
+                      </p>
+                    </>
+                  )}
+                  {result.assessment ? (
+                    <div className="mt-3 text-xs text-[var(--spr-text-muted)]">{result.assessment.observedAreas} of {result.assessment.totalAreas} trust areas observed</div>
+                  ) : null}
+
+                  <div className="mt-6 grid grid-cols-3 gap-3 text-center text-sm">
+                    <div><div className="text-2xl font-bold tabular-nums">{result.findings?.total ?? result.summary.openFindings}</div><div className="text-xs text-[var(--spr-text-muted)]">findings detected</div></div>
+                    <div><div className="text-2xl font-bold tabular-nums">{result.findings?.elevated ?? result.summary.criticalOrHigh}</div><div className="text-xs text-[var(--spr-text-muted)]">elevated findings</div></div>
+                    <div><div className="text-2xl font-bold tabular-nums">{result.evidence?.total ?? result.summary.evidenceCount}</div><div className="text-xs text-[var(--spr-text-muted)]">evidence items analysed</div></div>
+                  </div>
                 </div>
-                {result.findings.length > 0 && (<ul className="mt-4 space-y-2 text-sm">{result.findings.slice(0, 20).map((f) => (<li key={f.id} className="rounded-lg border border-[var(--spr-border)] p-3"><span className="font-semibold uppercase text-[#f48771]">{f.severity}</span> {f.title}{f.component ? ` — ${f.component}` : ''}</li>))}</ul>)}
-                <button onClick={onSignUp} className="mt-6 w-full rounded-xl bg-[var(--spr-accent)] px-4 py-3.5 font-bold text-white"><ShieldCheck className="mr-2 inline h-4 w-4" />Sign up to claim this Passport &amp; get continuous monitoring</button>
+
+                {/* Five trust areas. Two of them have no collector yet and say so
+                    in those words -- kept visible so the gap is legible, and
+                    worded so "not observed" reads as neither good nor bad. */}
+                {result.assessment ? (
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    {([
+                      ['security', '🔐', 'Security'],
+                      ['licensing', '⚖️', 'Licensing'],
+                      ['supplyChain', '🏢', 'Buyer readiness'],
+                      ['reliability', '🧱', 'Reliability'],
+                      ['maintainability', '🔧', 'Maintainability'],
+                    ] as [CategoryId, string, string][]).map(([id, icon, label]) => {
+                      const category = result.assessment!.categories[id];
+                      return (
+                        <div key={id} className="rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4">
+                          <div className="flex items-baseline justify-between gap-2">
+                            <span className="text-sm font-semibold text-[var(--spr-text)]"><span aria-hidden="true">{icon}</span> {label}</span>
+                            {category.status === 'scored'
+                              ? <span className="text-xl font-bold tabular-nums text-[var(--spr-text)]">{category.score}<span className="text-xs font-semibold text-[var(--spr-text-muted)]"> / 100</span></span>
+                              : <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--spr-text-muted)]">Not observed</span>}
+                          </div>
+                          <p className="mt-2 text-xs leading-5 text-[var(--spr-text-muted)]">
+                            {category.status === 'scored' ? category.detail : category.reason}
+                          </p>
+                          {category.status === 'not_observed' ? (
+                            <p className="mt-2 text-[11px] text-[var(--spr-text-faint)]"><Lock className="mr-1 inline h-3 w-3" />Detailed analysis</p>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
+                {/* Severity histogram. Real counts, no raw scanner rows. */}
+                {result.findings?.bySeverity ? (
+                  <div className="mt-4 rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4">
+                    <div className="text-xs font-semibold uppercase tracking-wider text-[var(--spr-text-muted)]">Scan results</div>
+                    <div className="mt-3 space-y-1.5 text-sm">
+                      {([['critical', 'Critical'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low'], ['info', 'Informational']] as [string, string][]).map(([key, label]) => (
+                        <div key={key} className="flex items-center justify-between gap-3">
+                          <span className="text-[var(--spr-text-muted)]">{label}</span>
+                          <span className="tabular-nums font-semibold text-[var(--spr-text)]">{result.findings!.bySeverity[key] ?? 0}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* Teasers: severity and category only. The API sends nothing
+                    else, so the report cannot be reconstructed from this page. */}
+                {result.findings?.teasers?.length ? (
+                  <div className="mt-4 space-y-2">
+                    {result.findings.teasers.map((teaser) => (
+                      <div key={teaser.category} className="rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4">
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-full border border-[var(--spr-border)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--spr-text)]">{teaser.severity}</span>
+                          <span className="text-sm font-semibold text-[var(--spr-text)]">{teaser.category}</span>
+                          <span className="ml-auto text-xs text-[var(--spr-text-muted)]">{teaser.count} observation{teaser.count === 1 ? '' : 's'}</span>
+                        </div>
+                        <p className="mt-2 text-xs text-[var(--spr-text-muted)]">
+                          <Lock className="mr-1 inline h-3 w-3" />Affected components, exact locations, evidence and remediation are in the full Passport.
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                {/* Evidence coverage. Only types actually present get a row, and
+                    zero verification is stated as zero verification. */}
+                {result.evidence && result.evidence.total > 0 ? (
+                  <div className="mt-4 rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4">
+                    <div className="text-xs font-semibold uppercase tracking-wider text-[var(--spr-text-muted)]">Evidence coverage</div>
+                    <div className="mt-3 space-y-1.5 text-sm">
+                      {Object.entries(result.evidence.byType).map(([type, count]) => (
+                        <div key={type} className="flex items-center justify-between gap-3">
+                          <span className="text-[var(--spr-text-muted)]">{type}</span>
+                          <span className="tabular-nums font-semibold text-[var(--spr-text)]">{count}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="mt-3 border-t border-[var(--spr-border)] pt-3 text-xs text-[var(--spr-text-muted)]">
+                      {result.evidence.verified === 0
+                        ? `None of the ${result.evidence.total} evidence items are cryptographically verified.`
+                        : `${result.evidence.verified} of ${result.evidence.total} evidence items are cryptographically verified.`}
+                    </p>
+                  </div>
+                ) : null}
+
+                {/* What SPR verified: one line per capability whose evidence exists. */}
+                {result.verifiedCapabilities?.length ? (
+                  <div className="mt-4 rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4">
+                    <div className="text-xs font-semibold uppercase tracking-wider text-[var(--spr-text-muted)]">What SPR verified</div>
+                    <ul className="mt-3 grid gap-1.5 sm:grid-cols-2">
+                      {result.verifiedCapabilities.map((capability) => (
+                        <li key={capability} className="flex items-start gap-2 text-sm text-[var(--spr-text)]">
+                          <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--spr-green)]" />{capability}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+
+                {/* The gate. Counts of what is withheld, never the content --
+                    which is not in this payload to reveal. */}
+                <div className="mt-4 rounded-xl border border-[var(--spr-highlight)]/40 bg-[var(--spr-accent)]/10 p-5">
+                  <div className="flex items-center gap-2 text-sm font-bold text-[var(--spr-text)]"><Lock className="h-4 w-4" />Unlock the complete Passport</div>
+                  <p className="mt-2 text-xs leading-5 text-[var(--spr-text-muted)]">
+                    {result.locked ? `${result.locked.detailedFindings} full finding record${result.locked.detailedFindings === 1 ? '' : 's'} and ${result.locked.evidenceRecords} evidence record${result.locked.evidenceRecords === 1 ? '' : 's'} were collected for this repository and are not included in the free preview.` : 'Full finding records and evidence are not included in the free preview.'}
+                  </p>
+                  <ul className="mt-3 grid gap-1 text-xs text-[var(--spr-text-muted)] sm:grid-cols-2">
+                    {['Full finding descriptions', 'Affected components and locations', 'Evidence explorer and records', 'Licence analysis detail', 'Remediation guidance', 'Buyer-ready report', 'Continuous monitoring'].map((entry) => (
+                      <li key={entry} className="flex items-start gap-2"><CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-[var(--spr-green)]" />{entry}</li>
+                    ))}
+                  </ul>
+                  <button onClick={onSignUp} className="mt-4 w-full rounded-xl bg-[var(--spr-accent)] px-4 py-3.5 font-bold text-white">
+                    <ShieldCheck className="mr-2 inline h-4 w-4" />Claim your Passport
+                  </button>
+                </div>
                 </>
                 )}
               </div>

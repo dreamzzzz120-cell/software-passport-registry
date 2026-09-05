@@ -16,8 +16,6 @@ function id(prefix: string) { return `${prefix}_${crypto.randomUUID().replaceAll
 export function createMspRouter() {
   const router = Router();
 
-  // Cross-client assignment list for MSP staff. Client principals must only
-  // receive assignments belonging to their authenticated client boundary.
   router.get('/assignments', async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
@@ -58,6 +56,30 @@ export function createMspRouter() {
       if (!((result as any).rows?.length)) return res.status(404).json({ error: 'ASSIGNMENT_NOT_FOUND' });
       await appendAuditEntry(db, { tenantId, action: 'client.technician_unassigned', actor: req.user!.email, payload: { clientId: req.params.clientId } });
       return res.status(204).send();
+    } catch (error) { return next(error); }
+  });
+
+  // MSP commercial usage is measured in Active Passports: unique passports
+  // with enabled continuous integration monitoring. This deliberately excludes
+  // one-off scans and historical/inactive passports from the billable meter.
+  router.get('/usage', requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const tenantId = req.user!.tenantId;
+      const db = req.db!;
+      const subscription = (await db.execute(sql`SELECT plan, status, client_limit AS "activePassportLimit" FROM tenant_subscriptions WHERE tenant_id=${tenantId} LIMIT 1`) as any).rows?.[0] ?? null;
+      const usage = (await db.execute(sql`SELECT COUNT(DISTINCT passport_id)::int AS "activePassports" FROM monitoring_configurations WHERE tenant_id=${tenantId} AND subject_type='integration_provider' AND enabled=true`) as any).rows?.[0];
+      const activePassports = Number(usage?.activePassports ?? 0);
+      const limit = subscription?.activePassportLimit == null ? null : Number(subscription.activePassportLimit);
+      return res.json({
+        billingUnit: 'active_passport',
+        definition: 'Unique passport with at least one enabled integration-monitoring configuration.',
+        plan: subscription?.plan ?? null,
+        subscriptionStatus: subscription?.status ?? 'none',
+        activePassports,
+        includedActivePassports: limit,
+        remaining: limit == null ? null : Math.max(0, limit - activePassports),
+        overLimit: limit != null && activePassports > limit,
+      });
     } catch (error) { return next(error); }
   });
 

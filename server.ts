@@ -10,6 +10,7 @@ import { appPool, checkDatabaseHealth, closeDatabase, db } from './src/db/index.
 import { sql } from 'drizzle-orm';
 import { AuthenticatedRequest, rateLimiter, requireAuth, requireRole } from './src/middleware/security.ts';
 import { createAuthRouter } from './src/routes/auth.ts';
+import { createFounderCommandCenterRouter } from './src/routes/founder-command-center.ts';
 import { createOrganizationProvisioningRouter } from './src/routes/organization-provisioning.ts';
 import { createConnectRouter } from './src/routes/connect.ts';
 import { createIntegrationsRouter } from './src/routes/integrations.ts';
@@ -76,6 +77,7 @@ app.get('/ready', async (_req, res) => { const database = await checkDatabaseHea
 app.get('/api/health', async (_req, res) => { const database = await checkDatabaseHealth(); res.status(database.ok ? 200 : 503).json({ status: database.ok ? 'ok' : 'degraded', database: database.ok ? database : { ok: false, latencyMs: database.latencyMs, error: 'DATABASE_UNAVAILABLE' } }); });
 app.use('/api', rateLimiter);
 app.use('/api', createAuthRouter());
+app.use('/api', createFounderCommandCenterRouter());
 app.use('/api', createOrganizationProvisioningRouter());
 app.use('/api', createPublicConnectRouter());
 app.use('/api', createFreeReviewRouter());

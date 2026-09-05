@@ -10,6 +10,7 @@ import { sql } from 'drizzle-orm';
 import { config } from '../config.ts';
 import { attachTenantScope } from '../middleware/tenant-scope.ts';
 import { signFreeReviewStatusToken, verifyFreeReviewStatusToken } from './public-connect.ts';
+import { assessTrust, severityBreakdown } from '../free-review/scoring.ts';
 
 export const FREE_REVIEW_TENANT_ID = 'tenant-free-review-system';
 const STATUS_TOKEN_TTL_SECONDS = 60 * 60 * 2;
@@ -139,7 +140,22 @@ export function createLegacyFreeReviewRouter() {
           : unfinished.length > 0
             ? 'The scan did not finish in time. No result was produced, so nothing here should be read as a clean review.'
             : null;
-      const passport = (await scopedDb.execute(sql`SELECT id, name, version, publisher, category, verification_status AS "verificationStatus" FROM passports WHERE id=${passportId} AND tenant_id=${FREE_REVIEW_TENANT_ID} LIMIT 1`) as any).rows?.[0] || null;
+      // sbom is the Syft component array the repository worker persists. It is
+      // read for its LENGTH only -- the licence ratio needs a real denominator --
+      // and the components themselves never leave this function.
+      const passportRow = (await scopedDb.execute(sql`SELECT id, name, version, publisher, category, verification_status AS "verificationStatus", sbom FROM passports WHERE id=${passportId} AND tenant_id=${FREE_REVIEW_TENANT_ID} LIMIT 1`) as any).rows?.[0] || null;
+      const sbomComponentCount = (() => {
+        if (!passportRow?.sbom) return null;
+        try {
+          const parsed = typeof passportRow.sbom === 'string' ? JSON.parse(passportRow.sbom) : passportRow.sbom;
+          return Array.isArray(parsed) && parsed.length > 0 ? parsed.length : null;
+        } catch {
+          return null;
+        }
+      })();
+      const passport = passportRow
+        ? { id: passportRow.id, name: passportRow.name, version: passportRow.version, publisher: passportRow.publisher, category: passportRow.category, verificationStatus: passportRow.verificationStatus }
+        : null;
       const findings = (await scopedDb.execute(sql`SELECT id, severity, category, title, description, component, fixed_version AS "fixedVersion", status, detected_at AS "detectedAt", engine_id AS "engineId" FROM scan_findings WHERE tenant_id=${FREE_REVIEW_TENANT_ID} AND asset_id=${passportId} ORDER BY detected_at DESC`) as any).rows || [];
       const evidence = (await scopedDb.execute(sql`SELECT id, name, type, verified, status, signer, timestamp, engine_id AS "engineId" FROM evidence_items WHERE tenant_id=${FREE_REVIEW_TENANT_ID} AND asset_id=${passportId} ORDER BY timestamp DESC`) as any).rows || [];
       const openFindings = findings.filter((f: any) => !['resolved', 'closed', 'verified'].includes(String(f.status).toLowerCase()));
@@ -189,7 +205,82 @@ export function createLegacyFreeReviewRouter() {
         latestMessage: logRows[0]?.message ? String(logRows[0].message) : null,
       };
       res.setHeader('cache-control', 'private, max-age=0, no-store');
-      return res.json({ passportId, scanStatus, failureReason, progress, passport, summary: { openFindings: openFindings.length, criticalOrHigh: criticalOrHigh.length, evidenceCount: evidence.length }, findings, evidence, policy: { rule: 'SPR reports observed evidence only. A scan still in progress reports scanStatus "scanning", never a placeholder result. A scan where every engine failed reports "failed", and its zero counts mean nothing was scanned -- not that nothing was found.' } });
+      // PREVIEW-SAFE RESPONSE.
+      //
+      // This endpoint is reachable by anyone holding the status token, which is
+      // handed to every anonymous visitor who runs a Free Review. It previously
+      // returned every finding with its title, description and affected
+      // component, and every evidence item with its signer -- the entire paid
+      // report, to an unauthenticated caller, with the UI as the only thing
+      // deciding what to show. Blurring in the browser is not access control.
+      //
+      // What leaves this function now is aggregate: counts, scores, severity
+      // histogram, evidence types. The teasers carry a severity and a category
+      // and nothing else -- no title, no description, no component, no location,
+      // no remediation -- so a prospect can see that a signal exists without
+      // being able to reconstruct the report from the JSON.
+      const assessment = assessTrust({
+        securityEngineCompleted: jobs.some((j: any) => String(j.job_type) === 'repository_security_scan' && j.status === 'Completed'),
+        repositoryEngineCompleted: jobs.some((j: any) => String(j.job_type) === 'repository_scan' && j.status === 'Completed'),
+        findings: findings.map((f: any) => ({ severity: String(f.severity), category: String(f.category), status: String(f.status) })),
+        sbomComponentCount,
+        evidence: evidence.map((e: any) => ({ type: String(e.type), verified: e.verified, engineId: e.engineId })),
+      });
+
+      const bySeverity = severityBreakdown(findings.map((f: any) => ({ severity: String(f.severity), category: String(f.category), status: String(f.status) })));
+
+      // One teaser per category actually present, carrying only the highest
+      // severity observed in it and how many there are. Derived entirely from
+      // real rows; invents no description.
+      const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low', 'info'];
+      const teaserMap = new Map<string, { category: string; severity: string; count: number }>();
+      for (const f of openFindings) {
+        const category = String(f.category);
+        const severity = String(f.severity).toLowerCase();
+        const existing = teaserMap.get(category);
+        if (!existing) { teaserMap.set(category, { category, severity, count: 1 }); continue; }
+        existing.count += 1;
+        if (SEVERITY_ORDER.indexOf(severity) < SEVERITY_ORDER.indexOf(existing.severity)) existing.severity = severity;
+      }
+      const teasers = [...teaserMap.values()]
+        .sort((a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity))
+        .slice(0, 5);
+
+      const evidenceByType: Record<string, number> = {};
+      for (const item of evidence) evidenceByType[String(item.type)] = (evidenceByType[String(item.type)] || 0) + 1;
+      const verifiedEvidence = evidence.filter((e: any) => e.verified === true || Number(e.verified) === 1).length;
+
+      // Only capabilities whose evidence actually exists. An engine that failed,
+      // or produced nothing, must not appear as something SPR verified.
+      const engineIds = new Set(evidence.map((e: any) => String(e.engineId || '')).filter(Boolean));
+      const verifiedCapabilities = [
+        engineIds.has('repository-worker') && 'Repository acquisition',
+        engineIds.has('repository-worker') && 'Manifest inventory',
+        engineIds.has('repository-worker') && 'SBOM generation',
+        engineIds.has('osv-worker') && 'Dependency vulnerability analysis',
+        engineIds.has('spr-security-orchestrator-v1') && 'Security analysis',
+        Object.prototype.hasOwnProperty.call(evidenceByType, 'Attestation') && 'Attestation detection',
+        sbomComponentCount !== null && 'Licence analysis',
+      ].filter((entry): entry is string => typeof entry === 'string');
+
+      res.setHeader('cache-control', 'private, max-age=0, no-store');
+      return res.json({
+        passportId,
+        scanStatus,
+        failureReason,
+        progress,
+        passport,
+        assessment,
+        findings: { total: openFindings.length, elevated: criticalOrHigh.length, bySeverity, teasers },
+        evidence: { total: evidence.length, verified: verifiedEvidence, unverified: evidence.length - verifiedEvidence, byType: evidenceByType },
+        sbom: { componentCount: sbomComponentCount },
+        verifiedCapabilities,
+        // The existence and count of what is withheld may be shown. The content
+        // may not, and is not present in this payload to be un-hidden.
+        locked: { detailedFindings: openFindings.length, evidenceRecords: evidence.length, remediation: true, componentLocations: true },
+        summary: { openFindings: openFindings.length, criticalOrHigh: criticalOrHigh.length, evidenceCount: evidence.length },
+        policy: { rule: 'SPR reports observed evidence only. A scan still in progress reports scanStatus "scanning", never a placeholder result. A scan where every engine failed reports "failed", and its zero counts mean nothing was scanned -- not that nothing was found. This free preview returns aggregates only: finding descriptions, affected components, evidence records and remediation are withheld server-side, not hidden in the browser.' },
+      });
     } catch (error) { return next(error); }
   });
   return router;

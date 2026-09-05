@@ -53,6 +53,13 @@ const envSchema = z.object({
   SPR_OWNER_BOOTSTRAP_SECRET_SHA256: z.preprocess((value) => typeof value === 'string' ? (value.trim().toLowerCase() || undefined) : value, z.string().regex(/^[a-f0-9]{64}$/).optional()),
   SPR_PUBLIC_PASSPORT_SECRET: optionalTrimmedString,
   SENTRY_DSN: optionalTrimmedUrl, REDIS_URL: optionalTrimmedString, RATE_LIMIT_FAIL_OPEN: optionalBooleanString, MONITORING_ENABLED_TENANT_IDS: optionalTrimmedString,
+  // Founder Command Center — platform-operator-only page (distinct from the
+  // per-tenant 'Owner' role: every paying customer has an Owner, but only the
+  // emails listed here may see cross-platform connection health/MRR/tasks).
+  FOUNDER_EMAILS: optionalTrimmedString,
+  RAILWAY_API_TOKEN: optionalTrimmedString, RAILWAY_PROJECT_ID: optionalTrimmedString,
+  VERCEL_API_TOKEN: optionalTrimmedString, VERCEL_PROJECT_ID: optionalTrimmedString,
+  GITHUB_TOKEN: optionalTrimmedString, GITHUB_OWNER: optionalTrimmedString, GITHUB_REPO: optionalTrimmedString,
 });
 
 const parseBoolean = (input: string | undefined, fallback: boolean) => input ? ['true', '1'].includes(input.trim().toLowerCase()) : fallback;
@@ -118,6 +125,14 @@ export const config = {
   ownerBootstrap: { initialOwnerEmail: parsedEnv.SPR_INITIAL_OWNER_EMAIL, secret: parsedEnv.SPR_OWNER_BOOTSTRAP_SECRET, secretSha256: parsedEnv.SPR_OWNER_BOOTSTRAP_SECRET_SHA256 },
   publicPassport: { secret: parsedEnv.SPR_PUBLIC_PASSPORT_SECRET },
   sentry: { dsn: parsedEnv.SENTRY_DSN }, redis: { url: parsedEnv.REDIS_URL, failOpen: parsedEnv.NODE_ENV !== 'production' && parseBoolean(parsedEnv.RATE_LIMIT_FAIL_OPEN, false) }, monitoring: { enabledTenantIds: parseCsv(parsedEnv.MONITORING_ENABLED_TENANT_IDS) },
+  founder: {
+    // Lowercased on purpose: compared against the lowercased email on the
+    // authenticated user, same normalization used for SPR_INITIAL_OWNER_EMAIL.
+    emails: parseCsv(parsedEnv.FOUNDER_EMAILS).map((email) => email.toLowerCase()),
+  },
+  railway: { apiToken: parsedEnv.RAILWAY_API_TOKEN, projectId: parsedEnv.RAILWAY_PROJECT_ID },
+  vercel: { apiToken: parsedEnv.VERCEL_API_TOKEN, projectId: parsedEnv.VERCEL_PROJECT_ID },
+  githubCi: { token: parsedEnv.GITHUB_TOKEN, owner: parsedEnv.GITHUB_OWNER, repo: parsedEnv.GITHUB_REPO },
 };
 
 export function validateConfiguration() {
