@@ -1,0 +1,21 @@
+SPDX-License-Identifier: LicenseRef-SPR-Proprietary
+
+SOFTWARE PASSPORT REGISTRY (SPR) — PROPRIETARY SOFTWARE LICENSE
+
+Copyright (c) 2026 Software Passport Registry. All rights reserved.
+
+This repository and the Software Passport Registry software, source code,
+documentation, workflows, configuration, and other original materials are
+proprietary and confidential unless a separate written agreement states
+otherwise.
+
+No permission is granted to use, copy, modify, merge, publish, distribute,
+sublicense, sell, or create derivative works from the original SPR materials,
+except as expressly authorized by Software Passport Registry in writing.
+
+Third-party dependencies and services included or referenced by this project
+remain subject to their own licenses. See THIRD-PARTY-NOTICES.md for the
+third-party license inventory maintained for this repository.
+
+THE SOFTWARE AND ORIGINAL SPR MATERIALS ARE PROVIDED "AS IS" TO THE MAXIMUM
+EXTENT PERMITTED BY LAW, WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED.
