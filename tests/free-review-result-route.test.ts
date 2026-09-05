@@ -127,8 +127,27 @@ describe('9-12. no privilege, tenant or secret exposure', () => {
 
 describe('13-14. existing behaviour intact', () => {
   it('the plain /free-review entry point still works', () => {
-    expect(app).toContain("if (!user && path === '/free-review') return <FreeReviewView");
+    expect(app).toContain("if (path === '/free-review') return <FreeReviewView");
     expect(freeReviewImpl).toContain("router.post('/free-review/scan'");
+  });
+
+  // Reported from production: opening the free scan signed the visitor into
+  // their account. Firebase restores a saved session with no deliberate sign-in,
+  // and while /free-review was gated on `!user` that restored session pushed the
+  // page into the authenticated Command Center -- on the one page whose promise
+  // is that no account is required. The route must not consult `user` at all.
+  it('never depends on the visitor being signed out, so a restored session cannot hijack it', () => {
+    expect(app).not.toContain("!user && path === '/free-review'");
+    expect(app).not.toContain('!user && freeReviewResult');
+    // And it must not be answered a second time inside the authenticated shell,
+    // which is what wrapped the free report in the account UI.
+    expect(app).not.toContain("case '/free-review':");
+  });
+
+  it('keeps the free scan anonymous on the server: its own tenant, no identity', () => {
+    expect(freeReviewImpl).toContain('FREE_REVIEW_TENANT_ID');
+    expect(freeReviewImpl).toContain('ip_hash');
+    expect(stripComments(freeReviewImpl)).not.toContain('req.user');
   });
 
   it('the result page adds no verification logic of its own', () => {

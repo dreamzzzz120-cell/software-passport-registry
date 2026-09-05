@@ -376,8 +376,21 @@ export default function App() {
   // Static sample Passport. Reads no database and no tenant - see
   // DemoPassport.tsx. Public by design and explicitly labelled DEMO.
   if (path === '/passport/demo') return <DemoPassport onRunFreeReview={() => navigate('/free-review')} onHome={() => navigate('/')} />;
-  if (!user && path === '/free-review') return <FreeReviewView onSignUp={() => navigate('/login')} />;
-  if (!user && freeReviewResult) return <FreeReviewView onSignUp={() => navigate('/login')} initialResult={freeReviewResult} />;
+  // The Free Review is public, and stays public even for a visitor who happens
+  // to have a Firebase session in this browser. Gating it on `!user` meant that
+  // Firebase silently restoring a saved session -- which needs no deliberate
+  // sign-in and can happen on a page the visitor opened precisely because it
+  // promises "no account required" -- dropped them into the authenticated
+  // Command Center around the free report instead. Nobody asked to be signed
+  // in; they asked for a free scan. Handled here alongside /terms and
+  // /passport/demo, which are public in the same unconditional way.
+  //
+  // Nothing about the scan itself was ever tied to the account: the API writes
+  // into the dedicated Free Review tenant and rate-limits on a hashed IP, never
+  // on an identity. This is purely about which shell the page renders in.
+  const freeReviewSignUpTarget = user ? '/passports' : '/login';
+  if (path === '/free-review') return <FreeReviewView onSignUp={() => navigate(freeReviewSignUpTarget)} />;
+  if (freeReviewResult) return <FreeReviewView onSignUp={() => navigate(freeReviewSignUpTarget)} initialResult={freeReviewResult} />;
   if (!user && path === '/pricing') return <MspPricingView isAuthenticated={false} onPrimaryAction={() => navigate('/login')} />;
   if (!user && path === '/msp') return <MspLandingView onEnter={() => navigate('/login')} onViewPricing={() => navigate('/pricing')} />;
   if (!user) return <AuthLoading />;
@@ -417,11 +430,10 @@ export default function App() {
     case '/team': view = <TeamView role={role} />; break;
     case '/audit-log': view = <AuditLogView />; break;
     case '/extensions': view = <ExtensionMarketplace onNavigateTab={onNavigateTab} role={role} />; break;
-    // Free Review is a public tool, but a signed-in user reaching it fell
-    // through to the default WorkflowBoundary below - so following the link
-    // while authenticated landed on a generic "Workflow" page instead of the
-    // scanner. Render it inside the Command Center so the left rail stays.
-    case '/free-review': view = <FreeReviewView onSignUp={() => navigate('/passports')} />; break;
+    // No '/free-review' case: it is answered above, before the authenticated
+    // shell, for signed-in and signed-out visitors alike. Rendering it in here
+    // was what wrapped the free report in the Command Center and made opening a
+    // public page look like being signed into an account.
     default: view = <WorkflowBoundary title="Workflow" description="This authenticated capability is explicitly routed through the Command Center. Choose its owning workflow from the left rail." onNavigate={navigate} />;
   }
 
