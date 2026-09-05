@@ -79,7 +79,7 @@ export function createLegacyFreeReviewRouter() {
       const payload = verifyFreeReviewStatusToken(req.params.token, passportId);
       if (!payload) return res.status(401).json({ error: 'Invalid or expired Free Review status link' });
       const scopedDb = await attachTenantScope(FREE_REVIEW_TENANT_ID, res);
-      const jobs = (await scopedDb.execute(sql`SELECT job_type, status, error, created_at AS "createdAt" FROM agent_jobs WHERE tenant_id=${FREE_REVIEW_TENANT_ID} AND passport_id=${passportId}`) as any).rows || [];
+      const jobs = (await scopedDb.execute(sql`SELECT id, job_type, status, progress, error, created_at AS "createdAt", updated_at AS "updatedAt" FROM agent_jobs WHERE tenant_id=${FREE_REVIEW_TENANT_ID} AND passport_id=${passportId}`) as any).rows || [];
       if (jobs.length === 0) return res.status(404).json({ error: 'Free Review submission not found' });
       // A Free Review is bounded. The two engines retry on different schedules --
       // the security scanner on a flat 30s backoff, the repository scanner on an
@@ -144,8 +144,48 @@ export function createLegacyFreeReviewRouter() {
       const evidence = (await scopedDb.execute(sql`SELECT id, name, type, verified, status, signer, timestamp, engine_id AS "engineId" FROM evidence_items WHERE tenant_id=${FREE_REVIEW_TENANT_ID} AND asset_id=${passportId} ORDER BY timestamp DESC`) as any).rows || [];
       const openFindings = findings.filter((f: any) => !['resolved', 'closed', 'verified'].includes(String(f.status).toLowerCase()));
       const criticalOrHigh = openFindings.filter((f: any) => ['critical', 'high'].includes(String(f.severity).toLowerCase()));
+      // Visible progress, taken from what the workers actually record. A Free
+      // Review can run for minutes on a large repository, and until now the page
+      // showed one spinner and the claim that it "usually takes under a minute",
+      // so a healthy long run was indistinguishable from a hung one and visitors
+      // reasonably concluded the scan was broken.
+      //
+      // Every number here is read, never estimated: percent is the job's own
+      // agent_jobs.progress (the security scanner records 5 -> 25 -> 55 -> 100 as
+      // it acquires, scans and finishes), and the message is the newest real
+      // agent_logs line. Nothing is interpolated or advanced on a timer, so a
+      // bar that stops moving is telling the truth about a job that stopped
+      // moving -- which is exactly what a visitor needs to be able to see.
+      const JOB_LABELS: Record<string, string> = {
+        repository_scan: 'Reading the repository and building its SBOM',
+        repository_security_scan: 'Scanning for vulnerabilities, secrets and licence issues',
+      };
+      const jobIds = jobs.map((j: any) => String(j.id));
+      const logRows = jobIds.length === 0 ? [] : ((await scopedDb.execute(
+        sql`SELECT message, created_at AS "createdAt" FROM agent_logs WHERE job_id IN ${jobIds} ORDER BY created_at DESC LIMIT 1`,
+      ) as any).rows || []);
+      const stepPercent = (job: any) => {
+        if (job.status === 'Completed') return 100;
+        if (job.status === 'Failed') return 100;
+        const recorded = Number(job.progress);
+        return Number.isFinite(recorded) ? Math.max(0, Math.min(100, Math.round(recorded))) : 0;
+      };
+      const steps = jobs
+        .map((job: any) => ({
+          id: String(job.job_type),
+          label: JOB_LABELS[String(job.job_type)] || 'Scanning',
+          status: String(job.status),
+          percent: stepPercent(job),
+        }))
+        .sort((a: any, b: any) => a.id.localeCompare(b.id));
+      const progress = {
+        percent: steps.length === 0 ? 0 : Math.round(steps.reduce((total: number, step: any) => total + step.percent, 0) / steps.length),
+        elapsedSeconds: Math.max(0, Math.round((Date.now() - oldestStartedAt) / 1000)),
+        steps,
+        latestMessage: logRows[0]?.message ? String(logRows[0].message) : null,
+      };
       res.setHeader('cache-control', 'private, max-age=0, no-store');
-      return res.json({ passportId, scanStatus, failureReason, passport, summary: { openFindings: openFindings.length, criticalOrHigh: criticalOrHigh.length, evidenceCount: evidence.length }, findings, evidence, policy: { rule: 'SPR reports observed evidence only. A scan still in progress reports scanStatus "scanning", never a placeholder result. A scan where every engine failed reports "failed", and its zero counts mean nothing was scanned -- not that nothing was found.' } });
+      return res.json({ passportId, scanStatus, failureReason, progress, passport, summary: { openFindings: openFindings.length, criticalOrHigh: criticalOrHigh.length, evidenceCount: evidence.length }, findings, evidence, policy: { rule: 'SPR reports observed evidence only. A scan still in progress reports scanStatus "scanning", never a placeholder result. A scan where every engine failed reports "failed", and its zero counts mean nothing was scanned -- not that nothing was found.' } });
     } catch (error) { return next(error); }
   });
   return router;

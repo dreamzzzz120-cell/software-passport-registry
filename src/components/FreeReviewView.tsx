@@ -13,6 +13,20 @@ interface FreeReviewStatus {
   passport: { name: string; version: string; publisher: string; verificationStatus: string } | null;
   summary: { openFindings: number; criticalOrHigh: number; evidenceCount: number };
   findings: FreeReviewFinding[];
+  /** Real worker progress. Every value is recorded by the scan, never estimated. */
+  progress?: {
+    percent: number;
+    elapsedSeconds: number;
+    steps: { id: string; label: string; status: string; percent: number }[];
+    latestMessage: string | null;
+  } | null;
+}
+
+function formatElapsed(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return '0s';
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return minutes > 0 ? `${minutes}m ${remainder}s` : `${remainder}s`;
 }
 
 const POLL_BASE_MS = 5_000;
@@ -202,7 +216,61 @@ export default function FreeReviewView({ onSignUp, initialResult }: FreeReviewVi
         {statusUrl && (
           <div className="mt-8 space-y-4 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6">
             {error && <div role="alert" className="rounded-xl border border-red-400/20 bg-red-400/10 p-3 text-sm text-red-200"><AlertCircle className="mr-2 inline h-4 w-4" />{error}</div>}
-            {(!result || result.scanStatus === 'scanning') && (<div className="flex items-center gap-3 text-sm text-[var(--spr-text-muted)]"><Loader className="h-5 w-5 animate-spin" /> Scanning {displayName}... this usually takes under a minute.</div>)}
+            {/* A real repository can take several minutes. The old state was one
+                spinner and the claim that it "usually takes under a minute", so
+                a healthy long run looked identical to a hung one and people
+                concluded the scan was broken. Everything below is read from the
+                job rows: the percentages are the workers' own recorded progress,
+                the message is the newest real log line, and the clock is the
+                actual elapsed time. Nothing advances on a timer, so a bar that
+                stops moving is honestly reporting a job that stopped moving. */}
+            {(!result || result.scanStatus === 'scanning') && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3 text-sm text-[var(--spr-text)]">
+                  <span className="flex items-center gap-3"><Loader className="h-5 w-5 animate-spin" /> Scanning {displayName}…</span>
+                  <span className="tabular-nums text-[var(--spr-text-muted)]">
+                    {result?.progress ? `${result.progress.percent}% · ${formatElapsed(result.progress.elapsedSeconds)} elapsed` : 'Starting…'}
+                  </span>
+                </div>
+
+                <div
+                  className="h-2 w-full overflow-hidden rounded-full bg-[var(--spr-surface-deep)]"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={result?.progress?.percent ?? 0}
+                  aria-label={`Free Review progress for ${displayName}`}
+                >
+                  <div className="h-full rounded-full bg-[var(--spr-highlight)] transition-all duration-500" style={{ width: `${result?.progress?.percent ?? 0}%` }} />
+                </div>
+
+                {result?.progress?.steps?.length ? (
+                  <ul className="space-y-1.5">
+                    {result.progress.steps.map((step) => (
+                      <li key={step.id} className="flex items-start justify-between gap-3 text-xs text-[var(--spr-text-muted)]">
+                        <span className="flex items-start gap-2">
+                          {step.status === 'Completed'
+                            ? <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--spr-green)]" />
+                            : step.status === 'Failed'
+                              ? <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-300" />
+                              : <Loader className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin" />}
+                          {step.label}
+                        </span>
+                        <span className="shrink-0 tabular-nums">{step.status === 'Pending' ? 'Queued' : `${step.percent}%`}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+
+                {result?.progress?.latestMessage ? (
+                  <p className="text-xs text-[var(--spr-text-muted)]">{result.progress.latestMessage}</p>
+                ) : null}
+
+                <p className="text-xs text-[var(--spr-text-muted)]">
+                  A large repository can take several minutes. You can leave this page open — the link stays valid.
+                </p>
+              </div>
+            )}
             {result && result.scanStatus !== 'scanning' && (
               <div>
                 {/* A run where every engine failed scanned nothing. Showing a
