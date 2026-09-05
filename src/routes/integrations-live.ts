@@ -15,12 +15,6 @@ const mappingSchema = z.object({ clientId: z.string().trim().min(1).max(255).nul
 function id(prefix: string) { return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`; }
 function routeParam(value: string | string[] | undefined): string { return Array.isArray(value) ? value[0] || '' : value || ''; }
 export function providerFromParam(value: string): Provider { if (!PROVIDERS.has(value) || value === 'github') throw new Error('PROVIDER_NOT_SUPPORTED_BY_GENERIC_ADAPTER'); return value as Provider; }
-// Credential storage is provider-agnostic (encryptCredentials doesn't care what
-// it's encrypting), unlike collectProviderEvidence/the generic /test route,
-// which assumes a single-observation shape GitHub's deep collector does not
-// return. GitHub credentials are stored through this same endpoint, then
-// tested through /api/trust-loop/collect (collectGitHubDeepEvidence), never
-// through the generic /test route.
 export function credentialProviderFromParam(value: string): string { if (!PROVIDERS.has(value)) throw new Error('PROVIDER_NOT_SUPPORTED_BY_GENERIC_ADAPTER'); return value; }
 function customerDiscoveryProviderFromParam(value: string): CustomerDiscoveryProvider { if (!supportsCustomerDiscovery(value)) throw new Error('PROVIDER_DOES_NOT_SUPPORT_CUSTOMER_DISCOVERY'); return value; }
 function integrationId(tenantId: string, provider: string) { return `int_${crypto.createHash('sha256').update(`${tenantId}:${provider}`).digest('hex').slice(0, 32)}`; }
@@ -70,12 +64,6 @@ export function createLiveIntegrationsRouter() {
     }
   });
 
-  // Real, authenticated repository listing for the stored GitHub credential --
-  // the UI must let the user pick from their actual repositories rather than
-  // requiring them to type a URL blind. Same authenticated request shape as
-  // collectGitHubDeepEvidence (src/integrations/github-deep.ts); only
-  // non-secret fields needed to build a https://github.com/{owner}/{repo} URL
-  // are returned.
   router.get('/github/repositories', requireAuth, requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
@@ -124,11 +112,6 @@ export function createLiveIntegrationsRouter() {
     }
   });
 
-  // MSP customer/tenant mapping: for providers with a real multi-customer
-  // concept (ConnectWise, Autotask, NinjaOne, Hudu), discover their actual
-  // customer/company/organization list and let it be mapped to an SPR
-  // Client. Discovery never touches evidence or scores -- it only records
-  // who the provider says its customers are; see migrations/0025.
   router.post('/:provider/customers/discover', requireAuth, requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
     try {
       const provider = customerDiscoveryProviderFromParam(routeParam(req.params.provider));
@@ -141,11 +124,7 @@ export function createLiveIntegrationsRouter() {
       const now = new Date().toISOString();
       await db.transaction(async tx => {
         for (const customer of discovered) {
-          await tx.execute(sql`
-            INSERT INTO provider_customers (id, tenant_id, provider, external_customer_id, external_customer_name, raw_metadata, discovered_at, last_synced_at)
-            VALUES (${id('provcust')}, ${tenantId}, ${provider}, ${customer.externalId}, ${customer.name}, ${JSON.stringify(customer.raw)}, ${now}, ${now})
-            ON CONFLICT (tenant_id, provider, external_customer_id) DO UPDATE SET external_customer_name = EXCLUDED.external_customer_name, raw_metadata = EXCLUDED.raw_metadata, last_synced_at = EXCLUDED.last_synced_at
-          `);
+          await tx.execute(sql`INSERT INTO provider_customers (id, tenant_id, provider, external_customer_id, external_customer_name, raw_metadata, discovered_at, last_synced_at) VALUES (${id('provcust')}, ${tenantId}, ${provider}, ${customer.externalId}, ${customer.name}, ${JSON.stringify(customer.raw)}, ${now}, ${now}) ON CONFLICT (tenant_id, provider, external_customer_id) DO UPDATE SET external_customer_name = EXCLUDED.external_customer_name, raw_metadata = EXCLUDED.raw_metadata, last_synced_at = EXCLUDED.last_synced_at`);
         }
       });
       return res.json({ provider, discoveredCount: discovered.length, syncedAt: now });
@@ -161,11 +140,15 @@ export function createLiveIntegrationsRouter() {
       const provider = customerDiscoveryProviderFromParam(routeParam(req.params.provider));
       const db = req.db!;
       const tenantId = req.user!.tenantId;
+      const isClient = req.user!.role === 'Client';
+      const clientId = req.user!.clientId;
+      if (isClient && !clientId) return res.status(403).json({ error: 'Client account has invalid client configuration' });
       const rows = await db.execute(sql`
         SELECT pc.id, pc.external_customer_id, pc.external_customer_name, pc.client_id, pc.discovered_at, pc.last_synced_at, pc.mapped_at, c.name AS client_name
         FROM provider_customers pc
         LEFT JOIN clients c ON c.id = pc.client_id AND c.tenant_id = pc.tenant_id
         WHERE pc.tenant_id = ${tenantId} AND pc.provider = ${provider}
+          AND (${isClient ? sql`pc.client_id = ${clientId}` : sql`TRUE`})
         ORDER BY pc.external_customer_name ASC
       `);
       return res.json((rows as any).rows ?? []);
@@ -186,9 +169,6 @@ export function createLiveIntegrationsRouter() {
       const existing = await db.execute(sql`SELECT id FROM provider_customers WHERE tenant_id = ${tenantId} AND provider = ${provider} AND external_customer_id = ${externalId} LIMIT 1`);
       if (!((existing as any).rows?.length)) return res.status(404).json({ error: 'Discovered customer not found for this tenant. Run discovery first.' });
       if (parsed.data.clientId) {
-        // Tenant ownership check on the target client is mandatory here --
-        // without it, one tenant could map a provider customer to a
-        // client_id belonging to a different tenant (a BOLA/IDOR class bug).
         const client = await db.execute(sql`SELECT id FROM clients WHERE id = ${parsed.data.clientId} AND tenant_id = ${tenantId} LIMIT 1`);
         if (!((client as any).rows?.length)) return res.status(404).json({ error: 'Client not found for this tenant.' });
       }
