@@ -23,6 +23,7 @@
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "verify:license": "node scripts/verify-license-manifest.mjs",
     "zip:full": "node scripts/make-full-zip.js"
   },
   "dependencies": {
