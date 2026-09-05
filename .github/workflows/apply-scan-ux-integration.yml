@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: LicenseRef-SPR-Proprietary
+# Copyright (c) 2026 Software Passport Registry. All rights reserved.
+
 name: Apply hardened scan UX integration
 
 on:
@@ -86,8 +89,6 @@ jobs:
           if marker in text and "Restore an in-flight scan" not in text:
               text = text.replace(marker, marker + "\n\n  // Restore an in-flight scan after navigation/reload; the job remains server-side.\n  useEffect(() => {\n    if (!currentJobId) return;\n    setIsScanning(true);\n    setScanCompleted(false);\n  }, [currentJobId]);\n")
 
-          # The hardened progress component owns scan lifecycle; remove legacy state that
-          # could otherwise create a second polling/render path.
           text = re.sub(r"\n  const \[scanProgress, setScanProgress\] = useState\(0\);", "", text, count=1)
           text = re.sub(r"\n  const \[scanLogs, setScanLogs\] = useState<string\[\]>\(\[\]\);", "", text, count=1)
           text = text.replace("    setScanProgress(0);\n", "")
