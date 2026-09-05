@@ -2,6 +2,7 @@
   "name": "software-passport-registry",
   "private": true,
   "version": "1.0.1",
+  "license": "LicenseRef-SPR-Proprietary",
   "type": "module",
   "engines": {
     "node": ">=22 <23"
@@ -68,7 +69,6 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.5",
-    "@vitejs/plugin-react": "^5.2.0",
     "drizzle-kit": "^0.31.10",
     "esbuild": "^0.28.1",
     "tailwindcss": "^4.1.0",
