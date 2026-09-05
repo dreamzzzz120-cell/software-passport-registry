@@ -86,7 +86,19 @@ describe('SPR security release contracts', () => {
     expect(versions).toContain(59);
     expect(versions).toContain(60);
     expect(versions).toContain(61);
-    expect(versions[versions.length - 1]).toBeGreaterThanOrEqual(61);
+    expect(versions).toContain(62);
+    expect(versions[versions.length - 1]).toBeGreaterThanOrEqual(62);
+  });
+
+  it('meters MSP usage by active monitored passports and protects the limit at the DB boundary', () => {
+    const route = read('src/routes/msp.ts');
+    const migration = read('migrations/0062_active_passport_entitlement_guard.sql');
+    expect(route).toContain("billingUnit: 'active_passport'");
+    expect(route).toContain('COUNT(DISTINCT passport_id)');
+    expect(route).toContain("enabled=true");
+    expect(migration).toContain('pg_advisory_xact_lock');
+    expect(migration).toContain('spr_enforce_active_passport_limit');
+    expect(migration).toContain('ACTIVE_PASSPORT_LIMIT_REACHED');
   });
 
   it('keeps tenant-scoped deletion/integrity controls in the database layer', () => {
