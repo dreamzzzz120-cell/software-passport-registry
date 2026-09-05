@@ -2,22 +2,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Pool, type PoolClient } from 'pg';
 import { readFileSync } from 'node:fs';
 
-// Real production incident, found and fixed via live behavioral testing:
-// APP_DATABASE_URL was never configured, so the app's real per-request
-// connection (attachTenantScope, src/middleware/tenant-scope.ts) fell back
-// to the table-owner connection -- and Postgres bypasses Row-Level Security
-// entirely for table owners. The spr_tenant_isolation policies existed on
-// every tenant-scoped table but provided zero actual protection; the only
-// thing preventing cross-tenant access was every route's own WHERE tenant_id
-// filter, with no structural backstop. This test proves the restricted
-// runtime role genuinely cannot bypass RLS, using the exact mechanism
-// attachTenantScope uses (set_config('app.tenant_id', ..., true) inside a
-// transaction), against real tables, with real cross-tenant attack attempts
-// -- not just inspecting that a policy definition exists.
-//
-// Skipped when APP_DATABASE_URL isn't configured (e.g. local dev without a
-// provisioned spr_app_runtime role) rather than failing -- this is a live
-// database behavioral test, not a pure unit test.
+// Real production regression test. It runs against the restricted runtime
+// connection when APP_DATABASE_URL is configured; otherwise the live DB cases
+// are skipped rather than pretending local unit tests prove RLS behavior.
 const appDatabaseUrl = process.env.APP_DATABASE_URL;
 const describeIfConfigured = appDatabaseUrl ? describe : describe.skip;
 
@@ -99,38 +86,22 @@ describeIfConfigured('spr_app_runtime cannot bypass Row-Level Security', () => {
   });
 });
 
-// The readiness probe is the only signal an operator gets that tenant
-// isolation still holds in the database this process is actually connected to,
-// and it has been reporting {"tenantRls":{"ok":false}} in production since
-// migration 0053 introduced spr_assert_tenant_rls(): RLS was ENABLED on every
-// tenant table by 0020/0021/0041/0042/0048 but never FORCED, so the assertion
-// could not pass. The tempting "fix" is to delete the assertion from /ready.
-// These file-level assertions exist so that stays a deliberate act rather than
-// a silent one, and they hold whether or not a database is reachable here.
 describe('readiness keeps asserting the tenant RLS invariant', () => {
   const read = (relativePath: string) =>
     readFileSync(new URL(`../../${relativePath}`, import.meta.url), 'utf8');
 
-  it('runs spr_assert_tenant_rls() in the readiness handler and fails readiness when it throws', () => {
+  it('runs spr_assert_tenant_rls() and fails readiness unless the least-privileged runtime role is active', () => {
     const server = read('server.ts');
     expect(server).toContain('SELECT spr_assert_tenant_rls()');
-    // The readiness gate was tightened from `database.ok && rls` to
-    // `database.ok && rls === true`, because rls is now tri-state: it starts
-    // null so that an unreachable database reports {"tenantRls":{"ok":null}}
-    // -- "not checked" -- instead of claiming a passing assertion that never
-    // ran. Requiring an explicit true keeps null and false both un-ready, so
-    // this is strictly stronger than the expression it replaces.
-    expect(server).toContain('const ready = database.ok && rls === true;');
+    expect(server).toContain("const leastPrivilege = runtimeRole === 'spr_app_runtime';");
+    expect(server).toContain('const ready = database.ok && rls === true && leastPrivilege;');
     expect(server).toContain('tenantRls: { ok: rls }');
-    // null must never be able to satisfy readiness.
     expect(server).not.toMatch(/const ready = database\.ok && rls;/);
   });
 
   it('ships a migration that forces RLS, so the assertion is satisfiable rather than aspirational', () => {
     const migration = read('migrations/0054_force_tenant_rls.sql');
     expect(migration).toContain('FORCE ROW LEVEL SECURITY');
-    // The migration asserts the invariant itself, so a deploy fails at the
-    // migration step rather than booting into a permanently un-ready service.
     expect(migration).toContain('SELECT spr_assert_tenant_rls()');
   });
 });
