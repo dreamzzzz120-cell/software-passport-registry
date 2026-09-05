@@ -34,6 +34,7 @@
 //    Trusting an id the caller supplies would let a signed webhook for one
 //    ticket rewrite an unrelated finding.
 
+import crypto, { randomUUID } from 'node:crypto';
 import { Router, type Request, type Response } from 'express';
 import { sql } from 'drizzle-orm';
 import { attachTenantScope } from '../middleware/tenant-scope.ts';
@@ -44,8 +45,16 @@ import {
   isRejection,
   planFindingUpdate,
   PsaVendorContractUnverified,
+  registerPsaAdapter,
 } from '../integrations/psa-finding-sync.ts';
 import { isFindingState } from '../trust/finding-state.ts';
+import { connectWiseAdapter, externalEventId, verifyConnectWiseSignature } from '../integrations/connectwise/webhook-adapter.ts';
+
+// ConnectWise signs with a bare HMAC-SHA256 over the body, so it brings its own
+// verifier and its own delivery id; the native scheme would reject all of it.
+registerPsaAdapter({ ...connectWiseAdapter, verify: verifyConnectWiseSignature, eventId: externalEventId });
+
+const sha256Hex = (value: string) => crypto.createHash('sha256').update(value, 'utf8').digest('hex');
 
 const rawBodyOf = (req: Request): string =>
   Buffer.isBuffer(req.body) ? req.body.toString('utf8') : typeof req.body === 'string' ? req.body : '';
@@ -93,8 +102,30 @@ export function createPsaWebhookRouter() {
       if (!secret) return res.status(500).json({ error: 'ENDPOINT_SECRET_UNREADABLE' });
 
       const signature = String(req.headers[adapter.signatureHeader.toLowerCase()] ?? '');
-      if (!signature || !verifyWebhookSignature(secret, rawBody, signature)) {
+      // A vendor that signs differently supplies its own verifier; otherwise the
+      // native t=<unix>,v1=<hex> scheme applies.
+      const verified = adapter.verify
+        ? adapter.verify(secret, rawBody, signature)
+        : verifyWebhookSignature(secret, rawBody, signature);
+      if (!signature || !verified) {
         return res.status(401).json({ error: 'UNAUTHORIZED' });
+      }
+
+      // Replay protection. SPR's native signature carries a timestamp and is
+      // rejected outside a five-minute window; a vendor scheme that signs only
+      // the body -- ConnectWise's does -- leaves a captured request valid
+      // forever. The UNIQUE (endpoint_id, external_event_id) constraint on
+      // psa_webhook_events is what bounds it: a replayed delivery conflicts and
+      // is acknowledged without being applied a second time.
+      const deliveryId = adapter.eventId ? adapter.eventId(rawBody) : `sha256:${sha256Hex(rawBody)}`;
+      const firstDelivery = (await scoped.execute(sql`
+        INSERT INTO psa_webhook_events (id, endpoint_id, tenant_id, provider, external_event_id, payload_hash)
+        VALUES (${`psaevt_${randomUUID()}`}, ${endpoint.id}, ${tenantId}, ${provider}, ${deliveryId}, ${sha256Hex(rawBody)})
+        ON CONFLICT (endpoint_id, external_event_id) DO NOTHING
+        RETURNING id
+      `) as any).rows?.[0];
+      if (!firstDelivery) {
+        return res.status(200).json({ received: true, applied: false, code: 'DUPLICATE_DELIVERY' });
       }
 
       const event = adapter.parse(rawBody, req.headers as Record<string, string | undefined>);

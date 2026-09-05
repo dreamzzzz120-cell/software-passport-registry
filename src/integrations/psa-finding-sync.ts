@@ -162,6 +162,18 @@ export interface PsaAdapter {
   signatureHeader: string;
   /** Parse a verified raw body into the neutral event shape. */
   parse(rawBody: string, headers: Record<string, string | undefined>): PsaWebhookEvent;
+  /**
+   * Verify the vendor's signature. Optional: without it the transport falls
+   * back to SPR's native t=<unix>,v1=<hex> scheme. A vendor that signs
+   * differently -- ConnectWise does -- must supply its own, because the native
+   * verifier would reject every genuine request from it.
+   */
+  verify?(secret: string, rawBody: string, header: string): boolean;
+  /**
+   * A stable id for this delivery, used to reject replays. Vendors whose
+   * signature carries no timestamp cannot bound replay in the signature itself.
+   */
+  eventId?(rawBody: string): string;
 }
 
 export class PsaVendorContractUnverified extends Error {
