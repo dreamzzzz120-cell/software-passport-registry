@@ -76,6 +76,28 @@ pool.on('error', (err) => {
 // operator has provisioned the least-privileged spr_app_runtime role (migration
 // 0020); otherwise it falls back to the same owner connection as `pool`, which
 // is a no-op for Row-Level Security since table owners bypass RLS entirely.
+// Do NOT put an `sslmode=` parameter in DATABASE_URL, APP_DATABASE_URL or
+// WORKER_DATABASE_URL. pg 8.23 treats sslmode=prefer/require/verify-ca as
+// aliases for verify-full and builds its own TLS options from the URL, which
+// takes precedence over the `ssl` object below -- so the CA configured here
+// never reaches the handshake and the connection dies with "self-signed
+// certificate in certificate chain".
+//
+// That is not hypothetical. On 2026-09-05 APP_DATABASE_URL carried
+// `?sslmode=require`; the app pool could not connect, /ready reported
+// runtimeRole null, the Railway healthcheck failed, and six consecutive deploys
+// were rejected while the previous instance kept serving in a degraded state.
+// The owner URL had no sslmode and connected fine, which is why exactly one of
+// the two pools was broken.
+//
+// TLS is configured here instead, from SQL_SSL and SQL_SSL_CA. The correct
+// posture is real verification: SQL_SSL=verify-full with SQL_SSL_CA holding the
+// actual CA that issued the server certificate. The Railway Postgres leaf is
+// CN=localhost issued by CN=root-ca, and its SAN does include
+// postgres.railway.internal, so verify-full genuinely passes against the real
+// CA -- verified against production before it was enabled. Do not "fix" a TLS
+// failure here by dropping rejectUnauthorized to false or supplying a
+// placeholder CA; that trades a real guarantee for a green healthcheck.
 const sslConfigFor = (connectionString: string | undefined) => config.database.ssl
   ? { rejectUnauthorized: config.database.sslVerify, ...(config.database.sslCa ? { ca: config.database.sslCa } : {}) }
   : undefined;
