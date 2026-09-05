@@ -32,7 +32,7 @@
       "source": "https://github.com/github/codeql-action"
     },
     "github-action:gitleaks/gitleaks-action@v2": {
-      "license": "LicenseRef-Gitleaks-Action-EULA",
+      "license": "Gitleaks Action EULA",
       "source": "https://github.com/gitleaks/gitleaks-action"
     }
   }
