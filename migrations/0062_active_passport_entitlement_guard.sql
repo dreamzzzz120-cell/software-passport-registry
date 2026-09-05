@@ -30,14 +30,18 @@ BEGIN
   LIMIT 1;
 
   -- Missing/incomplete subscriptions preserve the existing default-access rule.
-  IF subscription_status IS NULL OR subscription_status = 'incomplete' OR active_limit IS NULL THEN
+  IF subscription_status IS NULL OR subscription_status = 'incomplete' THEN
     RETURN NEW;
   END IF;
 
-  -- Active/trialing/past_due retain their paid entitlement. Lapsed states are
-  -- fail-closed and may not activate another monitored passport.
+  -- Active/trialing/past_due retain their paid entitlement. A NULL limit means
+  -- unlimited only for a currently entitled subscription. Lapsed subscriptions
+  -- fail closed even if their historical plan was Enterprise/unlimited.
+  IF subscription_status IN ('active', 'trialing', 'past_due') AND active_limit IS NULL THEN
+    RETURN NEW;
+  END IF;
   IF subscription_status NOT IN ('active', 'trialing', 'past_due') THEN
-    active_limit := GREATEST(active_limit, 0);
+    active_limit := 0;
   END IF;
 
   SELECT COUNT(DISTINCT passport_id)::integer
