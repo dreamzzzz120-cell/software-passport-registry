@@ -28,12 +28,11 @@ interface ScansViewProps {
   onTriggerNewScan: (scan: Scan) => void;
   clients?: Client[];
   assets?: any[];
-  onBatchTagScans?: (scanIds: string[], customCategory: string) => void;
   passports?: any[];
   role?: string;
 }
 
-export default function ScansView({ scans, onTriggerNewScan, clients, assets, onBatchTagScans, passports, role = 'Viewer' }: ScansViewProps) {
+export default function ScansView({ scans, onTriggerNewScan, clients, assets, passports, role = 'Viewer' }: ScansViewProps) {
   // Matches server.ts /api/scans/schedules* and /api/agent-jobs backend
   // gating: requireRole(['Owner','Admin','Operator']).
   const canManageSchedules = ['Owner', 'Admin', 'Operator'].includes(role);
@@ -100,7 +99,6 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
   const [newScheduleAssetId, setNewScheduleAssetId] = useState('');
   const [newScheduleFrequency, setNewScheduleFrequency] = useState('Daily');
   const [newScheduleScanType, setNewScheduleScanType] = useState('SBOM Deep Verify');
-  const [newScheduleStartTime, setNewScheduleStartTime] = useState('02:00 AM');
 
   // Set default asset ID in form
   useEffect(() => {
@@ -225,6 +223,8 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
   // Batch-tagging State Variables
   const [selectedScanIds, setSelectedScanIds] = useState<string[]>([]);
   const [batchCategory, setBatchCategory] = useState<string>('');
+  const [batchTagging, setBatchTagging] = useState(false);
+  const [batchTagError, setBatchTagError] = useState('');
 
   const toggleSelectScan = (id: string) => {
     setSelectedScanIds(prev =>
@@ -244,13 +244,31 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
     }
   };
 
-  const handleApplyBatchTag = () => {
-    if (!batchCategory.trim() || selectedScanIds.length === 0) return;
-    if (onBatchTagScans) {
-      onBatchTagScans(selectedScanIds, batchCategory.trim());
+  const handleApplyBatchTag = async () => {
+    if (!batchCategory.trim() || selectedScanIds.length === 0 || batchTagging) return;
+    setBatchTagging(true);
+    setBatchTagError('');
+    try {
+      const response = await apiFetch('/api/scans/batch-tag', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scanIds: selectedScanIds, category: batchCategory.trim() }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error?.message || body?.error || 'Unable to apply this category.');
+      }
+      setSelectedScanIds([]);
+      setBatchCategory('');
+      // scans is owned by App.tsx's own state, not local to this component --
+      // this is the same global refresh signal InvestorHomeView's remediation
+      // flow already uses to pull freshly-changed records back down as props.
+      window.dispatchEvent(new CustomEvent('refresh-data'));
+    } catch (err) {
+      setBatchTagError(err instanceof Error ? err.message : 'Unable to apply this category.');
+    } finally {
+      setBatchTagging(false);
     }
-    setSelectedScanIds([]);
-    setBatchCategory('');
   };
 
   // Drag and Drop handlers
@@ -561,7 +579,11 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-[10px] font-mono text-[var(--spr-text-muted)]">License: {activeP.licenseType}</span>
-                          <span className="px-2 py-0.5 rounded bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] text-[9px] font-bold font-mono">Verified Passport</span>
+                          {activeP.verificationStatus === 'verified'
+                            ? <span className="px-2 py-0.5 rounded bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] text-[9px] font-bold font-mono">Verified Passport</span>
+                            : activeP.verificationStatus === 'partial'
+                              ? <span className="px-2 py-0.5 rounded bg-[var(--spr-amber)]/15 text-[var(--spr-amber)] text-[9px] font-bold font-mono">Partially Verified</span>
+                              : <span className="px-2 py-0.5 rounded border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-text-muted)] text-[9px] font-bold font-mono">Unverified</span>}
                         </div>
                       </div>
                     );
@@ -699,14 +721,10 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
 
                       {/* Target Run Time */}
                       <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-[var(--spr-text-muted)] uppercase font-mono">Preferred Run Window (Local Time)</label>
-                        <input
-                          type="text"
-                          value={newScheduleStartTime}
-                          onChange={(e) => setNewScheduleStartTime(e.target.value)}
-                          placeholder="e.g. 02:00 AM, 11:30 PM"
-                          className="w-full px-3 py-2 bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] rounded-lg text-xs focus:ring-1 focus:ring-[var(--spr-highlight)] focus:outline-none font-sans text-[var(--spr-text-faint)] font-bold"
-                        />
+                        <label className="text-[10px] font-bold text-[var(--spr-text-muted)] uppercase font-mono">Preferred Run Window</label>
+                        <div className="w-full px-3 py-2 bg-[var(--spr-surface-sunken)] border border-dashed border-[var(--spr-border)] rounded-lg text-[11px] text-[var(--spr-text-muted)]">
+                          Not yet supported -- schedules run on frequency alone (e.g. every 24h from creation), not a specific time of day.
+                        </div>
                       </div>
                     </div>
 
@@ -995,19 +1013,20 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, on
                 />
                 <button
                   type="button"
-                  onClick={handleApplyBatchTag}
-                  disabled={!batchCategory.trim()}
+                  onClick={() => void handleApplyBatchTag()}
+                  disabled={!batchCategory.trim() || batchTagging}
                   className={`px-3 py-1.5 rounded text-xs font-bold text-[var(--spr-text)] transition-all cursor-pointer shrink-0 ${
-                    batchCategory.trim()
+                    batchCategory.trim() && !batchTagging
                       ? 'bg-[var(--spr-accent-soft)] hover:bg-[var(--spr-accent-soft)] shadow-sm'
                       : 'bg-[var(--spr-border)] cursor-not-allowed'
                   }`}
                 >
-                  Apply & Sync
+                  {batchTagging ? 'Applying…' : 'Apply & Sync'}
                 </button>
               </div>
+              {batchTagError && <p role="alert" className="text-[9px] text-[var(--spr-red)] font-sans leading-tight">{batchTagError}</p>}
               <p className="text-[9px] text-[var(--spr-text-muted)] font-sans leading-tight">
-                This will tag the selected records and trigger a bulk update to synchronize custom categories in the Assets inventory.
+                This relabels the selected scan records with the category you enter. It does not change Assets or Passport records.
               </p>
             </div>
           )}

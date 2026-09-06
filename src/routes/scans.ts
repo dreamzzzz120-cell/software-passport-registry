@@ -32,6 +32,10 @@ const scheduleSchema = z.object({
   scanType: z.string().min(1).max(200),
 }).strict();
 const scheduleUpdateSchema = z.object({ status: z.enum(['Active', 'Paused']) }).strict();
+const batchTagSchema = z.object({
+  scanIds: z.array(z.string().min(1).max(200)).min(1).max(200),
+  category: z.string().trim().min(1).max(200),
+}).strict();
 
 function id(prefix: string) { return `${prefix}_${crypto.randomUUID().replace(/-/g, '')}`; }
 
@@ -79,6 +83,26 @@ export function createScansRouter() {
       await db.execute(sql`INSERT INTO agent_jobs (id,tenant_id,agent_id,passport_id,job_type,status,progress,next_attempt_at,created_at,updated_at) VALUES (${jobId},${req.user!.tenantId},'comprehensive_scanner',${passport.id},'osv_manifest_scan','Pending',0,NOW(),NOW(),NOW())`);
       await db.execute(sql`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES (${jobId},'comprehensive_scanner','Queued real OSV dependency vulnerability scan against the persisted SBOM.','Info')`);
       return res.status(202).json({ id: scanId, jobId, targetName, scanType, triggeredBy: req.user!.uid, status: 'Scanning', durationMs: 0, findingsCount: null, timestamp, clientName });
+    } catch (error) { return next(error); }
+  });
+
+  // Batch-reclassify previously-unclassified scan records with a real,
+  // operator-chosen category label. The UI's "Custom Category name" field
+  // was previously wired to a prop (onBatchTagScans) that App.tsx never
+  // actually passed to ScansView -- selecting scans, typing a category, and
+  // clicking Apply silently cleared the selection and did nothing, with no
+  // error shown. This is the real endpoint that action now calls.
+  router.post('/scans/batch-tag', requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const parsed = batchTagSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+      const db = req.db!;
+      const { scanIds, category } = parsed.data;
+      // See tests/drizzle-array-in-clause-contract.test.ts for the established
+      // rule on binding a JS array in a Drizzle sql template -- this is the
+      // one correct form.
+      const result = await db.execute(sql`UPDATE scans SET scan_type = ${category} WHERE tenant_id = ${req.user!.tenantId} AND id IN ${scanIds}`);
+      return res.json({ updatedCount: (result as any).rowCount ?? 0 });
     } catch (error) { return next(error); }
   });
 
