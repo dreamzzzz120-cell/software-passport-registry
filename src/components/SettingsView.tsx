@@ -19,9 +19,17 @@ interface SettingsViewProps {
   onToggleTheme: () => void;
 }
 
+function formatUptime(totalSeconds: number): string {
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
 export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps) {
   const [activeSubTab, setActiveSubTab] = useState<'configurations' | 'bible' | 'organization' | 'guide'>('configurations');
-  const [slaTarget, setSlaTarget] = useState(85);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [offboarding, setOffboarding] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -327,12 +335,15 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
   const [loadingLedgers, setLoadingLedgers] = useState(false);
   const [verifyingLedger, setVerifyingLedger] = useState(false);
   const [verificationResult, setVerificationResult] = useState<any | null>(null);
+  const [runtimeStatus, setRuntimeStatus] = useState<{ service: string; uptimeSeconds: number } | null>(null);
 
-  // SAML SSO Form settings
-  const [ssoEnabled, setSsoEnabled] = useState(true);
-  const [ssoProvider, setSsoProvider] = useState('Okta Enterprise IdP');
-  const [ssoMetadataUrl, setSsoMetadataUrl] = useState('https://idp.okta.com/app/exk810/sso/saml/metadata');
-  const [ssoClientId, setSsoClientId] = useState('spr_msp_okta_prod_01');
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/health').then((r) => r.json()).then((data) => {
+      if (!cancelled && data?.service) setRuntimeStatus({ service: data.service, uptimeSeconds: Number(data.uptimeSeconds) || 0 });
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   const handleVerifyLedger = async () => {
     setVerifyingLedger(true);
@@ -542,7 +553,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
       if (!isNaN(baselineNum) && !isNaN(inputNum)) {
         if (inputNum < baselineNum) {
           versionStatus = 'Fail';
-          versionDetails = `Ingested version v${inputVer} is older than the recommended secure baseline v${baseline}. Potential known CVE exposures exist!`;
+          versionDetails = `v${inputVer} is below the example secure baseline (v${baseline}) recorded in your local Product Bible. This is a version-number comparison against your own reference entry, not a live CVE database lookup.`;
         } else {
           versionStatus = 'Compliant';
           versionDetails = `Version v${inputVer} matches or exceeds secure baseline standards (v${baseline}).`;
@@ -702,33 +713,17 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
 
               <div className="space-y-3.5 text-xs">
                 <div className="flex flex-col gap-1">
-                  <label className="font-semibold text-[var(--spr-text)]">Audit Trust SLA Target Threshold (Score)</label>
-                  <div className="flex gap-2 items-center">
-                    <input
-                      type="range"
-                      min="60"
-                      max="98"
-                      value={slaTarget}
-                      onChange={(e) => setSlaTarget(Number(e.target.value))}
-                      className="flex-1 bg-[var(--spr-surface-sunken)] h-1.5 rounded-full cursor-pointer accent-[var(--spr-highlight)]"
-                    />
-                    <span className="font-mono font-bold text-[var(--spr-highlight)] bg-[var(--spr-accent-soft)] border border-[var(--spr-border)] px-2 py-1 rounded">
-                      {slaTarget}/100
-                    </span>
+                  <label className="font-semibold text-[var(--spr-text)]">Audit Trust SLA Target Threshold</label>
+                  <div className="rounded-md border border-dashed border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2.5 text-[11px] text-[var(--spr-text-muted)]">
+                    Not yet implemented -- no per-tenant alert threshold is configurable or read by the alert pipeline today. Alerts are generated from real findings and vulnerability evidence, not from a score cutoff.
                   </div>
-                  <p className="text-[10px] text-[var(--spr-text-faint)] mt-0.5">Alerts are compiled if a software passport overall rating drops below this value.</p>
                 </div>
 
                 <div className="flex justify-between items-center border-t border-[var(--spr-border)] pt-3">
                   <div>
-                    <span className="font-semibold text-[var(--spr-text)] block">Enable Automated Daily Recalculation Scans</span>
-                    <p className="text-[10px] text-[var(--spr-text-faint)] leading-snug">Automatically scan active client software inventory on CVE database updates.</p>
+                    <span className="font-semibold text-[var(--spr-text)] block">Automated Daily Recalculation Scans</span>
+                    <p className="text-[10px] text-[var(--spr-text-faint)] leading-snug">Not yet implemented -- no scheduled job re-scans client inventory on CVE database updates today. Use Scans → Automated Scanning Schedules for real, working recurring scans.</p>
                   </div>
-                  <input
-                    type="checkbox"
-                    defaultChecked
-                    className="w-4.5 h-4.5 text-[var(--spr-highlight)] border-[var(--spr-border)] rounded focus:ring-[var(--spr-highlight)]"
-                  />
                 </div>
               </div>
             </div>
@@ -780,54 +775,10 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
             <div className="spr-panel p-5 space-y-4">
               <h3 className="text-xs font-bold text-[var(--spr-text)] flex items-center gap-1.5 pb-2 border-b border-[var(--spr-border)]">
                 <Globe className="w-4.5 h-4.5 text-[var(--spr-highlight)]" />
-                <span>Enterprise SAML / SSO Integration Configuration</span>
+                <span>Enterprise SAML / SSO Integration</span>
               </h3>
-
-              <div className="space-y-4 text-xs">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <span className="font-semibold text-[var(--spr-text)] block">SAML SSO Access Gate</span>
-                    <p className="text-[10px] text-[var(--spr-text-faint)] leading-snug">Redirect unauthenticated corporate domains to the unified Identity Provider (IdP).</p>
-                  </div>
-                  <button
-                    onClick={() => setSsoEnabled(!ssoEnabled)}
-                    className={`px-3 py-1 text-xs font-bold rounded-md border cursor-pointer transition-colors ${
-                      ssoEnabled ? 'bg-[var(--spr-surface-sunken)] border-[var(--spr-border)] text-[var(--spr-green)]' : 'bg-[var(--spr-surface-sunken)] border-[var(--spr-border)] text-[var(--spr-text-muted)]'
-                    }`}
-                  >
-                    {ssoEnabled ? 'SSO Active' : 'SSO Inactive'}
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                  <div>
-                    <label className="block text-[10px] font-mono font-bold text-[var(--spr-text-faint)] uppercase mb-1">Corporate Identity Provider</label>
-                    <input
-                      type="text"
-                      value={ssoProvider}
-                      onChange={(e) => setSsoProvider(e.target.value)}
-                      className="w-full rounded-md border border-[var(--spr-border)] text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] p-2.5 bg-[var(--spr-surface-sunken)]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-mono font-bold text-[var(--spr-text-faint)] uppercase mb-1">Client ID / Issuer URL</label>
-                    <input
-                      type="text"
-                      value={ssoClientId}
-                      onChange={(e) => setSsoClientId(e.target.value)}
-                      className="w-full rounded-md border border-[var(--spr-border)] text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] p-2.5 bg-[var(--spr-surface-sunken)] font-mono"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-[10px] font-mono font-bold text-[var(--spr-text-faint)] uppercase mb-1">SAML 2.0 Metadata XML Endpoint URL</label>
-                    <input
-                      type="text"
-                      value={ssoMetadataUrl}
-                      onChange={(e) => setSsoMetadataUrl(e.target.value)}
-                      className="w-full rounded-md border border-[var(--spr-border)] text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] p-2.5 bg-[var(--spr-surface-sunken)] font-mono"
-                    />
-                  </div>
-                </div>
+              <div className="rounded-md border border-dashed border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2.5 text-[11px] text-[var(--spr-text-muted)]">
+                Not yet implemented. There is no SAML/SSO enforcement anywhere in the authentication pipeline today -- this card previously showed a permanently-"Active" status with a pre-filled example provider and client ID that were never sent anywhere, never saved, and did not reflect any real integration. Sign-in is by Firebase-issued credential only.
               </div>
             </div>
 
@@ -901,9 +852,17 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                   <FileCode className="w-4.5 h-4.5 text-[var(--spr-highlight)]" />
                   <span>Cryptographic Blockchain Audit Ledger</span>
                 </h3>
-                <span className="font-mono text-[10px] text-[var(--spr-green)] bg-[var(--spr-surface-sunken)] px-2 py-0.5 rounded border border-[var(--spr-border)] flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--spr-green)] animate-pulse" />
-                  Tamper-Proof SLA verified
+                <span className={`font-mono text-[10px] px-2 py-0.5 rounded border border-[var(--spr-border)] flex items-center gap-1 ${
+                  verificationResult?.isValid === true ? 'text-[var(--spr-green)] bg-[var(--spr-surface-sunken)]' :
+                  verificationResult?.isValid === false ? 'text-[var(--spr-red)] bg-[var(--spr-surface-sunken)]' :
+                  'text-[var(--spr-text-muted)] bg-[var(--spr-surface-sunken)]'
+                }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${
+                    verificationResult?.isValid === true ? 'bg-[var(--spr-green)] animate-pulse' :
+                    verificationResult?.isValid === false ? 'bg-[var(--spr-red)]' :
+                    'bg-[var(--spr-text-faint)]'
+                  }`} />
+                  {verificationResult?.isValid === true ? 'Verified this session' : verificationResult?.isValid === false ? 'Verification failed' : 'Not yet verified this session'}
                 </span>
               </div>
               
@@ -1043,12 +1002,9 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
 
                 <div className="flex justify-between items-center border-t border-[var(--spr-border)] pt-3">
                   <div>
-                    <span className="font-semibold text-[var(--spr-text)] block">Cryptographic PGP Auditing Key (Private)</span>
-                    <p className="text-[10px] text-[var(--spr-text-faint)] ">Used for signing generated software passports and audit attestations.</p>
+                    <span className="font-semibold text-[var(--spr-text)] block">Cryptographic PGP Signing Key</span>
+                    <p className="text-[10px] text-[var(--spr-text-faint)] ">Not yet implemented -- generated Software Passports and audit attestations are not cryptographically signed today. No key-management endpoint exists on the backend yet.</p>
                   </div>
-                  <button className="bg-[var(--spr-surface-sunken)] hover:bg-[var(--spr-surface-hover)] text-white font-sans font-semibold text-xs px-3.5 py-1.8 rounded-lg cursor-pointer transition-colors">
-                    Regenerate Sign Key
-                  </button>
                 </div>
 
                 <div className="flex justify-between items-center border-t border-[var(--spr-border)] pt-4 mt-2 bg-[var(--spr-surface-sunken)] p-3.5 rounded-lg border border-dashed border-[var(--spr-border)]">
@@ -1129,23 +1085,24 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
             <div className="spr-panel p-5 space-y-4 h-fit">
               <h3 className="text-xs font-bold text-[var(--spr-text)] flex items-center gap-1.5 pb-2 border-b border-[var(--spr-border)]">
                 <Shield className="w-4.5 h-4.5 text-[var(--spr-text-faint)] " />
-                <span>Platform Pedigree Coordinates</span>
+                <span>Platform Runtime Status</span>
               </h3>
 
               <div className="text-xs space-y-2.5 font-mono text-[var(--spr-text-faint)] ">
                 <div className="flex justify-between border-b border-[var(--spr-border)] pb-1.5">
-                  <span>PORTAL SERVICE:</span>
-                  <span className="font-bold text-[var(--spr-text)]">SPR-CORE-VM</span>
+                  <span>SERVICE:</span>
+                  <span className="font-bold text-[var(--spr-text)]">{runtimeStatus ? runtimeStatus.service : 'Not fetched'}</span>
                 </div>
                 <div className="flex justify-between border-b border-[var(--spr-border)] pb-1.5">
-                  <span>COMPILATION:</span>
-                  <span className="font-bold text-[var(--spr-text)]">DOCKER PROD v2.4</span>
+                  <span>PROCESS UPTIME:</span>
+                  <span className="font-bold text-[var(--spr-text)]">{runtimeStatus ? formatUptime(runtimeStatus.uptimeSeconds) : 'Not fetched'}</span>
                 </div>
                 <div className="flex justify-between border-b border-[var(--spr-border)] pb-1.5">
-                  <span>SLA COMPLIANCE:</span>
-                  <span className="font-bold text-[var(--spr-green)]">99.98%</span>
+                  <span>HISTORICAL SLA:</span>
+                  <span className="font-bold text-[var(--spr-text-muted)]">Not tracked</span>
                 </div>
               </div>
+              <p className="text-[9px] text-[var(--spr-text-faint)] leading-relaxed">Process uptime resets on every deploy or restart -- it is not a measure of historical availability. No uptime-history or SLA-compliance tracking system exists yet.</p>
             </div>
 
             <div className="spr-panel p-5 space-y-4 h-fit">
@@ -1565,12 +1522,10 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
               <div className="space-y-1">
                 <h3 className="text-xs font-bold text-[var(--spr-highlight)]">Enterprise Platform Master Product Bible</h3>
                 <p className="text-xs text-[var(--spr-highlight)] font-sans leading-relaxed">
-                  This Bible defines standard secure baseline versions, permitted/copyleft licenses, risk classifications, and operational NIST/ISO security safeguard guidelines. Ingested Software Passports must be checked against these standards to prevent compliance violations.
+                  A reference library of example secure-baseline versions, license policies, and safeguard notes you can compare against in the Sandbox Auditor below.
                 </p>
-                <div className="flex gap-4 pt-2 text-[10px] font-semibold text-[var(--spr-highlight)]">
-                  <span>• Policy Reference: NIST SP 800-53 r5</span>
-                  <span>• Legal Stand: SSPL/AGPL Copyleft Blocked</span>
-                  <span>• Baseline updates: Automated daily RSS synchronizations</span>
+                <div className="mt-2 rounded-md border border-dashed border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2.5 text-[11px] text-[var(--spr-text-muted)]">
+                  This library is local to your current session only -- it is not saved to your account, not shared with your team, and resets on refresh. It is not synchronized from any external feed, and no real Software Passport scan reads from it: the Sandbox Auditor below is a standalone what-if comparison tool, not part of the actual scanning pipeline.
                 </div>
               </div>
             </div>
