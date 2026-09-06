@@ -1,19 +1,20 @@
+-- 0072: Corrects a type-mismatch bug in migration 0064's Active Passport
+-- entitlement guard. monitoring_configurations.enabled is integer (0/1), not
+-- boolean (migrations/0000_base_application_schema.sql, src/db/schema.ts).
+-- Migration 0064 compared it against the literal `true` in both a partial
+-- index predicate and the trigger function body. Postgres has no implicit
+-- integer<->boolean cast, so `enabled = true` fails immediately with
+-- "operator does not exist: integer = boolean" -- reproduced by running the
+-- full migration history against a brand-new Postgres 16 instance from
+-- scratch. This migration re-creates the index and function with correct
+-- integer comparisons. It is safe to run whether or not this environment's
+-- 0064 already succeeded some other way: CREATE INDEX IF NOT EXISTS and
+-- CREATE OR REPLACE FUNCTION make this idempotent, and the trigger logic
+-- itself is unchanged -- only the type of literal it compares against.
+
 BEGIN;
 
--- Active Passport is the MSP billing unit: a unique passport with at least one
--- enabled integration-monitoring configuration. The existing plan client_limit
--- is reused as the included Active Passport allowance so billing semantics stay
--- compatible with already-issued Stripe plans while the public meter moves from
--- "clients" to the actually monitored assets.
---
--- monitoring_configurations.enabled is integer (0/1), not boolean -- see
--- migrations/0000_base_application_schema.sql and src/db/schema.ts. Comparing
--- it against the literal `true` fails immediately with "operator does not
--- exist: integer = boolean" on any fresh database, since Postgres has no
--- implicit integer<->boolean cast (unlike SQLite/MySQL). Fixed in the
--- corrective migration 0072; this file is corrected here too so a fresh
--- install reads the right thing, even though editing it doesn't re-run it
--- against a database where it already executed.
+DROP INDEX IF EXISTS idx_monitoring_active_passports;
 CREATE INDEX IF NOT EXISTS idx_monitoring_active_passports
   ON monitoring_configurations (tenant_id, passport_id)
   WHERE subject_type = 'integration_provider' AND enabled = 1;
@@ -32,22 +33,15 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  -- Serialize concurrent activations for one tenant. Without this lock two
-  -- requests could both observe one free slot and create two new passports.
   PERFORM pg_advisory_xact_lock(hashtextextended('spr:active-passports:' || NEW.tenant_id, 0));
 
   SELECT status, client_limit INTO subscription_status, active_limit
   FROM tenant_subscriptions WHERE tenant_id = NEW.tenant_id LIMIT 1;
 
-  -- Preserve the platform's existing default-access behavior for a tenant that
-  -- has no subscription row or is still incomplete.
   IF subscription_status IS NULL OR subscription_status = 'incomplete' THEN
     RETURN NEW;
   END IF;
 
-  -- Active/trialing/past_due retain their paid entitlement. A NULL limit means
-  -- unlimited only for a currently entitled subscription. Lapsed subscriptions
-  -- fail closed even if their historical plan was Enterprise/unlimited.
   IF subscription_status IN ('active', 'trialing', 'past_due') AND active_limit IS NULL THEN
     RETURN NEW;
   END IF;

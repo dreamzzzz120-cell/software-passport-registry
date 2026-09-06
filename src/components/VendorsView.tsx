@@ -156,9 +156,15 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
     }
 
     // 4. Reputation Score Filter
+    // A vendor with no real scored audit yet has score === null/undefined.
+    // Numeric comparisons against null coerce to 0 in JS (null < 70 is true),
+    // which would silently sort an unassessed vendor into "Critical" --
+    // asserting a known-bad rating for a vendor nobody has evidence about
+    // yet. Require a real number before bucketing by score at all.
     if (reputationFilter !== 'all') {
       result = result.filter(v => {
         const score = v.reputationScore ?? v.overallTrustScore;
+        if (typeof score !== 'number') return reputationFilter === 'unassessed';
         if (reputationFilter === 'excellent') return score >= 90;
         if (reputationFilter === 'good') return score >= 80 && score < 90;
         if (reputationFilter === 'fair') return score >= 70 && score < 80;
@@ -180,8 +186,16 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
       let valB: any = b.name;
 
       if (sortBy === 'score') {
-        valA = a.reputationScore ?? a.overallTrustScore;
-        valB = b.reputationScore ?? b.overallTrustScore;
+        // Unassessed vendors (null score) always sort after any real score,
+        // regardless of asc/desc -- null coercing to 0 would otherwise rank
+        // an unaudited vendor as if it were known to be the worst-scored one.
+        const rawA = a.reputationScore ?? a.overallTrustScore;
+        const rawB = b.reputationScore ?? b.overallTrustScore;
+        if (typeof rawA !== 'number' && typeof rawB !== 'number') return 0;
+        if (typeof rawA !== 'number') return 1;
+        if (typeof rawB !== 'number') return -1;
+        valA = rawA;
+        valB = rawB;
       } else if (sortBy === 'passports') {
         valA = a.activePassportsCount;
         valB = b.activePassportsCount;
@@ -398,6 +412,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                 <option value="good">Good (80-89)</option>
                 <option value="fair">Fair (70-79)</option>
                 <option value="critical">Critical (&lt;70)</option>
+                <option value="unassessed">Not yet assessed</option>
               </select>
               <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[var(--spr-text-muted)]">
                 <ChevronRight className="w-3.5 h-3.5 rotate-90" />
@@ -495,13 +510,15 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                         {/* Overall Score Circle */}
                         <div className="flex items-center gap-1.5">
                           <div className={`w-8 h-8 rounded-full flex items-center justify-center font-mono font-bold text-xs ${
-                            score >= 90 
-                              ? 'bg-[var(--spr-green)]/10 text-[var(--spr-green)] border border-[var(--spr-green)]/30'
-                              : score >= 80 
-                                ? 'bg-[var(--spr-amber)]/10 text-[var(--spr-amber)] border border-[var(--spr-amber)]/30'
-                                : 'bg-[var(--spr-red)]/10 text-[var(--spr-red)] border border-[var(--spr-red)]/30'
-                          }`}>
-                            {score}
+                            typeof score !== 'number'
+                              ? 'bg-[var(--spr-surface-sunken)] text-[var(--spr-text-faint)] border border-[var(--spr-border)]'
+                              : score >= 90
+                                ? 'bg-[var(--spr-green)]/10 text-[var(--spr-green)] border border-[var(--spr-green)]/30'
+                                : score >= 80
+                                  ? 'bg-[var(--spr-amber)]/10 text-[var(--spr-amber)] border border-[var(--spr-amber)]/30'
+                                  : 'bg-[var(--spr-red)]/10 text-[var(--spr-red)] border border-[var(--spr-red)]/30'
+                          }`} title={typeof score !== 'number' ? 'No scored audit exists yet for this vendor.' : undefined}>
+                            {typeof score === 'number' ? score : '—'}
                           </div>
                           <ChevronRight className={`w-4 h-4 text-[var(--spr-text-muted)] transition-transform ${isSelected ? 'translate-x-0.5 text-[var(--spr-highlight)]' : ''}`} />
                         </div>
@@ -554,7 +571,15 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
               <div>
                 <div className="text-[10px] font-mono text-[var(--spr-text-muted)] uppercase font-bold">Avg Reputation score</div>
                 <div className="text-sm font-bold text-[var(--spr-text)]">
-                  {vendors.length === 0 ? '—' : `${Math.round(vendors.reduce((acc, v) => acc + (v.reputationScore ?? v.overallTrustScore), 0) / vendors.length)}/100`}
+                  {(() => {
+                    // Unassessed vendors (null score) must not be counted as 0
+                    // in this average -- that would silently drag a fleet's
+                    // reputation average down for vendors nobody has actually
+                    // audited yet, the exact fabrication this view otherwise
+                    // avoids elsewhere on this page.
+                    const scored = vendors.map((v) => v.reputationScore ?? v.overallTrustScore).filter((s): s is number => typeof s === 'number');
+                    return scored.length === 0 ? '—' : `${Math.round(scored.reduce((acc, s) => acc + s, 0) / scored.length)}/100`;
+                  })()}
                 </div>
               </div>
             </div>

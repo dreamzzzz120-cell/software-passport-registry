@@ -487,7 +487,7 @@ export function generateCoBrandedTrustReport(
     const metrics = [
       { label: 'CLIENT TRUST SCORE', val: scoreDisplay(client.trustScore), sub: riskDisplay(client.riskLevel), color: [107, 114, 128] },
       { label: 'ACTIVE PASSPORTS', val: `${client.softwareInventory.length} Active`, sub: 'Evidence status per record', color: [rgb.r, rgb.g, rgb.b] },
-      { label: 'PATCHED VULNS (CVE)', val: `${patchedCvesCount} Patched`, sub: 'Remediated past 30 days', color: [16, 185, 129] },
+      { label: 'PATCHED VULNS (CVE)', val: `${patchedCvesCount} Patched`, sub: 'Currently marked resolved or mitigated', color: [16, 185, 129] },
       { label: 'UNRESOLVED ALERTS', val: `${client.criticalRisksCount}`, sub: client.criticalRisksCount > 0 ? 'Action Required' : 'Guarded', color: client.criticalRisksCount > 0 ? [239, 68, 68] : [16, 185, 129] },
     ];
 

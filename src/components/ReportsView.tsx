@@ -279,7 +279,14 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
   const generateWhiteLabelReport = () => {
     const client = clients.find((item) => item.id === whiteLabelClientId);
     if (!client || !mspName.trim()) return;
-    generateCoBrandedTrustReport(client, mspName.trim(), brandColor, reportTitle, 0, executiveSummary, logoBase64, sections.summary, sections.metrics, sections.inventory, sections.compliance, sections.signatures);
+    // Real count of this client's vulnerabilities currently marked resolved or
+    // mitigated. There is no resolution-date field in the data model, so this
+    // cannot honestly claim a "past 30 days" window -- see the label fix in
+    // pdfGenerator.ts. A hardcoded 0 here previously made every report claim
+    // zero patches regardless of the client's actual remediation history.
+    const clientPassports = passports.filter((passport) => String((passport as any).clientId || '') === client.id);
+    const patchedCvesCount = clientPassports.reduce((total, passport) => total + (passport.vulnerabilities || []).filter((v: any) => v.status === 'Resolved' || v.status === 'Mitigated').length, 0);
+    generateCoBrandedTrustReport(client, mspName.trim(), brandColor, reportTitle, patchedCvesCount, executiveSummary, logoBase64, sections.summary, sections.metrics, sections.inventory, sections.compliance, sections.signatures);
   };
 
   const reportText = useMemo(() => {
