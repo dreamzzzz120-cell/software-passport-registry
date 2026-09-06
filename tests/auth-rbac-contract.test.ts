@@ -56,8 +56,11 @@ describe('SPR authentication/RBAC/database release contracts', () => {
     expect(auth).toContain("router.get('/founder/metrics'");
     expect(auth).toContain("requireRole('Owner')");
     expect(auth).toContain("router.get('/passports/self-passport'");
-    expect(auth).toContain('req.user!.tenantId');
-    expect(auth).toContain("healthStatus: 'Not verified'");
+    expect(auth).toContain('requireFounder');
+    // healthStatus is derived from the same three real checks /ready uses
+    // (database, tenant RLS, least-privilege runtime role) -- never a
+    // hardcoded literal, and never fabricated as "Healthy" without evidence.
+    expect(auth).toContain("database.ok && rlsOk === true && leastPrivilege ? 'Healthy' : 'Not verified'");
     expect(auth).toContain('overallScore: null');
   });
 });
