@@ -289,7 +289,7 @@ export default function ClientsView({
                 <div className="bg-[var(--spr-surface-sunken)] p-2.5 rounded-md border border-[var(--spr-border)] ">
                   <p className="text-[8px] text-[var(--spr-text-muted)] font-mono font-bold uppercase">Trust Score</p>
                   <p className="text-base font-bold font-mono text-[var(--spr-text)] mt-0.5">
-                    {c.trustScore}<span className="text-[10px] text-[var(--spr-text-muted)] ">/100</span>
+                    {typeof c.trustScore === 'number' ? <>{c.trustScore}<span className="text-[10px] text-[var(--spr-text-muted)] ">/100</span></> : c.trustScore}
                   </p>
                 </div>
                 <div className="bg-[var(--spr-surface-sunken)] p-2.5 rounded-md border border-[var(--spr-border)] ">
@@ -298,7 +298,7 @@ export default function ClientsView({
                 </div>
                 <div className="bg-[var(--spr-surface-sunken)] p-2.5 rounded-md border border-[var(--spr-border)] ">
                   <p className="text-[8px] text-[var(--spr-text-muted)] font-mono font-bold uppercase">Compliance</p>
-                  <p className="text-base font-bold font-mono text-[var(--spr-text)] mt-0.5">{c.complianceProgress}%</p>
+                  <p className="text-base font-bold font-mono text-[var(--spr-text)] mt-0.5">{typeof c.complianceProgress === 'number' ? `${c.complianceProgress}%` : c.complianceProgress}</p>
                 </div>
               </div>
 
@@ -471,7 +471,7 @@ export default function ClientsView({
                         </div>
                         <div className="bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] p-4 rounded-md text-center">
                           <p className="text-[9px] text-[var(--spr-text-muted)] font-mono font-bold uppercase">Compliance Score</p>
-                          <p className="text-2xl font-display font-extrabold font-mono text-[var(--spr-text)] mt-1">{client.complianceProgress}%</p>
+                          <p className="text-2xl font-display font-extrabold font-mono text-[var(--spr-text)] mt-1">{typeof client.complianceProgress === 'number' ? `${client.complianceProgress}%` : client.complianceProgress}</p>
                           <span className="text-[9px] text-[var(--spr-text-muted)] font-mono">Client record</span>
                         </div>
                         <div className="bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] p-4 rounded-md text-center">
