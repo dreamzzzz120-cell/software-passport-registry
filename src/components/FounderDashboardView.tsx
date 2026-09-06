@@ -8,10 +8,10 @@ interface FounderDashboardViewProps {
 }
 
 interface FounderMetrics {
-  latency: string;
+  latency: number | null;
   capitalProtected: string;
-  throughput: string;
-  mitigations: string;
+  throughput: number;
+  mitigations: number;
   overallScore?: number;
   auditEvents?: number;
   activeThreats?: number;
