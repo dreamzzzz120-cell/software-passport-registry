@@ -36,7 +36,11 @@ export function createTrafficRouter() {
       return res.status(202).json({ accepted: true });
     } catch (error) {
       console.error('[SPR] traffic event failed', { error: error instanceof Error ? error.message : String(error), ipHash });
-      return res.status(202).json({ accepted: false });
+      // Do not report a failed write as accepted. The client may be using
+      // sendBeacon, so there is no response handler to recover a swallowed
+      // failure; a 5xx keeps the contract truthful for fetch/probes and makes
+      // production monitoring alertable instead of silently recording zero.
+      return res.status(503).json({ error: { code: 'TRAFFIC_STORAGE_UNAVAILABLE', message: 'Traffic telemetry is temporarily unavailable.' } });
     }
   });
 
