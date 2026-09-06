@@ -503,11 +503,15 @@ export function createAuthRouter() {
     }
   });
 
-  // Owner-only self-passport retrieval. Absence of evidence is represented as
-  // a 404 instead of a fabricated passport or trust score.
-  router.get('/passports/self-passport', requireAuth, requireRole('Owner'), async (req: AuthenticatedRequest, res, next) => {
+  // Owner-only self-passport retrieval. SPR's self-passport is a single
+  // platform-level record (id: passport_spr_self) -- it is NOT tenant data,
+  // so it is intentionally read via the unscoped `db` connection rather than
+  // req.db's tenant-scoped/RLS connection. Scoping this by req.user.tenantId
+  // previously caused false 404s for any Owner account other than whichever
+  // tenant happened to be first ever created. Absence of evidence is
+  // represented as a 404 instead of a fabricated passport or trust score.
+  router.get('/passports/self-passport', requireAuth, requireRole('Owner'), requireFounder, async (req: AuthenticatedRequest, res, next) => {
     try {
-      const db = req.db!;
       const result = await db.execute(sql`
         SELECT
           id,
@@ -517,8 +521,7 @@ export function createAuthRouter() {
           release_date AS "releaseDate",
           evidence
         FROM passports
-        WHERE tenant_id = ${req.user!.tenantId}
-        ORDER BY release_date DESC NULLS LAST, id DESC
+        WHERE id = 'passport_spr_self'
         LIMIT 1
       `);
       const row = (result as any).rows?.[0];
