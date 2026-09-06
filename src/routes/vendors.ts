@@ -125,8 +125,6 @@ export function createVendorsRouter() {
       `) as any).rows?.[0];
       if (!vendor) return res.status(404).json({ error: 'VENDOR_NOT_FOUND' });
 
-      const delta = parsed.data.status === 'Passed' ? 3 : parsed.data.status === 'Failed' ? -10 : 0;
-      const newScore = Math.min(100, Math.max(0, vendor.reputationScore + delta));
       const now = new Date().toISOString();
       const auditId = newId('vendoraudit');
 
@@ -136,15 +134,39 @@ export function createVendorsRouter() {
         RETURNING id, audit_type AS "auditType", status, details, auditor, reference_hash AS "referenceHash", created_at AS "createdAt"
       `) as any).rows?.[0];
 
-      const updatedVendor = (await db.execute(sql`
-        UPDATE vendors SET reputation_score = ${newScore}, overall_trust_score = ${newScore},
-          risk_tier = ${riskTierFor(newScore)}, last_audit_date = ${now}, updated_at = ${now}
-        WHERE id = ${vendorId} AND tenant_id = ${tenantId}
-        RETURNING id, name, category, website, locations, review_status AS "reviewStatus", risk_tier AS "riskTier",
-          reputation_score AS "reputationScore", overall_trust_score AS "overallTrustScore",
-          active_passports_count AS "activePassportsCount", security_incidents_count AS "securityIncidentsCount",
-          last_audit_date AS "lastAuditDate"
-      `) as any).rows?.[0];
+      // 'Under Review' carries no score evidence -- leave reputation_score,
+      // overall_trust_score and risk_tier exactly as they are, including
+      // remaining unset/null for a vendor with no prior scored audit. Only
+      // 'Passed'/'Failed' are real evidence and move the score. A vendor
+      // with no prior score (never audited, or backfilled to null by
+      // migration 0071) starts from the same neutral 70 baseline this has
+      // always used ONCE real evidence exists -- the fix is that a vendor
+      // with zero audits no longer shows a score at all, not a change to
+      // how the score behaves once evidence exists.
+      let updatedVendor;
+      if (parsed.data.status === 'Under Review') {
+        updatedVendor = (await db.execute(sql`
+          UPDATE vendors SET last_audit_date = ${now}, updated_at = ${now}
+          WHERE id = ${vendorId} AND tenant_id = ${tenantId}
+          RETURNING id, name, category, website, locations, review_status AS "reviewStatus", risk_tier AS "riskTier",
+            reputation_score AS "reputationScore", overall_trust_score AS "overallTrustScore",
+            active_passports_count AS "activePassportsCount", security_incidents_count AS "securityIncidentsCount",
+            last_audit_date AS "lastAuditDate"
+        `) as any).rows?.[0];
+      } else {
+        const priorScore = vendor.reputationScore ?? 70;
+        const delta = parsed.data.status === 'Passed' ? 3 : -10;
+        const newScore = Math.min(100, Math.max(0, priorScore + delta));
+        updatedVendor = (await db.execute(sql`
+          UPDATE vendors SET reputation_score = ${newScore}, overall_trust_score = ${newScore},
+            risk_tier = ${riskTierFor(newScore)}, last_audit_date = ${now}, updated_at = ${now}
+          WHERE id = ${vendorId} AND tenant_id = ${tenantId}
+          RETURNING id, name, category, website, locations, review_status AS "reviewStatus", risk_tier AS "riskTier",
+            reputation_score AS "reputationScore", overall_trust_score AS "overallTrustScore",
+            active_passports_count AS "activePassportsCount", security_incidents_count AS "securityIncidentsCount",
+            last_audit_date AS "lastAuditDate"
+        `) as any).rows?.[0];
+      }
 
       res.status(201).json({ vendor: publicVendor(updatedVendor), audit: publicAudit(auditRow) });
     } catch (error) { next(error); }

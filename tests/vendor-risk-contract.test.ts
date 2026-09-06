@@ -56,12 +56,36 @@ describe('vendors routes', () => {
   it('recalculates reputation/trust/tier server-side from a real delta rule instead of trusting a client-supplied score', () => {
     const s = source();
     expect(s).not.toMatch(/reputationScore:\s*z\./);
-    expect(s).toContain("const delta = parsed.data.status === 'Passed' ? 3 : parsed.data.status === 'Failed' ? -10 : 0;");
-    expect(s).toContain('Math.min(100, Math.max(0, vendor.reputationScore + delta))');
+    // 'Under Review' carries no score evidence and must not write a score at
+    // all -- not even a same-value write, since that would convert an
+    // unaudited vendor's null/unassessed score into a concrete number.
+    expect(s).toContain("if (parsed.data.status === 'Under Review') {");
+    expect(s).toContain("const delta = parsed.data.status === 'Passed' ? 3 : -10;");
+    // A vendor with no prior scored audit (reputationScore null) must not
+    // have delta applied to null directly -- that coerces to 0 in JS and
+    // would produce a fabricated score with zero real evidence behind it.
+    expect(s).toContain('const priorScore = vendor.reputationScore ?? 70;');
+    expect(s).toContain('Math.min(100, Math.max(0, priorScore + delta))');
   });
 
   it('404s an audit lodged against a vendor id that does not belong to the caller\'s tenant', () => {
     expect(source()).toContain("if (!vendor) return res.status(404).json({ error: 'VENDOR_NOT_FOUND' });");
+  });
+
+  // A new vendor with zero audits previously defaulted to reputation_score
+  // and overall_trust_score = 70 -- a specific, quantified "Fair" trust
+  // rating asserted before a single piece of evidence existed for that
+  // vendor. Fixed in migration 0071. This regression test statically
+  // guards against either default silently returning.
+  it('vendor score columns carry no fabricated default -- a vendor with zero audits has no score at all', () => {
+    const schema = read('src/db/schema.ts');
+    expect(schema).not.toContain("reputationScore: integer('reputation_score').notNull().default(70)");
+    expect(schema).not.toContain("overallTrustScore: integer('overall_trust_score').notNull().default(70)");
+    expect(schema).toContain("reputationScore: integer('reputation_score'),");
+    expect(schema).toContain("overallTrustScore: integer('overall_trust_score'),");
+    const migration = read('migrations/0071_vendor_score_no_fabricated_baseline.sql');
+    expect(migration).toContain('ALTER TABLE vendors ALTER COLUMN reputation_score DROP DEFAULT');
+    expect(migration).toContain('ALTER TABLE vendors ALTER COLUMN reputation_score DROP NOT NULL');
   });
 });
 

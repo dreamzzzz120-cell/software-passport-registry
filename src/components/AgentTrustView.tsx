@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Bot } from 'lucide-react';
 
 const tools = [
@@ -15,12 +15,18 @@ export default function AgentTrustView() {
   const [passport, setPassport] = useState('');
   const [claim, setClaim] = useState('');
   const [copied, setCopied] = useState(false);
+  // The endpoint below is real code, but it only responds if
+  // SPR_MCP_BEARER_TOKEN is configured server-side -- otherwise every request
+  // to it 404s. Check real status rather than presenting it as always live.
+  const [mcpAvailable, setMcpAvailable] = useState<boolean | null>(null);
+  useEffect(() => { let cancelled = false; fetch('/health').then(r => r.json()).then(d => { if (!cancelled) setMcpAvailable(Boolean(d?.mcpAvailable)); }).catch(() => { if (!cancelled) setMcpAvailable(false); }); return () => { cancelled = true; }; }, []);
   const endpoint = useMemo(() => `${window.location.origin}/mcp`, []);
   const example = useMemo(() => JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'verify_software', arguments: { passport: passport || 'YOUR_SIGNED_PASSPORT' } } }, null, 2), [passport]);
   const copy = async (value: string) => { await navigator.clipboard.writeText(value); setCopied(true); window.setTimeout(() => setCopied(false), 1500); };
 
   return <div className="mx-auto max-w-6xl space-y-6">
     <div><div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.25em] text-[#9cdcfe]"><Bot className="h-4 w-4" /> AI TRUST LAYER</div><h1 className="mt-2 text-3xl font-bold">Agent Trust API</h1><p className="mt-2 max-w-3xl text-[var(--spr-text-muted)]">Let MCP-compatible AI agents verify software against SPR evidence instead of relying on unsupported AI claims.</p></div>
+    {mcpAvailable === false && <div className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 p-4 text-sm text-[var(--spr-red)]">This endpoint is not currently enabled on this server. Requests to it will fail until it is configured.</div>}
     <div className="grid gap-4 md:grid-cols-3">
       <div className="spr-panel p-5"><div className="text-sm text-[var(--spr-green)]">Transport</div><div className="mt-2 text-xl font-semibold">MCP / JSON-RPC</div><div className="mt-1 text-xs text-[var(--spr-text-muted)]">Read-only agent surface</div></div>
       <div className="spr-panel p-5"><div className="text-sm text-[var(--spr-highlight)]">Endpoint</div><div className="mt-2 break-all text-sm font-mono">{endpoint}</div><button onClick={() => void copy(endpoint)} className="spr-btn spr-btn-secondary mt-3 !py-1.5 !px-3 !text-xs">{copied ? 'Copied' : 'Copy endpoint'}</button></div>

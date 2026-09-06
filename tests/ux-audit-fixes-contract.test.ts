@@ -53,6 +53,9 @@ describe('SPR live-audit bug-fix contracts', () => {
 
   it('never divides by zero into a literal NaN when the vendor list is empty', () => {
     const view = read('src/components/VendorsView.tsx');
-    expect(view).toContain("vendors.length === 0 ? '—' :");
+    // Guards on scored.length now, not vendors.length -- stricter, since a
+    // non-empty vendor list where none have a real scored audit yet must
+    // also show '—' rather than averaging in fabricated/null scores.
+    expect(view).toContain("scored.length === 0 ? '—' :");
   });
 });
