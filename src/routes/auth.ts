@@ -480,18 +480,33 @@ export function createAuthRouter() {
         SELECT
           (SELECT COUNT(*)::int FROM clients WHERE tenant_id = ${req.user!.tenantId}) AS "clientCount",
           (SELECT COUNT(*)::int FROM passports WHERE tenant_id = ${req.user!.tenantId}) AS "passportCount",
-          (SELECT COUNT(*)::int FROM scans WHERE tenant_id = ${req.user!.tenantId}) AS "scanCount"
+          (SELECT COUNT(*)::int FROM scans WHERE tenant_id = ${req.user!.tenantId}) AS "scanCount",
+          (SELECT COUNT(*)::int FROM alerts WHERE tenant_id = ${req.user!.tenantId} AND resolved_at IS NOT NULL) AS "resolvedAlertCount"
       `);
       const row = (counts as any).rows?.[0] || {};
+      // systemIntegrity uses the same three real checks /ready and the
+      // self-passport endpoint use (database, tenant RLS, least-privilege
+      // runtime role). mitigations and throughput are real observed counts.
+      // overallScore ("Autonomy Score") and capitalProtected have no defined
+      // methodology or schema field anywhere in this codebase -- inventing a
+      // formula for either would be exactly the fabrication this platform's
+      // evidence model exists to prevent, so both stay honestly unverified.
+      const database = await checkDatabaseHealth();
+      let rlsOk: boolean | null = null;
+      if (database.ok) { try { await db.execute(sql`SELECT spr_assert_tenant_rls()`); rlsOk = true; } catch { rlsOk = false; } }
+      let runtimeRole: string | null = null;
+      if (database.ok) { try { const scoped = await appPool.query('SELECT current_user AS role'); runtimeRole = scoped.rows?.[0]?.role ?? null; } catch { runtimeRole = null; } }
+      const leastPrivilege = runtimeRole === 'spr_app_runtime';
+      const systemIntegrity = database.ok && rlsOk === true && leastPrivilege ? 'Healthy' : 'Not verified';
       return res.json({
-        latency: 'Not verified',
+        latency: database.ok ? database.latencyMs : null,
         capitalProtected: 'Not verified',
-        throughput: 'Not verified',
-        mitigations: 'Not verified',
+        throughput: Number(row.scanCount || 0),
+        mitigations: Number(row.resolvedAlertCount || 0),
         overallScore: null,
         auditEvents: null,
         activeThreats: null,
-        systemIntegrity: 'Not verified',
+        systemIntegrity,
         observed: {
           clientCount: Number(row.clientCount || 0),
           passportCount: Number(row.passportCount || 0),
