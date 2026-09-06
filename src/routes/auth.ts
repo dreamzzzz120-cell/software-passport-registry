@@ -11,7 +11,7 @@ import { z } from 'zod';
 import { users } from '../db/schema.ts';
 import { db } from '../db/index.ts';
 import { attachTenantScope } from '../middleware/tenant-scope.ts';
-import { AuthenticatedRequest, requireAuth, requireRole } from '../middleware/security.ts';
+import { AuthenticatedRequest, requireAuth, requireRole, requireFounder } from '../middleware/security.ts';
 import { adminAuth, setUserCustomClaims } from '../lib/firebase-admin.ts';
 import { appendAuditEntry, verifyAuditChain } from '../security/audit-log.ts';
 import { describeUserAgent, sessionFingerprint } from '../security/session-tracking.ts';
@@ -473,7 +473,7 @@ export function createAuthRouter() {
   // Owner-only founder metrics. Every value is either observed from tenant
   // data or explicitly reported as not verified; this endpoint never invents
   // production health, security, financial, or performance telemetry.
-  router.get('/founder/metrics', requireAuth, requireRole('Owner'), async (req: AuthenticatedRequest, res, next) => {
+  router.get('/founder/metrics', requireAuth, requireRole('Owner'), requireFounder, async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
       const counts = await db.execute(sql`
