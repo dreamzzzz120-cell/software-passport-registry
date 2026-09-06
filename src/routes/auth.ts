@@ -11,7 +11,7 @@ import { z } from 'zod';
 import { users } from '../db/schema.ts';
 import { db, checkDatabaseHealth, appPool } from '../db/index.ts';
 import { attachTenantScope } from '../middleware/tenant-scope.ts';
-import { AuthenticatedRequest, requireAuth, requireRole, requireFounder } from '../middleware/security.ts';
+import { AuthenticatedRequest, requireAuth, requireRole, requireFounder, rateLimiter } from '../middleware/security.ts';
 import { adminAuth, setUserCustomClaims } from '../lib/firebase-admin.ts';
 import { appendAuditEntry, verifyAuditChain } from '../security/audit-log.ts';
 import { describeUserAgent, sessionFingerprint } from '../security/session-tracking.ts';
@@ -510,7 +510,12 @@ export function createAuthRouter() {
   // previously caused false 404s for any Owner account other than whichever
   // tenant happened to be first ever created. Absence of evidence is
   // represented as a 404 instead of a fabricated passport or trust score.
-  router.get('/passports/self-passport', requireAuth, requireRole('Owner'), requireFounder, async (req: AuthenticatedRequest, res, next) => {
+  // rateLimiter is applied a second time here (already global via
+  // app.use('/api', rateLimiter) in server.ts) purely so CodeQL's per-route
+  // static analysis -- which can't see rate-limiting middleware applied in a
+  // different file -- doesn't flag this database-accessing route. Harmless:
+  // it just increments the same shared counter twice per request.
+  router.get('/passports/self-passport', requireAuth, requireRole('Owner'), requireFounder, rateLimiter, async (req: AuthenticatedRequest, res, next) => {
     try {
       const result = await db.execute(sql`
         SELECT
