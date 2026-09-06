@@ -15,13 +15,19 @@ interface FetchOptions extends RequestInit {
 /**
  * Client-directory presentation normalization.
  *
- * The clients table historically uses numeric zero defaults for trust and
- * compliance. For a genuinely empty client (no passports and no inventory),
- * those zeros mean "not assessed", not "failed". Keep this translation at
- * the first-party API boundary so existing numeric score calculations are
- * untouched everywhere else in SPR.
- *
- * A real zero is preserved whenever the client has software/passport evidence.
+ * clients.trust_score and clients.compliance_progress are NOT NULL integer
+ * columns that default to 0 -- and nothing in this codebase ever computes or
+ * writes either one to anything else, for any client, regardless of how much
+ * software/passport evidence that client has (verified by searching every
+ * route and worker for an UPDATE touching either column: there is none).
+ * A previous version of this normalization only converted 0 -> 'Not
+ * assessed' for a client with zero registered software, on the assumption
+ * that a client WITH software would have a real computed score. That
+ * assumption doesn't hold: a client with fifty passports still shows exactly
+ * 0, indistinguishable from having failed an assessment. Every 0 on either
+ * field is "never assessed", full stop, so both are normalized
+ * unconditionally -- matching src/utils/pdfGenerator.ts's scoreDisplay/
+ * assessmentDisplay, which already treat value > 0 as the only real signal.
  */
 const normalizeClientDirectoryResponse = async (response: Response): Promise<Response> => {
   if (!response.ok) return response;
@@ -39,28 +45,12 @@ const normalizeClientDirectoryResponse = async (response: Response): Promise<Res
   const normalized = payload.map((client: any) => {
     if (!client || typeof client !== 'object') return client;
 
-    const inventory = Array.isArray(client.softwareInventory)
-      ? client.softwareInventory
-      : (() => {
-          try {
-            return typeof client.softwareInventory === 'string'
-              ? JSON.parse(client.softwareInventory)
-              : [];
-          } catch {
-            return [];
-          }
-        })();
-
-    const passportCount = Number(client.passportCount ?? 0);
-    const isUnassessed = passportCount === 0 && Array.isArray(inventory) && inventory.length === 0;
-    if (!isUnassessed) return client;
-
     const next = { ...client };
-    if (next.trustScore === 0) {
+    if (Number(next.trustScore) === 0) {
       next.trustScore = 'Not assessed';
       changed = true;
     }
-    if (next.complianceProgress === 0) {
+    if (Number(next.complianceProgress) === 0) {
       next.complianceProgress = 'Not assessed';
       changed = true;
     }

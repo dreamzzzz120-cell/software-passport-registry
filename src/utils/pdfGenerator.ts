@@ -20,7 +20,7 @@ import { Client, SoftwarePassport, EvidenceItem, Vulnerability } from '../types'
  * weighting, and never upgrade a value: an unassessed field reads as NOT
  * ASSESSED, and a real value is still shown if one is ever computed.
  */
-export function scoreDisplay(score: number | null | undefined): string {
+export function scoreDisplay(score: number | 'Not assessed' | null | undefined): string {
   const value = Number(score);
   return Number.isFinite(value) && value > 0 ? `${value}/100` : 'NOT ASSESSED';
 }
@@ -33,7 +33,7 @@ export function riskDisplay(riskLevel: string | null | undefined): string {
   return `${value} (self-reported, not verified)`;
 }
 
-export function assessmentDisplay(progress: number | null | undefined): string {
+export function assessmentDisplay(progress: number | 'Not assessed' | null | undefined): string {
   const value = Number(progress);
   return Number.isFinite(value) && value > 0 ? `${value}%` : 'NOT ASSESSED';
 }
