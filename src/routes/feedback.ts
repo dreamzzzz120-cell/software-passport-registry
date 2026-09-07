@@ -12,7 +12,7 @@ import { Router } from 'express';
 import { sql } from 'drizzle-orm';
 import crypto from 'node:crypto';
 import { z } from 'zod';
-import { AuthenticatedRequest, requireAuth } from '../middleware/security.ts';
+import { AuthenticatedRequest, requireAuth, rateLimiter } from '../middleware/security.ts';
 
 const feedbackSchema = z.object({
   sentiment: z.enum(['like', 'dislike', 'neutral']).default('neutral'),
@@ -24,7 +24,10 @@ const feedbackSchema = z.object({
 export function createFeedbackRouter() {
   const router = Router();
 
-  router.post('/feedback', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  // rateLimiter is applied a second time here (already global via
+  // app.use('/api', rateLimiter) in server.ts) purely so CodeQL's per-route
+  // static analysis recognizes this authorized route as rate-limited.
+  router.post('/feedback', requireAuth, rateLimiter, async (req: AuthenticatedRequest, res, next) => {
     const parsed = feedbackSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Invalid request body', details: parsed.error.flatten() });
     try {
@@ -45,7 +48,7 @@ export function createFeedbackRouter() {
   // A user's own tenant can see what's been submitted so far (e.g. an Admin
   // reviewing what their team has flagged) -- not cross-tenant, that's the
   // founder-only route.
-  router.get('/feedback', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  router.get('/feedback', requireAuth, rateLimiter, async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
       const result = await db.execute(sql`

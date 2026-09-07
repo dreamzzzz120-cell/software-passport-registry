@@ -19,7 +19,7 @@
 import { Router } from 'express';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { AuthenticatedRequest, requireAuth, requireRole, requireFounder } from '../middleware/security.ts';
+import { AuthenticatedRequest, requireAuth, requireRole, requireFounder, rateLimiter } from '../middleware/security.ts';
 import { db } from '../db/index.ts';
 import {
   checkRailway,
@@ -85,7 +85,10 @@ export function createFounderCommandCenterRouter() {
   // that tenant's earliest Owner-role user the same way ensureInitialSelfPassport
   // does. A tenant with no Owner row yet (mid-signup) shows holder as null
   // rather than fabricating one.
-  router.get('/founder/passports', requireAuth, requireRole('Owner'), requireFounder, async (_req: AuthenticatedRequest, res, next) => {
+  // rateLimiter is applied a second time here (already global via
+  // app.use('/api', rateLimiter) in server.ts) purely so CodeQL's per-route
+  // static analysis recognizes this authorized route as rate-limited.
+  router.get('/founder/passports', requireAuth, requireRole('Owner'), requireFounder, rateLimiter, async (_req: AuthenticatedRequest, res, next) => {
     try {
       const result = await db.execute(sql`
         SELECT
@@ -119,7 +122,7 @@ export function createFounderCommandCenterRouter() {
   // Platform-wide feedback inbox: every like/dislike/bug/complaint/suggestion
   // from every tenant, newest first. Uses the plain `db` import for the same
   // reason the passport registry does above -- deliberately cross-tenant.
-  router.get('/founder/feedback', requireAuth, requireRole('Owner'), requireFounder, async (_req: AuthenticatedRequest, res, next) => {
+  router.get('/founder/feedback', requireAuth, requireRole('Owner'), requireFounder, rateLimiter, async (_req: AuthenticatedRequest, res, next) => {
     try {
       const result = await db.execute(sql`
         SELECT f.id, f.tenant_id AS "tenantId", f.sentiment, f.category, f.page, f.message, f.status, f.created_at AS "createdAt",
@@ -136,7 +139,7 @@ export function createFounderCommandCenterRouter() {
   });
 
   const feedbackStatusSchema = z.object({ status: z.enum(['new', 'seen', 'resolved', 'dismissed']) }).strict();
-  router.patch('/founder/feedback/:id', requireAuth, requireRole('Owner'), requireFounder, async (req: AuthenticatedRequest, res, next) => {
+  router.patch('/founder/feedback/:id', requireAuth, requireRole('Owner'), requireFounder, rateLimiter, async (req: AuthenticatedRequest, res, next) => {
     const parsed = feedbackStatusSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Invalid request body', details: parsed.error.flatten() });
     try {
