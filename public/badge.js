@@ -4,8 +4,8 @@
  * Usage (the signed URL is generated for the MSP in-app; it is not guessable
  * and it is not derived from a slug):
  *
- *   <script src="https://softwarepassportregistry.com/badge.js"
- *           data-passport-url="https://softwarepassportregistry.com/badge/v1/<id>/<token>"></script>
+ *   <script src="https://www.softwarepassportregistry.com/badge.js"
+ *           data-passport-url="https://www.softwarepassportregistry.com/badge/v1/<id>/<token>"></script>
  *
  * Renders inline at the exact point the <script> tag sits in the page.
  * No dependencies, no cookies, no tracking beyond the single GET below.
@@ -15,7 +15,10 @@
   // to whatever host served it -- a custom MSP domain, a CDN alias or staging
   // all work without a rebuild. This constant is only the fallback for the
   // case where the script element carries no usable src.
-  var DEFAULT_ORIGIN = 'https://softwarepassportregistry.com';
+  // www, not the apex: the apex 308-redirects to www, and a cross-origin
+  // fetch that has to follow a redirect needs CORS on both hops. Embeds
+  // should name the same host in both attributes.
+  var DEFAULT_ORIGIN = 'https://www.softwarepassportregistry.com';
   var API_ORIGIN = DEFAULT_ORIGIN;
   var selfOrigin = null;
   var FETCH_TIMEOUT_MS = 8000;
