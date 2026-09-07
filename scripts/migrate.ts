@@ -8,6 +8,7 @@
  */
 
 import { Pool, PoolClient } from 'pg';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -16,6 +17,17 @@ interface MigrationRecord {
   description: string;
   executed_at: string;
   execution_duration_ms: number | null;
+}
+
+interface MigrationRunResult {
+  success: boolean;
+  executed: number;
+  skipped: number;
+  errors: string[];
+  /** Tables the migrations create that are absent from the database. */
+  missingTables: string[];
+  /** Canonical hash of the live schema, or null if the check could not run. */
+  schemaFingerprint: string | null;
 }
 
 interface MigrationFile {
@@ -80,7 +92,7 @@ export class MigrationRunner {
     return duration;
   }
 
-  async runPendingMigrations(): Promise<{ success: boolean; executed: number; skipped: number; errors: string[] }> {
+  async runPendingMigrations(): Promise<MigrationRunResult> {
     const client = await this.pool.connect();
     const errors: string[] = [];
     let executed = 0;
@@ -114,7 +126,25 @@ export class MigrationRunner {
         this.log(`Schema drift audit could not run: ${error instanceof Error ? error.message : String(error)}`, 'warn');
         return [] as string[];
       });
-      return { success: errors.length === 0, executed, skipped: Math.max(0, completed.size - executed), errors, missingTables };
+      const fingerprint = await this.schemaFingerprint(client).catch((error) => {
+        this.log(`Schema fingerprint could not run: ${error instanceof Error ? error.message : String(error)}`, 'warn');
+        return null;
+      });
+      // Per-table hashes go to the log, not the JSON result, so a diff can
+      // localise drift to a single table without making the release output
+      // unreadable. SCHEMA_FINGERPRINT_DETAIL=false silences them.
+      if (fingerprint && process.env.SCHEMA_FINGERPRINT_DETAIL !== 'false') {
+        const lines = Object.entries(fingerprint.tables).map(([table, hash]) => `  ${table} ${hash}`);
+        console.log(`[schema-fingerprint] ${Object.keys(fingerprint.tables).length} tables\n${lines.join('\n')}`);
+      }
+      return {
+        success: errors.length === 0,
+        executed,
+        skipped: Math.max(0, completed.size - executed),
+        errors,
+        missingTables,
+        schemaFingerprint: fingerprint?.overall ?? null,
+      };
     } finally {
       if (lockHeld) await client.query('SELECT pg_advisory_unlock($1)', [MIGRATION_ADVISORY_LOCK]).catch(() => undefined);
       client.release();
@@ -168,6 +198,93 @@ export class MigrationRunner {
       );
     }
     return missing;
+  }
+
+  /**
+   * Canonical fingerprint of the live schema, per table and overall.
+   *
+   * Table existence is a weak guarantee: a table can be present while a column,
+   * index, constraint, or -- most importantly here -- an RLS policy is not.
+   * This product's tenant isolation is enforced by row-level security, so a
+   * missing FORCE ROW LEVEL SECURITY or a dropped policy is a data-exposure
+   * bug that the table-existence check would happily call healthy.
+   *
+   * The fingerprint covers, per table: columns (name, type, nullability,
+   * default), constraints (primary key, foreign key, unique, check), indexes,
+   * whether RLS is enabled and forced, and every policy including its USING
+   * and WITH CHECK expressions.
+   *
+   * Production cannot know the expected value, so this reports rather than
+   * judges. Comparing a release log against the fingerprint of a database
+   * freshly built from the same migrations turns "the tables are all there"
+   * into "the schema is equivalent", and a per-table hash says exactly which
+   * table diverged.
+   */
+  async schemaFingerprint(client: PoolClient): Promise<{ overall: string; tables: Record<string, string> }> {
+    const parts = new Map<string, string[]>();
+    const add = (table: string, line: string) => {
+      const key = String(table).toLowerCase();
+      const bucket = parts.get(key);
+      if (bucket) bucket.push(line);
+      else parts.set(key, [line]);
+    };
+
+    const columns = await client.query(
+      `SELECT table_name, column_name, data_type, is_nullable, coalesce(column_default, '') AS column_default
+         FROM information_schema.columns
+        WHERE table_schema = current_schema()
+        ORDER BY table_name, column_name`
+    );
+    for (const r of columns.rows as Array<Record<string, string>>) {
+      add(r.table_name, `col ${r.column_name} ${r.data_type} null=${r.is_nullable} default=${r.column_default}`);
+    }
+
+    const constraints = await client.query(
+      `SELECT c.conrelid::regclass::text AS table_name, c.conname, pg_get_constraintdef(c.oid) AS def
+         FROM pg_constraint c
+         JOIN pg_class t ON t.oid = c.conrelid
+         JOIN pg_namespace n ON n.oid = t.relnamespace
+        WHERE n.nspname = current_schema()
+        ORDER BY 1, 2`
+    );
+    for (const r of constraints.rows as Array<Record<string, string>>) {
+      add(r.table_name.replace(/^.*\./, '').replace(/"/g, ''), `con ${r.conname} ${r.def}`);
+    }
+
+    const indexes = await client.query(
+      `SELECT tablename, indexname, indexdef FROM pg_indexes WHERE schemaname = current_schema() ORDER BY 1, 2`
+    );
+    for (const r of indexes.rows as Array<Record<string, string>>) {
+      add(r.tablename, `idx ${r.indexname} ${r.indexdef}`);
+    }
+
+    const rls = await client.query(
+      `SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity
+         FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = current_schema() AND c.relkind = 'r'
+        ORDER BY 1`
+    );
+    for (const r of rls.rows as Array<Record<string, unknown>>) {
+      add(String(r.relname), `rls enabled=${r.relrowsecurity} forced=${r.relforcerowsecurity}`);
+    }
+
+    const policies = await client.query(
+      `SELECT tablename, policyname, permissive, roles::text AS roles, cmd,
+              coalesce(qual, '') AS qual, coalesce(with_check, '') AS with_check
+         FROM pg_policies WHERE schemaname = current_schema() ORDER BY 1, 2`
+    );
+    for (const r of policies.rows as Array<Record<string, string>>) {
+      add(r.tablename, `pol ${r.policyname} ${r.permissive} ${r.roles} ${r.cmd} using=${r.qual} check=${r.with_check}`);
+    }
+
+    const tables: Record<string, string> = {};
+    for (const [table, lines] of [...parts.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+      tables[table] = createHash('sha256').update(lines.sort().join('\n'), 'utf8').digest('hex').slice(0, 16);
+    }
+    const overall = createHash('sha256')
+      .update(Object.entries(tables).map(([t, h]) => `${t}:${h}`).join('\n'), 'utf8')
+      .digest('hex');
+    return { overall, tables };
   }
 
   async getMigrationStatus(): Promise<MigrationRecord[]> {
