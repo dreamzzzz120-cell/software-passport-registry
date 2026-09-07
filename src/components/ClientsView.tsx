@@ -137,6 +137,15 @@ export default function ClientsView({
     .map(passport => passport.securityScore)
     .filter((score): score is number => typeof score === 'number' && Number.isFinite(score));
 
+  // vendorReputationScore is real column data shipped on every passport
+  // (src/routes/connect.ts, src/routes/commercial.ts) -- the exact same
+  // shape securityScores already averages two lines above. There was no
+  // reason for this one to be a permanent 'Not verified' literal while its
+  // sibling metric was computed from real evidence.
+  const supplierReputationScores = clientPassports
+    .map(passport => passport.vendorReputationScore)
+    .filter((score): score is number => typeof score === 'number' && Number.isFinite(score));
+
   // Filter clients list based on search and industry/risk selectors
   const filteredClients = useMemo(() => {
     return clients.filter(c => {
@@ -477,9 +486,9 @@ export default function ClientsView({
                         <div className="bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] p-4 rounded-md text-center">
                           <p className="text-[9px] text-[var(--spr-text-muted)] font-mono font-bold uppercase">Supplier Rep</p>
                           <p className="text-2xl font-display font-extrabold font-mono text-[var(--spr-text)] mt-1">
-                            { 'Not verified'}
+                            {supplierReputationScores.length > 0 ? Math.round(supplierReputationScores.reduce((sum, score) => sum + score, 0) / supplierReputationScores.length) : 'Not verified'}
                           </p>
-                          <span className="text-[9px] text-[var(--spr-text-muted)] font-mono">No vendor score observed</span>
+                          <span className="text-[9px] text-[var(--spr-text-muted)] font-mono">{supplierReputationScores.length > 0 ? 'Passport-derived' : 'No vendor score observed'}</span>
                         </div>
                       </div>
                     </div>
@@ -693,7 +702,6 @@ export default function ClientsView({
                               <span>{member.email}</span>
                               <ExternalLink className="w-3.5 h-3.5" />
                             </a>
-                            <span className="text-[9px] font-mono text-[var(--spr-text-muted)] mt-1 block">Privileges: Authorized Auditor</span>
                           </div>
                         </div>
                       ))}
