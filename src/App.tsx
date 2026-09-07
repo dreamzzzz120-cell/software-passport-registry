@@ -181,6 +181,9 @@ export default function App() {
   const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState('Viewer');
+  // Platform-operator identity, from the server's FOUNDER_EMAILS allowlist.
+  // Never inferred from `role`: Owner is per-tenant and every customer has one.
+  const [isFounder, setIsFounder] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState('');
   const [selectedPassportId, setSelectedPassportId] = useState<string | null>(null);
   const [assets, setAssets] = useState<any[]>([]);
@@ -318,7 +321,7 @@ export default function App() {
         return;
       }
       const [me, scansResponse, findingsResponse, passportsResponse, clientsResponse, integrationsResponse, vendorsResponse] = responses;
-      if (me.ok) { const data = await me.json().catch(() => null); if (!cancelled) setRole(String(data?.role || 'Viewer')); }
+      if (me.ok) { const data = await me.json().catch(() => null); if (!cancelled) { setRole(String(data?.role || 'Viewer')); setIsFounder(data?.isFounder === true); } }
       if (scansResponse.ok) { const data = await scansResponse.json().catch(() => []); if (!cancelled && Array.isArray(data)) setScans(data); }
       if (findingsResponse.ok) { const data = await findingsResponse.json().catch(() => []); const rows = Array.isArray(data) ? data : data?.findings; if (!cancelled && Array.isArray(rows)) { setFindings(rows); setAlerts(rows.map((row: any) => ({ id: String(row.id), title: String(row.title || row.control_id || 'Trust finding'), severity: String(row.severity || 'Low').replace(/^./, (s: string) => s.toUpperCase()), category: 'Trust finding', clientName: String(row.client_id || 'Tenant'), description: String(row.description || 'Evidence-backed finding'), timestamp: String(row.updated_at || ''), status: deriveAlertStatus(row.remediation_status, row.status), remediationId: row.remediation_id ? String(row.remediation_id) : null, ownerDisplay: row.remediation_owner_display || null, slaDueAt: row.remediation_sla_due_at || null })) as Alert[]); } }
       if (passportsResponse.ok) { const data = await passportsResponse.json().catch(() => []); const rows = Array.isArray(data) ? data : data?.passports; if (!cancelled && Array.isArray(rows)) { const normalized = rows.map((row: any) => ({ ...row, id: String(row.id), name: String(row.name || 'Unnamed software'), version: String(row.version || 'unknown'), publisher: String(row.publisher || 'unknown'), clientId: row.clientId ? String(row.clientId) : undefined, evidence: Array.isArray(row.evidence) ? row.evidence : [], vulnerabilities: Array.isArray(row.vulnerabilities) ? row.vulnerabilities : [], timeline: toJsonArrayColumn(row.timeline), sbom: toJsonArrayColumn(row.sbom), scores: null, scoreStatus: row.scoreStatus || 'not_authoritatively_scored' })) as SoftwarePassport[]; setPassports(normalized); setAssets(normalized.map((passport: any) => ({ id: passport.id, name: passport.name, hostName: passport.name, type: passport.category || 'software', clientId: passport.clientId, clientName: String(passport.clientId || 'Unobserved'), environment: String(passport.environment || 'Unobserved'), version: passport.version }))); } }
@@ -486,7 +489,12 @@ export default function App() {
     case '/ai-trust-center': view = <AITrustCenterView role={role} />; break;
     case '/enterprise-readiness': view = <EnterpriseReadinessView clients={clients} />; break;
     case '/investor': view = <InvestorHomeView passports={passports} clients={clients} alerts={alerts} onShowTelemetry={() => navigate('/scans')} onNavigateTab={onNavigateTab} />; break;
-    case '/founder': view = <FounderDashboardView userRole={role} />; break;
+    // Hiding the tile is not enough: the path is still typeable. A non-founder
+    // who navigates here gets the ordinary dashboard, not the founder shell.
+    case '/founder': view = isFounder
+      ? <FounderDashboardView userRole={role} />
+      : <WorkflowBoundary title="Workflow" description="This authenticated capability is explicitly routed through the Command Center. Choose its owning workflow from the left rail." onNavigate={navigate} />;
+      break;
     case '/billing': view = <BillingView />; break;
     case '/pricing': view = <MspPricingView isAuthenticated={true} onPrimaryAction={() => navigate('/billing')} />; break;
     case '/settings': view = <SettingsView theme={theme} onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} />; break;
@@ -501,7 +509,7 @@ export default function App() {
   }
 
   return (
-    <CommandCenter path={path} userEmail={user.email} role={role} onNavigate={navigate} onSignOut={() => void signOutUser()}>
+    <CommandCenter path={path} userEmail={user.email} role={role} isFounder={isFounder} onNavigate={navigate} onSignOut={() => void signOutUser()}>
       <ViewErrorBoundary routeKey={path}>{view}</ViewErrorBoundary>
     </CommandCenter>
   );
