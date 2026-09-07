@@ -16,6 +16,22 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 // are deliberately NOT retried: retrying those just digs the quota hole
 // deeper and delays the honest error the user needs to see.
 const sendVerificationWithRetry = async (user: User) => {
+  // Server first. It sends from our own domain via the email provider, where
+  // a failure is recorded; Firebase's built-in sender reports nothing, so a
+  // spam-filtered message is indistinguishable from a delivered one. The
+  // endpoint needs only a valid ID token -- not a provisioned SPR user row --
+  // which is what makes it usable here, on the signup path, where no such row
+  // exists yet. If no provider is configured it reports that and sends
+  // nothing, and we fall through to Firebase exactly as before.
+  try {
+    const response = await apiFetch('/api/auth/send-verification', { method: 'POST' });
+    if (response.ok) {
+      const data = await response.json().catch(() => null);
+      if (data?.sent === true) return;
+    }
+  } catch {
+    /* fall through to the Firebase sender */
+  }
   try {
     await sendEmailVerification(user);
   } catch (err: any) {
@@ -177,23 +193,10 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
     if (!currentUser || currentUser.emailVerified || resendCooldownRemaining > 0) return;
     setLoading(true); setError(''); setNotice('');
     try {
-      // Prefer the server path: it sends from our own domain through the
-      // notification outbox, which records delivery failures. Firebase's
-      // built-in sender reports nothing, so a filtered message looks exactly
-      // like a delivered one. If no email provider is configured the server
-      // says so and sends nothing, and we fall back to the Firebase path --
-      // identical to the previous behaviour.
-      let deliveredByServer = false;
-      try {
-        const response = await apiFetch('/api/auth/resend-verification', { method: 'POST' });
-        if (response.ok) {
-          const data = await response.json().catch(() => null);
-          deliveredByServer = data?.sent === true;
-        }
-      } catch {
-        deliveredByServer = false;
-      }
-      if (!deliveredByServer) await sendVerificationWithRetry(currentUser);
+      // sendVerificationWithRetry now tries the server itself, so every route
+      // that sends a verification link -- signup, sign-in while unverified,
+      // and this button -- goes through one path.
+      await sendVerificationWithRetry(currentUser);
       setNotice('A fresh verification email has been sent.');
     } catch (err: any) {
       setError(authMessage(err, 'Could not resend the verification email.'));
