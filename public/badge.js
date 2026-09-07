@@ -11,7 +11,13 @@
  * No dependencies, no cookies, no tracking beyond the single GET below.
  */
 (function () {
-  var API_ORIGIN = 'https://softwarepassportregistry.com';
+  // Resolved from this script's own src below, so the badge always calls back
+  // to whatever host served it -- a custom MSP domain, a CDN alias or staging
+  // all work without a rebuild. This constant is only the fallback for the
+  // case where the script element carries no usable src.
+  var DEFAULT_ORIGIN = 'https://softwarepassportregistry.com';
+  var API_ORIGIN = DEFAULT_ORIGIN;
+  var selfOrigin = null;
   var FETCH_TIMEOUT_MS = 8000;
 
   /**
@@ -58,8 +64,11 @@
     if (typeof value !== 'string' || !value) return null;
     try {
       var url = new URL(value, API_ORIGIN);
-      if (url.protocol !== 'https:') return null;
       if (url.origin !== API_ORIGIN) return null;
+      // The registry is https in every deployed environment. http is tolerated
+      // only when the script itself was served over http, which in practice
+      // means a developer running the app on localhost.
+      if (url.protocol !== 'https:' && url.origin !== selfOrigin) return null;
       return url.href;
     } catch (e) {
       return null;
@@ -163,6 +172,16 @@
     })();
 
   if (!thisScript || !thisScript.parentNode) return;
+
+  // Call back to whichever host served this script.
+  try {
+    if (thisScript.src) {
+      selfOrigin = new URL(thisScript.src, document.baseURI).origin;
+      API_ORIGIN = selfOrigin;
+    }
+  } catch (e) {
+    /* keep DEFAULT_ORIGIN */
+  }
 
   var badgeUrl = safeRegistryUrl(thisScript.getAttribute('data-passport-url'));
   if (!badgeUrl) return;
