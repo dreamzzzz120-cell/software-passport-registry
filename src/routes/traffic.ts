@@ -35,7 +35,22 @@ export function createTrafficRouter() {
       await db.execute(sql`INSERT INTO traffic_events (id, session_id, path, referrer, user_agent, country, device_type) VALUES (${randomUUID()}, ${sessionId}, ${path}, ${referrer ?? null}, ${userAgent}, ${countryFromRequest(req)}, ${deviceType})`);
       return res.status(202).json({ accepted: true });
     } catch (error) {
-      console.error('[SPR] traffic event failed', { error: error instanceof Error ? error.message : String(error), ipHash });
+      // Drizzle's message is only the failed SQL and its params; the real
+      // Postgres error (undefined_table, insufficient_privilege, an RLS
+      // denial) lives on .cause. Logging only the message left this route
+      // failing in production with nothing to diagnose it from, which defeats
+      // the point of answering 5xx below.
+      const cause = (error as { cause?: unknown })?.cause as
+        | { code?: string; message?: string; detail?: string; table?: string }
+        | undefined;
+      console.error('[SPR] traffic event failed', {
+        error: error instanceof Error ? error.message : String(error),
+        causeCode: cause?.code ?? null,
+        causeMessage: cause?.message ?? null,
+        causeDetail: cause?.detail ?? null,
+        causeTable: cause?.table ?? null,
+        ipHash,
+      });
       // Do not report a failed write as accepted. The client may be using
       // sendBeacon, so there is no response handler to recover a swallowed
       // failure; a 5xx keeps the contract truthful for fetch/probes and makes
