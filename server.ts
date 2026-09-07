@@ -18,6 +18,7 @@ import { createIntegrationsRouter } from './src/routes/integrations.ts';
 import { createLiveIntegrationsRouter } from './src/routes/integrations-live.ts';
 import { createMonitoringRouter } from './src/routes/monitoring.ts';
 import { createPublicConnectRouter } from './src/routes/public-connect.ts';
+import { createBadgeRouter } from './src/routes/badge.ts';
 import { createFreeReviewRouter } from './src/routes/free-review.ts';
 import { createScansRouter } from './src/routes/scans.ts';
 import { createComplianceRouter } from './src/routes/compliance.ts';
@@ -67,6 +68,13 @@ const corsOrigin = (origin: string | undefined, callback: (error: Error | null, 
 app.use(helmet({ contentSecurityPolicy: { useDefaults: false, directives: { defaultSrc: ["'self'"], baseUri: ["'self'"], objectSrc: ["'none'"], frameAncestors: ["'none'"], formAction: ["'self'"], scriptSrc: ["'self'", "'sha256-kWQT+628v4D1A4MJk9hTD6a0W1AdPlPKtzhPlYKIpZc='"], styleSrc: ["'self'", "'unsafe-inline'"], imgSrc: ["'self'", 'data:', 'blob:', 'https:'], fontSrc: ["'self'", 'data:', 'https:'], connectSrc, frameSrc: ["'self'", 'https:'], workerSrc: ["'self'", 'blob:'], manifestSrc: ["'self'"], upgradeInsecureRequests: [] } }, crossOriginEmbedderPolicy: false, frameguard: { action: 'deny' }, referrerPolicy: { policy: 'no-referrer' } }));
 const PERMISSIONS_POLICY = ['accelerometer=()', 'autoplay=()', 'bluetooth=()', 'camera=()', 'display-capture=()', 'encrypted-media=()', 'geolocation=()', 'gyroscope=()', 'magnetometer=()', 'microphone=()', 'midi=()', 'usb=()', 'serial=()', 'xr-spatial-tracking=()', 'fullscreen=(self)', 'payment=(self)'].join(', ');
 app.use((_req, res, next) => { res.setHeader('Permissions-Policy', PERMISSIONS_POLICY); next(); });
+// Mounted ahead of the app-wide cors() on purpose. That policy is an origin
+// allowlist with credentials: true and denies every origin it does not know,
+// which is correct for the app and fatal for a badge that is embedded on MSP
+// client domains we do not control. The badge router sets its own
+// Access-Control-Allow-Origin: * and is read-only, credential-free, and gated
+// on the same signed Passport token as /api/public/v1/.../trust/:token.
+app.use('/badge', rateLimiter, createBadgeRouter());
 app.use(cors({ origin: corsOrigin, credentials: true, methods: ['GET','HEAD','POST','PUT','PATCH','DELETE','OPTIONS'], allowedHeaders: ['Authorization','Content-Type','X-Request-ID','X-API-Key'] }));
 app.use((req, res, next) => { if (req.method === 'TRACE' || req.method === 'CONNECT') return res.status(405).json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'HTTP method is not allowed.' } }); if (req.headers['content-length'] && !/^\d+$/.test(String(req.headers['content-length']))) return res.status(400).json({ error: { code: 'INVALID_CONTENT_LENGTH', message: 'Invalid Content-Length header.' } }); return next(); });
 app.post('/api/billing/webhook', express.raw({ type: 'application/json', limit: requestBodyLimit }), stripeWebhookHandler);
