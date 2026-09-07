@@ -3,7 +3,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import { z } from 'zod';
 import { sql } from 'drizzle-orm';
 import { db } from '../db/index.ts';
-import { requireAuth, requireRole } from '../middleware/security.ts';
+import { requireAuth, requireRole, requireFounder, rateLimiter } from '../middleware/security.ts';
 
 const eventSchema = z.object({
   sessionId: z.string().regex(/^[A-Za-z0-9_-]{16,80}$/),
@@ -44,7 +44,13 @@ export function createTrafficRouter() {
     }
   });
 
-  router.get('/summary', requireAuth, requireRole(['Owner', 'Admin']), async (_req, res) => {
+  // Site-wide traffic across every tenant's marketing pages is platform
+  // business data, not this customer's data -- 'Owner' is a per-tenant role
+  // (every paying MSP customer has one), so requireRole alone let any
+  // customer's Owner/Admin pull cross-tenant analytics with no tenant filter
+  // at all. requireFounder restricts this to the platform operator, matching
+  // every other cross-tenant endpoint (/founder/metrics, /founder/passports).
+  router.get('/summary', requireAuth, requireRole(['Owner', 'Admin']), requireFounder, rateLimiter, async (_req, res) => {
     const result = await db.execute(sql`
       SELECT
         COUNT(*) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '30 minutes')::int AS active_events,
