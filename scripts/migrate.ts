@@ -109,11 +109,65 @@ export class MigrationRunner {
           break;
         }
       }
-      return { success: errors.length === 0, executed, skipped: Math.max(0, completed.size - executed), errors };
+      const missingTables = await this.auditSchemaDrift(client, migrations).catch((error) => {
+        // The audit must never be the reason a release fails.
+        this.log(`Schema drift audit could not run: ${error instanceof Error ? error.message : String(error)}`, 'warn');
+        return [] as string[];
+      });
+      return { success: errors.length === 0, executed, skipped: Math.max(0, completed.size - executed), errors, missingTables };
     } finally {
       if (lockHeld) await client.query('SELECT pg_advisory_unlock($1)', [MIGRATION_ADVISORY_LOCK]).catch(() => undefined);
       client.release();
     }
+  }
+
+  /**
+   * Read-only check that the schema actually contains what the migrations say
+   * they created.
+   *
+   * The ledger is not evidence. traffic_events was recorded as created by
+   * 0045 and reported "skipped" on every deploy, while the table did not exist
+   * in production -- the failure only surfaced as a 42P01 at request time, on
+   * a route that had been answering 503 site-wide. A runner that trusts its
+   * own ledger cannot detect that, so it verifies instead.
+   *
+   * This deliberately does NOT fail the release. The extent of any existing
+   * drift is unknown, and exiting non-zero here could block the very deploys
+   * that carry the repairs. It reports, loudly, in the release output. Once a
+   * clean run confirms no drift, flipping this to a hard failure is a one-line
+   * change and is the right end state.
+   */
+  async auditSchemaDrift(client: PoolClient, migrations: MigrationFile[]): Promise<string[]> {
+    const expected = new Set<string>();
+    // CREATE TABLE [IF NOT EXISTS] [schema.]name, quoted or bare.
+    const pattern = /create\s+table\s+(?:if\s+not\s+exists\s+)?(?:"?public"?\s*\.\s*)?"?([a-z_][a-z0-9_]*)"?/gi;
+    // Comments are stripped first: prose like "-- create table for X" in a
+    // migration header otherwise parses as a table named "for".
+    const stripComments = (sql: string) =>
+      sql.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/--[^\r\n]*/g, ' ');
+    for (const migration of migrations) {
+      for (const match of stripComments(migration.sql).matchAll(pattern)) {
+        if (match[1]) expected.add(match[1].toLowerCase());
+      }
+    }
+    if (expected.size === 0) return [];
+
+    const actual = new Set<string>();
+    const result = await client.query(
+      `SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema()`
+    );
+    for (const row of result.rows as Array<{ table_name: string }>) {
+      actual.add(String(row.table_name).toLowerCase());
+    }
+
+    const missing = [...expected].filter((table) => !actual.has(table)).sort();
+    if (missing.length) {
+      this.log(
+        `SCHEMA DRIFT: ${missing.length} table(s) created by migrations are absent from the database: ${missing.join(', ')}`,
+        'error'
+      );
+    }
+    return missing;
   }
 
   async getMigrationStatus(): Promise<MigrationRecord[]> {
