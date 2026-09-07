@@ -1,6 +1,7 @@
 import { useState, type Key, type ReactNode } from 'react';
 import { EXTENSIONS, type ExtensionDefinition } from '../workflows/extensionRegistry';
 import { AMBER, BLUE, CYAN, GREEN, ORANGE, PURPLE, RED, TEAL } from '../workflows/featureColors';
+import FeedbackWidget from './FeedbackWidget';
 
 type NavItem = { id: string; label: string; icon: string; path: string; color: string; desc: string };
 
@@ -234,6 +235,7 @@ export default function CommandCenter({ children, path, userEmail, role, onNavig
           <div className="mx-auto max-w-[1600px] p-4 md:p-6">{children}</div>
         </main>
       </div>
+      <FeedbackWidget currentPath={path} />
     </div>
   );
 }
