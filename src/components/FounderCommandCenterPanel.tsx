@@ -21,6 +21,19 @@ type CommandCenterData = {
   generatedAt: string;
 };
 type Task = { id: number; title: string; category: 'seo' | 'backlinks' | 'outreach' | 'infra' | 'general'; status: 'open' | 'in_progress' | 'done'; notes: string | null; due_date: string | null };
+type PassportRow = {
+  id: string;
+  tenantId: string;
+  name: string;
+  version: string;
+  publisher: string;
+  category: string;
+  overallScore: number | null;
+  verificationStatus: 'unverified' | 'partial' | 'verified';
+  releaseDate: string | null;
+  holderEmail: string | null;
+  holderCompany: string | null;
+};
 
 const DOT_CLASS: Record<Connection['status'], string> = {
   ok: 'spr-status-dot spr-status-dot--green',
@@ -35,6 +48,7 @@ function money(cents: number) {
 export default function FounderCommandCenterPanel() {
   const [data, setData] = useState<CommandCenterData | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [passports, setPassports] = useState<PassportRow[]>([]);
   const [visible, setVisible] = useState(false); // stays false (renders nothing) unless the founder-only fetch succeeds
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState<Task['category']>('general');
@@ -46,8 +60,11 @@ export default function FounderCommandCenterPanel() {
       const cc = await ccRes.json();
       const tasksRes = await apiFetch('/api/founder/tasks');
       const taskList = tasksRes.ok ? await tasksRes.json() : [];
+      const passportsRes = await apiFetch('/api/founder/passports');
+      const passportList = passportsRes.ok ? await passportsRes.json() : [];
       setData(cc);
       setTasks(taskList);
+      setPassports(passportList);
       setVisible(true);
     } catch {
       // Silent — this panel is a bonus for the founder, not core UI.
@@ -126,6 +143,54 @@ export default function FounderCommandCenterPanel() {
             <p className="mt-2 text-xl font-bold text-[var(--spr-text)]">{m.value}</p>
           </div>
         ))}
+      </div>
+
+      {/* Passport registry — every passport, every tenant, who holds it */}
+      <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-5">
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-[11px] uppercase tracking-[0.24em] font-semibold text-[var(--spr-text-muted)]">Passport Registry — All Tenants ({passports.length})</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="text-[10px] uppercase tracking-[0.18em] text-[var(--spr-text-muted)]">
+                <th className="pb-2 pr-3">Passport</th>
+                <th className="pb-2 pr-3">Holder</th>
+                <th className="pb-2 pr-3">Score</th>
+                <th className="pb-2 pr-3">Verification</th>
+                <th className="pb-2 pr-3">Released</th>
+              </tr>
+            </thead>
+            <tbody>
+              {passports.map((p) => (
+                <tr key={p.id} className="border-t border-[var(--spr-border)]">
+                  <td className="py-2 pr-3">
+                    <div className="font-medium text-[var(--spr-text)]">{p.name} <span className="text-[var(--spr-text-muted)]">v{p.version}</span></div>
+                    <div className="text-xs text-[var(--spr-text-muted)]">{p.publisher} · {p.category}</div>
+                  </td>
+                  <td className="py-2 pr-3">
+                    {p.holderEmail ? (
+                      <div>
+                        <div className="text-[var(--spr-text)]">{p.holderCompany || p.holderEmail}</div>
+                        {p.holderCompany && <div className="text-xs text-[var(--spr-text-muted)]">{p.holderEmail}</div>}
+                      </div>
+                    ) : (
+                      <span className="text-[var(--spr-text-muted)]">No Owner on tenant {p.tenantId}</span>
+                    )}
+                  </td>
+                  <td className="py-2 pr-3 text-[var(--spr-text)]">{p.overallScore ?? 'Not verified'}</td>
+                  <td className="py-2 pr-3">
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${p.verificationStatus === 'verified' ? 'bg-[var(--spr-green)]/15 text-[var(--spr-green)]' : p.verificationStatus === 'partial' ? 'bg-[var(--spr-amber)]/15 text-[var(--spr-amber)]' : 'bg-[var(--spr-text-muted)]/15 text-[var(--spr-text-muted)]'}`}>{p.verificationStatus}</span>
+                  </td>
+                  <td className="py-2 pr-3 text-[var(--spr-text-muted)]">{p.releaseDate || 'Not verified'}</td>
+                </tr>
+              ))}
+              {passports.length === 0 && (
+                <tr><td colSpan={5} className="py-4 text-center text-[var(--spr-text-muted)]">No passports issued yet.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Growth tasks */}

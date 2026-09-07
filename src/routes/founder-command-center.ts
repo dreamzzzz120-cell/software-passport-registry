@@ -77,6 +77,81 @@ export function createFounderCommandCenterRouter() {
     }
   });
 
+  // Platform-wide passport registry: every passport ever issued, across every
+  // tenant, with the tenant's Owner as the "holder". organizations/
+  // organization_memberships (migration 0049/0050) are NOT wired to tenant_id
+  // yet -- see 0050's own comment -- so the only authoritative link from a
+  // passport to a human is passports.tenant_id -> users.tenant_id, picking
+  // that tenant's earliest Owner-role user the same way ensureInitialSelfPassport
+  // does. A tenant with no Owner row yet (mid-signup) shows holder as null
+  // rather than fabricating one.
+  router.get('/founder/passports', requireAuth, requireRole('Owner'), requireFounder, async (_req: AuthenticatedRequest, res, next) => {
+    try {
+      const result = await db.execute(sql`
+        SELECT
+          p.id,
+          p.tenant_id AS "tenantId",
+          p.name,
+          p.version,
+          p.publisher,
+          p.category,
+          p.overall_score AS "overallScore",
+          p.verification_status AS "verificationStatus",
+          p.release_date AS "releaseDate",
+          holder.email AS "holderEmail",
+          holder.company_name AS "holderCompany"
+        FROM passports p
+        LEFT JOIN LATERAL (
+          SELECT email, company_name
+          FROM users
+          WHERE users.tenant_id = p.tenant_id AND users.role = 'Owner'
+          ORDER BY created_at ASC
+          LIMIT 1
+        ) holder ON true
+        ORDER BY p.release_date DESC NULLS LAST, p.id DESC
+      `);
+      return res.json((result as any).rows ?? []);
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  // Platform-wide feedback inbox: every like/dislike/bug/complaint/suggestion
+  // from every tenant, newest first. Uses the plain `db` import for the same
+  // reason the passport registry does above -- deliberately cross-tenant.
+  router.get('/founder/feedback', requireAuth, requireRole('Owner'), requireFounder, async (_req: AuthenticatedRequest, res, next) => {
+    try {
+      const result = await db.execute(sql`
+        SELECT f.id, f.tenant_id AS "tenantId", f.sentiment, f.category, f.page, f.message, f.status, f.created_at AS "createdAt",
+               u.email AS "submittedBy", u.company_name AS "submittedByCompany"
+        FROM user_feedback f
+        JOIN users u ON u.id = f.user_id
+        ORDER BY f.created_at DESC
+        LIMIT 500
+      `);
+      return res.json((result as any).rows ?? []);
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  const feedbackStatusSchema = z.object({ status: z.enum(['new', 'seen', 'resolved', 'dismissed']) }).strict();
+  router.patch('/founder/feedback/:id', requireAuth, requireRole('Owner'), requireFounder, async (req: AuthenticatedRequest, res, next) => {
+    const parsed = feedbackStatusSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Invalid request body', details: parsed.error.flatten() });
+    try {
+      const result = await db.execute(sql`
+        UPDATE user_feedback SET status = ${parsed.data.status} WHERE id = ${req.params.id}
+        RETURNING id, status
+      `);
+      const row = (result as any).rows?.[0];
+      if (!row) return res.status(404).json({ error: 'Feedback not found' });
+      return res.json(row);
+    } catch (error) {
+      return next(error);
+    }
+  });
+
   const taskSchema = z.object({
     title: z.string().trim().min(1).max(300),
     category: z.enum(['seo', 'backlinks', 'outreach', 'infra', 'general']).default('general'),
