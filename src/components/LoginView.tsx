@@ -8,6 +8,24 @@ import { apiFetch } from '../utils/apiClient';
 import { getTotpResolver, resolveTotpSignIn } from '../lib/mfa';
 
 interface LoginViewProps { onLoginSuccess: (user: { uid: string; email: string | null; displayName: string; token: string; emailVerified: boolean; onboarded: 0 }) => void; }
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Transient network hiccups are the most common reason sendEmailVerification
+// throws even though the account is fine -- one short-delay retry recovers
+// most of them without user action. Quota/abuse errors (too-many-requests)
+// are deliberately NOT retried: retrying those just digs the quota hole
+// deeper and delays the honest error the user needs to see.
+const sendVerificationWithRetry = async (user: User) => {
+  try {
+    await sendEmailVerification(user);
+  } catch (err: any) {
+    if (err?.code === 'auth/too-many-requests') throw err;
+    await sleep(1500);
+    await sendEmailVerification(user);
+  }
+};
+
+const RESEND_COOLDOWN_MS = 30_000;
 const STAGED_KEY = 'spr-universal-intake-v1';
 const authMessage = (error: any, fallback: string) => {
   switch (error?.code) {
@@ -31,6 +49,8 @@ const authMessage = (error: any, fallback: string) => {
 export default function LoginView({ onLoginSuccess }: LoginViewProps) {
   const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false); const [googleLoading, setGoogleLoading] = useState(false); const [error, setError] = useState(''); const [notice, setNotice] = useState('');
+  const [resendCooldownUntil, setResendCooldownUntil] = useState(0);
+  const [resendCooldownTick, setResendCooldownTick] = useState(0);
   const [stagedCount, setStagedCount] = useState(0); const [stagedRepo, setStagedRepo] = useState('');
   const [mfaResolver, setMfaResolver] = useState<ReturnType<typeof getTotpResolver>>(null);
   const [mfaCode, setMfaCode] = useState('');
@@ -55,7 +75,7 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
     if (!auth) throw new Error('Firebase authentication is not initialized.'); await reload(user);
     if (!user.emailVerified) {
       try {
-        await sendEmailVerification(user);
+        await sendVerificationWithRetry(user);
         setNotice('Verify your email before entering SPR. We sent a fresh verification email. Then sign in again.');
       } catch (err: any) {
         // Previously swallowed silently and claimed success either way --
@@ -127,7 +147,7 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
       endSignupTransition(); setLoading(false); return;
     }
     try {
-      await sendEmailVerification(created);
+      await sendVerificationWithRetry(created);
       await signOut(auth);
       setNotice('Account created. Check your email, verify it, then sign in. Your secure intake remains available for 24 hours.');
     } catch (err: any) {
@@ -141,7 +161,31 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
   };
   const google = async () => { if (loading || googleLoading || mfaLoading) return; if (!auth || !firebaseConfigured) { setError('Firebase browser configuration is missing. Add the VITE_FIREBASE_* Production variables in Vercel and redeploy.'); return; } setGoogleLoading(true); setError(''); setNotice('Opening secure Google sign-in…'); try { const result = await signInWithPopup(auth, googleAuthProvider); await complete(result.user); } catch (err: any) { if (handleMfaRequired(err)) { setGoogleLoading(false); return; } if (['auth/popup-blocked','auth/operation-not-supported-in-this-environment'].includes(err?.code)) { try { await signInWithRedirect(auth, googleAuthProvider); return; } catch (redirectError: any) { const message = authMessage(redirectError, 'Google sign-in failed.'); if (message) setError(message); else setNotice(''); setGoogleLoading(false); return; } } const message = authMessage(err, 'Google sign-in failed.'); if (message) setError(message); else setNotice(''); setGoogleLoading(false); } };
   const reset = async () => { if (!email.trim()) { setError('Enter your email first.'); return; } if (!auth || !firebaseConfigured) { setError('Firebase browser configuration is missing.'); return; } setLoading(true); setError(''); setNotice(''); try { await sendPasswordResetEmail(auth, email.trim().toLowerCase()); setNotice('Password reset email sent.'); } catch (err: any) { setError(authMessage(err, 'Could not send the reset email.')); } finally { setLoading(false); } };
-  const resendVerification = async () => { const currentUser = auth?.currentUser; if (!currentUser || currentUser.emailVerified) return; setLoading(true); setError(''); setNotice(''); try { await sendEmailVerification(currentUser); setNotice('A fresh verification email has been sent.'); } catch (err: any) { setError(authMessage(err, 'Could not resend the verification email.')); } finally { setLoading(false); } };
+  // Cooldown exists to protect the Firebase per-account email-send quota --
+  // spamming this button is the single easiest way to trigger the same
+  // auth/too-many-requests failure that made verification emails silently
+  // never arrive in the first place. It re-arms even on a failed send: a
+  // failure still consumed part of that quota.
+  const resendCooldownRemaining = Math.max(0, Math.ceil((resendCooldownUntil - Date.now()) / 1000));
+  useEffect(() => {
+    if (resendCooldownRemaining <= 0) return;
+    const timer = setInterval(() => setResendCooldownTick(t => t + 1), 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldownRemaining > 0]);
+  const resendVerification = async () => {
+    const currentUser = auth?.currentUser;
+    if (!currentUser || currentUser.emailVerified || resendCooldownRemaining > 0) return;
+    setLoading(true); setError(''); setNotice('');
+    try {
+      await sendVerificationWithRetry(currentUser);
+      setNotice('A fresh verification email has been sent.');
+    } catch (err: any) {
+      setError(authMessage(err, 'Could not resend the verification email.'));
+    } finally {
+      setResendCooldownUntil(Date.now() + RESEND_COOLDOWN_MS);
+      setLoading(false);
+    }
+  };
   const busy = loading || googleLoading || mfaLoading;
 
   if (mfaResolver) return <div className="min-h-screen flex items-center justify-center bg-[var(--spr-surface)] p-6 text-[var(--spr-text)]"><div className="w-full max-w-md space-y-5 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-7 shadow-2xl"><div className="text-center"><div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-[var(--spr-highlight)]/40 bg-[var(--spr-accent-soft)]"><KeyRound className="h-8 w-8 text-[var(--spr-highlight)]" /></div><h1 className="mt-5 text-2xl font-semibold">Verify your identity</h1><p className="mt-2 text-sm text-[var(--spr-text-muted)]">Open your authenticator app and enter the current 6-digit code.</p></div><label className="block text-sm font-semibold">Authenticator code<input autoFocus inputMode="numeric" autoComplete="one-time-code" maxLength={6} pattern="[0-9]{6}" value={mfaCode} onChange={e => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))} className="mt-2 w-full rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-4 py-4 text-center text-2xl tracking-[.45em] text-[var(--spr-text)] outline-none focus:border-[var(--spr-highlight)]/40" /></label>{error && <div role="alert" className="rounded-xl border border-red-400/20 bg-red-400/10 p-3 text-sm text-red-200"><AlertCircle className="mr-2 inline h-4 w-4" />{error}</div>}<button type="button" disabled={mfaLoading || mfaCode.length !== 6} onClick={submitMfa} className="w-full rounded-xl bg-[var(--spr-accent)] px-4 py-3.5 font-bold text-white disabled:opacity-50">{mfaLoading ? <Loader className="mx-auto h-5 w-5 animate-spin" /> : <>Verify and continue <ArrowRight className="ml-1 inline h-4 w-4" /></>}</button><button type="button" disabled={mfaLoading} onClick={() => { setMfaResolver(null); setMfaCode(''); setError(''); setNotice(''); }} className="w-full rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-4 py-3 text-sm font-semibold">Cancel sign-in</button></div></div>;
@@ -156,7 +200,7 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
     <button type="submit" disabled={busy} className="w-full rounded-xl bg-[var(--spr-accent)] px-4 py-3.5 font-bold text-white disabled:opacity-50">{loading ? <Loader className="mx-auto h-5 w-5 animate-spin" /> : <>Sign in <ArrowRight className="ml-1 inline h-4 w-4" /></>}</button>
     <button type="button" disabled={busy} onClick={register} className="w-full rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] px-4 py-3 font-semibold"><ShieldCheck className="mr-2 inline h-4 w-4" />Create account</button>
     <button type="button" disabled={busy} onClick={google} className="w-full rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-4 py-3 font-semibold">{googleLoading ? <Loader className="mx-auto h-5 w-5 animate-spin" /> : 'Continue with Google'}</button>
-    <div className="flex justify-between text-xs"><button type="button" disabled={busy} onClick={reset} className="text-[var(--spr-highlight)]">Forgot password?</button><button type="button" disabled={busy} onClick={resendVerification} className="text-[var(--spr-text-muted)]">Resend verification</button></div>
+    <div className="flex justify-between text-xs"><button type="button" disabled={busy} onClick={reset} className="text-[var(--spr-highlight)]">Forgot password?</button><button type="button" disabled={busy || resendCooldownRemaining > 0} onClick={resendVerification} className="text-[var(--spr-text-muted)]">{resendCooldownRemaining > 0 ? `Resend verification (${resendCooldownRemaining}s)` : 'Resend verification'}</button></div>
     <div className="flex justify-center gap-4 border-t border-[var(--spr-border)] pt-4 text-[11px] text-[var(--spr-text-faint)]"><a href="/terms">Terms of Service</a><a href="/privacy">Privacy Policy</a></div>
   </form></div>;
 }
