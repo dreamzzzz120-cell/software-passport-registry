@@ -50,6 +50,33 @@ export async function appendAuditEntry(
 }
 
 /**
+ * Same hash chain as appendAuditEntry, for the worker execution context.
+ * Workers (osv-worker.ts, trust-monitoring-worker.ts, etc.) hold a plain
+ * pg.Pool from createWorkerPool() -- there is no per-request ScopedDb with a
+ * drizzle sql`` tag out there, and no HTTP request to derive an actor
+ * identity from. Reuses the exact same computeHash/canonicalTimestamp so a
+ * chain that has entries from both an HTTP request and a background worker
+ * verifies identically either way.
+ */
+export async function appendAuditEntryViaPool(
+  pool: { query: (text: string, values?: unknown[]) => Promise<{ rows: any[] }> },
+  params: { tenantId: string; action: string; actor: string; payload: Record<string, unknown> },
+) {
+  const timestamp = new Date().toISOString();
+  const payloadJson = JSON.stringify(params.payload ?? {});
+  const last = await pool.query(
+    'SELECT current_hash AS "currentHash" FROM audit_trail WHERE tenant_id = $1 ORDER BY id DESC LIMIT 1',
+    [params.tenantId],
+  );
+  const previousHash = last.rows?.[0]?.currentHash ?? AUDIT_TRAIL_GENESIS_HASH;
+  const currentHash = computeHash(params.action, timestamp, params.actor, payloadJson, previousHash);
+  await pool.query(
+    'INSERT INTO audit_trail (tenant_id, action, timestamp, actor, payload, previous_hash, current_hash) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+    [params.tenantId, params.action, timestamp, params.actor, payloadJson, previousHash, currentHash],
+  );
+}
+
+/**
  * Recomputes every block in order and checks both stored hash and predecessor linkage.
  * Never throws for ordinary integrity failures: callers receive a deterministic INVALID result.
  */
