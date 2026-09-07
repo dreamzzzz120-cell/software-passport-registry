@@ -924,5 +924,57 @@ export function createAuthRouter() {
     return res.json({ verified: req.user!.emailVerified, emailVerified: req.user!.emailVerified });
   });
 
+  /**
+   * Send the email-verification link from our own domain.
+   *
+   * The client SDK's sendEmailVerification() posts from Firebase's shared
+   * noreply@<project>.firebaseapp.com. That address has no SPF or DKIM
+   * alignment with softwarepassportregistry.com, and Firebase surfaces no
+   * bounce or delivery record, so a filtered message is indistinguishable from
+   * a delivered one. That is the reported cause of verification mail not
+   * arriving, and it is invisible from inside the product.
+   *
+   * When an email provider is configured, the link is generated with the Admin
+   * SDK and handed to notification_outbox, which already carries retry,
+   * backoff, provider_message_id and last_error, and sends from our own
+   * domain -- so a failure is recorded rather than silently absorbed.
+   *
+   * When no provider is configured this says so plainly and sends nothing, and
+   * the client falls back to the existing Firebase path. Behaviour is
+   * therefore unchanged until RESEND_API_KEY and EMAIL_FROM are set; this
+   * endpoint cannot make delivery worse than it is today.
+   *
+   * BILLING_EXEMPT_PATHS already listed /api/auth/resend-verification before
+   * this existed: a user who cannot verify their email must not be blocked
+   * from verifying it by a billing state.
+   */
+  router.post('/auth/resend-verification', requireAuth, rateLimiter, async (req: AuthenticatedRequest, res, next) => {
+    try {
+      if (req.user!.emailVerified) return res.json({ sent: false, via: 'already-verified' });
+
+      const providerConfigured = Boolean(process.env.RESEND_API_KEY?.trim() && process.env.EMAIL_FROM?.trim());
+      const email = req.user!.email?.trim();
+      if (!providerConfigured || !email) return res.json({ sent: false, via: 'firebase' });
+
+      const link = await adminAuth.generateEmailVerificationLink(email);
+      const body = [
+        'Confirm your email address to finish setting up Software Passport Registry.',
+        '',
+        link,
+        '',
+        'If you did not create this account, ignore this message and nothing further will happen.',
+      ].join('\n');
+
+      await req.db!.execute(sql`
+        INSERT INTO notification_outbox (id, tenant_id, channel, destination, subject, body)
+        VALUES (${`verify_${crypto.randomUUID()}`}, ${req.user!.tenantId}, 'email', ${email},
+                ${'Confirm your Software Passport Registry email'}, ${body})
+      `);
+      return res.json({ sent: true, via: 'provider' });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
   return router;
 }
