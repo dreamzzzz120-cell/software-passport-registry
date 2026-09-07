@@ -5,10 +5,18 @@ import { collectGitHubDeepEvidence } from '../integrations/github-deep.ts';
 import { decryptCredentials } from '../integrations/credential-vault.ts';
 import { persistTrustLoop, verifyRemediation, ControlObservation } from '../trust/trust-loop.ts';
 import { safeNetworkFetch } from '../utils/monitoring.ts';
+import { createWorkerPool } from './worker-db.ts';
 
 const PROVIDERS=new Set(['github','gitlab','bitbucket','azure-devops','jira','confluence','slack','microsoft-365','aws','azure','google-cloud','connectwise','autotask','ninjaone','hudu']);
 function id(p:string){return`${p}_${crypto.randomUUID().replaceAll('-','')}`;}
-function pool(){return new Pool(process.env.DATABASE_URL?{connectionString:process.env.DATABASE_URL}:{host:process.env.SQL_HOST,user:process.env.SQL_USER,password:process.env.SQL_PASSWORD,database:process.env.SQL_DB_NAME});}
+// Was previously its own ad-hoc connection reading DATABASE_URL directly --
+// the owner/superuser connection string, which bypasses Postgres RLS
+// unconditionally regardless of FORCE ROW LEVEL SECURITY. Every other worker
+// in this codebase goes through createWorkerPool(), which prefers the
+// least-privileged spr_worker_runtime role via WORKER_DATABASE_URL. This
+// worker now does the same, so its queries get the same RLS backstop as
+// every other worker's, on top of the explicit tenant_id filters below.
+function pool(){return createWorkerPool();}
 
 async function scheduleDue(p:Pool){
   const now=new Date().toISOString();
@@ -18,7 +26,7 @@ async function scheduleDue(p:Pool){
     const key=`${cfg.id}:${window}`;
     await p.query(`INSERT INTO collector_jobs (id,tenant_id,client_id,asset_id,passport_id,monitoring_configuration_id,collector_id,collector_version,subject_type,subject_identifier,schedule_source,observation_window,idempotency_key,state,attempt_number,maximum_attempts,created_at,next_attempt_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'monitoring',$11,$12,'queued',0,3,$13,$13) ON CONFLICT (idempotency_key) DO NOTHING`,[id('collector-job'),cfg.tenant_id,cfg.client_id,cfg.asset_id,cfg.passport_id,cfg.id,cfg.collector_id,'deep-v2',cfg.subject_type,cfg.subject_identifier,window,key,now]);
     const next=new Date(Date.now()+Math.max(900,cfg.schedule_seconds)*1000).toISOString();
-    await p.query(`UPDATE monitoring_configurations SET last_attempted_at=$2,next_scheduled_at=$3,updated_at=$2 WHERE id=$1`,[cfg.id,now,next]);
+    await p.query(`UPDATE monitoring_configurations SET last_attempted_at=$2,next_scheduled_at=$3,updated_at=$2 WHERE id=$1 AND tenant_id=$4`,[cfg.id,now,next,cfg.tenant_id]);
   }
   return due.rowCount;
 }
@@ -42,11 +50,11 @@ export async function resolveRemediationVerification(p:Pool,job:any,succeeded:bo
   const task=taskRow.rows[0];
   if(!task)return;
   if(!succeeded){
-    await p.query(`UPDATE trust_remediation_work_items SET status='VERIFICATION_FAILED',verification_failure_reason=$2 WHERE id=$1`,[task.id,String(failureReason||'COLLECTOR_FAILED').slice(0,500)]);
+    await p.query(`UPDATE trust_remediation_work_items SET status='VERIFICATION_FAILED',verification_failure_reason=$2 WHERE id=$1 AND tenant_id=$3`,[task.id,String(failureReason||'COLLECTOR_FAILED').slice(0,500),job.tenant_id]);
     await recordTaskTransition(p,job.tenant_id,task.id,task.status,'VERIFICATION_FAILED');
     return;
   }
-  await p.query(`UPDATE trust_remediation_work_items SET status='VERIFYING' WHERE id=$1`,[task.id]);
+  await p.query(`UPDATE trust_remediation_work_items SET status='VERIFYING' WHERE id=$1 AND tenant_id=$2`,[task.id,job.tenant_id]);
   await recordTaskTransition(p,job.tenant_id,task.id,task.status,'VERIFYING');
   try{
     const observationRow=await p.query(`SELECT id FROM trust_observations WHERE tenant_id=$1 AND passport_id=$2 ORDER BY observation_version DESC LIMIT 1`,[job.tenant_id,job.passport_id]);
@@ -54,14 +62,14 @@ export async function resolveRemediationVerification(p:Pool,job:any,succeeded:bo
     if(!observationId)throw new Error('NO_OBSERVATION_PRODUCED');
     if(!result?.evidenceIds?.length)throw new Error('NO_EVIDENCE_PRODUCED');
     const verification=await verifyRemediation({tenantId:job.tenant_id,findingId:task.finding_id,evidenceIds:result.evidenceIds,observationIds:[observationId]});
-    await p.query(`UPDATE trust_remediation_work_items SET status='VERIFIED',verified_at=$2,verification_result=$3 WHERE id=$1`,[task.id,new Date().toISOString(),JSON.stringify(verification)]);
+    await p.query(`UPDATE trust_remediation_work_items SET status='VERIFIED',verified_at=$2,verification_result=$3 WHERE id=$1 AND tenant_id=$4`,[task.id,new Date().toISOString(),JSON.stringify(verification),job.tenant_id]);
     await recordTaskTransition(p,job.tenant_id,task.id,'VERIFYING','VERIFIED');
   }catch(verifyError:any){
-    await p.query(`UPDATE trust_remediation_work_items SET status='VERIFICATION_FAILED',verification_failure_reason=$2 WHERE id=$1`,[task.id,String(verifyError?.message||verifyError).slice(0,500)]);
+    await p.query(`UPDATE trust_remediation_work_items SET status='VERIFICATION_FAILED',verification_failure_reason=$2 WHERE id=$1 AND tenant_id=$3`,[task.id,String(verifyError?.message||verifyError).slice(0,500),job.tenant_id]);
     await recordTaskTransition(p,job.tenant_id,task.id,'VERIFYING','VERIFICATION_FAILED');
   }
 }
-async function complete(p:Pool,job:any,observations:ControlObservation[]){const result=await persistTrustLoop({tenantId:job.tenant_id,passportId:job.passport_id,clientId:job.client_id,assetId:job.asset_id,observations,generationReason:'scheduled_collection',actorType:'worker',collectorVersionMap:{[job.collector_id]:job.collector_version}});const now=new Date().toISOString();await p.query(`UPDATE collector_jobs SET state='succeeded',safe_error_code=NULL,safe_error_message=NULL,lease_owner=NULL,lease_expires_at=NULL,heartbeat_at=NULL,completed_at=$2 WHERE id=$1`,[job.id,now]);await p.query(`UPDATE monitoring_configurations SET last_successful_at=$2,last_status=$3,failure_count=0,consecutive_failure_count=0,updated_at=$2 WHERE id=$1`,[job.monitoring_configuration_id,now,observations.some(o=>o.status==='FAIL')?'fail':'pass']);await p.query(`INSERT INTO collector_results (id,tenant_id,client_id,asset_id,passport_id,job_id,collector_id,collector_version,subject_type,subject_identifier,status,started_at,completed_at,evidence_ids,finding_ids,verification_methods,limitations) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'succeeded',$11,$12,$13,$14,$15,$16) ON CONFLICT DO NOTHING`,[id('collector-result'),job.tenant_id,job.client_id,job.asset_id,job.passport_id,job.id,job.collector_id,job.collector_version,job.subject_type,job.subject_identifier,job.started_at,now,JSON.stringify(result.evidenceIds),JSON.stringify(result.findings.map((f:any)=>f.id)),JSON.stringify(observations.map(o=>o.verificationMethod)),JSON.stringify(observations.map(o=>o.limitation).filter(Boolean))]);await resolveRemediationVerification(p,job,true,result);return result;}
-async function fail(p:Pool,job:any,error:any){const now=new Date().toISOString(),terminal=job.attempt_number>=job.maximum_attempts;await p.query(`UPDATE collector_jobs SET state=$2,safe_error_code=$3,safe_error_message=$4,lease_owner=NULL,lease_expires_at=NULL,heartbeat_at=NULL,completed_at=CASE WHEN $2='dead_lettered' THEN $5 ELSE completed_at END,next_attempt_at=($5::timestamptz+make_interval(secs=>LEAST(3600,30*POWER(2,attempt_number))))::text WHERE id=$1`,[job.id,terminal?'dead_lettered':'failed','COLLECTOR_EXECUTION_FAILED',String(error?.message||error).slice(0,500),now]);await p.query(`UPDATE monitoring_configurations SET failure_count=failure_count+1,consecutive_failure_count=consecutive_failure_count+1,last_status='failed',updated_at=$2 WHERE id=$1`,[job.monitoring_configuration_id,now]).catch(()=>undefined);if(terminal)await resolveRemediationVerification(p,job,false,null,String(error?.message||error)).catch(e=>console.error('REMEDIATION_VERIFICATION_RESOLVE_FAILED',e));}
+async function complete(p:Pool,job:any,observations:ControlObservation[]){const result=await persistTrustLoop({tenantId:job.tenant_id,passportId:job.passport_id,clientId:job.client_id,assetId:job.asset_id,observations,generationReason:'scheduled_collection',actorType:'worker',collectorVersionMap:{[job.collector_id]:job.collector_version}});const now=new Date().toISOString();await p.query(`UPDATE collector_jobs SET state='succeeded',safe_error_code=NULL,safe_error_message=NULL,lease_owner=NULL,lease_expires_at=NULL,heartbeat_at=NULL,completed_at=$2 WHERE id=$1 AND tenant_id=$3`,[job.id,now,job.tenant_id]);await p.query(`UPDATE monitoring_configurations SET last_successful_at=$2,last_status=$3,failure_count=0,consecutive_failure_count=0,updated_at=$2 WHERE id=$1 AND tenant_id=$4`,[job.monitoring_configuration_id,now,observations.some(o=>o.status==='FAIL')?'fail':'pass',job.tenant_id]);await p.query(`INSERT INTO collector_results (id,tenant_id,client_id,asset_id,passport_id,job_id,collector_id,collector_version,subject_type,subject_identifier,status,started_at,completed_at,evidence_ids,finding_ids,verification_methods,limitations) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'succeeded',$11,$12,$13,$14,$15,$16) ON CONFLICT DO NOTHING`,[id('collector-result'),job.tenant_id,job.client_id,job.asset_id,job.passport_id,job.id,job.collector_id,job.collector_version,job.subject_type,job.subject_identifier,job.started_at,now,JSON.stringify(result.evidenceIds),JSON.stringify(result.findings.map((f:any)=>f.id)),JSON.stringify(observations.map(o=>o.verificationMethod)),JSON.stringify(observations.map(o=>o.limitation).filter(Boolean))]);await resolveRemediationVerification(p,job,true,result);return result;}
+async function fail(p:Pool,job:any,error:any){const now=new Date().toISOString(),terminal=job.attempt_number>=job.maximum_attempts;await p.query(`UPDATE collector_jobs SET state=$2,safe_error_code=$3,safe_error_message=$4,lease_owner=NULL,lease_expires_at=NULL,heartbeat_at=NULL,completed_at=CASE WHEN $2='dead_lettered' THEN $5 ELSE completed_at END,next_attempt_at=($5::timestamptz+make_interval(secs=>LEAST(3600,30*POWER(2,attempt_number))))::text WHERE id=$1 AND tenant_id=$6`,[job.id,terminal?'dead_lettered':'failed','COLLECTOR_EXECUTION_FAILED',String(error?.message||error).slice(0,500),now,job.tenant_id]);await p.query(`UPDATE monitoring_configurations SET failure_count=failure_count+1,consecutive_failure_count=consecutive_failure_count+1,last_status='failed',updated_at=$2 WHERE id=$1 AND tenant_id=$3`,[job.monitoring_configuration_id,now,job.tenant_id]).catch(()=>undefined);if(terminal)await resolveRemediationVerification(p,job,false,null,String(error?.message||error)).catch(e=>console.error('REMEDIATION_VERIFICATION_RESOLVE_FAILED',e));}
 
 export async function runTrustMonitoringWorkerLoop(){const p=pool();let lastSchedule=0;for(;;){try{if(Date.now()-lastSchedule>=30000){await scheduleDue(p);lastSchedule=Date.now();}}catch(e){console.error('TRUST_SCHEDULER_ERROR',e);}const job=await claim(p);if(!job){await new Promise(r=>setTimeout(r,1500));continue;}try{const observations=await execute(p,job);await complete(p,job,observations);}catch(e){await fail(p,job,e);}}}
