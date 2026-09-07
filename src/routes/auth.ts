@@ -8,6 +8,7 @@ import crypto from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
+import { config } from '../config.ts';
 import { users } from '../db/schema.ts';
 import { db, checkDatabaseHealth, appPool } from '../db/index.ts';
 import { attachTenantScope } from '../middleware/tenant-scope.ts';
@@ -172,7 +173,14 @@ export function createAuthRouter() {
       }).from(users).where(eq(users.uid, req.user!.uid)).then(rows => rows[0]);
 
       if (!user) return res.status(403).json({ error: 'User account is not provisioned' });
-      return res.json({ ...user, emailVerified: req.user!.emailVerified });
+      // Derived from the same FOUNDER_EMAILS allowlist that requireFounder
+      // enforces with, so the navigation can never offer a surface the API
+      // will refuse. It is deliberately NOT the 'Owner' role: Owner is a
+      // per-tenant role that every paying MSP customer has.
+      const founderEmails = config.founder.emails;
+      const callerEmail = req.user!.email?.trim().toLowerCase();
+      const isFounder = founderEmails.length > 0 && Boolean(callerEmail) && founderEmails.includes(callerEmail!);
+      return res.json({ ...user, emailVerified: req.user!.emailVerified, isFounder });
     } catch (error) {
       return next(error);
     }

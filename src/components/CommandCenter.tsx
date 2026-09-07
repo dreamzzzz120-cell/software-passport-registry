@@ -106,11 +106,17 @@ function ExtensionButton({ extension, active, onNavigate }: ExtensionButtonProps
   );
 }
 
-export default function CommandCenter({ children, path, userEmail, role, onNavigate, onSignOut }: { children: ReactNode; path: string; userEmail?: string | null; role: string; onNavigate: (path: string) => void; onSignOut: () => void }) {
+export default function CommandCenter({ children, path, userEmail, role, isFounder = false, onNavigate, onSignOut }: { children: ReactNode; path: string; userEmail?: string | null; role: string; isFounder?: boolean; onNavigate: (path: string) => void; onSignOut: () => void }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const extensionActive = path.startsWith('/extensions/');
   const active = (candidate: string) => path === candidate || (candidate !== '/dashboard' && path.startsWith(`${candidate}/`));
-  const executiveItems = role === 'Owner' ? EXECUTIVE : EXECUTIVE.filter((item) => item.id !== 'founder');
+  // Gated on the server's FOUNDER_EMAILS allowlist, not on role. This used to
+  // read `role === 'Owner'`, but Owner is a per-tenant role that every paying
+  // MSP customer has, so every customer's Owner was shown a "Founder Dashboard"
+  // tile described as "Founder-only internal metrics and controls". The API
+  // already refused the data (requireFounder returns 403), so nothing leaked --
+  // but the tile advertised internal tooling to customers.
+  const executiveItems = isFounder ? EXECUTIVE : EXECUTIVE.filter((item) => item.id !== 'founder');
   const mobileItems = [...CORE, ...GOVERNANCE, ...executiveItems, ...SYSTEM, ...EXTENSIONS.map((extension) => ({ id: extension.id, label: extension.shortName, icon: 'EX', path: extension.entryPath }))];
   const currentItem = [...CORE, ...GOVERNANCE, ...executiveItems, ...SYSTEM].find((item) => active(item.path));
   const currentLabel = extensionActive ? 'Extension workflow' : currentItem?.label || 'Trust workspace';
