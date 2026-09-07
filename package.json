@@ -75,7 +75,7 @@
     "drizzle-kit": "^0.31.10",
     "esbuild": "^0.28.1",
     "tailwindcss": "^4.1.0",
-    "tsx": "^4.7.0",
+    "tsx": "^4.23.13",
     "typescript": "^7.0.2",
     "vitest": "^4.1.11"
   },
