@@ -53,7 +53,18 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
 
   const complete = async (user: User) => {
     if (!auth) throw new Error('Firebase authentication is not initialized.'); await reload(user);
-    if (!user.emailVerified) { try { await sendEmailVerification(user); } catch {} await signOut(auth); setNotice('Verify your email before entering SPR. We sent a fresh verification email. Then sign in again.'); return; }
+    if (!user.emailVerified) {
+      try {
+        await sendEmailVerification(user);
+        setNotice('Verify your email before entering SPR. We sent a fresh verification email. Then sign in again.');
+      } catch (err: any) {
+        // Previously swallowed silently and claimed success either way --
+        // a customer whose resend genuinely failed had no way to know.
+        setError(`We couldn't send a verification email right now (${err?.code || 'unknown error'}). Please try "Resend verification" in a few minutes.`);
+      }
+      await signOut(auth);
+      return;
+    }
     const token = await user.getIdToken(true);
     await claimIntake();
     onLoginSuccess({ uid: user.uid, email: user.email, displayName: user.displayName || user.email?.split('@')[0] || 'User', token, emailVerified: true, onboarded: 0 });
@@ -96,7 +107,38 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
   }, []);
 
   const submit = async (event: React.FormEvent) => { event.preventDefault(); if (loading || googleLoading || mfaLoading) return; if (!auth || !firebaseConfigured) { setError('Firebase browser configuration is missing. Add the VITE_FIREBASE_* Production variables in Vercel and redeploy.'); return; } setLoading(true); setError(''); setNotice(''); try { const result = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password); await complete(result.user); } catch (err: any) { if (!handleMfaRequired(err)) { const message = authMessage(err, 'Sign-in failed.'); if (message) setError(message); } } finally { setLoading(false); } };
-  const register = async () => { if (loading || googleLoading || mfaLoading) return; if (!auth || !firebaseConfigured) { setError('Firebase browser configuration is missing. Add the VITE_FIREBASE_* Production variables in Vercel and redeploy.'); return; } setLoading(true); setError(''); setNotice(''); beginSignupTransition(); try { const result = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), password); await sendEmailVerification(result.user); await signOut(auth); setNotice('Account created. Check your email, verify it, then sign in. Your secure intake remains available for 24 hours.'); } catch (err: any) { setError(authMessage(err, 'Account creation failed.')); } finally { endSignupTransition(); setLoading(false); } };
+  const register = async () => {
+    if (loading || googleLoading || mfaLoading) return;
+    if (!auth || !firebaseConfigured) { setError('Firebase browser configuration is missing. Add the VITE_FIREBASE_* Production variables in Vercel and redeploy.'); return; }
+    setLoading(true); setError(''); setNotice(''); beginSignupTransition();
+    let created: User | null = null;
+    try {
+      // Account creation and the verification-email send are two independent
+      // Firebase calls. Previously both lived in one try/catch, so a
+      // successfully-created account whose verification email failed to send
+      // (rate limits, transient errors) was reported as "Account creation
+      // failed" -- a lie. The customer believed nothing happened, had no idea
+      // to use "Resend verification", and a retry just hit
+      // auth/email-already-in-use with no path forward.
+      const result = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
+      created = result.user;
+    } catch (err: any) {
+      setError(authMessage(err, 'Account creation failed.'));
+      endSignupTransition(); setLoading(false); return;
+    }
+    try {
+      await sendEmailVerification(created);
+      await signOut(auth);
+      setNotice('Account created. Check your email, verify it, then sign in. Your secure intake remains available for 24 hours.');
+    } catch (err: any) {
+      // Account creation genuinely succeeded here -- do not sign the user
+      // out, so auth.currentUser (and therefore the "Resend verification"
+      // button, which reads auth?.currentUser) still works immediately.
+      setError(`Your account was created, but we couldn't send the verification email (${err?.code || 'unknown error'}). Click "Resend verification" below to try again.`);
+    } finally {
+      endSignupTransition(); setLoading(false);
+    }
+  };
   const google = async () => { if (loading || googleLoading || mfaLoading) return; if (!auth || !firebaseConfigured) { setError('Firebase browser configuration is missing. Add the VITE_FIREBASE_* Production variables in Vercel and redeploy.'); return; } setGoogleLoading(true); setError(''); setNotice('Opening secure Google sign-in…'); try { const result = await signInWithPopup(auth, googleAuthProvider); await complete(result.user); } catch (err: any) { if (handleMfaRequired(err)) { setGoogleLoading(false); return; } if (['auth/popup-blocked','auth/operation-not-supported-in-this-environment'].includes(err?.code)) { try { await signInWithRedirect(auth, googleAuthProvider); return; } catch (redirectError: any) { const message = authMessage(redirectError, 'Google sign-in failed.'); if (message) setError(message); else setNotice(''); setGoogleLoading(false); return; } } const message = authMessage(err, 'Google sign-in failed.'); if (message) setError(message); else setNotice(''); setGoogleLoading(false); } };
   const reset = async () => { if (!email.trim()) { setError('Enter your email first.'); return; } if (!auth || !firebaseConfigured) { setError('Firebase browser configuration is missing.'); return; } setLoading(true); setError(''); setNotice(''); try { await sendPasswordResetEmail(auth, email.trim().toLowerCase()); setNotice('Password reset email sent.'); } catch (err: any) { setError(authMessage(err, 'Could not send the reset email.')); } finally { setLoading(false); } };
   const resendVerification = async () => { const currentUser = auth?.currentUser; if (!currentUser || currentUser.emailVerified) return; setLoading(true); setError(''); setNotice(''); try { await sendEmailVerification(currentUser); setNotice('A fresh verification email has been sent.'); } catch (err: any) { setError(authMessage(err, 'Could not resend the verification email.')); } finally { setLoading(false); } };
