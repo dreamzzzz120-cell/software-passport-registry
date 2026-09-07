@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import { sql } from 'drizzle-orm';
-import { rateLimiter } from '../middleware/security.ts';
 import { attachTenantScope } from '../middleware/tenant-scope.ts';
 import { publicTrustResponse, verifyPublicPassportToken } from './public-connect.ts';
 
@@ -51,11 +50,19 @@ export function createBadgeRouter() {
     return res.status(204).end();
   });
 
-  // rateLimiter is applied a second time here (already applied at the mount,
-  // app.use('/badge', rateLimiter, ...) in server.ts) purely so CodeQL's
-  // per-route static analysis recognizes this authorized route as
-  // rate-limited.
-  router.get('/v1/:passportId/:token', rateLimiter, async (req, res) => {
+  // Rate limiting is applied at the mount in server.ts:
+  // app.use('/badge', rateLimiter, createBadgeRouter()).
+  //
+  // CodeQL's js/missing-rate-limiting reports this handler as unlimited. That
+  // is a false positive: the query recognises a fixed list of rate-limiting
+  // libraries, and this codebase uses its own Redis/in-memory limiter in
+  // src/middleware/security.ts, which the query cannot identify. Applying
+  // rateLimiter a second time on the route -- the workaround used elsewhere in
+  // this repo -- does not silence it either, and measurably tightens the
+  // budget: a 120-request burst returned 30x200 then 90x429, first 429 at
+  // request 31, instead of the intended 100 per 60s window. So the duplicate
+  // is deliberately not applied here.
+  router.get('/v1/:passportId/:token', async (req, res) => {
     // Express types these as string | string[]; a repeated path segment cannot
     // occur for this pattern, but narrow explicitly rather than assert.
     const passportId = String(req.params.passportId ?? '');
