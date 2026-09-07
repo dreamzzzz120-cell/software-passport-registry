@@ -177,7 +177,23 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
     if (!currentUser || currentUser.emailVerified || resendCooldownRemaining > 0) return;
     setLoading(true); setError(''); setNotice('');
     try {
-      await sendVerificationWithRetry(currentUser);
+      // Prefer the server path: it sends from our own domain through the
+      // notification outbox, which records delivery failures. Firebase's
+      // built-in sender reports nothing, so a filtered message looks exactly
+      // like a delivered one. If no email provider is configured the server
+      // says so and sends nothing, and we fall back to the Firebase path --
+      // identical to the previous behaviour.
+      let deliveredByServer = false;
+      try {
+        const response = await apiFetch('/api/auth/resend-verification', { method: 'POST' });
+        if (response.ok) {
+          const data = await response.json().catch(() => null);
+          deliveredByServer = data?.sent === true;
+        }
+      } catch {
+        deliveredByServer = false;
+      }
+      if (!deliveredByServer) await sendVerificationWithRetry(currentUser);
       setNotice('A fresh verification email has been sent.');
     } catch (err: any) {
       setError(authMessage(err, 'Could not resend the verification email.'));
