@@ -130,12 +130,13 @@ export class MigrationRunner {
         this.log(`Schema fingerprint could not run: ${error instanceof Error ? error.message : String(error)}`, 'warn');
         return null;
       });
-      // Per-table hashes go to the log, not the JSON result, so a diff can
-      // localise drift to a single table without making the release output
-      // unreadable. SCHEMA_FINGERPRINT_DETAIL=false silences them.
+      // Per-object hashes go to the log, not the JSON result, so a diff can
+      // localise drift to a single table, function, sequence or enum without
+      // making the release output unreadable. SCHEMA_FINGERPRINT_DETAIL=false
+      // silences them.
       if (fingerprint && process.env.SCHEMA_FINGERPRINT_DETAIL !== 'false') {
-        const lines = Object.entries(fingerprint.tables).map(([table, hash]) => `  ${table} ${hash}`);
-        console.log(`[schema-fingerprint] ${Object.keys(fingerprint.tables).length} tables\n${lines.join('\n')}`);
+        const lines = Object.entries(fingerprint.objects).map(([object, hash]) => `  ${object} ${hash}`);
+        console.log(`[schema-fingerprint] ${Object.keys(fingerprint.objects).length} objects\n${lines.join('\n')}`);
       }
       return {
         success: errors.length === 0,
@@ -209,21 +210,35 @@ export class MigrationRunner {
    * missing FORCE ROW LEVEL SECURITY or a dropped policy is a data-exposure
    * bug that the table-existence check would happily call healthy.
    *
-   * The fingerprint covers, per table: columns (name, type, nullability,
-   * default), constraints (primary key, foreign key, unique, check), indexes,
-   * whether RLS is enabled and forced, and every policy including its USING
-   * and WITH CHECK expressions.
+   * Per table: columns (name, type, nullability, default), constraints
+   * (primary key, foreign key, unique, check), indexes, triggers, whether RLS
+   * is enabled and forced, every policy including its USING and WITH CHECK
+   * expressions, and the table-level grants recorded against it. Also
+   * fingerprinted, each as its own object rather than folded into a table:
+   * every function and procedure (full definition, so a silently edited
+   * function body -- e.g. spr_assert_tenant_rls() itself -- shows up as
+   * drift), every sequence, and every enum type with its ordered labels.
+   *
+   * A GRANT is the difference between "least-privilege role configured" and
+   * "least-privilege role actually holds only what it should" -- the same gap
+   * the RLS policy coverage closed. information_schema.role_table_grants only
+   * shows grants the connecting role can see (as grantor, grantee, or owner);
+   * migrations run as the schema owner, which owns every table here, so this
+   * sees every grant made on them. provision-runtime-roles.ts issues no GRANT
+   * or REVOKE (only ALTER ROLE ... PASSWORD), so grants come solely from
+   * migrations and a production database stays comparable against one built
+   * fresh from the same files.
    *
    * Production cannot know the expected value, so this reports rather than
    * judges. Comparing a release log against the fingerprint of a database
    * freshly built from the same migrations turns "the tables are all there"
-   * into "the schema is equivalent", and a per-table hash says exactly which
-   * table diverged.
+   * into "the schema is equivalent", and a per-object hash says exactly which
+   * table, function, sequence or enum diverged.
    */
-  async schemaFingerprint(client: PoolClient): Promise<{ overall: string; tables: Record<string, string> }> {
+  async schemaFingerprint(client: PoolClient): Promise<{ overall: string; objects: Record<string, string> }> {
     const parts = new Map<string, string[]>();
-    const add = (table: string, line: string) => {
-      const key = String(table).toLowerCase();
+    const add = (object: string, line: string) => {
+      const key = String(object).toLowerCase();
       const bucket = parts.get(key);
       if (bucket) bucket.push(line);
       else parts.set(key, [line]);
@@ -258,6 +273,18 @@ export class MigrationRunner {
       add(r.tablename, `idx ${r.indexname} ${r.indexdef}`);
     }
 
+    const triggers = await client.query(
+      `SELECT c.relname AS table_name, t.tgname, pg_get_triggerdef(t.oid) AS def
+         FROM pg_trigger t
+         JOIN pg_class c ON c.oid = t.tgrelid
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = current_schema() AND NOT t.tgisinternal
+        ORDER BY 1, 2`
+    );
+    for (const r of triggers.rows as Array<Record<string, string>>) {
+      add(r.table_name, `trg ${r.tgname} ${r.def}`);
+    }
+
     const rls = await client.query(
       `SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity
          FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -277,14 +304,85 @@ export class MigrationRunner {
       add(r.tablename, `pol ${r.policyname} ${r.permissive} ${r.roles} ${r.cmd} using=${r.qual} check=${r.with_check}`);
     }
 
-    const tables: Record<string, string> = {};
-    for (const [table, lines] of [...parts.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
-      tables[table] = createHash('sha256').update(lines.sort().join('\n'), 'utf8').digest('hex').slice(0, 16);
+    const grants = await client.query(
+      `SELECT table_name, grantee, privilege_type, is_grantable
+         FROM information_schema.role_table_grants
+        WHERE table_schema = current_schema()
+        ORDER BY table_name, grantee, privilege_type`
+    );
+    for (const r of grants.rows as Array<Record<string, string>>) {
+      add(r.table_name, `grant ${r.grantee} ${r.privilege_type} grantable=${r.is_grantable}`);
+    }
+
+    const sequences = await client.query(
+      `SELECT sequence_name, data_type, start_value, minimum_value, maximum_value, increment, cycle_option
+         FROM information_schema.sequences
+        WHERE sequence_schema = current_schema()
+        ORDER BY sequence_name`
+    );
+    for (const r of sequences.rows as Array<Record<string, string>>) {
+      add(
+        `sequence:${r.sequence_name}`,
+        `seq ${r.data_type} start=${r.start_value} min=${r.minimum_value} max=${r.maximum_value} inc=${r.increment} cycle=${r.cycle_option}`
+      );
+    }
+
+    const enums = await client.query(
+      `SELECT t.typname, e.enumlabel
+         FROM pg_type t
+         JOIN pg_enum e ON e.enumtypid = t.oid
+         JOIN pg_namespace n ON n.oid = t.typnamespace
+        WHERE n.nspname = current_schema()
+        ORDER BY t.typname, e.enumsortorder`
+    );
+    for (const r of enums.rows as Array<Record<string, string>>) {
+      add(`enum:${r.typname}`, `label ${r.enumlabel}`);
+    }
+
+    // prokind IN ('f','p') is load-bearing, not tidiness. pg_get_functiondef
+    // raises 42809 ("is an aggregate function") for aggregates and window
+    // functions, and this whole method is wrapped in a catch that returns
+    // null -- so a single CREATE AGGREGATE, or any extension installed into
+    // this schema that ships one, would silently switch the entire drift
+    // check off while the release still reported success. Verified: adding
+    // one aggregate makes the unfiltered query throw 42809 and the filtered
+    // one return normally.
+    const functions = await client.query(
+      `SELECT p.proname, pg_get_function_identity_arguments(p.oid) AS args, pg_get_functiondef(p.oid) AS def
+         FROM pg_proc p
+         JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = current_schema() AND p.prokind IN ('f', 'p')
+        ORDER BY p.proname, args`
+    );
+    for (const r of functions.rows as Array<Record<string, string>>) {
+      add(`function:${r.proname}(${r.args})`, `fn ${r.def}`);
+    }
+
+    // Aggregates and window functions, which the query above must exclude.
+    // Excluding them outright would leave them unwatched, so they are tracked
+    // here by identity and kind instead -- everything pg_get_functiondef would
+    // have refused to render, still visible as drift if one appears, changes
+    // signature or disappears.
+    const otherRoutines = await client.query(
+      `SELECT p.proname, pg_get_function_identity_arguments(p.oid) AS args, p.prokind,
+              pg_get_function_result(p.oid) AS result
+         FROM pg_proc p
+         JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = current_schema() AND p.prokind NOT IN ('f', 'p')
+        ORDER BY p.proname, args`
+    );
+    for (const r of otherRoutines.rows as Array<Record<string, string>>) {
+      add(`routine:${r.proname}(${r.args})`, `kind=${r.prokind} returns=${r.result}`);
+    }
+
+    const objects: Record<string, string> = {};
+    for (const [object, lines] of [...parts.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+      objects[object] = createHash('sha256').update(lines.sort().join('\n'), 'utf8').digest('hex').slice(0, 16);
     }
     const overall = createHash('sha256')
-      .update(Object.entries(tables).map(([t, h]) => `${t}:${h}`).join('\n'), 'utf8')
+      .update(Object.entries(objects).map(([o, h]) => `${o}:${h}`).join('\n'), 'utf8')
       .digest('hex');
-    return { overall, tables };
+    return { overall, objects };
   }
 
   async getMigrationStatus(): Promise<MigrationRecord[]> {
