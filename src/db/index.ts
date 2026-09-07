@@ -113,6 +113,30 @@ export const appPool = config.database.appConnectionString
   : pool;
 if (appPool !== pool) appPool.on('error', (err) => console.error('[Database] Unexpected error on idle app-runtime pool client:', err?.message || err));
 
+// Keep at least one connection warm on each pool. Production /ready latency
+// was measured climbing from a p50 of ~450ms to ~2.1-2.5s over 2026-09-05 to
+// 2026-09-07 (Railway HTTP metrics), while the Postgres service's own CPU
+// (avg <1%, max 3.5%), memory and disk stayed flat -- the database was never
+// doing more work, so the added time was not query execution. /ready also
+// queries both spr_app_runtime and the owner role over connections
+// configured with SQL_SSL=verify-full (real certificate verification, not a
+// relaxed mode -- see the appPool comment above). idleTimeoutMillis defaults
+// to 30s and traffic to /ready is sparse, so most checks were paying a full
+// TCP+TLS handshake instead of reusing a live connection. Pinging under that
+// idle timeout keeps one connection per pool alive so a real request finds it
+// warm. unref() so this never holds the process open -- the release steps
+// (migrate, provision-runtime-roles) import this module and must still exit --
+// and it is skipped entirely when there is no database to ping.
+const KEEPALIVE_INTERVAL_MS = 20_000;
+let keepAliveTimer: ReturnType<typeof setInterval> | undefined;
+if (isDatabaseConfigured) {
+  keepAliveTimer = setInterval(() => {
+    pool.query('SELECT 1').catch(() => {});
+    if (appPool !== pool) appPool.query('SELECT 1').catch(() => {});
+  }, KEEPALIVE_INTERVAL_MS);
+  keepAliveTimer.unref();
+}
+
 export async function checkDatabaseHealth(): Promise<{ ok: true; latencyMs: number } | { ok: false; latencyMs: number; error: string }> {
   const started = Date.now();
   if (!isDatabaseConfigured) return { ok: false, latencyMs: 0, error: 'DB_MISCONFIGURED' };
@@ -129,6 +153,7 @@ export async function checkDatabaseHealth(): Promise<{ ok: true; latencyMs: numb
 }
 
 export async function closeDatabase(): Promise<void> {
+  if (keepAliveTimer) clearInterval(keepAliveTimer);
   await pool.end();
   if (appPool !== pool) await appPool.end();
 }
