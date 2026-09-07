@@ -14,6 +14,7 @@ import { db, checkDatabaseHealth, appPool } from '../db/index.ts';
 import { attachTenantScope } from '../middleware/tenant-scope.ts';
 import { AuthenticatedRequest, requireAuth, requireRole, requireFounder, rateLimiter } from '../middleware/security.ts';
 import { adminAuth, setUserCustomClaims } from '../lib/firebase-admin.ts';
+import { isEmailProviderConfigured, sendEmailDirect } from '../lib/email.ts';
 import { appendAuditEntry, verifyAuditChain } from '../security/audit-log.ts';
 import { describeUserAgent, sessionFingerprint } from '../security/session-tracking.ts';
 import { offboardTenantData } from '../db/sync.ts';
@@ -925,6 +926,72 @@ export function createAuthRouter() {
   });
 
   /**
+   * Send a verification link to an account that may not be provisioned yet.
+   *
+   * /auth/resend-verification cannot serve the case that matters most. It runs
+   * behind requireAuth, which rejects a caller with no row in `users`:
+   *
+   *   if (!dbUser) return res.status(403)... 'User account is not provisioned'
+   *
+   * A user who has just signed up has a Firebase account and no such row --
+   * provisioning happens later -- so that endpoint answers 403 and the client
+   * falls back to Firebase's own sender. Which means the very first email a
+   * new account depends on, the one without which they can never sign in, was
+   * still leaving as noreply@<project>.firebaseapp.com: no SPF or DKIM
+   * alignment with this domain, and no bounce or delivery record anywhere.
+   *
+   * So this deliberately does NOT use requireAuth. It verifies the Firebase ID
+   * token directly and needs nothing else.
+   *
+   * The token is the whole authorisation. The address is read from the decoded
+   * token and never from the request body, so this cannot be pointed at an
+   * arbitrary recipient, and it reveals nothing about whether any other
+   * address exists. Sending goes direct rather than through
+   * notification_outbox because that table requires a tenant_id, which an
+   * unprovisioned account does not have.
+   */
+  router.post('/auth/send-verification', rateLimiter, async (req, res, next) => {
+    try {
+      const header = req.headers.authorization;
+      const token = header?.startsWith('Bearer ') ? header.slice(7).trim() : '';
+      if (!token || token.length > 8192) {
+        return res.status(401).json({ error: 'Unauthorized: Missing or invalid authorization token' });
+      }
+
+      let decoded;
+      try {
+        decoded = await adminAuth.verifyIdToken(token, true);
+      } catch {
+        return res.status(401).json({ error: 'Unauthorized: Invalid security token' });
+      }
+
+      if (decoded.email_verified === true) return res.json({ sent: false, via: 'already-verified' });
+
+      const email = typeof decoded.email === 'string' ? decoded.email.trim() : '';
+      if (!email || !isEmailProviderConfigured()) return res.json({ sent: false, via: 'firebase' });
+
+      const link = await adminAuth.generateEmailVerificationLink(email);
+      await sendEmailDirect(
+        email,
+        'Confirm your Software Passport Registry email',
+        [
+          'Confirm your email address to finish setting up Software Passport Registry.',
+          '',
+          link,
+          '',
+          'If you did not create this account, ignore this message and nothing further will happen.',
+        ].join('\n')
+      );
+      return res.json({ sent: true, via: 'provider' });
+    } catch (error) {
+      // A provider failure must not strand the caller: report it as unsent so
+      // the client falls back to Firebase rather than showing a dead end.
+      console.error('[SPR] send-verification failed', error instanceof Error ? error.message : String(error));
+      return res.json({ sent: false, via: 'firebase' });
+    }
+  });
+
+  /**
    * Send the email-verification link from our own domain.
    *
    * The client SDK's sendEmailVerification() posts from Firebase's shared
@@ -943,6 +1010,13 @@ export function createAuthRouter() {
    * the client falls back to the existing Firebase path. Behaviour is
    * therefore unchanged until RESEND_API_KEY and EMAIL_FROM are set; this
    * endpoint cannot make delivery worse than it is today.
+   *
+   * The client now prefers /auth/send-verification for every verification
+   * email, since that one also works before provisioning. This route is kept
+   * rather than deleted: it queues through notification_outbox, so a provider
+   * failure is retried with backoff, and tests/paid-access-gate-contract
+   * asserts on it to hold the rule that a billing state must never block a
+   * user from verifying their email.
    *
    * BILLING_EXEMPT_PATHS already listed /api/auth/resend-verification before
    * this existed: a user who cannot verify their email must not be blocked
