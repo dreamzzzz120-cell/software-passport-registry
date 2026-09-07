@@ -52,7 +52,14 @@ import type { VerificationDecisionState } from './components/trust/TrustStateBad
 import type { VerificationDecisionDetail } from './components/design/CommandCenter';
 import { EXTENSIONS } from './workflows/extensionRegistry';
 
-const PUBLIC_PATHS = new Set(['/','/login','/free-review','/pricing','/msp','/terms','/privacy','/passport/demo']);
+// The public Trust Center routes belong here too. /trust/, /about/ and
+// /methodology/ only escaped the signed-out redirect below because each has a
+// committed static page under public/, so React never runs on them --
+// /security-center/ has no such file, fell through to the SPA, and the guard
+// bounced every signed-out visitor to /login. It is a tab in the public Trust
+// Center nav (PublicTrustCenterView), so that was reachable by clicking.
+// Listing all four keeps them public whether or not a static page exists.
+const PUBLIC_PATHS = new Set(['/','/login','/free-review','/pricing','/msp','/terms','/privacy','/passport/demo','/trust/','/about/','/methodology/','/security-center/']);
 
 // A completed Free Review result is addressable at
 //   /free-review/result/<passportId>/<token>
