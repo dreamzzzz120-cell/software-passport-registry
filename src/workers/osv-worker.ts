@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, mkdir, writeFile, readdir, lstat, rm } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
+import { appendAuditEntryViaPool } from '../security/audit-log.ts';
 import { Pool, PoolClient } from 'pg';
 import { assessOsvSeverity } from '../security/osv-severity.ts';
 import { componentIdentity, vulnerabilityIdentity } from '../security/osv-identity.ts';
@@ -481,9 +482,15 @@ async function processRepositoryJob(pool: Pool, job: ClaimedJob) {
     // is the only place that ever assigns a real, non-null score.
     await pool.query(`INSERT INTO passports (id,tenant_id,name,version,publisher,category,overall_score,security_score,compliance_score,vendor_reputation_score,verification_status,release_date,file_hash,license_type,ai_summary,sbom,evidence,vulnerabilities,timeline) VALUES ($1,$2,$3,$4,$5,'Repository',NULL,NULL,NULL,NULL,'unverified',$6,$7,'Unknown',$8,$9,'[]','[]','[]') ON CONFLICT (id) DO UPDATE SET version=EXCLUDED.version,file_hash=EXCLUDED.file_hash,sbom=EXCLUDED.sbom,overall_score=NULL,security_score=NULL,compliance_score=NULL,vendor_reputation_score=NULL,verification_status='unverified' WHERE passports.tenant_id=$2`, [job.passport_id,job.tenant_id,source.repository_name,commitSha,source.repository_owner,acquiredAt.toISOString().slice(0,10),sourceHash,'Repository acquired and SBOM generated. Trust assessment remains pending.',JSON.stringify(osvComponents)]);
     mark('passport_upserted');
+    // Section 20 of the MSP acceptance spec requires Passport publication to
+    // be audited. This was a real gap -- zero appendAuditEntry calls existed
+    // anywhere for passport events despite the hash-chained audit_trail
+    // ledger already existing and working for every other event type.
+    await appendAuditEntryViaPool(pool, { tenantId: job.tenant_id, action: 'passport.published', actor: 'repository-worker', payload: { passportId: job.passport_id, jobId: job.id, name: source.repository_name, version: commitSha, sourceHash } });
     const repoEvidenceId = deterministicId('ev-repo',`${job.id}|${sourceHash}`); const manifestEvidenceId = deterministicId('ev-manifest',`${job.id}|${manifestHash}`); const sbomEvidenceId = deterministicId('ev-sbom',`${job.id}|${rawSbomHash}|${componentsHash}`);
     await pool.query(`INSERT INTO evidence_items (id,tenant_id,asset_id,name,type,verified,signer,timestamp,hash,raw_content,engine_id) VALUES ($1,$2,$3,'Repository source descriptor','Attestation',0,'github.com',$4,$5,$6,'repository-worker'),($7,$2,$3,'Manifest inventory','Build Log',0,'repository-worker',$4,$8,$9,'repository-worker'),($10,$2,$3,'Syft CycloneDX SBOM summary','Build Log',0,'Syft 1.49.0',$4,$11,$12,'repository-worker') ON CONFLICT (id) DO NOTHING`, [repoEvidenceId,job.tenant_id,job.passport_id,acquiredAt.toISOString(),`sha256:${sourceHash}`,JSON.stringify(descriptor),manifestEvidenceId,`sha256:${manifestHash}`,JSON.stringify(manifests),sbomEvidenceId,`sha256:${sha256(sbomEvidencePayload)}`,sbomEvidencePayload]);
     mark('evidence_persisted');
+    await appendAuditEntryViaPool(pool, { tenantId: job.tenant_id, action: 'evidence.created', actor: 'repository-worker', payload: { passportId: job.passport_id, jobId: job.id, evidenceIds: [repoEvidenceId, manifestEvidenceId, sbomEvidenceId] } });
     mark('osv_query_started', { componentCount: osvComponents.length });
     await processJob(pool,job);
     mark('osv_query_completed');

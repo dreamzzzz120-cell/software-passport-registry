@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { Router } from 'express';
 import { z } from 'zod';
 import { sql } from 'drizzle-orm';
+import { appendAuditEntry } from '../security/audit-log.ts';
 import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/security.ts';
 
 const repositorySchema = z.object({
@@ -82,6 +83,14 @@ export function createScansRouter() {
       await db.execute(sql`INSERT INTO scans (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name) VALUES (${scanId},${req.user!.tenantId},${targetName},${scanType},${req.user!.uid},'Scanning',0,NULL,${timestamp},${clientName})`);
       await db.execute(sql`INSERT INTO agent_jobs (id,tenant_id,agent_id,passport_id,job_type,status,progress,next_attempt_at,created_at,updated_at) VALUES (${jobId},${req.user!.tenantId},'comprehensive_scanner',${passport.id},'osv_manifest_scan','Pending',0,NOW(),NOW(),NOW())`);
       await db.execute(sql`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES (${jobId},'comprehensive_scanner','Queued real OSV dependency vulnerability scan against the persisted SBOM.','Info')`);
+      // Section 20 of the MSP acceptance spec requires scan execution to be
+      // audited. This was a real gap -- zero appendAuditEntry calls existed
+      // anywhere for scan/evidence/passport events despite the hash-chained
+      // audit_trail ledger already existing and working for every other
+      // event type. Only the genuinely-queued path is audited (not the
+      // no-matching-passport branch above, which is a validation rejection,
+      // not a scan that ran).
+      await appendAuditEntry(db, { tenantId: req.user!.tenantId, action: 'scan.queued', actor: req.user!.uid, payload: { scanId, jobId, targetName, scanType, clientName, passportId: passport.id } });
       return res.status(202).json({ id: scanId, jobId, targetName, scanType, triggeredBy: req.user!.uid, status: 'Scanning', durationMs: 0, findingsCount: null, timestamp, clientName });
     } catch (error) { return next(error); }
   });
@@ -169,6 +178,7 @@ export function createScansRouter() {
       await db.execute(sql`INSERT INTO agent_jobs (id,tenant_id,agent_id,passport_id,job_type,status,progress,next_attempt_at,created_at,updated_at) VALUES (${jobId},${req.user!.tenantId},'comprehensive_scanner',${passport.id},'osv_manifest_scan','Pending',0,NOW(),NOW(),NOW())`);
       await db.execute(sql`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES (${jobId},'comprehensive_scanner',${'Scheduled OSV dependency scan dispatched for ' + schedule.assetHostName},'Info')`);
       const updated = (await db.execute(sql`UPDATE scan_schedules SET last_run_at=${now.toISOString()}, next_run_at=${next} WHERE id=${req.params.id} AND tenant_id=${req.user!.tenantId} RETURNING id, asset_id AS "assetId", asset_host_name AS "assetHostName", asset_type AS "assetType", client_name AS "clientName", frequency, scan_type AS "scanType", status, last_run_at AS "lastRunAt", next_run_at AS "nextRunAt", created_at AS "createdAt"`)).rows?.[0];
+      await appendAuditEntry(db, { tenantId: req.user!.tenantId, action: 'scan.queued', actor: req.user!.uid, payload: { scanId, jobId, passportId: passport.id, scheduleId: req.params.id, scanType: schedule.scanType } });
       return res.status(202).json({ success: true, scanId, jobId, queued: true, schedule: updated });
     } catch (error) { return next(error); }
   });
@@ -239,10 +249,12 @@ export function createScansRouter() {
         await db.execute(sql`INSERT INTO agent_jobs (id,tenant_id,agent_id,passport_id,job_type,status,progress,result,created_at,updated_at,completed_at) VALUES (${jobId},${req.user!.tenantId},'comprehensive_scanner',${passport.id},'osv_manifest_scan','Completed',100,${JSON.stringify({ provider: 'OSV', evidenceState: 'No versioned SBOM components were present', componentsQueried: 0, findingsPersisted: 0, completedAt })},NOW(),NOW(),NOW())`);
         await db.execute(sql`INSERT INTO evidence_items (id,tenant_id,asset_id,name,type,verified,status,signer,timestamp,hash,raw_content,engine_id,verification_failure_reason) VALUES (${id('ev')},${req.user!.tenantId},${passport.id},'SBOM scan assessment','Security Scan',0,'OBSERVED','spr-api',${completedAt},${evidenceHash},${evidencePayload},'osv-worker','SBOM_EMPTY')`);
         await db.execute(sql`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES (${jobId},'comprehensive_scanner','Completed: the persisted SBOM contained no versioned components for OSV lookup.','Info')`);
+        await appendAuditEntry(db, { tenantId: req.user!.tenantId, action: 'evidence.created', actor: req.user!.uid, payload: { passportId: passport.id, jobId, type: 'Security Scan', engineId: 'osv-worker', evidenceHash } });
         return res.status(202).json({ id: jobId, status: 'Completed', jobType: 'osv_manifest_scan' });
       }
       await db.execute(sql`INSERT INTO agent_jobs (id,tenant_id,agent_id,passport_id,job_type,status,progress,next_attempt_at,created_at,updated_at) VALUES (${jobId},${req.user!.tenantId},'comprehensive_scanner',${passport.id},'osv_manifest_scan','Pending',0,NOW(),NOW(),NOW())`);
       await db.execute(sql`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES (${jobId},'comprehensive_scanner','Queued real OSV dependency vulnerability scan against the persisted SBOM.','Info')`);
+      await appendAuditEntry(db, { tenantId: req.user!.tenantId, action: 'scan.queued', actor: req.user!.uid, payload: { jobId, passportId: passport.id, jobType: 'osv_manifest_scan' } });
       return res.status(202).json({ id: jobId, status: 'Pending', jobType: 'osv_manifest_scan' });
     } catch (error) { return next(error); }
   });
@@ -264,6 +276,7 @@ export function createScansRouter() {
       await db.execute(sql`INSERT INTO repository_scan_sources (id,job_id,tenant_id,connection_id,provider,repository_owner,repository_name,requested_ref,repository_subdirectory,created_at) VALUES (${id('source')},${repositoryJobId},${req.user!.tenantId},${connectionId},'github',${owner},${repository},${ref},${subdirectory},NOW())`);
       await db.execute(sql`INSERT INTO repository_scan_sources (id,job_id,tenant_id,connection_id,provider,repository_owner,repository_name,requested_ref,repository_subdirectory,created_at) VALUES (${id('source')},${securityJobId},${req.user!.tenantId},${connectionId},'github',${owner},${repository},${ref},${subdirectory},NOW())`);
       await db.execute(sql`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES (${repositoryJobId},'repository-scanner','Queued real GitHub acquisition + pinned Syft SBOM + OSV dependency scan.','Info'),(${securityJobId},'security-scanner','Queued real secret, IaC/configuration, license, Syft and OSV scan.','Info')`);
+      await appendAuditEntry(db, { tenantId: req.user!.tenantId, action: 'scan.queued', actor: req.user!.uid, payload: { repositoryJobId, securityJobId, passportId, owner, repository, ref } });
       return res.status(202).json({ repositoryJobId, securityJobId, status: 'Pending', engines: ['Syft','OSV','Secret','IaC/Config','License'] });
     } catch (error) { return next(error); }
   });

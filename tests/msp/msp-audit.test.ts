@@ -55,12 +55,15 @@ describe('audit coverage for the event categories section 20 requires', () => {
     expect(hasActionPrefix('tenant.deletion')).toBe(true);
   });
 
-  // These three are real, current gaps, not yet true. Left as failing
-  // .todo entries -- visible in every test run as unfinished work -- rather
-  // than silently passing (a false green) or being deleted (making the gap
-  // invisible again). Section 27 of the spec: a test must fail if evidence
-  // cannot be traced; this is that failure, made explicit instead of hidden.
-  it.todo('scan execution is audited (no appendAuditEntry call exists anywhere in src/routes/scans.ts or the scan worker today)');
-  it.todo('evidence creation is audited (no appendAuditEntry call exists anywhere in the evidence-writing paths today)');
-  it.todo('Passport publication is audited (no appendAuditEntry call exists anywhere passports are created/published today)');
+  it('scan execution is audited', () => {
+    expect(hasActionPrefix('scan.queued')).toBe(true);
+  });
+
+  it('evidence creation is audited', () => {
+    expect(hasActionPrefix('evidence.created')).toBe(true);
+  });
+
+  it('Passport publication is audited', () => {
+    expect(hasActionPrefix('passport.published')).toBe(true);
+  });
 });
