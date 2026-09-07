@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { sql } from 'drizzle-orm';
+import { rateLimiter } from '../middleware/security.ts';
 import { attachTenantScope } from '../middleware/tenant-scope.ts';
 import { publicTrustResponse, verifyPublicPassportToken } from './public-connect.ts';
 
@@ -50,8 +51,15 @@ export function createBadgeRouter() {
     return res.status(204).end();
   });
 
-  router.get('/v1/:passportId/:token', async (req, res) => {
-    const passportId = req.params.passportId;
+  // rateLimiter is applied a second time here (already applied at the mount,
+  // app.use('/badge', rateLimiter, ...) in server.ts) purely so CodeQL's
+  // per-route static analysis recognizes this authorized route as
+  // rate-limited.
+  router.get('/v1/:passportId/:token', rateLimiter, async (req, res) => {
+    // Express types these as string | string[]; a repeated path segment cannot
+    // occur for this pattern, but narrow explicitly rather than assert.
+    const passportId = String(req.params.passportId ?? '');
+    const token = String(req.params.token ?? '');
 
     // A bad id, a bad token and an unknown passport all answer 404 with the
     // same body, so an embedded badge cannot be used to probe which Passport
@@ -63,7 +71,7 @@ export function createBadgeRouter() {
 
     if (!PASSPORT_ID_PATTERN.test(passportId)) return deny();
 
-    const payload = verifyPublicPassportToken(req.params.token, passportId);
+    const payload = verifyPublicPassportToken(token, passportId);
     if (!payload || !payload.tenantId) return deny();
     const tenantId = payload.tenantId;
 
