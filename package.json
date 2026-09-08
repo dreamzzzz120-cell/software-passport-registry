@@ -28,7 +28,6 @@
     "zip:full": "node scripts/make-full-zip.js"
   },
   "dependencies": {
-    "@google/genai": "^2.21.0",
     "@sentry/node": "^10.73.0",
     "@supabase/ssr": "^0.12.5",
     "@supabase/supabase-js": "^2.115.0",
@@ -44,8 +43,8 @@
     "firebase": "^12.17.1",
     "firebase-admin": "^14.3.0",
     "helmet": "^8.1.0",
-    "html2canvas": "^1.4.1",
-    "ioredis": "^6.0.0",
+    "html2canvas": "^1.4.0",
+    "ioredis": "^6.0.1",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "lucide-react": "^1.40.0",
@@ -68,7 +67,6 @@
     "@types/express": "^5.0.6",
     "@types/node": "^26.4.1",
     "@types/pg": "^8.23.1",
-    "@types/qrcode": "^1.5.6",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.7",
     "@vitejs/plugin-react": "^5.2.0",
