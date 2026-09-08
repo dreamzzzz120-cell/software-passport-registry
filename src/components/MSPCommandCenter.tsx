@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ArrowRight, Building2, CheckCircle2, Clock3, Database, FileCheck2, FileSearch, Layers, Network, Radio, ShieldAlert, ShieldQuestion, User, X } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Building2, CheckCircle2, Database, FileCheck2, FileSearch, Layers, Network, Radio, ShieldAlert, ShieldQuestion, User, X } from 'lucide-react';
 import { Alert, Client, SoftwarePassport } from '../types';
 import { apiFetch } from '../utils/apiClient';
 import TrustNetworkMap, { type NetworkClientNode } from './trust/TrustNetworkMap';
@@ -13,18 +13,7 @@ interface Props {
   onSelectClient: (id: string) => void;
   onSelectPassport?: (id: string) => void;
   onNavigate: (tab: string) => void;
-  /**
-   * Authoritative decisions keyed by passport id, from the single batch
-   * retrieval in App (GET /api/user/verification). The grid never issues a
-   * per-passport verification request, and a passport absent from this map
-   * renders UNINITIALIZED rather than falling back to the legacy column.
-   */
   verificationDecisions?: Record<string, VerificationDecisionState>;
-  /**
-   * Whether the estate has actually been read yet. Without this the page cannot
-   * tell "no clients" from "not loaded", and rendered the zero-client empty
-   * state to existing customers on first paint and on any API failure.
-   */
   dataStatus?: 'loading' | 'ready' | 'error';
   onRetry?: () => void;
 }
@@ -37,17 +26,11 @@ const severityClass = (severity: Alert['severity']) => severity === 'Critical'
   : severity === 'High' ? 'bg-[var(--spr-amber)]/10 text-[var(--spr-amber)] border-[var(--spr-amber)]/30'
   : 'bg-[var(--spr-accent)]/20 text-[var(--spr-highlight)] border-[var(--spr-highlight)]/30';
 
-// Evidence older than this is not treated as fresh for the coverage metric below.
-// This does not change any stored evidence or score — it only affects how the
-// Trust Network summarizes freshness for a human reading the page.
 const EVIDENCE_FRESHNESS_WINDOW_DAYS = 30;
 const MAX_NETWORK_CLIENTS = 6;
 
-// Quick-jump strip to the real, existing routes that make up the trust
-// network layer. None of these paths are invented — they mirror the exact
-// routes already wired in App.tsx/CommandCenter.tsx.
 const NETWORK_NAV = [
-  { id: 'msp', label: 'Trust Network', path: '/msp' },
+  { id: 'msp', label: 'Command Center', path: '/msp' },
   { id: 'clients', label: 'Clients', path: '/clients' },
   { id: 'assets', label: 'Software', path: '/assets' },
   { id: 'passports', label: 'Passports', path: '/passports' },
@@ -99,9 +82,6 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
   const criticalClients = new Set(attention.filter(item => item.severity === 'Critical').map(item => item.clientName)).size;
   const attentionClients = new Set(attention.filter(item => item.severity !== 'Critical').map(item => item.clientName)).size;
 
-  // Real software-verification rollup from passport records already loaded by the
-  // app — nothing here is fabricated or defaulted to 0/100/VERIFIED. A passport
-  // with no recorded verificationStatus is counted as unknown, not coerced.
   const softwareVerification = useMemo(() => {
     let verified = 0;
     let needsReview = 0;
@@ -110,38 +90,25 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
     let staleOrMissingEvidence = 0;
     const now = Date.now();
     for (const passport of passports) {
-      // Rollup counts come from the authoritative evaluator, not from the
-      // legacy verification_status column. A passport with no decision yet is
-      // counted as unknown rather than assumed to be anything better.
       const decision = verificationDecisions?.[passport.id];
       if (decision === 'VERIFIED') verified += 1;
       else if (decision === 'PARTIAL' || decision === 'INVESTIGATE') needsReview += 1;
       else unknown += 1;
-
       const evidenceTimestamps = (passport.evidence || [])
         .map((item) => (item?.timestamp ? Date.parse(item.timestamp) : NaN))
         .filter((value) => !Number.isNaN(value));
-      if (evidenceTimestamps.length === 0) {
-        staleOrMissingEvidence += 1;
-        continue;
-      }
+      if (evidenceTimestamps.length === 0) { staleOrMissingEvidence += 1; continue; }
       const mostRecent = Math.max(...evidenceTimestamps);
       const ageDays = (now - mostRecent) / (1000 * 60 * 60 * 24);
       if (ageDays <= EVIDENCE_FRESHNESS_WINDOW_DAYS) freshEvidence += 1;
       else staleOrMissingEvidence += 1;
     }
     const total = passports.length;
-    // Coverage is left undefined (not 0%) when there is nothing to measure yet,
-    // so an empty portfolio never renders as "0% verified".
     const coveragePct = total > 0 ? Math.round((verified / total) * 100) : null;
     const freshnessPct = total > 0 ? Math.round((freshEvidence / total) * 100) : null;
     return { total, verified, needsReview, unknown, freshEvidence, staleOrMissingEvidence, coveragePct, freshnessPct };
   }, [passports, verificationDecisions]);
 
-  // Evidence coverage counts real evidence *items* (not passports): how many
-  // of all recorded evidence entries across the portfolio carry a VERIFIED
-  // status. A portfolio with zero evidence items renders "NO DATA", never a
-  // misleading 0% or 100%.
   const evidenceCoverage = useMemo(() => {
     let total = 0;
     let verified = 0;
@@ -154,9 +121,6 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
     return { total, verified, pct: total > 0 ? Math.round((verified / total) * 100) : null };
   }, [passports, verificationDecisions]);
 
-  // Recent observations come only from each passport's own real timeline
-  // entries. Nothing here is synthesized — a portfolio with no timeline
-  // history simply has nothing to show.
   const recentObservations = useMemo(() => {
     const entries: { date: string; event: string; software: string; passportId: string }[] = [];
     for (const passport of passports) {
@@ -168,20 +132,12 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
     return entries.sort((a, b) => Date.parse(b.date) - Date.parse(a.date)).slice(0, 8);
   }, [passports, verificationDecisions]);
 
-  // The Trust Network map's Client -> Software layer, built strictly from
-  // each client's own real softwareInventory (server-computed), joined back
-  // to the loaded passport records for their current, real verification
-  // state. If a listed software item's passport can't be resolved, its state
-  // is reported as unknown (insufficient evidence to say otherwise) rather
-  // than guessed from a different field.
   const passportsById = useMemo(() => new Map(passports.map((p) => [p.id, p])), [passports]);
   const networkClients: NetworkClientNode[] = useMemo(() => clientRiskRollup.slice(0, MAX_NETWORK_CLIENTS).map(({ client }) => ({
     id: client.id,
     name: client.name,
     software: (client.softwareInventory || []).map((item) => {
       const passport = passportsById.get(item.passportId);
-      // Authoritative decision from the single batch retrieval in App - never
-      // the legacy verification_status column, and never a per-row request.
       const state: TrustState = trustStateFromDecision(verificationDecisions?.[item.passportId]);
       return { passportId: item.passportId, name: item.name, state };
     }),
@@ -255,7 +211,7 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
   const hasSoftware = passports.length > 0;
 
   return <div className="mx-auto max-w-6xl space-y-8 pb-10" id="msp-command-center">
-    <nav className="flex flex-wrap gap-1.5 overflow-x-auto" aria-label="Trust network sections">
+    <nav className="flex flex-wrap gap-1.5 overflow-x-auto" aria-label="MSP command center sections">
       {NETWORK_NAV.map((item) => (
         <button key={item.id} onClick={() => onNavigate(item.path)} className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${item.id === 'msp' ? 'border-[var(--spr-highlight)]/50 bg-[var(--spr-accent-soft)]/30 text-[var(--spr-highlight)]' : 'border-[var(--spr-border)] bg-[var(--spr-surface-alt)] text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-sunken)]'}`}>
           {item.label}
@@ -265,9 +221,9 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
 
     <section className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
       <div>
-        <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-[#c586c0]"><Network className="h-4 w-4" /> MSP control plane</div>
-        <h1 className="text-3xl font-bold tracking-tight text-[var(--spr-text)] md:text-4xl">Trust Network</h1>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--spr-text-muted)]">A live view of software trust across your client environment. Observe clients, software, evidence, and trust states from one system.</p>
+        <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-[#c586c0]"><Network className="h-4 w-4" /> MSP command center</div>
+        <h1 className="text-3xl font-bold tracking-tight text-[var(--spr-text)] md:text-4xl">Protect every client’s software stack</h1>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--spr-text-muted)]">Check software, see the evidence, find risk, and take action — client by client, from one MSP workspace.</p>
       </div>
       <div className="flex items-center gap-2">
         <div className="relative">
@@ -285,52 +241,56 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
           )}
         </div>
         <button onClick={() => onNavigate('clients')} className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-4 py-2.5 text-sm font-semibold text-[var(--spr-text)] transition hover:border-[var(--spr-text-faint)] hover:bg-[var(--spr-surface-hover)]">
-          View all clients <ArrowRight className="h-4 w-4" />
+          View clients <ArrowRight className="h-4 w-4" />
         </button>
       </div>
     </section>
 
+    <section className="rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5 md:p-6">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[.14em] text-[var(--spr-highlight)]">MSP workflow</p>
+          <h2 className="mt-1 text-lg font-bold text-[var(--spr-text)]">Client → Software → Evidence → Decision</h2>
+          <p className="mt-1 text-sm text-[var(--spr-text-muted)]">Use SPR to turn software checks into something your technicians and clients can act on.</p>
+        </div>
+        <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+          {['Check','Prove','Prioritize','Report'].map((step, index) => <div key={step} className="rounded-lg border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-center font-semibold text-[var(--spr-text)]"><span className="mr-1 text-[var(--spr-text-faint)]">0{index + 1}</span>{step}</div>)}
+        </div>
+      </div>
+    </section>
+
     {dataStatus === 'loading' ? (
-      // Skeleton rather than zeros. Rendering 0 Clients / 0 Software while the
-      // estate is still being read states something false about the customer's
-      // account, and the zero-client empty state below states it emphatically.
       <section aria-busy="true" aria-live="polite" className="space-y-6">
-        <span className="sr-only">Loading your trust network…</span>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {[0, 1, 2, 3].map((i) => <div key={i} className="h-28 animate-pulse rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)]" />)}
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {[0, 1, 2, 3, 4].map((i) => <div key={i} className="h-24 animate-pulse rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)]" />)}
-        </div>
+        <span className="sr-only">Loading your client software environment…</span>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[0, 1, 2, 3].map((i) => <div key={i} className="h-28 animate-pulse rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)]" />)}</div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{[0, 1, 2, 3, 4].map((i) => <div key={i} className="h-24 animate-pulse rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)]" />)}</div>
         <div className="h-72 animate-pulse rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)]" />
       </section>
     ) : dataStatus === 'error' ? (
       <section role="alert" className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-surface-deep)] py-16 text-center">
         <AlertTriangle className="mx-auto h-9 w-9 text-[var(--spr-red)]" aria-hidden="true" />
-        <h2 className="mt-4 text-xl font-bold text-[var(--spr-text)]">Trust Network couldn&rsquo;t load</h2>
-        {/* Deliberately says nothing about the underlying failure: no status
-            code, no URL, no message from the server. */}
-        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[var(--spr-text-muted)]">We couldn&rsquo;t retrieve the latest trust information. Your data has not changed.</p>
+        <h2 className="mt-4 text-xl font-bold text-[var(--spr-text)]">Client environment couldn&rsquo;t load</h2>
+        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[var(--spr-text-muted)]">We couldn&rsquo;t retrieve the latest client software information. Your data has not changed.</p>
         {onRetry && <button onClick={onRetry} className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[var(--spr-accent)] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[var(--spr-accent-hover)]">Try again</button>}
       </section>
     ) : !hasClients ? (
-      <section className="rounded-md border border-dashed border-[var(--spr-border)] bg-[var(--spr-surface-deep)] py-20 text-center">
-        <Network className="mx-auto h-9 w-9 text-[var(--spr-text-faint)]" />
-        <h2 className="mt-4 text-xl font-bold text-[var(--spr-text)]">Build your trust network</h2>
-        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[var(--spr-text-muted)]">Add your first client to begin observing software trust across their environment.</p>
-        <button onClick={() => onNavigate('clients')} className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[var(--spr-accent)] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[var(--spr-accent-hover)]">Add client <ArrowRight className="h-4 w-4" /></button>
+      <section className="rounded-2xl border border-dashed border-[var(--spr-border)] bg-[var(--spr-surface-deep)] py-20 text-center">
+        <Building2 className="mx-auto h-9 w-9 text-[var(--spr-text-faint)]" />
+        <h2 className="mt-4 text-xl font-bold text-[var(--spr-text)]">Start with your first client</h2>
+        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[var(--spr-text-muted)]">Add a client, register their software, and SPR will build the evidence trail you can use to investigate and report.</p>
+        <button onClick={() => onNavigate('clients')} className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[var(--spr-accent)] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[var(--spr-accent-hover)]">Add first client <ArrowRight className="h-4 w-4" /></button>
       </section>
     ) : !hasSoftware ? (
-      <section className="rounded-md border border-dashed border-[var(--spr-border)] bg-[var(--spr-surface-deep)] py-20 text-center">
+      <section className="rounded-2xl border border-dashed border-[var(--spr-border)] bg-[var(--spr-surface-deep)] py-20 text-center">
         <Layers className="mx-auto h-9 w-9 text-[var(--spr-text-faint)]" />
-        <h2 className="mt-4 text-xl font-bold text-[var(--spr-text)]">Client trust environment ready</h2>
-        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[var(--spr-text-muted)]">Add software to establish your first Software Passport.</p>
-        <button onClick={() => onNavigate('passports')} className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[var(--spr-accent)] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[var(--spr-accent-hover)]">Add software <ArrowRight className="h-4 w-4" /></button>
+        <h2 className="mt-4 text-xl font-bold text-[var(--spr-text)]">Your first client is ready</h2>
+        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[var(--spr-text-muted)]">Register an application to start checking software and building its Software Passport.</p>
+        <button onClick={() => onNavigate('passports')} className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[var(--spr-accent)] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[var(--spr-accent-hover)]">Register software <ArrowRight className="h-4 w-4" /></button>
       </section>
     ) : <>
 
     <section>
-      <h2 className="mb-3 text-xs font-bold uppercase tracking-[.14em] text-[var(--spr-text-faint)]">Current trust state</h2>
+      <h2 className="mb-3 text-xs font-bold uppercase tracking-[.14em] text-[var(--spr-text-faint)]">What needs attention</h2>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Metric label="Verified" value={softwareVerification.verified} icon={<CheckCircle2 />} tone="text-[var(--spr-green)]" sub="Software passports" />
         <Metric label="Needs review" value={softwareVerification.needsReview} icon={<ShieldAlert />} tone="text-[var(--spr-amber)]" sub="Software passports" />
@@ -341,25 +301,25 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
     </section>
 
     <section>
-      <h2 className="mb-3 text-xs font-bold uppercase tracking-[.14em] text-[var(--spr-text-faint)]">Trust inventory</h2>
+      <h2 className="mb-3 text-xs font-bold uppercase tracking-[.14em] text-[var(--spr-text-faint)]">Your client environment</h2>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Metric label="Clients" value={clients.length} icon={<Building2 />} tone="text-[var(--spr-highlight)]" />
         <Metric label="Software" value={passports.length} icon={<Database />} tone="text-[var(--spr-highlight)]" />
         <Metric label="Passports" value={passports.length} icon={<Layers />} tone="text-[var(--spr-highlight)]" />
         <Metric label="Evidence" value={evidenceCoverage.total} icon={<FileCheck2 />} tone="text-[var(--spr-highlight)]" />
-        <Metric label="Open observations" value={attention.length} icon={<Radio />} tone="text-[var(--spr-highlight)]" />
+        <Metric label="Open findings" value={attention.length} icon={<Radio />} tone="text-[var(--spr-highlight)]" />
       </div>
     </section>
 
     <section className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5">
-      <div className="mb-4"><h2 className="text-lg font-bold text-[var(--spr-text)]">Trust network</h2><p className="mt-1 text-sm text-[var(--spr-text-muted)]">Client → Software → Trust state, built from your actual portfolio.</p></div>
+      <div className="mb-4"><h2 className="text-lg font-bold text-[var(--spr-text)]">Clients → software → trust</h2><p className="mt-1 text-sm text-[var(--spr-text-muted)]">See which client environments have verified software, software needing review, or insufficient evidence.</p></div>
       <TrustNetworkMap clients={networkClients} clientsOmitted={clientsOmittedFromNetwork} onSelectClient={(id) => { onSelectClient(id); onNavigate('clients'); }} onSelectSoftware={(passportId) => { onSelectPassport?.(passportId); onNavigate('passports'); }} />
     </section>
 
     <section className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)]">
       <div className="flex flex-col gap-3 border-b border-[var(--spr-border)] px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
-        <div><h2 className="text-lg font-bold text-[var(--spr-text)]">Attention required</h2><p className="mt-1 text-sm text-[var(--spr-text-muted)]">Active observations currently recorded by SPR.</p></div>
-        <span className="w-fit rounded-full border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-1 text-xs font-medium text-[var(--spr-text)]">{attention.length} active findings</span>
+        <div><h2 className="text-lg font-bold text-[var(--spr-text)]">Action required</h2><p className="mt-1 text-sm text-[var(--spr-text-muted)]">Active findings recorded by SPR, ranked by severity.</p></div>
+        <span className="w-fit rounded-full border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-1 text-xs font-medium text-[var(--spr-text)]">{attention.length} open findings</span>
       </div>
       {attention.length ? <div className="divide-y divide-[var(--spr-border)]">
         {attention.map(alert => {
@@ -382,11 +342,11 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
 
     <section className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)]">
       <div className="flex flex-col gap-3 border-b border-[var(--spr-border)] px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
-        <div><h2 className="text-lg font-bold text-[var(--spr-text)]">Cross-client trust risk</h2><p className="mt-1 text-sm text-[var(--spr-text-muted)]">Every client ranked by active critical and high findings, with technician assignment.</p></div>
+        <div><h2 className="text-lg font-bold text-[var(--spr-text)]">Client risk at a glance</h2><p className="mt-1 text-sm text-[var(--spr-text-muted)]">Every client ranked by active critical and high findings, with technician assignment.</p></div>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[720px] text-left text-sm">
-          <thead className="border-b border-[var(--spr-border)] text-[10px] uppercase tracking-[.14em] text-[var(--spr-text-faint)]"><tr><th className="px-5 py-3">Client</th><th className="px-5 py-3">Critical</th><th className="px-5 py-3">High</th><th className="px-5 py-3">Active observations</th><th className="px-5 py-3">Trust state</th><th className="px-5 py-3">Assigned technician</th></tr></thead>
+          <thead className="border-b border-[var(--spr-border)] text-[10px] uppercase tracking-[.14em] text-[var(--spr-text-faint)]"><tr><th className="px-5 py-3">Client</th><th className="px-5 py-3">Critical</th><th className="px-5 py-3">High</th><th className="px-5 py-3">Open findings</th><th className="px-5 py-3">Trust state</th><th className="px-5 py-3">Assigned technician</th></tr></thead>
           <tbody className="divide-y divide-[var(--spr-border)]">
             {clientRiskRollup.map(({ client, activeCount, critical, high, assignment }) => (
               <tr key={client.id}>
@@ -419,7 +379,7 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
 
     <section className="grid gap-4 md:grid-cols-2">
       <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5">
-        <h2 className="text-sm font-bold uppercase tracking-[.1em] text-[var(--spr-text-faint)]">Evidence coverage</h2>
+        <h2 className="text-sm font-bold uppercase tracking-[.1em] text-[var(--spr-text-faint)]">Evidence you can prove</h2>
         {evidenceCoverage.total > 0 ? (
           <>
             <p className="mt-3 text-3xl font-bold text-[var(--spr-text)]">{evidenceCoverage.verified} / {evidenceCoverage.total}</p>
@@ -428,7 +388,7 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
         ) : <p className="mt-3 text-sm text-[var(--spr-text-faint)]">No data — no evidence has been recorded yet.</p>}
       </div>
       <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5">
-        <h2 className="text-sm font-bold uppercase tracking-[.1em] text-[var(--spr-text-faint)]">Verification coverage</h2>
+        <h2 className="text-sm font-bold uppercase tracking-[.1em] text-[var(--spr-text-faint)]">Software verification</h2>
         {softwareVerification.total > 0 ? (
           <>
             <p className="mt-3 text-3xl font-bold text-[var(--spr-text)]">{softwareVerification.verified} / {softwareVerification.total}</p>
@@ -439,8 +399,8 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
     </section>
 
     <section className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5">
-      <h2 className="text-lg font-bold text-[var(--spr-text)]">Recent observations</h2>
-      <p className="mt-1 text-sm text-[var(--spr-text-muted)]">Real, recorded timeline events from your software passports.</p>
+      <h2 className="text-lg font-bold text-[var(--spr-text)]">What changed</h2>
+      <p className="mt-1 text-sm text-[var(--spr-text-muted)]">Recent recorded events from your software passports.</p>
       {recentObservations.length > 0 ? (
         <ul className="mt-4 space-y-2.5">
           {recentObservations.map((entry, index) => (
@@ -450,7 +410,7 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
             </li>
           ))}
         </ul>
-      ) : <p className="mt-4 text-sm text-[var(--spr-text-faint)]">No recorded observations yet.</p>}
+      ) : <p className="mt-4 text-sm text-[var(--spr-text-faint)]">No recorded changes yet.</p>}
     </section>
 
     </>}
