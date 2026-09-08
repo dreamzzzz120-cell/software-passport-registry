@@ -3,15 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { fuzzyMatch, filterData } from '../utils/filter';
+import { fuzzyMatch } from '../utils/filter';
 import { toJsonArrayColumn } from '../lib/clientJsonColumns';
 import {
   Building2,
   ShieldCheck,
   ShieldAlert,
-  ArrowLeft,
   Users,
   Activity,
   Award,
@@ -22,11 +21,7 @@ import {
   AlertTriangle,
   ExternalLink,
   ChevronRight,
-  TrendingUp,
-  Clock,
-  UserCheck,
   FileText,
-  Search,
   Filter,
   Download,
   Plus,
@@ -70,8 +65,33 @@ export default function ClientsView({
   const [addClientError, setAddClientError] = useState<string | null>(null);
   const [addClientSuccess, setAddClientSuccess] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!showAddClient) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !creatingClient) setShowAddClient(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showAddClient, creatingClient]);
+
+  useEffect(() => {
+    if (selectedClientId !== 'global' && !clients.some(c => c.id === selectedClientId)) {
+      setSelectedClientId('global');
+    }
+  }, [clients, selectedClientId, setSelectedClientId]);
+
   const handleCreateClient = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canCreateClient || creatingClient) return;
+
+    const name = newClientName.trim();
+    const domain = newClientDomain.trim().toLowerCase();
+    const industry = newClientIndustry.trim();
+    if (!name || !domain || !industry) {
+      setAddClientError('Client name, primary domain, and industry are required.');
+      return;
+    }
+
     setCreatingClient(true);
     setAddClientError(null);
     setAddClientSuccess(null);
@@ -79,16 +99,15 @@ export default function ClientsView({
       const response = await apiFetch('/api/user/clients', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newClientName.trim(), domain: newClientDomain.trim().toLowerCase(), industry: newClientIndustry.trim() }),
+        body: JSON.stringify({ name, domain, industry }),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) {
-        // POST /api/user/clients reports Zod validation failures (e.g. an
-        // invalid domain format) as a generic 'Invalid request' with the real
-        // per-field message nested under details.fieldErrors -- surface that
-        // specific message instead of the unhelpful generic one.
         const fieldMessage = Object.values(data?.details?.fieldErrors || {}).flat()[0] as string | undefined;
         throw new Error(fieldMessage || data?.details?.formErrors?.[0] || data?.error?.message || data?.error || 'Unable to create client.');
+      }
+      if (!data?.id || !data?.name || !data?.domain || !data?.industry) {
+        throw new Error('The server returned an incomplete client record. Please try again.');
       }
       const created: Client = {
         id: data.id, name: data.name, domain: data.domain, industry: data.industry,
@@ -96,10 +115,6 @@ export default function ClientsView({
         subscriptionTier: data.subscriptionTier ?? 'Standard', joinedDate: data.joinedDate ?? new Date().toISOString(),
         teamCount: data.teamCount ?? 1, passportCount: data.passportCount ?? 0, criticalRisksCount: data.criticalRisksCount ?? 0,
         complianceProgress: data.complianceProgress ?? 0,
-        // `?? []` only covered null/undefined; these four arrive as
-        // JSON-stringified TEXT columns, and a string is neither. Coerce
-        // properly so a freshly created client cannot crash the views that
-        // iterate these fields.
         softwareInventory: toJsonArrayColumn(data.softwareInventory),
         complianceStatus: toJsonArrayColumn(data.complianceStatus),
         teamMembers: toJsonArrayColumn(data.teamMembers),
@@ -116,13 +131,11 @@ export default function ClientsView({
     }
   };
 
-  // Identify all unique client industries for dynamic filters
   const industries = useMemo(() => {
     const list = clients.map(c => c.industry);
     return Array.from(new Set(list));
   }, [clients]);
 
-  // Extract the current selected client
   const client = useMemo(() => {
     return clients.find(c => c.id === selectedClientId) || null;
   }, [clients, selectedClientId]);
@@ -137,16 +150,10 @@ export default function ClientsView({
     .map(passport => passport.securityScore)
     .filter((score): score is number => typeof score === 'number' && Number.isFinite(score));
 
-  // vendorReputationScore is real column data shipped on every passport
-  // (src/routes/connect.ts, src/routes/commercial.ts) -- the exact same
-  // shape securityScores already averages two lines above. There was no
-  // reason for this one to be a permanent 'Not verified' literal while its
-  // sibling metric was computed from real evidence.
   const supplierReputationScores = clientPassports
     .map(passport => passport.vendorReputationScore)
     .filter((score): score is number => typeof score === 'number' && Number.isFinite(score));
 
-  // Filter clients list based on search and industry/risk selectors
   const filteredClients = useMemo(() => {
     return clients.filter(c => {
       const matchesSearch = searchQuery
@@ -156,14 +163,17 @@ export default function ClientsView({
         : true;
       const matchesIndustry = industryFilter === 'all' || c.industry === industryFilter;
       const matchesRisk = riskFilter === 'all' || c.riskLevel === riskFilter;
-
       return matchesSearch && matchesIndustry && matchesRisk;
     });
   }, [clients, searchQuery, industryFilter, riskFilter]);
 
-  // Handle client compliance data CSV export
   const handleExportCSV = () => {
     const headers = ['Client Name', 'Industry', 'Trust Score', 'Passports Active', 'Compliance Progress', 'Risk Level', 'Joined Date'];
+    const escapeCsv = (value: unknown) => {
+      const text = String(value ?? '');
+      const safe = /^[=+\-@]/.test(text) ? `'${text}` : text;
+      return `"${safe.replace(/"/g, '""')}"`;
+    };
     const rows = filteredClients.map(c => [
       c.name,
       c.industry,
@@ -173,77 +183,68 @@ export default function ClientsView({
       c.riskLevel,
       c.joinedDate
     ]);
-
-    const csvContent = 'data:text/csv;charset=utf-8,' 
-      + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    
-    const encodedUri = encodeURI(csvContent);
+    const csvContent = [headers, ...rows].map(row => row.map(escapeCsv).join(',')).join('\r\n');
+    const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `tenant_compliance_audit_${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = 'hidden';
+    link.href = url;
+    link.download = `client_compliance_report_${new Date().toISOString().split('T')[0]}.csv`;
+    link.style.display = 'none';
     document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
+    link.remove();
+    URL.revokeObjectURL(url);
   };
 
   return (
     <div className="space-y-6" id="msp-clients-index">
-      {/* Page Header */}
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <div>
-          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.22em] text-[#c586c0]"><Building2 className="h-4 w-4" /> Tenant directory</div>
-          <h1 className="text-xl font-display font-extrabold text-[var(--spr-text)] mt-1">Client Tenant Directory</h1>
+          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.22em] text-[#c586c0]"><Building2 className="h-4 w-4" /> Client management</div>
+          <h1 className="text-xl font-display font-extrabold text-[var(--spr-text)] mt-1">Protect every client’s software stack</h1>
           <p className="text-xs text-[var(--spr-text-muted)] font-sans mt-1">
-            Browse and manage software trust state across {clients.length} active workspace tenants. Click a card to open.
+            Manage each client’s software, evidence, security findings, and verification status from one place.
           </p>
         </div>
 
-        {/* Quick Filters */}
         <div className="flex flex-wrap items-center gap-2">
           {canCreateClient && (
             <button
-              onClick={() => { setShowAddClient(true); setAddClientError(null); }}
+              onClick={() => { setShowAddClient(true); setAddClientError(null); setAddClientSuccess(null); }}
               className="spr-btn spr-btn-primary flex items-center gap-1.5"
               id="add-client-btn"
+              type="button"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Add Client</span>
+              <span>Add client</span>
             </button>
           )}
           <button
             onClick={handleExportCSV}
             className="spr-btn spr-btn-secondary flex items-center gap-1.5"
             id="export-tenants-csv-btn"
+            type="button"
+            disabled={filteredClients.length === 0}
+            title={filteredClients.length === 0 ? 'No clients to export' : 'Export the clients currently shown'}
           >
             <Download className="w-3.5 h-3.5" />
-            <span>Export Directory</span>
+            <span>Export client report</span>
           </button>
 
-          <div className="flex items-center gap-1.5 bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] px-3 py-2 rounded-md text-xs text-[var(--spr-text-faint)] ">
+          <div className="flex items-center gap-1.5 bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] px-3 py-2 rounded-md text-xs text-[var(--spr-text-faint)]">
             <Filter className="w-3.5 h-3.5 text-[var(--spr-text-muted)]" />
-            <span>Industry:</span>
-            <select
-              value={industryFilter}
-              onChange={(e) => setIndustryFilter(e.target.value)}
-              className="bg-transparent focus:outline-none font-semibold cursor-pointer text-[var(--spr-text)] "
-            >
-              <option value="all">All Industries</option>
-              {industries.map(ind => (
-                <option key={ind} value={ind}>{ind}</option>
-              ))}
+            <label htmlFor="client-industry-filter">Industry:</label>
+            <select id="client-industry-filter" value={industryFilter} onChange={(e) => setIndustryFilter(e.target.value)} className="bg-transparent focus:outline-none font-semibold cursor-pointer text-[var(--spr-text)]">
+              <option value="all">All industries</option>
+              {industries.map(ind => <option key={ind} value={ind}>{ind}</option>)}
             </select>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] px-3 py-2 rounded-md text-xs text-[var(--spr-text-faint)] ">
+          <div className="flex items-center gap-1.5 bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] px-3 py-2 rounded-md text-xs text-[var(--spr-text-faint)]">
             <ShieldAlert className="w-3.5 h-3.5 text-[var(--spr-text-muted)]" />
-            <span>Risk Level:</span>
-            <select
-              value={riskFilter}
-              onChange={(e) => setRiskFilter(e.target.value)}
-              className="bg-transparent focus:outline-none font-semibold cursor-pointer text-[var(--spr-text)] "
-            >
-              <option value="all">All Tiers</option>
+            <label htmlFor="client-risk-filter">Risk:</label>
+            <select id="client-risk-filter" value={riskFilter} onChange={(e) => setRiskFilter(e.target.value)} className="bg-transparent focus:outline-none font-semibold cursor-pointer text-[var(--spr-text)]">
+              <option value="all">All risk levels</option>
               <option value="Safe">Safe</option>
               <option value="Medium">Medium</option>
               <option value="High">High</option>
@@ -252,463 +253,166 @@ export default function ClientsView({
         </div>
       </div>
 
-      {/* Client Directory Grid */}
+      <div className="flex items-center justify-between text-[10px] font-mono text-[var(--spr-text-muted)]">
+        <span>{filteredClients.length} of {clients.length} clients shown</span>
+        {(searchQuery || industryFilter !== 'all' || riskFilter !== 'all') && <span>Filters are active</span>}
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {filteredClients.map(c => {
           const hasCriticalRisks = c.criticalRisksCount > 0;
           const isDrawerActive = selectedClientId === c.id;
           return (
-            <div
+            <button
               key={c.id}
+              type="button"
               onClick={() => setSelectedClientId(c.id)}
-              className={`spr-panel p-5 cursor-pointer flex flex-col gap-4 relative group transition-all duration-300 ${
-                isDrawerActive
-                  ? 'border-[var(--spr-highlight)]'
-                  : 'hover:border-[var(--spr-highlight)]'
-              }`}
+              aria-label={`Open client ${c.name}`}
+              aria-pressed={isDrawerActive}
+              className={`spr-panel p-5 text-left cursor-pointer flex flex-col gap-4 relative group transition-all duration-300 w-full ${isDrawerActive ? 'border-[var(--spr-highlight)]' : 'hover:border-[var(--spr-highlight)]'}`}
             >
-              {/* Upper Details */}
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-md flex items-center justify-center font-bold text-sm ${c.avatarColor}`}>
-                    {c.name.charAt(0)}
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-[var(--spr-text)] group-hover:text-[var(--spr-highlight)] transition-colors">
-                      {c.name}
-                    </h3>
-                    <p className="text-[10px] text-[var(--spr-text-muted)] font-mono flex items-center gap-1 mt-0.5">
-                      <Globe className="w-3 h-3 text-[var(--spr-text-muted)]" />
-                      <span>{c.domain}</span> • <span>{c.industry}</span>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={`w-10 h-10 rounded-md flex items-center justify-center font-bold text-sm shrink-0 ${c.avatarColor}`}>{c.name.charAt(0)}</div>
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-bold text-[var(--spr-text)] group-hover:text-[var(--spr-highlight)] transition-colors truncate">{c.name}</h3>
+                    <p className="text-[10px] text-[var(--spr-text-muted)] font-mono flex items-center gap-1 mt-0.5 truncate">
+                      <Globe className="w-3 h-3 shrink-0" /><span className="truncate">{c.domain}</span> • <span>{c.industry}</span>
                     </p>
                   </div>
                 </div>
-
-                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold border ${
-                  c.riskLevel === 'Safe' ? 'bg-[var(--spr-green)]/15 border-[var(--spr-green)] text-[var(--spr-green)] ' :
-                  c.riskLevel === 'Medium' ? 'bg-[var(--spr-amber)]/15 border-[var(--spr-amber)] text-[var(--spr-amber)] ' :
-                  'bg-[var(--spr-red)]/15 border-[var(--spr-red)] text-[var(--spr-red)] '
-                }`}>
-                  {c.riskLevel} Risk
+                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold border shrink-0 ${c.riskLevel === 'Safe' ? 'bg-[var(--spr-green)]/15 border-[var(--spr-green)] text-[var(--spr-green)]' : c.riskLevel === 'Medium' ? 'bg-[var(--spr-amber)]/15 border-[var(--spr-amber)] text-[var(--spr-amber)]' : 'bg-[var(--spr-red)]/15 border-[var(--spr-red)] text-[var(--spr-red)]'}`}>
+                  {c.riskLevel} risk
                 </span>
               </div>
 
-              {/* Performance indicators Grid */}
               <div className="grid grid-cols-3 gap-3 pt-3 border-t border-[var(--spr-border)] text-center">
-                <div className="bg-[var(--spr-surface-sunken)] p-2.5 rounded-md border border-[var(--spr-border)] ">
-                  <p className="text-[8px] text-[var(--spr-text-muted)] font-mono font-bold uppercase">Trust Score</p>
-                  <p className="text-base font-bold font-mono text-[var(--spr-text)] mt-0.5">
-                    {typeof c.trustScore === 'number' ? <>{c.trustScore}<span className="text-[10px] text-[var(--spr-text-muted)] ">/100</span></> : c.trustScore}
-                  </p>
+                <div className="bg-[var(--spr-surface-sunken)] p-2.5 rounded-md border border-[var(--spr-border)]">
+                  <p className="text-[8px] text-[var(--spr-text-muted)] font-mono font-bold uppercase">Trust</p>
+                  <p className="text-base font-bold font-mono text-[var(--spr-text)] mt-0.5">{typeof c.trustScore === 'number' ? <>{c.trustScore}<span className="text-[10px] text-[var(--spr-text-muted)]">/100</span></> : c.trustScore}</p>
                 </div>
-                <div className="bg-[var(--spr-surface-sunken)] p-2.5 rounded-md border border-[var(--spr-border)] ">
-                  <p className="text-[8px] text-[var(--spr-text-muted)] font-mono font-bold uppercase">Passports</p>
+                <div className="bg-[var(--spr-surface-sunken)] p-2.5 rounded-md border border-[var(--spr-border)]">
+                  <p className="text-[8px] text-[var(--spr-text-muted)] font-mono font-bold uppercase">Software</p>
                   <p className="text-base font-bold font-mono text-[var(--spr-text)] mt-0.5">{c.passportCount}</p>
                 </div>
-                <div className="bg-[var(--spr-surface-sunken)] p-2.5 rounded-md border border-[var(--spr-border)] ">
+                <div className="bg-[var(--spr-surface-sunken)] p-2.5 rounded-md border border-[var(--spr-border)]">
                   <p className="text-[8px] text-[var(--spr-text-muted)] font-mono font-bold uppercase">Compliance</p>
                   <p className="text-base font-bold font-mono text-[var(--spr-text)] mt-0.5">{typeof c.complianceProgress === 'number' ? `${c.complianceProgress}%` : c.complianceProgress}</p>
                 </div>
               </div>
 
-              {/* Subtext warning / health status */}
-              <div className="flex items-center justify-between text-[10px] font-mono mt-1">
-                <span className="text-[var(--spr-text-muted)] ">Joined: {c.joinedDate}</span>
+              <div className="flex items-center justify-between gap-3 text-[10px] font-mono mt-1">
+                <span className="text-[var(--spr-text-muted)] truncate">Joined: {c.joinedDate}</span>
                 {hasCriticalRisks ? (
-                  <span className="text-[var(--spr-red)] font-bold flex items-center gap-1">
-                    <AlertTriangle className="w-3.5 h-3.5 text-[var(--spr-red)] animate-pulse" />
-                    {c.criticalRisksCount} Critical Alerts Active
-                  </span>
+                  <span className="text-[var(--spr-red)] font-bold flex items-center gap-1 shrink-0"><AlertTriangle className="w-3.5 h-3.5" />{c.criticalRisksCount} issues need attention</span>
                 ) : (
-                  <span className="text-[var(--spr-green)] font-bold flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5 text-[var(--spr-green)] " />
-                    No critical risks recorded
-                  </span>
+                  <span className="text-[var(--spr-green)] font-bold flex items-center gap-1 shrink-0"><ShieldCheck className="w-3.5 h-3.5" />No critical issues recorded</span>
                 )}
               </div>
 
-              <div className="absolute bottom-4 right-5 text-[var(--spr-highlight)] opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 font-bold text-xs">
-                <span>Configure Drawer</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </div>
-            </div>
+              <div className="absolute bottom-4 right-5 text-[var(--spr-highlight)] opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 font-bold text-xs"><span>Open client</span><ChevronRight className="w-3.5 h-3.5" /></div>
+            </button>
           );
         })}
       </div>
 
       {filteredClients.length === 0 && (
-        <div className="bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] rounded-md p-12 text-center ">
+        <div className="bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] rounded-md p-12 text-center">
           <Building2 className="w-12 h-12 text-[var(--spr-text)] mx-auto mb-3" />
-          <h3 className="text-sm font-bold text-[var(--spr-text-faint)] ">{clients.length === 0 ? 'No clients yet' : 'No client workspaces found'}</h3>
+          <h3 className="text-sm font-bold text-[var(--spr-text-faint)]">{clients.length === 0 ? 'Add your first client' : 'No clients match these filters'}</h3>
           <p className="text-xs text-[var(--spr-text-muted)] max-w-sm mx-auto mt-1">
-            {clients.length === 0
-              ? (canCreateClient ? 'Add your first client to start tracking their software passports and evidence.' : 'Ask an Owner or Admin to add a client to this workspace.')
-              : 'Adjust your search keywords or industry filters and try again.'}
+            {clients.length === 0 ? (canCreateClient ? 'Create a client workspace to start tracking their software, evidence, risks, and verification.' : 'Ask an Owner or Admin to add a client to this workspace.') : 'Adjust your search or filters to find the client you need.'}
           </p>
           {clients.length === 0 && canCreateClient && (
-            <button onClick={() => setShowAddClient(true)} className="spr-btn spr-btn-primary mt-4 inline-flex items-center gap-1.5">
-              <Plus className="w-3.5 h-3.5" /> Add Client
-            </button>
+            <button type="button" onClick={() => setShowAddClient(true)} className="spr-btn spr-btn-primary mt-4 inline-flex items-center gap-1.5"><Plus className="w-3.5 h-3.5" /> Add client</button>
           )}
         </div>
       )}
 
-      {/* Slide-out Drawer Panel */}
       <AnimatePresence>
         {selectedClientId !== 'global' && client && (
           <>
-            {/* Backdrop Overlay with blur */}
-            <motion.div
-              key="clients-drawer-backdrop"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 0.5 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setSelectedClientId('global')}
-              className="fixed inset-0 bg-black/60 z-40 cursor-pointer"
-            />
-
-            {/* Sliding Drawer Container */}
-            <motion.div
-              key="clients-drawer-panel"
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', damping: 26, stiffness: 170 }}
-              className="fixed right-0 top-0 bottom-0 w-full max-w-4xl bg-[var(--spr-surface-sunken)] border-l border-[var(--spr-border)] z-50 overflow-y-auto p-6 flex flex-col"
-            >
-              {/* Drawer Top Navigation & Actions */}
-              <div className="flex items-center justify-between border-b border-[var(--spr-border)] pb-4 shrink-0">
-                <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-md flex items-center justify-center font-bold text-sm ${client.avatarColor}`}>
-                    {client.name.charAt(0)}
-                  </div>
-                  <div>
-                    <span className="text-[9px] font-mono font-bold tracking-wider text-[var(--spr-text-muted)] uppercase">
-                      ACTIVE TENANT CONTROLLER
-                    </span>
-                    <h2 className="text-base font-display font-extrabold text-[var(--spr-text)] leading-tight">
-                      {client.name}
-                    </h2>
+            <motion.div key="clients-drawer-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 0.5 }} exit={{ opacity: 0 }} onClick={() => setSelectedClientId('global')} className="fixed inset-0 bg-black/60 z-40 cursor-pointer" />
+            <motion.div key="clients-drawer-panel" initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 26, stiffness: 170 }} className="fixed right-0 top-0 bottom-0 w-full max-w-4xl bg-[var(--spr-surface-sunken)] border-l border-[var(--spr-border)] z-50 overflow-y-auto p-6 flex flex-col" role="dialog" aria-modal="true" aria-labelledby="client-drawer-title">
+              <div className="flex items-center justify-between border-b border-[var(--spr-border)] pb-4 shrink-0 gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={`w-10 h-10 rounded-md flex items-center justify-center font-bold text-sm shrink-0 ${client.avatarColor}`}>{client.name.charAt(0)}</div>
+                  <div className="min-w-0">
+                    <span className="text-[9px] font-mono font-bold tracking-wider text-[var(--spr-text-muted)] uppercase">CLIENT</span>
+                    <h2 id="client-drawer-title" className="text-base font-display font-extrabold text-[var(--spr-text)] leading-tight truncate">{client.name}</h2>
                   </div>
                 </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => generateClientCompliancePDF(client)}
-                    className="spr-btn spr-btn-primary flex items-center gap-1.5 !text-[11px] !py-1.8"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>Compliance PDF</span>
-                  </button>
-                  <button
-                    onClick={() => setSelectedClientId('global')}
-                    className="p-1.8 hover:bg-[var(--spr-surface-hover)] border border-[var(--spr-border)] rounded-md text-[var(--spr-text-muted)] hover:text-[var(--spr-text-faint)] cursor-pointer transition-colors"
-                    title="Close Drawer"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button type="button" onClick={() => generateClientCompliancePDF(client)} className="spr-btn spr-btn-primary flex items-center gap-1.5 !text-[11px] !py-1.8"><Download className="w-3.5 h-3.5" /><span>Download compliance report</span></button>
+                  <button type="button" onClick={() => setSelectedClientId('global')} className="p-1.8 hover:bg-[var(--spr-surface-hover)] border border-[var(--spr-border)] rounded-md text-[var(--spr-text-muted)] hover:text-[var(--spr-text-faint)] cursor-pointer transition-colors" title="Close client" aria-label="Close client"><X className="w-4 h-4" /></button>
                 </div>
               </div>
 
-              {/* Badges and summary bar */}
               <div className="flex flex-wrap gap-2 text-[10px] font-mono mt-4 shrink-0">
-                <span className="bg-[var(--spr-surface-hover)] text-[var(--spr-text-faint)] px-2.5 py-1 rounded-md font-medium border border-[var(--spr-border)] ">
-                  Tier: {client.subscriptionTier}
-                </span>
-                <span className="bg-[var(--spr-surface-hover)] text-[var(--spr-text-faint)] px-2.5 py-1 rounded-md font-medium border border-[var(--spr-border)] ">
-                  Domain: {client.domain}
-                </span>
-                <span className={`px-2.5 py-1 rounded-md font-bold border ${
-                  client.riskLevel === 'Safe' ? 'bg-[var(--spr-green)]/15 border-[var(--spr-green)] text-[var(--spr-green)] ' :
-                  client.riskLevel === 'Medium' ? 'bg-[var(--spr-amber)]/15 border-[var(--spr-amber)] text-[var(--spr-amber)] ' :
-                  'bg-[var(--spr-red)]/15 border-[var(--spr-red)] text-[var(--spr-red)] '
-                }`}>
-                  Risk Status: {client.riskLevel}
-                </span>
+                <span className="bg-[var(--spr-surface-hover)] text-[var(--spr-text-faint)] px-2.5 py-1 rounded-md font-medium border border-[var(--spr-border)]">Plan: {client.subscriptionTier}</span>
+                <span className="bg-[var(--spr-surface-hover)] text-[var(--spr-text-faint)] px-2.5 py-1 rounded-md font-medium border border-[var(--spr-border)]">Domain: {client.domain}</span>
+                <span className={`px-2.5 py-1 rounded-md font-bold border ${client.riskLevel === 'Safe' ? 'bg-[var(--spr-green)]/15 border-[var(--spr-green)] text-[var(--spr-green)]' : client.riskLevel === 'Medium' ? 'bg-[var(--spr-amber)]/15 border-[var(--spr-amber)] text-[var(--spr-amber)]' : 'bg-[var(--spr-red)]/15 border-[var(--spr-red)] text-[var(--spr-red)]'}`}>Risk: {client.riskLevel}</span>
               </div>
 
-              {/* Drawer Tabs Header */}
-              <div className="flex border-b border-[var(--spr-border)] text-xs font-semibold gap-1 select-none overflow-x-auto mt-4 shrink-0">
+              <div className="flex border-b border-[var(--spr-border)] text-xs font-semibold gap-1 select-none overflow-x-auto mt-4 shrink-0" role="tablist" aria-label="Client details">
                 {[
-                  { id: 'overview', label: 'Trust Coordinates', icon: Award },
-                  { id: 'inventory', label: 'SBOM Inventory', icon: FileCheck },
-                  { id: 'security', label: 'Security Center', icon: ShieldAlert },
-                  { id: 'compliance', label: 'Framework Matrices', icon: Lock },
-                  { id: 'team', label: 'Stakeholders', icon: Users }
+                  { id: 'overview', label: 'Overview', icon: Award },
+                  { id: 'inventory', label: 'Software', icon: FileCheck },
+                  { id: 'security', label: 'Security', icon: ShieldAlert },
+                  { id: 'compliance', label: 'Compliance', icon: Lock },
+                  { id: 'team', label: 'Contacts', icon: Users }
                 ].map(tb => {
                   const Icon = tb.icon;
                   const isSel = workspaceTab === tb.id;
-                  return (
-                    <button
-                      key={tb.id}
-                      type="button"
-                      onClick={() => setWorkspaceTab(tb.id as any)}
-                      className={`flex items-center gap-1.5 px-3 py-2 cursor-pointer border-b-2 font-sans font-bold text-[11px] transition-colors whitespace-nowrap ${
-                        isSel 
-                          ? 'border-[var(--spr-highlight)] text-[var(--spr-highlight)] '
-                          : 'border-transparent text-[var(--spr-text-muted)] hover:text-[var(--spr-text)] '
-                      }`}
-                    >
-                      <Icon className="w-3.5 h-3.5" />
-                      <span>{tb.label}</span>
-                    </button>
-                  );
+                  return <button key={tb.id} type="button" role="tab" aria-selected={isSel} onClick={() => setWorkspaceTab(tb.id as typeof workspaceTab)} className={`flex items-center gap-1.5 px-3 py-2 cursor-pointer border-b-2 font-sans font-bold text-[11px] transition-colors whitespace-nowrap ${isSel ? 'border-[var(--spr-highlight)] text-[var(--spr-highlight)]' : 'border-transparent text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]'}`}><Icon className="w-3.5 h-3.5" /><span>{tb.label}</span></button>;
                 })}
               </div>
 
-              {/* Drawer Tabs Body content */}
               <div className="flex-1 overflow-y-auto pt-4 pb-2 space-y-6">
-                
-                {/* 1. Trust Coordinates Tab */}
                 {workspaceTab === 'overview' && (
                   <div className="space-y-6">
-                    {/* Trust Scores Bento Box */}
-                    <div className="bg-[var(--spr-surface-alt)] p-5 rounded-md border border-[var(--spr-border)] ">
-                      <h3 className="text-xs font-bold text-[var(--spr-text-muted)] font-mono uppercase tracking-wider mb-4">Core Trust Coordinates</h3>
+                    <div className="bg-[var(--spr-surface-alt)] p-5 rounded-md border border-[var(--spr-border)]">
+                      <h3 className="text-xs font-bold text-[var(--spr-text-muted)] font-mono uppercase tracking-wider mb-4">Trust overview</h3>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                        <div className="bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] p-4 rounded-md text-center">
-                          <p className="text-[9px] text-[var(--spr-text-muted)] font-mono font-bold uppercase">Overall score</p>
-                          <p className="text-2xl font-display font-extrabold font-mono text-[var(--spr-text)] mt-1">{client.trustScore}</p>
-                          <span className="text-[9px] text-[var(--spr-text-muted)] font-semibold font-mono">Observed client record</span>
-                        </div>
-                        <div className="bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] p-4 rounded-md text-center">
-                          <p className="text-[9px] text-[var(--spr-text-muted)] font-mono font-bold uppercase">Security Score</p>
-                          <p className="text-2xl font-display font-extrabold font-mono text-[var(--spr-text)] mt-1">
-                            {securityScores.length > 0 ? Math.round(securityScores.reduce((sum, score) => sum + score, 0) / securityScores.length) : 'Not verified'}
-                          </p>
-                          <span className="text-[9px] text-[var(--spr-text-muted)] font-mono">Passport-derived</span>
-                        </div>
-                        <div className="bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] p-4 rounded-md text-center">
-                          <p className="text-[9px] text-[var(--spr-text-muted)] font-mono font-bold uppercase">Compliance Score</p>
-                          <p className="text-2xl font-display font-extrabold font-mono text-[var(--spr-text)] mt-1">{typeof client.complianceProgress === 'number' ? `${client.complianceProgress}%` : client.complianceProgress}</p>
-                          <span className="text-[9px] text-[var(--spr-text-muted)] font-mono">Client record</span>
-                        </div>
-                        <div className="bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] p-4 rounded-md text-center">
-                          <p className="text-[9px] text-[var(--spr-text-muted)] font-mono font-bold uppercase">Supplier Rep</p>
-                          <p className="text-2xl font-display font-extrabold font-mono text-[var(--spr-text)] mt-1">
-                            {supplierReputationScores.length > 0 ? Math.round(supplierReputationScores.reduce((sum, score) => sum + score, 0) / supplierReputationScores.length) : 'Not verified'}
-                          </p>
-                          <span className="text-[9px] text-[var(--spr-text-muted)] font-mono">{supplierReputationScores.length > 0 ? 'Passport-derived' : 'No vendor score observed'}</span>
-                        </div>
+                        <div className="bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] p-4 rounded-md text-center"><p className="text-[9px] text-[var(--spr-text-muted)] font-mono font-bold uppercase">Overall score</p><p className="text-2xl font-display font-extrabold font-mono text-[var(--spr-text)] mt-1">{client.trustScore}</p><span className="text-[9px] text-[var(--spr-text-muted)] font-semibold font-mono">Client record</span></div>
+                        <div className="bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] p-4 rounded-md text-center"><p className="text-[9px] text-[var(--spr-text-muted)] font-mono font-bold uppercase">Security</p><p className="text-2xl font-display font-extrabold font-mono text-[var(--spr-text)] mt-1">{securityScores.length > 0 ? Math.round(securityScores.reduce((sum, score) => sum + score, 0) / securityScores.length) : 'Not verified'}</p><span className="text-[9px] text-[var(--spr-text-muted)] font-mono">Passport-derived</span></div>
+                        <div className="bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] p-4 rounded-md text-center"><p className="text-[9px] text-[var(--spr-text-muted)] font-mono font-bold uppercase">Compliance</p><p className="text-2xl font-display font-extrabold font-mono text-[var(--spr-text)] mt-1">{typeof client.complianceProgress === 'number' ? `${client.complianceProgress}%` : client.complianceProgress}</p><span className="text-[9px] text-[var(--spr-text-muted)] font-mono">Client record</span></div>
+                        <div className="bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] p-4 rounded-md text-center"><p className="text-[9px] text-[var(--spr-text-muted)] font-mono font-bold uppercase">Supplier reputation</p><p className="text-2xl font-display font-extrabold font-mono text-[var(--spr-text)] mt-1">{supplierReputationScores.length > 0 ? Math.round(supplierReputationScores.reduce((sum, score) => sum + score, 0) / supplierReputationScores.length) : 'Not verified'}</p><span className="text-[9px] text-[var(--spr-text-muted)] font-mono">{supplierReputationScores.length > 0 ? 'Passport-derived' : 'No vendor score observed'}</span></div>
                       </div>
                     </div>
 
-                    {/* Company Overview Details Card */}
                     <div className="bg-[var(--spr-surface-alt)] p-5 rounded-md border border-[var(--spr-border)] grid grid-cols-1 sm:grid-cols-2 gap-6">
-                      <div className="space-y-3.5">
-                        <h3 className="text-xs font-bold text-[var(--spr-text)] font-display">Tenant Profile Overview</h3>
-                        <div className="text-xs space-y-2">
-                          <div className="flex justify-between border-b border-[var(--spr-border)] pb-1.5">
-                            <span className="text-[var(--spr-text-muted)] font-mono text-[10px]">ORGANIZATION NAME</span>
-                            <span className="font-semibold text-[var(--spr-text-faint)] ">{client.name}</span>
-                          </div>
-                          <div className="flex justify-between border-b border-[var(--spr-border)] pb-1.5">
-                            <span className="text-[var(--spr-text-muted)] font-mono text-[10px]">DOMAIN</span>
-                            <span className="font-semibold text-[var(--spr-text-faint)] font-mono">{client.domain}</span>
-                          </div>
-                          <div className="flex justify-between border-b border-[var(--spr-border)] pb-1.5">
-                            <span className="text-[var(--spr-text-muted)] font-mono text-[10px]">INDUSTRY</span>
-                            <span className="font-semibold text-[var(--spr-text-faint)] ">{client.industry}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-3.5">
-                        <h3 className="text-xs font-bold text-[var(--spr-text)] font-display">SLA & Scope Details</h3>
-                        <div className="text-xs space-y-2">
-                          <div className="flex justify-between border-b border-[var(--spr-border)] pb-1.5">
-                            <span className="text-[var(--spr-text-muted)] font-mono text-[10px]">VERIFIED REGISTRY</span>
-                            <span className="font-semibold text-[var(--spr-text-faint)] font-mono">tenant-{client.id}</span>
-                          </div>
-                          <div className="flex justify-between border-b border-[var(--spr-border)] pb-1.5">
-                            <span className="text-[var(--spr-text-muted)] font-mono text-[10px]">JOINED DATE</span>
-                            <span className="font-semibold text-[var(--spr-text-faint)] font-mono">{client.joinedDate}</span>
-                          </div>
-                          <div className="flex justify-between border-b border-[var(--spr-border)] pb-1.5">
-                            <span className="text-[var(--spr-text-muted)] font-mono text-[10px]">COMPLIANCE TARGET</span>
-                            <span className="font-bold text-[var(--spr-highlight)] font-mono">{client.complianceStatus.length ? client.complianceStatus.map((item) => item.code).join(', ') : 'Not observed'}</span>
-                          </div>
-                        </div>
-                      </div>
+                      <div className="space-y-3.5"><h3 className="text-xs font-bold text-[var(--spr-text)] font-display">Client profile</h3><div className="text-xs space-y-2"><div className="flex justify-between border-b border-[var(--spr-border)] pb-1.5"><span className="text-[var(--spr-text-muted)] font-mono text-[10px]">ORGANIZATION</span><span className="font-semibold text-[var(--spr-text-faint)]">{client.name}</span></div><div className="flex justify-between border-b border-[var(--spr-border)] pb-1.5"><span className="text-[var(--spr-text-muted)] font-mono text-[10px]">DOMAIN</span><span className="font-semibold text-[var(--spr-text-faint)] font-mono">{client.domain}</span></div><div className="flex justify-between border-b border-[var(--spr-border)] pb-1.5"><span className="text-[var(--spr-text-muted)] font-mono text-[10px]">INDUSTRY</span><span className="font-semibold text-[var(--spr-text-faint)]">{client.industry}</span></div></div></div>
+                      <div className="space-y-3.5"><h3 className="text-xs font-bold text-[var(--spr-text)] font-display">Service scope</h3><div className="text-xs space-y-2"><div className="flex justify-between border-b border-[var(--spr-border)] pb-1.5"><span className="text-[var(--spr-text-muted)] font-mono text-[10px]">CLIENT ID</span><span className="font-semibold text-[var(--spr-text-faint)] font-mono break-all">{client.id}</span></div><div className="flex justify-between border-b border-[var(--spr-border)] pb-1.5"><span className="text-[var(--spr-text-muted)] font-mono text-[10px]">JOINED</span><span className="font-semibold text-[var(--spr-text-faint)] font-mono">{client.joinedDate}</span></div><div className="flex justify-between border-b border-[var(--spr-border)] pb-1.5"><span className="text-[var(--spr-text-muted)] font-mono text-[10px]">COMPLIANCE TARGET</span><span className="font-bold text-[var(--spr-highlight)] font-mono text-right">{client.complianceStatus.length ? client.complianceStatus.map(item => item.code).join(', ') : 'Not observed'}</span></div></div></div>
                     </div>
                   </div>
                 )}
 
-                {/* 2. SBOM Inventory Tab */}
                 {workspaceTab === 'inventory' && (
                   <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <h3 className="text-xs font-bold text-[var(--spr-text-muted)] font-mono uppercase tracking-wider">Registered Client Software SBOM Passports</h3>
-                      <span className="text-[10px] text-[var(--spr-text-muted)] font-mono">Count: {client.passportCount}</span>
-                    </div>
-
-                    {client.softwareInventory.length === 0 && (
-                      <div className="rounded-md border border-dashed border-[var(--spr-border)] px-5 py-10 text-center text-xs text-[var(--spr-text-muted)] ">No software passports registered for this client yet.</div>
-                    )}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {passports.filter(p => {
-                        const clientPassportIds = new Set(client.softwareInventory.map(item => item.passportId));
-                        return clientPassportIds.has(p.id);
-                      }).map(p => (
-                        <div
-                          key={p.id}
-                          onClick={() => onNavigateTab('passports', p.id)}
-                          className="bg-[var(--spr-surface-alt)] p-4 rounded-md border border-[var(--spr-border)] hover:border-[var(--spr-highlight)] cursor-pointer transition-colors space-y-3 "
-                        >
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <h4 className="text-xs font-bold text-[var(--spr-text)] ">{p.name}</h4>
-                              <p className="text-[10px] text-[var(--spr-text-muted)] font-mono">Version: {p.version || 'Not observed'}</p>
-                            </div>
-                            <span className="text-[10px] font-mono bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] px-2 py-0.5 border border-[var(--spr-highlight)] rounded font-semibold">
-                              {p.sbom.length} Dependencies
-                            </span>
-                          </div>
-
-                          <div className="flex justify-between items-center text-[10px] font-mono text-[var(--spr-text-muted)] pt-2 border-t border-[var(--spr-border)] ">
-                            <span>Compliance: {p.complianceScore == null ? 'Not verified' : `${p.complianceScore}%`}</span>
-                            <span className="text-[var(--spr-highlight)] font-bold flex items-center gap-0.5">
-                              Open Passport <ChevronRight className="w-3 h-3" />
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                    <div className="flex justify-between items-center"><h3 className="text-xs font-bold text-[var(--spr-text-muted)] font-mono uppercase tracking-wider">Software & passports</h3><span className="text-[10px] text-[var(--spr-text-muted)] font-mono">Count: {client.passportCount}</span></div>
+                    {client.softwareInventory.length === 0 && <div className="rounded-md border border-dashed border-[var(--spr-border)] px-5 py-10 text-center text-xs text-[var(--spr-text-muted)]">No software passports registered for this client yet.</div>}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{passports.filter(p => client.softwareInventory.some(item => item.passportId === p.id)).map(p => <button key={p.id} type="button" onClick={() => onNavigateTab('passports', p.id)} className="bg-[var(--spr-surface-alt)] p-4 rounded-md border border-[var(--spr-border)] hover:border-[var(--spr-highlight)] cursor-pointer transition-colors space-y-3 text-left"><div className="flex justify-between items-start gap-3"><div><h4 className="text-xs font-bold text-[var(--spr-text)]">{p.name}</h4><p className="text-[10px] text-[var(--spr-text-muted)] font-mono">Version: {p.version || 'Not observed'}</p></div><span className="text-[10px] font-mono bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] px-2 py-0.5 border border-[var(--spr-highlight)] rounded font-semibold shrink-0">{p.sbom.length} dependencies</span></div><div className="flex justify-between items-center text-[10px] font-mono text-[var(--spr-text-muted)] pt-2 border-t border-[var(--spr-border)]"><span>Compliance: {p.complianceScore == null ? 'Not verified' : `${p.complianceScore}%`}</span><span className="text-[var(--spr-highlight)] font-bold flex items-center gap-0.5">Open passport <ChevronRight className="w-3 h-3" /></span></div></button>)}</div>
                   </div>
                 )}
 
-                {/* 3. Security Center Tab */}
                 {workspaceTab === 'security' && (
                   <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <h3 className="text-xs font-bold text-[var(--spr-text-muted)] font-mono uppercase tracking-wider">Active Vulnerability Footprint</h3>
-                      <button
-                        onClick={() => onNavigateTab('alerts')}
-                        className="text-[10px] font-mono text-[var(--spr-highlight)] hover:underline font-bold"
-                      >
-                        Launch Threat Mitigator
-                      </button>
-                    </div>
-
-                    <div className="bg-[var(--spr-surface-alt)] rounded-md border border-[var(--spr-border)] overflow-hidden">
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse text-xs">
-                          <thead>
-                            <tr className="bg-[var(--spr-surface-sunken)] text-[var(--spr-text-muted)] font-mono font-bold border-b border-[var(--spr-border)] text-[10px]">
-                              <th className="px-5 py-3">CVE ID</th>
-                              <th className="px-5 py-3">COMPONENT</th>
-                              <th className="px-5 py-3">SEVERITY</th>
-                              <th className="px-5 py-3">CVSS</th>
-                              <th className="px-5 py-3">STATUS</th>
-                              <th className="px-5 py-3">THREAT SUMMARY</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-[var(--spr-border)] text-[var(--spr-text-faint)] ">
-                            {clientPassports.flatMap(passport => (passport.vulnerabilities || []).map(vulnerability => ({ passport, vulnerability }))).map(({ passport, vulnerability }, index) => (
-                              <tr key={`${passport.id}-${vulnerability.id}-${index}`} className="hover:bg-[var(--spr-surface-sunken)] ">
-                                <td className="px-5 py-3.5 font-bold text-[var(--spr-highlight)] font-mono">{vulnerability.id}</td>
-                                <td className="px-5 py-3.5 font-semibold text-[var(--spr-text-faint)] ">{vulnerability.component}</td>
-                                <td className="px-5 py-3.5"><span className="rounded-full border border-[var(--spr-border)] bg-[var(--spr-surface-hover)] px-2.5 py-0.5 text-[9px] font-extrabold uppercase ">{vulnerability.severity}</span></td>
-                                <td className="px-5 py-3.5 font-bold font-mono">{vulnerability.cvss ?? 'Not observed'}</td>
-                                <td className="px-5 py-3.5"><span className="rounded border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2 py-0.5 text-[9px] font-bold ">{vulnerability.status}</span></td>
-                                <td className="max-w-sm truncate px-5 py-3.5 text-[var(--spr-text-muted)] " title={vulnerability.description}>{vulnerability.description || 'No description observed.'}</td>
-                              </tr>
-                            ))}
-                            {clientPassports.every(passport => !passport.vulnerabilities?.length) && <tr><td colSpan={6} className="px-5 py-6 text-center text-[var(--spr-text-muted)] font-mono">No vulnerability observations are recorded for this client.</td></tr>}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
+                    <div className="flex justify-between items-center gap-3"><h3 className="text-xs font-bold text-[var(--spr-text-muted)] font-mono uppercase tracking-wider">Security findings</h3><button type="button" onClick={() => onNavigateTab('alerts')} className="text-[10px] font-mono text-[var(--spr-highlight)] hover:underline font-bold">View all findings</button></div>
+                    <div className="bg-[var(--spr-surface-alt)] rounded-md border border-[var(--spr-border)] overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-left border-collapse text-xs"><thead><tr className="bg-[var(--spr-surface-sunken)] text-[var(--spr-text-muted)] font-mono font-bold border-b border-[var(--spr-border)] text-[10px]"><th className="px-5 py-3">CVE ID</th><th className="px-5 py-3">COMPONENT</th><th className="px-5 py-3">SEVERITY</th><th className="px-5 py-3">CVSS</th><th className="px-5 py-3">STATUS</th><th className="px-5 py-3">THREAT SUMMARY</th></tr></thead><tbody className="divide-y divide-[var(--spr-border)] text-[var(--spr-text-faint)]">{clientPassports.flatMap(passport => (passport.vulnerabilities || []).map(vulnerability => ({ passport, vulnerability }))).map(({ passport, vulnerability }, index) => <tr key={`${passport.id}-${vulnerability.id}-${index}`} className="hover:bg-[var(--spr-surface-sunken)]"><td className="px-5 py-3.5 font-bold text-[var(--spr-highlight)] font-mono">{vulnerability.id}</td><td className="px-5 py-3.5 font-semibold">{vulnerability.component}</td><td className="px-5 py-3.5"><span className="rounded-full border border-[var(--spr-border)] bg-[var(--spr-surface-hover)] px-2.5 py-0.5 text-[9px] font-extrabold uppercase">{vulnerability.severity}</span></td><td className="px-5 py-3.5 font-bold font-mono">{vulnerability.cvss ?? 'Not observed'}</td><td className="px-5 py-3.5"><span className="rounded border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2 py-0.5 text-[9px] font-bold">{vulnerability.status}</span></td><td className="max-w-sm truncate px-5 py-3.5 text-[var(--spr-text-muted)]" title={vulnerability.description}>{vulnerability.description || 'No description observed.'}</td></tr>)}{clientPassports.every(passport => !passport.vulnerabilities?.length) && <tr><td colSpan={6} className="px-5 py-6 text-center text-[var(--spr-text-muted)] font-mono">No vulnerability observations are recorded for this client.</td></tr>}</tbody></table></div></div>
                   </div>
                 )}
 
-                {/* 4. Compliance Framework Matrices Tab */}
                 {workspaceTab === 'compliance' && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {client.complianceStatus.length === 0 && (
-                      <div className="col-span-full rounded-md border border-dashed border-[var(--spr-border)] px-5 py-10 text-center text-xs text-[var(--spr-text-muted)] ">No compliance frameworks recorded for this client yet.</div>
-                    )}
-                    {client.complianceStatus.map((comp) => (
-                      <div key={comp.id} className="bg-[var(--spr-surface-alt)] p-5 rounded-md border border-[var(--spr-border)] flex flex-col justify-between gap-4">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <span className="text-[9px] font-mono font-bold bg-[var(--spr-accent-soft)] border border-[var(--spr-highlight)] text-[var(--spr-highlight)] px-2 py-0.5 rounded">
-                              {comp.code} Framework
-                            </span>
-                            <h3 className="text-sm font-bold text-[var(--spr-text)] font-display mt-2">{comp.name}</h3>
-                          </div>
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono border ${
-                            comp.status === 'Compliant' ? 'bg-[var(--spr-green)]/15 border-[var(--spr-green)] text-[var(--spr-green)] ' :
-                            comp.status === 'In Progress' ? 'bg-[var(--spr-amber)]/15 border-[var(--spr-amber)] text-[var(--spr-amber)] ' :
-                            'bg-[var(--spr-red)]/15 border-[var(--spr-red)] text-[var(--spr-red)] '
-                          }`}>
-                            {comp.status}
-                          </span>
-                        </div>
-
-                        {/* Progress Bar */}
-                        <div className="space-y-1.5">
-                          <div className="flex justify-between text-[10px] font-mono text-[var(--spr-text-muted)] ">
-                            <span>Controls verification progress</span>
-                            <span className="font-bold text-[var(--spr-text-faint)] ">{comp.progress}%</span>
-                          </div>
-                          <div className="w-full bg-[var(--spr-surface-hover)] h-2 rounded-full overflow-hidden">
-                            <div className="bg-[var(--spr-accent)] h-full transition-all duration-500" style={{ width: `${comp.progress}%` }}></div>
-                          </div>
-                          <div className="flex justify-between text-[9px] font-mono text-[var(--spr-text-muted)] ">
-                            <span>{comp.compliantControls} of {comp.totalControls} Controls Certified</span>
-                            <span>SLA Audit Ready</span>
-                          </div>
-                        </div>
-
-                        <button
-                          onClick={() => onNavigateTab('compliance')}
-                          className="spr-btn spr-btn-secondary w-full text-center"
-                        >
-                          Launch Verification Portal
-                        </button>
-                      </div>
-                    ))}
+                    {client.complianceStatus.length === 0 && <div className="col-span-full rounded-md border border-dashed border-[var(--spr-border)] px-5 py-10 text-center text-xs text-[var(--spr-text-muted)]">No compliance frameworks recorded for this client yet.</div>}
+                    {client.complianceStatus.map(comp => <div key={comp.id} className="bg-[var(--spr-surface-alt)] p-5 rounded-md border border-[var(--spr-border)] flex flex-col justify-between gap-4"><div className="flex justify-between items-start gap-3"><div><span className="text-[9px] font-mono font-bold bg-[var(--spr-accent-soft)] border border-[var(--spr-highlight)] text-[var(--spr-highlight)] px-2 py-0.5 rounded">{comp.code} framework</span><h3 className="text-sm font-bold text-[var(--spr-text)] font-display mt-2">{comp.name}</h3></div><span className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono border ${comp.status === 'Compliant' ? 'bg-[var(--spr-green)]/15 border-[var(--spr-green)] text-[var(--spr-green)]' : comp.status === 'In Progress' ? 'bg-[var(--spr-amber)]/15 border-[var(--spr-amber)] text-[var(--spr-amber)]' : 'bg-[var(--spr-red)]/15 border-[var(--spr-red)] text-[var(--spr-red)]'}`}>{comp.status}</span></div><div className="space-y-1.5"><div className="flex justify-between text-[10px] font-mono text-[var(--spr-text-muted)]"><span>Control verification progress</span><span className="font-bold text-[var(--spr-text-faint)]">{comp.progress}%</span></div><div className="w-full bg-[var(--spr-surface-hover)] h-2 rounded-full overflow-hidden"><div className="bg-[var(--spr-accent)] h-full transition-all duration-500" style={{ width: `${comp.progress}%` }} /></div><div className="flex justify-between text-[9px] font-mono text-[var(--spr-text-muted)]"><span>{comp.compliantControls} of {comp.totalControls} controls</span><span>Verification status</span></div></div><button type="button" onClick={() => onNavigateTab('compliance')} className="spr-btn spr-btn-secondary w-full text-center">View compliance</button></div>)}
                   </div>
                 )}
 
-                {/* 5. Team Directory Tab */}
                 {workspaceTab === 'team' && (
-                  <div className="bg-[var(--spr-surface-alt)] rounded-md border border-[var(--spr-border)] overflow-hidden">
-                    <div className="px-5 py-4 border-b border-[var(--spr-border)] ">
-                      <h3 className="text-sm font-bold text-[var(--spr-text)] font-display">Client Stakeholders & Key Operators</h3>
-                      <p className="text-[10px] text-[var(--spr-text-muted)] font-mono mt-0.5">Authorizing authorities registered with access privileges inside this workspace.</p>
-                    </div>
-                    <div className="divide-y divide-[var(--spr-border)] ">
-                      {client.teamMembers.length === 0 && (
-                        <div className="px-5 py-10 text-center text-xs text-[var(--spr-text-muted)] ">No stakeholders recorded for this client yet.</div>
-                      )}
-                      {client.teamMembers.map((member, i) => (
-                        <div key={i} className="px-5 py-4 flex items-center justify-between hover:bg-[var(--spr-surface-sunken)] ">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-full bg-[var(--spr-accent-soft)] border border-[var(--spr-highlight)] flex items-center justify-center text-xs font-bold text-[var(--spr-highlight)] ">
-                              {member.avatar}
-                            </div>
-                            <div>
-                              <h4 className="text-xs font-bold text-[var(--spr-text)] ">{member.name}</h4>
-                              <p className="text-[10px] text-[var(--spr-text-muted)] font-mono">{member.role}</p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <a
-                              href={`mailto:${member.email}`}
-                              className="text-xs font-semibold text-[var(--spr-highlight)] hover:text-[var(--spr-highlight)] font-mono flex items-center gap-1 cursor-pointer"
-                            >
-                              <span>{member.email}</span>
-                              <ExternalLink className="w-3.5 h-3.5" />
-                            </a>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                  <div className="bg-[var(--spr-surface-alt)] rounded-md border border-[var(--spr-border)] overflow-hidden"><div className="px-5 py-4 border-b border-[var(--spr-border)]"><h3 className="text-sm font-bold text-[var(--spr-text)] font-display">Client contacts</h3><p className="text-[10px] text-[var(--spr-text-muted)] font-mono mt-0.5">People responsible for the client environment and security decisions.</p></div><div className="divide-y divide-[var(--spr-border)]">{client.teamMembers.length === 0 && <div className="px-5 py-10 text-center text-xs text-[var(--spr-text-muted)]">No contacts recorded for this client yet.</div>}{client.teamMembers.map((member, i) => <div key={`${member.email}-${i}`} className="px-5 py-4 flex items-center justify-between gap-4 hover:bg-[var(--spr-surface-sunken)]"><div className="flex items-center gap-3 min-w-0"><div className="w-9 h-9 rounded-full bg-[var(--spr-accent-soft)] border border-[var(--spr-highlight)] flex items-center justify-center text-xs font-bold text-[var(--spr-highlight)] shrink-0">{member.avatar}</div><div className="min-w-0"><h4 className="text-xs font-bold text-[var(--spr-text)] truncate">{member.name}</h4><p className="text-[10px] text-[var(--spr-text-muted)] font-mono">{member.role}</p></div></div><a href={`mailto:${encodeURIComponent(member.email)}`} className="text-xs font-semibold text-[var(--spr-highlight)] hover:underline font-mono flex items-center gap-1 cursor-pointer shrink-0"><span>{member.email}</span><ExternalLink className="w-3.5 h-3.5" /></a></div>)}</div></div>
                 )}
-
               </div>
             </motion.div>
           </>
@@ -716,59 +420,17 @@ export default function ClientsView({
       </AnimatePresence>
 
       {showAddClient && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-labelledby="add-client-title">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-labelledby="add-client-title" onMouseDown={(event) => { if (event.target === event.currentTarget && !creatingClient) setShowAddClient(false); }}>
           <div className="w-full max-w-lg rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6 shadow-2xl">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.18em] text-[#c586c0]"><Building2 className="h-4 w-4" /> New client trust environment</div>
-                <h2 id="add-client-title" className="mt-1 text-lg font-bold text-[var(--spr-text)]">Establish a client trust environment</h2>
-                <p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">Create the foundation for monitoring the software, vendors, and technology this client depends on.</p>
-              </div>
-              <button onClick={() => setShowAddClient(false)} aria-label="Close" className="rounded-md p-1.5 text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)] hover:text-[var(--spr-text)]"><X className="h-4 w-4" /></button>
-            </div>
-
+            <div className="flex items-start justify-between gap-4"><div><div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.18em] text-[#c586c0]"><Building2 className="h-4 w-4" /> New client</div><h2 id="add-client-title" className="mt-1 text-lg font-bold text-[var(--spr-text)]">Add a client</h2><p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">Create the client workspace you’ll use to track software, evidence, risks, and verification.</p></div><button type="button" onClick={() => setShowAddClient(false)} aria-label="Close" disabled={creatingClient} className="rounded-md p-1.5 text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)] hover:text-[var(--spr-text)] disabled:opacity-40"><X className="h-4 w-4" /></button></div>
             <form onSubmit={handleCreateClient} className="mt-5 space-y-3.5">
-              {addClientError && (
-                <div role="alert" className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 px-3 py-2.5 text-xs text-[var(--spr-red)] flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 shrink-0" /> {addClientError}
-                </div>
-              )}
-              {addClientSuccess && (
-                <div className="rounded-md border border-[var(--spr-green)]/40 bg-[var(--spr-green)]/10 px-3 py-2.5 text-xs text-[var(--spr-green)] flex items-center gap-2">
-                  <CheckCircle className="w-4 h-4 shrink-0" /> {addClientSuccess}
-                </div>
-              )}
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold text-[var(--spr-text-muted)]">Client / Organization name *</label>
-                <input required value={newClientName} onChange={(e) => setNewClientName(e.target.value)} placeholder="Acme Manufacturing" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]" />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold text-[var(--spr-text-muted)]">Primary domain *</label>
-                <input required value={newClientDomain} onChange={(e) => setNewClientDomain(e.target.value)} placeholder="acme.com" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]" />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold text-[var(--spr-text-muted)]">Industry *</label>
-                <input required value={newClientIndustry} onChange={(e) => setNewClientIndustry(e.target.value)} placeholder="Manufacturing" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]" />
-              </div>
-
-              <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3.5">
-                <div className="text-[10px] font-bold uppercase tracking-[.14em] text-[var(--spr-text-faint)]">After creation, this environment will track</div>
-                <div className="mt-2.5 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                  <div className="flex items-center gap-1.5 text-[11px] text-[var(--spr-text-muted)]"><Globe className="h-3.5 w-3.5 text-[var(--spr-highlight)]" /> Software</div>
-                  <div className="flex items-center gap-1.5 text-[11px] text-[var(--spr-text-muted)]"><Users className="h-3.5 w-3.5 text-[var(--spr-highlight)]" /> Vendors</div>
-                  <div className="flex items-center gap-1.5 text-[11px] text-[var(--spr-text-muted)]"><FileCheck className="h-3.5 w-3.5 text-[var(--spr-highlight)]" /> Passports</div>
-                  <div className="flex items-center gap-1.5 text-[11px] text-[var(--spr-text-muted)]"><FileText className="h-3.5 w-3.5 text-[var(--spr-highlight)]" /> Evidence</div>
-                  <div className="flex items-center gap-1.5 text-[11px] text-[var(--spr-text-muted)]"><Activity className="h-3.5 w-3.5 text-[var(--spr-highlight)]" /> Monitoring</div>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={() => setShowAddClient(false)} className="rounded-md border border-[var(--spr-border)] px-3.5 py-2 text-xs font-semibold text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)]">Cancel</button>
-                <button type="submit" disabled={creatingClient || !newClientName.trim() || !newClientDomain.trim() || !newClientIndustry.trim()} className="inline-flex items-center gap-1.5 rounded-md bg-[var(--spr-accent)] px-3.5 py-2 text-xs font-bold text-white hover:bg-[var(--spr-accent-hover)] disabled:opacity-40">
-                  {creatingClient ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                  {creatingClient ? 'Establishing…' : 'Establish Trust Environment'}
-                </button>
-              </div>
+              {addClientError && <div role="alert" className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 px-3 py-2.5 text-xs text-[var(--spr-red)] flex items-center gap-2"><AlertTriangle className="w-4 h-4 shrink-0" /> {addClientError}</div>}
+              {addClientSuccess && <div role="status" className="rounded-md border border-[var(--spr-green)]/40 bg-[var(--spr-green)]/10 px-3 py-2.5 text-xs text-[var(--spr-green)] flex items-center gap-2"><CheckCircle className="w-4 h-4 shrink-0" /> {addClientSuccess}</div>}
+              <div className="flex flex-col gap-1"><label htmlFor="new-client-name" className="text-[10px] font-bold text-[var(--spr-text-muted)]">Client / organization name *</label><input id="new-client-name" required autoFocus value={newClientName} onChange={(e) => setNewClientName(e.target.value)} placeholder="Acme Manufacturing" autoComplete="organization" maxLength={200} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]" /></div>
+              <div className="flex flex-col gap-1"><label htmlFor="new-client-domain" className="text-[10px] font-bold text-[var(--spr-text-muted)]">Primary domain *</label><input id="new-client-domain" required value={newClientDomain} onChange={(e) => setNewClientDomain(e.target.value)} placeholder="acme.com" autoComplete="url" maxLength={253} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]" /></div>
+              <div className="flex flex-col gap-1"><label htmlFor="new-client-industry" className="text-[10px] font-bold text-[var(--spr-text-muted)]">Industry *</label><input id="new-client-industry" required value={newClientIndustry} onChange={(e) => setNewClientIndustry(e.target.value)} placeholder="Manufacturing" autoComplete="organization-title" maxLength={120} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]" /></div>
+              <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3.5"><div className="text-[10px] font-bold uppercase tracking-[.14em] text-[var(--spr-text-faint)]">SPR will track for this client</div><div className="mt-2.5 grid grid-cols-2 gap-2 sm:grid-cols-3"><div className="flex items-center gap-1.5 text-[11px] text-[var(--spr-text-muted)]"><Globe className="h-3.5 w-3.5 text-[var(--spr-highlight)]" /> Software</div><div className="flex items-center gap-1.5 text-[11px] text-[var(--spr-text-muted)]"><Users className="h-3.5 w-3.5 text-[var(--spr-highlight)]" /> Vendors</div><div className="flex items-center gap-1.5 text-[11px] text-[var(--spr-text-muted)]"><FileCheck className="h-3.5 w-3.5 text-[var(--spr-highlight)]" /> Passports</div><div className="flex items-center gap-1.5 text-[11px] text-[var(--spr-text-muted)]"><FileText className="h-3.5 w-3.5 text-[var(--spr-highlight)]" /> Evidence</div><div className="flex items-center gap-1.5 text-[11px] text-[var(--spr-text-muted)]"><Activity className="h-3.5 w-3.5 text-[var(--spr-highlight)]" /> Monitoring</div></div></div>
+              <div className="flex justify-end gap-2 pt-2"><button type="button" onClick={() => setShowAddClient(false)} disabled={creatingClient} className="rounded-md border border-[var(--spr-border)] px-3.5 py-2 text-xs font-semibold text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)] disabled:opacity-40">Cancel</button><button type="submit" disabled={creatingClient || !newClientName.trim() || !newClientDomain.trim() || !newClientIndustry.trim()} className="inline-flex items-center gap-1.5 rounded-md bg-[var(--spr-accent)] px-3.5 py-2 text-xs font-bold text-white hover:bg-[var(--spr-accent-hover)] disabled:opacity-40">{creatingClient ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}{creatingClient ? 'Creating…' : 'Create client'}</button></div>
             </form>
           </div>
         </div>
