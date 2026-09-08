@@ -7,6 +7,8 @@ s = s.replaceAll('geminiReasoningSchema', 'gptReasoningSchema');
 s = s.replaceAll('Gemini evidence-reasoning', 'GPT evidence-reasoning');
 s = s.replaceAll('Gemini response', 'GPT response');
 s = s.replaceAll('Gemini cited', 'GPT cited');
+s = s.replaceAll('Gemini', 'GPT');
+s = s.replaceAll('gemini', 'gpt');
 
 const start = s.indexOf("    await logJobStep(jobId, 'ai-evidence-reasoning'");
 const end = s.indexOf("    if (!aiSummaryText) {", start);
