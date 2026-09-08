@@ -1,6 +1,7 @@
 name: Fix GPT Scanner
 on:
-  workflow_dispatch:
+  push:
+    branches: [chore/gpt-only-ai-provider]
 permissions:
   contents: write
 jobs:
@@ -117,5 +118,5 @@ Respond with ONLY a JSON object matching exactly:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add src/utils/scanner.ts .github/workflows/fix-gpt-scanner.yml
-          git commit -m 'fix: route scanner AI reasoning through GPT gateway'
+          git diff --cached --quiet || git commit -m 'fix: route scanner AI reasoning through GPT gateway'
           git push origin chore/gpt-only-ai-provider
