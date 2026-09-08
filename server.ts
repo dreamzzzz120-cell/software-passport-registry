@@ -100,7 +100,26 @@ const connectRouter = createConnectRouter(); app.use('/api', connectRouter); app
 app.use('/api/integrations', createIntegrationsRouter());
 app.use('/api/integrations-live', createLiveIntegrationsRouter());
 const requireTrustMutationRole = (req: Request, res: Response, next: NextFunction) => { if (['GET','HEAD','OPTIONS'].includes(req.method)) return next(); if (req.method === 'POST' && /\/remediations\/[^/]+\/approve$/.test(req.path)) return requireRole(['Owner','Admin','Operator','Technician','Client'])(req as AuthenticatedRequest, res, next); return requireRole(['Owner','Admin','Operator','Technician'])(req as AuthenticatedRequest, res, next); };
-app.use('/api/trust-loop', requireAuth, requireTrustMutationRole);
+const requireClientTrustReadScope = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  if (req.user?.role !== 'Client' || !['GET', 'HEAD'].includes(req.method)) return next();
+  const passportMatch = req.path.match(/^\/(?:ledger|reports)\/([^/]+)/);
+  if (passportMatch) {
+    const passportId = decodeURIComponent(passportMatch[1]);
+    const rows = (await req.db!.execute(sql`SELECT id FROM passports WHERE id=${passportId} AND tenant_id=${req.user.tenantId} AND client_id=${req.user.clientId} LIMIT 1`) as any).rows ?? [];
+    if (!rows.length) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
+    return next();
+  }
+  if (req.path === '/monitoring' && typeof req.query.passportId !== 'string') {
+    return res.status(400).json({ error: 'PASSPORT_SCOPE_REQUIRED' });
+  }
+  if (req.path === '/monitoring' && typeof req.query.passportId === 'string') {
+    const passportId = req.query.passportId;
+    const rows = (await req.db!.execute(sql`SELECT id FROM passports WHERE id=${passportId} AND tenant_id=${req.user.tenantId} AND client_id=${req.user.clientId} LIMIT 1`) as any).rows ?? [];
+    if (!rows.length) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
+  }
+  return next();
+};
+app.use('/api/trust-loop', requireAuth, requireTrustMutationRole, requireClientTrustReadScope);
 app.use('/api/trust-loop', createTrustLoopRouter());
 app.use('/api/integration-monitoring', createIntegrationMonitoringRouter());
 app.use('/api/monitoring', createMonitoringRouter());
