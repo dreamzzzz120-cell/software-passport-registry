@@ -61,7 +61,7 @@ export function createScansRouter() {
   router.get('/scans', async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
-      const result = await db.execute(sql`SELECT id, target_name AS "targetName", scan_type AS "scanType", triggered_by AS "triggeredBy", status, duration_ms AS "durationMs", findings_count AS "findingsCount", timestamp, client_name AS "clientName" FROM scans WHERE tenant_id=${req.user!.tenantId} ORDER BY timestamp DESC LIMIT 100`);
+      const result = await db.execute(sql`SELECT s.id, s.target_name AS "targetName", s.scan_type AS "scanType", s.triggered_by AS "triggeredBy", s.status, s.duration_ms AS "durationMs", s.findings_count AS "findingsCount", s.timestamp, s.client_name AS "clientName" FROM scans s WHERE s.tenant_id=${req.user!.tenantId} AND (${req.user!.role} <> 'Client' OR EXISTS (SELECT 1 FROM passports p WHERE p.tenant_id=s.tenant_id AND p.client_id=${req.user!.clientId ?? ''} AND (p.id=s.target_name OR LOWER(p.name)=LOWER(s.target_name)))) ORDER BY s.timestamp DESC LIMIT 100`);
       return res.json((result as any).rows || []);
     } catch (error) { return next(error); }
   });
@@ -83,33 +83,17 @@ export function createScansRouter() {
       await db.execute(sql`INSERT INTO scans (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name) VALUES (${scanId},${req.user!.tenantId},${targetName},${scanType},${req.user!.uid},'Scanning',0,NULL,${timestamp},${clientName})`);
       await db.execute(sql`INSERT INTO agent_jobs (id,tenant_id,agent_id,passport_id,job_type,status,progress,next_attempt_at,created_at,updated_at) VALUES (${jobId},${req.user!.tenantId},'comprehensive_scanner',${passport.id},'osv_manifest_scan','Pending',0,NOW(),NOW(),NOW())`);
       await db.execute(sql`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES (${jobId},'comprehensive_scanner','Queued real OSV dependency vulnerability scan against the persisted SBOM.','Info')`);
-      // Section 20 of the MSP acceptance spec requires scan execution to be
-      // audited. This was a real gap -- zero appendAuditEntry calls existed
-      // anywhere for scan/evidence/passport events despite the hash-chained
-      // audit_trail ledger already existing and working for every other
-      // event type. Only the genuinely-queued path is audited (not the
-      // no-matching-passport branch above, which is a validation rejection,
-      // not a scan that ran).
       await appendAuditEntry(db, { tenantId: req.user!.tenantId, action: 'scan.queued', actor: req.user!.uid, payload: { scanId, jobId, targetName, scanType, clientName, passportId: passport.id } });
       return res.status(202).json({ id: scanId, jobId, targetName, scanType, triggeredBy: req.user!.uid, status: 'Scanning', durationMs: 0, findingsCount: null, timestamp, clientName });
     } catch (error) { return next(error); }
   });
 
-  // Batch-reclassify previously-unclassified scan records with a real,
-  // operator-chosen category label. The UI's "Custom Category name" field
-  // was previously wired to a prop (onBatchTagScans) that App.tsx never
-  // actually passed to ScansView -- selecting scans, typing a category, and
-  // clicking Apply silently cleared the selection and did nothing, with no
-  // error shown. This is the real endpoint that action now calls.
   router.post('/scans/batch-tag', requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
     try {
       const parsed = batchTagSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
       const db = req.db!;
       const { scanIds, category } = parsed.data;
-      // See tests/drizzle-array-in-clause-contract.test.ts for the established
-      // rule on binding a JS array in a Drizzle sql template -- this is the
-      // one correct form.
       const result = await db.execute(sql`UPDATE scans SET scan_type = ${category} WHERE tenant_id = ${req.user!.tenantId} AND id IN ${scanIds}`);
       return res.json({ updatedCount: (result as any).rowCount ?? 0 });
     } catch (error) { return next(error); }
@@ -118,7 +102,7 @@ export function createScansRouter() {
   router.get('/scans/schedules', async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
-      const result = await db.execute(sql`SELECT id, asset_id AS "assetId", asset_host_name AS "assetHostName", asset_type AS "assetType", client_name AS "clientName", frequency, scan_type AS "scanType", status, last_run_at AS "lastRunAt", next_run_at AS "nextRunAt", created_at AS "createdAt" FROM scan_schedules WHERE tenant_id=${req.user!.tenantId} ORDER BY created_at DESC`);
+      const result = await db.execute(sql`SELECT s.id, s.asset_id AS "assetId", s.asset_host_name AS "assetHostName", s.asset_type AS "assetType", s.client_name AS "clientName", s.frequency, s.scan_type AS "scanType", s.status, s.last_run_at AS "lastRunAt", s.next_run_at AS "nextRunAt", s.created_at AS "createdAt" FROM scan_schedules s WHERE s.tenant_id=${req.user!.tenantId} AND (${req.user!.role} <> 'Client' OR EXISTS (SELECT 1 FROM passports p WHERE p.tenant_id=s.tenant_id AND p.client_id=${req.user!.clientId ?? ''} AND (p.id=s.asset_id OR LOWER(p.name)=LOWER(s.asset_host_name)))) ORDER BY s.created_at DESC`);
       return res.json((result as any).rows || []);
     } catch (error) { return next(error); }
   });
@@ -186,7 +170,7 @@ export function createScansRouter() {
   router.get('/agent-jobs', async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
-      const result = await db.execute(sql`SELECT id, agent_id, passport_id, job_type, CASE WHEN status='Completed' THEN 'Success' ELSE status END AS status, status AS db_status, progress, result, error, attempt_count, max_attempts, completed_at, created_at, updated_at FROM agent_jobs WHERE tenant_id=${req.user!.tenantId} ORDER BY created_at DESC LIMIT 100`);
+      const result = await db.execute(sql`SELECT j.id, j.agent_id, j.passport_id, j.job_type, CASE WHEN j.status='Completed' THEN 'Success' ELSE j.status END AS status, j.status AS db_status, j.progress, j.result, j.error, j.attempt_count, j.max_attempts, j.completed_at, j.created_at, j.updated_at FROM agent_jobs j JOIN passports p ON p.id=j.passport_id AND p.tenant_id=j.tenant_id WHERE j.tenant_id=${req.user!.tenantId} AND (${req.user!.role} <> 'Client' OR p.client_id=${req.user!.clientId ?? ''}) ORDER BY j.created_at DESC LIMIT 100`);
       return res.json((result as any).rows || []);
     } catch (error) { return next(error); }
   });
@@ -194,7 +178,7 @@ export function createScansRouter() {
   router.get('/agent-jobs/:id', async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
-      const result = await db.execute(sql`SELECT id, agent_id AS "agentId", passport_id AS "passportId", job_type AS "jobType", status, progress, result, error, attempt_count AS "attemptCount", max_attempts AS "maxAttempts", completed_at AS "completedAt", created_at AS "createdAt", updated_at AS "updatedAt" FROM agent_jobs WHERE id=${req.params.id} AND tenant_id=${req.user!.tenantId} LIMIT 1`);
+      const result = await db.execute(sql`SELECT j.id, j.agent_id AS "agentId", j.passport_id AS "passportId", j.job_type AS "jobType", j.status, j.progress, j.result, j.error, j.attempt_count AS "attemptCount", j.max_attempts AS "maxAttempts", j.completed_at AS "completedAt", j.created_at AS "createdAt", j.updated_at AS "updatedAt" FROM agent_jobs j JOIN passports p ON p.id=j.passport_id AND p.tenant_id=j.tenant_id WHERE j.id=${req.params.id} AND j.tenant_id=${req.user!.tenantId} AND (${req.user!.role} <> 'Client' OR p.client_id=${req.user!.clientId ?? ''}) LIMIT 1`);
       const row = (result as any).rows?.[0];
       if (!row) return res.status(404).json({ error: 'Agent job not found' });
       return res.json(row);
@@ -204,7 +188,7 @@ export function createScansRouter() {
   router.get('/agent-jobs/:id/logs', async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
-      const result = await db.execute(sql`SELECT l.id, l.agent_id, l.message, l.level, l.timestamp FROM agent_logs l JOIN agent_jobs j ON j.id=l.job_id AND j.tenant_id=${req.user!.tenantId} WHERE l.job_id=${req.params.id} ORDER BY l.timestamp ASC, l.id ASC`);
+      const result = await db.execute(sql`SELECT l.id, l.agent_id, l.message, l.level, l.timestamp FROM agent_logs l JOIN agent_jobs j ON j.id=l.job_id AND j.tenant_id=${req.user!.tenantId} JOIN passports p ON p.id=j.passport_id AND p.tenant_id=j.tenant_id WHERE l.job_id=${req.params.id} AND (${req.user!.role} <> 'Client' OR p.client_id=${req.user!.clientId ?? ''}) ORDER BY l.timestamp ASC, l.id ASC`);
       return res.json((result as any).rows || []);
     } catch (error) { return next(error); }
   });
