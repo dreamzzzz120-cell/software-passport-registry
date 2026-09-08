@@ -12,10 +12,27 @@ interface AssetsViewProps {
 export default function AssetsView({ clients, searchQuery, assets }: AssetsViewProps) {
   const [tenantFilter, setTenantFilter] = useState('all');
   const systemAssets = assets ?? [];
+  const clientNameById = useMemo(
+    () => new Map(clients.map((client) => [String(client.id), String(client.name)])),
+    [clients],
+  );
+  const resolvedAssets = useMemo(
+    () => systemAssets.map((asset) => ({
+      ...asset,
+      // The App currently derives asset records from passports and may supply
+      // clientName as the client id. Resolve that identifier here so the
+      // asset map, tenant filter, and table always present the human-readable
+      // MSP client name without requiring a second asset API.
+      clientName: asset.clientId
+        ? clientNameById.get(String(asset.clientId)) || 'Unobserved'
+        : (asset.clientName || 'Unobserved'),
+    })),
+    [systemAssets, clientNameById],
+  );
   const filteredAssets = useMemo(() => {
-    const fuzzyFiltered = filterData(systemAssets, searchQuery, ['hostName', 'activePassport', 'name', 'type', 'OS', 'clientName']);
+    const fuzzyFiltered = filterData(resolvedAssets, searchQuery, ['hostName', 'activePassport', 'name', 'type', 'OS', 'clientName']);
     return fuzzyFiltered.filter((asset) => tenantFilter === 'all' || asset.clientName === tenantFilter);
-  }, [systemAssets, searchQuery, tenantFilter]);
+  }, [resolvedAssets, searchQuery, tenantFilter]);
   const observedTypes = new Set(systemAssets.map((asset) => asset.type).filter(Boolean)).size;
 
   return (
