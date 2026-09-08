@@ -17,9 +17,9 @@ for (const { pattern, label } of forbidden) {
 }
 
 const required = [
-  { pattern: /POST\s+['\"]\/api\/agent-jobs['\"]|apiFetch\(['\"]\/api\/agent-jobs['\"]/, label: 'server-backed audit job creation' },
+  { pattern: /apiFetch\(\s*['\"]\/api\/agent-jobs['\"]\s*,\s*\{\s*method:\s*['\"]POST['\"]/s, label: 'server-backed audit job creation' },
   { pattern: /\/api\/agent-jobs\/\$\{encodeURIComponent\(jobId\)\}/, label: 'server-backed job status polling' },
-  { pattern: /\/logs['\"]\)/, label: 'server-backed audit log retrieval' },
+  { pattern: /\/api\/agent-jobs\/\$\{encodeURIComponent\(jobId\)\}\/logs/, label: 'server-backed audit log retrieval' },
 ];
 
 for (const { pattern, label } of required) {
