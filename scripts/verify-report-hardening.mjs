@@ -6,7 +6,7 @@ const forbidden = [
   { pattern: /simulat(?:e|ed|ing)?\s+(?:report|audit)\s+completion/i, label: 'simulated report completion' },
   { pattern: /setTimeout\s*\(/, label: 'setTimeout-based report completion' },
   { pattern: /setAuditJob\s*\(\s*\{[^}]*status:\s*['\"](?:Completed|Succeeded)['\"]/s, label: 'client-fabricated completed job state' },
-  { pattern: /setAuditText\s*\(\s*['\"][^'\"]*(?:verified|complete|completed)[^'\"]*['\"]\s*\)/i, label: 'client-fabricated verification text' },
+  { pattern: /setAuditText\s*\(\s*['\"](?!Not verified\b)[^'\"]*(?:verified|complete|completed)[^'\"]*['\"]\s*\)/i, label: 'client-fabricated verification text' },
 ];
 
 for (const { pattern, label } of forbidden) {
