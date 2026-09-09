@@ -30,7 +30,7 @@ const optionalBooleanString = z.optional(booleanString);
 const optionalPositiveIntegerString = z.optional(z.string().regex(/^[1-9][0-9]*$/, 'Must be a positive integer'));
 
 const envSchema = z.object({
-  NODE_ENV: z.enum(['development', 'production', 'test', 'staging']).optional(), PORT: optionalPositiveIntegerString,
+  NODE_ENV: z.enum(['development', 'production', 'test']).optional(), PORT: optionalPositiveIntegerString,
   APP_URL: optionalTrimmedUrl, APP_ALLOWED_ORIGINS: optionalTrimmedString,
   ENFORCE_HTTPS: optionalBooleanString, TRUST_PROXY: optionalBooleanString, ALLOW_IFRAME: optionalBooleanString,
   SQL_HOST: optionalTrimmedString, SQL_USER: optionalTrimmedString, SQL_PASSWORD: optionalTrimmedString, SQL_DB_NAME: optionalTrimmedString,
@@ -53,6 +53,9 @@ const envSchema = z.object({
   SPR_OWNER_BOOTSTRAP_SECRET_SHA256: z.preprocess((value) => typeof value === 'string' ? (value.trim().toLowerCase() || undefined) : value, z.string().regex(/^[a-f0-9]{64}$/).optional()),
   SPR_PUBLIC_PASSPORT_SECRET: optionalTrimmedString,
   SENTRY_DSN: optionalTrimmedUrl, REDIS_URL: optionalTrimmedString, RATE_LIMIT_FAIL_OPEN: optionalBooleanString, MONITORING_ENABLED_TENANT_IDS: optionalTrimmedString,
+  // Founder Command Center — platform-operator-only page (distinct from the
+  // per-tenant 'Owner' role: every paying customer has an Owner, but only the
+  // emails listed here may see cross-platform connection health/MRR/tasks).
   FOUNDER_EMAILS: optionalTrimmedString,
   RAILWAY_API_TOKEN: optionalTrimmedString, RAILWAY_PROJECT_ID: optionalTrimmedString,
   VERCEL_API_TOKEN: optionalTrimmedString, VERCEL_PROJECT_ID: optionalTrimmedString,
@@ -122,7 +125,11 @@ export const config = {
   ownerBootstrap: { initialOwnerEmail: parsedEnv.SPR_INITIAL_OWNER_EMAIL, secret: parsedEnv.SPR_OWNER_BOOTSTRAP_SECRET, secretSha256: parsedEnv.SPR_OWNER_BOOTSTRAP_SECRET_SHA256 },
   publicPassport: { secret: parsedEnv.SPR_PUBLIC_PASSPORT_SECRET },
   sentry: { dsn: parsedEnv.SENTRY_DSN }, redis: { url: parsedEnv.REDIS_URL, failOpen: parsedEnv.NODE_ENV !== 'production' && parseBoolean(parsedEnv.RATE_LIMIT_FAIL_OPEN, false) }, monitoring: { enabledTenantIds: parseCsv(parsedEnv.MONITORING_ENABLED_TENANT_IDS) },
-  founder: { emails: parseCsv(parsedEnv.FOUNDER_EMAILS).map((email) => email.toLowerCase()) },
+  founder: {
+    // Lowercased on purpose: compared against the lowercased email on the
+    // authenticated user, same normalization used for SPR_INITIAL_OWNER_EMAIL.
+    emails: parseCsv(parsedEnv.FOUNDER_EMAILS).map((email) => email.toLowerCase()),
+  },
   railway: { apiToken: parsedEnv.RAILWAY_API_TOKEN, projectId: parsedEnv.RAILWAY_PROJECT_ID },
   vercel: { apiToken: parsedEnv.VERCEL_API_TOKEN, projectId: parsedEnv.VERCEL_PROJECT_ID },
   githubCi: { token: parsedEnv.GITHUB_TOKEN, owner: parsedEnv.GITHUB_OWNER, repo: parsedEnv.GITHUB_REPO },
@@ -137,6 +144,9 @@ export function validateConfiguration() {
   if (!config.trustProxy) missing.push('TRUST_PROXY=true');
   if (config.allowIframe) missing.push('ALLOW_IFRAME=false');
   if (!config.database.isConfigured) missing.push('DATABASE_URL or SQL_HOST/SQL_USER/SQL_PASSWORD/SQL_DB_NAME');
+  // appConnectionString falls back to DATABASE_URL, so an unset APP_DATABASE_URL would
+  // silently reconnect the whole HTTP API as the owner role -- which is BYPASSRLS -- with
+  // no error and no readiness failure. Tenant isolation must not degrade quietly.
   if (!parsedEnv.APP_DATABASE_URL) missing.push('APP_DATABASE_URL (least-privileged spr_app_runtime connection; without it the API would run as the owner role and bypass RLS)');
   if (!config.database.ssl) missing.push('SQL_SSL=true/require/verify/verify-full');
   if (config.database.sslVerify && !config.database.sslCa && !['verify-full', 'verify'].includes(parsedEnv.SQL_SSL ?? '')) missing.push('SQL_SSL_CA for certificate verification');
@@ -163,4 +173,9 @@ export const configurationCatalog = [
   { name: 'AI_GATEWAY_API_KEY', category: 'featureSpecific', requiredInProduction: false }, { name: 'SPR_OWNER_BOOTSTRAP_SECRET_SHA256', category: 'bootstrap-only', requiredInProduction: false },
   { name: 'STRIPE_SECRET_KEY', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_WEBHOOK_SECRET', category: 'featureSpecific', requiredInProduction: false },
   { name: 'STRIPE_PRICE_MSP_PILOT', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_MSP_GROWTH', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_MSP_SCALE', category: 'featureSpecific', requiredInProduction: false },
-];
+  { name: 'STRIPE_PRICE_SOFTWARE_PASSPORT', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_EVIDENCE_REPORT', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_SECURITY_ASSESSMENT', category: 'featureSpecific', requiredInProduction: false },
+  { name: 'STRIPE_PRICE_VERIFIED_SYSTEM_REPORT', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_DUE_DILIGENCE_REPORT', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_VENDOR_RISK_ASSESSMENT', category: 'featureSpecific', requiredInProduction: false },
+  { name: 'STRIPE_PRICE_SBOM_ANALYSIS', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_PORTFOLIO_ASSESSMENT', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_AUDIT_EVIDENCE_PACKAGE', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_CUSTOM_ASSESSMENT', category: 'featureSpecific', requiredInProduction: false },
+  { name: 'STRIPE_PRICE_CONTINUOUS_VERIFICATION', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_TRUST_BADGE', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_PUBLIC_PASSPORT', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_API', category: 'featureSpecific', requiredInProduction: false },
+  { name: 'GEMINI_API_KEY', category: 'featureSpecific', requiredInProduction: false }, { name: 'SENTRY_DSN', category: 'optional', requiredInProduction: false },
+] as const;
