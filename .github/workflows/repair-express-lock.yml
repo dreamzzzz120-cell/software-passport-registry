@@ -1,0 +1,47 @@
+name: Repair Express type lock
+
+on:
+  push:
+    branches:
+      - fix/worker-release-role-provisioning
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: fix/worker-release-role-provisioning
+          fetch-depth: 0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Repair Express Request constructor typing
+        run: python - <<'PY'
+          from pathlib import Path
+          p = Path('server.ts')
+          s = p.read_text()
+          old = "new Request(`${config.appUrl || 'https://localhost'}/mcp`,"
+          new = "new globalThis.Request(`${config.appUrl || 'https://localhost'}/mcp`,"
+          if old not in s:
+            raise SystemExit('Expected Request constructor not found')
+          p.write_text(s.replace(old, new, 1))
+          print('Patched server.ts Request constructor.')
+          PY
+      - name: Commit regenerated lockfile and typing repair
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json server.ts
+          if git diff --cached --quiet; then
+            echo "Files already synchronized."
+            exit 0
+          fi
+          git commit -m "Fix Express request typing"
+          git push origin HEAD:fix/worker-release-role-provisioning
