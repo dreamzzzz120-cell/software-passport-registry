@@ -42,6 +42,24 @@ const SBOM_TIMEOUT_MS = 120_000;
 const SYFT_VERSION = '1.49.0';
 const GITHUB_API_ORIGIN = 'https://api.github.com';
 const GITHUB_CODELOAD_ORIGIN = 'https://codeload.github.com';
+// Free Review acquisition used to call GitHub with no credential at all, which
+// caps the whole worker at GitHub's 60 requests/hour/IP anonymous budget. On a
+// shared Railway egress IP that budget is gone almost immediately, so every
+// review failed with a 403 that the code below then reported to the customer as
+// "that repository is private" -- see the 2026-09-10 production Free Review
+// outage. GITHUB_TOKEN is optional so local and test runs still work unauthed.
+const githubToken = () => process.env.GITHUB_TOKEN?.trim() || '';
+export function githubHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  const token = githubToken();
+  return { 'user-agent': 'spr-repository-worker/1.0', ...extra, ...(token ? { authorization: `Bearer ${token}` } : {}) };
+}
+// GitHub reports an exhausted budget as 403 (or 429) with the remaining count at
+// zero. That is a temporary condition on our side, not a statement about the
+// repository, and conflating the two is what produced the misleading message.
+export function isRateLimited(response: { status: number; headers: { get(name: string): string | null } }) {
+  if (response.status !== 403 && response.status !== 429) return false;
+  return response.headers.get('x-ratelimit-remaining') === '0' || Boolean(response.headers.get('retry-after'));
+}
 const OSV_ORIGIN = 'https://api.osv.dev';
 
 async function claimJob(pool: Pool): Promise<ClaimedJob | null> {
@@ -306,8 +324,9 @@ async function fetchJson(url: string, notFoundCode: string) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), ACQUISITION_TIMEOUT_MS);
   try {
-    const response = await fetch(parsed, { redirect: 'error', headers: { accept: 'application/vnd.github+json', 'user-agent': 'spr-repository-worker/1.0' }, signal: controller.signal });
+    const response = await fetch(parsed, { redirect: 'error', headers: githubHeaders({ accept: 'application/vnd.github+json' }), signal: controller.signal });
     if (response.status === 404 || response.status === 422) throw new Error(notFoundCode);
+    if (isRateLimited(response)) throw new Error('REPOSITORY_RATE_LIMITED');
     if (response.status === 403) throw new Error('REPOSITORY_ACCESS_DENIED');
     if (!response.ok) throw new Error('REPOSITORY_ACCESS_DENIED');
     const text = await readTextLimited(response, PROVIDER_MAX_RESPONSE_BYTES);
@@ -325,8 +344,9 @@ export async function downloadArchive(url: string, destination: string, options:
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(parsed, { headers: { 'user-agent': 'spr-repository-worker/1.0' }, redirect: 'error', signal: controller.signal });
+    const response = await fetch(parsed, { headers: githubHeaders(), redirect: 'error', signal: controller.signal });
     if (response.status === 404) throw new Error('REPOSITORY_NOT_FOUND');
+    if (isRateLimited(response)) throw new Error('REPOSITORY_RATE_LIMITED');
     if (response.status === 403) throw new Error('REPOSITORY_ACCESS_DENIED');
     if (!response.ok || !response.body) throw new Error('REPOSITORY_ACCESS_DENIED');
     const declaredSize = Number(response.headers.get('content-length') || 0);
