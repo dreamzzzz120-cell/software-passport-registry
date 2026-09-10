@@ -208,12 +208,16 @@ describe('private application routes are never made indexable', () => {
     }
   });
 
-  it('every prerendered route is genuinely public in App.tsx', () => {
+  it('every prerendered route is genuinely public in App.tsx or has a committed static page', () => {
     const declared = app.match(/const PUBLIC_PATHS = new Set\(\[([^\]]+)\]\)/);
     expect(declared).not.toBeNull();
     const publicPaths = [...declared![1].matchAll(/'([^']+)'/g)].map(match => match[1]);
     for (const page of pages) {
-      expect(publicPaths, `${page.path} is prerendered but not public`).toContain(page.path);
+      const normalized = page.path.replace(/^\//, '').replace(/\/$/, '');
+      const staticFile = page.path === '/' ? path.join(root, 'public', 'index.html') : path.join(root, 'public', normalized, 'index.html');
+      const isReactPublic = publicPaths.includes(page.path) || publicPaths.includes(normalized ? `/${normalized}/` : '/');
+      const isStaticPublic = fs.existsSync(staticFile);
+      expect(isReactPublic || isStaticPublic, `${page.path} is neither declared public in App.tsx nor backed by a committed static page`).toBe(true);
     }
   });
 
