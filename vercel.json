@@ -11,19 +11,19 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://spr-app-production-28f5.up.railway.app/api/:path*"
+      "destination": "https://spr-app-staging-production.up.railway.app/api/:path*"
     },
     {
       "source": "/health",
-      "destination": "https://spr-app-production-28f5.up.railway.app/health"
+      "destination": "https://spr-app-staging-production.up.railway.app/health"
     },
     {
       "source": "/ready",
-      "destination": "https://spr-app-production-28f5.up.railway.app/ready"
+      "destination": "https://spr-app-staging-production.up.railway.app/ready"
     },
     {
       "source": "/badge/v1/:path*",
-      "destination": "https://spr-app-production-28f5.up.railway.app/badge/v1/:path*"
+      "destination": "https://spr-app-staging-production.up.railway.app/badge/v1/:path*"
     },
     {
       "source": "/(.*)",
