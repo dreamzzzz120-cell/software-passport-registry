@@ -45,6 +45,41 @@
       "description": "Software Passport Registry for MSPs. Track software inventory and evidence across every client, with risk visibility and client-facing trust reporting."
     },
     {
+      "path": "/about/",
+      "title": "About Software Passport Registry — SPR",
+      "description": "Learn who builds Software Passport Registry and why SPR focuses on evidence-based software identity, verification, transparency and observable trust signals."
+    },
+    {
+      "path": "/trust/",
+      "title": "Trust Center — Software Passport Registry",
+      "description": "Explore Software Passport Registry company identity, verification methodology, security practices, dependencies and documented product boundaries."
+    },
+    {
+      "path": "/methodology/",
+      "title": "Verification Methodology — Software Passport Registry",
+      "description": "See how SPR moves from provider evidence through normalization and identity to an explainable verification decision, while preserving unknown states."
+    },
+    {
+      "path": "/security/",
+      "title": "Security — Software Passport Registry",
+      "description": "Review documented Software Passport Registry security architecture, tenant isolation controls, authentication boundaries and responsible security disclosures."
+    },
+    {
+      "path": "/contact/",
+      "title": "Contact Software Passport Registry",
+      "description": "Contact Software Passport Registry for product questions, security reports, partnership discussions, MSP pilots and other business inquiries."
+    },
+    {
+      "path": "/data-retention/",
+      "title": "Data Retention & Deletion — Software Passport Registry",
+      "description": "Learn how Software Passport Registry approaches retention and deletion for account, repository, evidence, audit and operational data."
+    },
+    {
+      "path": "/subprocessors/",
+      "title": "Subprocessors & Infrastructure — Software Passport Registry",
+      "description": "Review the documented third-party infrastructure and subprocessors used to operate Software Passport Registry and support its evidence workflows."
+    },
+    {
       "path": "/terms",
       "title": "Terms of Service — Software Passport Registry",
       "description": "The terms governing use of Software Passport Registry, covering account responsibilities, acceptable use, and restrictions on accessing other tenants' data."
