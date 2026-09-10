@@ -170,6 +170,30 @@ describe('entitlement enforcement is real, wired into the actual client-creation
     expect(s).toContain('const allowed = clientLimit === null || clientCount < clientLimit;');
   });
 
+  it('treats a missing tenant_subscriptions table as unrestricted billing state instead of crashing client creation', async () => {
+    const { canCreateClient } = await import('../src/routes/billing.ts');
+    const missingBillingTable = {
+      execute: async (query: unknown) => {
+        const sqlText = String((query as any)?.query ?? '');
+        if (sqlText.includes('FROM tenant_subscriptions')) {
+          const err = new Error('relation "tenant_subscriptions" does not exist');
+          (err as any).code = '42P01';
+          throw err;
+        }
+        if (sqlText.includes('FROM clients WHERE tenant_id')) return { rows: [{ count: 0 }] };
+        return { rows: [] };
+      },
+    };
+
+    await expect(canCreateClient('tenant-missing-billing', missingBillingTable as any)).resolves.toMatchObject({
+      allowed: true,
+      plan: null,
+      clientLimit: null,
+      clientCount: 0,
+      nextPlan: null,
+    });
+  });
+
   it('POST /api/user/clients actually calls canCreateClient before inserting, and returns a structured 402 with usage/upgrade info when blocked', () => {
     const s = read('src/routes/auth.ts');
     const routeStart = s.indexOf("router.post('/user/clients'");

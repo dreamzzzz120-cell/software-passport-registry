@@ -445,7 +445,18 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
 export async function canCreateClient(tenantId: string, scopedDb: { execute: (query: any) => Promise<any> }): Promise<{
   allowed: boolean; plan: PlanId | null; clientLimit: number | null; clientCount: number; nextPlan: PlanId | null;
 }> {
-  const { plan, clientLimit } = await getPlanLimits(tenantId, scopedDb);
+  let plan: PlanId | null = null;
+  let clientLimit: number | null = null;
+
+  try {
+    const limits = await getPlanLimits(tenantId, scopedDb);
+    plan = limits.plan;
+    clientLimit = limits.clientLimit;
+  } catch (error) {
+    const code = (error as any)?.code ?? (error as any)?.cause?.code;
+    if (code !== '42P01' && code !== '42703') throw error;
+  }
+
   const countResult = await scopedDb.execute(sql`SELECT count(*)::int AS count FROM clients WHERE tenant_id = ${tenantId}`);
   const clientCount = (countResult as any).rows?.[0]?.count ?? 0;
   const allowed = clientLimit === null || clientCount < clientLimit;
