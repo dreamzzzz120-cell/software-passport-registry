@@ -38,6 +38,15 @@ describe('githubHeaders', () => {
     process.env.GITHUB_TOKEN = 'ghp_real';
     expect(githubHeaders({ authorization: 'Bearer spoofed' }).authorization).toBe('Bearer ghp_real');
   });
+
+  // security-scanner-worker shares this helper but identifies itself separately,
+  // so a caller-supplied user-agent must win while the credential is still added.
+  it('lets a caller keep its own user-agent and still authenticates', () => {
+    process.env.GITHUB_TOKEN = 'ghp_real';
+    const result = githubHeaders({ accept: 'application/vnd.github+json', 'user-agent': 'spr-security-worker/1.0' });
+    expect(result['user-agent']).toBe('spr-security-worker/1.0');
+    expect(result.authorization).toBe('Bearer ghp_real');
+  });
 });
 
 describe('isRateLimited', () => {

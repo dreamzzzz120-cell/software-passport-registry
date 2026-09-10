@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, mkdir, readdir, rm } from 'node:fs/promises';
 import { Pool } from 'pg';
-import { downloadArchive, generateRepositorySbom, runBounded, validateArchiveEntries } from './osv-worker.ts';
+import { downloadArchive, generateRepositorySbom, githubHeaders, isRateLimited, runBounded, validateArchiveEntries } from './osv-worker.ts';
 import { createWorkerPool, assertWorkerDatabase } from './worker-db.ts';
 import { runRealRepositoryScanners } from '../scanners/real-repository-scanners.ts';
 import { scanFindingIdentity } from '../security/scan-finding-identity.ts';
@@ -43,13 +43,21 @@ async function processSecurityJob(pool: Pool, job: any) {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), `spr-sec-${job.id}-`));
   try {
     const repoApi = `https://api.github.com/repos/${encodeURIComponent(source.repository_owner)}/${encodeURIComponent(source.repository_name)}`;
-    const metadataResponse = await fetch(repoApi, { redirect: 'error', headers: { accept: 'application/vnd.github+json', 'user-agent': 'spr-security-worker/1.0' } });
+    // This worker keeps its own acquisition path, so it needs the same GitHub
+    // credential and the same rate-limit classification as osv-worker. Without
+    // them it ran anonymously, was throttled on the shared Railway egress IP,
+    // and reported the throttle to the customer as "that repository is private"
+    // -- which is what still surfaced after the osv-worker fix, because this
+    // job's failure is the one that reaches failureReason.
+    const metadataResponse = await fetch(repoApi, { redirect: 'error', headers: githubHeaders({ accept: 'application/vnd.github+json', 'user-agent': 'spr-security-worker/1.0' }) });
+    if (isRateLimited(metadataResponse)) throw new Error('REPOSITORY_RATE_LIMITED');
     if (!metadataResponse.ok) throw new Error(metadataResponse.status === 404 ? 'REPOSITORY_NOT_FOUND' : 'REPOSITORY_ACCESS_DENIED');
     const metadata: any = await metadataResponse.json();
     if (metadata.private) throw new Error('REPOSITORY_ACCESS_DENIED');
     const defaultBranch = typeof metadata.default_branch === 'string' && metadata.default_branch.trim() ? metadata.default_branch.trim() : '';
     const requestedRef = source.requested_ref || defaultBranch || 'main';
-    const commitResponse = await fetch(`${repoApi}/commits/${encodeURIComponent(requestedRef)}`, { redirect: 'error', headers: { accept: 'application/vnd.github+json', 'user-agent': 'spr-security-worker/1.0' } });
+    const commitResponse = await fetch(`${repoApi}/commits/${encodeURIComponent(requestedRef)}`, { redirect: 'error', headers: githubHeaders({ accept: 'application/vnd.github+json', 'user-agent': 'spr-security-worker/1.0' }) });
+    if (isRateLimited(commitResponse)) throw new Error('REPOSITORY_RATE_LIMITED');
     if (!commitResponse.ok) throw new Error('REPOSITORY_REF_NOT_FOUND');
     const commit: any = await commitResponse.json();
     if (typeof commit.sha !== 'string' || !/^[a-f0-9]{40}$/i.test(commit.sha)) throw new Error('REPOSITORY_REF_NOT_FOUND');
