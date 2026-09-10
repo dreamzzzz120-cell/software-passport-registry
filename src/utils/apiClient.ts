@@ -109,7 +109,7 @@ export const apiFetch = async (
   }
   if (!headers.has('Accept')) headers.set('Accept', 'application/json');
   if (init?.body && !headers.has('Content-Type') && typeof init.body === 'string') {
-    headers.set('Content-Type', 'application/json');
+    headers.set('Content-Type', 'application/json; charset=utf-8');
   }
 
   const timeoutMs = init?.timeout ?? 30_000;
