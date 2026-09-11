@@ -1,11 +1,25 @@
+# Config-as-code for the worker service (spr-worker-staging). The worker
+# service's "config file path" setting in Railway must point at THIS file.
+#
+# Why this exists: Railway reads railway.toml by default for every service in
+# the repo, and railway.toml pins dockerfilePath = "Dockerfile" (the app
+# image). Config-as-code overrides the dashboard's per-service Dockerfile
+# setting, so the worker was silently built from the app image -- which has
+# no unzip and no syft -- and every repository scan in production failed at
+# `unzip -Z1` with REPOSITORY_ACQUISITION_FAILED. Free Review never once
+# completed. Dockerfile.worker installs unzip, tar and syft; it is the only
+# image the worker can run in.
 [build]
-builder = "RAILPACK"
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.worker"
 
 [deploy]
 startCommand = "node dist/worker.cjs"
-preDeployCommand = ["node dist/migrate.cjs"]
+# Same single-entry rule as railway.toml: "npm run release" runs migrations
+# and provisions the runtime roles through npm's shell.
+preDeployCommand = ["npm run release"]
+# The worker's /health is its own liveness listener (worker.ts, port 8080);
+# it has no /ready.
 healthcheckPath = "/health"
-healthcheckTimeout = 120
+healthcheckTimeout = 180
 restartPolicyType = "ALWAYS"
-checkSuites = false
-
