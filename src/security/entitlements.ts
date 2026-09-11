@@ -109,12 +109,33 @@ export async function tenantHasCapability(db: ScopedDb, tenantId: string, capabi
  * Single decision point for every capability check, so the authenticated API
  * boundary and the per-route enforceCapability() can never drift apart.
  */
+// Add-ons that grant a capability on top of the plan. Trust Badge and Public
+// Software Passport are not listed: nothing in the product is gated on them
+// today, so they cannot honestly grant anything until that gating exists.
+export const ADDON_CAPABILITY_GRANTS: Readonly<Record<string, Capability>> = { api: 'api', continuousVerification: 'monitoring' };
+
+export async function tenantHasAddonCapability(db: ScopedDb, tenantId: string, capability: Capability): Promise<boolean> {
+  const addons = Object.entries(ADDON_CAPABILITY_GRANTS).filter(([, granted]) => granted === capability).map(([addon]) => addon);
+  if (addons.length === 0) return false;
+  const result = await db.execute(sql`
+    SELECT EXISTS (
+      SELECT 1 FROM tenant_addons
+      WHERE tenant_id = ${tenantId}
+        AND addon IN (${sql.join(addons.map((addon) => sql`${addon}`), sql`, `)})
+        AND status IN (${ENTITLING_STATUSES_SQL})
+    ) AS allowed
+  `);
+  return Boolean((result as unknown as { rows?: Array<{ allowed?: boolean }> }).rows?.[0]?.allowed);
+}
+
 export async function evaluateCapability(db: ScopedDb, tenantId: string, capability: Capability): Promise<CapabilityDecision> {
   const state = await readSubscriptionState(db, tenantId);
   const gate = resolveSubscriptionGate(state);
   if (gate === 'default-access') return { allowed: true, gate, state };
   if (gate === 'lapsed') return { allowed: lapsedPlanAllows(capability), gate, state };
-  return { allowed: await tenantHasCapability(db, tenantId, capability), gate, state };
+  // A paid add-on grants its capability regardless of the plan tier.
+  if (await tenantHasCapability(db, tenantId, capability)) return { allowed: true, gate, state };
+  return { allowed: await tenantHasAddonCapability(db, tenantId, capability), gate, state };
 }
 
 export function capabilityDenial(capability: Capability, decision: CapabilityDecision) {
