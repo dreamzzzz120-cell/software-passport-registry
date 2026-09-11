@@ -1,4 +1,6 @@
 import * as Sentry from '@sentry/node';
+import rateLimit from 'express-rate-limit';
+const founderActionLimiter = rateLimit({ windowMs: 60_000, limit: 10, standardHeaders: 'draft-7', legacyHeaders: false, validate: { trustProxy: false } });
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -487,7 +489,7 @@ export function createAuthRouter() {
   // delivery can be verified without waiting for a real failure. Returns the
   // event id Sentry assigned, or 503 when no DSN is configured -- never a
   // pretend success.
-  router.post('/founder/monitoring/test-event', requireAuth, requireRole('Owner'), requireFounder, async (req: AuthenticatedRequest, res) => {
+  router.post('/founder/monitoring/test-event', founderActionLimiter, requireAuth, requireRole('Owner'), requireFounder, async (req: AuthenticatedRequest, res) => {
     if (!config.sentry.dsn) return res.status(503).json({ error: 'MONITORING_NOT_CONFIGURED', message: 'SENTRY_DSN is not set on this deployment.' });
     const eventId = Sentry.captureMessage(`SPR founder test event from ${req.user!.email ?? 'founder'}`, { level: 'info', tags: { source: 'founder-dashboard' } });
     await Sentry.flush(5000).catch(() => undefined);
