@@ -78,32 +78,66 @@
     }
   }
 
+  var markSerial = 0;
+
   /**
-   * Shield mark, drawn inline so the badge carries its own artwork onto any
-   * host page. A single solid path keeps it crisp at 18px and needs no fill
-   * rules a host stylesheet could override.
+   * SPR mark, drawn inline so the badge carries its own artwork onto any host
+   * page: a white shield outline, a blue shield outline offset over it and
+   * clipped to its right half, and a bold T. Each render gets its own clipPath
+   * id so several badges on one page cannot share (and break) a clip.
    */
-  function shieldIcon(color) {
+  function sprMark() {
     var svgNS = 'http://www.w3.org/2000/svg';
+    var id = 'spr-mark-clip-' + (++markSerial);
     var svg = document.createElementNS(svgNS, 'svg');
-    svg.setAttribute('viewBox', '0 0 24 24');
-    svg.setAttribute('width', '18');
-    svg.setAttribute('height', '18');
+    svg.setAttribute('viewBox', '0 0 26 26');
+    svg.setAttribute('width', '26');
+    svg.setAttribute('height', '26');
     svg.setAttribute('aria-hidden', 'true');
     svg.style.flexShrink = '0';
     svg.style.display = 'block';
-    var shield = document.createElementNS(svgNS, 'path');
-    shield.setAttribute('d', 'M12 2 4 5v6c0 5.25 3.4 10.15 8 11.35C16.6 21.15 20 16.25 20 11V5l-8-3z');
-    shield.setAttribute('fill', color);
-    var check = document.createElementNS(svgNS, 'path');
-    check.setAttribute('d', 'M9.2 12.1l1.9 1.9 3.8-4.1');
-    check.setAttribute('fill', 'none');
-    check.setAttribute('stroke', '#0f172a');
-    check.setAttribute('stroke-width', '2');
-    check.setAttribute('stroke-linecap', 'round');
-    check.setAttribute('stroke-linejoin', 'round');
-    svg.appendChild(shield);
-    svg.appendChild(check);
+    svg.style.overflow = 'visible';
+
+    var defs = document.createElementNS(svgNS, 'defs');
+    var clip = document.createElementNS(svgNS, 'clipPath');
+    clip.setAttribute('id', id);
+    var rect = document.createElementNS(svgNS, 'rect');
+    rect.setAttribute('x', '13'); rect.setAttribute('y', '-2'); rect.setAttribute('width', '16'); rect.setAttribute('height', '30');
+    clip.appendChild(rect);
+    defs.appendChild(clip);
+    svg.appendChild(defs);
+
+    var shieldD = 'M12 1.5 3.5 4.75v6.5c0 5.6 3.6 10.8 8.5 12.1 4.9-1.3 8.5-6.5 8.5-12.1v-6.5L12 1.5z';
+
+    var white = document.createElementNS(svgNS, 'path');
+    white.setAttribute('d', shieldD);
+    white.setAttribute('fill', 'none');
+    white.setAttribute('stroke', '#ffffff');
+    white.setAttribute('stroke-width', '1.7');
+    white.setAttribute('stroke-linejoin', 'round');
+
+    var blue = document.createElementNS(svgNS, 'path');
+    blue.setAttribute('d', shieldD);
+    blue.setAttribute('transform', 'translate(2.5 2.5)');
+    blue.setAttribute('fill', 'none');
+    blue.setAttribute('stroke', '#3b82f6');
+    blue.setAttribute('stroke-width', '1.7');
+    blue.setAttribute('stroke-linejoin', 'round');
+    blue.setAttribute('clip-path', 'url(#' + id + ')');
+
+    var t = document.createElementNS(svgNS, 'text');
+    t.setAttribute('x', '12');
+    t.setAttribute('y', '16.2');
+    t.setAttribute('text-anchor', 'middle');
+    t.setAttribute('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif');
+    t.setAttribute('font-size', '12.5');
+    t.setAttribute('font-weight', '800');
+    t.setAttribute('fill', '#ffffff');
+    t.textContent = 'T';
+
+    svg.appendChild(white);
+    svg.appendChild(blue);
+    svg.appendChild(t);
     return svg;
   }
 
@@ -143,30 +177,30 @@
     var mark = el('span', {
       display: 'inline-flex',
       alignItems: 'center',
-      gap: '8px',
-      padding: '7px 11px 7px 10px',
+      gap: '9px',
+      padding: '6px 12px 6px 9px',
       background: '#0f172a',
       color: '#ffffff'
     });
-    mark.appendChild(shieldIcon('#ffffff'));
+    mark.appendChild(sprMark());
     var markText = el('span', { display: 'inline-flex', flexDirection: 'column', gap: '1px' });
     var markTop = el('span', {
-      fontSize: '10.5px',
-      fontWeight: '700',
-      letterSpacing: '0.08em',
-      textTransform: 'uppercase',
+      fontSize: '15px',
+      fontWeight: '800',
+      letterSpacing: '0.06em',
+      lineHeight: '1',
       whiteSpace: 'nowrap'
     });
-    markTop.textContent = 'Software Passport';
+    markTop.textContent = 'SPR';
     var markBottom = el('span', {
-      fontSize: '9.5px',
-      fontWeight: '500',
-      letterSpacing: '0.12em',
+      fontSize: '8.5px',
+      fontWeight: '600',
+      letterSpacing: '0.1em',
       textTransform: 'uppercase',
       color: '#94a3b8',
       whiteSpace: 'nowrap'
     });
-    markBottom.textContent = 'Registry';
+    markBottom.textContent = 'Software Passport Registry';
     markText.appendChild(markTop);
     markText.appendChild(markBottom);
     mark.appendChild(markText);
