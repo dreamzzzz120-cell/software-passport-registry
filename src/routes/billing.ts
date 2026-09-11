@@ -235,8 +235,19 @@ export function createBillingRouter() {
       const stripe = stripeClient();
       const tenantId = req.user!.tenantId;
       const scopedDb = req.db!;
-      const existing = (await scopedDb.execute(sql`SELECT stripe_customer_id AS "stripeCustomerId" FROM tenant_subscriptions WHERE tenant_id = ${tenantId} LIMIT 1`) as any).rows?.[0];
+      const existing = (await scopedDb.execute(sql`SELECT stripe_customer_id AS "stripeCustomerId", stripe_subscription_id AS "stripeSubscriptionId", plan, status FROM tenant_subscriptions WHERE tenant_id = ${tenantId} LIMIT 1`) as any).rows?.[0];
       const customerId: string | undefined = existing?.stripeCustomerId;
+      // One plan subscription per tenant. Observed 2026-09-11: a tenant that
+      // already held an active plan could start a second plan checkout, and
+      // Stripe happily created a second live subscription -- a real customer
+      // would be billed twice. Plan changes go through the Billing Portal,
+      // which swaps the price on the existing subscription with proration.
+      if (existing?.stripeSubscriptionId && ['active', 'trialing', 'past_due'].includes(String(existing.status))) {
+        return res.status(409).json({
+          error: 'PLAN_ALREADY_ACTIVE', code: 'PLAN_ALREADY_ACTIVE', currentPlan: existing.plan, billingPath: '/billing',
+          message: `This workspace already has an active ${existing.plan} plan. Use Manage billing to change plans; a second checkout would create a second subscription.`,
+        });
+      }
       const session = await stripe.checkout.sessions.create({
         mode: 'subscription',
         ...(customerId ? { customer: customerId } : { customer_email: req.user!.email }),
