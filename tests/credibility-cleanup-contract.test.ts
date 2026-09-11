@@ -33,10 +33,8 @@ describe('dead components with fabricated certification claims are removed, not 
 });
 
 describe('no remaining live UI/data claims present SLSA Level 4 (or any specific level) as an established fact', () => {
-  it('extensionsData.ts no longer asserts a specific SLSA level as a plain fact', () => {
-    const s = read('src/data/extensionsData.ts');
-    expect(s).not.toContain('SLSA Level 4 digital signatures');
-    expect(s).toContain('Verified only when qualifying evidence is submitted and independently checked');
+  it('the extensions marketplace data that asserted SLSA Level 4 as fact is gone entirely (it was unreferenced by any live view)', () => {
+    expect(fs.existsSync(path.join(process.cwd(), 'src/data/extensionsData.ts'))).toBe(false);
   });
 
   it('the only remaining "SLSA Level" reference in the app is contextual reference data about an external regulatory framework applicable to a software category, not a claim about specific software', () => {
