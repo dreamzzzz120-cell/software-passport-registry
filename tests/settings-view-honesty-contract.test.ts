@@ -47,9 +47,12 @@ describe('SettingsView no longer fabricates security/infrastructure status', () 
     expect(s).toContain("fetch('/health').then((r) => r.json())");
   });
 
-  it('the Product Bible library discloses it is local-only, session-scoped reference data, not synced or wired to the real scanning pipeline', () => {
+  it('the Product Bible tab and its sandbox "attestation" are gone: no client-side PASS/WARN/FAIL verdicts from hard-coded baselines', () => {
     const s = source();
+    expect(s).not.toContain("activeSubTab === 'bible'");
+    expect(s).not.toContain('handleRunSandboxAudit');
+    expect(s).not.toContain('bibleProducts');
+    expect(s).not.toContain('AUDIT KERNEL');
     expect(s).not.toContain('Automated daily RSS synchronizations');
-    expect(s).toContain('This library is local to your current session only');
   });
 });

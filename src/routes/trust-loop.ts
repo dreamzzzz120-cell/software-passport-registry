@@ -148,6 +148,41 @@ export function createTrustLoopRouter() {
       return res.json({ findings: (rows as any).rows || [] });
     } catch (error) { return next(error); }
   });
+  // Single-finding detail for the MSP Command Center "Explain this" panel.
+  // Same tenant + Client-role scoping as the list above; the camelCase shape
+  // is exactly what MSPCommandCenter.tsx renders (clientName, evidenceIds,
+  // firstObservedAt/lastObservedAt). Client name is joined from the real
+  // clients row rather than echoing the raw client_id.
+  router.get('/findings/:id', async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const clientScope = req.user!.role === 'Client' ? req.user!.clientId : null;
+      const findingId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const row = (await db.execute(sql`
+        SELECT f.*, c.name AS client_name, r.id AS remediation_id, r.status AS remediation_status
+        FROM trust_findings f
+        LEFT JOIN clients c ON c.id = f.client_id AND c.tenant_id = f.tenant_id
+        LEFT JOIN LATERAL (
+          SELECT id, status FROM trust_remediation_work_items w
+          WHERE w.tenant_id = f.tenant_id AND w.finding_id = f.id
+          ORDER BY w.created_at DESC LIMIT 1
+        ) r ON true
+        WHERE f.tenant_id=${tenantId} AND f.id=${findingId} AND (${clientScope}::text IS NULL OR f.client_id = ${clientScope})
+        LIMIT 1
+      `) as any).rows?.[0];
+      if (!row) return res.status(404).json({ error: 'FINDING_NOT_FOUND' });
+      let evidenceIds: string[] = [];
+      try { const parsed = JSON.parse(row.evidence_ids || '[]'); if (Array.isArray(parsed)) evidenceIds = parsed.map(String); } catch { evidenceIds = []; }
+      return res.json({
+        id: row.id, passportId: row.passport_id, clientId: row.client_id, clientName: row.client_name || row.client_id,
+        controlId: row.control_id, title: row.title, severity: row.severity, status: row.status,
+        description: row.description, remediation: row.remediation, evidenceIds,
+        firstObservedAt: row.created_at, lastObservedAt: row.updated_at, timestamp: row.updated_at, resolvedAt: row.resolved_at,
+        remediationId: row.remediation_id ?? null, remediationStatus: row.remediation_status ?? null,
+      });
+    } catch (error) { return next(error); }
+  });
 
   router.post('/remediations', async (req: AuthenticatedRequest, res, next) => {
     const parsed = remediationSchema.safeParse(req.body);

@@ -3,11 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  CheckSquare, Square, CheckCircle2, ChevronRight, Database,
-  ArrowRight, ShieldCheck, Key, Settings, HelpCircle, Layers, Info, Sparkles,
-  RefreshCw, Lock, AlertTriangle, ExternalLink, Zap, Monitor, Globe, Network, Cpu, BadgePercent
+  CheckSquare, Square, CheckCircle2, ArrowRight, Key, Sparkles, RefreshCw, AlertTriangle, Lock
 } from 'lucide-react';
 import { Github, Gitlab } from 'lucide-react-base';
 import { apiFetch } from '../utils/apiClient';
@@ -20,6 +18,27 @@ interface PilotOnboardingChecklistProps {
   onNavigateTab: (tab: string, itemId?: string) => void;
 }
 
+// Shapes are the real responses of GET /api/integrations-live and
+// GET /api/billing -- nothing here is derived from local state or storage.
+type LiveIntegration = { id: string; provider: string; name: string; credentialStatus: string; lastTestedAt: string | null };
+type CatalogPlan = { id: string; label: string; priceLabel: string | null; interval: string | null; clientLimit: number | null; checkoutAvailable: boolean };
+type BillingStatus = {
+  billingConfigured: boolean;
+  plans: CatalogPlan[];
+  subscription: { plan: string | null; status: string | null; clientLimit: number | null; currentPeriodEnd: string | null } | null;
+  clientCount: number;
+};
+
+type RepoProvider = 'github' | 'gitlab';
+
+async function responseError(response: Response, fallback: string) {
+  const data = await response.json().catch(() => null);
+  if (!data) return fallback;
+  if (typeof data.error === 'string') return data.error;
+  if (typeof data.error?.message === 'string') return data.error.message;
+  return fallback;
+}
+
 export default function PilotOnboardingChecklist({
   clientsCount,
   passportsCount,
@@ -27,162 +46,81 @@ export default function PilotOnboardingChecklist({
   onOpenQuickAction,
   onNavigateTab
 }: PilotOnboardingChecklistProps) {
-  // Sub-sections expanded state
   const [activeTab, setActiveTab] = useState<'integrations' | 'billing' | 'none'>('none');
-  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState<RepoProvider | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Real Integration configuration state
-  const [githubAppId, setGithubAppId] = useState('');
-  const [githubPrivateKey, setGithubPrivateKey] = useState('');
-  const [githubRepo, setGithubRepo] = useState('');
-  const [githubConnected, setGithubConnected] = useState(false);
-
+  // Repository credentials. These go to PUT /api/integrations-live/:provider/
+  // credentials (encrypted at rest by the integration credential vault) --
+  // the same path the full Integrations page uses -- and are never kept
+  // here after a successful save.
+  const [githubToken, setGithubToken] = useState('');
   const [gitlabToken, setGitlabToken] = useState('');
-  const [gitlabProject, setGitlabProject] = useState('');
-  const [gitlabConnected, setGitlabConnected] = useState(false);
+  const [gitlabBaseUrl, setGitlabBaseUrl] = useState('');
 
-  const [pypiToken, setPypiToken] = useState('');
-  const [pypiConnected, setPypiConnected] = useState(false);
+  const [integrations, setIntegrations] = useState<LiveIntegration[]>([]);
+  const [billing, setBilling] = useState<BillingStatus | null>(null);
+  const [billingError, setBillingError] = useState<string | null>(null);
 
-  // Active threat feeds & vulnerability databases
-  const [selectedFeeds, setSelectedFeeds] = useState<string[]>(['nvd', 'cisa']);
-  const [customVulnApiKey, setCustomVulnApiKey] = useState('');
-
-  // Active plan / subscription limits state
-  const [currentPlan, setCurrentPlan] = useState<'Starter' | 'Growth' | 'Enterprise'>('Starter');
-  const [billingCycle, setBillingCycle] = useState<'Monthly' | 'Annual'>('Monthly');
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-
-  // Plan configurations
-  const plans = {
-    Starter: {
-      name: 'Starter Pilot',
-      price: billingCycle === 'Monthly' ? 299 : 249,
-      clientLimit: 3,
-      passportLimit: 5,
-      scanLimit: 10,
-      badge: 'Great for Testing'
-    },
-    Growth: {
-      name: 'Growth Scale',
-      price: billingCycle === 'Monthly' ? 799 : 649,
-      clientLimit: 10,
-      passportLimit: 25,
-      scanLimit: 50,
-      badge: 'Best Value for MSPs'
-    },
-    Enterprise: {
-      name: 'Enterprise Sovereign',
-      price: billingCycle === 'Monthly' ? 1999 : 1599,
-      clientLimit: 100,
-      passportLimit: 200,
-      scanLimit: 1000,
-      badge: 'Unlimited Power'
-    }
-  };
-
-  // Dynamic values calculated against current selected plan limits
-  const currentLimits = plans[currentPlan];
-  const clientUtilization = (clientsCount / currentLimits.clientLimit) * 100;
-  const passportUtilization = (passportsCount / currentLimits.passportLimit) * 100;
-  const scanUtilization = (scansCount / currentLimits.scanLimit) * 100;
-
-  // Initialize and load integration settings from the server
-  useEffect(() => {
-    const fetchIntegrations = async () => {
-      try {
-        const res = await apiFetch('/api/integrations');
-        if (res.ok) {
-          const data = await res.json();
-          // Map backend connection state
-          const gh = data.find((i: any) => i.id.includes('github') || i.name.toLowerCase().includes('github'));
-          if (gh && gh.connected) {
-            setGithubConnected(true);
-            setGithubAppId('app-981242');
-            setGithubRepo('company-org/main-repo');
-          }
-          const sl = data.find((i: any) => i.id.includes('slack') || i.name.toLowerCase().includes('slack'));
-          // Keep internal states loaded
-        }
-      } catch (err) {
-        console.error('Failed to load integrations status from backend:', err);
-      }
-    };
-
-    fetchIntegrations();
-
-    // Load custom plan from localStorage if user upgraded earlier
-    const savedPlan = localStorage.getItem('msp_subscription_plan');
-    if (savedPlan && ['Starter', 'Growth', 'Enterprise'].includes(savedPlan)) {
-      setCurrentPlan(savedPlan as any);
+  const loadIntegrations = useCallback(async () => {
+    try {
+      const res = await apiFetch('/api/integrations-live');
+      const data = await res.json().catch(() => []);
+      if (res.ok && Array.isArray(data)) setIntegrations(data);
+    } catch (err) {
+      console.error('Failed to load live integration status from backend:', err);
     }
   }, []);
 
-  // Form submit handler for integrations (Real backend POST/PUT proxy)
-  const handleSaveIntegration = async (connector: 'github' | 'gitlab' | 'pypi') => {
-    setLoading(true);
+  const loadBilling = useCallback(async () => {
+    try {
+      const res = await apiFetch('/api/billing');
+      if (!res.ok) { setBillingError(await responseError(res, 'Billing status is unavailable.')); return; }
+      const data = await res.json();
+      setBilling(data);
+      setBillingError(null);
+    } catch (err) {
+      console.error('Failed to load billing status from backend:', err);
+      setBillingError('Billing status is unavailable.');
+    }
+  }, []);
+
+  useEffect(() => { void loadIntegrations(); void loadBilling(); }, [loadIntegrations, loadBilling]);
+
+  const statusOf = (provider: RepoProvider) => integrations.find((item) => item.provider === provider)?.credentialStatus ?? 'NOT_CONFIGURED';
+  const isConfigured = (provider: RepoProvider) => statusOf(provider) !== 'NOT_CONFIGURED';
+  const githubConnected = isConfigured('github');
+  const gitlabConnected = isConfigured('gitlab');
+
+  const handleSaveCredentials = async (provider: RepoProvider) => {
+    setSaving(provider);
     setSuccessMsg(null);
     setErrorMsg(null);
-
     try {
-      // Find matching integration ID from server
-      const listRes = await apiFetch('/api/integrations');
-      const list = await listRes.json();
-      const match = list.find((i: any) => i.id.toLowerCase().includes(connector));
-
-      if (!match) {
-        throw new Error(`Integration model for ${connector} not found on server.`);
-      }
-
-      // Update integration state on the server
-      const updateRes = await apiFetch(`/api/integrations/${match.id}`, {
+      const credentials: Record<string, string> = provider === 'github'
+        ? { accessToken: githubToken.trim() }
+        : { accessToken: gitlabToken.trim(), ...(gitlabBaseUrl.trim() ? { baseUrl: gitlabBaseUrl.trim() } : {}) };
+      const res = await apiFetch(`/api/integrations-live/${provider}/credentials`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          connected: true,
-          apiKeyHint: connector === 'github' ? `gh_app_${githubAppId}` : `gl_token_***`,
-          lastSyncDate: new Date().toISOString()
-        })
+        body: JSON.stringify(credentials)
       });
-
-      if (updateRes.ok) {
-        if (connector === 'github') setGithubConnected(true);
-        if (connector === 'gitlab') setGitlabConnected(true);
-        if (connector === 'pypi') setPypiConnected(true);
-
-        setSuccessMsg(`${match.name} was marked connected. Verify repository access before starting a scan.`);
-      } else {
-        const errData = await updateRes.json();
-        setErrorMsg(errData.error || `Failed to verify credentials with ${match.name}.`);
-      }
+      if (!res.ok) throw new Error(await responseError(res, `Unable to save ${provider} credentials.`));
+      if (provider === 'github') setGithubToken(''); else { setGitlabToken(''); setGitlabBaseUrl(''); }
+      setSuccessMsg(`${provider === 'github' ? 'GitHub' : 'GitLab'} credentials saved and encrypted. Run a test from the Integrations page to collect live evidence before treating the source as verified.`);
+      await loadIntegrations();
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Network error during integration handshake.');
+      setErrorMsg(err?.message || 'Network error while saving credentials.');
     } finally {
-      setLoading(false);
+      setSaving(null);
     }
   };
 
-  // Toggle threat feed
-  const toggleFeed = (feed: string) => {
-    if (selectedFeeds.includes(feed)) {
-      setSelectedFeeds(selectedFeeds.filter(f => f !== feed));
-    } else {
-      setSelectedFeeds([...selectedFeeds, feed]);
-    }
-  };
+  const subscription = billing?.subscription ?? null;
+  const activePlan = subscription?.plan ? billing?.plans.find((plan) => plan.id === subscription.plan) ?? null : null;
+  const planReviewed = Boolean(subscription?.plan);
 
-  // Upgrade Plan handler (Saves plan state dynamically)
-  const handleUpgradePlan = (planKey: 'Starter' | 'Growth' | 'Enterprise') => {
-    setCurrentPlan(planKey);
-    localStorage.setItem('msp_subscription_plan', planKey);
-    setShowUpgradeModal(false);
-    setSuccessMsg(`Congratulations! Upgraded successfully to ${plans[planKey].name} tier.`);
-    setTimeout(() => setSuccessMsg(null), 5000);
-  };
-
-  // Core Checklist tasks
   const tasks = [
     {
       id: 'onboard-client',
@@ -215,24 +153,34 @@ export default function PilotOnboardingChecklist({
       id: 'configure-integrations',
       title: 'Connect a source repository',
       description: 'Add repository access before starting a repository scan.',
-      status: githubConnected || gitlabConnected || pypiConnected,
+      status: githubConnected || gitlabConnected,
       actionLabel: 'Configure Sources',
       action: () => setActiveTab(activeTab === 'integrations' ? 'none' : 'integrations'),
-      completedText: 'Integrations Connected'
+      completedText: [githubConnected ? 'GitHub' : null, gitlabConnected ? 'GitLab' : null].filter(Boolean).join(' + ') + ' configured'
     },
     {
       id: 'verify-limits',
       title: 'Review your plan',
       description: 'Check the current usage limits before adding production workloads.',
-      status: currentPlan !== 'Starter' || clientsCount > 0, // Mark done if upgraded or they have active assets
+      status: planReviewed,
       actionLabel: 'Manage Plan',
       action: () => setActiveTab(activeTab === 'billing' ? 'none' : 'billing'),
-      completedText: `Active Plan: ${plans[currentPlan].name}`
+      completedText: `Active plan: ${activePlan?.label ?? subscription?.plan ?? 'recorded'}`
     }
   ];
 
   const completedCount = tasks.filter(t => t.status).length;
   const progressPercent = (completedCount / tasks.length) * 100;
+
+  const statusBadge = (provider: RepoProvider) => {
+    const status = statusOf(provider);
+    const configured = status !== 'NOT_CONFIGURED';
+    return (
+      <span className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded ${configured ? 'bg-[var(--spr-green)]/15 text-[var(--spr-green)] border border-[var(--spr-green)]' : 'bg-[var(--spr-surface-alt)] text-[var(--spr-text-muted)]'}`}>
+        {status.replace(/_/g, ' ')}
+      </span>
+    );
+  };
 
   return (
     <div id="pilot-onboarding-hub" className="spr-panel text-[var(--spr-text)] p-6 space-y-6 relative overflow-hidden">
@@ -250,10 +198,10 @@ export default function PilotOnboardingChecklist({
           </div>
           <h2 className="text-lg font-bold text-[var(--spr-text)] font-display flex items-center gap-2">
             <span>Set up SPR</span>
-            <span className="text-xs font-normal text-[var(--spr-text-muted)]">Four practical steps</span>
+            <span className="text-xs font-normal text-[var(--spr-text-muted)]">Five practical steps</span>
           </h2>
           <p className="text-xs text-[var(--spr-text-muted)] leading-relaxed max-w-2xl">
-            Add a client, register its software, run a scan, and review the recorded results. SPR marks each item complete from saved workspace data.
+            Add a client, register its software, run a scan, connect a repository, and review your plan. SPR marks each item complete from saved workspace data.
           </p>
         </div>
 
@@ -279,13 +227,13 @@ export default function PilotOnboardingChecklist({
               />
             </svg>
             <div className="absolute inset-0 flex items-center justify-center text-xs font-bold font-mono">
-              {completedCount}/5
+              {completedCount}/{tasks.length}
             </div>
           </div>
           <div className="text-left space-y-0.5">
-            <span className="text-[12px] font-mono text-[var(--spr-text-muted)] block uppercase">Pilot Status</span>
-            <span className={`text-xs font-bold ${completedCount === 5 ? 'text-[var(--spr-green)]' : 'text-[var(--spr-highlight)]'}`}>
-              {completedCount === 5 ? '🚀 Pilot Ready: Attested' : 'In-Flight Ingestion'}
+            <span className="text-[12px] font-mono text-[var(--spr-text-muted)] block uppercase">Setup status</span>
+            <span className={`text-xs font-bold ${completedCount === tasks.length ? 'text-[var(--spr-green)]' : 'text-[var(--spr-highlight)]'}`}>
+              {completedCount === tasks.length ? 'All steps complete' : `${tasks.length - completedCount} step${tasks.length - completedCount === 1 ? '' : 's'} remaining`}
             </span>
           </div>
         </div>
@@ -299,7 +247,7 @@ export default function PilotOnboardingChecklist({
         </div>
       )}
       {errorMsg && (
-        <div className="bg-[var(--spr-red)]/15 border border-[var(--spr-red)] text-[var(--spr-red)] p-4 rounded-md text-xs flex items-center gap-2 animate-fadeIn text-left">
+        <div role="alert" className="bg-[var(--spr-red)]/15 border border-[var(--spr-red)] text-[var(--spr-red)] p-4 rounded-md text-xs flex items-center gap-2 animate-fadeIn text-left">
           <AlertTriangle className="w-4 h-4 shrink-0" />
           <span>{errorMsg}</span>
         </div>
@@ -317,7 +265,6 @@ export default function PilotOnboardingChecklist({
             }`}
           >
             <div className="space-y-2 text-left">
-              {/* Top line with step & checkbox */}
               <div className="flex justify-between items-center">
                 <span className="text-[11px] font-mono font-bold text-[var(--spr-highlight)]">STEP 0{idx + 1}</span>
                 {task.status ? (
@@ -334,7 +281,6 @@ export default function PilotOnboardingChecklist({
               <p className="text-[12px] text-[var(--spr-text-muted)] leading-normal line-clamp-3">{task.description}</p>
             </div>
 
-            {/* CTA action bottom */}
             <div>
               {task.status ? (
                 <div className="text-[12px] font-mono text-[var(--spr-green)] font-semibold flex items-center gap-1 bg-[var(--spr-green)]/15 px-2.5 py-1.5 rounded-md border border-[var(--spr-green)]">
@@ -355,16 +301,13 @@ export default function PilotOnboardingChecklist({
         ))}
       </div>
 
-      {/* Tabs Switcher for Advanced Configurations */}
+      {/* Expanded configuration area */}
       {(activeTab === 'integrations' || activeTab === 'billing') && (
         <div className="border-t border-[var(--spr-border)] pt-6 animate-fadeIn">
-          {/* Active Header for expand area */}
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-xs font-mono font-bold text-[var(--spr-highlight)] uppercase tracking-widest flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-[var(--spr-highlight)]" />
-              <span>
-                {activeTab === 'integrations' ? 'Advanced Repositories & Databases Integration Center' : 'MSP Tenant Usage Limits & Billing Panel'}
-              </span>
+              <span>{activeTab === 'integrations' ? 'Source repository access' : 'Plan and usage'}</span>
             </h3>
             <div className="flex items-center gap-4">
               <button
@@ -377,382 +320,143 @@ export default function PilotOnboardingChecklist({
                 onClick={() => setActiveTab('none')}
                 className="text-[12px] font-mono text-[var(--spr-text-muted)] hover:text-[var(--spr-text)] underline"
               >
-                Close Configurator
+                Close
               </button>
             </div>
           </div>
 
-          {/* Tab Content: Integrations */}
+          {/* Integrations: GitHub + GitLab, through the real credential vault */}
           {activeTab === 'integrations' && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 text-left">
-              {/* GitHub App Connector */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 text-left">
               <div className="bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] p-5 rounded-md space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Github className="w-4 h-4 text-[var(--spr-highlight)]" />
-                    <span className="text-xs font-bold text-[var(--spr-text)] font-sans">GitHub Enterprise Connector</span>
+                    <span className="text-xs font-bold text-[var(--spr-text)] font-sans">GitHub</span>
                   </div>
-                  <span className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded ${
-                    githubConnected ? 'bg-[var(--spr-green)]/15 text-[var(--spr-green)] border border-[var(--spr-green)]' : 'bg-[var(--spr-surface-alt)] text-[var(--spr-text-muted)]'
-                  }`}>
-                    {githubConnected ? 'CONNECTED' : 'UNCONFIGURED'}
-                  </span>
+                  {statusBadge('github')}
                 </div>
                 <p className="text-[12px] text-[var(--spr-text-muted)] leading-normal">
-                  Authenticates with your GitHub Organization. Seals continuous webhook callbacks to verify commit signatures and SBOM updates on pull-requests.
+                  A personal access token with read access to the repositories you want scanned. SPR uses it for immutable commit acquisition, SBOM generation and dependency evidence.
                 </p>
-
-                <div className="space-y-3 pt-2">
-                  <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-[11px] font-mono font-bold text-[var(--spr-text-muted)] uppercase">APP ID</span>
-                    <input
-                      type="text"
-                      value={githubAppId}
-                      onChange={(e) => setGithubAppId(e.target.value)}
-                      placeholder="e.g. app-12345"
-                      className="w-full bg-[var(--spr-surface)] border border-[var(--spr-border)] rounded-md text-xs pl-16 pr-3 py-2 text-[var(--spr-text)] font-mono focus:outline-none"
-                    />
-                  </div>
-                  <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-[11px] font-mono font-bold text-[var(--spr-text-muted)] uppercase">REPO</span>
-                    <input
-                      type="text"
-                      value={githubRepo}
-                      onChange={(e) => setGithubRepo(e.target.value)}
-                      placeholder="e.g. org/main-registry"
-                      className="w-full bg-[var(--spr-surface)] border border-[var(--spr-border)] rounded-md text-xs pl-16 pr-3 py-2 text-[var(--spr-text)] font-mono focus:outline-none"
-                    />
-                  </div>
-                  <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-[11px] font-mono font-bold text-[var(--spr-text-muted)] uppercase">PEM KEY</span>
-                    <textarea
-                      value={githubPrivateKey}
-                      onChange={(e) => setGithubPrivateKey(e.target.value)}
-                      placeholder="Paste the PEM-encoded private key"
-                      rows={2}
-                      className="w-full bg-[var(--spr-surface)] border border-[var(--spr-border)] rounded-md text-[11px] pl-16 pr-3 py-2 text-[var(--spr-text)] font-mono focus:outline-none resize-none"
-                    />
-                  </div>
-                  <button
-                    onClick={() => handleSaveIntegration('github')}
-                    disabled={loading || !githubAppId || !githubRepo}
-                    className="w-full py-2 bg-[var(--spr-accent)] hover:bg-[var(--spr-accent)] text-[var(--spr-text)] font-sans font-bold text-[12px] rounded-md transition disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
-                  >
-                    {loading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
-                    <span>Seal Connection & Sync</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* GitLab API Connector */}
-              <div className="bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] p-5 rounded-md space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Gitlab className="w-4 h-4 text-[var(--spr-highlight)]" />
-                    <span className="text-xs font-bold text-[var(--spr-text)] font-sans">GitLab CI/CD Access</span>
-                  </div>
-                  <span className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded ${
-                    gitlabConnected ? 'bg-[var(--spr-green)]/15 text-[var(--spr-green)] border border-[var(--spr-green)]' : 'bg-[var(--spr-surface-alt)] text-[var(--spr-text-muted)]'
-                  }`}>
-                    {gitlabConnected ? 'CONNECTED' : 'UNCONFIGURED'}
-                  </span>
-                </div>
-                <p className="text-[12px] text-[var(--spr-text-muted)] leading-normal">
-                  Link your private GitLab registry projects. Attest compile-time variables and artifact hashes securely within the software supply chain.
-                </p>
-
                 <div className="space-y-3 pt-2">
                   <div className="relative">
                     <span className="absolute left-3 top-2.5 text-[11px] font-mono font-bold text-[var(--spr-text-muted)] uppercase">TOKEN</span>
                     <input
                       type="password"
-                      value={gitlabToken}
-                      onChange={(e) => setGitlabToken(e.target.value)}
-                      placeholder="glpat-***"
-                      className="w-full bg-[var(--spr-surface)] border border-[var(--spr-border)] rounded-md text-xs pl-16 pr-3 py-2 text-[var(--spr-text)] font-mono focus:outline-none"
-                    />
-                  </div>
-                  <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-[11px] font-mono font-bold text-[var(--spr-text-muted)] uppercase">PROJECT</span>
-                    <input
-                      type="text"
-                      value={gitlabProject}
-                      onChange={(e) => setGitlabProject(e.target.value)}
-                      placeholder="e.g. gitlab.com/org/project-id"
+                      autoComplete="off"
+                      value={githubToken}
+                      onChange={(e) => setGithubToken(e.target.value)}
+                      placeholder="ghp_..."
                       className="w-full bg-[var(--spr-surface)] border border-[var(--spr-border)] rounded-md text-xs pl-16 pr-3 py-2 text-[var(--spr-text)] font-mono focus:outline-none"
                     />
                   </div>
                   <button
-                    onClick={() => handleSaveIntegration('gitlab')}
-                    disabled={loading || !gitlabToken || !gitlabProject}
-                    className="w-full py-2 bg-[var(--spr-accent-soft)] hover:bg-[var(--spr-accent)] text-[var(--spr-text)] font-sans font-bold text-[12px] rounded-md transition disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
+                    onClick={() => void handleSaveCredentials('github')}
+                    disabled={saving !== null || !githubToken.trim()}
+                    className="w-full py-2 bg-[var(--spr-accent)] hover:bg-[var(--spr-accent)] text-[var(--spr-text)] font-sans font-bold text-[12px] rounded-md transition disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
                   >
-                    {loading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Key className="w-3.5 h-3.5" />}
-                    <span>Authenticate GitLab</span>
+                    {saving === 'github' ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Lock className="w-3.5 h-3.5" />}
+                    <span>{githubConnected ? 'Replace GitHub token' : 'Save GitHub token'}</span>
                   </button>
                 </div>
               </div>
 
-              {/* Package Registries & Vulnerability DBs */}
               <div className="bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] p-5 rounded-md space-y-4">
-                <div className="flex items-center gap-2">
-                  <Database className="w-4 h-4 text-[var(--spr-green)]" />
-                  <span className="text-xs font-bold text-[var(--spr-text)] font-sans">Threat Feeds & Package registries</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Gitlab className="w-4 h-4 text-[var(--spr-highlight)]" />
+                    <span className="text-xs font-bold text-[var(--spr-text)] font-sans">GitLab</span>
+                  </div>
+                  {statusBadge('gitlab')}
                 </div>
                 <p className="text-[12px] text-[var(--spr-text-muted)] leading-normal">
-                  Toggle active connections to vulnerability registries. SPR queries these APIs dynamically to compare package hashes and compile alerts.
+                  A personal access token with read access to your projects. Leave the base URL empty for gitlab.com; set it only for a self-hosted instance.
                 </p>
-
-                {/* Registry Token */}
-                <div className="space-y-3 pt-1">
+                <div className="space-y-3 pt-2">
                   <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-[11px] font-mono font-bold text-[var(--spr-text-muted)] uppercase">NPM/PYPI</span>
+                    <span className="absolute left-3 top-2.5 text-[11px] font-mono font-bold text-[var(--spr-text-muted)] uppercase">TOKEN</span>
                     <input
                       type="password"
-                      value={pypiToken}
-                      onChange={(e) => setPypiToken(e.target.value)}
-                      placeholder="pypi-token-***"
+                      autoComplete="off"
+                      value={gitlabToken}
+                      onChange={(e) => setGitlabToken(e.target.value)}
+                      placeholder="glpat-..."
                       className="w-full bg-[var(--spr-surface)] border border-[var(--spr-border)] rounded-md text-xs pl-16 pr-3 py-2 text-[var(--spr-text)] font-mono focus:outline-none"
                     />
                   </div>
-
-                  <div className="space-y-2">
-                    <span className="text-[11px] font-mono font-bold text-[var(--spr-text-muted)] block uppercase">ACTIVE VULNERABILITY REPOSITORIES</span>
-                    <div className="grid grid-cols-2 gap-2 text-[12px] font-mono">
-                      <label className="flex items-center gap-1.5 cursor-pointer text-[var(--spr-text)] hover:text-[var(--spr-text)]">
-                        <input
-                          type="checkbox"
-                          checked={selectedFeeds.includes('nvd')}
-                          onChange={() => toggleFeed('nvd')}
-                          className="rounded border-[var(--spr-border)] bg-[var(--spr-surface)] text-[var(--spr-highlight)] "
-                        />
-                        <span>NVD NIST Feed</span>
-                      </label>
-                      <label className="flex items-center gap-1.5 cursor-pointer text-[var(--spr-text)] hover:text-[var(--spr-text)]">
-                        <input
-                          type="checkbox"
-                          checked={selectedFeeds.includes('cisa')}
-                          onChange={() => toggleFeed('cisa')}
-                          className="rounded border-[var(--spr-border)] bg-[var(--spr-surface)] text-[var(--spr-highlight)] "
-                        />
-                        <span>CISA KEV Feed</span>
-                      </label>
-                      <label className="flex items-center gap-1.5 cursor-pointer text-[var(--spr-text)] hover:text-[var(--spr-text)] col-span-2">
-                        <input
-                          type="checkbox"
-                          checked={selectedFeeds.includes('snyk')}
-                          onChange={() => toggleFeed('snyk')}
-                          className="rounded border-[var(--spr-border)] bg-[var(--spr-surface)] text-[var(--spr-highlight)] "
-                        />
-                        <span>Snyk Database Connector (Simulated)</span>
-                      </label>
-                    </div>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-[11px] font-mono font-bold text-[var(--spr-text-muted)] uppercase">URL</span>
+                    <input
+                      type="text"
+                      value={gitlabBaseUrl}
+                      onChange={(e) => setGitlabBaseUrl(e.target.value)}
+                      placeholder="https://gitlab.com (optional)"
+                      className="w-full bg-[var(--spr-surface)] border border-[var(--spr-border)] rounded-md text-xs pl-16 pr-3 py-2 text-[var(--spr-text)] font-mono focus:outline-none"
+                    />
                   </div>
-
                   <button
-                    onClick={() => handleSaveIntegration('pypi')}
-                    disabled={loading || !pypiToken}
-                    className="w-full py-2 bg-[var(--spr-green)] hover:bg-[var(--spr-green)] text-[var(--spr-text)] font-sans font-bold text-[12px] rounded-md transition disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
+                    onClick={() => void handleSaveCredentials('gitlab')}
+                    disabled={saving !== null || !gitlabToken.trim()}
+                    className="w-full py-2 bg-[var(--spr-accent-soft)] hover:bg-[var(--spr-accent)] text-[var(--spr-text)] font-sans font-bold text-[12px] rounded-md transition disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
                   >
-                    <span>Connect Threat Registries</span>
+                    {saving === 'gitlab' ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Key className="w-3.5 h-3.5" />}
+                    <span>{gitlabConnected ? 'Replace GitLab token' : 'Save GitLab token'}</span>
                   </button>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Tab Content: Billing */}
+          {/* Billing: what the backend and Stripe actually say, nothing local */}
           {activeTab === 'billing' && (
-            <div className="bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] p-6 rounded-md space-y-6 text-left">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="space-y-1">
-                  <h3 className="text-sm font-bold text-[var(--spr-text)] flex items-center gap-2">
-                    <span>MSP Commercial Limits Center</span>
-                    <span className="bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] border border-[var(--spr-highlight)] text-[11px] font-mono px-2 py-0.5 rounded">
-                      Active Plan: {plans[currentPlan].name}
-                    </span>
-                  </h3>
-                  <p className="text-[11px] text-[var(--spr-text-muted)]">
-                    Your usage metrics are derived dynamically from the multi-tenant PostgreSQL database clusters under isolated tenant partitions.
-                  </p>
-                </div>
-
-                {/* Pricing period switcher */}
-                <div className="flex bg-[var(--spr-surface)] p-0.5 rounded-md border border-[var(--spr-border)] text-[12px] font-mono font-bold shrink-0 self-start md:self-center">
-                  <button
-                    onClick={() => setBillingCycle('Monthly')}
-                    className={`px-3 py-1 rounded-md transition ${billingCycle === 'Monthly' ? 'bg-[var(--spr-accent)] text-[var(--spr-text)]' : 'text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]'}`}
-                  >
-                    Monthly
-                  </button>
-                  <button
-                    onClick={() => setBillingCycle('Annual')}
-                    className={`px-3 py-1 rounded-md transition ${billingCycle === 'Annual' ? 'bg-[var(--spr-accent)] text-[var(--spr-text)]' : 'text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]'}`}
-                  >
-                    Annual (20% Off)
-                  </button>
-                </div>
-              </div>
-
-              {/* Progress Gauges Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Gauge 1: Clients Limit */}
-                <div className="space-y-2 bg-[var(--spr-surface)] p-4 rounded-md border border-[var(--spr-border)]">
-                  <div className="flex justify-between items-center text-xs font-mono">
-                    <span className="text-[var(--spr-text-muted)]">CLIENT WORKSPACES</span>
-                    <span className="font-bold text-[var(--spr-text)]">
-                      {clientsCount} / {currentLimits.clientLimit}
-                    </span>
-                  </div>
-                  <div className="w-full bg-[var(--spr-surface-alt)] h-2 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-500 ${clientUtilization >= 80 ? 'bg-[var(--spr-red)]' : 'bg-[var(--spr-highlight)]'}`}
-                      style={{ width: `${Math.min(100, clientUtilization)}%` }}
-                    ></div>
-                  </div>
-                  <p className="text-[11px] text-[var(--spr-text-muted)]">Maximum client domains you can onboard under continuous SLA tracking.</p>
-                </div>
-
-                {/* Gauge 2: Passports Limit */}
-                <div className="space-y-2 bg-[var(--spr-surface)] p-4 rounded-md border border-[var(--spr-border)]">
-                  <div className="flex justify-between items-center text-xs font-mono">
-                    <span className="text-[var(--spr-text-muted)]">SOFTWARE PASSPORTS</span>
-                    <span className="font-bold text-[var(--spr-text)]">
-                      {passportsCount} / {currentLimits.passportLimit}
-                    </span>
-                  </div>
-                  <div className="w-full bg-[var(--spr-surface-alt)] h-2 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-500 ${passportUtilization >= 80 ? 'bg-[var(--spr-red)]' : 'bg-[var(--spr-highlight)]'}`}
-                      style={{ width: `${Math.min(100, passportUtilization)}%` }}
-                    ></div>
-                  </div>
-                  <p className="text-[11px] text-[var(--spr-text-muted)]">Active software artifacts with cryptographic seals and verified SBOM registries.</p>
-                </div>
-
-                {/* Gauge 3: Continuous Scans Limit */}
-                <div className="space-y-2 bg-[var(--spr-surface)] p-4 rounded-md border border-[var(--spr-border)]">
-                  <div className="flex justify-between items-center text-xs font-mono">
-                    <span className="text-[var(--spr-text-muted)]">MONTHLY CONTINUOUS SCANS</span>
-                    <span className="font-bold text-[var(--spr-text)]">
-                      {scansCount} / {currentLimits.scanLimit}
-                    </span>
-                  </div>
-                  <div className="w-full bg-[var(--spr-surface-alt)] h-2 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-500 ${scanUtilization >= 80 ? 'bg-[var(--spr-red)]' : 'bg-[var(--spr-highlight)]'}`}
-                      style={{ width: `${Math.min(100, scanUtilization)}%` }}
-                    ></div>
-                  </div>
-                  <p className="text-[11px] text-[var(--spr-text-muted)]">Dynamic scanner actions checking dependencies against the NIST vulnerability databases.</p>
-                </div>
-              </div>
-
-              {/* Plans pricing summary card */}
-              <div className="bg-[var(--spr-surface)] border border-[var(--spr-border)] p-5 rounded-md flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                <div className="space-y-1 text-left">
-                  <span className="text-[11px] font-mono font-bold text-[var(--spr-highlight)] uppercase tracking-widest block">Active Commercial Tier</span>
-                  <div className="flex items-baseline gap-1.5">
-                    <h4 className="text-base font-bold text-[var(--spr-text)]">{plans[currentPlan].name} Tier</h4>
-                    <span className="text-xs font-mono text-[var(--spr-highlight)]">${plans[currentPlan].price}/month</span>
-                  </div>
-                  <p className="text-[11px] text-[var(--spr-text-muted)] max-w-xl">
-                    Need higher scale constraints or automated multi-tenant OS patch management? Switch subscriptions below to immediately expand limits without card prompt.
-                  </p>
-                </div>
-
-                <button
-                  onClick={() => setShowUpgradeModal(true)}
-                  className="px-5 py-2.5 bg-[var(--spr-accent)] hover:bg-[var(--spr-accent)] text-[var(--spr-text)] font-sans font-bold text-xs rounded-md transition-all active:scale-98 flex items-center gap-1.5 cursor-pointer shrink-0"
-                >
-                  <Layers className="w-4 h-4" />
-                  <span>Switch Subscription Plan</span>
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Subscription upgrade modal dialog */}
-      {showUpgradeModal && (
-        <div className="fixed inset-0 bg-[var(--spr-surface)] z-50 flex items-center justify-center p-4">
-          <div className="bg-[var(--spr-surface)] border border-[var(--spr-border)] max-w-4xl w-full rounded-md p-6 relative space-y-6 text-left">
-            <div className="flex justify-between items-start">
-              <div className="space-y-1">
-                <span className="bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] border border-[var(--spr-highlight)] text-[11px] font-mono px-2 py-0.5 rounded uppercase">Commercial Selection</span>
-                <h3 className="text-base font-bold text-[var(--spr-text)]">Upgrade MSP Workspace Limits</h3>
-                <p className="text-xs text-[var(--spr-text-muted)]">Instantly upgrade billing plans in the database sandbox to run more scans and register clients.</p>
-              </div>
-              <button
-                onClick={() => setShowUpgradeModal(false)}
-                className="p-1 text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Plans comparison cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {(Object.keys(plans) as Array<keyof typeof plans>).map((key) => {
-                const plan = plans[key];
-                const isSelected = currentPlan === key;
-                return (
-                  <div
-                    key={key}
-                    className={`p-5 rounded-md border flex flex-col justify-between space-y-4 ${
-                      isSelected
-                        ? 'bg-[var(--spr-surface-alt)] border-[var(--spr-highlight)]'
-                        : 'bg-[var(--spr-surface-alt)] border-[var(--spr-border)] hover:border-[var(--spr-border)]'
-                    }`}
-                  >
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-start">
-                        <h4 className="text-sm font-extrabold text-[var(--spr-text)]">{plan.name}</h4>
-                        <span className="text-[11px] font-mono font-bold bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] px-1.5 py-0.5 rounded">
-                          {plan.badge}
+            <div className="bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] p-6 rounded-md space-y-5 text-left">
+              {billingError && (
+                <div role="alert" className="text-[12px] text-[var(--spr-red)] flex items-center gap-2"><AlertTriangle className="w-4 h-4 shrink-0" /><span>{billingError}</span></div>
+              )}
+              {!billingError && !billing && (
+                <p className="text-[12px] text-[var(--spr-text-muted)]">Loading billing status…</p>
+              )}
+              {billing && (
+                <>
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <h3 className="text-sm font-bold text-[var(--spr-text)] flex items-center gap-2">
+                        <span>Your plan</span>
+                        <span className="bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] border border-[var(--spr-highlight)] text-[11px] font-mono px-2 py-0.5 rounded">
+                          {activePlan?.label ?? subscription?.plan ?? 'No plan recorded'}
                         </span>
-                      </div>
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-xl font-mono font-extrabold text-[var(--spr-highlight)]">${plan.price}</span>
-                        <span className="text-[12px] text-[var(--spr-text-muted)] font-mono">/mo</span>
-                      </div>
-                      <div className="border-t border-[var(--spr-border)] pt-3 space-y-2 text-xs text-[var(--spr-text)] font-mono">
-                        <div className="flex justify-between">
-                          <span>Max Clients</span>
-                          <span className="font-bold text-[var(--spr-text)]">{plan.clientLimit}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Max Passports</span>
-                          <span className="font-bold text-[var(--spr-text)]">{plan.passportLimit}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Monthly Scans</span>
-                          <span className="font-bold text-[var(--spr-text)]">{plan.scanLimit}</span>
-                        </div>
-                      </div>
+                        {subscription?.status && <span className="text-[11px] font-mono text-[var(--spr-text-muted)] uppercase">{subscription.status}</span>}
+                      </h3>
+                      <p className="text-[11px] text-[var(--spr-text-muted)]">
+                        {subscription?.plan
+                          ? `Client limit ${subscription.clientLimit ?? 'unlimited'} · ${billing.clientCount} in use${subscription.currentPeriodEnd ? ` · renews ${new Date(subscription.currentPeriodEnd).toLocaleDateString()}` : ''}`
+                          : 'This workspace has no subscription on record yet. Choose a plan on the Billing page to start checkout.'}
+                      </p>
                     </div>
-
-                    <button
-                      onClick={() => handleUpgradePlan(key)}
-                      disabled={isSelected}
-                      className={`w-full py-2 rounded-md text-xs font-bold transition-all ${
-                        isSelected
-                          ? 'bg-[var(--spr-surface-sunken)] text-[var(--spr-text-muted)] cursor-default'
-                          : 'bg-[var(--spr-accent)] hover:bg-[var(--spr-accent)] text-[var(--spr-text)] cursor-pointer active:scale-98'
-                      }`}
-                    >
-                      {isSelected ? 'CURRENT ACTIVE PLAN' : `UPGRADE TO ${key.toUpperCase()}`}
+                    <button onClick={() => onNavigateTab('/billing')} className="spr-btn spr-btn-primary !py-2 !text-[12px]">
+                      {subscription?.plan ? 'Manage billing' : 'Choose a plan'}
                     </button>
                   </div>
-                );
-              })}
-            </div>
 
-            <p className="text-[12px] text-[var(--spr-text-muted)] font-mono text-center">
-              * Upgrades instantly adjust database constraints for your current isolated tenant partition. Simulated via standard Stripe backend pipelines.
-            </p>
-          </div>
+                  {!billing.billingConfigured && (
+                    <p className="text-[12px] text-[var(--spr-text-muted)]">Billing is not configured on this deployment, so checkout is unavailable.</p>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                    {billing.plans.map((plan) => (
+                      <div key={plan.id} className={`p-3 rounded-md border ${plan.id === subscription?.plan ? 'border-[var(--spr-highlight)]' : 'border-[var(--spr-border)]'} bg-[var(--spr-surface)] space-y-1`}>
+                        <p className="text-xs font-bold text-[var(--spr-text)]">{plan.label}</p>
+                        <p className="text-[12px] font-mono text-[var(--spr-text-muted)]">{plan.priceLabel ?? (plan.id === 'enterprise' ? 'Custom pricing' : 'Not available for checkout')}</p>
+                        <p className="text-[11px] text-[var(--spr-text-muted)]">{plan.clientLimit === null ? 'Unlimited clients' : `Up to ${plan.clientLimit} client${plan.clientLimit === 1 ? '' : 's'}`}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-[var(--spr-text-muted)]">Prices are read from Stripe, the system that charges them. Plan changes happen through checkout or the billing portal on the Billing page — nothing here changes your plan directly.</p>
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

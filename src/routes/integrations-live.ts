@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/security.ts';
+import { appendAuditEntry } from '../security/audit-log.ts';
 import { INTEGRATION_CATALOG } from '../integrations/catalog.ts';
 import { collectProviderEvidence, Provider, ProviderCredentials } from '../integrations/adapters.ts';
 import { decryptCredentials, encryptCredentials } from '../integrations/credential-vault.ts';
@@ -76,6 +77,7 @@ export function createLiveIntegrationsRouter() {
       const endpointId = id('psawh');
       const encrypted = encryptCredentials({ secret: parsed.data.secret });
       await db.execute(sql`INSERT INTO psa_webhook_endpoints (id, tenant_id, provider, secret_hash, secret_ciphertext, active, created_by) VALUES (${endpointId}, ${tenantId}, ${parsed.data.provider}, ${secretHash(parsed.data.secret)}, ${encrypted}, true, ${req.user!.uid})`);
+      await appendAuditEntry(db, { tenantId, action: 'psa_webhook.created', actor: req.user!.uid, payload: { endpointId, provider: parsed.data.provider } });
       return res.status(201).json({ id: endpointId, provider: parsed.data.provider, active: true, secretHash: secretHash(parsed.data.secret), endpointPath: `/api/integrations-live/psa/webhooks/${endpointId}` });
     } catch (error: any) {
       if (/INTEGRATION_MASTER_KEY/.test(error?.message || '')) return res.status(503).json({ error: error.message });
@@ -87,6 +89,7 @@ export function createLiveIntegrationsRouter() {
     try {
       const endpointId = routeParam(req.params.endpointId);
       await req.db!.execute(sql`UPDATE psa_webhook_endpoints SET active = false, rotated_at = CURRENT_TIMESTAMP WHERE id = ${endpointId} AND tenant_id = ${req.user!.tenantId}`);
+      await appendAuditEntry(req.db!, { tenantId: req.user!.tenantId, action: 'psa_webhook.disabled', actor: req.user!.uid, payload: { endpointId } });
       return res.status(204).send();
     } catch (error) { return next(error); }
   });
@@ -138,6 +141,7 @@ export function createLiveIntegrationsRouter() {
       const tenantId = req.user!.tenantId;
       const encryptedPayload = encryptCredentials(parsed.data);
       await db.execute(sql`INSERT INTO integration_credentials (id, tenant_id, provider, encrypted_payload, key_version, status) VALUES (${id('cred')}, ${tenantId}, ${provider}, ${encryptedPayload}, 1, 'CONFIGURED') ON CONFLICT (tenant_id, provider) DO UPDATE SET encrypted_payload = EXCLUDED.encrypted_payload, key_version = EXCLUDED.key_version, status = 'CONFIGURED', updated_at = CURRENT_TIMESTAMP`);
+      await appendAuditEntry(db, { tenantId, action: 'integration_credentials.saved', actor: req.user!.uid, payload: { provider, fields: Object.keys(parsed.data) } });
       return res.status(204).send();
     } catch (error: any) {
       if (/INTEGRATION_MASTER_KEY|PROVIDER_NOT_SUPPORTED/.test(error?.message || '')) return res.status(503).json({ error: error.message });
@@ -154,6 +158,7 @@ export function createLiveIntegrationsRouter() {
         await tx.execute(sql`DELETE FROM integration_credentials WHERE tenant_id = ${tenantId} AND provider = ${provider}`);
         await tx.execute(sql`UPDATE integrations SET connected = 0 WHERE id = ${integrationId(tenantId, provider)} AND tenant_id = ${tenantId}`);
       });
+      await appendAuditEntry(db, { tenantId, action: 'integration_credentials.deleted', actor: req.user!.uid, payload: { provider } });
       return res.status(204).send();
     } catch (error: any) {
       if (/PROVIDER_NOT_SUPPORTED/.test(error?.message || '')) return res.status(503).json({ error: error.message });
