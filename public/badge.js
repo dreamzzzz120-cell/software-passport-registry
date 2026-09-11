@@ -79,71 +79,92 @@
   }
 
   var markSerial = 0;
+  var SVG_NS = 'http://www.w3.org/2000/svg';
+  var FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+
+  function svgEl(tag, attrs) {
+    var e = document.createElementNS(SVG_NS, tag);
+    if (attrs) for (var k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
 
   /**
    * SPR mark, drawn inline so the badge carries its own artwork onto any host
-   * page: a white shield outline, a blue shield outline offset over it and
-   * clipped to its right half, and a bold T. Each render gets its own clipPath
-   * id so several badges on one page cannot share (and break) a clip.
+   * page: a gradient-filled shield with a white outline, a blue outline offset
+   * over it and clipped to its right half, and a bold T. Every id is
+   * per-render so several badges on one page cannot share (and break) a
+   * gradient or clip.
    */
-  function sprMark() {
-    var svgNS = 'http://www.w3.org/2000/svg';
-    var id = 'spr-mark-clip-' + (++markSerial);
-    var svg = document.createElementNS(svgNS, 'svg');
-    svg.setAttribute('viewBox', '0 0 26 26');
-    svg.setAttribute('width', '26');
-    svg.setAttribute('height', '26');
-    svg.setAttribute('aria-hidden', 'true');
+  function sprMark(size) {
+    var n = ++markSerial;
+    var clipId = 'spr-clip-' + n, gradId = 'spr-grad-' + n, glowId = 'spr-glow-' + n;
+    var svg = svgEl('svg', { viewBox: '0 0 28 28', width: String(size), height: String(size), 'aria-hidden': 'true' });
     svg.style.flexShrink = '0';
     svg.style.display = 'block';
     svg.style.overflow = 'visible';
 
-    var defs = document.createElementNS(svgNS, 'defs');
-    var clip = document.createElementNS(svgNS, 'clipPath');
-    clip.setAttribute('id', id);
-    var rect = document.createElementNS(svgNS, 'rect');
-    rect.setAttribute('x', '13'); rect.setAttribute('y', '-2'); rect.setAttribute('width', '16'); rect.setAttribute('height', '30');
-    clip.appendChild(rect);
+    var defs = svgEl('defs');
+    var grad = svgEl('linearGradient', { id: gradId, x1: '0', y1: '0', x2: '0', y2: '1' });
+    grad.appendChild(svgEl('stop', { offset: '0', 'stop-color': '#1d4ed8' }));
+    grad.appendChild(svgEl('stop', { offset: '1', 'stop-color': '#0b1a3a' }));
+    defs.appendChild(grad);
+    var clip = svgEl('clipPath', { id: clipId });
+    clip.appendChild(svgEl('rect', { x: '14', y: '-3', width: '20', height: '34' }));
     defs.appendChild(clip);
+    var glow = svgEl('filter', { id: glowId, x: '-30%', y: '-30%', width: '160%', height: '160%' });
+    glow.appendChild(svgEl('feGaussianBlur', { stdDeviation: '0.6' }));
+    defs.appendChild(glow);
     svg.appendChild(defs);
 
-    var shieldD = 'M12 1.5 3.5 4.75v6.5c0 5.6 3.6 10.8 8.5 12.1 4.9-1.3 8.5-6.5 8.5-12.1v-6.5L12 1.5z';
+    var shieldD = 'M14 2 4.5 5.6v7.1c0 6.1 3.95 11.8 9.5 13.3 5.55-1.5 9.5-7.2 9.5-13.3V5.6L14 2z';
 
-    var white = document.createElementNS(svgNS, 'path');
-    white.setAttribute('d', shieldD);
-    white.setAttribute('fill', 'none');
-    white.setAttribute('stroke', '#ffffff');
-    white.setAttribute('stroke-width', '1.7');
-    white.setAttribute('stroke-linejoin', 'round');
+    // Filled body, then the white outline on top of it.
+    svg.appendChild(svgEl('path', { d: shieldD, fill: 'url(#' + gradId + ')' }));
+    svg.appendChild(svgEl('path', { d: shieldD, fill: 'none', stroke: '#ffffff', 'stroke-width': '1.8', 'stroke-linejoin': 'round' }));
 
-    var blue = document.createElementNS(svgNS, 'path');
-    blue.setAttribute('d', shieldD);
-    blue.setAttribute('transform', 'translate(2.5 2.5)');
-    blue.setAttribute('fill', 'none');
-    blue.setAttribute('stroke', '#3b82f6');
-    blue.setAttribute('stroke-width', '1.7');
-    blue.setAttribute('stroke-linejoin', 'round');
-    blue.setAttribute('clip-path', 'url(#' + id + ')');
+    // Blue echo: same outline, offset, right half only.
+    svg.appendChild(svgEl('path', { d: shieldD, transform: 'translate(3 3)', fill: 'none', stroke: '#60a5fa', 'stroke-width': '1.8', 'stroke-linejoin': 'round', 'clip-path': 'url(#' + clipId + ')' }));
 
-    var t = document.createElementNS(svgNS, 'text');
-    t.setAttribute('x', '12');
-    t.setAttribute('y', '16.2');
-    t.setAttribute('text-anchor', 'middle');
-    t.setAttribute('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif');
-    t.setAttribute('font-size', '12.5');
-    t.setAttribute('font-weight', '800');
-    t.setAttribute('fill', '#ffffff');
-    t.textContent = 'T';
-
-    svg.appendChild(white);
-    svg.appendChild(blue);
+    // The T: a soft glow underneath, crisp letter on top.
+    var tAttrs = { x: '14', y: '19.2', 'text-anchor': 'middle', 'font-family': FONT, 'font-size': '15', 'font-weight': '800', fill: '#ffffff' };
+    var tGlow = svgEl('text', tAttrs); tGlow.setAttribute('filter', 'url(#' + glowId + ')'); tGlow.setAttribute('opacity', '0.55'); tGlow.textContent = 'T';
+    var t = svgEl('text', tAttrs); t.textContent = 'T';
+    svg.appendChild(tGlow);
     svg.appendChild(t);
     return svg;
   }
 
+  /**
+   * Status glyph for the state chip. One small path per state; anything not
+   * listed falls back to a neutral dash so an unknown status never borrows a
+   * stronger state's symbol.
+   */
+  function statusGlyph(key, color) {
+    var svg = svgEl('svg', { viewBox: '0 0 16 16', width: '14', height: '14', 'aria-hidden': 'true' });
+    svg.style.display = 'block';
+    var stroke = { fill: 'none', stroke: color, 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' };
+    var d;
+    if (key === 'verified') d = 'M3.5 8.5 6.5 11.5 12.5 4.5';
+    else if (key === 'partial') { svg.appendChild(svgEl('circle', { cx: '8', cy: '8', r: '5.5', fill: 'none', stroke: color, 'stroke-width': '2' })); svg.appendChild(svgEl('path', { d: 'M8 2.5A5.5 5.5 0 0 1 8 13.5z', fill: color })); return svg; }
+    else if (key === 'investigate') d = 'M8 3.5v5.5M8 12.2v.3';
+    else if (key === 'avoid') d = 'M4.5 4.5l7 7M11.5 4.5l-7 7';
+    else if (key === 'unknown') d = 'M5.8 6.2a2.2 2.2 0 1 1 3.1 2c-.7.4-.9.8-.9 1.6M8 12.3v.2';
+    else d = 'M4.5 8h7';
+    var p = svgEl('path', stroke); p.setAttribute('d', d);
+    svg.appendChild(p);
+    return svg;
+  }
+
+  function hexToRgba(hex, alpha) {
+    var h = hex.replace('#', '');
+    var r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+  }
+
   function renderBadge(container, data) {
+    var key = typeof (data && data.status) === 'string' ? data.status.trim().toLowerCase() : '';
     var status = resolveStatus(data && data.status);
-    var font = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+    if (!STATUS_COPY[key]) key = 'indeterminate';
 
     // Rendered as a span, not an anchor: there is no public human-readable
     // Passport page to link to yet. When one exists, the endpoint can start
@@ -156,14 +177,14 @@
     var wrap = el('span', {
       display: 'inline-flex',
       alignItems: 'stretch',
-      fontFamily: font,
+      fontFamily: FONT,
       lineHeight: '1.2',
-      border: '1px solid #d0d7de',
-      borderRadius: '6px',
+      border: '1px solid #cbd3dc',
+      borderRadius: '9px',
       overflow: 'hidden',
       background: '#ffffff',
       color: '#1f2328',
-      boxShadow: '0 1px 0 rgba(31,35,40,0.04)',
+      boxShadow: '0 1px 2px rgba(15,23,42,0.08), 0 4px 14px rgba(15,23,42,0.06)',
       verticalAlign: 'middle'
     });
 
@@ -173,65 +194,62 @@
       'Software Passport Registry' + (name ? ' for ' + name : '') + ': ' + status.label
     );
 
-    // Left segment: the registry mark.
+    // Left segment: the registry mark on a deep navy gradient with a hairline
+    // top highlight, so it reads as a physical plate rather than a flat fill.
     var mark = el('span', {
+      position: 'relative',
       display: 'inline-flex',
       alignItems: 'center',
-      gap: '9px',
-      padding: '6px 12px 6px 9px',
-      background: '#0f172a',
+      gap: '10px',
+      padding: '8px 14px 8px 11px',
+      background: 'linear-gradient(180deg, #16213d 0%, #0b1226 100%)',
       color: '#ffffff'
     });
-    mark.appendChild(sprMark());
-    var markText = el('span', { display: 'inline-flex', flexDirection: 'column', gap: '1px' });
-    var markTop = el('span', {
-      fontSize: '15px',
-      fontWeight: '800',
-      letterSpacing: '0.06em',
-      lineHeight: '1',
-      whiteSpace: 'nowrap'
-    });
+    var sheen = el('span', { position: 'absolute', left: '0', right: '0', top: '0', height: '1px', background: 'rgba(255,255,255,0.14)' });
+    sheen.setAttribute('aria-hidden', 'true');
+    mark.appendChild(sheen);
+    mark.appendChild(sprMark(30));
+    var markText = el('span', { display: 'inline-flex', flexDirection: 'column', gap: '2px' });
+    var markTop = el('span', { fontSize: '16px', fontWeight: '800', letterSpacing: '0.08em', lineHeight: '1', whiteSpace: 'nowrap' });
     markTop.textContent = 'SPR';
-    var markBottom = el('span', {
-      fontSize: '8.5px',
-      fontWeight: '600',
-      letterSpacing: '0.1em',
-      textTransform: 'uppercase',
-      color: '#94a3b8',
-      whiteSpace: 'nowrap'
-    });
+    var markBottom = el('span', { fontSize: '8.5px', fontWeight: '600', letterSpacing: '0.14em', textTransform: 'uppercase', color: '#8fa3c7', whiteSpace: 'nowrap' });
     markBottom.textContent = 'Software Passport Registry';
     markText.appendChild(markTop);
     markText.appendChild(markBottom);
     mark.appendChild(markText);
 
-    // Right segment: the evidence state, with the status colour on the
-    // leading edge so it reads even when the label is not.
+    // Right segment: a tinted state chip with a glyph, the label beside it,
+    // provenance beneath. The tint is the status colour at low alpha so the
+    // segment stays legible on any host background.
     var state = el('span', {
       display: 'inline-flex',
       flexDirection: 'column',
       justifyContent: 'center',
-      gap: '2px',
-      padding: '7px 12px 7px 11px',
-      borderLeft: '3px solid ' + status.color,
+      gap: '3px',
+      padding: '8px 14px 8px 12px',
+      background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
       whiteSpace: 'nowrap'
     });
-    var stateRow = el('span', { display: 'inline-flex', alignItems: 'center', gap: '6px' });
-    var dot = el('span', {
-      display: 'inline-block',
-      width: '8px',
-      height: '8px',
-      borderRadius: '50%',
-      background: status.color,
+    var stateRow = el('span', { display: 'inline-flex', alignItems: 'center', gap: '8px' });
+    var chip = el('span', {
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: '22px',
+      height: '22px',
+      borderRadius: '6px',
+      background: hexToRgba(status.color, 0.12),
+      border: '1px solid ' + hexToRgba(status.color, 0.35),
       flexShrink: '0'
     });
-    dot.setAttribute('aria-hidden', 'true');
-    var strong = el('strong', { fontSize: '13px', fontWeight: '700', color: status.color, letterSpacing: '0.01em' });
+    chip.setAttribute('aria-hidden', 'true');
+    chip.appendChild(statusGlyph(key, status.color));
+    var strong = el('strong', { fontSize: '14px', fontWeight: '700', color: status.color, letterSpacing: '0.01em' });
     // No score is rendered. The registry does not publish an authoritative
     // score (scoreStatus is 'not_authoritatively_scored'), and a number here
     // would read as one.
     strong.textContent = status.label;
-    stateRow.appendChild(dot);
+    stateRow.appendChild(chip);
     stateRow.appendChild(strong);
     state.appendChild(stateRow);
 
@@ -239,7 +257,7 @@
     // on. Omitted rather than shown as "0 sources" when the count is absent,
     // so a payload from an older server never renders a false negative.
     var sources = data && typeof data.independentSources === 'number' && data.independentSources >= 0 ? data.independentSources : null;
-    var sub = el('span', { fontSize: '11px', color: '#57606a' });
+    var sub = el('span', { fontSize: '11px', color: '#57606a', paddingLeft: '30px' });
     if (sources !== null) {
       sub.textContent = sources + ' independent source' + (sources === 1 ? '' : 's');
     } else if (name) {
