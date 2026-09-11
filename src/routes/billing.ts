@@ -241,6 +241,10 @@ export function createBillingRouter() {
         mode: 'subscription',
         ...(customerId ? { customer: customerId } : { customer_email: req.user!.email }),
         line_items: [{ price: priceId, quantity: 1 }],
+        // Buyers can enter a Stripe promotion code on the hosted page; a code that
+        // brings the total to zero must not demand a card for a $0 subscription.
+        allow_promotion_codes: true,
+        payment_method_collection: 'if_required',
         success_url: `${config.appUrl}/billing?checkout=success`,
         cancel_url: `${config.appUrl}/billing?checkout=cancelled`,
         client_reference_id: tenantId,
@@ -275,6 +279,8 @@ export function createBillingRouter() {
         mode: 'payment',
         customer_email: req.user!.email,
         line_items: [{ price: priceId, quantity: 1 }],
+        // Buyers can enter a Stripe promotion code on the hosted page.
+        allow_promotion_codes: true,
         success_url: `${config.appUrl}/billing?purchase=success&product=${encodeURIComponent(parsed.data.product)}`,
         cancel_url: `${config.appUrl}/billing?purchase=cancelled`,
         client_reference_id: tenantId,
@@ -299,6 +305,10 @@ export function createBillingRouter() {
         mode: 'subscription',
         customer_email: req.user!.email,
         line_items: [{ price: priceId, quantity: 1 }],
+        // Buyers can enter a Stripe promotion code on the hosted page; a code that
+        // brings the total to zero must not demand a card for a $0 subscription.
+        allow_promotion_codes: true,
+        payment_method_collection: 'if_required',
         success_url: `${config.appUrl}/billing?addon=success&addon=${encodeURIComponent(parsed.data.addon)}`,
         cancel_url: `${config.appUrl}/billing?addon=cancelled`,
         client_reference_id: tenantId,
