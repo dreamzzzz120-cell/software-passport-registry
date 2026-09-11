@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm';
 import type { Response, Request } from 'express';
 import type { ScopedDb } from '../middleware/tenant-scope.ts';
 
-export type Capability = 'workspace' | 'passport' | 'sbom' | 'monitoring' | 'vendor_risk' | 'governance' | 'msp' | 'white_label' | 'bulk_export' | 'api' | 'enterprise_controls';
+export type Capability = 'workspace' | 'passport' | 'sbom' | 'monitoring' | 'vendor_risk' | 'governance' | 'msp' | 'white_label' | 'bulk_export' | 'api' | 'enterprise_controls' | 'trust_badge' | 'public_passport';
 
 const PATH_CAPABILITIES: Array<{ capability: Capability; test: (path: string) => boolean }> = [
   { capability: 'bulk_export', test: p => p.includes('/export') },
@@ -109,10 +109,11 @@ export async function tenantHasCapability(db: ScopedDb, tenantId: string, capabi
  * Single decision point for every capability check, so the authenticated API
  * boundary and the per-route enforceCapability() can never drift apart.
  */
-// Add-ons that grant a capability on top of the plan. Trust Badge and Public
-// Software Passport are not listed: nothing in the product is gated on them
-// today, so they cannot honestly grant anything until that gating exists.
-export const ADDON_CAPABILITY_GRANTS: Readonly<Record<string, Capability>> = { api: 'api', continuousVerification: 'monitoring' };
+// Add-ons that grant a capability on top of the plan. Founder decision
+// 2026-09-11: Trust Badge and Public Software Passport are paid add-ons, not
+// free -- minting a public passport link needs public_passport, rendering the
+// embeddable badge additionally needs trust_badge. No plan tier grants either.
+export const ADDON_CAPABILITY_GRANTS: Readonly<Record<string, Capability>> = { api: 'api', continuousVerification: 'monitoring', trustBadge: 'trust_badge', publicPassport: 'public_passport' };
 
 export async function tenantHasAddonCapability(db: ScopedDb, tenantId: string, capability: Capability): Promise<boolean> {
   const addons = Object.entries(ADDON_CAPABILITY_GRANTS).filter(([, granted]) => granted === capability).map(([addon]) => addon);

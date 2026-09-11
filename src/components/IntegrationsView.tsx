@@ -10,6 +10,7 @@ import {
   ShieldCheck, Ticket, BookOpen, CloudLightning, Copy, Send, Trash2, Webhook, XCircle,
 } from 'lucide-react';
 import { Slack, Github } from 'lucide-react-base';
+import ApiKeysPanel from './ApiKeysPanel';
 import type { Client, SoftwarePassport } from '../types';
 import { apiFetch } from '../utils/apiClient';
 import { CREDENTIAL_FIELDS, WEBHOOK_EVENT_TYPES } from '../integrations/credentialFields';
@@ -498,6 +499,8 @@ export default function IntegrationsView({ passports = [], clients = [], onNavig
           Direct native ticket-creation in Jira/ConnectWise/Autotask, SIEM ingestion, and identity-provider connectors are not built — this signed webhook is the only outbound event mechanism SPR currently ships. Use it to relay events into those systems yourself.
         </div>
       </div>
+
+      <ApiKeysPanel />
     </div>
   );
 }

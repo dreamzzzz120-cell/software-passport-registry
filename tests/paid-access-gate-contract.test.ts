@@ -344,9 +344,12 @@ describe('activating a paid plan never removes basic workspace administration', 
 // item. The webhook now records add-on subscriptions in tenant_addons and the
 // gate grants the add-on's capability while that row is entitling.
 describe('paid add-ons grant a real capability', () => {
-  it('maps the two functional add-ons, and deliberately not the two ungated ones', async () => {
+  it('maps every add-on to a capability that something real is gated on (founder: add-ons are not free)', async () => {
     const { ADDON_CAPABILITY_GRANTS } = await import('../src/security/entitlements.ts');
-    expect(ADDON_CAPABILITY_GRANTS).toEqual({ api: 'api', continuousVerification: 'monitoring' });
+    expect(ADDON_CAPABILITY_GRANTS).toEqual({ api: 'api', continuousVerification: 'monitoring', trustBadge: 'trust_badge', publicPassport: 'public_passport' });
+    // and the gates exist where the feature is delivered
+    expect(read('src/routes/public-connect.ts')).toContain("enforceCapability(req, res, 'public_passport')");
+    expect(read('src/routes/badge.ts')).toContain("evaluateCapability(scopedDb, tenantId, 'trust_badge')");
   });
 
   it('webhook records add-on subscriptions and checkout refuses a duplicate active add-on', () => {

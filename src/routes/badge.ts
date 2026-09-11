@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { sql } from 'drizzle-orm';
 import { attachTenantScope } from '../middleware/tenant-scope.ts';
 import { publicTrustResponse, verifyPublicPassportToken } from './public-connect.ts';
+import { evaluateCapability } from '../security/entitlements.ts';
 
 /**
  * PUBLIC BADGE DATA ENDPOINT
@@ -86,6 +87,9 @@ export function createBadgeRouter() {
       // Tenant-scoped handle, exactly as the sibling public share routes do.
       // The raw db handle would read outside row-level security.
       const scopedDb = await attachTenantScope(tenantId, res);
+      // The embeddable badge is the Trust Badge add-on. A tenant without it
+      // (or whose add-on lapsed) gets the same 404 as an unknown passport.
+      if (!(await evaluateCapability(scopedDb, tenantId, 'trust_badge')).allowed) return deny();
 
       const passport = (await scopedDb.execute(sql`
         SELECT id, tenant_id, name, version, publisher, category
