@@ -288,15 +288,15 @@ export default function ClientsView({
 
               <div className="grid grid-cols-3 gap-3 pt-3 border-t border-[var(--spr-border)] text-center">
                 <div className="bg-[var(--spr-surface-sunken)] p-2.5 rounded-md border border-[var(--spr-border)]">
-                  <p className="text-[8px] text-[var(--spr-text-muted)] font-mono font-bold uppercase">Trust</p>
+                  <p className="text-[11px] text-[var(--spr-text-muted)] font-mono font-bold uppercase">Trust</p>
                   <p className="text-base font-bold font-mono text-[var(--spr-text)] mt-0.5">{typeof c.trustScore === 'number' ? <>{c.trustScore}<span className="text-[12px] text-[var(--spr-text-muted)]">/100</span></> : c.trustScore}</p>
                 </div>
                 <div className="bg-[var(--spr-surface-sunken)] p-2.5 rounded-md border border-[var(--spr-border)]">
-                  <p className="text-[8px] text-[var(--spr-text-muted)] font-mono font-bold uppercase">Software</p>
+                  <p className="text-[11px] text-[var(--spr-text-muted)] font-mono font-bold uppercase">Software</p>
                   <p className="text-base font-bold font-mono text-[var(--spr-text)] mt-0.5">{c.passportCount}</p>
                 </div>
                 <div className="bg-[var(--spr-surface-sunken)] p-2.5 rounded-md border border-[var(--spr-border)]">
-                  <p className="text-[8px] text-[var(--spr-text-muted)] font-mono font-bold uppercase">Compliance</p>
+                  <p className="text-[11px] text-[var(--spr-text-muted)] font-mono font-bold uppercase">Compliance</p>
                   <p className="text-base font-bold font-mono text-[var(--spr-text)] mt-0.5">{typeof c.complianceProgress === 'number' ? `${c.complianceProgress}%` : c.complianceProgress}</p>
                 </div>
               </div>

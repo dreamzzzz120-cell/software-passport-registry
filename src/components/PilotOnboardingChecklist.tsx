@@ -404,7 +404,7 @@ export default function PilotOnboardingChecklist({
 
                 <div className="space-y-3 pt-2">
                   <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-[8px] font-mono font-bold text-[var(--spr-text-muted)] uppercase">APP ID</span>
+                    <span className="absolute left-3 top-2.5 text-[11px] font-mono font-bold text-[var(--spr-text-muted)] uppercase">APP ID</span>
                     <input
                       type="text"
                       value={githubAppId}
@@ -414,7 +414,7 @@ export default function PilotOnboardingChecklist({
                     />
                   </div>
                   <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-[8px] font-mono font-bold text-[var(--spr-text-muted)] uppercase">REPO</span>
+                    <span className="absolute left-3 top-2.5 text-[11px] font-mono font-bold text-[var(--spr-text-muted)] uppercase">REPO</span>
                     <input
                       type="text"
                       value={githubRepo}
@@ -424,7 +424,7 @@ export default function PilotOnboardingChecklist({
                     />
                   </div>
                   <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-[8px] font-mono font-bold text-[var(--spr-text-muted)] uppercase">PEM KEY</span>
+                    <span className="absolute left-3 top-2.5 text-[11px] font-mono font-bold text-[var(--spr-text-muted)] uppercase">PEM KEY</span>
                     <textarea
                       value={githubPrivateKey}
                       onChange={(e) => setGithubPrivateKey(e.target.value)}
@@ -463,7 +463,7 @@ export default function PilotOnboardingChecklist({
 
                 <div className="space-y-3 pt-2">
                   <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-[8px] font-mono font-bold text-[var(--spr-text-muted)] uppercase">TOKEN</span>
+                    <span className="absolute left-3 top-2.5 text-[11px] font-mono font-bold text-[var(--spr-text-muted)] uppercase">TOKEN</span>
                     <input
                       type="password"
                       value={gitlabToken}
@@ -473,7 +473,7 @@ export default function PilotOnboardingChecklist({
                     />
                   </div>
                   <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-[8px] font-mono font-bold text-[var(--spr-text-muted)] uppercase">PROJECT</span>
+                    <span className="absolute left-3 top-2.5 text-[11px] font-mono font-bold text-[var(--spr-text-muted)] uppercase">PROJECT</span>
                     <input
                       type="text"
                       value={gitlabProject}
@@ -506,7 +506,7 @@ export default function PilotOnboardingChecklist({
                 {/* Registry Token */}
                 <div className="space-y-3 pt-1">
                   <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-[8px] font-mono font-bold text-[var(--spr-text-muted)] uppercase">NPM/PYPI</span>
+                    <span className="absolute left-3 top-2.5 text-[11px] font-mono font-bold text-[var(--spr-text-muted)] uppercase">NPM/PYPI</span>
                     <input
                       type="password"
                       value={pypiToken}

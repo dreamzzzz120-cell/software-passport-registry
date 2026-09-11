@@ -438,7 +438,7 @@ export default function SoftwareSectorsPanel({
                         {metrics.avgTrust == null ? 'Not verified' : `${metrics.avgTrust}% Avg Trust`}
                       </span>
                     ) : (
-                      <span className="text-[8px] font-mono font-bold text-[var(--spr-text-muted)] uppercase bg-[var(--spr-surface-hover)] border border-[var(--spr-border)] px-2 py-0.8 rounded-full">
+                      <span className="text-[11px] font-mono font-bold text-[var(--spr-text-muted)] uppercase bg-[var(--spr-surface-hover)] border border-[var(--spr-border)] px-2 py-0.8 rounded-full">
                         Empty Sector
                       </span>
                     )}
@@ -504,11 +504,11 @@ export default function SoftwareSectorsPanel({
             {/* Sector Statistics List */}
             <div className="grid grid-cols-2 gap-3 font-mono text-[11px] text-[var(--spr-text-muted)]">
               <div className="bg-[var(--spr-surface-sunken)] p-2.5 rounded-md border border-[var(--spr-border)]">
-                <span className="text-[8px] font-bold text-[var(--spr-text-muted)] uppercase tracking-wide block">Active Passports</span>
+                <span className="text-[11px] font-bold text-[var(--spr-text-muted)] uppercase tracking-wide block">Active Passports</span>
                 <span className="text-xs font-bold text-[var(--spr-text-faint)] mt-1 block">{selectedMetrics.count} monitored</span>
               </div>
               <div className="bg-[var(--spr-surface-sunken)] p-2.5 rounded-md border border-[var(--spr-border)]">
-                <span className="text-[8px] font-bold text-[var(--spr-text-muted)] uppercase tracking-wide block">Total Dependencies</span>
+                <span className="text-[11px] font-bold text-[var(--spr-text-muted)] uppercase tracking-wide block">Total Dependencies</span>
                 <span className="text-xs font-bold text-[var(--spr-text-faint)] mt-1 block">{selectedMetrics.totalSboms} SBOM nodes</span>
               </div>
             </div>

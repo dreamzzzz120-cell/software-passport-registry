@@ -487,7 +487,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                       <div className="space-y-1 min-w-0 pr-4">
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-[var(--spr-text)] text-xs truncate">{vendor.name}</span>
-                          <span className={`px-1.5 py-0.5 rounded-full text-[8px] font-bold ${
+                          <span className={`px-1.5 py-0.5 rounded-full text-[11px] font-bold ${
                             vendor.reviewStatus === 'Approved' ? 'bg-[var(--spr-green)]/15 text-[var(--spr-green)]' : 'bg-[var(--spr-amber)]/15 text-[var(--spr-amber)]'
                           }`}>
                             {vendor.reviewStatus}
@@ -812,7 +812,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                               </span>
                             </div>
                             
-                            <span className={`px-2 py-0.5 rounded font-mono text-[8px] font-bold self-start ${
+                            <span className={`px-2 py-0.5 rounded font-mono text-[11px] font-bold self-start ${
                               isPassed 
                                 ? 'bg-[var(--spr-green)]/15 text-[var(--spr-green)] border border-emerald-200'
                                 : isFailed 
@@ -831,7 +831,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                           {/* Metadata: Auditor & Cryptographic Hash References */}
                           <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[var(--spr-border)] font-mono text-[11px] text-[var(--spr-text-muted)] bg-[var(--spr-surface-sunken)] p-2 rounded-md">
                             <div>
-                              <span className="block text-[var(--spr-text-muted)] font-bold uppercase text-[7px]">Auditor</span>
+                              <span className="block text-[var(--spr-text-muted)] font-bold uppercase text-[11px]">Auditor</span>
                               <span className="font-semibold text-[var(--spr-text-faint)] flex items-center gap-1 mt-0.5 truncate" title={audit.auditor}>
                                 <User className="w-2.5 h-2.5 shrink-0 text-[var(--spr-text-muted)]" />
                                 {audit.auditor}
@@ -839,7 +839,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                             </div>
 
                             <div>
-                              <span className="block text-[var(--spr-text-muted)] font-bold uppercase text-[7px]">Ledger Hash Proof</span>
+                              <span className="block text-[var(--spr-text-muted)] font-bold uppercase text-[11px]">Ledger Hash Proof</span>
                               <button
                                 type="button"
                                 onClick={() => audit.referenceHash && copyToClipboard(audit.referenceHash, audit.id)}
@@ -852,11 +852,11 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                                   {audit.referenceHash ? `${audit.referenceHash.substring(0, 15)}...` : 'Not provided'}
                                 </span>
                                 {copiedAuditId === audit.id ? (
-                                  <span className="text-[8px] text-[var(--spr-green)] bg-[var(--spr-green)]/10 px-1 rounded uppercase font-bold font-sans">
+                                  <span className="text-[11px] text-[var(--spr-green)] bg-[var(--spr-green)]/10 px-1 rounded uppercase font-bold font-sans">
                                     Copied!
                                   </span>
                                 ) : (
-                                  <span className="text-[8px] text-[var(--spr-text-faint)] font-sans group-hover:block">
+                                  <span className="text-[11px] text-[var(--spr-text-faint)] font-sans group-hover:block">
                                     Copy
                                   </span>
                                 )}

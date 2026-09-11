@@ -78,30 +78,111 @@
     }
   }
 
+  /**
+   * Shield mark, drawn inline so the badge carries its own artwork onto any
+   * host page. A single solid path keeps it crisp at 18px and needs no fill
+   * rules a host stylesheet could override.
+   */
+  function shieldIcon(color) {
+    var svgNS = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(svgNS, 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('width', '18');
+    svg.setAttribute('height', '18');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.style.flexShrink = '0';
+    svg.style.display = 'block';
+    var shield = document.createElementNS(svgNS, 'path');
+    shield.setAttribute('d', 'M12 2 4 5v6c0 5.25 3.4 10.15 8 11.35C16.6 21.15 20 16.25 20 11V5l-8-3z');
+    shield.setAttribute('fill', color);
+    var check = document.createElementNS(svgNS, 'path');
+    check.setAttribute('d', 'M9.2 12.1l1.9 1.9 3.8-4.1');
+    check.setAttribute('fill', 'none');
+    check.setAttribute('stroke', '#0f172a');
+    check.setAttribute('stroke-width', '2');
+    check.setAttribute('stroke-linecap', 'round');
+    check.setAttribute('stroke-linejoin', 'round');
+    svg.appendChild(shield);
+    svg.appendChild(check);
+    return svg;
+  }
+
   function renderBadge(container, data) {
     var status = resolveStatus(data && data.status);
+    var font = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
 
     // Rendered as a span, not an anchor: there is no public human-readable
     // Passport page to link to yet. When one exists, the endpoint can start
     // returning passportUrl and this becomes an <a> — until then the badge
     // must not look clickable while doing nothing.
+    //
+    // Two-segment seal: a fixed registry mark on the left, the evidence
+    // state on the right. The mark never changes colour with the status, so
+    // the brand and the verdict read as two separate facts.
     var wrap = el('span', {
       display: 'inline-flex',
-      alignItems: 'center',
-      gap: '10px',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-      background: '#ffffff',
-      border: '1px solid #e1dfdd',
+      alignItems: 'stretch',
+      fontFamily: font,
+      lineHeight: '1.2',
+      border: '1px solid #d0d7de',
       borderRadius: '6px',
-      padding: '8px 12px',
-      color: '#201f1e'
+      overflow: 'hidden',
+      background: '#ffffff',
+      color: '#1f2328',
+      boxShadow: '0 1px 0 rgba(31,35,40,0.04)',
+      verticalAlign: 'middle'
     });
 
     var name = data && typeof data.name === 'string' && data.name ? data.name : null;
     wrap.setAttribute(
       'aria-label',
-      'Software Passport' + (name ? ' for ' + name : '') + ': ' + status.label
+      'Software Passport Registry' + (name ? ' for ' + name : '') + ': ' + status.label
     );
+
+    // Left segment: the registry mark.
+    var mark = el('span', {
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '8px',
+      padding: '7px 11px 7px 10px',
+      background: '#0f172a',
+      color: '#ffffff'
+    });
+    mark.appendChild(shieldIcon('#ffffff'));
+    var markText = el('span', { display: 'inline-flex', flexDirection: 'column', gap: '1px' });
+    var markTop = el('span', {
+      fontSize: '10.5px',
+      fontWeight: '700',
+      letterSpacing: '0.08em',
+      textTransform: 'uppercase',
+      whiteSpace: 'nowrap'
+    });
+    markTop.textContent = 'Software Passport';
+    var markBottom = el('span', {
+      fontSize: '9.5px',
+      fontWeight: '500',
+      letterSpacing: '0.12em',
+      textTransform: 'uppercase',
+      color: '#94a3b8',
+      whiteSpace: 'nowrap'
+    });
+    markBottom.textContent = 'Registry';
+    markText.appendChild(markTop);
+    markText.appendChild(markBottom);
+    mark.appendChild(markText);
+
+    // Right segment: the evidence state, with the status colour on the
+    // leading edge so it reads even when the label is not.
+    var state = el('span', {
+      display: 'inline-flex',
+      flexDirection: 'column',
+      justifyContent: 'center',
+      gap: '2px',
+      padding: '7px 12px 7px 11px',
+      borderLeft: '3px solid ' + status.color,
+      whiteSpace: 'nowrap'
+    });
+    var stateRow = el('span', { display: 'inline-flex', alignItems: 'center', gap: '6px' });
     var dot = el('span', {
       display: 'inline-block',
       width: '8px',
@@ -111,20 +192,29 @@
       flexShrink: '0'
     });
     dot.setAttribute('aria-hidden', 'true');
-
-    var text = el('span', { fontSize: '13px' });
-    var strong = el('strong', { fontWeight: '600' });
+    var strong = el('strong', { fontSize: '13px', fontWeight: '700', color: status.color, letterSpacing: '0.01em' });
     // No score is rendered. The registry does not publish an authoritative
     // score (scoreStatus is 'not_authoritatively_scored'), and a number here
     // would read as one.
     strong.textContent = status.label;
-    var small = el('span', { color: '#616161', marginLeft: '6px', fontSize: '12px' });
-    small.textContent = 'Software Passport';
-    text.appendChild(strong);
-    text.appendChild(small);
+    stateRow.appendChild(dot);
+    stateRow.appendChild(strong);
+    state.appendChild(stateRow);
 
-    wrap.appendChild(dot);
-    wrap.appendChild(text);
+    // Provenance, not a rating: how many independent sources the state rests
+    // on. Omitted rather than shown as "0 sources" when the count is absent,
+    // so a payload from an older server never renders a false negative.
+    var sources = data && typeof data.independentSources === 'number' && data.independentSources >= 0 ? data.independentSources : null;
+    var sub = el('span', { fontSize: '11px', color: '#57606a' });
+    if (sources !== null) {
+      sub.textContent = sources + ' independent source' + (sources === 1 ? '' : 's');
+    } else if (name) {
+      sub.textContent = name;
+    }
+    if (sub.textContent) state.appendChild(sub);
+
+    wrap.appendChild(mark);
+    wrap.appendChild(state);
     container.appendChild(wrap);
   }
 
@@ -134,7 +224,7 @@
       fontSize: '12px',
       color: '#616161'
     });
-    span.textContent = 'Software Passport unavailable';
+    span.textContent = 'Software Passport Registry unavailable';
     container.appendChild(span);
   }
 

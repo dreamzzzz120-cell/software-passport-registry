@@ -278,7 +278,7 @@ export default function SoftwareLineageTracker({ passports, clients, assets, onU
                   >
                     <div className="min-w-0">
                       <p className="truncate font-sans leading-tight">{p.name}</p>
-                      <span className="text-[8px] font-mono text-[var(--spr-text-muted)] mt-1 block">v{p.version} • {p.publisher}</span>
+                      <span className="text-[11px] font-mono text-[var(--spr-text-muted)] mt-1 block">v{p.version} • {p.publisher}</span>
                     </div>
                     <ChevronRight className={`w-3.5 h-3.5 shrink-0 ml-2 ${isSelected ? 'text-[var(--spr-highlight)] ' : 'text-[var(--spr-text-muted)] '}`} />
                   </button>
@@ -292,10 +292,10 @@ export default function SoftwareLineageTracker({ passports, clients, assets, onU
             <div className="bg-[var(--spr-surface)] text-[var(--spr-text)] rounded-md border border-[var(--spr-border)] p-5 space-y-4">
               <div className="flex justify-between items-start border-b border-[var(--spr-border)] pb-2.5">
                 <div>
-                  <span className="text-[8px] font-mono font-black text-[var(--spr-highlight)] uppercase tracking-widest">CAMERA FOCUS</span>
+                  <span className="text-[11px] font-mono font-black text-[var(--spr-highlight)] uppercase tracking-widest">CAMERA FOCUS</span>
                   <h4 className="text-sm font-black text-[var(--spr-text)] mt-1 leading-snug">{activePassport.name}</h4>
                 </div>
-                <span className="bg-[var(--spr-accent-soft)] border border-[var(--spr-highlight)] text-[var(--spr-highlight)] text-[8px] font-mono font-semibold px-2 py-0.5 rounded-md uppercase shrink-0">
+                <span className="bg-[var(--spr-accent-soft)] border border-[var(--spr-highlight)] text-[var(--spr-highlight)] text-[11px] font-mono font-semibold px-2 py-0.5 rounded-md uppercase shrink-0">
                   {activePassport.category}
                 </span>
               </div>
@@ -314,8 +314,8 @@ export default function SoftwareLineageTracker({ passports, clients, assets, onU
                   <span className={activePassport.overallScore == null ? 'text-[var(--spr-text-muted)] font-bold' : 'text-[var(--spr-green)] font-bold'}>{activePassport.overallScore == null ? 'Not verified' : `${activePassport.overallScore}/100`}</span>
                 </div>
                 <div className="flex flex-col gap-1 pt-2 border-t border-[var(--spr-border)]">
-                  <span className="text-[var(--spr-text-muted)] uppercase text-[8px]">DIGITAL FILE HASH:</span>
-                  <span className="text-[var(--spr-text-muted)] break-all bg-[var(--spr-surface)] p-2 rounded-md border border-[var(--spr-border)] select-all font-mono text-[8px] leading-tight">
+                  <span className="text-[var(--spr-text-muted)] uppercase text-[11px]">DIGITAL FILE HASH:</span>
+                  <span className="text-[var(--spr-text-muted)] break-all bg-[var(--spr-surface)] p-2 rounded-md border border-[var(--spr-border)] select-all font-mono text-[11px] leading-tight">
                     {activePassport.fileHash}
                   </span>
                 </div>
@@ -367,7 +367,7 @@ export default function SoftwareLineageTracker({ passports, clients, assets, onU
                 {!slsaEvidence && (
                   <div className="space-y-3 font-sans">
                     <div className="p-2.5 bg-[var(--spr-surface-alt)] border border-dashed border-[var(--spr-border)] rounded-md text-xs space-y-1.5">
-                      <p className="text-[8px] font-mono uppercase font-bold tracking-wider text-[var(--spr-text-muted)]">SLSA Provenance</p>
+                      <p className="text-[11px] font-mono uppercase font-bold tracking-wider text-[var(--spr-text-muted)]">SLSA Provenance</p>
                       <p className="text-[12px] text-[var(--spr-text-muted)] leading-relaxed">Evidence Not Available. No SLSA/in-toto provenance attestation has been submitted for this software.</p>
                     </div>
                     <button type="button" onClick={() => setSlsaModalOpen(true)} className="w-full bg-[var(--spr-surface-alt)] hover:bg-[var(--spr-surface-hover)] text-[var(--spr-highlight)] border border-[var(--spr-border)] font-bold py-2 rounded-md text-[12px] transition-all cursor-pointer">
@@ -383,17 +383,17 @@ export default function SoftwareLineageTracker({ passports, clients, assets, onU
                         <FileSignature className="w-3.5 h-3.5 shrink-0" />
                         <span>SLSA Provenance — Verified</span>
                       </div>
-                      <p className="text-[8px] font-mono text-[var(--spr-highlight)] leading-tight">Structurally valid, hash-verified in-toto provenance statement</p>
+                      <p className="text-[11px] font-mono text-[var(--spr-highlight)] leading-tight">Structurally valid, hash-verified in-toto provenance statement</p>
                     </div>
                     <div className="p-2.5 bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] rounded-md text-xs space-y-1">
-                      <p className="text-[8px] font-mono uppercase font-bold tracking-wider text-[var(--spr-text-muted)]">Builder</p>
+                      <p className="text-[11px] font-mono uppercase font-bold tracking-wider text-[var(--spr-text-muted)]">Builder</p>
                       <p className="text-[12px] text-[var(--spr-text)] break-all">{slsaDetails?.builderId || 'unknown'}</p>
                     </div>
                     <div className="p-2.5 bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] rounded-md text-xs space-y-1">
-                      <p className="text-[8px] font-mono uppercase font-bold tracking-wider text-[var(--spr-text-muted)]">Predicate type</p>
+                      <p className="text-[11px] font-mono uppercase font-bold tracking-wider text-[var(--spr-text-muted)]">Predicate type</p>
                       <p className="text-[11px] text-[var(--spr-text-muted)] break-all">{slsaDetails?.predicateType || 'unknown'}</p>
                     </div>
-                    <p className="text-[8px] text-[var(--spr-text-faint)] leading-relaxed">SPR does not independently verify the attestation's Sigstore/DSSE signature chain.</p>
+                    <p className="text-[11px] text-[var(--spr-text-faint)] leading-relaxed">SPR does not independently verify the attestation's Sigstore/DSSE signature chain.</p>
                   </div>
                 )}
 
@@ -404,7 +404,7 @@ export default function SoftwareLineageTracker({ passports, clients, assets, onU
                         <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                         <span>SLSA Provenance — Verification Failed</span>
                       </div>
-                      <p className="text-[8px] font-mono text-[var(--spr-red)] leading-tight break-all">{slsaEvidence.failureReason || 'Unknown failure'}</p>
+                      <p className="text-[11px] font-mono text-[var(--spr-red)] leading-tight break-all">{slsaEvidence.failureReason || 'Unknown failure'}</p>
                     </div>
                     <button type="button" onClick={() => setSlsaModalOpen(true)} className="w-full bg-[var(--spr-surface-alt)] hover:bg-[var(--spr-surface-hover)] text-[var(--spr-highlight)] border border-[var(--spr-border)] font-bold py-2 rounded-md text-[12px] transition-all cursor-pointer">
                       Resubmit provenance attestation
@@ -451,14 +451,14 @@ export default function SoftwareLineageTracker({ passports, clients, assets, onU
                         <div className="min-w-0">
                           <p className="font-bold text-[var(--spr-text-faint)] truncate" title={comp.name}>{comp.name}</p>
                           <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="text-[8px] font-mono text-[var(--spr-text-muted)] font-semibold">v{comp.version}</span>
-                            <span className="text-[8px] font-mono bg-[var(--spr-surface-hover)] text-[var(--spr-text-muted)] px-1 py-0.2 rounded font-black uppercase">
+                            <span className="text-[11px] font-mono text-[var(--spr-text-muted)] font-semibold">v{comp.version}</span>
+                            <span className="text-[11px] font-mono bg-[var(--spr-surface-hover)] text-[var(--spr-text-muted)] px-1 py-0.2 rounded font-black uppercase">
                               {comp.dependencyType}
                             </span>
                           </div>
                         </div>
 
-                        <span className={`px-1.5 rounded text-[8px] font-bold font-mono shrink-0 ml-1.5 border ${
+                        <span className={`px-1.5 rounded text-[11px] font-bold font-mono shrink-0 ml-1.5 border ${
                           comp.trustLevel === 'Trusted' ? 'bg-[var(--spr-green)]/15 text-[var(--spr-green)] border-[var(--spr-green)] ' :
                           comp.trustLevel === 'Review Required' ? 'bg-[var(--spr-amber)]/15 text-[var(--spr-amber)] border-[var(--spr-amber)] ' :
                           'bg-[var(--spr-red)]/15 text-[var(--spr-red)] border-[var(--spr-red)] '
@@ -498,9 +498,9 @@ export default function SoftwareLineageTracker({ passports, clients, assets, onU
                             <h5 className="font-bold text-[var(--spr-text)] font-mono text-[12px] truncate max-w-[130px]" title={asset.hostName}>
                               {asset.hostName}
                             </h5>
-                            <p className="text-[8px] font-mono text-[var(--spr-text-muted)] mt-0.5">{asset.type} • {asset.OS}</p>
+                            <p className="text-[11px] font-mono text-[var(--spr-text-muted)] mt-0.5">{asset.type} • {asset.OS}</p>
                           </div>
-                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold font-mono uppercase ${
+                          <span className={`px-1.5 py-0.5 rounded text-[11px] font-bold font-mono uppercase ${
                             asset.health === 'Compliant' ? 'bg-[var(--spr-green)]/15 text-[var(--spr-green)]' : 'bg-[var(--spr-red)]/15 text-[var(--spr-red)]'
                           }`}>
                             {asset.health}
@@ -576,7 +576,7 @@ export default function SoftwareLineageTracker({ passports, clients, assets, onU
                       >
                         <div className="flex justify-between items-start">
                           <div>
-                            <span className="text-[8px] font-mono font-bold bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] px-1.5 py-0.5 rounded border border-[var(--spr-highlight)] ">
+                            <span className="text-[11px] font-mono font-bold bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] px-1.5 py-0.5 rounded border border-[var(--spr-highlight)] ">
                               Dependency Node Found
                             </span>
                             <h5 className="font-bold text-[var(--spr-text)] text-xs mt-1.5">
@@ -611,9 +611,9 @@ export default function SoftwareLineageTracker({ passports, clients, assets, onU
                                 >
                                   <div>
                                     <p className="font-bold text-[var(--spr-text-faint)] font-mono truncate max-w-[140px]">{host.hostName}</p>
-                                    <p className="text-[8px] text-[var(--spr-text-muted)] font-mono mt-0.5">{host.clientName} • {host.environment}</p>
+                                    <p className="text-[11px] text-[var(--spr-text-muted)] font-mono mt-0.5">{host.clientName} • {host.environment}</p>
                                   </div>
-                                  <span className={`px-1 py-0.2 rounded text-[7px] font-mono font-bold uppercase ${
+                                  <span className={`px-1 py-0.2 rounded text-[11px] font-mono font-bold uppercase ${
                                     host.health === 'Compliant' ? 'bg-[var(--spr-green)]/15 text-[var(--spr-green)] border border-[var(--spr-green)]' : 'bg-[var(--spr-red)]/15 text-[var(--spr-red)] border border-[var(--spr-red)]'
                                   }`}>
                                     {host.health}

@@ -349,7 +349,7 @@ export default function IntegrationsView({ passports = [], clients = [], onNavig
                 <span className={`px-3 py-1 text-xs font-semibold rounded-md border ${STATUS_STYLES[item.credentialStatus]}`}>{STATUS_LABEL[item.credentialStatus]}</span>
               </div>
               <div>
-                <span className={`px-2 py-0.5 rounded text-[8px] font-mono font-bold uppercase tracking-wider border ${getCategoryStyles(item.category)}`}>{item.category}</span>
+                <span className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold uppercase tracking-wider border ${getCategoryStyles(item.category)}`}>{item.category}</span>
                 <h3 className="text-sm font-bold text-[var(--spr-text)] font-display mt-2">{item.name}</h3>
                 <p className="text-xs text-[var(--spr-text-muted)] leading-relaxed mt-2">{item.description}</p>
               </div>
