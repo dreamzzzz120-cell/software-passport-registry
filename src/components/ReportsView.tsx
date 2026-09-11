@@ -17,6 +17,7 @@ type ReportPayload = {
   observations?: unknown[];
   remediation?: unknown[];
   verification?: unknown[];
+  repositoryScan?: { sbomComponentCount?: number; sbomComponents?: unknown[]; findings?: unknown[]; evidence?: unknown[]; openFindingCount?: number };
   traceability?: string;
   limitations?: Array<{ evidenceId?: string; limitation?: string }>;
   reportHash?: string;
@@ -297,6 +298,8 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
       `Report hash: ${report.reportHash || 'not returned'}`,
       `Evidence records: ${report.evidence?.length ?? 0}`,
       `Findings: ${report.findings?.length ?? 0}`,
+      `Repository scan findings: ${report.repositoryScan?.findings?.length ?? 0} (open ${report.repositoryScan?.openFindingCount ?? 0})`,
+      `Repository scan evidence: ${report.repositoryScan?.evidence?.length ?? 0} · SBOM components: ${report.repositoryScan?.sbomComponentCount ?? 0}`,
       `Observations: ${report.observations?.length ?? 0}`,
       `Remediation records: ${report.remediation?.length ?? 0}`,
       `Traceability: ${report.traceability || 'not returned'}`,

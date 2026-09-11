@@ -506,6 +506,14 @@ export async function buildAndPersistReport(db: any, tenantId: string, passportI
   const evidence = (await db.execute(sql`SELECT id,provider,control_id,subject,source_url,observed_at,verification_method,status,severity,evidence_hash,limitation FROM evidence_ledger WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY observed_at DESC`) as any).rows || [];
   const observations = (await db.execute(sql`SELECT id,observation_version,generated_at,previous_observation_id,evidence_ids,finding_ids,canonical_payload_hash,completeness_basis_points,open_finding_count,unknown_dimension_count FROM trust_observations WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY observation_version DESC`) as any).rows || [];
   const remediation = (await db.execute(sql`SELECT * FROM trust_remediation_work_items WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY updated_at DESC`) as any).rows || [];
+  // Repository scans (Syft SBOM + OSV + secrets/IaC/licence) write to
+  // scan_findings and evidence_items, not to the trust-loop tables above. A
+  // report that omitted them said nothing about the one observation most
+  // passports have -- observed 2026-09-11 on a freshly scanned passport whose
+  // executive report came back with zero findings and zero evidence.
+  const scanFindings = (await db.execute(sql`SELECT id, severity, category, title, description, component, fixed_version AS "fixedVersion", status, detected_at AS "detectedAt", engine_id AS "engineId" FROM scan_findings WHERE tenant_id=${tenantId} AND asset_id=${passportId} ORDER BY CASE lower(severity) WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 WHEN 'low' THEN 4 ELSE 5 END, detected_at DESC`) as any).rows || [];
+  const scanEvidence = (await db.execute(sql`SELECT id, name, type, verified, status, signer, timestamp, hash, engine_id AS "engineId", verification_failure_reason AS "verificationFailureReason" FROM evidence_items WHERE tenant_id=${tenantId} AND asset_id=${passportId} ORDER BY timestamp DESC`) as any).rows || [];
+  const sbomComponents = (() => { try { const parsed = typeof passport.sbom === 'string' ? JSON.parse(passport.sbom) : passport.sbom; return Array.isArray(parsed) ? parsed : []; } catch { return []; } })();
   const verification = (await db.execute(sql`SELECT * FROM remediation_verification_ledger WHERE tenant_id=${tenantId} AND finding_id IN (SELECT id FROM trust_findings WHERE tenant_id=${tenantId} AND passport_id=${passportId}) ORDER BY created_at DESC`) as any).rows || [];
   const latest = observations[0];
   // Score/confidence/completeness/status all come from the passport row --
@@ -520,9 +528,20 @@ export async function buildAndPersistReport(db: any, tenantId: string, passportI
     risk: { overall: canonicalScore, security: passport.security_score, compliance: passport.compliance_score, verificationStatus },
     evidenceQuality: { completenessBasisPoints, unknownDimensions: latest?.unknown_dimension_count ?? 0, latestObservationAt: latest?.generated_at ?? null },
     findings, evidence, observations, remediation, verification,
+    repositoryScan: {
+      sbomComponentCount: sbomComponents.length,
+      sbomComponents: sbomComponents.map((c: any) => ({ name: c?.name ?? c?.packageName ?? null, version: c?.version ?? null, purl: c?.purl ?? null, license: c?.license ?? c?.licenses ?? null })),
+      findings: scanFindings,
+      evidence: scanEvidence,
+      openFindingCount: scanFindings.filter((f: any) => !['resolved', 'closed', 'verified'].includes(String(f.status || '').toLowerCase())).length,
+    },
     traceability: 'Report -> Passport -> Risk -> Finding -> Observation -> Provider -> Source -> Timestamp -> Hash',
     resolutionTraceability: 'Finding -> remediation -> new observation -> independent verification',
-    limitations: evidence.filter((item: any) => item.limitation).map((item: any) => ({ evidenceId: item.id, limitation: item.limitation })),
+    limitations: [
+      ...evidence.filter((item: any) => item.limitation).map((item: any) => ({ evidenceId: item.id, limitation: item.limitation })),
+      ...(observations.length === 0 ? [{ evidenceId: null, limitation: 'No trust-loop provider observation exists for this passport; risk scores are not measured. Repository-scan results below are the only observations.' }] : []),
+      ...(scanFindings.length === 0 && scanEvidence.length === 0 ? [{ evidenceId: null, limitation: 'No repository scan has completed for this passport.' }] : []),
+    ],
     ...buildReportTypeExtras(reportType, passport, findings),
   };
   const canonicalPayload = JSON.stringify(report);
