@@ -97,7 +97,7 @@
    */
   function sprMark(size) {
     var n = ++markSerial;
-    var clipId = 'spr-clip-' + n, gradId = 'spr-grad-' + n, glowId = 'spr-glow-' + n;
+    var gradId = 'spr-grad-' + n, glowId = 'spr-glow-' + n;
     var svg = svgEl('svg', { viewBox: '0 0 28 28', width: String(size), height: String(size), 'aria-hidden': 'true' });
     svg.style.flexShrink = '0';
     svg.style.display = 'block';
@@ -108,9 +108,6 @@
     grad.appendChild(svgEl('stop', { offset: '0', 'stop-color': '#1d4ed8' }));
     grad.appendChild(svgEl('stop', { offset: '1', 'stop-color': '#0b1a3a' }));
     defs.appendChild(grad);
-    var clip = svgEl('clipPath', { id: clipId });
-    clip.appendChild(svgEl('rect', { x: '14', y: '-3', width: '20', height: '34' }));
-    defs.appendChild(clip);
     var glow = svgEl('filter', { id: glowId, x: '-30%', y: '-30%', width: '160%', height: '160%' });
     glow.appendChild(svgEl('feGaussianBlur', { stdDeviation: '0.6' }));
     defs.appendChild(glow);
@@ -121,9 +118,6 @@
     // Filled body, then the white outline on top of it.
     svg.appendChild(svgEl('path', { d: shieldD, fill: 'url(#' + gradId + ')' }));
     svg.appendChild(svgEl('path', { d: shieldD, fill: 'none', stroke: '#ffffff', 'stroke-width': '1.8', 'stroke-linejoin': 'round' }));
-
-    // Blue echo: same outline, offset, right half only.
-    svg.appendChild(svgEl('path', { d: shieldD, transform: 'translate(3 3)', fill: 'none', stroke: '#60a5fa', 'stroke-width': '1.8', 'stroke-linejoin': 'round', 'clip-path': 'url(#' + clipId + ')' }));
 
     // The T: a soft glow underneath, crisp letter on top.
     var tAttrs = { x: '14', y: '19.2', 'text-anchor': 'middle', 'font-family': FONT, 'font-size': '15', 'font-weight': '800', fill: '#ffffff' };
