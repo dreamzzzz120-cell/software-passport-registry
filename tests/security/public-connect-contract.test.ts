@@ -9,7 +9,7 @@ const read = (relative: string) => fs.readFileSync(path.join(root, relative), 'u
 describe('public connect/share-token security contracts', () => {
   it('requires privileged tenant roles to mint Passport and report share tokens', () => {
     const source = read('src/routes/public-connect.ts');
-    expect(source).toContain("router.post('/public/v1/passports/:id/token', requireAuth, requireRole(['Owner', 'Admin', 'Operator'])");
+    expect(source).toContain("router.post('/public/v1/passports/:id/token', linkMintLimiter, requireAuth, requireRole(['Owner', 'Admin', 'Operator'])");
     expect(source).toContain("router.post('/public/v1/reports/:id/token', requireAuth, requireRole(['Owner', 'Admin', 'Operator'])");
   });
 

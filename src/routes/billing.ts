@@ -213,8 +213,24 @@ export function createBillingRouter() {
         FROM tenant_subscriptions WHERE tenant_id = ${tenantId} LIMIT 1
       `);
       const clientCountResult = await scopedDb.execute(sql`SELECT count(*)::int AS count FROM clients WHERE tenant_id = ${tenantId}`);
+      // Purchase history is read from the tamper-evident audit trail: only
+      // events the Stripe webhook actually recorded appear here, never a
+      // checkout that was started and abandoned.
+      const purchaseRows = (await scopedDb.execute(sql`
+        SELECT action, timestamp, payload FROM audit_trail
+        WHERE tenant_id = ${tenantId} AND action IN ('billing.purchase.notified', 'billing.addon.completed', 'billing.subscription.activated')
+        ORDER BY id DESC LIMIT 50
+      `) as any).rows ?? [];
+      const purchases = purchaseRows.map((row: any) => {
+        let payload: any = {}; try { payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : (row.payload ?? {}); } catch { payload = {}; }
+        const kind = row.action === 'billing.purchase.notified' ? 'product' : row.action === 'billing.addon.completed' ? 'addon' : 'plan';
+        const id = kind === 'product' ? payload.product : kind === 'addon' ? payload.addon : payload.plan;
+        const label = kind === 'product' ? ONE_TIME_CONFIG[id as OneTimeProductId]?.label : kind === 'addon' ? ADDON_CONFIG[id as AddonId]?.label : PLAN_CONFIG[id as PlanId]?.label;
+        return { kind, id: id ?? null, label: label ?? id ?? 'Unknown item', at: row.timestamp, orderRef: payload.orderRef ?? null, amount: payload.amount ?? null, fulfilment: kind === 'product' ? 'produced by the SPR team; you will be contacted at your account email' : kind === 'addon' ? 'active on this workspace' : 'active plan' };
+      });
       const catalog = await buildCatalog();
       return res.json({
+        purchases,
         ...catalog,
         availablePlans: catalog.plans.filter((plan) => plan.checkoutAvailable).map((plan) => plan.id),
         availableProducts: catalog.products.filter((product) => product.checkoutAvailable).map((product) => product.id),
@@ -438,7 +454,7 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
             `Stripe checkout session: ${session.id}`,
           ].join('\n');
           await db.execute(sql`INSERT INTO notification_outbox (id, tenant_id, channel, destination, subject, body) VALUES (${`purchase_${event.id}_ops`}, ${tenantId}, 'email', ${config.fulfilmentEmail}, ${`[SPR sale] ${label} — ${amount ?? ''} — ref ${orderRef}`}, ${opsBody}) ON CONFLICT (id) DO NOTHING`);
-          await appendAuditEntry(db, { tenantId, action: 'billing.purchase.notified', actor: 'stripe-webhook', payload: { product: productId, stripeEventId: event.id, buyerNotified: Boolean(buyerEmail), fulfilmentEmail: config.fulfilmentEmail } });
+          await appendAuditEntry(db, { tenantId, action: 'billing.purchase.notified', actor: 'stripe-webhook', payload: { product: productId, orderRef, amount: amount || null, stripeEventId: event.id, buyerNotified: Boolean(buyerEmail), fulfilmentEmail: config.fulfilmentEmail } });
         } else if (tenantId && session.metadata?.addon) {
           // An add-on checkout completing left no trace at all: it is a
           // subscription, so it missed the plan branch above, and it is not a

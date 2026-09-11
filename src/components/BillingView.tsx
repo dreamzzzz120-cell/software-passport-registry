@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { CreditCard, ShieldCheck, ExternalLink, Loader2, AlertTriangle } from 'lucide-react';
+import { CreditCard, ShieldCheck, ExternalLink, Loader2, AlertTriangle, CheckCircle2, Receipt } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
 
 type PlanId = 'pilot' | 'starter' | 'professional' | 'growth' | 'enterprise';
@@ -26,7 +26,21 @@ type BillingStatus = {
   availableAddons: AddonId[];
   subscription: { plan: PlanId | null; status: string; clientLimit: number | null; currentPeriodEnd: string | null } | null;
   clientCount: number;
+  purchases?: Array<{ kind: 'product' | 'addon' | 'plan'; id: string | null; label: string; at: string; orderRef: string | null; amount: string | null; fulfilment: string }>;
 };
+
+// Stripe sends the buyer back with one of these query strings. The banner
+// only says the checkout page reported success; the purchase list below is
+// what SPR's webhook actually recorded, and only that counts as confirmed.
+function returnBanner(): { tone: 'ok' | 'muted'; text: string } | null {
+  if (typeof window === 'undefined') return null;
+  const q = new URLSearchParams(window.location.search);
+  if (q.get('checkout') === 'success') return { tone: 'ok', text: 'Stripe reported your plan checkout as complete. It appears under Your purchases once SPR receives Stripe\'s confirmation (usually within a minute).' };
+  if (q.get('purchase') === 'success') return { tone: 'ok', text: `Stripe reported your order as complete${q.get('product') ? ` (${q.get('product')})` : ''}. An order-received email with your reference is on its way; the item appears under Your purchases once confirmed.` };
+  if (q.get('addon') === 'success') return { tone: 'ok', text: 'Stripe reported your add-on checkout as complete. It becomes active once SPR receives Stripe\'s confirmation (usually within a minute).' };
+  if (q.get('checkout') === 'cancelled' || q.get('purchase') === 'cancelled' || q.get('addon') === 'cancelled') return { tone: 'muted', text: 'Checkout was cancelled. Nothing was charged.' };
+  return null;
+}
 
 const limitLabel = (limit: number | null) => limit === null ? 'Unlimited clients' : `Up to ${limit} client${limit === 1 ? '' : 's'}`;
 // One primary action per section; everything else is the outlined secondary,
@@ -44,6 +58,7 @@ export default function BillingView() {
   const [busyProduct, setBusyProduct] = useState<OneTimeProductId | null>(null);
   const [busyAddon, setBusyAddon] = useState<AddonId | null>(null);
   const [openingPortal, setOpeningPortal] = useState(false);
+  const [banner] = useState(returnBanner);
 
   const loadStatus = () => {
     setLoading(true);
@@ -142,6 +157,11 @@ export default function BillingView() {
           <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
         </div>
       )}
+      {banner && (
+        <div role="status" className={banner.tone === 'ok' ? 'flex items-center gap-2 rounded-md border border-[var(--spr-green)]/40 bg-[var(--spr-green)]/10 px-4 py-3 text-sm text-[var(--spr-green)]' : 'flex items-center gap-2 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] px-4 py-3 text-sm text-[var(--spr-text-muted)]'}>
+          <CheckCircle2 className="h-4 w-4 shrink-0" /> {banner.text}
+        </div>
+      )}
 
       {loading ? (
         <div className="flex flex-col items-center justify-center space-y-2 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-20">
@@ -156,6 +176,29 @@ export default function BillingView() {
         </div>
       ) : (
         <>
+          {(status.purchases?.length ?? 0) > 0 && (
+            <section className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)]" id="spr-purchases">
+              <div className="flex items-center gap-2 border-b border-[var(--spr-border)] px-5 py-3">
+                <Receipt className="h-4 w-4 text-[var(--spr-highlight)]" />
+                <h2 className="text-sm font-semibold text-[var(--spr-text)]">Your purchases</h2>
+                <span className="text-xs text-[var(--spr-text-muted)]">confirmed by Stripe to SPR</span>
+              </div>
+              <ul className="divide-y divide-[var(--spr-border)]">
+                {status.purchases!.map((p, i) => (
+                  <li key={`${p.kind}-${p.id}-${p.at}-${i}`} className="flex flex-col gap-1 px-5 py-3 text-sm md:flex-row md:items-center md:justify-between">
+                    <div className="min-w-0">
+                      <span className="font-medium text-[var(--spr-text)]">{p.label}</span>
+                      <span className="ml-2 text-xs text-[var(--spr-text-muted)]">{p.kind === 'product' ? 'one-time' : p.kind === 'addon' ? 'add-on' : 'plan'}</span>
+                      <p className="text-xs text-[var(--spr-text-muted)]">{p.fulfilment}</p>
+                    </div>
+                    <div className="shrink-0 text-xs text-[var(--spr-text-muted)] font-mono">
+                      {p.orderRef && <span>ref {p.orderRef} · </span>}{p.amount && <span>{p.amount} · </span>}{new Date(p.at).toLocaleString()}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           {currentPlan && (
             <div className="flex flex-col justify-between gap-4 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] px-5 py-4 md:flex-row md:items-center">
               <div className="min-w-0">
