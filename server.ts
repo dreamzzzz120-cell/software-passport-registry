@@ -1,4 +1,5 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import cors from 'cors';
 import helmet from 'helmet';
 import * as Sentry from '@sentry/node';
@@ -89,9 +90,15 @@ app.use((req, res, next) => { if (config.isProduction && config.enforceHttps && 
 app.get('/health', (_req, res) => res.status(200).json({ status: 'ok', service: 'spr-app', uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000), mcpAvailable: Boolean(process.env.SPR_MCP_BEARER_TOKEN) }));
 // /api/ready is the same probe reached through the Vercel /api/* rewrite; the
 // Settings diagnostics panel calls it, so it must exist under both paths.
+// Readiness is probed by the platform healthcheck and by the Settings diagnostics panel. It runs
+// real database queries, so it is rate-limited -- but with an in-memory,
+// fail-open limiter rather than the Redis-backed fail-closed one used for
+// /api: a readiness probe must not report 503 because the rate-limit store
+// is unreachable, and the shared limiter's dependency is exactly that store.
+const readinessLimiter = rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: 'draft-7', legacyHeaders: false, validate: { trustProxy: false } });
 const readinessHandler = async (_req: Request, res: Response) => { const database = await checkDatabaseHealth(); let rls: boolean | null = null; let runtimeRole: string | null = null; if (database.ok) { const [rlsResult, roleResult] = await Promise.all([ db.execute(sql`SELECT spr_assert_tenant_rls()`).then(() => true).catch(() => false), appPool.query('SELECT current_user AS role').then((scoped) => scoped.rows?.[0]?.role ?? null).catch(() => null) ]); rls = rlsResult; runtimeRole = roleResult; } const leastPrivilege = runtimeRole === 'spr_app_runtime'; const ready = database.ok && rls === true && leastPrivilege; res.status(ready ? 200 : 503).json({ status: ready ? 'ready' : 'not_ready', checks: { database: database.ok ? database : { ok: false, latencyMs: database.latencyMs, error: 'DATABASE_UNAVAILABLE' }, tenantRls: { ok: rls }, runtimeRole: { role: runtimeRole, leastPrivilege } }, uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000) }); };
-app.get('/ready', rateLimiter, readinessHandler);
-app.get('/api/ready', rateLimiter, readinessHandler);
+app.get('/ready', readinessLimiter, readinessHandler);
+app.get('/api/ready', readinessLimiter, readinessHandler);
 app.get('/api/health', async (_req, res) => { const database = await checkDatabaseHealth(); res.status(database.ok ? 200 : 503).json({ status: database.ok ? 'ok' : 'degraded', database: database.ok ? database : { ok: false, latencyMs: database.latencyMs, error: 'DATABASE_UNAVAILABLE' } }); });
 app.use('/api', rateLimiter);
 app.use('/api', createAuthRouter());
