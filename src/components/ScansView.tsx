@@ -436,7 +436,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
       {/* Page Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.22em] text-[#ce9178]"><Radar className="h-4 w-4" /> Continuous scanning</div>
+          <div className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[.22em] text-[#ce9178]"><Radar className="h-4 w-4" /> Continuous scanning</div>
           <h1 className="mt-3 text-xl font-display font-bold text-[var(--spr-text)]">SBOM Scanning & Attestation</h1>
           <p className="text-xs text-[var(--spr-text-muted)] font-sans mt-1">
             Analyze JSON software manifests to compile trust indexes, and manage automated scanning schedules for critical production assets.
@@ -483,7 +483,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
           <div className="flex items-center gap-1.5">
             <Calendar className="w-3.5 h-3.5" />
             <span>Automated Scanning Schedules</span>
-            <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold font-mono bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)]">
+            <span className="px-1.5 py-0.5 rounded-full text-[11px] font-bold font-mono bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)]">
               {schedules.length}
             </span>
           </div>
@@ -528,7 +528,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
                   </div>
                   <div>
                     <h3 className="text-xs font-bold text-[var(--spr-text)] uppercase tracking-wider font-mono">Universal Software Trust Agent Scanner</h3>
-                    <p className="text-[10px] text-[var(--spr-text-muted)] font-sans">Trigger the 8-engine AI Security pipeline and compile cryptographic evidence logs persistently in the database.</p>
+                    <p className="text-[12px] text-[var(--spr-text-muted)] font-sans">Trigger the 8-engine AI Security pipeline and compile cryptographic evidence logs persistently in the database.</p>
                   </div>
                 </div>
 
@@ -536,7 +536,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Software Passport Selector */}
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-[var(--spr-text-muted)] uppercase font-mono">Software Passport Target</label>
+                      <label className="text-[12px] font-bold text-[var(--spr-text-muted)] uppercase font-mono">Software Passport Target</label>
                       <select
                         value={selectedPassportId}
                         onChange={(e) => setSelectedPassportId(e.target.value)}
@@ -550,7 +550,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
 
                     {/* Tenant Client Target */}
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-[var(--spr-text-muted)] uppercase font-mono">Client (Tenant Context)</label>
+                      <label className="text-[12px] font-bold text-[var(--spr-text-muted)] uppercase font-mono">Client (Tenant Context)</label>
                       <select
                         value={chosenClientName}
                         onChange={(e) => setChosenClientName(e.target.value)}
@@ -578,12 +578,12 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
                           <span className="font-medium text-[var(--spr-text-faint)]">Selected: <strong className="text-[var(--spr-text)]">{activeP.name}</strong> (v{activeP.version})</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-mono text-[var(--spr-text-muted)]">License: {activeP.licenseType}</span>
+                          <span className="text-[12px] font-mono text-[var(--spr-text-muted)]">License: {activeP.licenseType}</span>
                           {activeP.verificationStatus === 'verified'
-                            ? <span className="px-2 py-0.5 rounded bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] text-[9px] font-bold font-mono">Verified Passport</span>
+                            ? <span className="px-2 py-0.5 rounded bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] text-[11px] font-bold font-mono">Verified Passport</span>
                             : activeP.verificationStatus === 'partial'
-                              ? <span className="px-2 py-0.5 rounded bg-[var(--spr-amber)]/15 text-[var(--spr-amber)] text-[9px] font-bold font-mono">Partially Verified</span>
-                              : <span className="px-2 py-0.5 rounded border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-text-muted)] text-[9px] font-bold font-mono">Unverified</span>}
+                              ? <span className="px-2 py-0.5 rounded bg-[var(--spr-amber)]/15 text-[var(--spr-amber)] text-[11px] font-bold font-mono">Partially Verified</span>
+                              : <span className="px-2 py-0.5 rounded border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-text-muted)] text-[11px] font-bold font-mono">Unverified</span>}
                         </div>
                       </div>
                     );
@@ -619,7 +619,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
                     <div className="text-lg font-bold text-[var(--spr-text)]">
                       {schedules.filter(s => s.status === 'Active').length} / {schedules.length}
                     </div>
-                    <div className="text-[9px] text-[var(--spr-text-muted)]">Configured background scan schedules</div>
+                    <div className="text-[11px] text-[var(--spr-text-muted)]">Configured background scan schedules</div>
                   </div>
                 </div>
 
@@ -635,7 +635,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
                         return `${uniqueProtected} / ${prodAssets.length}`;
                       })()}
                     </div>
-                    <div className="text-[9px] text-[var(--spr-text-muted)]">Registered production assets covered</div>
+                    <div className="text-[11px] text-[var(--spr-text-muted)]">Registered production assets covered</div>
                   </div>
                 </div>
 
@@ -652,7 +652,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
                         return `${pct}%`;
                       })()}
                     </div>
-                    <div className="text-[9px] text-[var(--spr-text-muted)]">Automated recurring security trust</div>
+                    <div className="text-[11px] text-[var(--spr-text-muted)]">Automated recurring security trust</div>
                   </div>
                 </div>
               </div>
@@ -666,7 +666,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
                     </div>
                     <div>
                       <h3 className="text-xs font-bold text-[var(--spr-text)] uppercase tracking-wider font-mono">Configure Automated Scan Pipeline</h3>
-                      <p className="text-[10px] text-[var(--spr-text-muted)] font-sans">Set up automated continuous SBOM scanning for critical tenant software endpoints.</p>
+                      <p className="text-[12px] text-[var(--spr-text-muted)] font-sans">Set up automated continuous SBOM scanning for critical tenant software endpoints.</p>
                     </div>
                   </div>
 
@@ -674,7 +674,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {/* Asset Select */}
                       <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-[var(--spr-text-muted)] uppercase font-mono">Target Production Asset</label>
+                        <label className="text-[12px] font-bold text-[var(--spr-text-muted)] uppercase font-mono">Target Production Asset</label>
                         <select
                           value={newScheduleAssetId}
                           onChange={(e) => setNewScheduleAssetId(e.target.value)}
@@ -690,7 +690,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
 
                       {/* Recurrence Frequency */}
                       <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-[var(--spr-text-muted)] uppercase font-mono">Scan Recurrence / Frequency</label>
+                        <label className="text-[12px] font-bold text-[var(--spr-text-muted)] uppercase font-mono">Scan Recurrence / Frequency</label>
                         <select
                           value={newScheduleFrequency}
                           onChange={(e) => setNewScheduleFrequency(e.target.value)}
@@ -706,7 +706,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
 
                       {/* Scanning Policy Rule */}
                       <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-[var(--spr-text-muted)] uppercase font-mono">Scanning Policy / Rule</label>
+                        <label className="text-[12px] font-bold text-[var(--spr-text-muted)] uppercase font-mono">Scanning Policy / Rule</label>
                         <select
                           value={newScheduleScanType}
                           onChange={(e) => setNewScheduleScanType(e.target.value)}
@@ -721,7 +721,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
 
                       {/* Target Run Time */}
                       <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-[var(--spr-text-muted)] uppercase font-mono">Preferred Run Window</label>
+                        <label className="text-[12px] font-bold text-[var(--spr-text-muted)] uppercase font-mono">Preferred Run Window</label>
                         <div className="w-full px-3 py-2 bg-[var(--spr-surface-sunken)] border border-dashed border-[var(--spr-border)] rounded-lg text-[11px] text-[var(--spr-text-muted)]">
                           Not yet supported -- schedules run on frequency alone (e.g. every 24h from creation), not a specific time of day.
                         </div>
@@ -784,7 +784,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
                                     {schedule.assetHostName}
                                   </span>
                                 </h4>
-                                <p className="text-[10px] text-[var(--spr-text-muted)] font-sans">
+                                <p className="text-[12px] text-[var(--spr-text-muted)] font-sans">
                                   Client: <strong className="text-[var(--spr-text-faint)]">{schedule.clientName}</strong>
                                 </p>
                               </div>
@@ -796,17 +796,17 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
                             </div>
 
                             <div className="p-2.5 bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)]/70 rounded-lg space-y-1.5 text-xs">
-                              <div className="flex justify-between items-center text-[10px]">
+                              <div className="flex justify-between items-center text-[12px]">
                                 <span className="text-[var(--spr-text-muted)] font-mono">Scanning Policy:</span>
                                 <span className="font-bold text-[var(--spr-text-faint)] font-mono">{schedule.scanType}</span>
                               </div>
-                              <div className="flex justify-between items-center text-[10px]">
+                              <div className="flex justify-between items-center text-[12px]">
                                 <span className="text-[var(--spr-text-muted)] font-mono">Interval:</span>
                                 <span className="font-semibold text-[var(--spr-highlight)] font-mono">{schedule.frequency}</span>
                               </div>
                             </div>
 
-                            <div className="flex justify-between items-center text-[10px] text-[var(--spr-text-muted)] font-mono border-t border-dashed border-[var(--spr-border)] pt-2.5">
+                            <div className="flex justify-between items-center text-[12px] text-[var(--spr-text-muted)] font-mono border-t border-dashed border-[var(--spr-border)] pt-2.5">
                               <div className="flex items-center gap-1">
                                 <Clock className="w-3 h-3 text-[var(--spr-text-muted)]" />
                                 <span>Last run: <strong className="text-[var(--spr-text-faint)]">{formatRunTime(schedule.lastRunAt)}</strong></span>
@@ -823,7 +823,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
                             <button
                               onClick={() => handleRunScheduleNow(schedule)}
                               disabled={!canManageSchedules || !isActive}
-                              className={`flex-1 py-1.5 px-3 rounded-lg text-[10px] font-bold text-[var(--spr-text)] transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                              className={`flex-1 py-1.5 px-3 rounded-lg text-[12px] font-bold text-[var(--spr-text)] transition-all flex items-center justify-center gap-1 cursor-pointer ${
                                 canManageSchedules && isActive ? 'bg-[var(--spr-accent-soft)] hover:bg-[var(--spr-accent-soft)] shadow-sm' : 'bg-[var(--spr-border)] text-[var(--spr-text-muted)] cursor-not-allowed'
                               }`}
                               title={!canManageSchedules ? `Your ${role} role cannot run schedules.` : 'Trigger scanning routine immediately on this production target'}
@@ -836,7 +836,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
                             <button
                               onClick={() => handleToggleScheduleStatus(schedule.id)}
                               disabled={!canManageSchedules}
-                              className="px-3 py-1.5 border border-[var(--spr-border)] text-[var(--spr-text-faint)] rounded-lg hover:bg-[var(--spr-surface-sunken)] transition-all text-[10px] font-semibold cursor-pointer flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-50"
+                              className="px-3 py-1.5 border border-[var(--spr-border)] text-[var(--spr-text-faint)] rounded-lg hover:bg-[var(--spr-surface-sunken)] transition-all text-[12px] font-semibold cursor-pointer flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-50"
                               title={!canManageSchedules ? `Your ${role} role cannot change schedules.` : isActive ? 'Pause automated recurrences' : 'Resume automated recurrences'}
                             >
                               {isActive ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
@@ -866,14 +866,14 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
           {(isScanning || scanCompleted) && (
             <div className="bg-[var(--spr-surface)] rounded-xl p-5 border border-[var(--spr-border)] shadow-md font-mono text-xs text-[var(--spr-text)]">
               <div className="flex justify-between items-center pb-3 border-b border-[var(--spr-border)]/80 mb-4">
-                <span className="text-[var(--spr-text-muted)] font-bold text-[10px] uppercase">Compilation Terminal Console</span>
-                <span className="text-[var(--spr-highlight)] text-[10px] font-bold">PROVENANCE PORT v1.0</span>
+                <span className="text-[var(--spr-text-muted)] font-bold text-[12px] uppercase">Compilation Terminal Console</span>
+                <span className="text-[var(--spr-highlight)] text-[12px] font-bold">PROVENANCE PORT v1.0</span>
               </div>
 
               {/* Progress Bar */}
               {isScanning && (
                 <div className="space-y-1.5 mb-4">
-                  <div className="flex justify-between text-[10px] text-[var(--spr-text-muted)]">
+                  <div className="flex justify-between text-[12px] text-[var(--spr-text-muted)]">
                     <span>Attesting SBOM payload integrity...</span>
                     <span>{scanProgress}%</span>
                   </div>
@@ -910,7 +910,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
                       setScanCompleted(false);
                       setScanProgress(0);
                     }}
-                    className="bg-[var(--spr-accent-soft)] text-[var(--spr-text)] font-sans font-semibold text-[10px] uppercase px-3 py-1.5 rounded cursor-pointer hover:bg-[var(--spr-accent-soft)] transition-all"
+                    className="bg-[var(--spr-accent-soft)] text-[var(--spr-text)] font-sans font-semibold text-[12px] uppercase px-3 py-1.5 rounded cursor-pointer hover:bg-[var(--spr-accent-soft)] transition-all"
                   >
                     Clear Console
                   </button>
@@ -925,13 +925,13 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
           <div className="flex items-center justify-between mb-4 pb-2 border-b border-[var(--spr-border)]">
             <div>
               <h3 className="text-xs font-bold text-[var(--spr-text)] font-display">MSP Global Scan Logs</h3>
-              <p className="text-[9px] text-[var(--spr-text-muted)] font-sans mt-0.5">Audit trail of system attestations</p>
+              <p className="text-[11px] text-[var(--spr-text-muted)] font-sans mt-0.5">Audit trail of system attestations</p>
             </div>
             {unclassifiedScans.length > 0 && (
               <button
                 type="button"
                 onClick={handleToggleSelectAllUnclassified}
-                className={`px-2 py-1 rounded text-[9px] font-bold font-mono border transition-all cursor-pointer ${
+                className={`px-2 py-1 rounded text-[11px] font-bold font-mono border transition-all cursor-pointer ${
                   allUnclassifiedSelected
                     ? 'bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200'
                     : 'bg-[var(--spr-surface-sunken)] text-[var(--spr-text-faint)] border-[var(--spr-border)] hover:bg-[var(--spr-surface-sunken)]'
@@ -946,7 +946,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
             {scans.length === 0 && (
               <div className="rounded-lg border border-dashed border-[var(--spr-border)] px-4 py-10 text-center">
                 <p className="text-xs font-semibold text-[var(--spr-text-muted)]">No scans recorded yet</p>
-                <p className="mt-1 text-[10px] text-[var(--spr-text-muted)]">Scan logs will appear here once a scan or scheduled run completes.</p>
+                <p className="mt-1 text-[12px] text-[var(--spr-text-muted)]">Scan logs will appear here once a scan or scheduled run completes.</p>
               </div>
             )}
             {scans.map((s) => {
@@ -972,7 +972,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
                       <h4 className="font-bold text-[var(--spr-text-faint)] leading-snug truncate" title={s.targetName}>
                         {s.targetName}
                       </h4>
-                      <p className="text-[9px] text-[var(--spr-text-muted)] font-mono mt-0.5 truncate">
+                      <p className="text-[11px] text-[var(--spr-text-muted)] font-mono mt-0.5 truncate">
                         Type: <span className={isUnclassified ? "text-amber-600 font-bold" : "text-[var(--spr-text-muted)] font-medium"}>{s.scanType}</span> • Owner: {s.clientName}
                       </p>
                     </div>
@@ -992,13 +992,13 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
           {selectedScanIds.length > 0 && (
             <div className="mt-4 pt-3 border-t border-[var(--spr-border)] bg-[var(--spr-accent-soft)] p-3 rounded-lg border border-[var(--spr-highlight)]/40 space-y-2 shrink-0">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-[var(--spr-highlight)] uppercase font-mono tracking-wider">
+                <span className="text-[12px] font-bold text-[var(--spr-highlight)] uppercase font-mono tracking-wider">
                   Batch Tag {selectedScanIds.length} {selectedScanIds.length === 1 ? 'Record' : 'Records'} Selected
                 </span>
                 <button
                   type="button"
                   onClick={() => setSelectedScanIds([])}
-                  className="text-[9px] text-[var(--spr-text-muted)] hover:text-[var(--spr-text)] underline cursor-pointer font-sans"
+                  className="text-[11px] text-[var(--spr-text-muted)] hover:text-[var(--spr-text)] underline cursor-pointer font-sans"
                 >
                   Clear Selection
                 </button>
@@ -1024,8 +1024,8 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
                   {batchTagging ? 'Applying…' : 'Apply & Sync'}
                 </button>
               </div>
-              {batchTagError && <p role="alert" className="text-[9px] text-[var(--spr-red)] font-sans leading-tight">{batchTagError}</p>}
-              <p className="text-[9px] text-[var(--spr-text-muted)] font-sans leading-tight">
+              {batchTagError && <p role="alert" className="text-[11px] text-[var(--spr-red)] font-sans leading-tight">{batchTagError}</p>}
+              <p className="text-[11px] text-[var(--spr-text-muted)] font-sans leading-tight">
                 This relabels the selected scan records with the category you enter. It does not change Assets or Passport records.
               </p>
             </div>

@@ -69,7 +69,7 @@ export default function TrustNetworkMap({ clients, clientsOmitted, onSelectClien
               aria-label={`Open ${client.name}`}
             >
               <span className="truncate text-sm font-semibold text-[var(--spr-text)]">{client.name}</span>
-              <span className="shrink-0 text-[10px] uppercase tracking-wide text-[var(--spr-text-faint)]">Client</span>
+              <span className="shrink-0 text-[12px] uppercase tracking-wide text-[var(--spr-text-faint)]">Client</span>
             </button>
             <div className="flex-1 space-y-1.5 p-3">
               {client.software.length === 0 && (
@@ -83,14 +83,14 @@ export default function TrustNetworkMap({ clients, clientsOmitted, onSelectClien
                   aria-label={`Open ${software.name}, trust state ${STATE_LABEL[software.state]}`}
                 >
                   <span className="truncate text-xs text-[var(--spr-text)]">{software.name}</span>
-                  <span className="flex shrink-0 items-center gap-1.5 text-[10px] font-semibold" style={{ color: STATE_COLOR[software.state] }}>
+                  <span className="flex shrink-0 items-center gap-1.5 text-[12px] font-semibold" style={{ color: STATE_COLOR[software.state] }}>
                     <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: STATE_COLOR[software.state] }} aria-hidden="true" />
                     {STATE_LABEL[software.state]}
                   </span>
                 </button>
               ))}
               {client.software.length > MAX_SOFTWARE_PER_CLIENT && (
-                <p className="px-1 pt-1 text-[10px] text-[var(--spr-text-faint)]">+{client.software.length - MAX_SOFTWARE_PER_CLIENT} more software asset{client.software.length - MAX_SOFTWARE_PER_CLIENT === 1 ? '' : 's'}</p>
+                <p className="px-1 pt-1 text-[12px] text-[var(--spr-text-faint)]">+{client.software.length - MAX_SOFTWARE_PER_CLIENT} more software asset{client.software.length - MAX_SOFTWARE_PER_CLIENT === 1 ? '' : 's'}</p>
               )}
             </div>
           </div>

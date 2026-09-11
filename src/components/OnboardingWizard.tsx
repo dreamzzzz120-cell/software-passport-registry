@@ -175,7 +175,7 @@ export default function OnboardingWizard({ user, onOnboardingComplete }: Onboard
         
         {/* Progress Bar */}
         <div className="flex items-center justify-between mb-6 border-b border-[var(--spr-border)] pb-4">
-          <span className="text-[10px] font-mono uppercase text-[var(--spr-text-muted)] font-bold tracking-wider">
+          <span className="text-[12px] font-mono uppercase text-[var(--spr-text-muted)] font-bold tracking-wider">
             Step {step} of 4: {step === 1 && 'Workspace'}
             {step === 2 && 'Preferences'}
             {step === 3 && 'Account security'}
@@ -265,7 +265,7 @@ export default function OnboardingWizard({ user, onOnboardingComplete }: Onboard
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-[10px] font-mono font-bold text-[var(--spr-text-muted)] uppercase mb-1.5">
+                <label className="block text-[12px] font-mono font-bold text-[var(--spr-text-muted)] uppercase mb-1.5">
                   Team members
                 </label>
                 <input
@@ -278,7 +278,7 @@ export default function OnboardingWizard({ user, onOnboardingComplete }: Onboard
               </div>
 
               <div>
-                <label className="block text-[10px] font-mono font-bold text-[var(--spr-text-muted)] uppercase mb-1.5">
+                <label className="block text-[12px] font-mono font-bold text-[var(--spr-text-muted)] uppercase mb-1.5">
                   Clients
                 </label>
                 <input
@@ -292,7 +292,7 @@ export default function OnboardingWizard({ user, onOnboardingComplete }: Onboard
             </div>
 
             <div>
-              <label className="block text-[10px] font-mono font-bold text-[var(--spr-text-muted)] uppercase mb-1.5">
+              <label className="block text-[12px] font-mono font-bold text-[var(--spr-text-muted)] uppercase mb-1.5">
                 Main goal
               </label>
               <select
@@ -342,12 +342,12 @@ export default function OnboardingWizard({ user, onOnboardingComplete }: Onboard
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <KeyRound className="h-4 w-4 text-[var(--spr-highlight)]" />
-                    <span className="text-[10px] font-mono uppercase text-[var(--spr-highlight)] font-bold tracking-wider">
+                    <span className="text-[12px] font-mono uppercase text-[var(--spr-highlight)] font-bold tracking-wider">
                       Authenticator setup
                     </span>
                   </div>
                   {isTotpVerified && (
-                    <span className="flex items-center gap-1 text-[10px] font-bold text-[var(--spr-green)]">
+                    <span className="flex items-center gap-1 text-[12px] font-bold text-[var(--spr-green)]">
                       <CheckCircle2 className="h-3 w-3" />
                       MFA Verified
                     </span>
@@ -364,7 +364,7 @@ export default function OnboardingWizard({ user, onOnboardingComplete }: Onboard
                         className="h-20 w-20"
                       />
                     ) : (
-                      <div className="h-20 w-20 bg-[var(--spr-border)] flex items-center justify-center text-[10px] text-[var(--spr-text-muted)] font-mono">
+                      <div className="h-20 w-20 bg-[var(--spr-border)] flex items-center justify-center text-[12px] text-[var(--spr-text-muted)] font-mono">
                         Generating QR...
                       </div>
                     )}
@@ -374,7 +374,7 @@ export default function OnboardingWizard({ user, onOnboardingComplete }: Onboard
                     <span className="font-mono text-xs text-[var(--spr-text)] tracking-widest font-bold bg-[var(--spr-surface-sunken)] px-2 py-1 rounded border border-[var(--spr-border)] select-all block">
                       {mfaSecret?.secretKey || 'Generating...'}
                     </span>
-                    <p className="text-[9px] text-[var(--spr-text-muted)]">
+                    <p className="text-[11px] text-[var(--spr-text-muted)]">
                       Scan the QR code, or enter this key in your authenticator app.
                     </p>
                   </div>
@@ -382,7 +382,7 @@ export default function OnboardingWizard({ user, onOnboardingComplete }: Onboard
 
                 {/* Verification Code Input */}
                 <div className="pt-2 border-t border-[var(--spr-border)] space-y-2">
-                  <label className="text-[10px] font-mono uppercase text-[var(--spr-text-muted)] block">
+                  <label className="text-[12px] font-mono uppercase text-[var(--spr-text-muted)] block">
                     Enter the 6-digit code
                   </label>
                   <div className="flex gap-2">
@@ -407,12 +407,12 @@ export default function OnboardingWizard({ user, onOnboardingComplete }: Onboard
                     </button>
                   </div>
                   {totpError && (
-                    <p className="text-[10px] text-[var(--spr-red)] font-medium leading-tight">
+                    <p className="text-[12px] text-[var(--spr-red)] font-medium leading-tight">
                       {totpError}
                     </p>
                   )}
                   {isTotpVerified && (
-                    <p className="text-[10px] text-[var(--spr-green)] font-medium leading-tight">
+                    <p className="text-[12px] text-[var(--spr-green)] font-medium leading-tight">
                       ✓ Code verified successfully! MFA active for this workspace.
                     </p>
                   )}
@@ -445,7 +445,7 @@ export default function OnboardingWizard({ user, onOnboardingComplete }: Onboard
             </div>
             
             {setupLogs.length === 4 && (
-              <div className="p-3 bg-[var(--spr-accent-soft)]/40 text-[var(--spr-highlight)] border border-[var(--spr-accent)]/40 rounded-md flex gap-2 items-center text-[10px]">
+              <div className="p-3 bg-[var(--spr-accent-soft)]/40 text-[var(--spr-highlight)] border border-[var(--spr-accent)]/40 rounded-md flex gap-2 items-center text-[12px]">
                 <Sparkles className="h-4 w-4 text-[var(--spr-highlight)] shrink-0" />
                 <span>Your workspace is ready.</span>
               </div>

@@ -40,7 +40,7 @@ describe('Privacy UI: zero dead controls', () => {
     expect(app).toContain("import PrivacyView from './components/PrivacyView';");
     expect(app).toContain("case '/privacy': view = <PrivacyView role={role} />; break;");
     const nav = read('src/components/CommandCenter.tsx');
-    expect(nav).toMatch(/id: 'privacy', label: 'Privacy', icon: '◍', path: '\/privacy'/);
+    expect(nav).toMatch(/id: 'privacy', label: 'Privacy', icon: \w+, path: '\/privacy'/);
   });
 });
 

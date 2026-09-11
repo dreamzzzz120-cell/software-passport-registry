@@ -53,7 +53,7 @@ describe('Governance UI: zero dead controls', () => {
     expect(app).toContain("import GovernanceView from './components/GovernanceView';");
     expect(app).toContain("case '/governance': view = <GovernanceView role={role} />; break;");
     const nav = read('src/components/CommandCenter.tsx');
-    expect(nav).toMatch(/id: 'governance', label: 'Governance', icon: '⚖', path: '\/governance'/);
+    expect(nav).toMatch(/id: 'governance', label: 'Governance', icon: \w+, path: '\/governance'/);
   });
 });
 

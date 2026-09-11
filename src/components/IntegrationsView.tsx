@@ -321,7 +321,7 @@ export default function IntegrationsView({ passports = [], clients = [], onNavig
     <div className="space-y-6" id="msp-integrations-view">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.22em] text-[#4ec9b0]"><Plug className="h-4 w-4" /> Connected evidence</div>
+          <div className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[.22em] text-[#4ec9b0]"><Plug className="h-4 w-4" /> Connected evidence</div>
           <h1 className="mt-1 text-xl font-display font-bold text-[var(--spr-text)]">Integrations</h1>
           <p className="text-xs text-[var(--spr-text-muted)] font-sans mt-1">Every connector below makes a real authenticated request and writes hashed evidence to the trust graph — nothing here is a UI-only toggle.</p>
         </div>
@@ -353,7 +353,7 @@ export default function IntegrationsView({ passports = [], clients = [], onNavig
                 <h3 className="text-sm font-bold text-[var(--spr-text)] font-display mt-2">{item.name}</h3>
                 <p className="text-xs text-[var(--spr-text-muted)] leading-relaxed mt-2">{item.description}</p>
               </div>
-              {item.lastTestedAt && <p className="text-[10px] text-[var(--spr-text-faint)]">Last live evidence: {new Date(item.lastTestedAt).toLocaleString()}</p>}
+              {item.lastTestedAt && <p className="text-[12px] text-[var(--spr-text-faint)]">Last live evidence: {new Date(item.lastTestedAt).toLocaleString()}</p>}
 
               <button onClick={() => toggleExpanded(item.provider)} className="inline-flex items-center justify-center gap-1.5 rounded-md border border-[var(--spr-accent)]/40 bg-[var(--spr-accent-soft)] px-3 py-2 text-xs font-bold text-[var(--spr-highlight)] hover:bg-[var(--spr-accent)]/40">
                 <KeyRound className="w-3.5 h-3.5" /> {expanded ? 'Hide credentials' : item.credentialStatus === 'NOT_CONFIGURED' ? 'Connect' : 'Update credentials'}
@@ -362,7 +362,7 @@ export default function IntegrationsView({ passports = [], clients = [], onNavig
                 <div className="space-y-2 spr-panel-alt p-3">
                   {fields.map((field) => (
                     <div key={field.key}>
-                      <label className="text-[10px] font-bold text-[var(--spr-text-muted)]">{field.label}{field.required ? ' *' : ''}</label>
+                      <label className="text-[12px] font-bold text-[var(--spr-text-muted)]">{field.label}{field.required ? ' *' : ''}</label>
                       {field.type === 'textarea' ? (
                         <textarea rows={5} placeholder={field.placeholder} value={credentialValues[field.key] || ''} onChange={(e) => setCredentialValues((current) => ({ ...current, [field.key]: e.target.value }))} className="mt-0.5 w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2.5 py-1.5 text-xs text-[var(--spr-text)] font-mono resize-y" />
                       ) : (
@@ -428,7 +428,7 @@ export default function IntegrationsView({ passports = [], clients = [], onNavig
                   )}
                 </>
               )}
-              {message && <p className="text-[10px] leading-4 text-[var(--spr-text-muted)]">{message}</p>}
+              {message && <p className="text-[12px] leading-4 text-[var(--spr-text-muted)]">{message}</p>}
             </div>
           );
         })}
@@ -437,7 +437,7 @@ export default function IntegrationsView({ passports = [], clients = [], onNavig
       {plannedProviders.length > 0 && (
         <div className="rounded-md border border-dashed border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4">
           <div className="text-xs font-bold text-[var(--spr-text-muted)] mb-2">Cataloged, not yet built</div>
-          <div className="flex flex-wrap gap-2">{plannedProviders.map((item) => <span key={item.id} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2.5 py-1 text-[10px] text-[var(--spr-text-muted)]">{item.name}</span>)}</div>
+          <div className="flex flex-wrap gap-2">{plannedProviders.map((item) => <span key={item.id} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2.5 py-1 text-[12px] text-[var(--spr-text-muted)]">{item.name}</span>)}</div>
         </div>
       )}
 
@@ -485,15 +485,15 @@ export default function IntegrationsView({ passports = [], clients = [], onNavig
                     <span className="truncate font-mono text-[var(--spr-text)]">{webhook.url}</span>
                     {webhook.active ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[var(--spr-green)]" /> : <XCircle className="h-3.5 w-3.5 shrink-0 text-[var(--spr-text-faint)]" />}
                   </div>
-                  <div className="mt-1 text-[10px] text-[var(--spr-text-muted)]">{webhook.consecutive_failure_count > 0 && <span className="text-[var(--spr-amber)]">{webhook.consecutive_failure_count} recent failures · </span>}Created {new Date(webhook.created_at).toLocaleDateString()}</div>
-                  {webhook.active && <button onClick={() => void deactivateWebhook(webhook.id)} className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-[var(--spr-red)] hover:text-[var(--spr-red)]/80"><Trash2 className="h-3 w-3" /> Deactivate</button>}
+                  <div className="mt-1 text-[12px] text-[var(--spr-text-muted)]">{webhook.consecutive_failure_count > 0 && <span className="text-[var(--spr-amber)]">{webhook.consecutive_failure_count} recent failures · </span>}Created {new Date(webhook.created_at).toLocaleDateString()}</div>
+                  {webhook.active && <button onClick={() => void deactivateWebhook(webhook.id)} className="mt-2 inline-flex items-center gap-1 text-[12px] font-bold text-[var(--spr-red)] hover:text-[var(--spr-red)]/80"><Trash2 className="h-3 w-3" /> Deactivate</button>}
                 </li>
               ))}
             </ul>
           </div>
         </div>
 
-        <div className="rounded-md border border-[var(--spr-amber)]/30 bg-[var(--spr-amber)]/[.08] p-3 text-[10px] leading-5 text-[var(--spr-amber)]/90 flex gap-2">
+        <div className="rounded-md border border-[var(--spr-amber)]/30 bg-[var(--spr-amber)]/[.08] p-3 text-[12px] leading-5 text-[var(--spr-amber)]/90 flex gap-2">
           <AlertCircle className="h-3.5 w-3.5 shrink-0" />
           Direct native ticket-creation in Jira/ConnectWise/Autotask, SIEM ingestion, and identity-provider connectors are not built — this signed webhook is the only outbound event mechanism SPR currently ships. Use it to relay events into those systems yourself.
         </div>
@@ -510,13 +510,13 @@ function ProviderCustomerMapping({ provider, clients, customers, discovering, me
   return (
     <div className="spr-panel-alt p-3 space-y-2">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--spr-text-muted)]">MSP customers {customers.length > 0 && `(${mappedCount}/${customers.length} mapped)`}</span>
+        <span className="text-[12px] font-bold uppercase tracking-wider text-[var(--spr-text-muted)]">MSP customers {customers.length > 0 && `(${mappedCount}/${customers.length} mapped)`}</span>
         <div className="flex gap-1">
           <button onClick={onLoad} aria-label="Refresh discovered customers" className="rounded-md border border-[var(--spr-border)] p-1 text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]"><RefreshCw className="w-3 h-3" /></button>
-          <button onClick={onDiscover} disabled={discovering} className="rounded-md border border-[var(--spr-accent)]/40 bg-[var(--spr-accent-soft)] px-2 py-1 text-[10px] font-bold text-[var(--spr-highlight)] disabled:opacity-40">{discovering ? 'Discovering…' : 'Discover customers'}</button>
+          <button onClick={onDiscover} disabled={discovering} className="rounded-md border border-[var(--spr-accent)]/40 bg-[var(--spr-accent-soft)] px-2 py-1 text-[12px] font-bold text-[var(--spr-highlight)] disabled:opacity-40">{discovering ? 'Discovering…' : 'Discover customers'}</button>
         </div>
       </div>
-      {customers.length === 0 && <p className="text-[10px] text-[var(--spr-text-faint)]">No customers discovered yet from {provider}. Click "Discover customers" to fetch the real list from the provider.</p>}
+      {customers.length === 0 && <p className="text-[12px] text-[var(--spr-text-faint)]">No customers discovered yet from {provider}. Click "Discover customers" to fetch the real list from the provider.</p>}
       {customers.length > 0 && (
         <ul className="space-y-1.5 max-h-40 overflow-auto pr-1">
           {customers.map((customer) => (
@@ -526,7 +526,7 @@ function ProviderCustomerMapping({ provider, clients, customers, discovering, me
                 value={customer.client_id || ''}
                 disabled={mappingBusyId === `${provider}:${customer.external_customer_id}`}
                 onChange={(e) => onMap(customer.external_customer_id, e.target.value || null)}
-                className="shrink-0 max-w-[45%] rounded border border-[var(--spr-border)] bg-[var(--spr-surface)] px-1.5 py-1 text-[10px] text-[var(--spr-text)]"
+                className="shrink-0 max-w-[45%] rounded border border-[var(--spr-border)] bg-[var(--spr-surface)] px-1.5 py-1 text-[12px] text-[var(--spr-text)]"
               >
                 <option value="">Unmapped</option>
                 {clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
@@ -535,7 +535,7 @@ function ProviderCustomerMapping({ provider, clients, customers, discovering, me
           ))}
         </ul>
       )}
-      {message && <p className="text-[10px] text-[var(--spr-text-muted)]">{message}</p>}
+      {message && <p className="text-[12px] text-[var(--spr-text-muted)]">{message}</p>}
     </div>
   );
 }

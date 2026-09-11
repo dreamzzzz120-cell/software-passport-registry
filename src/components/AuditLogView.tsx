@@ -193,15 +193,15 @@ export default function AuditLogView() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[820px] text-left text-sm">
               <caption className="sr-only">Persisted tenant audit events</caption>
-              <thead className="border-b border-[var(--spr-border)] text-[10px] uppercase tracking-[.16em] text-[var(--spr-text-faint)]"><tr><th scope="col" className="px-3 py-3">Event</th><th scope="col" className="px-3 py-3">Object affected</th><th scope="col" className="px-3 py-3">Actor</th><th scope="col" className="px-3 py-3">Time</th><th scope="col" className="px-3 py-3">Payload</th><th scope="col" className="px-3 py-3">Chain hash</th></tr></thead>
+              <thead className="border-b border-[var(--spr-border)] text-[12px] uppercase tracking-[.16em] text-[var(--spr-text-faint)]"><tr><th scope="col" className="px-3 py-3">Event</th><th scope="col" className="px-3 py-3">Object affected</th><th scope="col" className="px-3 py-3">Actor</th><th scope="col" className="px-3 py-3">Time</th><th scope="col" className="px-3 py-3">Payload</th><th scope="col" className="px-3 py-3">Chain hash</th></tr></thead>
               <tbody className="divide-y divide-[var(--spr-border)]">
                 {filteredEntries.map((entry) => <tr key={entry.id} className="align-top">
-                  <td className="px-3 py-4"><div className="font-semibold text-[var(--spr-text)]">{entry.action}</div><div className="mt-1 text-[10px] text-[var(--spr-text-faint)]">Block #{entry.id}</div></td>
+                  <td className="px-3 py-4"><div className="font-semibold text-[var(--spr-text)]">{entry.action}</div><div className="mt-1 text-[12px] text-[var(--spr-text-faint)]">Block #{entry.id}</div></td>
                   <td className="px-3 py-4 text-[var(--spr-text)]">{objectAffected(entry)}</td>
                   <td className="px-3 py-4 text-[var(--spr-text-muted)]">{entry.actor || 'Actor unavailable'}</td>
                   <td className="whitespace-nowrap px-3 py-4 text-xs text-[var(--spr-text-muted)]">{formatDate(entry.timestamp)}</td>
                   <td className="max-w-[300px] px-3 py-4"><code className="block max-h-16 overflow-auto break-words rounded-lg bg-[var(--spr-surface-deep)] p-2 text-[11px] text-[var(--spr-text-muted)]">{payloadText(entry.payload)}</code></td>
-                  <td className="px-3 py-4"><div className="max-w-[180px] truncate font-mono text-[10px] text-[var(--spr-highlight)]/80" title={entry.currentHash}>{entry.currentHash}</div><div className="mt-1 max-w-[180px] truncate font-mono text-[10px] text-[var(--spr-text-faint)]" title={entry.previousHash}>prev {entry.previousHash}</div></td>
+                  <td className="px-3 py-4"><div className="max-w-[180px] truncate font-mono text-[12px] text-[var(--spr-highlight)]/80" title={entry.currentHash}>{entry.currentHash}</div><div className="mt-1 max-w-[180px] truncate font-mono text-[12px] text-[var(--spr-text-faint)]" title={entry.previousHash}>prev {entry.previousHash}</div></td>
                 </tr>)}
               </tbody>
             </table>

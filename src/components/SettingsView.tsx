@@ -625,7 +625,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-[var(--spr-border)] pb-4">
         <div>
-          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.22em] text-[#9cdcfe]"><Sliders className="h-4 w-4" /> Platform configuration</div>
+          <div className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[.22em] text-[#9cdcfe]"><Sliders className="h-4 w-4" /> Platform configuration</div>
           <h1 className="mt-2 text-xl font-bold text-[var(--spr-text)] flex items-center gap-2">
             <Settings className="w-5 h-5 text-[#9cdcfe]" />
             <span>Platform Settings & Compliance Bible</span>
@@ -722,7 +722,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                 <div className="flex justify-between items-center border-t border-[var(--spr-border)] pt-3">
                   <div>
                     <span className="font-semibold text-[var(--spr-text)] block">Automated Daily Recalculation Scans</span>
-                    <p className="text-[10px] text-[var(--spr-text-faint)] leading-snug">Not yet implemented -- no scheduled job re-scans client inventory on CVE database updates today. Use Scans → Automated Scanning Schedules for real, working recurring scans.</p>
+                    <p className="text-[12px] text-[var(--spr-text-faint)] leading-snug">Not yet implemented -- no scheduled job re-scans client inventory on CVE database updates today. Use Scans → Automated Scanning Schedules for real, working recurring scans.</p>
                   </div>
                 </div>
               </div>
@@ -738,7 +738,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
               <div className="space-y-4 text-xs">
                 <div className="flex flex-col gap-1.5">
                   <span className="font-semibold text-[var(--spr-text)]">Active Theme Preference</span>
-                  <p className="text-[10px] text-[var(--spr-text-faint)] ">Choose between high-contrast light mode or a dark interface designed for operating centers.</p>
+                  <p className="text-[12px] text-[var(--spr-text-faint)] ">Choose between high-contrast light mode or a dark interface designed for operating centers.</p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -789,7 +789,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                   <Lock className="w-4.5 h-4.5 text-[var(--spr-highlight)]" />
                   <span>Active Operator Sessions Ledger</span>
                 </span>
-                <span className="font-mono text-[10px] text-[var(--spr-highlight)] bg-[var(--spr-accent-soft)] px-2 py-0.5 rounded border border-[var(--spr-border)]">
+                <span className="font-mono text-[12px] text-[var(--spr-highlight)] bg-[var(--spr-accent-soft)] px-2 py-0.5 rounded border border-[var(--spr-border)]">
                   {sessions.length} Active Node{sessions.length !== 1 ? 's' : ''}
                 </span>
               </h3>
@@ -797,7 +797,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
               <div className="overflow-x-auto text-xs">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="border-b border-[var(--spr-border)] text-[var(--spr-text-faint)] font-mono text-[10px] uppercase">
+                    <tr className="border-b border-[var(--spr-border)] text-[var(--spr-text-faint)] font-mono text-[12px] uppercase">
                       <th className="py-2">User / Identity</th>
                       <th className="py-2">IP Address</th>
                       <th className="py-2">Device & Location</th>
@@ -818,7 +818,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                         <td className="py-3 font-mono text-[var(--spr-text-muted)]">{sess.ip}</td>
                         <td className="py-3 text-[var(--spr-text-muted)] leading-normal">
                           <span className="block">{sess.device}</span>
-                          <span className="text-[10px] text-[var(--spr-text-faint)]">{sess.location}</span>
+                          <span className="text-[12px] text-[var(--spr-text-faint)]">{sess.location}</span>
                         </td>
                         <td className="py-3 text-right">
                           {!sess.current && (
@@ -852,7 +852,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                   <FileCode className="w-4.5 h-4.5 text-[var(--spr-highlight)]" />
                   <span>Cryptographic Blockchain Audit Ledger</span>
                 </h3>
-                <span className={`font-mono text-[10px] px-2 py-0.5 rounded border border-[var(--spr-border)] flex items-center gap-1 ${
+                <span className={`font-mono text-[12px] px-2 py-0.5 rounded border border-[var(--spr-border)] flex items-center gap-1 ${
                   verificationResult?.isValid === true ? 'text-[var(--spr-green)] bg-[var(--spr-surface-sunken)]' :
                   verificationResult?.isValid === false ? 'text-[var(--spr-red)] bg-[var(--spr-surface-sunken)]' :
                   'text-[var(--spr-text-muted)] bg-[var(--spr-surface-sunken)]'
@@ -866,7 +866,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                 </span>
               </div>
               
-              <p className="text-[10px] text-[var(--spr-text-faint)] font-sans leading-relaxed">
+              <p className="text-[12px] text-[var(--spr-text-faint)] font-sans leading-relaxed">
                 Every critical login event and administrative action is recorded into a secure hash chain. Each block references the SHA-256 hash of its predecessor, creating a mathematically unalterable audit trail.
               </p>
 
@@ -897,7 +897,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                   <button
                     type="button"
                     onClick={() => setVerificationResult(null)}
-                    className="text-[10px] font-sans font-semibold text-[var(--spr-text-muted)] hover:text-[var(--spr-text)] px-3 py-2 bg-[var(--spr-surface-sunken)] hover:bg-[var(--spr-surface-hover)] rounded-lg cursor-pointer transition-colors"
+                    className="text-[12px] font-sans font-semibold text-[var(--spr-text-muted)] hover:text-[var(--spr-text)] px-3 py-2 bg-[var(--spr-surface-sunken)] hover:bg-[var(--spr-surface-hover)] rounded-lg cursor-pointer transition-colors"
                   >
                     Clear Audit Report
                   </button>
@@ -912,7 +912,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                     : 'bg-[var(--spr-surface-sunken)] border-[var(--spr-border)] text-[var(--spr-red)]'
                 } space-y-2.5 transition-all duration-300`}>
                   <div className="flex items-center justify-between">
-                    <span className="font-bold flex items-center gap-1.5 uppercase tracking-wide text-[10px]">
+                    <span className="font-bold flex items-center gap-1.5 uppercase tracking-wide text-[12px]">
                       {verificationResult.isValid ? (
                         <CheckCircle2 className="w-4.5 h-4.5 text-[var(--spr-green)] shrink-0" />
                       ) : (
@@ -920,7 +920,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                       )}
                       <span>LEDGER ATTESTATION REPORT</span>
                     </span>
-                    <span className="font-mono text-[9px] text-[var(--spr-text-faint)] ">
+                    <span className="font-mono text-[11px] text-[var(--spr-text-faint)] ">
                       Verified At: {new Date(verificationResult.verifiedAt).toLocaleTimeString()}
                     </span>
                   </div>
@@ -932,7 +932,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                   
                   {/* Verified Blocks Scrollable List */}
                   {verificationResult.details && verificationResult.details.length > 0 && (
-                    <div className="bg-[var(--spr-surface-sunken)] p-2.5 rounded-lg max-h-40 overflow-y-auto font-mono text-[9px] space-y-1.5 border border-[var(--spr-border)]">
+                    <div className="bg-[var(--spr-surface-sunken)] p-2.5 rounded-lg max-h-40 overflow-y-auto font-mono text-[11px] space-y-1.5 border border-[var(--spr-border)]">
                       <div className="font-sans font-bold text-[8px] text-[var(--spr-text-faint)] border-b border-[var(--spr-border)] pb-1 mb-1.5 uppercase">
                         Cryptographic Signatures Checked
                       </div>
@@ -956,7 +956,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                 </div>
               )}
 
-              <div className="space-y-3 font-mono text-[10px]">
+              <div className="space-y-3 font-mono text-[12px]">
                 {auditChain.length === 0 && <p className="text-[var(--spr-text-faint)] font-sans">No audit events recorded yet.</p>}
                 {auditChain.slice(0, 3).map((blockObj, idx) => (
                   <div key={idx} className="p-3 bg-[var(--spr-surface-sunken)] rounded-md border border-[var(--spr-border)] space-y-1 text-[var(--spr-text-muted)] relative overflow-hidden">
@@ -976,11 +976,11 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                       </div>
                     )}
                     <div className="space-y-0.5">
-                      <div className="flex gap-2 text-[9px] truncate">
+                      <div className="flex gap-2 text-[11px] truncate">
                         <span className="text-[var(--spr-text-faint)] uppercase font-bold shrink-0">BLOCK HASH:</span>
                         <span className="text-[var(--spr-highlight)] select-all font-mono truncate">{blockObj.hash}</span>
                       </div>
-                      <div className="flex gap-2 text-[9px] truncate">
+                      <div className="flex gap-2 text-[11px] truncate">
                         <span className="text-[var(--spr-text-faint)] uppercase shrink-0">PREV HASH:</span>
                         <span className="text-[var(--spr-text-muted)] select-all font-mono truncate">{blockObj.previousHash}</span>
                       </div>
@@ -1003,7 +1003,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                 <div className="flex justify-between items-center border-t border-[var(--spr-border)] pt-3">
                   <div>
                     <span className="font-semibold text-[var(--spr-text)] block">Cryptographic PGP Signing Key</span>
-                    <p className="text-[10px] text-[var(--spr-text-faint)] ">Not yet implemented -- generated Software Passports and audit attestations are not cryptographically signed today. No key-management endpoint exists on the backend yet.</p>
+                    <p className="text-[12px] text-[var(--spr-text-faint)] ">Not yet implemented -- generated Software Passports and audit attestations are not cryptographically signed today. No key-management endpoint exists on the backend yet.</p>
                   </div>
                 </div>
 
@@ -1012,7 +1012,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                     <span className="font-bold text-[var(--spr-red)] block flex items-center gap-1.5">
                       <Shield className="w-4 h-4 text-[var(--spr-red)]" /> Tenant Offboarding & Data Deletion (DPA Compliance)
                     </span>
-                    <p className="text-[10px] text-[var(--spr-text-muted)] leading-snug mt-1">
+                    <p className="text-[12px] text-[var(--spr-text-muted)] leading-snug mt-1">
                       Cascading-delete all client lists, passports, vulnerability logs, and active integrations. This action is immediate and completely irreversible under GDPR/DPA compliance standards.
                     </p>
                   </div>
@@ -1057,7 +1057,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
 
               <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
                 {history.map((log) => (
-                  <div key={log.id} className="p-2.5 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[10px] space-y-1 text-left">
+                  <div key={log.id} className="p-2.5 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[12px] space-y-1 text-left">
                     <div className="flex justify-between items-center">
                       <span className="font-mono font-bold text-[var(--spr-text)] truncate max-w-36">{log.email}</span>
                       <span className={`font-mono text-[8px] font-bold px-1.5 py-0.2 rounded ${
@@ -1068,9 +1068,9 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                     </div>
                     <div className="text-[var(--spr-text-muted)]">
                       <span className="block font-medium">{log.action}</span>
-                      <span className="block text-[9px] font-mono mt-0.5">{new Date(log.timestamp).toLocaleString()}</span>
+                      <span className="block text-[11px] font-mono mt-0.5">{new Date(log.timestamp).toLocaleString()}</span>
                     </div>
-                    <div className="flex justify-between font-mono text-[9px] text-[var(--spr-text-faint)] border-t border-[var(--spr-border)] pt-1 mt-1">
+                    <div className="flex justify-between font-mono text-[11px] text-[var(--spr-text-faint)] border-t border-[var(--spr-border)] pt-1 mt-1">
                       <span>IP: {log.ip}</span>
                       <span>Loc: {log.location}</span>
                     </div>
@@ -1102,7 +1102,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                   <span className="font-bold text-[var(--spr-text-muted)]">Not tracked</span>
                 </div>
               </div>
-              <p className="text-[9px] text-[var(--spr-text-faint)] leading-relaxed">Process uptime resets on every deploy or restart -- it is not a measure of historical availability. No uptime-history or SLA-compliance tracking system exists yet.</p>
+              <p className="text-[11px] text-[var(--spr-text-faint)] leading-relaxed">Process uptime resets on every deploy or restart -- it is not a measure of historical availability. No uptime-history or SLA-compliance tracking system exists yet.</p>
             </div>
 
             <div className="spr-panel p-5 space-y-4 h-fit">
@@ -1110,7 +1110,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                 <CheckCircle className="w-4.5 h-4.5 text-[var(--spr-green)]" />
                 <span>Readiness Diagnostics</span>
               </h3>
-              <p className="text-[10px] text-[var(--spr-text-faint)] font-sans leading-relaxed">
+              <p className="text-[12px] text-[var(--spr-text-faint)] font-sans leading-relaxed">
                 Checks live database connectivity via the same /api/ready probe an orchestrator uses. This does not verify row-level isolation, OAuth handshakes, or API quota — those have no self-check endpoint yet.
               </p>
 
@@ -1125,7 +1125,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
               {testResults.length > 0 && (
                 <div className="space-y-2.5 pt-2.5 border-t border-[var(--spr-border)]">
                   {testResults.map((t: any, idx: number) => (
-                    <div key={idx} className="text-[10px] space-y-0.5">
+                    <div key={idx} className="text-[12px] space-y-0.5">
                       <div className="flex justify-between items-center">
                         <span className="font-bold text-[var(--spr-text)]">{t.name}</span>
                         <span className={`font-mono font-bold px-1.5 py-0.2 rounded text-[8px] ${
@@ -1227,7 +1227,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                       <h4 className="font-bold text-sm text-[var(--spr-text)]">
                         {profileName || 'Active Operator'}
                       </h4>
-                      <p className="text-[10px] font-semibold text-[var(--spr-highlight)] font-mono mt-0.5">
+                      <p className="text-[12px] font-semibold text-[var(--spr-highlight)] font-mono mt-0.5">
                         {profileJobTitle || 'Workspace Administrator'}
                       </p>
                     </div>
@@ -1265,10 +1265,10 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
             </div>
 
             <div className="spr-panel p-5 space-y-3.5 text-left text-[var(--spr-text-faint)]">
-              <h4 className="text-[10px] font-mono font-bold uppercase text-[var(--spr-text-muted)] tracking-wider">
+              <h4 className="text-[12px] font-mono font-bold uppercase text-[var(--spr-text-muted)] tracking-wider">
                 Authorized Role Hierarchy
               </h4>
-              <p className="text-[10px] leading-relaxed">
+              <p className="text-[12px] leading-relaxed">
                 RBAC enforces strict isolation gates. Permissions cascade in order: <strong>Owner &gt; Admin &gt; Technician &gt; Viewer &gt; Client</strong>. Modifying team permissions automatically triggers a cryptographic token invalidation audit block.
               </p>
             </div>
@@ -1279,7 +1279,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                 <FileText className="w-4.5 h-4.5 text-[var(--spr-highlight)]" />
                 <span>White-label Branding</span>
               </h3>
-              <p className="text-[10px] leading-relaxed text-[var(--spr-text-muted)]">
+              <p className="text-[12px] leading-relaxed text-[var(--spr-text-muted)]">
                 Set once here; the Reports page's white-label export uses this automatically instead of asking you to retype it every time. This only changes report packaging — it never changes any score or evidence.
               </p>
 
@@ -1328,7 +1328,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                   <div className="mb-1 flex items-center gap-2">
                     <img src={brandingLogoDataUrl} alt="Logo preview" className="h-10 w-auto rounded border border-[var(--spr-border)] bg-white p-1" />
                     {canManageTeam && (
-                      <button type="button" onClick={() => setBrandingLogoDataUrl(null)} className="text-[10px] text-[var(--spr-red)] hover:underline">Remove</button>
+                      <button type="button" onClick={() => setBrandingLogoDataUrl(null)} className="text-[12px] text-[var(--spr-red)] hover:underline">Remove</button>
                     )}
                   </div>
                 )}
@@ -1337,7 +1337,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                     type="file"
                     accept="image/png,image/jpeg,image/svg+xml,image/webp"
                     onChange={(e) => handleBrandingLogoFile(e.target.files?.[0] || null)}
-                    className="text-[10px] text-[var(--spr-text-muted)] file:mr-2 file:rounded-md file:border file:border-[var(--spr-border)] file:bg-[var(--spr-surface-sunken)] file:px-2.5 file:py-1.5 file:text-[10px] file:text-[var(--spr-text)]"
+                    className="text-[12px] text-[var(--spr-text-muted)] file:mr-2 file:rounded-md file:border file:border-[var(--spr-border)] file:bg-[var(--spr-surface-sunken)] file:px-2.5 file:py-1.5 file:text-[12px] file:text-[var(--spr-text)]"
                   />
                 )}
               </div>
@@ -1352,9 +1352,9 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                   {savingBranding ? 'Saving…' : 'Save branding'}
                 </button>
               ) : (
-                <p className="text-[10px] text-[var(--spr-text-faint)]">Only Owner/Admin can change branding.</p>
+                <p className="text-[12px] text-[var(--spr-text-faint)]">Only Owner/Admin can change branding.</p>
               )}
-              {brandingUpdatedAt && <p className="text-[9px] text-[var(--spr-text-faint)]">Last updated {new Date(brandingUpdatedAt).toLocaleString()}</p>}
+              {brandingUpdatedAt && <p className="text-[11px] text-[var(--spr-text-faint)]">Last updated {new Date(brandingUpdatedAt).toLocaleString()}</p>}
             </div>
           </div>
 
@@ -1369,7 +1369,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
 
               <form onSubmit={handleInviteMember} className="flex flex-col md:flex-row gap-3">
                 <div className="flex-1 flex flex-col gap-1">
-                  <label className="block text-[10px] font-mono font-bold text-[var(--spr-text-faint)] uppercase">
+                  <label className="block text-[12px] font-mono font-bold text-[var(--spr-text-faint)] uppercase">
                     Email Address
                   </label>
                   <input
@@ -1383,7 +1383,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                 </div>
 
                 <div className="w-full md:w-44 flex flex-col gap-1">
-                  <label className="block text-[10px] font-mono font-bold text-[var(--spr-text-faint)] uppercase">
+                  <label className="block text-[12px] font-mono font-bold text-[var(--spr-text-faint)] uppercase">
                     Security Role
                   </label>
                   <select
@@ -1400,7 +1400,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
 
                 {inviteRole === 'Client' && (
                   <div className="w-full md:w-52 flex flex-col gap-1">
-                    <label className="block text-[10px] font-mono font-bold text-[var(--spr-text-faint)] uppercase">
+                    <label className="block text-[12px] font-mono font-bold text-[var(--spr-text-faint)] uppercase">
                       Client
                     </label>
                     <select
@@ -1424,7 +1424,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                   Send Invitation
                 </button>
               </form>
-              {!canManageTeam && <p className="text-[10px] text-[var(--spr-amber)]">Your {currentRole} role has read-only team access.</p>}
+              {!canManageTeam && <p className="text-[12px] text-[var(--spr-amber)]">Your {currentRole} role has read-only team access.</p>}
             </div>
 
             {/* Team Members List Card */}
@@ -1434,7 +1434,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                   <Lock className="w-4.5 h-4.5 text-[var(--spr-highlight)]" />
                   <span>Workspace Associates Matrix</span>
                 </span>
-                <span className="font-mono text-[9px] text-[var(--spr-highlight)] bg-[var(--spr-accent-soft)] px-2 py-0.5 rounded border border-[var(--spr-border)]">
+                <span className="font-mono text-[11px] text-[var(--spr-highlight)] bg-[var(--spr-accent-soft)] px-2 py-0.5 rounded border border-[var(--spr-border)]">
                   {teamMembers.length} Registered Nodes
                 </span>
               </h3>
@@ -1442,7 +1442,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
-                    <tr className="border-b border-[var(--spr-border)] text-[var(--spr-text-faint)] font-mono text-[10px] uppercase">
+                    <tr className="border-b border-[var(--spr-border)] text-[var(--spr-text-faint)] font-mono text-[12px] uppercase">
                       <th className="py-2.5">User Details</th>
                       <th className="py-2.5">Authority Role</th>
                       <th className="py-2.5 text-right">Administrative Actions</th>
@@ -1460,7 +1460,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                               <span className="font-bold text-[var(--spr-text)] block">
                                 {member.displayName || 'Pending Associate Registration'}
                               </span>
-                              <span className="text-[10px] font-mono text-[var(--spr-text-faint)] select-all block">
+                              <span className="text-[12px] font-mono text-[var(--spr-text-faint)] select-all block">
                                 {member.email}
                               </span>
                             </div>
@@ -1468,7 +1468,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                         </td>
                         <td className="py-3.5">
                           {member.role === 'Owner' ? (
-                            <span className="font-mono text-[9px] font-bold bg-[var(--spr-accent)] text-[var(--spr-highlight)] border border-[var(--spr-highlight)] px-2 py-0.5 rounded uppercase">
+                            <span className="font-mono text-[11px] font-bold bg-[var(--spr-accent)] text-[var(--spr-highlight)] border border-[var(--spr-highlight)] px-2 py-0.5 rounded uppercase">
                               Owner (Root)
                             </span>
                           ) : (
@@ -1477,7 +1477,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                               disabled={!canManageTeam}
                               title={!canManageTeam ? `Your ${currentRole} role cannot change roles.` : undefined}
                               onChange={(e) => handleUpdateMemberRole(member.id, e.target.value)}
-                              className="bg-transparent border border-[var(--spr-border)] rounded p-1 font-mono text-[10px] font-bold cursor-pointer text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] disabled:cursor-not-allowed disabled:opacity-50"
+                              className="bg-transparent border border-[var(--spr-border)] rounded p-1 font-mono text-[12px] font-bold cursor-pointer text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               <option value="Admin">Admin</option>
                               <option value="Technician">Technician</option>
@@ -1490,7 +1490,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                           {member.role !== 'Owner' && member.id !== profile?.id && canManageTeam && (
                             <button
                               onClick={() => handleRemoveMember(member.id)}
-                              className="px-2.5 py-1.5 text-[10px] font-bold text-[var(--spr-red)] border border-[var(--spr-border)] hover:bg-[var(--spr-surface-hover)] rounded-lg cursor-pointer transition-colors"
+                              className="px-2.5 py-1.5 text-[12px] font-bold text-[var(--spr-red)] border border-[var(--spr-border)] hover:bg-[var(--spr-surface-hover)] rounded-lg cursor-pointer transition-colors"
                             >
                               Revoke Access
                             </button>
@@ -1540,7 +1540,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                 <div className="flex justify-between items-center">
                   <div>
                     <h4 className="text-xs font-bold text-[var(--spr-text)]">Product Bible Index</h4>
-                    <p className="text-[10px] text-[var(--spr-text-faint)] font-sans">Index of certified system components</p>
+                    <p className="text-[12px] text-[var(--spr-text-faint)] font-sans">Index of certified system components</p>
                   </div>
                   <button
                     onClick={() => setShowAddBibleProduct(!showAddBibleProduct)}
@@ -1565,7 +1565,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                     />
                   </div>
 
-                  <div className="flex items-center justify-between text-[10px] text-[var(--spr-text-muted)] pt-1">
+                  <div className="flex items-center justify-between text-[12px] text-[var(--spr-text-muted)] pt-1">
                     <span>Risk Filter:</span>
                     <div className="flex gap-1.5 font-semibold">
                       {['all', 'low', 'medium', 'high'].map(r => (
@@ -1591,7 +1591,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                     <h5 className="font-bold text-[var(--spr-text)]">New Standard Specifications Registration</h5>
                     
                     <div>
-                      <label className="block text-[10px] text-[var(--spr-text-faint)] uppercase font-bold font-mono mb-1">Product / Package Name</label>
+                      <label className="block text-[12px] text-[var(--spr-text-faint)] uppercase font-bold font-mono mb-1">Product / Package Name</label>
                       <input
                         type="text"
                         placeholder="e.g. Apache Kafka"
@@ -1604,7 +1604,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
 
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-[10px] text-[var(--spr-text-faint)] uppercase font-bold font-mono mb-1">Class Type</label>
+                        <label className="block text-[12px] text-[var(--spr-text-faint)] uppercase font-bold font-mono mb-1">Class Type</label>
                         <select
                           value={newBpType}
                           onChange={(e) => setNewBpType(e.target.value)}
@@ -1620,7 +1620,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                       </div>
 
                       <div>
-                        <label className="block text-[10px] text-[var(--spr-text-faint)] uppercase font-bold font-mono mb-1">Secure Baseline</label>
+                        <label className="block text-[12px] text-[var(--spr-text-faint)] uppercase font-bold font-mono mb-1">Secure Baseline</label>
                         <input
                           type="text"
                           placeholder="e.g. 3.4.0"
@@ -1633,28 +1633,28 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                     </div>
 
                     <div>
-                      <label className="block text-[10px] text-[var(--spr-text-faint)] uppercase font-bold font-mono mb-1">Permitted Licenses</label>
+                      <label className="block text-[12px] text-[var(--spr-text-faint)] uppercase font-bold font-mono mb-1">Permitted Licenses</label>
                       <input
                         type="text"
                         value={newBpAllowedLics}
                         onChange={(e) => setNewBpAllowedLics(e.target.value)}
-                        className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] p-2 font-mono text-[10px]"
+                        className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] p-2 font-mono text-[12px]"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[10px] text-[var(--spr-text-faint)] uppercase font-bold font-mono mb-1">Prohibited Copylefts</label>
+                      <label className="block text-[12px] text-[var(--spr-text-faint)] uppercase font-bold font-mono mb-1">Prohibited Copylefts</label>
                       <input
                         type="text"
                         value={newBpDisallowedLics}
                         onChange={(e) => setNewBpDisallowedLics(e.target.value)}
-                        className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] p-2 font-mono text-[10px]"
+                        className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] p-2 font-mono text-[12px]"
                       />
                     </div>
 
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-[10px] text-[var(--spr-text-faint)] uppercase font-bold font-mono mb-1">Risk Tier</label>
+                        <label className="block text-[12px] text-[var(--spr-text-faint)] uppercase font-bold font-mono mb-1">Risk Tier</label>
                         <select
                           value={newBpRisk}
                           onChange={(e) => setNewBpRisk(e.target.value as any)}
@@ -1667,7 +1667,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                       </div>
 
                       <div>
-                        <label className="block text-[10px] text-[var(--spr-text-faint)] uppercase font-bold font-mono mb-1">Target Compliance</label>
+                        <label className="block text-[12px] text-[var(--spr-text-faint)] uppercase font-bold font-mono mb-1">Target Compliance</label>
                         <input
                           type="text"
                           placeholder="e.g. HIPAA CC4 / ISO"
@@ -1679,7 +1679,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                     </div>
 
                     <div>
-                      <label className="block text-[10px] text-[var(--spr-text-faint)] uppercase font-bold font-mono mb-1">Operational Safeguard Policy</label>
+                      <label className="block text-[12px] text-[var(--spr-text-faint)] uppercase font-bold font-mono mb-1">Operational Safeguard Policy</label>
                       <textarea
                         rows={2}
                         placeholder="Safeguards required..."
@@ -1711,7 +1711,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                 {/* List of Specs */}
                 <div className="space-y-1.5 max-h-[400px] overflow-y-auto pr-1">
                   {filteredBibleProducts.length === 0 ? (
-                    <p className="text-center text-[10px] text-[var(--spr-text-faint)] py-6">No matching standard specifications found.</p>
+                    <p className="text-center text-[12px] text-[var(--spr-text-faint)] py-6">No matching standard specifications found.</p>
                   ) : (
                     filteredBibleProducts.map(bp => {
                       const isSelected = bp.id === selectedBibleProductId;
@@ -1761,10 +1761,10 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                         <CheckCircle2 className="w-4.5 h-4.5 text-[var(--spr-green)]" />
                         {activeBibleProduct.name}
                       </h3>
-                      <p className="text-[10px] text-[var(--spr-text-faint)] font-sans mt-0.5">{activeBibleProduct.type}</p>
+                      <p className="text-[12px] text-[var(--spr-text-faint)] font-sans mt-0.5">{activeBibleProduct.type}</p>
                     </div>
 
-                    <span className="bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase border border-[var(--spr-border)]">
+                    <span className="bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] text-[11px] font-mono font-bold px-2 py-0.5 rounded uppercase border border-[var(--spr-border)]">
                       Baseline: v{activeBibleProduct.baselineSecureVersion}
                     </span>
                   </div>
@@ -1772,10 +1772,10 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-sans">
                     <div className="space-y-3">
                       <div>
-                        <span className="text-[9px] text-[var(--spr-text-faint)] block font-mono font-bold uppercase">Permitted Security greenlist licenses</span>
+                        <span className="text-[11px] text-[var(--spr-text-faint)] block font-mono font-bold uppercase">Permitted Security greenlist licenses</span>
                         <div className="flex flex-wrap gap-1.5 mt-1.5">
                           {activeBibleProduct.allowedLicenses.map((lic: string) => (
-                            <span key={lic} className="bg-[var(--spr-surface-sunken)] text-[var(--spr-green)] text-[10px] font-mono px-2 py-0.5 rounded border border-[var(--spr-border)] font-semibold">
+                            <span key={lic} className="bg-[var(--spr-surface-sunken)] text-[var(--spr-green)] text-[12px] font-mono px-2 py-0.5 rounded border border-[var(--spr-border)] font-semibold">
                               {lic}
                             </span>
                           ))}
@@ -1784,10 +1784,10 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                       </div>
 
                       <div>
-                        <span className="text-[9px] text-[var(--spr-text-faint)] block font-mono font-bold uppercase">Prohibited copyleft blacklisted licenses</span>
+                        <span className="text-[11px] text-[var(--spr-text-faint)] block font-mono font-bold uppercase">Prohibited copyleft blacklisted licenses</span>
                         <div className="flex flex-wrap gap-1.5 mt-1.5">
                           {activeBibleProduct.disallowedLicenses.map((lic: string) => (
-                            <span key={lic} className="bg-[var(--spr-surface-sunken)] text-[var(--spr-red)] text-[10px] font-mono px-2 py-0.5 rounded border border-[var(--spr-border)] font-semibold">
+                            <span key={lic} className="bg-[var(--spr-surface-sunken)] text-[var(--spr-red)] text-[12px] font-mono px-2 py-0.5 rounded border border-[var(--spr-border)] font-semibold">
                               {lic}
                             </span>
                           ))}
@@ -1797,16 +1797,16 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                     </div>
 
                     <div className="p-3.5 bg-[var(--spr-surface-sunken)] rounded-md border border-[var(--spr-border)] space-y-2">
-                      <span className="text-[9px] text-[var(--spr-text-faint)] block font-mono font-bold uppercase">Target Regulatory Framework Compliance</span>
+                      <span className="text-[11px] text-[var(--spr-text-faint)] block font-mono font-bold uppercase">Target Regulatory Framework Compliance</span>
                       <p className="font-bold text-[var(--spr-text)]">{activeBibleProduct.complianceTarget}</p>
-                      <p className="text-[10px] text-[var(--spr-text-muted)] leading-normal">
+                      <p className="text-[12px] text-[var(--spr-text-muted)] leading-normal">
                         Ingested components of this product category must be validated in accordance with audit guidelines mapped to this baseline.
                       </p>
                     </div>
                   </div>
 
                   <div className="p-4 bg-[var(--spr-accent-soft)] rounded-md border border-[var(--spr-border)] space-y-1.5 text-xs">
-                    <span className="font-bold text-[var(--spr-highlight)] font-mono text-[9px] uppercase tracking-wider block">Standard Core Safeguards Policy</span>
+                    <span className="font-bold text-[var(--spr-highlight)] font-mono text-[11px] uppercase tracking-wider block">Standard Core Safeguards Policy</span>
                     <p className="text-[var(--spr-text)] leading-normal font-sans text-[11px]">{activeBibleProduct.safeguardPolicy}</p>
                   </div>
                 </div>
@@ -1819,7 +1819,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                     <Sparkles className="w-4.5 h-4.5 text-[var(--spr-amber)] animate-bounce" />
                     <span>Interactive Product Compliance Sandbox Auditor</span>
                   </h3>
-                  <p className="text-[10px] text-[var(--spr-text-muted)] font-sans mt-0.5">
+                  <p className="text-[12px] text-[var(--spr-text-muted)] font-sans mt-0.5">
                     Simulate software ingest requests and instantly query compliance safety standards against the Master Product Bible.
                   </p>
                 </div>
@@ -1827,7 +1827,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-sans">
                   <div className="space-y-3.5">
                     <div>
-                      <label className="block text-[10px] text-[var(--spr-text-faint)] font-mono uppercase font-bold mb-1">Select Target Product Class</label>
+                      <label className="block text-[12px] text-[var(--spr-text-faint)] font-mono uppercase font-bold mb-1">Select Target Product Class</label>
                       <select
                         value={sandboxProduct}
                         onChange={(e) => {
@@ -1849,7 +1849,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
 
                     {sandboxProduct === 'custom' && (
                       <div className="animate-fadeIn">
-                        <label className="block text-[10px] text-[var(--spr-text-faint)] font-mono uppercase font-bold mb-1">Custom Product Name</label>
+                        <label className="block text-[12px] text-[var(--spr-text-faint)] font-mono uppercase font-bold mb-1">Custom Product Name</label>
                         <input
                           type="text"
                           placeholder="e.g. Apache Kafka"
@@ -1862,7 +1862,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
 
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-[10px] text-[var(--spr-text-faint)] font-mono uppercase font-bold mb-1">Ingested Version</label>
+                        <label className="block text-[12px] text-[var(--spr-text-faint)] font-mono uppercase font-bold mb-1">Ingested Version</label>
                         <input
                           type="text"
                           value={sandboxVersion}
@@ -1873,7 +1873,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                       </div>
 
                       <div>
-                        <label className="block text-[10px] text-[var(--spr-text-faint)] font-mono uppercase font-bold mb-1">License SPDX</label>
+                        <label className="block text-[12px] text-[var(--spr-text-faint)] font-mono uppercase font-bold mb-1">License SPDX</label>
                         <input
                           type="text"
                           value={sandboxLicense}
@@ -1885,7 +1885,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                     </div>
 
                     <div>
-                      <label className="block text-[10px] text-[var(--spr-text-faint)] font-mono uppercase font-bold mb-1">Target Deploy Environment</label>
+                      <label className="block text-[12px] text-[var(--spr-text-faint)] font-mono uppercase font-bold mb-1">Target Deploy Environment</label>
                       <div className="grid grid-cols-3 gap-2">
                         {['Production', 'Staging', 'Development'].map(env => (
                           <button
@@ -1924,7 +1924,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                             <h4 className="font-bold text-[var(--spr-text)] text-[11px] font-mono uppercase truncate max-w-[130px]">{sandboxReport.productName}</h4>
                           </div>
 
-                          <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase flex items-center gap-1 ${
+                          <span className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold uppercase flex items-center gap-1 ${
                             sandboxReport.overallStatus === 'PASS' ? 'bg-[var(--spr-surface-sunken)] text-[var(--spr-green)] border border-[var(--spr-border)]' :
                             sandboxReport.overallStatus === 'WARN' ? 'bg-[var(--spr-surface-sunken)] text-[var(--spr-amber)] border border-[var(--spr-border)]' :
                             'bg-[var(--spr-surface-sunken)] text-[var(--spr-red)] border border-[var(--spr-border)]'
@@ -1938,7 +1938,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                           </span>
                         </div>
 
-                        <div className="space-y-2 text-[10px] leading-normal font-sans">
+                        <div className="space-y-2 text-[12px] leading-normal font-sans">
                           <div className="flex items-start gap-1.5">
                             {sandboxReport.versionStatus === 'Compliant' ? (
                               <Check className="w-3.5 h-3.5 text-[var(--spr-green)] shrink-0 mt-0.5" />
@@ -1968,7 +1968,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                           </div>
                         </div>
 
-                        <div className="p-2.5 bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] rounded text-[9px] text-[var(--spr-text-muted)] leading-normal space-y-1">
+                        <div className="p-2.5 bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] rounded text-[11px] text-[var(--spr-text-muted)] leading-normal space-y-1">
                           <p className="font-bold text-[var(--spr-text)] font-mono text-[8px] uppercase">Compliance Checklist ({sandboxReport.complianceTarget}):</p>
                           <p className="font-sans italic">{sandboxReport.safeguardPolicy}</p>
                         </div>
@@ -1977,7 +1977,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                       <div className="text-center py-10 text-[var(--spr-text-faint)] space-y-2 font-sans flex flex-col justify-center items-center h-full">
                         <Sliders className="w-8 h-8 text-[var(--spr-text-faint)]" />
                         <p className="text-[11px] font-bold text-[var(--spr-text-muted)] mt-2">Attestation Pending</p>
-                        <p className="text-[9px] text-[var(--spr-text-faint)] leading-snug max-w-[180px]">
+                        <p className="text-[11px] text-[var(--spr-text-faint)] leading-snug max-w-[180px]">
                           Configure simulation parameters and run Sandbox Compliance Attestation to test build parameters against standards.
                         </p>
                       </div>

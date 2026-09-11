@@ -33,7 +33,7 @@ function CoverageRow({ label, description, observed, total }: { label: string; d
           <div className="text-sm font-semibold text-[var(--spr-text)]">{label}</div>
           <div className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">{description}</div>
         </div>
-        <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[.12em] ${stateClasses[state]}`}>
+        <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] font-bold uppercase tracking-[.12em] ${stateClasses[state]}`}>
           <Icon className="h-3.5 w-3.5" /> {state}
         </span>
       </div>

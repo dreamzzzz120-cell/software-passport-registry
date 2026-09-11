@@ -132,7 +132,7 @@ export default function MspPricingView({ isAuthenticated, onPrimaryAction }: Pro
   return (
     <div className="mx-auto max-w-7xl px-6 py-16 text-[var(--spr-text)]">
       <div className="text-center">
-        <div className="text-[10px] font-semibold uppercase tracking-[.15em] text-[var(--spr-highlight)]">Software Passport Registry for MSPs</div>
+        <div className="text-[12px] font-semibold uppercase tracking-[.15em] text-[var(--spr-highlight)]">Software Passport Registry for MSPs</div>
         <h1 className="mt-3 text-3xl font-bold tracking-tight md:text-4xl">Turn software trust into a recurring MSP service</h1>
         <p className="mx-auto mt-4 max-w-3xl text-sm leading-6 text-[var(--spr-text-muted)]">
           SPR gives MSPs the evidence, monitoring, reports, white-label delivery, and portfolio visibility needed to offer software trust and verification to their clients.
@@ -172,7 +172,7 @@ export default function MspPricingView({ isAuthenticated, onPrimaryAction }: Pro
           if (!copy) return null;
           return (
             <div key={plan.id} className={`rounded-md border p-6 ${copy.highlight ? 'border-[var(--spr-highlight)] bg-[var(--spr-accent)]/10' : 'border-[var(--spr-border)] bg-[var(--spr-surface-alt)]'}`}>
-              {copy.highlight && <div className="mb-3 inline-flex items-center gap-1 rounded-full border border-[var(--spr-highlight)]/40 bg-[var(--spr-highlight)]/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--spr-highlight)]">Most popular</div>}
+              {copy.highlight && <div className="mb-3 inline-flex items-center gap-1 rounded-full border border-[var(--spr-highlight)]/40 bg-[var(--spr-highlight)]/10 px-2.5 py-0.5 text-[12px] font-semibold uppercase tracking-wider text-[var(--spr-highlight)]">Most popular</div>}
               <h2 className="text-xl font-bold text-[var(--spr-text)]">{plan.label}</h2>
               <p className="mt-1 text-sm text-[var(--spr-text-muted)]">{copy.tagline}</p>
               <p className={`mt-4 text-2xl font-bold ${plan.priceLabel ? 'text-[var(--spr-text)]' : 'text-[var(--spr-text-muted)]'}`}>

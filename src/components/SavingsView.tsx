@@ -124,7 +124,7 @@ export default function SavingsView({ role = 'Viewer' }: { role?: string }) {
 
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="spr-panel p-4"><div className="text-xs font-bold uppercase tracking-wider text-[var(--spr-text-faint)]">Estimated hours saved</div><div className="mt-1 text-2xl font-bold text-[var(--spr-text)]">{report.laborValue.hours ?? '—'}</div><p className="mt-1 text-[11px] text-[var(--spr-text-faint)]">{report.laborValue.explanation}</p></div>
-          <div className="spr-panel p-4"><div className="text-xs font-bold uppercase tracking-wider text-[var(--spr-text-faint)]">Estimated labor value</div><div className="mt-1 text-2xl font-bold text-[var(--spr-text)]">{money(report.laborValue.dollarValue)}</div><span className={`mt-1 inline-block rounded-sm border px-1.5 py-0.5 text-[9px] font-bold uppercase ${BASIS_STYLE[report.laborValue.basis]}`}>{report.laborValue.basis.replace('_', ' ')}</span></div>
+          <div className="spr-panel p-4"><div className="text-xs font-bold uppercase tracking-wider text-[var(--spr-text-faint)]">Estimated labor value</div><div className="mt-1 text-2xl font-bold text-[var(--spr-text)]">{money(report.laborValue.dollarValue)}</div><span className={`mt-1 inline-block rounded-sm border px-1.5 py-0.5 text-[11px] font-bold uppercase ${BASIS_STYLE[report.laborValue.basis]}`}>{report.laborValue.basis.replace('_', ' ')}</span></div>
           <div className="spr-panel p-4"><div className="text-xs font-bold uppercase tracking-wider text-[var(--spr-text-faint)]">Net value ({report.windowDays}d)</div><div className="mt-1 text-2xl font-bold text-[var(--spr-text)]">{money(report.netValue.value)}</div><p className="mt-1 text-[11px] text-[var(--spr-text-faint)]">{report.netValue.explanation}</p></div>
         </div>
 
@@ -140,7 +140,7 @@ export default function SavingsView({ role = 'Viewer' }: { role?: string }) {
             ].map(([label, count]) => (
               <div key={label as string} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-3">
                 <div className="text-xl font-bold text-[var(--spr-text)]">{count as number}</div>
-                <div className="mt-1 text-[10px] uppercase tracking-wider text-[var(--spr-text-faint)]">{label as string}</div>
+                <div className="mt-1 text-[12px] uppercase tracking-wider text-[var(--spr-text-faint)]">{label as string}</div>
               </div>
             ))}
           </div>
@@ -157,7 +157,7 @@ export default function SavingsView({ role = 'Viewer' }: { role?: string }) {
                 </div>
                 <div className="shrink-0 text-right">
                   <div className="text-sm font-bold text-[var(--spr-text)]">{line.totalMinutes !== null ? `${line.totalMinutes} min` : '—'}</div>
-                  <span className={`mt-0.5 inline-block rounded-sm border px-1.5 py-0.5 text-[9px] font-bold uppercase ${BASIS_STYLE[line.basis]}`}>{line.basis.replace('_', ' ')}</span>
+                  <span className={`mt-0.5 inline-block rounded-sm border px-1.5 py-0.5 text-[11px] font-bold uppercase ${BASIS_STYLE[line.basis]}`}>{line.basis.replace('_', ' ')}</span>
                 </div>
               </div>
             ))}
@@ -182,7 +182,7 @@ export default function SavingsView({ role = 'Viewer' }: { role?: string }) {
             {saveError && <div role="alert" className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 px-3 py-2.5 text-xs text-[var(--spr-red)]">{saveError}</div>}
             {FIELDS.map((f) => (
               <div key={f.key} className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold text-[var(--spr-text-muted)]">{f.label} <span className="text-[var(--spr-text-faint)]">({f.suffix})</span></label>
+                <label className="text-[12px] font-bold text-[var(--spr-text-muted)]">{f.label} <span className="text-[var(--spr-text-faint)]">({f.suffix})</span></label>
                 <input type="number" min="0" step="any" value={form[f.key] ?? ''} onChange={(e) => setForm((cur) => ({ ...cur, [f.key]: e.target.value }))} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]" />
               </div>
             ))}

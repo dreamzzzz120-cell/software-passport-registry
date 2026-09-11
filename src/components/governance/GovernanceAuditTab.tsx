@@ -58,7 +58,7 @@ export default function GovernanceAuditTab() {
                   <span className="shrink-0 text-[var(--spr-text-faint)]">{new Date(r.timestamp).toLocaleString()}</span>
                 </div>
                 <p className="mt-0.5 text-[var(--spr-text-muted)]">Actor: {r.actor}</p>
-                {payload && Object.keys(payload).length > 0 && <pre className="mt-1.5 whitespace-pre-wrap break-all rounded-sm bg-[var(--spr-surface-deep)] p-2 text-[10px] text-[var(--spr-text-faint)]">{JSON.stringify(payload, null, 2)}</pre>}
+                {payload && Object.keys(payload).length > 0 && <pre className="mt-1.5 whitespace-pre-wrap break-all rounded-sm bg-[var(--spr-surface-deep)] p-2 text-[12px] text-[var(--spr-text-faint)]">{JSON.stringify(payload, null, 2)}</pre>}
               </div>
             );
           })}

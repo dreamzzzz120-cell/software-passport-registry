@@ -240,7 +240,7 @@ export default function PilotOnboardingChecklist({
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative">
         <div className="space-y-1.5 text-left">
           <div className="flex items-center gap-2">
-            <span className="bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] border border-[var(--spr-highlight)] text-[10px] font-mono font-bold px-2 py-0.5 rounded-md uppercase tracking-wider">
+            <span className="bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] border border-[var(--spr-highlight)] text-[12px] font-mono font-bold px-2 py-0.5 rounded-md uppercase tracking-wider">
               Getting started
             </span>
             <span className="flex h-2 w-2 relative">
@@ -283,7 +283,7 @@ export default function PilotOnboardingChecklist({
             </div>
           </div>
           <div className="text-left space-y-0.5">
-            <span className="text-[10px] font-mono text-[var(--spr-text-muted)] block uppercase">Pilot Status</span>
+            <span className="text-[12px] font-mono text-[var(--spr-text-muted)] block uppercase">Pilot Status</span>
             <span className={`text-xs font-bold ${completedCount === 5 ? 'text-[var(--spr-green)]' : 'text-[var(--spr-highlight)]'}`}>
               {completedCount === 5 ? '🚀 Pilot Ready: Attested' : 'In-Flight Ingestion'}
             </span>
@@ -319,7 +319,7 @@ export default function PilotOnboardingChecklist({
             <div className="space-y-2 text-left">
               {/* Top line with step & checkbox */}
               <div className="flex justify-between items-center">
-                <span className="text-[9px] font-mono font-bold text-[var(--spr-highlight)]">STEP 0{idx + 1}</span>
+                <span className="text-[11px] font-mono font-bold text-[var(--spr-highlight)]">STEP 0{idx + 1}</span>
                 {task.status ? (
                   <span className="p-0.5 bg-[var(--spr-green)]/15 text-[var(--spr-green)] rounded-md border border-[var(--spr-green)]">
                     <CheckSquare className="w-4 h-4" />
@@ -331,20 +331,20 @@ export default function PilotOnboardingChecklist({
                 )}
               </div>
               <h4 className="text-xs font-bold font-sans text-[var(--spr-text)] line-clamp-1">{task.title}</h4>
-              <p className="text-[10px] text-[var(--spr-text-muted)] leading-normal line-clamp-3">{task.description}</p>
+              <p className="text-[12px] text-[var(--spr-text-muted)] leading-normal line-clamp-3">{task.description}</p>
             </div>
 
             {/* CTA action bottom */}
             <div>
               {task.status ? (
-                <div className="text-[10px] font-mono text-[var(--spr-green)] font-semibold flex items-center gap-1 bg-[var(--spr-green)]/15 px-2.5 py-1.5 rounded-md border border-[var(--spr-green)]">
+                <div className="text-[12px] font-mono text-[var(--spr-green)] font-semibold flex items-center gap-1 bg-[var(--spr-green)]/15 px-2.5 py-1.5 rounded-md border border-[var(--spr-green)]">
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   <span className="truncate">{task.completedText}</span>
                 </div>
               ) : (
                 <button
                   onClick={task.action}
-                  className="spr-btn spr-btn-primary w-full !py-1.5 !text-[10px] flex items-center justify-center gap-1"
+                  className="spr-btn spr-btn-primary w-full !py-1.5 !text-[12px] flex items-center justify-center gap-1"
                 >
                   <span>{task.actionLabel}</span>
                   <ArrowRight className="w-3 h-3" />
@@ -369,13 +369,13 @@ export default function PilotOnboardingChecklist({
             <div className="flex items-center gap-4">
               <button
                 onClick={() => onNavigateTab(activeTab === 'integrations' ? '/integrations' : '/billing')}
-                className="text-[10px] font-mono text-[var(--spr-highlight)] hover:underline"
+                className="text-[12px] font-mono text-[var(--spr-highlight)] hover:underline"
               >
                 {activeTab === 'integrations' ? 'View full Integrations page →' : 'View full Billing page →'}
               </button>
               <button
                 onClick={() => setActiveTab('none')}
-                className="text-[10px] font-mono text-[var(--spr-text-muted)] hover:text-[var(--spr-text)] underline"
+                className="text-[12px] font-mono text-[var(--spr-text-muted)] hover:text-[var(--spr-text)] underline"
               >
                 Close Configurator
               </button>
@@ -392,13 +392,13 @@ export default function PilotOnboardingChecklist({
                     <Github className="w-4 h-4 text-[var(--spr-highlight)]" />
                     <span className="text-xs font-bold text-[var(--spr-text)] font-sans">GitHub Enterprise Connector</span>
                   </div>
-                  <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded ${
+                  <span className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded ${
                     githubConnected ? 'bg-[var(--spr-green)]/15 text-[var(--spr-green)] border border-[var(--spr-green)]' : 'bg-[var(--spr-surface-alt)] text-[var(--spr-text-muted)]'
                   }`}>
                     {githubConnected ? 'CONNECTED' : 'UNCONFIGURED'}
                   </span>
                 </div>
-                <p className="text-[10px] text-[var(--spr-text-muted)] leading-normal">
+                <p className="text-[12px] text-[var(--spr-text-muted)] leading-normal">
                   Authenticates with your GitHub Organization. Seals continuous webhook callbacks to verify commit signatures and SBOM updates on pull-requests.
                 </p>
 
@@ -430,13 +430,13 @@ export default function PilotOnboardingChecklist({
                       onChange={(e) => setGithubPrivateKey(e.target.value)}
                       placeholder="Paste the PEM-encoded private key"
                       rows={2}
-                      className="w-full bg-[var(--spr-surface)] border border-[var(--spr-border)] rounded-md text-[9px] pl-16 pr-3 py-2 text-[var(--spr-text)] font-mono focus:outline-none resize-none"
+                      className="w-full bg-[var(--spr-surface)] border border-[var(--spr-border)] rounded-md text-[11px] pl-16 pr-3 py-2 text-[var(--spr-text)] font-mono focus:outline-none resize-none"
                     />
                   </div>
                   <button
                     onClick={() => handleSaveIntegration('github')}
                     disabled={loading || !githubAppId || !githubRepo}
-                    className="w-full py-2 bg-[var(--spr-accent)] hover:bg-[var(--spr-accent)] text-[var(--spr-text)] font-sans font-bold text-[10px] rounded-md transition disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
+                    className="w-full py-2 bg-[var(--spr-accent)] hover:bg-[var(--spr-accent)] text-[var(--spr-text)] font-sans font-bold text-[12px] rounded-md transition disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     {loading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
                     <span>Seal Connection & Sync</span>
@@ -451,13 +451,13 @@ export default function PilotOnboardingChecklist({
                     <Gitlab className="w-4 h-4 text-[var(--spr-highlight)]" />
                     <span className="text-xs font-bold text-[var(--spr-text)] font-sans">GitLab CI/CD Access</span>
                   </div>
-                  <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded ${
+                  <span className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded ${
                     gitlabConnected ? 'bg-[var(--spr-green)]/15 text-[var(--spr-green)] border border-[var(--spr-green)]' : 'bg-[var(--spr-surface-alt)] text-[var(--spr-text-muted)]'
                   }`}>
                     {gitlabConnected ? 'CONNECTED' : 'UNCONFIGURED'}
                   </span>
                 </div>
-                <p className="text-[10px] text-[var(--spr-text-muted)] leading-normal">
+                <p className="text-[12px] text-[var(--spr-text-muted)] leading-normal">
                   Link your private GitLab registry projects. Attest compile-time variables and artifact hashes securely within the software supply chain.
                 </p>
 
@@ -485,7 +485,7 @@ export default function PilotOnboardingChecklist({
                   <button
                     onClick={() => handleSaveIntegration('gitlab')}
                     disabled={loading || !gitlabToken || !gitlabProject}
-                    className="w-full py-2 bg-[var(--spr-accent-soft)] hover:bg-[var(--spr-accent)] text-[var(--spr-text)] font-sans font-bold text-[10px] rounded-md transition disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
+                    className="w-full py-2 bg-[var(--spr-accent-soft)] hover:bg-[var(--spr-accent)] text-[var(--spr-text)] font-sans font-bold text-[12px] rounded-md transition disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     {loading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Key className="w-3.5 h-3.5" />}
                     <span>Authenticate GitLab</span>
@@ -499,7 +499,7 @@ export default function PilotOnboardingChecklist({
                   <Database className="w-4 h-4 text-[var(--spr-green)]" />
                   <span className="text-xs font-bold text-[var(--spr-text)] font-sans">Threat Feeds & Package registries</span>
                 </div>
-                <p className="text-[10px] text-[var(--spr-text-muted)] leading-normal">
+                <p className="text-[12px] text-[var(--spr-text-muted)] leading-normal">
                   Toggle active connections to vulnerability registries. SPR queries these APIs dynamically to compare package hashes and compile alerts.
                 </p>
 
@@ -517,8 +517,8 @@ export default function PilotOnboardingChecklist({
                   </div>
 
                   <div className="space-y-2">
-                    <span className="text-[9px] font-mono font-bold text-[var(--spr-text-muted)] block uppercase">ACTIVE VULNERABILITY REPOSITORIES</span>
-                    <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
+                    <span className="text-[11px] font-mono font-bold text-[var(--spr-text-muted)] block uppercase">ACTIVE VULNERABILITY REPOSITORIES</span>
+                    <div className="grid grid-cols-2 gap-2 text-[12px] font-mono">
                       <label className="flex items-center gap-1.5 cursor-pointer text-[var(--spr-text)] hover:text-[var(--spr-text)]">
                         <input
                           type="checkbox"
@@ -552,7 +552,7 @@ export default function PilotOnboardingChecklist({
                   <button
                     onClick={() => handleSaveIntegration('pypi')}
                     disabled={loading || !pypiToken}
-                    className="w-full py-2 bg-[var(--spr-green)] hover:bg-[var(--spr-green)] text-[var(--spr-text)] font-sans font-bold text-[10px] rounded-md transition disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
+                    className="w-full py-2 bg-[var(--spr-green)] hover:bg-[var(--spr-green)] text-[var(--spr-text)] font-sans font-bold text-[12px] rounded-md transition disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     <span>Connect Threat Registries</span>
                   </button>
@@ -568,7 +568,7 @@ export default function PilotOnboardingChecklist({
                 <div className="space-y-1">
                   <h3 className="text-sm font-bold text-[var(--spr-text)] flex items-center gap-2">
                     <span>MSP Commercial Limits Center</span>
-                    <span className="bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] border border-[var(--spr-highlight)] text-[9px] font-mono px-2 py-0.5 rounded">
+                    <span className="bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] border border-[var(--spr-highlight)] text-[11px] font-mono px-2 py-0.5 rounded">
                       Active Plan: {plans[currentPlan].name}
                     </span>
                   </h3>
@@ -578,7 +578,7 @@ export default function PilotOnboardingChecklist({
                 </div>
 
                 {/* Pricing period switcher */}
-                <div className="flex bg-[var(--spr-surface)] p-0.5 rounded-md border border-[var(--spr-border)] text-[10px] font-mono font-bold shrink-0 self-start md:self-center">
+                <div className="flex bg-[var(--spr-surface)] p-0.5 rounded-md border border-[var(--spr-border)] text-[12px] font-mono font-bold shrink-0 self-start md:self-center">
                   <button
                     onClick={() => setBillingCycle('Monthly')}
                     className={`px-3 py-1 rounded-md transition ${billingCycle === 'Monthly' ? 'bg-[var(--spr-accent)] text-[var(--spr-text)]' : 'text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]'}`}
@@ -610,7 +610,7 @@ export default function PilotOnboardingChecklist({
                       style={{ width: `${Math.min(100, clientUtilization)}%` }}
                     ></div>
                   </div>
-                  <p className="text-[9px] text-[var(--spr-text-muted)]">Maximum client domains you can onboard under continuous SLA tracking.</p>
+                  <p className="text-[11px] text-[var(--spr-text-muted)]">Maximum client domains you can onboard under continuous SLA tracking.</p>
                 </div>
 
                 {/* Gauge 2: Passports Limit */}
@@ -627,7 +627,7 @@ export default function PilotOnboardingChecklist({
                       style={{ width: `${Math.min(100, passportUtilization)}%` }}
                     ></div>
                   </div>
-                  <p className="text-[9px] text-[var(--spr-text-muted)]">Active software artifacts with cryptographic seals and verified SBOM registries.</p>
+                  <p className="text-[11px] text-[var(--spr-text-muted)]">Active software artifacts with cryptographic seals and verified SBOM registries.</p>
                 </div>
 
                 {/* Gauge 3: Continuous Scans Limit */}
@@ -644,14 +644,14 @@ export default function PilotOnboardingChecklist({
                       style={{ width: `${Math.min(100, scanUtilization)}%` }}
                     ></div>
                   </div>
-                  <p className="text-[9px] text-[var(--spr-text-muted)]">Dynamic scanner actions checking dependencies against the NIST vulnerability databases.</p>
+                  <p className="text-[11px] text-[var(--spr-text-muted)]">Dynamic scanner actions checking dependencies against the NIST vulnerability databases.</p>
                 </div>
               </div>
 
               {/* Plans pricing summary card */}
               <div className="bg-[var(--spr-surface)] border border-[var(--spr-border)] p-5 rounded-md flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                 <div className="space-y-1 text-left">
-                  <span className="text-[9px] font-mono font-bold text-[var(--spr-highlight)] uppercase tracking-widest block">Active Commercial Tier</span>
+                  <span className="text-[11px] font-mono font-bold text-[var(--spr-highlight)] uppercase tracking-widest block">Active Commercial Tier</span>
                   <div className="flex items-baseline gap-1.5">
                     <h4 className="text-base font-bold text-[var(--spr-text)]">{plans[currentPlan].name} Tier</h4>
                     <span className="text-xs font-mono text-[var(--spr-highlight)]">${plans[currentPlan].price}/month</span>
@@ -680,7 +680,7 @@ export default function PilotOnboardingChecklist({
           <div className="bg-[var(--spr-surface)] border border-[var(--spr-border)] max-w-4xl w-full rounded-md p-6 relative space-y-6 text-left">
             <div className="flex justify-between items-start">
               <div className="space-y-1">
-                <span className="bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] border border-[var(--spr-highlight)] text-[9px] font-mono px-2 py-0.5 rounded uppercase">Commercial Selection</span>
+                <span className="bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] border border-[var(--spr-highlight)] text-[11px] font-mono px-2 py-0.5 rounded uppercase">Commercial Selection</span>
                 <h3 className="text-base font-bold text-[var(--spr-text)]">Upgrade MSP Workspace Limits</h3>
                 <p className="text-xs text-[var(--spr-text-muted)]">Instantly upgrade billing plans in the database sandbox to run more scans and register clients.</p>
               </div>
@@ -709,13 +709,13 @@ export default function PilotOnboardingChecklist({
                     <div className="space-y-3">
                       <div className="flex justify-between items-start">
                         <h4 className="text-sm font-extrabold text-[var(--spr-text)]">{plan.name}</h4>
-                        <span className="text-[9px] font-mono font-bold bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] px-1.5 py-0.5 rounded">
+                        <span className="text-[11px] font-mono font-bold bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] px-1.5 py-0.5 rounded">
                           {plan.badge}
                         </span>
                       </div>
                       <div className="flex items-baseline gap-1">
                         <span className="text-xl font-mono font-extrabold text-[var(--spr-highlight)]">${plan.price}</span>
-                        <span className="text-[10px] text-[var(--spr-text-muted)] font-mono">/mo</span>
+                        <span className="text-[12px] text-[var(--spr-text-muted)] font-mono">/mo</span>
                       </div>
                       <div className="border-t border-[var(--spr-border)] pt-3 space-y-2 text-xs text-[var(--spr-text)] font-mono">
                         <div className="flex justify-between">
@@ -749,7 +749,7 @@ export default function PilotOnboardingChecklist({
               })}
             </div>
 
-            <p className="text-[10px] text-[var(--spr-text-muted)] font-mono text-center">
+            <p className="text-[12px] text-[var(--spr-text-muted)] font-mono text-center">
               * Upgrades instantly adjust database constraints for your current isolated tenant partition. Simulated via standard Stripe backend pipelines.
             </p>
           </div>

@@ -1,9 +1,14 @@
 import { useState, type Key, type ReactNode } from 'react';
+import {
+  Activity, Bell, Bot, Boxes, Building, Building2, ClipboardCheck, CreditCard, Crown, FileBadge, FileText,
+  Home, LayoutGrid, Lock, MessageSquareText, Network, PiggyBank, Plug, Puzzle, Scale, ScanLine, ScrollText,
+  Search, Settings, ShieldAlert, ShieldCheck, Sparkles, Store, TrendingUp, Users, type LucideIcon,
+} from 'lucide-react';
 import { EXTENSIONS, type ExtensionDefinition } from '../workflows/extensionRegistry';
 import { AMBER, BLUE, CYAN, GREEN, ORANGE, PURPLE, RED, TEAL } from '../workflows/featureColors';
 import FeedbackWidget from './FeedbackWidget';
 
-type NavItem = { id: string; label: string; icon: string; path: string; color: string; desc: string };
+type NavItem = { id: string; label: string; icon: LucideIcon; path: string; color: string; desc: string };
 
 // A distinct accent per feature so the sidebar reads at a glance instead of
 // as a wall of identically-gray glyphs — see workflows/featureColors.ts,
@@ -11,42 +16,42 @@ type NavItem = { id: string; label: string; icon: string; path: string; color: s
 // reads as the same color everywhere it appears.
 
 const CORE: NavItem[] = [
-  { id: 'msp', label: 'MSP Command', icon: '▦', path: '/msp', color: PURPLE, desc: 'Cross-client oversight for managed service providers — your primary entry point.' },
-  { id: 'dashboard', label: 'Overview', icon: '⌂', path: '/dashboard', color: BLUE, desc: 'Workspace summary — key metrics across passports, evidence, and alerts at a glance.' },
-  { id: 'assets', label: 'Assets', icon: '◈', path: '/assets', color: CYAN, desc: 'The software assets you track — services, applications, and components under management.' },
-  { id: 'passports', label: 'Passports', icon: '◇', path: '/passports', color: AMBER, desc: 'Software Passports — structured records combining identity, security, and evidence for a piece of software.' },
-  { id: 'coverage', label: 'Evidence coverage', icon: '▤', path: '/coverage', color: GREEN, desc: 'How much of your inventory has verifiable evidence versus self-attested claims.' },
-  { id: 'evidence-explorer', label: 'Evidence Explorer', icon: '⛾', path: '/evidence-explorer', color: TEAL, desc: 'Browse and search the underlying evidence records collected for your passports.' },
-  { id: 'scans', label: 'Scans', icon: '⌁', path: '/scans', color: ORANGE, desc: 'SBOM and vulnerability scans run against your assets.' },
-  { id: 'monitoring', label: 'Monitoring', icon: '◉', path: '/monitoring', color: BLUE, desc: 'Live monitoring signals for tracked assets and integrations.' },
-  { id: 'alerts', label: 'Alerts', icon: '!', path: '/alerts', color: RED, desc: 'Active findings and notifications that need attention.' },
-  { id: 'clients', label: 'Clients', icon: '◎', path: '/clients', color: PURPLE, desc: 'Organizations and teams you manage passports and evidence for.' },
-  { id: 'trust-graph', label: 'Trust Graph', icon: '◌', path: '/trust-graph', color: CYAN, desc: 'A relationship graph connecting assets, vendors, and evidence.' },
+  { id: 'msp', label: 'MSP Command', icon: LayoutGrid, path: '/msp', color: PURPLE, desc: 'Cross-client oversight for managed service providers — your primary entry point.' },
+  { id: 'dashboard', label: 'Overview', icon: Home, path: '/dashboard', color: BLUE, desc: 'Workspace summary — key metrics across passports, evidence, and alerts at a glance.' },
+  { id: 'assets', label: 'Assets', icon: Boxes, path: '/assets', color: CYAN, desc: 'The software assets you track — services, applications, and components under management.' },
+  { id: 'passports', label: 'Passports', icon: FileBadge, path: '/passports', color: AMBER, desc: 'Software Passports — structured records combining identity, security, and evidence for a piece of software.' },
+  { id: 'coverage', label: 'Evidence coverage', icon: ShieldCheck, path: '/coverage', color: GREEN, desc: 'How much of your inventory has verifiable evidence versus self-attested claims.' },
+  { id: 'evidence-explorer', label: 'Evidence Explorer', icon: Search, path: '/evidence-explorer', color: TEAL, desc: 'Browse and search the underlying evidence records collected for your passports.' },
+  { id: 'scans', label: 'Scans', icon: ScanLine, path: '/scans', color: ORANGE, desc: 'SBOM and vulnerability scans run against your assets.' },
+  { id: 'monitoring', label: 'Monitoring', icon: Activity, path: '/monitoring', color: BLUE, desc: 'Live monitoring signals for tracked assets and integrations.' },
+  { id: 'alerts', label: 'Alerts', icon: Bell, path: '/alerts', color: RED, desc: 'Active findings and notifications that need attention.' },
+  { id: 'clients', label: 'Clients', icon: Building2, path: '/clients', color: PURPLE, desc: 'Organizations and teams you manage passports and evidence for.' },
+  { id: 'trust-graph', label: 'Trust Graph', icon: Network, path: '/trust-graph', color: CYAN, desc: 'A relationship graph connecting assets, vendors, and evidence.' },
 ];
 const GOVERNANCE: NavItem[] = [
-  { id: 'security', label: 'Security', icon: '⌾', path: '/security', color: RED, desc: 'Security posture and findings across your tracked software.' },
-  { id: 'compliance', label: 'Compliance', icon: '✓', path: '/compliance', color: GREEN, desc: 'Compliance status against the frameworks and policies you track.' },
-  { id: 'audit-log', label: 'Audit Log', icon: '▥', path: '/audit-log', color: ORANGE, desc: 'A chronological record of actions taken in this workspace.' },
-  { id: 'vendors', label: 'Vendors', icon: '◫', path: '/vendors', color: PURPLE, desc: 'Third-party vendors and suppliers whose software you assess.' },
-  { id: 'questionnaires', label: 'Trust Response', icon: '?', path: '/questionnaires', color: BLUE, desc: 'Draft answers to security questionnaires from real, matched evidence.' },
-  { id: 'governance', label: 'Governance', icon: '⚖', path: '/governance', color: AMBER, desc: 'Policies, controls, framework requirements, and risk decisions, backed by real evidence and audit records.' },
-  { id: 'privacy', label: 'Privacy', icon: '◍', path: '/privacy', color: CYAN, desc: 'Personal information inventory, privacy requests, and privacy impact assessments.' },
-  { id: 'integrations', label: 'Integrations', icon: '↔', path: '/integrations', color: TEAL, desc: 'Connected tools and data sources feeding evidence into SPR.' },
-  { id: 'reports', label: 'Reports Center', icon: '▤', path: '/reports', color: BLUE, desc: 'Generated reports summarizing trust, compliance, and evidence.' },
+  { id: 'security', label: 'Security', icon: ShieldAlert, path: '/security', color: RED, desc: 'Security posture and findings across your tracked software.' },
+  { id: 'compliance', label: 'Compliance', icon: ClipboardCheck, path: '/compliance', color: GREEN, desc: 'Compliance status against the frameworks and policies you track.' },
+  { id: 'audit-log', label: 'Audit Log', icon: ScrollText, path: '/audit-log', color: ORANGE, desc: 'A chronological record of actions taken in this workspace.' },
+  { id: 'vendors', label: 'Vendors', icon: Store, path: '/vendors', color: PURPLE, desc: 'Third-party vendors and suppliers whose software you assess.' },
+  { id: 'questionnaires', label: 'Trust Response', icon: MessageSquareText, path: '/questionnaires', color: BLUE, desc: 'Draft answers to security questionnaires from real, matched evidence.' },
+  { id: 'governance', label: 'Governance', icon: Scale, path: '/governance', color: AMBER, desc: 'Policies, controls, framework requirements, and risk decisions, backed by real evidence and audit records.' },
+  { id: 'privacy', label: 'Privacy', icon: Lock, path: '/privacy', color: CYAN, desc: 'Personal information inventory, privacy requests, and privacy impact assessments.' },
+  { id: 'integrations', label: 'Integrations', icon: Plug, path: '/integrations', color: TEAL, desc: 'Connected tools and data sources feeding evidence into SPR.' },
+  { id: 'reports', label: 'Reports Center', icon: FileText, path: '/reports', color: BLUE, desc: 'Generated reports summarizing trust, compliance, and evidence.' },
 ];
 const EXECUTIVE: NavItem[] = [
-  { id: 'savings', label: 'Time & Savings', icon: '$', path: '/savings', color: GREEN, desc: 'Estimated time and cost savings from SPR activity, from a baseline you provide.' },
-  { id: 'agent-trust', label: 'AI Agent Trust', icon: 'AI', path: '/agent-trust', color: CYAN, desc: 'Trust posture for AI agents operating in your environment.' },
-  { id: 'ai-trust-center', label: 'AI Trust Center', icon: 'AI', path: '/ai-trust-center', color: BLUE, desc: 'Centralized view of AI-related trust and governance signals.' },
-  { id: 'enterprise-readiness', label: 'Enterprise Readiness', icon: 'ER', path: '/enterprise-readiness', color: AMBER, desc: 'Readiness checklist for enterprise buyers and procurement.' },
-  { id: 'investor', label: 'Investor View', icon: 'IV', path: '/investor', color: GREEN, desc: 'A read-only summary view built for investor updates.' },
-  { id: 'founder', label: 'Founder Dashboard', icon: 'FD', path: '/founder', color: RED, desc: 'Founder-only internal metrics and controls.' },
+  { id: 'savings', label: 'Time & Savings', icon: PiggyBank, path: '/savings', color: GREEN, desc: 'Estimated time and cost savings from SPR activity, from a baseline you provide.' },
+  { id: 'agent-trust', label: 'AI Agent Trust', icon: Bot, path: '/agent-trust', color: CYAN, desc: 'Trust posture for AI agents operating in your environment.' },
+  { id: 'ai-trust-center', label: 'AI Trust Center', icon: Sparkles, path: '/ai-trust-center', color: BLUE, desc: 'Centralized view of AI-related trust and governance signals.' },
+  { id: 'enterprise-readiness', label: 'Enterprise Readiness', icon: Building, path: '/enterprise-readiness', color: AMBER, desc: 'Readiness checklist for enterprise buyers and procurement.' },
+  { id: 'investor', label: 'Investor View', icon: TrendingUp, path: '/investor', color: GREEN, desc: 'A read-only summary view built for investor updates.' },
+  { id: 'founder', label: 'Founder Dashboard', icon: Crown, path: '/founder', color: RED, desc: 'Founder-only internal metrics and controls.' },
 ];
 const SYSTEM: NavItem[] = [
-  { id: 'team', label: 'Team', icon: '♙', path: '/team', color: TEAL, desc: 'Manage teammates and their roles in this workspace.' },
-  { id: 'extensions', label: 'Extension Marketplace', icon: 'EX', path: '/extensions', color: PURPLE, desc: 'Optional workflow extensions you can add to SPR.' },
-  { id: 'billing', label: 'Billing', icon: '$', path: '/billing', color: AMBER, desc: 'Subscription plan and billing details.' },
-  { id: 'settings', label: 'Settings', icon: '⚙', path: '/settings', color: CYAN, desc: 'Workspace configuration and preferences.' },
+  { id: 'team', label: 'Team', icon: Users, path: '/team', color: TEAL, desc: 'Manage teammates and their roles in this workspace.' },
+  { id: 'extensions', label: 'Extension Marketplace', icon: Puzzle, path: '/extensions', color: PURPLE, desc: 'Optional workflow extensions you can add to SPR.' },
+  { id: 'billing', label: 'Billing', icon: CreditCard, path: '/billing', color: AMBER, desc: 'Subscription plan and billing details.' },
+  { id: 'settings', label: 'Settings', icon: Settings, path: '/settings', color: CYAN, desc: 'Workspace configuration and preferences.' },
 ];
 
 const EXTENSION_ACCENTS: Record<string, string> = { cyan: BLUE, violet: PURPLE, fuchsia: '#d16d9e', amber: AMBER, emerald: GREEN };
@@ -63,7 +68,7 @@ function NavGroup({ group, activePath, onNavigate, defaultOpen }: { group: Group
         className="flex w-full items-center justify-between px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--spr-text-faint)] hover:text-[var(--spr-text)]"
       >
         <span>{group.label}</span>
-        <span className="text-[9px]">{open ? '▾' : '▸'}</span>
+        <span className="text-[11px]">{open ? '▾' : '▸'}</span>
       </button>
       {(open || hasActive) && (
         <nav className="space-y-0.5">
@@ -78,7 +83,7 @@ function NavGroup({ group, activePath, onNavigate, defaultOpen }: { group: Group
                 className="spr-nav-item flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[13px]"
                 style={active ? undefined : { color: 'var(--spr-text)' }}
               >
-                <span className="grid h-5 w-5 shrink-0 place-items-center text-[10px]" style={{ color: item.color }}>{item.icon}</span>
+                <item.icon className="h-4 w-4 shrink-0" strokeWidth={1.75} style={{ color: item.color }} aria-hidden="true" />
                 <span className="flex-1 truncate">{item.label}</span>
               </button>
             );
@@ -100,7 +105,7 @@ function ExtensionButton({ extension, active, onNavigate }: ExtensionButtonProps
       className="spr-nav-item flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[13px]"
       style={active ? undefined : { color: 'var(--spr-text)' }}
     >
-      <span className="grid h-5 w-5 shrink-0 place-items-center rounded-sm border text-[8px] font-bold" style={{ borderColor: color, color }}>EX</span>
+      <Puzzle className="h-4 w-4 shrink-0" strokeWidth={1.75} style={{ color }} aria-hidden="true" />
       <span className="min-w-0 flex-1 truncate">{extension.shortName}</span>
     </button>
   );
@@ -117,7 +122,7 @@ export default function CommandCenter({ children, path, userEmail, role, isFound
   // already refused the data (requireFounder returns 403), so nothing leaked --
   // but the tile advertised internal tooling to customers.
   const executiveItems = isFounder ? EXECUTIVE : EXECUTIVE.filter((item) => item.id !== 'founder');
-  const mobileItems = [...CORE, ...GOVERNANCE, ...executiveItems, ...SYSTEM, ...EXTENSIONS.map((extension) => ({ id: extension.id, label: extension.shortName, icon: 'EX', path: extension.entryPath }))];
+  const mobileItems = [...CORE, ...GOVERNANCE, ...executiveItems, ...SYSTEM, ...EXTENSIONS.map((extension) => ({ id: extension.id, label: extension.shortName, icon: Puzzle, path: extension.entryPath }))];
   const currentItem = [...CORE, ...GOVERNANCE, ...executiveItems, ...SYSTEM].find((item) => active(item.path));
   const currentLabel = extensionActive ? 'Extension workflow' : currentItem?.label || 'Trust workspace';
 
@@ -136,7 +141,7 @@ export default function CommandCenter({ children, path, userEmail, role, isFound
             <img src="/brand/spr-icon.png" alt="SPR" className="h-11 w-11 shrink-0 rounded-md border border-[var(--spr-border)] object-contain" />
             <span className="min-w-0">
               <span className="block text-[13px] font-semibold leading-tight">Software Passport Registry</span>
-              <span className="block text-[10px] leading-tight text-[var(--spr-text-faint)]">Software Trust OS</span>
+              <span className="block text-[12px] leading-tight text-[var(--spr-text-faint)]">Software Trust OS</span>
             </span>
           </button>
           <NavGroup group={{ label: 'Core workflow', items: CORE }} activePath={active} onNavigate={onNavigate} defaultOpen />
@@ -144,7 +149,7 @@ export default function CommandCenter({ children, path, userEmail, role, isFound
           <NavGroup group={{ label: 'Executive', items: executiveItems }} activePath={active} onNavigate={onNavigate} defaultOpen={false} />
           <div className="mb-1 mt-2 flex items-center justify-between px-2 py-1.5 text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--spr-text-faint)]">
             <span>Extensions</span>
-            <span title={`${EXTENSIONS.length} extension${EXTENSIONS.length === 1 ? '' : 's'} installed in this workspace.`} className="rounded-sm border border-[var(--spr-border)] px-1.5 text-[9px] text-[var(--spr-text-muted)]">{EXTENSIONS.length}</span>
+            <span title={`${EXTENSIONS.length} extension${EXTENSIONS.length === 1 ? '' : 's'} installed in this workspace.`} className="rounded-sm border border-[var(--spr-border)] px-1.5 text-[11px] text-[var(--spr-text-muted)]">{EXTENSIONS.length}</span>
           </div>
           <nav className="space-y-0.5">
             {EXTENSIONS.map((extension) => (
@@ -161,7 +166,7 @@ export default function CommandCenter({ children, path, userEmail, role, isFound
                 className="spr-nav-item flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[13px]"
                 style={active(item.path) ? undefined : { color: 'var(--spr-text)' }}
               >
-                <span className="grid h-5 w-5 shrink-0 place-items-center text-[10px]" style={{ color: item.color }}>{item.icon}</span>
+                <item.icon className="h-4 w-4 shrink-0" strokeWidth={1.75} style={{ color: item.color }} aria-hidden="true" />
                 <span className="flex-1 truncate">{item.label}</span>
               </button>
             ))}

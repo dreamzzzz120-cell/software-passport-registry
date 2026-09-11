@@ -386,7 +386,7 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[720px] text-left text-sm">
-          <thead className="border-b border-[var(--spr-border)] text-[10px] uppercase tracking-[.14em] text-[var(--spr-text-faint)]"><tr><th className="px-5 py-3">Client</th><th className="px-5 py-3">Critical</th><th className="px-5 py-3">High</th><th className="px-5 py-3">Active observations</th><th className="px-5 py-3">Trust state</th><th className="px-5 py-3">Assigned technician</th></tr></thead>
+          <thead className="border-b border-[var(--spr-border)] text-[12px] uppercase tracking-[.14em] text-[var(--spr-text-faint)]"><tr><th className="px-5 py-3">Client</th><th className="px-5 py-3">Critical</th><th className="px-5 py-3">High</th><th className="px-5 py-3">Active observations</th><th className="px-5 py-3">Trust state</th><th className="px-5 py-3">Assigned technician</th></tr></thead>
           <tbody className="divide-y divide-[var(--spr-border)]">
             {clientRiskRollup.map(({ client, activeCount, critical, high, assignment }) => (
               <tr key={client.id}>
@@ -470,7 +470,7 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
   </div>;
 }
 
-function Metric({ label, value, icon, tone, sub }: { label: string; value: number; icon: React.ReactNode; tone: string; sub?: string }) { return <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5"><div className={`mb-4 h-5 w-5 ${tone}`}>{icon}</div><p className="text-3xl font-bold text-[var(--spr-text)]">{value}</p><p className="mt-1 text-sm text-[var(--spr-text-muted)]">{label}</p>{sub && <p className="mt-0.5 text-[10px] text-[var(--spr-text-faint)]">{sub}</p>}</div>; }
+function Metric({ label, value, icon, tone, sub }: { label: string; value: number; icon: React.ReactNode; tone: string; sub?: string }) { return <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5"><div className={`mb-4 h-5 w-5 ${tone}`}>{icon}</div><p className="text-3xl font-bold text-[var(--spr-text)]">{value}</p><p className="mt-1 text-sm text-[var(--spr-text-muted)]">{label}</p>{sub && <p className="mt-0.5 text-[12px] text-[var(--spr-text-faint)]">{sub}</p>}</div>; }
 function Detail({ label, value }: { label: string; value: string }) { return <div className="rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] p-4"><p className="text-xs font-semibold uppercase tracking-wider text-[var(--spr-text-muted)]">{label}</p><p className="mt-2 text-sm leading-5 text-[var(--spr-text)]">{value}</p></div>; }
 function formatStoredTime(value?: string | null) { return value ? new Date(value).toLocaleString() : 'Not observed'; }
 function evidenceList(value?: string | null) { try { const parsed = JSON.parse(value || '[]'); return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : []; } catch { return []; } }
