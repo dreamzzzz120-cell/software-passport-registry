@@ -31,7 +31,9 @@ describe('React typings remain installed', () => {
 });
 
 describe('the error boundaries use no type escape hatches', () => {
-  const boundaries = ['src/components/ViewErrorBoundary.tsx', 'src/LazyApp.tsx'];
+  // LazyApp.tsx was an unreferenced duplicate boundary and has been deleted;
+  // ViewErrorBoundary is the one the app renders.
+  const boundaries = ['src/components/ViewErrorBoundary.tsx'];
 
   it('contains no unsafe casts or suppression directives', () => {
     for (const file of boundaries) {
@@ -44,13 +46,12 @@ describe('the error boundaries use no type escape hatches', () => {
   });
 
   it('reads children from props rather than a constructor snapshot', () => {
-    const lazyApp = read('src/LazyApp.tsx');
-    expect(lazyApp).toContain('return this.props.children');
-    expect(lazyApp).not.toMatch(/private\s+readonly\s+children/);
-    expect(read('src/components/ViewErrorBoundary.tsx')).toContain('return this.props.children');
+    const boundary = read('src/components/ViewErrorBoundary.tsx');
+    expect(boundary).toContain('return this.props.children');
+    expect(boundary).not.toMatch(/private\s+readonly\s+children/);
   });
 
-  it('both boundaries still declare the React error-boundary contract', () => {
+  it('the boundary still declares the React error-boundary contract', () => {
     for (const file of boundaries) {
       expect(read(file), file).toContain('static getDerivedStateFromError');
     }
