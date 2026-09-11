@@ -18,11 +18,23 @@ CREATE TABLE IF NOT EXISTS tenant_addons (
 CREATE INDEX IF NOT EXISTS tenant_addons_tenant_addon_idx ON tenant_addons (tenant_id, addon, status);
 
 DO $$
+DECLARE
+  tbl text;
 BEGIN
-  EXECUTE 'ALTER TABLE tenant_addons ENABLE ROW LEVEL SECURITY';
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'tenant_addons' AND policyname = 'spr_tenant_isolation') THEN
-    EXECUTE 'CREATE POLICY spr_tenant_isolation ON tenant_addons USING (tenant_id = current_setting(''app.tenant_id'', true)) WITH CHECK (tenant_id = current_setting(''app.tenant_id'', true))';
-  END IF;
+  FOREACH tbl IN ARRAY ARRAY['tenant_addons'] LOOP
+    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);
+    EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', tbl);
+
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_policies
+      WHERE schemaname = 'public' AND tablename = tbl AND policyname = 'spr_tenant_isolation'
+    ) THEN
+      EXECUTE format(
+        'CREATE POLICY spr_tenant_isolation ON %I USING (tenant_id = current_setting(''app.tenant_id'', true)) WITH CHECK (tenant_id = current_setting(''app.tenant_id'', true))',
+        tbl
+      );
+    END IF;
+  END LOOP;
 END $$;
 
 DO $$
