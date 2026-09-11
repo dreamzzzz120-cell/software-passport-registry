@@ -39,8 +39,8 @@ describe('SPR integrations UI contracts', () => {
   it('adds first-party webhook management gated the same way as the rest of tenant administration', () => {
     const connect = read('src/routes/connect.ts');
     expect(connect).toContain("router.get('/v1/dashboard/webhooks', requireAuth, requireRole(['Owner', 'Admin'])");
-    expect(connect).toContain("router.post('/v1/dashboard/webhooks', requireAuth, requireRole(['Owner', 'Admin'])");
-    expect(connect).toContain("router.delete('/v1/dashboard/webhooks/:id', requireAuth, requireRole(['Owner', 'Admin'])");
+    expect(connect).toContain("router.post('/v1/dashboard/webhooks', sensitiveMutationLimiter, requireAuth, requireRole(['Owner', 'Admin'])");
+    expect(connect).toContain("router.delete('/v1/dashboard/webhooks/:id', sensitiveMutationLimiter, requireAuth, requireRole(['Owner', 'Admin'])");
   });
 
   it('keeps credential fields for each provider in the same set the real collector actually reads', () => {
