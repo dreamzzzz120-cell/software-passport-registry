@@ -17,6 +17,7 @@ Allow: /free-review
 Allow: /pricing
 Allow: /msp
 Allow: /passport/demo
+Allow: /software
 Allow: /terms
 Allow: /privacy
 
@@ -67,3 +68,4 @@ Disallow: /free-review/result
 Disallow: /api/
 
 Sitemap: https://www.softwarepassportregistry.com/sitemap.xml
+Sitemap: https://www.softwarepassportregistry.com/software/sitemap.xml

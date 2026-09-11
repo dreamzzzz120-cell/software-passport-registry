@@ -26,7 +26,10 @@ describe('Free Review contracts', () => {
   });
 
   it('never pre-inserts a passports row -- the repository-scan worker creates it from acquired metadata', () => {
-    const freeReview = read('src/routes/free-review-legacy.ts');
+    // The enqueue path lives in free-review-submit.ts, shared by the public
+    // route and the registry seeder so both produce identical rows.
+    const freeReview = read('src/routes/free-review-submit.ts');
+    expect(read('src/routes/free-review-legacy.ts')).toContain('enqueueFreeReview(scopedDb, { owner, repository, ref: requestedRef, ipHash })');
     expect(freeReview).not.toMatch(/INSERT INTO passports/);
     expect(freeReview).toContain("INSERT INTO agent_jobs");
     expect(freeReview).toContain("'repository_scan'");
@@ -35,7 +38,8 @@ describe('Free Review contracts', () => {
 
   it('scopes every query to the fixed system tenant, not a caller-supplied tenant', () => {
     const freeReview = read('src/routes/free-review-legacy.ts');
-    expect(freeReview).toContain("export const FREE_REVIEW_TENANT_ID = 'tenant-free-review-system';");
+    expect(read('src/routes/free-review-submit.ts')).toContain("export const FREE_REVIEW_TENANT_ID = 'tenant-free-review-system';");
+    expect(freeReview).toContain("export { FREE_REVIEW_TENANT_ID } from './free-review-submit.ts';");
     expect(freeReview).toContain('attachTenantScope(FREE_REVIEW_TENANT_ID, res)');
   });
 
@@ -44,7 +48,9 @@ describe('Free Review contracts', () => {
     const capIndex = freeReview.indexOf('recentCount');
     expect(capIndex).toBeGreaterThan(-1);
     expect(freeReview.slice(capIndex, capIndex + 300)).toContain('DAILY_SUBMISSIONS_PER_IP');
-    const jobInsertIndex = freeReview.indexOf('INSERT INTO agent_jobs');
+    // The cap must be checked before the enqueue call that inserts the jobs.
+    const jobInsertIndex = freeReview.indexOf('enqueueFreeReview(scopedDb');
+    expect(jobInsertIndex).toBeGreaterThan(-1);
     expect(capIndex).toBeLessThan(jobInsertIndex);
   });
 

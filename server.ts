@@ -31,6 +31,7 @@ import { createMspRouter } from './src/routes/msp.ts';
 import { createAiTrustRouter } from './src/routes/ai-trust.ts';
 import { createRemediationTasksRouter } from './src/routes/remediation-tasks.ts';
 import { createBillingRouter, stripeWebhookHandler } from './src/routes/billing.ts';
+import { createSoftwareRegistryRouter } from './src/routes/software-registry.ts';
 import { createVendorsRouter } from './src/routes/vendors.ts';
 import { createQuestionnairesRouter } from './src/routes/questionnaires.ts';
 import { createSavingsRouter } from './src/routes/savings.ts';
@@ -76,6 +77,8 @@ app.use((_req, res, next) => { res.setHeader('Permissions-Policy', PERMISSIONS_P
 // Access-Control-Allow-Origin: * and is read-only, credential-free, and gated
 // on the same signed Passport token as /api/public/v1/.../trust/:token.
 app.use('/badge', rateLimiter, createBadgeRouter());
+// Public, server-rendered software pages (indexable; only completed reviews).
+app.use('/software', rateLimiter, createSoftwareRegistryRouter());
 app.use(cors({ origin: corsOrigin, credentials: true, methods: ['GET','HEAD','POST','PUT','PATCH','DELETE','OPTIONS'], allowedHeaders: ['Authorization','Content-Type','X-Request-ID','X-API-Key'] }));
 app.use((req, res, next) => { if (req.method === 'TRACE' || req.method === 'CONNECT') return res.status(405).json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'HTTP method is not allowed.' } }); if (req.headers['content-length'] && !/^\d+$/.test(String(req.headers['content-length']))) return res.status(400).json({ error: { code: 'INVALID_CONTENT_LENGTH', message: 'Invalid Content-Length header.' } }); return next(); });
 app.post('/api/billing/webhook', express.raw({ type: 'application/json', limit: requestBodyLimit }), stripeWebhookHandler);
