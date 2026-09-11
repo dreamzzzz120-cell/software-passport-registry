@@ -21,7 +21,7 @@ const read = (relative: string) => fs.readFileSync(path.join(root, relative), 'u
 // HTTP 402 in production for a tenant that had never been through checkout.
 // Verified against the live Railway HTTP logs on 2026-09-02.
 const REGRESSED_ENDPOINTS = [
-  { baseUrl: '/api', path: '/integrations', capability: 'api' },
+  { baseUrl: '/api', path: '/integrations', capability: 'workspace' },
   { baseUrl: '/api', path: '/user/clients', capability: 'workspace' },
   { baseUrl: '/api', path: '/scans', capability: 'sbom' },
   { baseUrl: '/api', path: '/user/passports', capability: 'passport' },
@@ -302,5 +302,38 @@ describe('authentication, tenant isolation and billing exemptions are unchanged'
     expect(server).toContain("app.use('/api/billing', createBillingRouter())");
     expect(read('src/routes/billing.ts')).toContain("router.post('/one-time-checkout', requireAuth");
     expect(read('src/middleware/security.ts')).toContain("const BILLING_EXEMPT_PATHS = ['/api/billing','/api/user/me','/api/auth/resend-verification','/api/auth/verify-status']");
+  });
+});
+
+// Observed live on 2026-09-11, minutes after the first ever completed SPR
+// checkout (MSP Starter, tenant aaa7f46a…): /api/integrations and
+// /api/vendors answered 402 for the newly paying tenant. /api/integrations was
+// mapped to the 'api' add-on capability and /api/organization + /api/tenant to
+// 'enterprise_controls', so activating a plan removed team management,
+// branding, repository connection and the customer's own deletion rights --
+// access a tenant with NO plan keeps. This pins the corrected map.
+describe('activating a paid plan never removes basic workspace administration', () => {
+  const asReq = (baseUrl: string, path: string) => ({ baseUrl, path }) as unknown as Parameters<typeof capabilityForPath>[0];
+
+  it('integration screens, team, branding and tenant self-service are workspace capabilities every plan has', () => {
+    for (const [baseUrl, path] of [
+      ['/api', '/integrations'], ['/api/integrations', '/'], ['/api/integrations', '/github/repository-scan'],
+      ['/api/integrations-live', '/'], ['/api/integrations-live', '/github/credentials'],
+      ['/api', '/organization/team'], ['/api', '/organization/branding'], ['/api', '/organization/invite'],
+      ['/api', '/tenant/offboard'], ['/api/commercial', '/tenant/deletion-request'],
+    ] as const) {
+      expect(capabilityForPath(asReq(baseUrl, path)), `${baseUrl}${path}`).toBe('workspace');
+    }
+  });
+
+  it("the 'api' capability covers only the machine API surface", () => {
+    expect(capabilityForPath(asReq('/api/agent/v1', '/passports'))).toBe('api');
+    expect(capabilityForPath(asReq('/api/connect', '/v1/software'))).toBe('api');
+    expect(capabilityForPath(asReq('/api/integrations/connect', '/v1/api-keys'))).toBe('api');
+  });
+
+  it('no path is gated behind enterprise_controls', () => {
+    const source = read('src/security/entitlements.ts');
+    expect(source).not.toMatch(/capability: 'enterprise_controls', test:/);
   });
 });

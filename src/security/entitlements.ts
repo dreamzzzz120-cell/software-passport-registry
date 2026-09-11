@@ -10,8 +10,17 @@ const PATH_CAPABILITIES: Array<{ capability: Capability; test: (path: string) =>
   { capability: 'governance', test: p => p.includes('/governance') || p.includes('/privacy') || p.includes('/compliance') },
   { capability: 'msp', test: p => p.includes('/msp') },
   { capability: 'monitoring', test: p => p.includes('/monitoring') || p.includes('/integration-monitoring') },
-  { capability: 'api', test: p => p.includes('/agent/v1') || p === '/api/connect' || p.includes('/api/integrations') },
-  { capability: 'enterprise_controls', test: p => p.includes('/tenant') || p.includes('/organization') },
+  // 'api' is the machine-to-machine SPR Connect / Agent API (an add-on). The
+  // product's own integration screens (/api/integrations, /api/integrations-
+  // live: connect a repo, save credentials) are core workspace function and
+  // must not be gated behind it -- a paying MSP Starter customer was locked
+  // out of connecting GitHub the moment their subscription activated.
+  { capability: 'api', test: p => p.includes('/agent/v1') || p === '/api/connect' || p.startsWith('/api/connect/') || p.includes('/api/integrations/connect') },
+  // No path maps to enterprise_controls: /api/organization/* (team, branding,
+  // invites) and /api/tenant/* (offboarding, deletion requests) are basic
+  // workspace administration and a customer's own data rights, not an
+  // Enterprise-tier feature. The capability stays defined for explicit
+  // enforceCapability() use if a real enterprise-only control is ever built.
   { capability: 'sbom', test: p => p.includes('/scan') || p.includes('/sbom') },
   { capability: 'passport', test: p => p.includes('/passport') || p.includes('/trust-loop') },
 ];
