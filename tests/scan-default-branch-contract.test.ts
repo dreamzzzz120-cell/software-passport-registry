@@ -63,9 +63,12 @@ describe('Free Review does not pin every scan to "main"', () => {
 
   it('stores null rather than a guessed branch name', () => {
     expect(route).toContain('const requestedRef = ref ?? null;');
-    expect(route).toContain('${requestedRef}');
+    expect(route).toContain('ref: requestedRef');
+    const submit = read('src/routes/free-review-submit.ts');
+    expect(submit).toContain('const requestedRef = input.ref ?? null;');
+    expect(submit).toContain('${requestedRef}');
     // The raw optional value must never reach the insert.
-    expect(route).not.toContain(",${ref},''");
+    expect(submit).not.toContain(",${ref},''");
   });
 
   it('still lets a caller pin an explicit ref', () => {
