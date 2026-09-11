@@ -125,6 +125,7 @@ export function createLegacyFreeReviewRouter() {
         REPOSITORY_NOT_FOUND: 'That repository could not be found on GitHub. Check the owner and repository name.',
         REPOSITORY_REF_NOT_FOUND: 'That repository exists, but its default branch could not be read.',
         REPOSITORY_ACCESS_DENIED: 'That repository is private or not publicly accessible. Free Review only scans public repositories.',
+        REPOSITORY_PRIVATE_REQUIRES_CREDENTIAL: 'That repository is private. Free Review only scans public repositories; to scan a private repository, sign in and connect your GitHub account under Integrations.',
         REPOSITORY_RATE_LIMITED: 'SPR has temporarily exhausted its GitHub request budget. This is a limit on our side, not a problem with your repository. Please try again shortly.',
         REPOSITORY_ACQUISITION_FAILED: 'The repository could not be downloaded for scanning.',
         REPOSITORY_PATH_INVALID: 'The requested path inside that repository is not valid.',

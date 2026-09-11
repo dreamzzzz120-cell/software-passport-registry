@@ -1,3 +1,4 @@
+import { decryptCredentials } from '../integrations/credential-vault.ts';
 import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
@@ -49,9 +50,22 @@ const GITHUB_CODELOAD_ORIGIN = 'https://codeload.github.com';
 // "that repository is private" -- see the 2026-09-10 production Free Review
 // outage. GITHUB_TOKEN is optional so local and test runs still work unauthed.
 const githubToken = () => process.env.GITHUB_TOKEN?.trim() || '';
-export function githubHeaders(extra: Record<string, string> = {}): Record<string, string> {
-  const token = githubToken();
+export function githubHeaders(extra: Record<string, string> = {}, token: string = githubToken()): Record<string, string> {
   return { 'user-agent': 'spr-repository-worker/1.0', ...extra, ...(token ? { authorization: `Bearer ${token}` } : {}) };
+}
+// A tenant's own saved GitHub credential (Integrations -> GitHub) is what
+// authorises access to that tenant's PRIVATE repositories. The server-wide
+// GITHUB_TOKEN exists only to lift the anonymous rate limit on PUBLIC ones;
+// it must never be the credential that opens a private repository, or one
+// tenant could read another's code by naming it.
+export async function resolveTenantGitHubToken(pool: { query: (text: string, values?: unknown[]) => Promise<{ rows: any[] }> }, tenantId: string): Promise<string | null> {
+  const row = (await pool.query(`SELECT encrypted_payload FROM integration_credentials WHERE tenant_id = $1 AND provider = 'github' LIMIT 1`, [tenantId])).rows[0];
+  if (!row?.encrypted_payload) return null;
+  try {
+    const credentials = decryptCredentials(row.encrypted_payload) as Record<string, unknown>;
+    const token = typeof credentials.accessToken === 'string' ? credentials.accessToken.trim() : '';
+    return token || null;
+  } catch { return null; }
 }
 // GitHub reports an exhausted budget as 403 (or 429) with the remaining count at
 // zero. That is a temporary condition on our side, not a statement about the
@@ -317,14 +331,14 @@ const ignoredDirectories = new Set(['.git','node_modules','vendor','build','dist
 
 function sha256(value: string | Buffer) { return crypto.createHash('sha256').update(value).digest('hex'); }
 
-async function fetchJson(url: string, notFoundCode: string) {
+async function fetchJson(url: string, notFoundCode: string, token: string = githubToken()) {
   const parsed = new URL(url);
   const origin = parsed.origin;
   if (origin !== GITHUB_API_ORIGIN || parsed.protocol !== 'https:' || parsed.username || parsed.password) throw new Error('OUTBOUND_URL_BLOCKED');
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), ACQUISITION_TIMEOUT_MS);
   try {
-    const response = await fetch(parsed, { redirect: 'error', headers: githubHeaders({ accept: 'application/vnd.github+json' }), signal: controller.signal });
+    const response = await fetch(parsed, { redirect: 'error', headers: githubHeaders({ accept: 'application/vnd.github+json' }, token), signal: controller.signal });
     if (response.status === 404 || response.status === 422) throw new Error(notFoundCode);
     if (isRateLimited(response)) throw new Error('REPOSITORY_RATE_LIMITED');
     if (response.status === 403) throw new Error('REPOSITORY_ACCESS_DENIED');
@@ -337,14 +351,14 @@ async function fetchJson(url: string, notFoundCode: string) {
   } finally { clearTimeout(timeout); }
 }
 
-export async function downloadArchive(url: string, destination: string, options: { timeoutMs?: number; maxBytes?: number } = {}) {
+export async function downloadArchive(url: string, destination: string, options: { timeoutMs?: number; maxBytes?: number; token?: string } = {}) {
   const parsed = assertTrustedOutboundUrl(url, GITHUB_CODELOAD_ORIGIN);
   const timeoutMs = options.timeoutMs ?? ACQUISITION_TIMEOUT_MS;
   const maxBytes = options.maxBytes ?? MAX_ARCHIVE_BYTES;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(parsed, { headers: githubHeaders(), redirect: 'error', signal: controller.signal });
+    const response = await fetch(parsed, { headers: githubHeaders({}, options.token ?? githubToken()), redirect: 'error', signal: controller.signal });
     if (response.status === 404) throw new Error('REPOSITORY_NOT_FOUND');
     if (isRateLimited(response)) throw new Error('REPOSITORY_RATE_LIMITED');
     if (response.status === 403) throw new Error('REPOSITORY_ACCESS_DENIED');
@@ -463,17 +477,20 @@ async function processRepositoryJob(pool: Pool, job: ClaimedJob) {
     mark('acquisition_started');
     const repoUrl = `${GITHUB_API_ORIGIN}/repos/${encodeURIComponent(source.repository_owner)}/${encodeURIComponent(source.repository_name)}`;
     const suppliedImmutableSha = typeof source.requested_ref === 'string' && /^[a-f0-9]{40}$/i.test(source.requested_ref);
-    const metadata = suppliedImmutableSha ? null : await fetchJson(repoUrl, 'REPOSITORY_NOT_FOUND');
-    mark('metadata_fetched', { hasMetadata: !!metadata });
-    if (metadata?.private) throw new Error('REPOSITORY_ACCESS_DENIED');
+    const tenantToken = await resolveTenantGitHubToken(pool, job.tenant_id);
+    const gitHubToken = tenantToken ?? githubToken();
+    const metadata = suppliedImmutableSha ? null : await fetchJson(repoUrl, 'REPOSITORY_NOT_FOUND', gitHubToken);
+    mark('metadata_fetched', { hasMetadata: !!metadata, credential: tenantToken ? 'tenant' : 'server' });
+    // A private repository is acquired only with the tenant's own credential.
+    if (metadata?.private && !tenantToken) throw new Error('REPOSITORY_PRIVATE_REQUIRES_CREDENTIAL');
     const requestedRef = source.requested_ref || metadata?.default_branch; if (!requestedRef) throw new Error('REPOSITORY_REF_NOT_FOUND');
-    const commitSha = suppliedImmutableSha ? requestedRef.toLowerCase() : (await fetchJson(`${repoUrl}/commits/${encodeURIComponent(requestedRef)}`, 'REPOSITORY_REF_NOT_FOUND'))?.sha;
+    const commitSha = suppliedImmutableSha ? requestedRef.toLowerCase() : (await fetchJson(`${repoUrl}/commits/${encodeURIComponent(requestedRef)}`, 'REPOSITORY_REF_NOT_FOUND', gitHubToken))?.sha;
     if (typeof commitSha !== 'string' || !/^[a-f0-9]{40}$/i.test(commitSha)) throw new Error('REPOSITORY_REF_NOT_FOUND');
     mark('commit_resolved');
     const descriptor = { provider:'github', owner:source.repository_owner, repository:source.repository_name, requestedRef, resolvedCommitSha:commitSha, subdirectory:source.repository_subdirectory, defaultBranch:metadata?.default_branch || null, visibility:metadata?.visibility || 'public', connectionId:source.connection_id, tenantId:job.tenant_id };
     const archivePath = path.join(tempRoot,'repository.zip'); const extractPath = path.join(tempRoot,'extracted'); const archiveExecutable = process.platform === 'win32' ? 'tar.exe' : 'unzip';
     await mkdir(extractPath);
-    await downloadArchive(`${GITHUB_CODELOAD_ORIGIN}/${encodeURIComponent(source.repository_owner)}/${encodeURIComponent(source.repository_name)}/zip/${commitSha}`, archivePath);
+    await downloadArchive(`${GITHUB_CODELOAD_ORIGIN}/${encodeURIComponent(source.repository_owner)}/${encodeURIComponent(source.repository_name)}/zip/${commitSha}`, archivePath, { token: gitHubToken });
     mark('archive_downloaded');
     const listing = await runBounded(archiveExecutable, process.platform === 'win32' ? ['-tf',archivePath] : ['-Z1',archivePath], ACQUISITION_TIMEOUT_MS, 10 * 1024 * 1024);
     if (listing.code !== 0) throw new Error('REPOSITORY_ACQUISITION_FAILED');

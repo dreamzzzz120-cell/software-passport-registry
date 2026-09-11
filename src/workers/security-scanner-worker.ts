@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, mkdir, readdir, rm } from 'node:fs/promises';
 import { Pool } from 'pg';
-import { downloadArchive, generateRepositorySbom, githubHeaders, isRateLimited, runBounded, validateArchiveEntries } from './osv-worker.ts';
+import { downloadArchive, generateRepositorySbom, githubHeaders, isRateLimited, resolveTenantGitHubToken, runBounded, validateArchiveEntries } from './osv-worker.ts';
 import { createWorkerPool, assertWorkerDatabase } from './worker-db.ts';
 import { runRealRepositoryScanners } from '../scanners/real-repository-scanners.ts';
 import { scanFindingIdentity } from '../security/scan-finding-identity.ts';
@@ -49,14 +49,17 @@ async function processSecurityJob(pool: Pool, job: any) {
     // and reported the throttle to the customer as "that repository is private"
     // -- which is what still surfaced after the osv-worker fix, because this
     // job's failure is the one that reaches failureReason.
-    const metadataResponse = await fetch(repoApi, { redirect: 'error', headers: githubHeaders({ accept: 'application/vnd.github+json', 'user-agent': 'spr-security-worker/1.0' }) });
+    const tenantToken = await resolveTenantGitHubToken(pool, job.tenant_id);
+    const headers = (extra: Record<string, string>) => tenantToken ? githubHeaders(extra, tenantToken) : githubHeaders(extra);
+    const metadataResponse = await fetch(repoApi, { redirect: 'error', headers: headers({ accept: 'application/vnd.github+json', 'user-agent': 'spr-security-worker/1.0' }) });
     if (isRateLimited(metadataResponse)) throw new Error('REPOSITORY_RATE_LIMITED');
     if (!metadataResponse.ok) throw new Error(metadataResponse.status === 404 ? 'REPOSITORY_NOT_FOUND' : 'REPOSITORY_ACCESS_DENIED');
     const metadata: any = await metadataResponse.json();
-    if (metadata.private) throw new Error('REPOSITORY_ACCESS_DENIED');
+    // Private repositories are acquired only with the tenant's own credential.
+    if (metadata.private && !tenantToken) throw new Error('REPOSITORY_PRIVATE_REQUIRES_CREDENTIAL');
     const defaultBranch = typeof metadata.default_branch === 'string' && metadata.default_branch.trim() ? metadata.default_branch.trim() : '';
     const requestedRef = source.requested_ref || defaultBranch || 'main';
-    const commitResponse = await fetch(`${repoApi}/commits/${encodeURIComponent(requestedRef)}`, { redirect: 'error', headers: githubHeaders({ accept: 'application/vnd.github+json', 'user-agent': 'spr-security-worker/1.0' }) });
+    const commitResponse = await fetch(`${repoApi}/commits/${encodeURIComponent(requestedRef)}`, { redirect: 'error', headers: headers({ accept: 'application/vnd.github+json', 'user-agent': 'spr-security-worker/1.0' }) });
     if (isRateLimited(commitResponse)) throw new Error('REPOSITORY_RATE_LIMITED');
     if (!commitResponse.ok) throw new Error('REPOSITORY_REF_NOT_FOUND');
     const commit: any = await commitResponse.json();
@@ -65,7 +68,7 @@ async function processSecurityJob(pool: Pool, job: any) {
     const archivePath = path.join(tempRoot, 'repository.zip');
     const extractPath = path.join(tempRoot, 'extracted');
     await mkdir(extractPath);
-    await downloadArchive(`https://codeload.github.com/${encodeURIComponent(source.repository_owner)}/${encodeURIComponent(source.repository_name)}/zip/${commit.sha}`, archivePath, { maxBytes: MAX_ARCHIVE_BYTES });
+    await downloadArchive(`https://codeload.github.com/${encodeURIComponent(source.repository_owner)}/${encodeURIComponent(source.repository_name)}/zip/${commit.sha}`, archivePath, { maxBytes: MAX_ARCHIVE_BYTES, ...(tenantToken ? { token: tenantToken } : {}) });
     const archiveExecutable = process.platform === 'win32' ? 'tar.exe' : 'unzip';
     const listing = await runBounded(archiveExecutable, process.platform === 'win32' ? ['-tf', archivePath] : ['-Z1', archivePath], 30_000, 10 * 1024 * 1024);
     if (listing.code !== 0) throw new Error('REPOSITORY_ACQUISITION_FAILED');
