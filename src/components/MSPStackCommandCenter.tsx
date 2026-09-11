@@ -11,7 +11,7 @@ const SOURCES = [
   ['scans', 'Scans', '/api/scans', 'Analysis jobs'],
   ['findings', 'Findings', '/api/trust-loop/findings', 'Security / trust findings'],
   ['integrations', 'Integrations', '/api/integrations', 'Connected evidence sources'],
-  ['vendors', 'Vendors', '/api/user/vendors', 'Supplier records'],
+  ['vendors', 'Vendors', '/api/vendors', 'Supplier records'],
   ['monitoring', 'Monitoring', '/api/monitoring/monitoring-configurations', 'Continuous verification'],
   ['remediation', 'Remediation', '/api/remediation-tasks', 'Work queue'],
   ['team', 'Team', '/api/organization/team', 'Technicians / operators'],

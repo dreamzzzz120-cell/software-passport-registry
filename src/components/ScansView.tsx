@@ -788,7 +788,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
                                   Client: <strong className="text-[var(--spr-text-faint)]">{schedule.clientName}</strong>
                                 </p>
                               </div>
-                              <span className={`px-2 py-0.5 rounded-full text-[8px] font-bold uppercase font-mono ${
+                              <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold uppercase font-mono ${
                                 isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-[var(--spr-surface-sunken)] text-[var(--spr-text-faint)]'
                               }`}>
                                 {schedule.status}
@@ -977,10 +977,10 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
                       </p>
                     </div>
                     <div className="text-right shrink-0">
-                      <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-bold font-mono ${s.status === 'Success' ? 'bg-emerald-100 text-emerald-800' : 'bg-[var(--spr-red)]/15 text-[var(--spr-red)]'}`}>
+                      <span className={`inline-block px-1.5 py-0.5 rounded text-[11px] font-bold font-mono ${s.status === 'Success' ? 'bg-emerald-100 text-emerald-800' : 'bg-[var(--spr-red)]/15 text-[var(--spr-red)]'}`}>
                         {s.status}
                       </span>
-                      <p className="text-[8px] font-mono text-[var(--spr-text-muted)] mt-1">{s.durationMs}ms</p>
+                      <p className="text-[11px] font-mono text-[var(--spr-text-muted)] mt-1">{s.durationMs}ms</p>
                     </div>
                   </div>
                 </div>

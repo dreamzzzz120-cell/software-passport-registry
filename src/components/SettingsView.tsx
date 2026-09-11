@@ -810,7 +810,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                         <td className="py-3 pr-2 font-semibold text-[var(--spr-text)]">
                           {sess.email}
                           {sess.current && (
-                            <span className="ml-2 font-mono text-[8px] bg-[var(--spr-surface-sunken)] text-[var(--spr-green)] border border-[var(--spr-border)] px-1.5 py-0.2 rounded font-bold uppercase">
+                            <span className="ml-2 font-mono text-[11px] bg-[var(--spr-surface-sunken)] text-[var(--spr-green)] border border-[var(--spr-border)] px-1.5 py-0.2 rounded font-bold uppercase">
                               Current Node
                             </span>
                           )}
@@ -933,7 +933,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                   {/* Verified Blocks Scrollable List */}
                   {verificationResult.details && verificationResult.details.length > 0 && (
                     <div className="bg-[var(--spr-surface-sunken)] p-2.5 rounded-lg max-h-40 overflow-y-auto font-mono text-[11px] space-y-1.5 border border-[var(--spr-border)]">
-                      <div className="font-sans font-bold text-[8px] text-[var(--spr-text-faint)] border-b border-[var(--spr-border)] pb-1 mb-1.5 uppercase">
+                      <div className="font-sans font-bold text-[11px] text-[var(--spr-text-faint)] border-b border-[var(--spr-border)] pb-1 mb-1.5 uppercase">
                         Cryptographic Signatures Checked
                       </div>
                       {verificationResult.details.map((vBlock: any, vIdx: number) => (
@@ -942,7 +942,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                             Block #{vBlock.id} ({vBlock.action}): 
                             <span className="ml-1 text-[var(--spr-text-faint)] select-all">{vBlock.storedHash.substring(0, 16)}...</span>
                           </div>
-                          <span className={`px-1.5 py-0.5 rounded text-[8px] uppercase font-bold shrink-0 ${
+                          <span className={`px-1.5 py-0.5 rounded text-[11px] uppercase font-bold shrink-0 ${
                             vBlock.valid 
                               ? 'bg-[var(--spr-surface-sunken)] text-[var(--spr-green)]'
                               : 'bg-[var(--spr-surface-sunken)] text-[var(--spr-red)]'
@@ -960,7 +960,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                 {auditChain.length === 0 && <p className="text-[var(--spr-text-faint)] font-sans">No audit events recorded yet.</p>}
                 {auditChain.slice(0, 3).map((blockObj, idx) => (
                   <div key={idx} className="p-3 bg-[var(--spr-surface-sunken)] rounded-md border border-[var(--spr-border)] space-y-1 text-[var(--spr-text-muted)] relative overflow-hidden">
-                    <div className="absolute right-2 top-2 text-[8px] bg-[var(--spr-surface-sunken)] text-[var(--spr-text-muted)] px-1.5 py-0.5 rounded uppercase font-bold">
+                    <div className="absolute right-2 top-2 text-[11px] bg-[var(--spr-surface-sunken)] text-[var(--spr-text-muted)] px-1.5 py-0.5 rounded uppercase font-bold">
                       Block #{auditChain.length - 1 - idx}
                     </div>
                     <div className="flex gap-2">
@@ -1060,7 +1060,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                   <div key={log.id} className="p-2.5 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[12px] space-y-1 text-left">
                     <div className="flex justify-between items-center">
                       <span className="font-mono font-bold text-[var(--spr-text)] truncate max-w-36">{log.email}</span>
-                      <span className={`font-mono text-[8px] font-bold px-1.5 py-0.2 rounded ${
+                      <span className={`font-mono text-[11px] font-bold px-1.5 py-0.2 rounded ${
                         log.status === 'Verified' ? 'bg-[var(--spr-surface-sunken)] text-[var(--spr-green)] ' : 'bg-[var(--spr-surface-sunken)] text-[var(--spr-red)]'
                       }`}>
                         {log.status}
@@ -1128,7 +1128,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                     <div key={idx} className="text-[12px] space-y-0.5">
                       <div className="flex justify-between items-center">
                         <span className="font-bold text-[var(--spr-text)]">{t.name}</span>
-                        <span className={`font-mono font-bold px-1.5 py-0.2 rounded text-[8px] ${
+                        <span className={`font-mono font-bold px-1.5 py-0.2 rounded text-[11px] ${
                           t.status === 'PASS' ? 'bg-[var(--spr-surface-sunken)] text-[var(--spr-green)] ' : 'bg-[var(--spr-surface-sunken)] text-[var(--spr-red)]'
                         }`}>
                           {t.status}
@@ -1727,11 +1727,11 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                         >
                           <div className="min-w-0">
                             <p className="truncate font-sans leading-snug">{bp.name}</p>
-                            <span className="text-[8px] font-mono text-[var(--spr-text-faint)] block mt-0.5">{bp.type}</span>
+                            <span className="text-[11px] font-mono text-[var(--spr-text-faint)] block mt-0.5">{bp.type}</span>
                           </div>
 
                           <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                            <span className={`px-1.5 py-0.2 rounded-[4px] text-[8px] font-mono font-bold ${
+                            <span className={`px-1.5 py-0.2 rounded-[4px] text-[11px] font-mono font-bold ${
                               bp.riskTier === 'High' ? 'bg-[var(--spr-surface-sunken)] text-[var(--spr-red)] border border-[var(--spr-border)]' :
                               bp.riskTier === 'Medium' ? 'bg-[var(--spr-surface-sunken)] text-[var(--spr-amber)] border border-[var(--spr-border)]' :
                               'bg-[var(--spr-surface-sunken)] text-[var(--spr-green)] border border-[var(--spr-border)]'
@@ -1756,7 +1756,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                 <div className="spr-panel p-5 space-y-4">
                   <div className="flex justify-between items-start border-b border-[var(--spr-border)] pb-3">
                     <div>
-                      <span className="text-[8px] font-mono uppercase tracking-widest font-bold text-[var(--spr-highlight)]">Approved Platform Standard Spec</span>
+                      <span className="text-[11px] font-mono uppercase tracking-widest font-bold text-[var(--spr-highlight)]">Approved Platform Standard Spec</span>
                       <h3 className="text-sm font-bold text-[var(--spr-text)] mt-1 flex items-center gap-1.5">
                         <CheckCircle2 className="w-4.5 h-4.5 text-[var(--spr-green)]" />
                         {activeBibleProduct.name}
@@ -1920,7 +1920,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                       <div className="space-y-3 font-sans animate-fadeIn">
                         <div className="flex justify-between items-center border-b border-[var(--spr-border)] pb-2">
                           <div>
-                            <span className="text-[8px] font-mono text-[var(--spr-text-faint)] font-bold block">ATTESTATION REPORT</span>
+                            <span className="text-[11px] font-mono text-[var(--spr-text-faint)] font-bold block">ATTESTATION REPORT</span>
                             <h4 className="font-bold text-[var(--spr-text)] text-[11px] font-mono uppercase truncate max-w-[130px]">{sandboxReport.productName}</h4>
                           </div>
 
@@ -1969,7 +1969,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                         </div>
 
                         <div className="p-2.5 bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] rounded text-[11px] text-[var(--spr-text-muted)] leading-normal space-y-1">
-                          <p className="font-bold text-[var(--spr-text)] font-mono text-[8px] uppercase">Compliance Checklist ({sandboxReport.complianceTarget}):</p>
+                          <p className="font-bold text-[var(--spr-text)] font-mono text-[11px] uppercase">Compliance Checklist ({sandboxReport.complianceTarget}):</p>
                           <p className="font-sans italic">{sandboxReport.safeguardPolicy}</p>
                         </div>
                       </div>
@@ -1983,7 +1983,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                       </div>
                     )}
 
-                    <div className="text-[8px] font-mono text-[var(--spr-text-faint)] border-t border-[var(--spr-border)] pt-2 mt-2 flex justify-between items-center">
+                    <div className="text-[11px] font-mono text-[var(--spr-text-faint)] border-t border-[var(--spr-border)] pt-2 mt-2 flex justify-between items-center">
                       <span>AUDIT KERNEL: SEC_ENGINE_v1.0</span>
                       {sandboxReport && (
                         <span>Attested: {new Date(sandboxReport.timestamp).toLocaleTimeString()}</span>
