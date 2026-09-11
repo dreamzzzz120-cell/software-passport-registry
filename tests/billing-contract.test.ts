@@ -51,7 +51,9 @@ describe('prices are read from Stripe, never restated in SPR', () => {
 
   it('reads each configured price from the Stripe Price object itself', () => {
     const s = source();
-    expect(s).toContain('await stripe.prices.retrieve(id)');
+    // The Price is still read from Stripe; the product is expanded alongside it
+    // so the product's own description travels with the price it belongs to.
+    expect(s).toContain("await stripe.prices.retrieve(id, { expand: ['product'] })");
     expect(s).toContain('price.unit_amount');
   });
 
