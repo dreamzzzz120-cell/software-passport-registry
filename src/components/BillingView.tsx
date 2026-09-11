@@ -65,7 +65,7 @@ export default function BillingView() {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan }),
       });
       const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || 'Unable to start checkout.');
+      if (!res.ok) throw new Error(data?.message || data?.error || 'Unable to start checkout.');
       if (data?.url) window.location.href = data.url;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to start checkout.');
