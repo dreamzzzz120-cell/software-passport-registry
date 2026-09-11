@@ -69,6 +69,7 @@ COPY --from=builder --chown=10001:10001 /app/package.json ./
 COPY --from=builder --chown=10001:10001 /app/node_modules ./node_modules
 COPY --from=builder --chown=10001:10001 /app/dist ./dist
 COPY --from=builder --chown=10001:10001 /app/migrations ./migrations
+COPY --from=builder --chown=10001:10001 /app/data ./data
 COPY --from=builder --chown=10001:10001 /app/index.html ./index.html
 
 RUN ! find /app -type f \( -name 'firebase-applet-config.json' -o -name '.env' -o -name '*.pem' -o -name '*.key' -o -name 'secret*.json' \) -print -quit | grep -q .
