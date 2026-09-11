@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/node';
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -482,6 +483,17 @@ export function createAuthRouter() {
   // Owner-only founder metrics. Every value is either observed from tenant
   // data or explicitly reported as not verified; this endpoint never invents
   // production health, security, financial, or performance telemetry.
+  // Founder-only: send one test event to the configured error monitor so
+  // delivery can be verified without waiting for a real failure. Returns the
+  // event id Sentry assigned, or 503 when no DSN is configured -- never a
+  // pretend success.
+  router.post('/founder/monitoring/test-event', requireAuth, requireRole('Owner'), requireFounder, async (req: AuthenticatedRequest, res) => {
+    if (!config.sentry.dsn) return res.status(503).json({ error: 'MONITORING_NOT_CONFIGURED', message: 'SENTRY_DSN is not set on this deployment.' });
+    const eventId = Sentry.captureMessage(`SPR founder test event from ${req.user!.email ?? 'founder'}`, { level: 'info', tags: { source: 'founder-dashboard' } });
+    await Sentry.flush(5000).catch(() => undefined);
+    return res.json({ eventId, sentAt: new Date().toISOString() });
+  });
+
   router.get('/founder/metrics', requireAuth, requireRole('Owner'), requireFounder, async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;

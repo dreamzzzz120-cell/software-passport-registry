@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ShieldCheck, Lock, Sparkles, Database, ArrowRight, RefreshCw } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
 import FounderCommandCenterPanel from './FounderCommandCenterPanel';
+import FounderMonitoringPanel from './FounderMonitoringPanel';
 
 interface FounderDashboardViewProps {
   userRole: string;
@@ -139,6 +140,7 @@ export default function FounderDashboardView({ userRole }: FounderDashboardViewP
           </div>
         </div>
       </div>
+      <FounderMonitoringPanel />
 
       <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
         <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-6">
