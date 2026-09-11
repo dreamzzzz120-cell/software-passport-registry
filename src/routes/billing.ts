@@ -271,6 +271,10 @@ export function createBillingRouter() {
         // Buyers can enter a Stripe promotion code on the hosted page; a code that
         // brings the total to zero must not demand a card for a $0 subscription.
         allow_promotion_codes: true,
+        // Founder decision 2026-09-11: prices are USD everywhere. Adaptive Pricing
+        // would otherwise localise the hosted page (a Canadian buyer saw CA$214.98
+        // for the $149 plan) and settle in that currency.
+        adaptive_pricing: { enabled: false },
         payment_method_collection: 'if_required',
         success_url: `${config.appUrl}/billing?checkout=success`,
         cancel_url: `${config.appUrl}/billing?checkout=cancelled`,
@@ -308,6 +312,10 @@ export function createBillingRouter() {
         line_items: [{ price: priceId, quantity: 1 }],
         // Buyers can enter a Stripe promotion code on the hosted page.
         allow_promotion_codes: true,
+        // Founder decision 2026-09-11: prices are USD everywhere. Adaptive Pricing
+        // would otherwise localise the hosted page (a Canadian buyer saw CA$214.98
+        // for the $149 plan) and settle in that currency.
+        adaptive_pricing: { enabled: false },
         success_url: `${config.appUrl}/billing?purchase=success&product=${encodeURIComponent(parsed.data.product)}`,
         cancel_url: `${config.appUrl}/billing?purchase=cancelled`,
         client_reference_id: tenantId,
@@ -339,6 +347,10 @@ export function createBillingRouter() {
         // Buyers can enter a Stripe promotion code on the hosted page; a code that
         // brings the total to zero must not demand a card for a $0 subscription.
         allow_promotion_codes: true,
+        // Founder decision 2026-09-11: prices are USD everywhere. Adaptive Pricing
+        // would otherwise localise the hosted page (a Canadian buyer saw CA$214.98
+        // for the $149 plan) and settle in that currency.
+        adaptive_pricing: { enabled: false },
         payment_method_collection: 'if_required',
         success_url: `${config.appUrl}/billing?addon=success&addon=${encodeURIComponent(parsed.data.addon)}`,
         cancel_url: `${config.appUrl}/billing?addon=cancelled`,
