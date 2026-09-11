@@ -26,8 +26,9 @@ async function main() {
   const client = await appPool.connect();
   const out: Record<string, any> = { generatedAt: new Date().toISOString(), passports: [] as any[] };
   try {
-    const user = (await client.query('SELECT tenant_id FROM users WHERE lower(email) = $1 ORDER BY created_at ASC LIMIT 1', [founderEmail])).rows[0];
-    if (!user) throw new Error(`no user row for ${founderEmail}`);
+    const tenantArg = process.argv.find((a) => a.startsWith('--tenant='))?.slice('--tenant='.length);
+    const user = tenantArg ? { tenant_id: tenantArg } : (await client.query('SELECT tenant_id FROM users WHERE lower(btrim(email)) = $1 ORDER BY created_at ASC LIMIT 1', [founderEmail])).rows[0];
+    if (!user) throw new Error(`no user row for ${founderEmail}; pass --tenant=<tenant id>`);
     const tenantId: string = user.tenant_id;
     await client.query('BEGIN');
     await client.query("SELECT set_config('app.tenant_id', $1, true)", [tenantId]);

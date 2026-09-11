@@ -33,7 +33,8 @@ const COMPANY = { name: 'Software Passport Registry Ltd.', domain: 'softwarepass
 const id = (prefix: string) => `${prefix}_${crypto.randomUUID().replace(/-/g, '')}`;
 
 async function main() {
-  const repos = process.argv.slice(2).filter((r) => /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/.test(r));
+  const repos = process.argv.slice(2).filter((r) => !r.startsWith('--') && /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/.test(r));
+  const tenantArg = process.argv.find((a) => a.startsWith('--tenant='))?.slice('--tenant='.length);
   if (repos.length === 0) { console.error('usage: seed-founder-workspace.cjs <owner/repo> [...]'); process.exit(2); }
   const founderEmail = (process.env.FOUNDER_EMAILS || process.env.SPR_INITIAL_OWNER_EMAIL || '').split(',')[0].trim().toLowerCase();
   if (!founderEmail) throw new Error('FOUNDER_EMAILS / SPR_INITIAL_OWNER_EMAIL not set');
@@ -41,8 +42,8 @@ async function main() {
 
   const client = await appPool.connect();
   try {
-    const user = (await client.query('SELECT id, uid, tenant_id FROM users WHERE lower(email) = $1 ORDER BY created_at ASC LIMIT 1', [founderEmail])).rows[0];
-    if (!user) throw new Error(`no user row for ${founderEmail}`);
+    const user = tenantArg ? { tenant_id: tenantArg } : (await client.query('SELECT tenant_id FROM users WHERE lower(btrim(email)) = $1 ORDER BY created_at ASC LIMIT 1', [founderEmail])).rows[0];
+    if (!user) throw new Error(`no user row for ${founderEmail}; pass --tenant=<tenant id>`);
     const tenantId: string = user.tenant_id;
     console.log('founder tenant', tenantId);
 
