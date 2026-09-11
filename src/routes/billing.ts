@@ -93,7 +93,10 @@ function stripeClient(): Stripe {
 // the previously resolved value in place rather than replacing a true price
 // with a blank one, and a price that was never resolved stays null — the UI
 // says the price is unavailable instead of showing a number SPR made up.
-export type ResolvedPrice = { priceLabel: string; unitAmount: number; currency: string; interval: string | null };
+// description is the Stripe Product's own description, expanded off the
+// Price. It is the one place product copy lives, so the billing page shows
+// what Stripe says rather than restating it in the client.
+export type ResolvedPrice = { priceLabel: string; unitAmount: number; currency: string; interval: string | null; description: string | null };
 const PRICE_CACHE_TTL_MS = 5 * 60 * 1000;
 const resolvedPrices = new Map<string, ResolvedPrice>();
 let priceCacheRefreshedAt = 0;
@@ -112,7 +115,9 @@ function describePrice(price: Stripe.Price): ResolvedPrice | null {
   }).format(major);
   const recurring = price.recurring;
   const interval = recurring ? (recurring.interval_count > 1 ? `${recurring.interval_count} ${recurring.interval}s` : recurring.interval) : null;
-  return { priceLabel: interval ? `${formatted}/${interval}` : formatted, unitAmount: price.unit_amount, currency: price.currency, interval };
+  const product = typeof price.product === 'object' && price.product && !('deleted' in price.product) ? price.product : null;
+  const description = product?.description?.trim() || null;
+  return { priceLabel: interval ? `${formatted}/${interval}` : formatted, unitAmount: price.unit_amount, currency: price.currency, interval, description };
 }
 
 async function refreshPrices(): Promise<void> {
@@ -120,7 +125,7 @@ async function refreshPrices(): Promise<void> {
   const ids = [...new Set(Object.values(config.stripe.prices).filter((id): id is string => Boolean(id)))];
   await Promise.all(ids.map(async (id) => {
     try {
-      const described = describePrice(await stripe.prices.retrieve(id));
+      const described = describePrice(await stripe.prices.retrieve(id, { expand: ['product'] }));
       if (described) resolvedPrices.set(id, described);
       else resolvedPrices.delete(id);
     } catch (error) {
@@ -149,6 +154,7 @@ type CatalogEntry = {
   unitAmount: number | null;
   currency: string | null;
   interval: string | null;
+  description: string | null;
   checkoutAvailable: boolean;
 };
 
@@ -161,6 +167,7 @@ function catalogEntry(id: string, label: string, priceId: string | undefined, pr
     unitAmount: price?.unitAmount ?? null,
     currency: price?.currency ?? null,
     interval: price?.interval ?? null,
+    description: price?.description ?? null,
     // A configured Price ID is what checkout needs; the label is what the
     // customer needs. Both must hold before anything is offered for sale, so
     // nobody is ever asked to buy at a price SPR could not state.

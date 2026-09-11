@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { CreditCard, ShieldCheck, ExternalLink, Loader2, AlertTriangle, FileCheck2 } from 'lucide-react';
+import { CreditCard, ShieldCheck, ExternalLink, Loader2, AlertTriangle } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
 
 type PlanId = 'pilot' | 'starter' | 'professional' | 'growth' | 'enterprise';
@@ -13,9 +13,9 @@ type AddonId = 'continuousVerification' | 'trustBadge' | 'publicPassport' | 'api
 // priceLabel is nullable on purpose: it comes from the real Stripe Price and
 // is null when that price could not be read, which the UI must show as an
 // unavailable price rather than as a figure of its own.
-type PlanMeta = { id: PlanId; label: string; priceLabel: string | null; clientLimit: number | null; checkoutAvailable: boolean };
-type ProductMeta = { id: OneTimeProductId; label: string; priceLabel: string | null; checkoutAvailable: boolean };
-type AddonMeta = { id: AddonId; label: string; priceLabel: string | null; checkoutAvailable: boolean };
+type PlanMeta = { id: PlanId; label: string; priceLabel: string | null; clientLimit: number | null; description: string | null; checkoutAvailable: boolean };
+type ProductMeta = { id: OneTimeProductId; label: string; priceLabel: string | null; description: string | null; checkoutAvailable: boolean };
+type AddonMeta = { id: AddonId; label: string; priceLabel: string | null; description: string | null; checkoutAvailable: boolean };
 type BillingStatus = {
   billingConfigured: boolean;
   plans: PlanMeta[];
@@ -29,6 +29,12 @@ type BillingStatus = {
 };
 
 const limitLabel = (limit: number | null) => limit === null ? 'Unlimited clients' : `Up to ${limit} client${limit === 1 ? '' : 's'}`;
+// One primary action per section; everything else is the outlined secondary,
+// so the page reads as a decision rather than nineteen identical blue buttons.
+const BTN_BASE = 'inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-40';
+const BTN_PRIMARY = `${BTN_BASE} bg-[var(--spr-accent)] text-white hover:bg-[var(--spr-accent-hover)]`;
+const BTN_OUTLINE = `${BTN_BASE} border border-[var(--spr-border)] bg-[var(--spr-surface)] text-[var(--spr-text)] hover:bg-[var(--spr-surface-hover)]`;
+const SALES_EMAIL = 'contact@softwarepassportregistry.com';
 
 export default function BillingView() {
   const [status, setStatus] = useState<BillingStatus | null>(null);
@@ -117,126 +123,159 @@ export default function BillingView() {
     }
   };
 
+
+  const anyBusy = busyPlan !== null || busyProduct !== null || busyAddon !== null;
+  const currentPlan = status?.subscription?.plan && status.subscription.status !== 'canceled' ? status.subscription.plan : null;
+  const currentPlanLabel = currentPlan ? status?.plans.find((p) => p.id === currentPlan)?.label ?? currentPlan : null;
+
   return (
-    <div className="space-y-8" id="msp-billing-view">
-      <div className="flex justify-between items-center">
-        <div>
-          <div className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[.22em] text-[var(--spr-amber)]"><CreditCard className="h-4 w-4" /> Billing</div>
-          <h1 className="text-xl font-display font-bold text-[var(--spr-text)]">SPR Billing</h1>
-          <p className="text-xs text-[var(--spr-text-muted)] font-sans mt-1">Paid verification, reports, monitoring, API access, and MSP subscriptions. Checkout runs through Stripe.</p>
-        </div>
+    <div className="space-y-10" id="msp-billing-view">
+      <div className="border-b border-[var(--spr-border)] pb-5">
+        <h1 className="text-2xl font-semibold tracking-tight text-[var(--spr-text)]">Billing</h1>
+        <p className="mt-1 max-w-2xl text-sm text-[var(--spr-text-muted)]">
+          Plans, add-ons and one-time assessments. Checkout runs through Stripe, and every price shown is read live from the Stripe Price the button charges against.
+        </p>
       </div>
 
       {error && (
-        <div role="alert" className="rounded-xl border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 px-4 py-3 text-xs text-[var(--spr-red)] flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 shrink-0" /> {error}
+        <div role="alert" className="flex items-center gap-2 rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 px-4 py-3 text-sm text-[var(--spr-red)]">
+          <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
         </div>
       )}
 
       {loading ? (
-        <div className="flex flex-col items-center justify-center p-20 bg-[var(--spr-surface)] border border-[var(--spr-border)] rounded-xl space-y-2">
-          <Loader2 className="w-6 h-6 text-[var(--spr-highlight)] animate-spin" />
-          <p className="text-xs text-[var(--spr-text-muted)] font-mono uppercase">Loading billing status…</p>
+        <div className="flex flex-col items-center justify-center space-y-2 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-20">
+          <Loader2 className="h-6 w-6 animate-spin text-[var(--spr-highlight)]" />
+          <p className="text-sm text-[var(--spr-text-muted)]">Loading billing…</p>
         </div>
       ) : !status?.billingConfigured ? (
-        <div className="rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface)] p-8 text-center space-y-2">
-          <CreditCard className="w-8 h-8 text-[var(--spr-text-faint)] mx-auto" />
+        <div className="space-y-2 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-8 text-center">
+          <CreditCard className="mx-auto h-8 w-8 text-[var(--spr-text-faint)]" />
           <p className="text-sm font-semibold text-[var(--spr-text)]">Billing is not yet configured for this deployment.</p>
-          <p className="text-xs text-[var(--spr-text-muted)]">Stripe credentials are not available to this server.</p>
+          <p className="text-sm text-[var(--spr-text-muted)]">Stripe credentials are not available to this server.</p>
         </div>
       ) : (
         <>
-          {status.subscription?.plan && status.subscription.status !== 'canceled' && (
-            <div className="rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface)] p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <p className="text-[12px] font-mono uppercase text-[var(--spr-text-muted)]">Current plan</p>
-                <p className="text-lg font-bold text-[var(--spr-text)] flex items-center gap-2">
-                  {status.plans.find((p) => p.id === status.subscription!.plan)?.label ?? status.subscription.plan}
-                  <span className={`text-[12px] font-bold px-2 py-0.5 rounded-full ${status.subscription.status === 'active' ? 'bg-[var(--spr-green)]/15 text-[var(--spr-green)]' : status.subscription.status === 'past_due' ? 'bg-[var(--spr-red)]/15 text-[var(--spr-red)]' : 'bg-[var(--spr-amber)]/15 text-[var(--spr-amber)]'}`}>
-                    {status.subscription.status}
+          {currentPlan && (
+            <div className="flex flex-col justify-between gap-4 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] px-5 py-4 md:flex-row md:items-center">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm text-[var(--spr-text-muted)]">Current plan</span>
+                  <span className="text-base font-semibold text-[var(--spr-text)]">{currentPlanLabel}</span>
+                  <span className={`rounded-full border px-2 py-0.5 text-[12px] font-medium ${status.subscription!.status === 'active' ? 'border-[var(--spr-green)]/40 text-[var(--spr-green)]' : status.subscription!.status === 'past_due' ? 'border-[var(--spr-red)]/40 text-[var(--spr-red)]' : 'border-[var(--spr-amber)]/40 text-[var(--spr-amber)]'}`}>
+                    {status.subscription!.status.replace('_', ' ')}
                   </span>
-                </p>
-                <p className="text-xs text-[var(--spr-text-muted)] mt-1">
-                  {status.clientCount} client{status.clientCount === 1 ? '' : 's'} used{status.subscription.clientLimit != null ? ` of ${status.subscription.clientLimit}` : ' (unlimited)'}
-                  {status.subscription.currentPeriodEnd && ` · renews ${new Date(status.subscription.currentPeriodEnd).toLocaleDateString()}`}
+                </div>
+                <p className="mt-1 text-sm text-[var(--spr-text-muted)]">
+                  {status.clientCount} client{status.clientCount === 1 ? '' : 's'} used{status.subscription!.clientLimit != null ? ` of ${status.subscription!.clientLimit}` : ' (unlimited)'}
+                  {status.subscription!.currentPeriodEnd && ` · renews ${new Date(status.subscription!.currentPeriodEnd).toLocaleDateString()}`}
                 </p>
               </div>
-              <button onClick={handleManageBilling} disabled={openingPortal} className="inline-flex items-center gap-1.5 bg-[var(--spr-surface-sunken)] hover:bg-[var(--spr-surface-hover)] text-[var(--spr-text)] font-bold py-2 px-3.5 rounded-lg text-xs transition cursor-pointer disabled:opacity-50">
-                {openingPortal ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ExternalLink className="w-3.5 h-3.5" />}
+              <button onClick={handleManageBilling} disabled={openingPortal} className={BTN_OUTLINE}>
+                {openingPortal ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
                 Manage billing
               </button>
             </div>
           )}
 
-          <section>
-            <div className="flex items-end justify-between gap-4 mb-4">
-              <div>
-                <div className="text-[12px] font-bold uppercase tracking-[.18em] text-[var(--spr-highlight)]">One-time purchases</div>
-                <h2 className="text-lg font-bold text-[var(--spr-text)]">Pay for the work you need</h2>
-              </div>
-              <FileCheck2 className="h-5 w-5 text-[var(--spr-text-faint)]" />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-              {status.products.map((product) => (
-                <div key={product.id} className="rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface)] p-5 space-y-3">
-                  <h3 className="text-sm font-bold text-[var(--spr-text)]">{product.label}</h3>
-                  <p className={`text-xl font-bold ${product.priceLabel ? 'text-[var(--spr-highlight)]' : 'text-[var(--spr-text-faint)]'}`}>{product.priceLabel ?? 'Price unavailable'}</p>
-                  <button onClick={() => handlePurchase(product.id)} disabled={!product.checkoutAvailable || busyProduct !== null || busyPlan !== null || busyAddon !== null} className="w-full inline-flex items-center justify-center gap-1.5 bg-[var(--spr-accent)] hover:bg-[var(--spr-accent-hover)] disabled:opacity-40 text-white font-bold py-2 rounded-lg text-xs transition cursor-pointer">
-                    {busyProduct === product.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                    {product.checkoutAvailable ? 'Buy now' : 'Unavailable'}
-                  </button>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section>
-            <div className="mb-4">
-              <div className="text-[12px] font-bold uppercase tracking-[.18em] text-[var(--spr-highlight)]">Recurring</div>
-              <h2 className="text-lg font-bold text-[var(--spr-text)]">MSP plans</h2>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-              {status.plans.map((planMeta) => {
-                const isCurrent = status.subscription?.plan === planMeta.id && status.subscription.status !== 'canceled';
+          <section aria-labelledby="billing-plans">
+            <h2 id="billing-plans" className="text-base font-semibold text-[var(--spr-text)]">Plans</h2>
+            <p className="mt-1 text-sm text-[var(--spr-text-muted)]">Pick the tier that matches how many clients you manage. Change plans any time from Manage billing.</p>
+            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+              {status.plans.map((plan) => {
+                const isCurrent = plan.id === currentPlan;
+                const recommended = plan.id === 'professional';
+                const salesLed = !plan.checkoutAvailable && (plan.id === 'enterprise' || plan.id === 'pilot');
                 return (
-                  <div key={planMeta.id} className={`rounded-xl border p-5 space-y-3 ${isCurrent ? 'border-[var(--spr-highlight)] bg-[var(--spr-accent)]/10' : 'border-[var(--spr-border)] bg-[var(--spr-surface)]'}`}>
-                    <h3 className="text-sm font-bold text-[var(--spr-text)]">{planMeta.label}</h3>
-                    <p className={`text-xs font-semibold ${planMeta.priceLabel ? 'text-[var(--spr-highlight)]' : 'text-[var(--spr-text-faint)]'}`}>{planMeta.priceLabel ?? 'Price unavailable'}</p>
-                    <p className="text-xs text-[var(--spr-text-muted)]">{limitLabel(planMeta.clientLimit)}</p>
-                    {isCurrent ? (
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-[var(--spr-green)]"><ShieldCheck className="w-4 h-4" /> Current plan</div>
-                    ) : (
-                      <button onClick={() => handleSubscribe(planMeta.id)} disabled={!planMeta.checkoutAvailable || busyPlan !== null || busyProduct !== null || busyAddon !== null} className="w-full inline-flex items-center justify-center gap-1.5 bg-[var(--spr-accent)] hover:bg-[var(--spr-accent-hover)] disabled:opacity-40 text-white font-bold py-2 rounded-lg text-xs transition cursor-pointer">
-                        {busyPlan === planMeta.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                        {planMeta.checkoutAvailable ? 'Subscribe' : 'Unavailable'}
-                      </button>
+                  <div
+                    key={plan.id}
+                    className={`relative flex flex-col rounded-md border p-5 ${isCurrent ? 'border-[var(--spr-green)]/60 bg-[var(--spr-surface)]' : recommended ? 'border-[var(--spr-highlight)] bg-[var(--spr-surface)]' : 'border-[var(--spr-border)] bg-[var(--spr-surface)]'}`}
+                  >
+                    {recommended && !isCurrent && (
+                      <span className="absolute -top-2.5 left-4 rounded-full bg-[var(--spr-highlight)] px-2 py-0.5 text-[11px] font-semibold text-white">Recommended</span>
                     )}
+                    <h3 className="text-sm font-semibold text-[var(--spr-text)]">{plan.label}</h3>
+                    <div className="mt-3 flex items-baseline gap-1">
+                      {plan.priceLabel ? (
+                        <>
+                          <span className="text-2xl font-semibold tabular-nums text-[var(--spr-text)]">{plan.priceLabel.split('/')[0]}</span>
+                          {plan.priceLabel.includes('/') && <span className="text-sm text-[var(--spr-text-muted)]">/{plan.priceLabel.split('/')[1]}</span>}
+                        </>
+                      ) : (
+                        <span className="text-2xl font-semibold text-[var(--spr-text)]">{salesLed ? 'Custom' : '—'}</span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-sm text-[var(--spr-text-muted)]">{limitLabel(plan.clientLimit)}</p>
+                    {plan.description && <p className="mt-3 text-sm leading-5 text-[var(--spr-text-muted)]">{plan.description}</p>}
+                    <div className="mt-auto pt-5">
+                      {isCurrent ? (
+                        <div className={`${BTN_OUTLINE} w-full cursor-default text-[var(--spr-green)]`} aria-disabled="true">
+                          <ShieldCheck className="h-4 w-4" /> Current plan
+                        </div>
+                      ) : salesLed ? (
+                        <a href={`mailto:${SALES_EMAIL}?subject=${encodeURIComponent(`SPR ${plan.label} plan`)}`} className={`${BTN_OUTLINE} w-full`}>
+                          Contact sales
+                        </a>
+                      ) : (
+                        <button
+                          onClick={() => handleSubscribe(plan.id)}
+                          disabled={!plan.checkoutAvailable || anyBusy}
+                          className={`${recommended ? BTN_PRIMARY : BTN_OUTLINE} w-full`}
+                        >
+                          {busyPlan === plan.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                          {plan.checkoutAvailable ? (currentPlan ? 'Switch plan' : 'Get started') : 'Unavailable'}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}
             </div>
           </section>
 
-          <section>
-            <div className="mb-4">
-              <div className="text-[12px] font-bold uppercase tracking-[.18em] text-[var(--spr-highlight)]">Recurring add-ons</div>
-              <h2 className="text-lg font-bold text-[var(--spr-text)]">Keep software verified</h2>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <section aria-labelledby="billing-addons">
+            <h2 id="billing-addons" className="text-base font-semibold text-[var(--spr-text)]">Add-ons</h2>
+            <p className="mt-1 text-sm text-[var(--spr-text-muted)]">Recurring services that keep your passports verified and public.</p>
+            <div className="mt-4 divide-y divide-[var(--spr-border)] rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)]">
               {status.addons.map((addon) => (
-                <div key={addon.id} className="rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface)] p-5 space-y-3">
-                  <h3 className="text-sm font-bold text-[var(--spr-text)]">{addon.label}</h3>
-                  <p className={`text-xl font-bold ${addon.priceLabel ? 'text-[var(--spr-highlight)]' : 'text-[var(--spr-text-faint)]'}`}>{addon.priceLabel ?? 'Price unavailable'}</p>
-                  <button onClick={() => handleAddon(addon.id)} disabled={!addon.checkoutAvailable || busyAddon !== null || busyProduct !== null || busyPlan !== null} className="w-full inline-flex items-center justify-center gap-1.5 bg-[var(--spr-accent)] hover:bg-[var(--spr-accent-hover)] disabled:opacity-40 text-white font-bold py-2 rounded-lg text-xs transition cursor-pointer">
-                    {busyAddon === addon.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                    {addon.checkoutAvailable ? 'Add to billing' : 'Unavailable'}
-                  </button>
+                <div key={addon.id} className="flex items-center justify-between gap-4 px-4 py-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-[var(--spr-text)]">{addon.label}</div>
+                    {addon.description && <div className="mt-0.5 text-sm text-[var(--spr-text-muted)]">{addon.description}</div>}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-4">
+                    <span className="text-sm font-semibold tabular-nums text-[var(--spr-text)]">{addon.priceLabel ?? '—'}</span>
+                    <button onClick={() => handleAddon(addon.id)} disabled={!addon.checkoutAvailable || anyBusy} className={BTN_OUTLINE}>
+                      {busyAddon === addon.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                      {addon.checkoutAvailable ? 'Add' : 'Unavailable'}
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
           </section>
 
-          <p className="text-[11px] leading-5 text-[var(--spr-text-faint)]">Stripe is the payment processor. Every amount shown is read from the live Stripe Price the checkout button charges against, so a plan whose price cannot be read is shown as unavailable rather than priced from memory.</p>
+          <section aria-labelledby="billing-onetime">
+            <h2 id="billing-onetime" className="text-base font-semibold text-[var(--spr-text)]">One-time reports & assessments</h2>
+            <p className="mt-1 text-sm text-[var(--spr-text-muted)]">Pay once for a specific deliverable. No subscription required.</p>
+            <div className="mt-4 divide-y divide-[var(--spr-border)] rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)]">
+              {status.products.map((product) => (
+                <div key={product.id} className="flex items-center justify-between gap-4 px-4 py-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-[var(--spr-text)]">{product.label}</div>
+                    {product.description && <div className="mt-0.5 text-sm text-[var(--spr-text-muted)]">{product.description}</div>}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-4">
+                    <span className="text-sm font-semibold tabular-nums text-[var(--spr-text)]">{product.priceLabel ?? '—'}</span>
+                    <button onClick={() => handlePurchase(product.id)} disabled={!product.checkoutAvailable || anyBusy} className={BTN_OUTLINE}>
+                      {busyProduct === product.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                      {product.checkoutAvailable ? 'Buy' : 'Unavailable'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
         </>
       )}
     </div>
