@@ -20,8 +20,8 @@ describe('/ready fails closed on every dependency it checks, not just the databa
 
   it('the /ready handler exists and is mounted at both paths', () => {
     expect(start).toBeGreaterThan(-1);
-    expect(server).toContain("app.get('/ready', readinessHandler)");
-    expect(server).toContain("app.get('/api/ready', readinessHandler)");
+    expect(server).toContain("app.get('/ready', rateLimiter, readinessHandler)");
+    expect(server).toContain("app.get('/api/ready', rateLimiter, readinessHandler)");
   });
 
   it('readiness requires the database check to have actually succeeded', () => {

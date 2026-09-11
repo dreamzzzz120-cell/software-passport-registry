@@ -90,8 +90,8 @@ app.get('/health', (_req, res) => res.status(200).json({ status: 'ok', service: 
 // /api/ready is the same probe reached through the Vercel /api/* rewrite; the
 // Settings diagnostics panel calls it, so it must exist under both paths.
 const readinessHandler = async (_req: Request, res: Response) => { const database = await checkDatabaseHealth(); let rls: boolean | null = null; let runtimeRole: string | null = null; if (database.ok) { const [rlsResult, roleResult] = await Promise.all([ db.execute(sql`SELECT spr_assert_tenant_rls()`).then(() => true).catch(() => false), appPool.query('SELECT current_user AS role').then((scoped) => scoped.rows?.[0]?.role ?? null).catch(() => null) ]); rls = rlsResult; runtimeRole = roleResult; } const leastPrivilege = runtimeRole === 'spr_app_runtime'; const ready = database.ok && rls === true && leastPrivilege; res.status(ready ? 200 : 503).json({ status: ready ? 'ready' : 'not_ready', checks: { database: database.ok ? database : { ok: false, latencyMs: database.latencyMs, error: 'DATABASE_UNAVAILABLE' }, tenantRls: { ok: rls }, runtimeRole: { role: runtimeRole, leastPrivilege } }, uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000) }); };
-app.get('/ready', readinessHandler);
-app.get('/api/ready', readinessHandler);
+app.get('/ready', rateLimiter, readinessHandler);
+app.get('/api/ready', rateLimiter, readinessHandler);
 app.get('/api/health', async (_req, res) => { const database = await checkDatabaseHealth(); res.status(database.ok ? 200 : 503).json({ status: database.ok ? 'ok' : 'degraded', database: database.ok ? database : { ok: false, latencyMs: database.latencyMs, error: 'DATABASE_UNAVAILABLE' } }); });
 app.use('/api', rateLimiter);
 app.use('/api', createAuthRouter());
