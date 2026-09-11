@@ -337,3 +337,26 @@ describe('activating a paid plan never removes basic workspace administration', 
     expect(source).not.toMatch(/capability: 'enterprise_controls', test:/);
   });
 });
+
+// Add-ons were only audit-logged: buying "SPR API" or "Continuous
+// Verification" changed nothing usable, because 'api' and 'monitoring' came
+// from the plan alone. Observed 2026-09-11 while exercising every priced
+// item. The webhook now records add-on subscriptions in tenant_addons and the
+// gate grants the add-on's capability while that row is entitling.
+describe('paid add-ons grant a real capability', () => {
+  it('maps the two functional add-ons, and deliberately not the two ungated ones', async () => {
+    const { ADDON_CAPABILITY_GRANTS } = await import('../src/security/entitlements.ts');
+    expect(ADDON_CAPABILITY_GRANTS).toEqual({ api: 'api', continuousVerification: 'monitoring' });
+  });
+
+  it('webhook records add-on subscriptions and checkout refuses a duplicate active add-on', () => {
+    const billing = read('src/routes/billing.ts');
+    expect(billing).toContain('INSERT INTO tenant_addons (stripe_subscription_id, tenant_id, addon, status)');
+    expect(billing).toContain("UPDATE tenant_addons SET status = 'canceled'");
+    expect(billing).toContain("error: 'ADDON_ALREADY_ACTIVE'");
+    expect(billing).toContain("error: 'PLAN_ALREADY_ACTIVE'");
+    const entitlements = read('src/security/entitlements.ts');
+    expect(entitlements).toContain('tenantHasAddonCapability(db, tenantId, capability)');
+    expect(fs.existsSync(path.join(process.cwd(), 'migrations/0077_tenant_addons.sql'))).toBe(true);
+  });
+});

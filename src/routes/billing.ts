@@ -312,6 +312,10 @@ export function createBillingRouter() {
       if (!priceId) return res.status(503).json({ error: 'This add-on is not yet available for checkout.' });
       const tenantId = req.user!.tenantId;
       const stripe = stripeClient();
+      // One active subscription per add-on per tenant; a second checkout would
+      // create a second live Stripe subscription for the same thing.
+      const activeAddon = (await req.db!.execute(sql`SELECT stripe_subscription_id FROM tenant_addons WHERE tenant_id = ${tenantId} AND addon = ${parsed.data.addon} AND status IN ('active', 'trialing', 'past_due') LIMIT 1`) as any).rows?.[0];
+      if (activeAddon) return res.status(409).json({ error: 'ADDON_ALREADY_ACTIVE', code: 'ADDON_ALREADY_ACTIVE', addon: parsed.data.addon, billingPath: '/billing', message: `${ADDON_CONFIG[parsed.data.addon].label} is already active on this workspace. Manage it from Manage billing.` });
       const session = await stripe.checkout.sessions.create({
         mode: 'subscription',
         customer_email: req.user!.email,
@@ -441,6 +445,9 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
           // payment, so it missed the one-time branch. Only billing.addon.initiated
           // was ever recorded, which cannot distinguish an add-on somebody
           // bought from one they abandoned at the Stripe page.
+          if (typeof session.subscription === 'string' && ADDON_CONFIG[session.metadata.addon as AddonId]) {
+            await db.execute(sql`INSERT INTO tenant_addons (stripe_subscription_id, tenant_id, addon, status) VALUES (${session.subscription}, ${tenantId}, ${session.metadata.addon}, 'active') ON CONFLICT (stripe_subscription_id) DO UPDATE SET status = 'active', updated_at = CURRENT_TIMESTAMP`);
+          }
           await appendAuditEntry(db, { tenantId, action: 'billing.addon.completed', actor: 'stripe-webhook', payload: { addon: session.metadata.addon, stripeEventId: event.id, checkoutSessionId: session.id, stripeSubscriptionId: session.subscription ? String(session.subscription) : null } });
         }
         break;
@@ -461,6 +468,7 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
         // plan that had genuinely lapsed. The plan row is only ever written
         // for a subscription that is actually a plan.
         if (addon && ADDON_CONFIG[addon]) {
+          if (tenantId) await db.execute(sql`INSERT INTO tenant_addons (stripe_subscription_id, tenant_id, addon, status, current_period_end) VALUES (${subscription.id}, ${tenantId}, ${addon}, ${subscription.status}, ${periodEnd}) ON CONFLICT (stripe_subscription_id) DO UPDATE SET status = EXCLUDED.status, current_period_end = EXCLUDED.current_period_end, updated_at = CURRENT_TIMESTAMP`);
           if (tenantId) await appendAuditEntry(db, { tenantId, action: 'billing.addon.status_changed', actor: 'stripe-webhook', payload: { addon, status: subscription.status, stripeEventId: event.id, stripeSubscriptionId: subscription.id } });
           break;
         }
@@ -475,6 +483,7 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
       }
       case 'customer.subscription.deleted': {
         const subscription = event.data.object as Stripe.Subscription;
+        await db.execute(sql`UPDATE tenant_addons SET status = 'canceled', updated_at = CURRENT_TIMESTAMP WHERE stripe_subscription_id = ${subscription.id}`);
         const canceled = (await db.execute(sql`UPDATE tenant_subscriptions SET status = 'canceled', updated_at = CURRENT_TIMESTAMP WHERE stripe_subscription_id = ${subscription.id} RETURNING tenant_id`) as any).rows?.[0];
         if (canceled?.tenant_id) await appendAuditEntry(db, { tenantId: canceled.tenant_id, action: 'billing.subscription.canceled', actor: 'stripe-webhook', payload: { stripeEventId: event.id } });
         break;
