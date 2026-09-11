@@ -9,10 +9,13 @@ describe('Trust Network (MSP Command Center rebuild) preserves existing function
     const s = source();
     expect(s).toContain("apiFetch('/api/msp/assignments')");
     expect(s).toContain("apiFetch('/api/organization/team')");
-    // /api/alerts/:id (finding detail) has no backend route yet -- a
-    // separate, known, still-open gap. Not asserted as working here; see
-    // the route-inventory audit that found it. Everything else in this
-    // block now has a real backend, proven below, not just preserved text.
+    // Finding detail used to call /api/alerts/:id, which never had a backend
+    // route (the "Explain this" panel always showed "Finding details are
+    // unavailable"). It now reads GET /api/trust-loop/findings/:id, which is
+    // real -- cross-checked against src/routes/trust-loop.ts below.
+    expect(s).toContain("apiFetch(`/api/trust-loop/findings/${encodeURIComponent(selected.id)}`)");
+    expect(read('src/routes/trust-loop.ts')).toContain("router.get('/findings/:id'");
+    expect(s).not.toContain('/api/alerts/');
     expect(s).toContain("apiFetch('/api/remediation-tasks'");
     expect(s).toContain("apiFetch('/api/monitoring/monitoring-configurations')");
     expect(s).toContain("onSelectClient(client.id); onNavigate('clients')");

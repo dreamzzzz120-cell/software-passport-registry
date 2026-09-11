@@ -192,7 +192,7 @@ export default function MSPCommandCenter({ clients, alerts, passports, role = 'V
     if (!selected) { setFinding(null); setFindingError(null); setTask(null); setTaskError(null); return; }
     let cancelled = false;
     setFindingLoading(true); setFindingError(null); setFinding(null);
-    apiFetch(`/api/alerts/${encodeURIComponent(selected.id)}`).then(async response => {
+    apiFetch(`/api/trust-loop/findings/${encodeURIComponent(selected.id)}`).then(async response => {
       if (!response.ok) { const body = await response.json().catch(() => ({})); throw new Error(body?.error || 'Finding details are unavailable.'); }
       return response.json();
     }).then(data => { if (!cancelled) setFinding(data); }).catch((cause: any) => { if (!cancelled) setFindingError(cause?.message || 'Finding details are unavailable.'); }).finally(() => { if (!cancelled) setFindingLoading(false); });

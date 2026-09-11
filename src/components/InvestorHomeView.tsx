@@ -49,26 +49,22 @@ export default function InvestorHomeView({ passports, onShowTelemetry, onNavigat
   const [passportSearch, setPassportSearch] = useState('');
   const [vendorSearch, setVendorSearch] = useState('');
 
+  // Opens one remediation task per OPEN finding that has none yet, through the
+  // real POST /api/remediation-tasks/bulk. Creating tasks is all this does --
+  // it never marks a finding resolved, and the log says so in plain terms.
   const triggerRemediation = async () => {
-    setIsRemediating(true); setRemediationLogs([]);
+    setIsRemediating(true); setRemediationLogs([]); setRemediationCompleted(false);
     try {
-      const response = await apiFetch('/api/remediation/run', { method: 'POST' });
-      const failure = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(failure.message || 'Remediation run failed');
-      if (failure.success) {
-        if (failure.resolvedCount === 0) {
-          setRemediationLogs(['No remediation items were returned by the backend. This is not a claim that the environment is risk-free.']);
-        } else {
-          const logsResponse = await apiFetch(`/api/agent-jobs/${failure.jobId}/logs`);
-          if (logsResponse.ok) {
-            const logs = await logsResponse.json();
-            setRemediationLogs(Array.isArray(logs) ? logs.map((log: any) => `[${String(log.level || 'info').toLowerCase()}] ${log.message}`) : ['Remediation request accepted; execution logs were not returned.']);
-          } else setRemediationLogs([`Remediation request accepted. The backend reported ${failure.resolvedCount} item(s); execution logs were not returned.`]);
-          setRemediationCompleted(true);
-          window.dispatchEvent(new CustomEvent('refresh-data'));
-        }
-      }
-    } catch { setRemediationLogs(['Bulk remediation is not built into this deployment yet — there is no /api/remediation/run backend. Use per-finding remediation from the Passports or MSP Command Center views instead.']); }
+      const response = await apiFetch('/api/remediation-tasks/bulk', { method: 'POST' });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body?.error || 'Remediation run failed');
+      const lines = [`Open findings: ${body.openFindings ?? 0}`, `New remediation tasks created: ${body.createdCount ?? 0}`, `Already had an active task: ${body.alreadyCoveredCount ?? 0}`];
+      for (const task of Array.isArray(body.tasks) ? body.tasks : []) lines.push(`[created] ${task.title} (${task.id})`);
+      if (!body.openFindings) lines.push('No open findings were returned by the backend. This is not a claim that the environment is risk-free.');
+      setRemediationLogs(lines);
+      setRemediationCompleted(true);
+      if (body.createdCount) window.dispatchEvent(new CustomEvent('refresh-data'));
+    } catch (cause: any) { setRemediationLogs([`Remediation run failed: ${cause?.message || 'unknown error'}`]); }
     finally { setIsRemediating(false); }
   };
 
@@ -100,7 +96,7 @@ export default function InvestorHomeView({ passports, onShowTelemetry, onNavigat
 
       <section className="spr-panel p-6"><div className="flex flex-col justify-between gap-3 border-b border-[var(--spr-border)] pb-4 sm:flex-row sm:items-center"><div><h3 className="text-sm font-extrabold text-[var(--spr-text)]">Software Passports</h3><p className="text-[11px] leading-tight text-[var(--spr-text-muted)]">Current passport records. Scores are shown only when returned by the backend.</p></div><div className="flex items-center gap-2 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2.5 py-1.5"><Search className="h-3.5 w-3.5 text-[var(--spr-text-faint)]"/><input aria-label="Filter passports" type="text" placeholder="Filter passports..." value={passportSearch} onChange={(e) => setPassportSearch(e.target.value)} className="w-full bg-transparent text-[11px] outline-none text-[var(--spr-text)]"/></div></div><div className="mt-4 overflow-x-auto"><table className="spr-table w-full"><thead><tr><th>Software</th><th>Category</th><th className="text-center">Score</th><th className="text-right">Evidence state</th></tr></thead><tbody>{filteredPassports.map((passport) => <tr key={passport.id}><td><span className="block text-xs font-extrabold text-[var(--spr-text)]">{passport.name}</span><span className="font-mono text-[12px] text-[var(--spr-text-faint)]">v{passport.version} · {passport.publisher}</span></td><td><span className="rounded bg-[var(--spr-surface-sunken)] px-1.5 py-0.5 text-[11px] font-bold text-[var(--spr-text-muted)]">{passport.category}</span></td><td className="text-center font-mono font-bold text-[var(--spr-text)]">{passport.overallScore ?? 'Not verified'}</td><td className="text-right text-[12px] font-mono text-[var(--spr-text-faint)]">{passport.overallScore == null ? 'Score unavailable' : 'Score observed'}</td></tr>)}{filteredPassports.length === 0 && <tr><td colSpan={4} className="py-6 text-center italic text-[var(--spr-text-faint)]">No matching passport records found.</td></tr>}</tbody></table></div></section>
 
-      {isRemediationOpen && <Modal title="Remediation workflow" onClose={() => setIsRemediationOpen(false)}><p className="text-sm text-[var(--spr-text-muted)]">Start the protected backend remediation workflow for this tenant. The UI will only report what the backend returns.</p><button disabled={isRemediating} onClick={() => void triggerRemediation()} className="spr-btn spr-btn-primary mt-5 disabled:opacity-50">{isRemediating ? 'Running…' : 'Run remediation'}</button>{remediationCompleted && <p className="mt-4 text-xs text-[var(--spr-green)]">Remediation request completed; re-check the evidence source before treating any risk as resolved.</p>}{remediationLogs.length > 0 && <pre className="mt-4 max-h-52 overflow-auto spr-panel-alt p-3 text-xs text-[var(--spr-text)]">{remediationLogs.join('\n')}</pre>}</Modal>}
+      {isRemediationOpen && <Modal title="Remediation workflow" onClose={() => setIsRemediationOpen(false)}><p className="text-sm text-[var(--spr-text-muted)]">Start the protected backend remediation workflow for this tenant. The UI will only report what the backend returns.</p><button disabled={isRemediating} onClick={() => void triggerRemediation()} className="spr-btn spr-btn-primary mt-5 disabled:opacity-50">{isRemediating ? 'Running…' : 'Run remediation'}</button>{remediationCompleted && <p className="mt-4 text-xs text-[var(--spr-green)]">Tasks were opened, not findings resolved. Work each task in the MSP Command Center and re-verify against the evidence source.</p>}{remediationLogs.length > 0 && <pre className="mt-4 max-h-52 overflow-auto spr-panel-alt p-3 text-xs text-[var(--spr-text)]">{remediationLogs.join('\n')}</pre>}</Modal>}
       {isReportsOpen && <Modal title="Evidence report hub" onClose={() => setIsReportsOpen(false)}><p className="text-sm text-[var(--spr-text-muted)]">Reports compile current application records. Certification, external assurance, and attestation status remain unverified unless backed by a connected evidence source.</p><div className="mt-5 space-y-2"><button onClick={() => setSelectedReportId('executive')} className="spr-btn spr-btn-secondary w-full text-left">Executive evidence summary</button><button onClick={() => setSelectedReportId('procurement')} className="spr-btn spr-btn-secondary w-full text-left">Procurement evidence summary</button><button onClick={() => setSelectedReportId('compliance')} className="spr-btn spr-btn-secondary w-full text-left">Compliance evidence summary</button></div><p className="mt-4 text-xs text-[var(--spr-text-muted)]">Selected: {selectedReportId}. No certification seal is implied.</p></Modal>}
     </motion.div>
   </div>;

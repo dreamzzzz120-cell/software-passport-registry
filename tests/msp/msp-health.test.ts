@@ -12,11 +12,16 @@ import path from 'node:path';
 // the source guarantee behind that observed behaviour.
 describe('/ready fails closed on every dependency it checks, not just the database', () => {
   const server = fs.readFileSync(path.join(process.cwd(), 'server.ts'), 'utf8');
-  const start = server.indexOf("app.get('/ready'");
-  const handler = start > -1 ? server.slice(start, server.indexOf('\n', server.indexOf(');', start))) : '';
+  // The probe body lives in `readinessHandler`, mounted at both /ready and
+  // /api/ready (the Settings diagnostics panel reaches it through the Vercel
+  // /api/* rewrite). The guarantees below are asserted on that one body.
+  const start = server.indexOf('const readinessHandler = async');
+  const handler = start > -1 ? server.slice(start, server.indexOf('\n', start)) : '';
 
-  it('the /ready handler exists', () => {
+  it('the /ready handler exists and is mounted at both paths', () => {
     expect(start).toBeGreaterThan(-1);
+    expect(server).toContain("app.get('/ready', readinessHandler)");
+    expect(server).toContain("app.get('/api/ready', readinessHandler)");
   });
 
   it('readiness requires the database check to have actually succeeded', () => {

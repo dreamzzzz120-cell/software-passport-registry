@@ -159,6 +159,46 @@ export function createRemediationTasksRouter() {
     } catch (error) { return next(error); }
   });
 
+  // Bulk "open a task for everything that needs one": the Investor Home
+  // "Run remediation" action. It creates one OPEN task per OPEN finding that
+  // has no active task yet, and skips the rest -- it does not, and cannot,
+  // fix anything by itself. The response says exactly how many were created
+  // versus already covered so the UI never implies findings were resolved.
+  // Must be registered before GET /:id so 'bulk' is not read as a task id.
+  router.post('/bulk', requireRole(STAFF_ROLES as unknown as string[]), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const uncovered = (await db.execute(sql`
+        SELECT f.id, f.client_id, f.passport_id, f.title, f.description
+        FROM trust_findings f
+        WHERE f.tenant_id = ${tenantId} AND f.status = 'OPEN'
+          AND NOT EXISTS (
+            SELECT 1 FROM trust_remediation_work_items w
+            WHERE w.tenant_id = f.tenant_id AND w.finding_id = f.id AND w.status NOT IN ('CLOSED', 'CANCELLED')
+          )
+        ORDER BY CASE f.severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 WHEN 'low' THEN 4 ELSE 5 END, f.updated_at DESC
+        LIMIT 200
+      `) as any).rows ?? [];
+      const openCount = Number((await db.execute(sql`SELECT count(*)::int AS count FROM trust_findings WHERE tenant_id = ${tenantId} AND status = 'OPEN'`) as any).rows?.[0]?.count ?? 0);
+      const now = new Date().toISOString();
+      const created: any[] = [];
+      for (const finding of uncovered) {
+        const taskId = id('remtask');
+        const title = String(finding.title || 'Remediation task').slice(0, 255);
+        await db.execute(sql`
+          INSERT INTO trust_remediation_work_items
+            (id, tenant_id, passport_id, finding_id, client_id, external_system, owner_id, status, title, remediation_plan, created_at, updated_at)
+          VALUES (${taskId}, ${tenantId}, ${finding.passport_id}, ${finding.id}, ${finding.client_id}, 'SPR', ${req.user!.uid}, 'OPEN', ${title}, ${finding.description || title}, ${now}, ${now})
+        `);
+        await recordTransition(db, tenantId, taskId, null, 'OPEN', req.user!.uid);
+        created.push({ id: taskId, findingId: finding.id, title });
+      }
+      if (created.length) await appendAuditEntry(db, { tenantId, action: 'remediation_task.bulk_created', actor: req.user!.uid, payload: { count: created.length, taskIds: created.map((task) => task.id) } });
+      return res.status(created.length ? 201 : 200).json({ openFindings: openCount, createdCount: created.length, alreadyCoveredCount: Math.max(0, openCount - created.length), tasks: created });
+    } catch (error) { return next(error); }
+  });
+
   router.get('/:id', async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
