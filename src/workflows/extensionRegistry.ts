@@ -30,7 +30,7 @@ export const EXTENSIONS: ExtensionDefinition[] = [
   {
     id: 'trust-evidence',
     name: 'Trust & Evidence',
-    shortName: 'Trust',
+    shortName: 'Trust Evidence',
     description: 'Canonical analysis and evidence workflow: register software, collect observed evidence, scan dependencies, review findings, and publish a trust passport.',
     accent: 'cyan',
     steps: ['Register asset', 'Collect evidence', 'Run analysis', 'Review findings', 'Publish passport'],
@@ -40,7 +40,7 @@ export const EXTENSIONS: ExtensionDefinition[] = [
   {
     id: 'msp-command-center',
     name: 'MSP Stack Command Center',
-    shortName: 'MSP Command',
+    shortName: 'MSP Workflow',
     description: 'The single MSP operating surface. Correlate clients, software, evidence, findings, monitoring, remediation, integrations, reporting, and audit state without replacing the MSP systems of record.',
     accent: 'violet',
     steps: ['Connect sources', 'Verify connectivity', 'Review client estate', 'Act on findings', 'Export / report'],
@@ -50,7 +50,7 @@ export const EXTENSIONS: ExtensionDefinition[] = [
   {
     id: 'agent-trust',
     name: 'AI Agent Trust',
-    shortName: 'Agents',
+    shortName: 'Agent Trust',
     description: 'Specialized trust workflow for AI-agent identity, permissions, provenance, evidence, and operational monitoring. Uses the same evidence and findings model as core SPR.',
     accent: 'fuchsia',
     steps: ['Register agent', 'Verify identity', 'Review permissions', 'Inspect evidence', 'Monitor trust'],
@@ -60,7 +60,7 @@ export const EXTENSIONS: ExtensionDefinition[] = [
   {
     id: 'vendor-risk',
     name: 'Vendor Risk',
-    shortName: 'Vendors',
+    shortName: 'Vendor Risk',
     description: 'Specialized supplier-risk workflow that maps vendors to software assets and evidence without duplicating the canonical passport or evidence records.',
     accent: 'amber',
     steps: ['Add vendor', 'Map assets', 'Assess risk', 'Review evidence', 'Approve / monitor'],
@@ -70,7 +70,7 @@ export const EXTENSIONS: ExtensionDefinition[] = [
   {
     id: 'integrations',
     name: 'Integrations Hub',
-    shortName: 'Integrations',
+    shortName: 'Integration Hub',
     description: 'Connect external systems and normalize their signals into SPR evidence. Integrations remain the system boundary; SPR remains the trust and evidence control plane.',
     accent: 'emerald',
     steps: ['Choose source', 'Connect', 'Sync', 'Validate', 'Monitor'],

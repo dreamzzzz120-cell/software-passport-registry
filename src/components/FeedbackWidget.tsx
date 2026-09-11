@@ -73,7 +73,7 @@ export default function FeedbackWidget({ currentPath }: { currentPath: string })
       <div className="w-full max-w-sm rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.16em] text-[var(--spr-highlight)]"><MessageSquarePlus className="h-3.5 w-3.5" /> Feedback</div>
+            <div className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[.16em] text-[var(--spr-highlight)]"><MessageSquarePlus className="h-3.5 w-3.5" /> Feedback</div>
             <h2 id="feedback-title" className="mt-1 text-sm font-bold text-[var(--spr-text)]">What's on your mind?</h2>
           </div>
           <button onClick={close} aria-label="Close" className="rounded-md p-1 text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)] hover:text-[var(--spr-text)]"><X className="h-4 w-4" /></button>

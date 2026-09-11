@@ -81,7 +81,7 @@ export default function MSPStackCommandCenter({ onNavigate }: { onNavigate: (pat
     <div className="spr-panel p-6 md:p-8">
       <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <div className="mb-3 inline-flex items-center gap-2 rounded-sm border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[.18em] text-[var(--spr-highlight)]"><Activity className="h-3.5 w-3.5" /> MSP command center</div>
+          <div className="mb-3 inline-flex items-center gap-2 rounded-sm border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] px-2.5 py-1 text-[12px] font-bold uppercase tracking-[.18em] text-[var(--spr-highlight)]"><Activity className="h-3.5 w-3.5" /> MSP command center</div>
           <h1 className="text-3xl font-semibold tracking-tight text-[var(--spr-text)] md:text-4xl">One operating view across the stack.</h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--spr-text-muted)]">SPR stays above the PSA/RMM and evidence stack: it pulls the signals it can access, preserves unknowns when a source is unavailable, and gives the MSP one place to see clients, software, findings, evidence, monitoring and remediation.</p>
         </div>
@@ -90,7 +90,7 @@ export default function MSPStackCommandCenter({ onNavigate }: { onNavigate: (pat
     </div>
 
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      {[['Clients', clients, Building2], ['Software', passports, Database], ['Findings', findings, ShieldAlert], ['Sources', integrations, PlugZap]].map(([label, value, Icon]: any) => <div key={label} className="spr-panel p-5"><div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.18em] text-[var(--spr-text-faint)]"><Icon className="h-3.5 w-3.5" />{label}</div><div className="mt-3 text-3xl font-semibold text-[var(--spr-text)]">{value === null || value === undefined ? 'Not verified' : value}</div></div>)}
+      {[['Clients', clients, Building2], ['Software', passports, Database], ['Findings', findings, ShieldAlert], ['Sources', integrations, PlugZap]].map(([label, value, Icon]: any) => <div key={label} className="spr-panel p-5"><div className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[.18em] text-[var(--spr-text-faint)]"><Icon className="h-3.5 w-3.5" />{label}</div><div className="mt-3 text-3xl font-semibold text-[var(--spr-text)]">{value === null || value === undefined ? 'Not verified' : value}</div></div>)}
     </div>
 
     <div className="grid gap-5 xl:grid-cols-[1.2fr_.8fr]">

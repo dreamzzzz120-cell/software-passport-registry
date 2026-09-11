@@ -132,10 +132,10 @@ export default function TrustRoom({ passport, client, canRunAudit, auditBusy, on
         <div className="cc-eyebrow">01 · Software identity</div>
         <h1 className="mt-1 text-2xl font-bold text-[var(--spr-text)]">{passport.name}</h1>
         <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs text-[var(--spr-text-muted)] sm:grid-cols-4">
-          <div><dt className="text-[10px] uppercase tracking-wide text-[var(--spr-text-faint)]">Publisher</dt><dd className="text-[var(--spr-text)]">{passport.publisher || 'Not observed'}</dd></div>
-          <div><dt className="text-[10px] uppercase tracking-wide text-[var(--spr-text-faint)]">Version</dt><dd className="text-[var(--spr-text)]">{passport.version || 'Not observed'}</dd></div>
-          <div><dt className="text-[10px] uppercase tracking-wide text-[var(--spr-text-faint)]">Passport ID</dt><dd className="font-mono text-[var(--spr-text)]">{passport.id}</dd></div>
-          <div><dt className="text-[10px] uppercase tracking-wide text-[var(--spr-text-faint)]">Last observed</dt><dd className="text-[var(--spr-text)]">{lastObserved || 'Not yet observed'}</dd></div>
+          <div><dt className="text-[12px] uppercase tracking-wide text-[var(--spr-text-faint)]">Publisher</dt><dd className="text-[var(--spr-text)]">{passport.publisher || 'Not observed'}</dd></div>
+          <div><dt className="text-[12px] uppercase tracking-wide text-[var(--spr-text-faint)]">Version</dt><dd className="text-[var(--spr-text)]">{passport.version || 'Not observed'}</dd></div>
+          <div><dt className="text-[12px] uppercase tracking-wide text-[var(--spr-text-faint)]">Passport ID</dt><dd className="font-mono text-[var(--spr-text)]">{passport.id}</dd></div>
+          <div><dt className="text-[12px] uppercase tracking-wide text-[var(--spr-text-faint)]">Last observed</dt><dd className="text-[var(--spr-text)]">{lastObserved || 'Not yet observed'}</dd></div>
         </dl>
       </header>
 
@@ -176,11 +176,11 @@ export default function TrustRoom({ passport, client, canRunAudit, auditBusy, on
 
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
           <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-4">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--spr-text-faint)]">Trust score</p>
+            <p className="text-[12px] font-bold uppercase tracking-wide text-[var(--spr-text-faint)]">Trust score</p>
             <p className="mt-1 text-2xl font-bold text-[var(--spr-text)]">{passport.overallScore == null ? 'Not available' : passport.overallScore}</p>
           </div>
           <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-4">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--spr-text-faint)]">Evidence confidence</p>
+            <p className="text-[12px] font-bold uppercase tracking-wide text-[var(--spr-text-faint)]">Evidence confidence</p>
             <p className="mt-1 text-2xl font-bold text-[var(--spr-text)]">{passport.confidenceScore == null ? 'Not available' : `${passport.confidenceScore}%`}</p>
           </div>
         </div>
@@ -245,7 +245,7 @@ export default function TrustRoom({ passport, client, canRunAudit, auditBusy, on
               return (
                 <div key={id} className="flex flex-col gap-3 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3.5 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <div className="flex items-center gap-2"><span className={`rounded-md border px-2 py-0.5 text-[10px] font-bold ${v.severity === 'Critical' ? 'border-[var(--spr-red)]/30 bg-[var(--spr-red)]/10 text-[var(--spr-red)]' : v.severity === 'High' ? 'border-[var(--spr-amber)]/30 bg-[var(--spr-amber)]/10 text-[var(--spr-amber)]' : 'border-[var(--spr-highlight)]/30 bg-[var(--spr-highlight)]/10 text-[var(--spr-highlight)]'}`}>{v.severity || 'Unknown severity'}</span><span className="text-sm font-semibold text-[var(--spr-text)]">{v.title || id}</span></div>
+                    <div className="flex items-center gap-2"><span className={`rounded-md border px-2 py-0.5 text-[12px] font-bold ${v.severity === 'Critical' ? 'border-[var(--spr-red)]/30 bg-[var(--spr-red)]/10 text-[var(--spr-red)]' : v.severity === 'High' ? 'border-[var(--spr-amber)]/30 bg-[var(--spr-amber)]/10 text-[var(--spr-amber)]' : 'border-[var(--spr-highlight)]/30 bg-[var(--spr-highlight)]/10 text-[var(--spr-highlight)]'}`}>{v.severity || 'Unknown severity'}</span><span className="text-sm font-semibold text-[var(--spr-text)]">{v.title || id}</span></div>
                     <p className="mt-1 text-xs text-[var(--spr-text-muted)]">{v.status || 'Open'} · {v.description || 'No description recorded.'}</p>
                   </div>
                   <button onClick={() => onCreateRemediation(v)} disabled={!canCreateRemediation || !id || remediationBusy === id} title={!canCreateRemediation ? 'Your role cannot create remediations.' : undefined} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-[var(--spr-border)] px-3.5 py-2 text-xs font-semibold text-[var(--spr-text)] hover:bg-[var(--spr-surface-hover)] disabled:cursor-not-allowed disabled:opacity-50">{remediationBusy === id ? 'Persisting…' : 'Investigate'}</button>

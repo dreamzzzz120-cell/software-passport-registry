@@ -86,7 +86,7 @@ export function DecisionBadge({
   state, size = 'md', className = '',
 }: { state: VerificationDecisionState | null | undefined; size?: 'sm' | 'md' | 'lg'; className?: string }) {
   const copy = decisionCopy(state);
-  const sizing = size === 'lg' ? 'px-6 py-3 text-2xl' : size === 'sm' ? 'px-2.5 py-1 text-[10px]' : 'px-3.5 py-1.5 text-xs';
+  const sizing = size === 'lg' ? 'px-6 py-3 text-2xl' : size === 'sm' ? 'px-2.5 py-1 text-[12px]' : 'px-3.5 py-1.5 text-xs';
   // An un-evaluated record gets the neutral UNKNOWN treatment rather than any
   // state the evaluator did not actually produce.
   const stateClass = state ? `cc-decision-${state}` : 'cc-decision-UNKNOWN';
@@ -188,7 +188,7 @@ export function SourceIdentity({ source, party }: { source: string; party?: 'fir
     <span className="inline-flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] text-[var(--cc-ink-muted)]">
       <span className="cc-mono">{source}</span>
       {party && (
-        <span className="rounded border border-[var(--cc-hairline)] px-1.5 py-0.5 text-[10px] uppercase tracking-wide">
+        <span className="rounded border border-[var(--cc-hairline)] px-1.5 py-0.5 text-[12px] uppercase tracking-wide">
           {party === 'third-party' ? 'third-party' : 'first-party'}
         </span>
       )}
@@ -217,7 +217,7 @@ export function EvidenceCard({
           {type && <div className="cc-eyebrow mt-1">{type}</div>}
         </div>
         {/* Observation, explicitly labelled so it is never mistaken for a decision. */}
-        <span className="shrink-0 rounded-md border border-[var(--cc-hairline)] px-2 py-1 text-[10px] font-bold uppercase tracking-[.14em] text-[var(--cc-ink-faint)]">
+        <span className="shrink-0 rounded-md border border-[var(--cc-hairline)] px-2 py-1 text-[12px] font-bold uppercase tracking-[.14em] text-[var(--cc-ink-faint)]">
           Observed
         </span>
       </div>
@@ -225,7 +225,7 @@ export function EvidenceCard({
         {source && <SourceIdentity source={source} party={party} />}
         <FreshnessIndicator label="Collected" observedAt={observedAt} />
       </div>
-      {hash && <div className="cc-mono mt-2 truncate text-[10px] text-[var(--cc-ink-faint)]">{hash}</div>}
+      {hash && <div className="cc-mono mt-2 truncate text-[12px] text-[var(--cc-ink-faint)]">{hash}</div>}
       {children}
     </GlassPanel>
   );

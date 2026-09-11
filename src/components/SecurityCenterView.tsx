@@ -61,7 +61,7 @@ export default function SecurityCenterView({ clients, passports }: SecurityCente
       <header className="rounded-[28px] border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6 md:p-8">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.22em] text-[var(--spr-red)]">
+            <div className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[.22em] text-[var(--spr-red)]">
               <ShieldCheck className="h-4 w-4" /> Security evidence
             </div>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight text-[var(--spr-text)]">Security posture ledger</h1>
@@ -102,7 +102,7 @@ export default function SecurityCenterView({ clients, passports }: SecurityCente
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] border-collapse text-left text-xs">
             <thead>
-              <tr className="border-b border-[var(--spr-border)] bg-black/15 text-[10px] font-bold uppercase tracking-[.14em] text-[var(--spr-text-faint)]">
+              <tr className="border-b border-[var(--spr-border)] bg-black/15 text-[12px] font-bold uppercase tracking-[.14em] text-[var(--spr-text-faint)]">
                 <th className="px-5 py-3">Finding</th>
                 <th className="px-5 py-3">Software / client</th>
                 <th className="px-5 py-3">Severity</th>
@@ -116,10 +116,10 @@ export default function SecurityCenterView({ clients, passports }: SecurityCente
                 <tr key={`${vulnerability.id}-${vulnerability.component}-${index}`} className="transition-colors hover:bg-[var(--spr-surface-alt)]">
                   <td className="px-5 py-4"><div className="font-mono font-semibold text-[var(--spr-highlight)]">{vulnerability.id}</div><div className="mt-1 max-w-xs text-[11px] text-[var(--spr-text-muted)]">{vulnerability.title}</div></td>
                   <td className="px-5 py-4"><div className="font-semibold text-[var(--spr-text)]">{vulnerability.passportName}</div><div className="mt-1 text-[11px] text-[var(--spr-text-muted)]">{vulnerability.clientName} · {vulnerability.component}</div></td>
-                  <td className="px-5 py-4"><span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold ${severityStyles[vulnerability.severity] || severityStyles.Low}`}>{vulnerability.severity}</span></td>
+                  <td className="px-5 py-4"><span className={`rounded-full border px-2.5 py-1 text-[12px] font-semibold ${severityStyles[vulnerability.severity] || severityStyles.Low}`}>{vulnerability.severity}</span></td>
                   <td className="px-5 py-4 font-mono text-[var(--spr-text)]">{vulnerability.cvss ?? 'Not observed'}</td>
                   <td className="px-5 py-4 text-[var(--spr-text-muted)]">{vulnerability.fixedVersion ? `Upgrade to ${vulnerability.fixedVersion}+` : 'No fixed version observed'}</td>
-                  <td className="px-5 py-4"><span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold ${statusStyles[vulnerability.status] || statusStyles.Open}`}>{vulnerability.status}</span></td>
+                  <td className="px-5 py-4"><span className={`rounded-full border px-2.5 py-1 text-[12px] font-semibold ${statusStyles[vulnerability.status] || statusStyles.Open}`}>{vulnerability.status}</span></td>
                 </tr>
               ))}
               {filteredVulnerabilities.length === 0 && (
@@ -140,5 +140,5 @@ function Metric({ icon, label, value, tone = 'cyan' }: { icon: ReactNode; label:
     emerald: 'border-[var(--spr-green)]/40 bg-[var(--spr-green)]/15 text-[var(--spr-green)]',
     amber: 'border-amber-300/15 bg-amber-300/[.05] text-amber-200',
   };
-  return <div className={`rounded-md border p-4 ${tones[tone]}`}><div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.14em] text-[var(--spr-text-muted)]"><span className="h-4 w-4">{icon}</span>{label}</div><div className="mt-3 text-2xl font-semibold text-[var(--spr-text)]">{value}</div></div>;
+  return <div className={`rounded-md border p-4 ${tones[tone]}`}><div className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[.14em] text-[var(--spr-text-muted)]"><span className="h-4 w-4">{icon}</span>{label}</div><div className="mt-3 text-2xl font-semibold text-[var(--spr-text)]">{value}</div></div>;
 }

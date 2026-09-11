@@ -158,8 +158,8 @@ export default function MonitoringView({ role = 'Viewer', passports = [], client
               <li key={alert.id} className="flex items-start justify-between gap-4 py-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className={`rounded-sm border px-1.5 py-0.5 text-[10px] font-bold uppercase ${SEVERITY_STYLE[alert.severity] || SEVERITY_STYLE.informational}`}>{alert.severity}</span>
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--spr-text-faint)]">{alert.status}</span>
+                    <span className={`rounded-sm border px-1.5 py-0.5 text-[12px] font-bold uppercase ${SEVERITY_STYLE[alert.severity] || SEVERITY_STYLE.informational}`}>{alert.severity}</span>
+                    <span className="text-[12px] font-semibold uppercase tracking-wider text-[var(--spr-text-faint)]">{alert.status}</span>
                   </div>
                   <p className="mt-1.5 text-sm text-[var(--spr-text)]">{alert.message}</p>
                   <p className="mt-0.5 text-xs text-[var(--spr-text-faint)]">{readable(alert.created_at)}</p>
@@ -183,7 +183,7 @@ export default function MonitoringView({ role = 'Viewer', passports = [], client
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-labelledby="enroll-title">
         <div className="w-full max-w-md rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6 shadow-2xl">
           <div className="flex items-start justify-between gap-4">
-            <div><div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.18em] text-[var(--spr-highlight)]"><Activity className="h-4 w-4" /> New monitor</div><h2 id="enroll-title" className="mt-1 text-lg font-bold text-[var(--spr-text)]">Enable monitoring</h2></div>
+            <div><div className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[.18em] text-[var(--spr-highlight)]"><Activity className="h-4 w-4" /> New monitor</div><h2 id="enroll-title" className="mt-1 text-lg font-bold text-[var(--spr-text)]">Enable monitoring</h2></div>
             <button onClick={() => setShowEnroll(false)} aria-label="Close" className="rounded-md p-1.5 text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)] hover:text-[var(--spr-text)]"><XCircle className="h-4 w-4" /></button>
           </div>
           <form onSubmit={handleEnroll} className="mt-5 space-y-3.5">
@@ -214,31 +214,31 @@ export default function MonitoringView({ role = 'Viewer', passports = [], client
             {enrollSuccess && <div className="rounded-md border border-[var(--spr-green)]/40 bg-[var(--spr-green)]/10 px-3 py-2.5 text-xs text-[var(--spr-green)] flex items-center gap-2"><CheckCircle2 className="w-4 h-4 shrink-0" /> {enrollSuccess}</div>}
 
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold text-[var(--spr-text-muted)]">Client *</label>
+              <label className="text-[12px] font-bold text-[var(--spr-text-muted)]">Client *</label>
               <select required value={enrollClientId} onChange={(e) => setEnrollClientId(e.target.value)} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]">
                 <option value="">{clients.length ? 'Select client…' : 'No clients yet — add one first'}</option>
                 {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold text-[var(--spr-text-muted)]">Software / Passport *</label>
+              <label className="text-[12px] font-bold text-[var(--spr-text-muted)]">Software / Passport *</label>
               <select required value={enrollPassportId} onChange={(e) => setEnrollPassportId(e.target.value)} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]">
                 <option value="">{passports.length ? 'Select passport…' : 'No passports yet'}</option>
                 {passports.map((p) => <option key={p.id} value={p.id}>{p.name} {p.version ? `· ${p.version}` : ''}</option>)}
               </select>
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold text-[var(--spr-text-muted)]">Source type *</label>
+              <label className="text-[12px] font-bold text-[var(--spr-text-muted)]">Source type *</label>
               <select value={enrollCollectorId} onChange={(e) => { setEnrollCollectorId(e.target.value); setEnrollSubject(''); }} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]">
                 {ENROLLABLE_COLLECTORS.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
               </select>
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold text-[var(--spr-text-muted)]">{activeCollector.label} identifier *</label>
+              <label className="text-[12px] font-bold text-[var(--spr-text-muted)]">{activeCollector.label} identifier *</label>
               <input required value={enrollSubject} onChange={(e) => setEnrollSubject(e.target.value)} placeholder={activeCollector.placeholder} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]" />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold text-[var(--spr-text-muted)]">Check frequency</label>
+              <label className="text-[12px] font-bold text-[var(--spr-text-muted)]">Check frequency</label>
               <select value={enrollSchedule} onChange={(e) => setEnrollSchedule(Number(e.target.value))} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]">
                 {availableSchedules.map((s) => <option key={s.seconds} value={s.seconds}>{s.label}</option>)}
               </select>

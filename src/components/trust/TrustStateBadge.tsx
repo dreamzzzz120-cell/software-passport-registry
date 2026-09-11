@@ -71,7 +71,7 @@ export default function TrustStateBadge({ state, showDescription = false, classN
   const Icon = meta.icon;
   return (
     <span className={`inline-flex items-center gap-1.5 ${className}`}>
-      <span className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider" style={{ borderColor: `${meta.color}66`, color: meta.color, backgroundColor: `${meta.color}1a` }}>
+      <span className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] font-bold uppercase tracking-wider" style={{ borderColor: `${meta.color}66`, color: meta.color, backgroundColor: `${meta.color}1a` }}>
         <Icon className="h-3 w-3" style={{ color: meta.color }} />
         {meta.label}
       </span>

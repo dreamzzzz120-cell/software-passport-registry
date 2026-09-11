@@ -217,7 +217,7 @@ export default function FreeReviewView({ onSignUp, initialResult }: FreeReviewVi
       <div className="mx-auto max-w-2xl">
         <div className="text-center">
           <img src="/brand/spr-logo.jpg" alt="Software Passport Registry" className="mx-auto mb-6 h-20 w-auto drop-shadow-[0_4px_20px_rgba(0,0,0,0.35)]" />
-          <div className="text-[10px] font-semibold uppercase tracking-[.15em] text-[var(--spr-highlight)]">Software Passport Registry</div>
+          <div className="text-[12px] font-semibold uppercase tracking-[.15em] text-[var(--spr-highlight)]">Software Passport Registry</div>
           <h1 className="mt-3 text-3xl font-semibold">Free software review</h1>
           <p className="mt-3 text-sm leading-6 text-[var(--spr-text-muted)]">Enter a public GitHub repository. SPR runs a real dependency and secret scan against it and shows you exactly what it found - no account required.</p>
         </div>
@@ -326,7 +326,7 @@ export default function FreeReviewView({ onSignUp, initialResult }: FreeReviewVi
                     for this scan; when nothing could be observed there is no
                     number and the page says so rather than printing a zero. */}
                 <div className="mt-5 rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-6 py-8 text-center">
-                  <div className="text-[10px] font-semibold uppercase tracking-[.2em] text-[var(--spr-text-muted)]">Software Passport</div>
+                  <div className="text-[12px] font-semibold uppercase tracking-[.2em] text-[var(--spr-text-muted)]">Software Passport</div>
                   {result.assessment?.score !== null && result.assessment?.score !== undefined ? (
                     <>
                       <div className="mt-3 text-6xl font-bold leading-none tracking-tight text-[var(--spr-text)]">
@@ -372,7 +372,7 @@ export default function FreeReviewView({ onSignUp, initialResult }: FreeReviewVi
                             <span className="text-sm font-semibold text-[var(--spr-text)]"><span aria-hidden="true">{icon}</span> {label}</span>
                             {category.status === 'scored'
                               ? <span className="text-xl font-bold tabular-nums text-[var(--spr-text)]">{category.score}<span className="text-xs font-semibold text-[var(--spr-text-muted)]"> / 100</span></span>
-                              : <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--spr-text-muted)]">Not observed</span>}
+                              : <span className="text-[12px] font-semibold uppercase tracking-wider text-[var(--spr-text-muted)]">Not observed</span>}
                           </div>
                           <p className="mt-2 text-xs leading-5 text-[var(--spr-text-muted)]">
                             {category.status === 'scored' ? category.detail : category.reason}
@@ -408,7 +408,7 @@ export default function FreeReviewView({ onSignUp, initialResult }: FreeReviewVi
                     {result.findings.teasers.map((teaser) => (
                       <div key={teaser.category} className="rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4">
                         <div className="flex items-center gap-2">
-                          <span className="rounded-full border border-[var(--spr-border)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--spr-text)]">{teaser.severity}</span>
+                          <span className="rounded-full border border-[var(--spr-border)] px-2 py-0.5 text-[12px] font-bold uppercase tracking-wider text-[var(--spr-text)]">{teaser.severity}</span>
                           <span className="text-sm font-semibold text-[var(--spr-text)]">{teaser.category}</span>
                           <span className="ml-auto text-xs text-[var(--spr-text-muted)]">{teaser.count} observation{teaser.count === 1 ? '' : 's'}</span>
                         </div>

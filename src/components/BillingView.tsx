@@ -121,7 +121,7 @@ export default function BillingView() {
     <div className="space-y-8" id="msp-billing-view">
       <div className="flex justify-between items-center">
         <div>
-          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.22em] text-[var(--spr-amber)]"><CreditCard className="h-4 w-4" /> Billing</div>
+          <div className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[.22em] text-[var(--spr-amber)]"><CreditCard className="h-4 w-4" /> Billing</div>
           <h1 className="text-xl font-display font-bold text-[var(--spr-text)]">SPR Billing</h1>
           <p className="text-xs text-[var(--spr-text-muted)] font-sans mt-1">Paid verification, reports, monitoring, API access, and MSP subscriptions. Checkout runs through Stripe.</p>
         </div>
@@ -149,10 +149,10 @@ export default function BillingView() {
           {status.subscription?.plan && status.subscription.status !== 'canceled' && (
             <div className="rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface)] p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
-                <p className="text-[10px] font-mono uppercase text-[var(--spr-text-muted)]">Current plan</p>
+                <p className="text-[12px] font-mono uppercase text-[var(--spr-text-muted)]">Current plan</p>
                 <p className="text-lg font-bold text-[var(--spr-text)] flex items-center gap-2">
                   {status.plans.find((p) => p.id === status.subscription!.plan)?.label ?? status.subscription.plan}
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${status.subscription.status === 'active' ? 'bg-[var(--spr-green)]/15 text-[var(--spr-green)]' : status.subscription.status === 'past_due' ? 'bg-[var(--spr-red)]/15 text-[var(--spr-red)]' : 'bg-[var(--spr-amber)]/15 text-[var(--spr-amber)]'}`}>
+                  <span className={`text-[12px] font-bold px-2 py-0.5 rounded-full ${status.subscription.status === 'active' ? 'bg-[var(--spr-green)]/15 text-[var(--spr-green)]' : status.subscription.status === 'past_due' ? 'bg-[var(--spr-red)]/15 text-[var(--spr-red)]' : 'bg-[var(--spr-amber)]/15 text-[var(--spr-amber)]'}`}>
                     {status.subscription.status}
                   </span>
                 </p>
@@ -171,7 +171,7 @@ export default function BillingView() {
           <section>
             <div className="flex items-end justify-between gap-4 mb-4">
               <div>
-                <div className="text-[10px] font-bold uppercase tracking-[.18em] text-[var(--spr-highlight)]">One-time purchases</div>
+                <div className="text-[12px] font-bold uppercase tracking-[.18em] text-[var(--spr-highlight)]">One-time purchases</div>
                 <h2 className="text-lg font-bold text-[var(--spr-text)]">Pay for the work you need</h2>
               </div>
               <FileCheck2 className="h-5 w-5 text-[var(--spr-text-faint)]" />
@@ -192,7 +192,7 @@ export default function BillingView() {
 
           <section>
             <div className="mb-4">
-              <div className="text-[10px] font-bold uppercase tracking-[.18em] text-[var(--spr-highlight)]">Recurring</div>
+              <div className="text-[12px] font-bold uppercase tracking-[.18em] text-[var(--spr-highlight)]">Recurring</div>
               <h2 className="text-lg font-bold text-[var(--spr-text)]">MSP plans</h2>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -219,7 +219,7 @@ export default function BillingView() {
 
           <section>
             <div className="mb-4">
-              <div className="text-[10px] font-bold uppercase tracking-[.18em] text-[var(--spr-highlight)]">Recurring add-ons</div>
+              <div className="text-[12px] font-bold uppercase tracking-[.18em] text-[var(--spr-highlight)]">Recurring add-ons</div>
               <h2 className="text-lg font-bold text-[var(--spr-text)]">Keep software verified</h2>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

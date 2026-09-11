@@ -87,7 +87,7 @@ export default function EvidenceExplorerView({ passports = [], selectedPassportI
   return (
     <section className="space-y-6" aria-labelledby="evidence-explorer-title">
       <header className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6">
-        <div className="text-[10px] font-bold uppercase tracking-[.22em] text-[#4ec9b0]">Evidence explorer</div>
+        <div className="text-[12px] font-bold uppercase tracking-[.22em] text-[#4ec9b0]">Evidence explorer</div>
         <h1 id="evidence-explorer-title" className="mt-2 text-3xl font-semibold tracking-tight">Every claim, traced to its evidence</h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--spr-text-muted)]">{ledger?.trace || 'Claim → Evidence → Source → Timestamp → Hash → History. Select a finding to see exactly what backs it.'}</p>
         <div className="mt-5">
@@ -116,7 +116,7 @@ export default function EvidenceExplorerView({ passports = [], selectedPassportI
               <label className="flex items-center gap-2 rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-3 py-2"><Search className="h-3.5 w-3.5 shrink-0 text-[var(--spr-text-faint)]" /><input value={claimQuery} onChange={(event) => setClaimQuery(event.target.value)} placeholder="Search claims by title or control" aria-label="Search claims" className="min-w-0 flex-1 bg-transparent text-xs text-[var(--spr-text)] outline-none placeholder:text-[var(--spr-text-faint)]" /></label>
               <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter claims by evidence status">
                 {STATUS_FILTERS.map((status) => (
-                  <button key={status} onClick={() => setStatusFilter(status)} aria-pressed={statusFilter === status} className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide transition ${statusFilter === status ? 'border-[var(--spr-highlight)]/50 bg-[var(--spr-accent-soft)] text-[var(--spr-text)]' : 'border-[var(--spr-border)] bg-[var(--spr-surface-deep)] text-[var(--spr-text-muted)] hover:border-[var(--spr-highlight)]/40'}`}>{status}</button>
+                  <button key={status} onClick={() => setStatusFilter(status)} aria-pressed={statusFilter === status} className={`rounded-full border px-2.5 py-1 text-[12px] font-semibold uppercase tracking-wide transition ${statusFilter === status ? 'border-[var(--spr-highlight)]/50 bg-[var(--spr-accent-soft)] text-[var(--spr-text)]' : 'border-[var(--spr-border)] bg-[var(--spr-surface-deep)] text-[var(--spr-text-muted)] hover:border-[var(--spr-highlight)]/40'}`}>{status}</button>
                 ))}
               </div>
             </div>
@@ -130,7 +130,7 @@ export default function EvidenceExplorerView({ passports = [], selectedPassportI
               <li key={finding.id}>
                 <button onClick={() => setSelectedFindingId(finding.id)} className={`w-full rounded-xl border px-3 py-3 text-left text-xs transition ${selectedFindingId === finding.id ? 'border-[var(--spr-highlight)]/40 bg-[var(--spr-accent-soft)] text-[var(--spr-text)]' : 'border-[var(--spr-border)] bg-[var(--spr-surface-deep)] text-[var(--spr-text)] hover:border-[var(--spr-highlight)]/40'}`}>
                   <div className="flex items-center justify-between gap-2"><span className="font-semibold">{finding.title || finding.control_id}</span><ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--spr-text-faint)]" /></div>
-                  <div className="mt-1 flex items-center gap-2 text-[10px] uppercase tracking-wide text-[var(--spr-text-muted)]"><span>{finding.severity}</span><span>·</span><span>{finding.status}</span><span>·</span><span>{parseIds(finding.evidence_ids).length} evidence</span></div>
+                  <div className="mt-1 flex items-center gap-2 text-[12px] uppercase tracking-wide text-[var(--spr-text-muted)]"><span>{finding.severity}</span><span>·</span><span>{finding.status}</span><span>·</span><span>{parseIds(finding.evidence_ids).length} evidence</span></div>
                 </button>
               </li>
             ))}
@@ -145,7 +145,7 @@ export default function EvidenceExplorerView({ passports = [], selectedPassportI
           ) : (
             <div className="space-y-6">
               <div>
-                <div className="text-[10px] font-bold uppercase tracking-[.2em] text-[var(--spr-highlight)]">Claim</div>
+                <div className="text-[12px] font-bold uppercase tracking-[.2em] text-[var(--spr-highlight)]">Claim</div>
                 <h2 className="mt-1 text-lg font-semibold text-[var(--spr-text)]">{selectedFinding.title || selectedFinding.control_id}</h2>
                 <p className="mt-1 text-xs text-[var(--spr-text-muted)]">Control {selectedFinding.control_id} · {selectedFinding.severity} · {selectedFinding.status} · fingerprint <code className="text-[var(--spr-text-muted)]">{selectedFinding.fingerprint}</code></p>
               </div>
@@ -163,9 +163,9 @@ export default function EvidenceExplorerView({ passports = [], selectedPassportI
                           <span className="text-[var(--spr-text-muted)]">{item.verification_method}</span>
                         </div>
                         <dl className="mt-3 grid gap-2 sm:grid-cols-2">
-                          <div><dt className="text-[10px] uppercase tracking-wide text-[var(--spr-text-faint)]">Source</dt><dd className="mt-0.5 truncate text-[var(--spr-text)]">{item.source_url ? <a href={item.source_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[var(--spr-highlight)] hover:underline"><Link2 className="h-3 w-3" />{item.source_url}</a> : 'No source URL recorded'}</dd></div>
-                          <div><dt className="text-[10px] uppercase tracking-wide text-[var(--spr-text-faint)]">Timestamp</dt><dd className="mt-0.5 flex items-center gap-1 text-[var(--spr-text)]"><Clock className="h-3 w-3 text-[var(--spr-text-faint)]" />{new Date(item.observed_at).toLocaleString()}</dd></div>
-                          <div className="sm:col-span-2"><dt className="text-[10px] uppercase tracking-wide text-[var(--spr-text-faint)]">Hash</dt><dd className="mt-0.5 break-all font-mono text-[var(--spr-text-muted)]">{item.evidence_hash}</dd></div>
+                          <div><dt className="text-[12px] uppercase tracking-wide text-[var(--spr-text-faint)]">Source</dt><dd className="mt-0.5 truncate text-[var(--spr-text)]">{item.source_url ? <a href={item.source_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[var(--spr-highlight)] hover:underline"><Link2 className="h-3 w-3" />{item.source_url}</a> : 'No source URL recorded'}</dd></div>
+                          <div><dt className="text-[12px] uppercase tracking-wide text-[var(--spr-text-faint)]">Timestamp</dt><dd className="mt-0.5 flex items-center gap-1 text-[var(--spr-text)]"><Clock className="h-3 w-3 text-[var(--spr-text-faint)]" />{new Date(item.observed_at).toLocaleString()}</dd></div>
+                          <div className="sm:col-span-2"><dt className="text-[12px] uppercase tracking-wide text-[var(--spr-text-faint)]">Hash</dt><dd className="mt-0.5 break-all font-mono text-[var(--spr-text-muted)]">{item.evidence_hash}</dd></div>
                         </dl>
                         {item.limitation && <p className="mt-3 rounded-lg border border-amber-300/15 bg-amber-300/[.05] px-3 py-2 text-[11px] text-amber-100/80">Limitation: {item.limitation}</p>}
                       </div>
@@ -192,7 +192,7 @@ export default function EvidenceExplorerView({ passports = [], selectedPassportI
                       <GitCommitVertical className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--spr-highlight)]/70" />
                       <div className="min-w-0">
                         <div className="text-[var(--spr-text)]">v{observation.observation_version} · {new Date(observation.generated_at).toLocaleString()}</div>
-                        <div className="mt-0.5 truncate font-mono text-[10px] text-[var(--spr-text-faint)]" title={observation.canonical_payload_hash}>{observation.canonical_payload_hash}</div>
+                        <div className="mt-0.5 truncate font-mono text-[12px] text-[var(--spr-text-faint)]" title={observation.canonical_payload_hash}>{observation.canonical_payload_hash}</div>
                       </div>
                     </li>
                   ))}

@@ -44,7 +44,7 @@ export default class ViewErrorBoundary extends Component<Props, State> {
     if (!error) return this.props.children;
     return (
       <section className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-surface-alt)] p-6 md:p-8" role="alert" aria-live="assertive">
-        <div className="text-[10px] font-semibold uppercase tracking-[.15em] text-[var(--spr-red)]">View error</div>
+        <div className="text-[12px] font-semibold uppercase tracking-[.15em] text-[var(--spr-red)]">View error</div>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight text-[var(--spr-text)]">This view could not be displayed.</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--spr-text-muted)]">
           SPR kept the rest of the application running. Try the page again or use the navigation to continue.

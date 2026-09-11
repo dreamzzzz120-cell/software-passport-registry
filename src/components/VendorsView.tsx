@@ -264,7 +264,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
       {/* Page Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.22em] text-[#c586c0]"><Factory className="h-4 w-4" /> Supply chain trust</div>
+          <div className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[.22em] text-[#c586c0]"><Factory className="h-4 w-4" /> Supply chain trust</div>
           <h1 className="mt-1 text-xl font-display font-bold text-[var(--spr-text)] flex items-center gap-2">
             <Factory className="w-5 h-5 text-[var(--spr-highlight)]" />
             <span>Vendor Trust Registry</span>
@@ -290,19 +290,19 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
             <form onSubmit={handleAddVendor} className="mt-5 space-y-3.5">
               {addVendorError && <div role="alert" className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 px-3 py-2.5 text-xs text-[var(--spr-red)] flex items-center gap-2"><AlertCircle className="w-4 h-4 shrink-0" /> {addVendorError}</div>}
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold text-[var(--spr-text-muted)]">Vendor name *</label>
+                <label className="text-[12px] font-bold text-[var(--spr-text-muted)]">Vendor name *</label>
                 <input required value={newVendorName} onChange={(e) => setNewVendorName(e.target.value)} placeholder="e.g. Acme Cloud Backup" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]" />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold text-[var(--spr-text-muted)]">Category</label>
+                <label className="text-[12px] font-bold text-[var(--spr-text-muted)]">Category</label>
                 <input value={newVendorCategory} onChange={(e) => setNewVendorCategory(e.target.value)} placeholder="Software Publisher" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]" />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold text-[var(--spr-text-muted)]">Website</label>
+                <label className="text-[12px] font-bold text-[var(--spr-text-muted)]">Website</label>
                 <input value={newVendorWebsite} onChange={(e) => setNewVendorWebsite(e.target.value)} placeholder="https://example.com" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]" />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold text-[var(--spr-text-muted)]">Location(s)</label>
+                <label className="text-[12px] font-bold text-[var(--spr-text-muted)]">Location(s)</label>
                 <input value={newVendorLocations} onChange={(e) => setNewVendorLocations(e.target.value)} placeholder="e.g. United States" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]" />
               </div>
               <div className="flex justify-end gap-2 pt-2">
@@ -360,7 +360,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
           {/* Review Status Filter */}
           <div className="space-y-1">
-            <label className="text-[10px] font-mono font-bold text-[var(--spr-text-muted)] uppercase tracking-wider block">Review Status</label>
+            <label className="text-[12px] font-mono font-bold text-[var(--spr-text-muted)] uppercase tracking-wider block">Review Status</label>
             <div className="relative">
               <select
                 value={statusFilter}
@@ -380,7 +380,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
           {/* Risk Tier Filter */}
           <div className="space-y-1">
-            <label className="text-[10px] font-mono font-bold text-[var(--spr-text-muted)] uppercase tracking-wider block">Risk Tier</label>
+            <label className="text-[12px] font-mono font-bold text-[var(--spr-text-muted)] uppercase tracking-wider block">Risk Tier</label>
             <div className="relative">
               <select
                 value={riskFilter}
@@ -400,7 +400,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
           {/* Reputation Score Filter */}
           <div className="space-y-1">
-            <label className="text-[10px] font-mono font-bold text-[var(--spr-text-muted)] uppercase tracking-wider block">Reputation Index</label>
+            <label className="text-[12px] font-mono font-bold text-[var(--spr-text-muted)] uppercase tracking-wider block">Reputation Index</label>
             <div className="relative">
               <select
                 value={reputationFilter}
@@ -422,7 +422,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
           {/* Compliance Audit Status Filter */}
           <div className="space-y-1">
-            <label className="text-[10px] font-mono font-bold text-[var(--spr-text-muted)] uppercase tracking-wider block">Audit Ledger Status</label>
+            <label className="text-[12px] font-mono font-bold text-[var(--spr-text-muted)] uppercase tracking-wider block">Audit Ledger Status</label>
             <div className="relative">
               <select
                 value={auditStatusFilter}
@@ -449,7 +449,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
         <div className="lg:col-span-3 space-y-4">
           <div className="spr-panel overflow-hidden">
             {/* Header with Sorting Indicators */}
-            <div className="bg-[var(--spr-surface-alt)] border-b border-[var(--spr-border)] px-4 py-2.5 flex justify-between items-center text-[10px] font-mono text-[var(--spr-text-muted)] font-bold uppercase">
+            <div className="bg-[var(--spr-surface-alt)] border-b border-[var(--spr-border)] px-4 py-2.5 flex justify-between items-center text-[12px] font-mono text-[var(--spr-text-muted)] font-bold uppercase">
               <span className="flex items-center gap-1 cursor-pointer hover:text-[var(--spr-text-faint)]" onClick={() => toggleSort('name')}>
                 Publisher Organization
                 <ArrowUpDown className="w-3 h-3" />
@@ -493,10 +493,10 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                             {vendor.reviewStatus}
                           </span>
                         </div>
-                        <div className="flex items-center gap-2 text-[10px] text-[var(--spr-text-muted)] font-sans">
+                        <div className="flex items-center gap-2 text-[12px] text-[var(--spr-text-muted)] font-sans">
                           <span>{vendor.category}</span>
                           <span className="text-[var(--spr-text-faint)]">•</span>
-                          <span className="text-[9px] font-mono truncate">{vendor.locations}</span>
+                          <span className="text-[11px] font-mono truncate">{vendor.locations}</span>
                         </div>
                       </div>
 
@@ -533,7 +533,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                 {vendors.length === 0 ? (
                   <>
                     <p className="text-xs font-semibold">No vendors recorded for this tenant yet.</p>
-                    <p className="text-[10px]">{canManageVendors ? 'Add your first supply-chain vendor to start tracking reputation and audit evidence.' : 'Ask an Owner or Admin to add a vendor.'}</p>
+                    <p className="text-[12px]">{canManageVendors ? 'Add your first supply-chain vendor to start tracking reputation and audit evidence.' : 'Ask an Owner or Admin to add a vendor.'}</p>
                     {canManageVendors && (
                       <button onClick={() => setShowAddVendor(true)} className="spr-btn spr-btn-primary mt-2 inline-flex items-center gap-2">
                         <Plus className="h-4 w-4" /> Add vendor
@@ -543,7 +543,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                 ) : (
                   <>
                     <p className="text-xs font-semibold">No publishers matching selected filters.</p>
-                    <p className="text-[10px]">Try broading your criteria or clearing the search query.</p>
+                    <p className="text-[12px]">Try broading your criteria or clearing the search query.</p>
                   </>
                 )}
               </div>
@@ -557,7 +557,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                 <ShieldCheck className="w-4 h-4" />
               </div>
               <div>
-                <div className="text-[10px] font-mono text-[var(--spr-text-muted)] uppercase font-bold">Approved Publishers</div>
+                <div className="text-[12px] font-mono text-[var(--spr-text-muted)] uppercase font-bold">Approved Publishers</div>
                 <div className="text-sm font-bold text-[var(--spr-text)]">
                   {vendors.filter(v => v.reviewStatus === 'Approved').length} / {vendors.length}
                 </div>
@@ -569,7 +569,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                 <Award className="w-4 h-4" />
               </div>
               <div>
-                <div className="text-[10px] font-mono text-[var(--spr-text-muted)] uppercase font-bold">Avg Reputation score</div>
+                <div className="text-[12px] font-mono text-[var(--spr-text-muted)] uppercase font-bold">Avg Reputation score</div>
                 <div className="text-sm font-bold text-[var(--spr-text)]">
                   {(() => {
                     // Unassessed vendors (null score) must not be counted as 0
@@ -589,7 +589,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                 <Activity className="w-4 h-4" />
               </div>
               <div>
-                <div className="text-[10px] font-mono text-[var(--spr-text-muted)] uppercase font-bold">Unobserved Audits</div>
+                <div className="text-[12px] font-mono text-[var(--spr-text-muted)] uppercase font-bold">Unobserved Audits</div>
                 <div className="text-sm font-bold text-[var(--spr-text)]">
                   {vendors.filter(v => v.reviewStatus === 'Under Review').length} Under Review
                 </div>
@@ -607,11 +607,11 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
               <div className="spr-panel p-5 space-y-4">
                 <div className="flex justify-between items-start border-b border-[var(--spr-border)] pb-3">
                   <div>
-                    <span className="text-[9px] font-mono font-bold bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] px-2 py-0.5 rounded uppercase">
+                    <span className="text-[11px] font-mono font-bold bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] px-2 py-0.5 rounded uppercase">
                       Publisher Profile
                     </span>
                     <h2 className="text-sm font-bold text-[var(--spr-text)] mt-1">{selectedVendor.name}</h2>
-                    <p className="text-[10px] text-[var(--spr-text-muted)] mt-0.5">{selectedVendor.category}</p>
+                    <p className="text-[12px] text-[var(--spr-text-muted)] mt-0.5">{selectedVendor.category}</p>
                   </div>
                   <a
                     href={selectedVendor.website}
@@ -625,7 +625,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
                 {/* Sub-scores metrics block */}
                 <div className="space-y-3">
-                  <h3 className="text-[10px] font-mono font-bold text-[var(--spr-text-muted)] uppercase tracking-wider">
+                  <h3 className="text-[12px] font-mono font-bold text-[var(--spr-text-muted)] uppercase tracking-wider">
                     Supply Chain Reputation Metrics
                   </h3>
 
@@ -635,7 +635,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                         reputationScore (+2, or a hardcoded 95 fallback), which fabricated a
                         metric that was never actually observed. Show the true state instead. */}
                     <div>
-                      <div className="flex justify-between text-[10px] font-semibold text-[var(--spr-text-faint)] mb-1">
+                      <div className="flex justify-between text-[12px] font-semibold text-[var(--spr-text-faint)] mb-1">
                         <span>Binary & Code Signing Attestation</span>
                         <span className="font-mono font-bold text-[var(--spr-text-muted)]">Not available</span>
                       </div>
@@ -646,7 +646,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                         overallTrustScore under an unrelated label; there is no real
                         SLA-response-time data source for vendors. */}
                     <div>
-                      <div className="flex justify-between text-[10px] font-semibold text-[var(--spr-text-faint)] mb-1">
+                      <div className="flex justify-between text-[12px] font-semibold text-[var(--spr-text-faint)] mb-1">
                         <span>Vulnerability SLA Response Speed</span>
                         <span className="font-mono font-bold text-[var(--spr-text-muted)]">Not available</span>
                       </div>
@@ -654,10 +654,10 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                     </div>
 
                     {/* Threat / Incident frequency */}
-                    <div className="flex justify-between items-center text-[10px] bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] rounded-md p-2.5 font-sans">
+                    <div className="flex justify-between items-center text-[12px] bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] rounded-md p-2.5 font-sans">
                       <div className="space-y-0.5">
                         <span className="text-[var(--spr-text-faint)] font-semibold block">Known Threat Incidents</span>
-                        <span className="text-[9px] text-[var(--spr-text-muted)]">Past 12 Months</span>
+                        <span className="text-[11px] text-[var(--spr-text-muted)]">Past 12 Months</span>
                       </div>
                       <span className={`font-mono font-bold px-2 py-0.5 rounded ${
                         selectedVendor.securityIncidentsCount === 0 
@@ -683,7 +683,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                   {canLodgeAudit && (
                     <button
                       onClick={() => { setIsAddingAudit(!isAddingAudit); setLodgeAuditError(''); }}
-                      className="text-[10px] font-sans font-bold bg-[var(--spr-accent)] hover:bg-[var(--spr-accent-hover)] text-white px-2 py-1 rounded-md flex items-center gap-0.5 transition-all cursor-pointer"
+                      className="text-[12px] font-sans font-bold bg-[var(--spr-accent)] hover:bg-[var(--spr-accent-hover)] text-white px-2 py-1 rounded-md flex items-center gap-0.5 transition-all cursor-pointer"
                     >
                       {isAddingAudit ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
                       <span>{isAddingAudit ? 'Cancel' : 'Lodge Proof'}</span>
@@ -696,7 +696,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                   <form onSubmit={handleAddAuditAttestation} className="p-3.5 spr-panel-alt text-[var(--spr-text)] space-y-3">
                     {lodgeAuditError && <div role="alert" className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 px-3 py-2.5 text-xs text-[var(--spr-red)] flex items-center gap-2"><AlertCircle className="w-4 h-4 shrink-0" /> {lodgeAuditError}</div>}
                     <div className="flex justify-between items-center border-b border-[var(--spr-border)] pb-1.5">
-                      <span className="text-[10px] font-mono font-bold text-[var(--spr-highlight)] flex items-center gap-1">
+                      <span className="text-[12px] font-mono font-bold text-[var(--spr-highlight)] flex items-center gap-1">
                         <Lock className="w-3 h-3" /> Lock Attestation Proof
                       </span>
                     </div>
@@ -704,7 +704,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                     <div className="space-y-2 text-xs">
                       {/* Audit Standard Type */}
                       <div className="space-y-0.5">
-                        <label className="text-[9px] font-mono text-[var(--spr-text-muted)] block uppercase">Audit Type</label>
+                        <label className="text-[11px] font-mono text-[var(--spr-text-muted)] block uppercase">Audit Type</label>
                         <select
                           value={newAuditType}
                           onChange={(e) => setNewAuditType(e.target.value)}
@@ -721,7 +721,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
                       {/* Auditor Name */}
                       <div className="space-y-0.5">
-                        <label className="text-[9px] font-mono text-[var(--spr-text-muted)] block uppercase">Auditor / Entity ID</label>
+                        <label className="text-[11px] font-mono text-[var(--spr-text-muted)] block uppercase">Auditor / Entity ID</label>
                         <input
                           type="text"
                           required
@@ -734,7 +734,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
                       {/* Audit Status */}
                       <div className="space-y-0.5">
-                        <label className="text-[9px] font-mono text-[var(--spr-text-muted)] block uppercase">Audit Outcome</label>
+                        <label className="text-[11px] font-mono text-[var(--spr-text-muted)] block uppercase">Audit Outcome</label>
                         <select
                           value={newAuditStatus}
                           onChange={(e: any) => setNewAuditStatus(e.target.value)}
@@ -748,7 +748,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
                       {/* Details */}
                       <div className="space-y-0.5">
-                        <label className="text-[9px] font-mono text-[var(--spr-text-muted)] block uppercase">Attestation Logs</label>
+                        <label className="text-[11px] font-mono text-[var(--spr-text-muted)] block uppercase">Attestation Logs</label>
                         <textarea
                           placeholder="Detailed results or parameters verified..."
                           value={newAuditDetails}
@@ -760,13 +760,13 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
 
                       {/* Cryptographic reference hash */}
                       <div className="space-y-0.5">
-                        <label className="text-[9px] font-mono text-[var(--spr-text-muted)] block uppercase">Cryptographical Hash reference (Optional)</label>
+                        <label className="text-[11px] font-mono text-[var(--spr-text-muted)] block uppercase">Cryptographical Hash reference (Optional)</label>
                         <input
                           type="text"
                           placeholder="Leave blank to auto-generate ledger hash..."
                           value={newAuditHash}
                           onChange={(e) => setNewAuditHash(e.target.value)}
-                          className="w-full bg-[var(--spr-surface)] border border-[var(--spr-border)] rounded px-2.5 py-1 font-mono text-[10px] text-white"
+                          className="w-full bg-[var(--spr-surface)] border border-[var(--spr-border)] rounded px-2.5 py-1 font-mono text-[12px] text-white"
                         />
                       </div>
 
@@ -803,10 +803,10 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                           {/* Header of Audit Event */}
                           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1">
                             <div className="space-y-0.5">
-                              <span className="text-[10px] font-bold text-[var(--spr-text)] block leading-tight">
+                              <span className="text-[12px] font-bold text-[var(--spr-text)] block leading-tight">
                                 {audit.auditType}
                               </span>
-                              <span className="text-[9px] text-[var(--spr-text-muted)] font-mono flex items-center gap-1">
+                              <span className="text-[11px] text-[var(--spr-text-muted)] font-mono flex items-center gap-1">
                                 <Calendar className="w-3 h-3 text-[var(--spr-text-muted)]" />
                                 <span>{audit.date}</span>
                               </span>
@@ -824,12 +824,12 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                           </div>
 
                           {/* Details description */}
-                          <p className="text-[10px] text-[var(--spr-text-faint)] leading-relaxed">
+                          <p className="text-[12px] text-[var(--spr-text-faint)] leading-relaxed">
                             {audit.details}
                           </p>
 
                           {/* Metadata: Auditor & Cryptographic Hash References */}
-                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[var(--spr-border)] font-mono text-[9px] text-[var(--spr-text-muted)] bg-[var(--spr-surface-sunken)] p-2 rounded-md">
+                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[var(--spr-border)] font-mono text-[11px] text-[var(--spr-text-muted)] bg-[var(--spr-surface-sunken)] p-2 rounded-md">
                             <div>
                               <span className="block text-[var(--spr-text-muted)] font-bold uppercase text-[7px]">Auditor</span>
                               <span className="font-semibold text-[var(--spr-text-faint)] flex items-center gap-1 mt-0.5 truncate" title={audit.auditor}>
@@ -870,7 +870,7 @@ export default function VendorsView({ vendors: initialVendors, searchQuery: glob
                     <div className="text-center p-6 text-[var(--spr-text-muted)]">
                       <HelpCircle className="w-7 h-7 text-[var(--spr-text-faint)] mx-auto mb-1.5" />
                       <p className="text-xs">No audit logs listed on the secure ledger.</p>
-                      <p className="text-[10px]">Click "Lodge Proof" above to register an audit.</p>
+                      <p className="text-[12px]">Click "Lodge Proof" above to register an audit.</p>
                     </div>
                   )}
                 </div>

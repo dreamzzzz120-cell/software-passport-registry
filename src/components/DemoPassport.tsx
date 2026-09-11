@@ -78,7 +78,7 @@ export default function DemoPassport({ onRunFreeReview, onHome }: { onRunFreeRev
               ['Last observed', '29 Aug 2026 (sample)'],
             ].map(([term, value]) => (
               <div key={term}>
-                <dt className="text-[10px] uppercase tracking-wide text-[var(--cc-ink-faint)]">{term}</dt>
+                <dt className="text-[12px] uppercase tracking-wide text-[var(--cc-ink-faint)]">{term}</dt>
                 <dd className="text-[var(--cc-ink)]">{value}</dd>
               </div>
             ))}

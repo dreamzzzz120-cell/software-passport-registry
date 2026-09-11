@@ -172,7 +172,7 @@ function AuthLoading() {
 
 function WorkflowBoundary({ title, description, extensionId, onNavigate }: { title: string; description: string; extensionId?: string; onNavigate: (path: string) => void }) {
   const extension = extensionId ? EXTENSIONS.find((item) => item.id === extensionId) : undefined;
-  return <section className="spr-panel p-6 md:p-8"><div className="text-[10px] font-semibold uppercase tracking-[.15em] text-[var(--spr-text-faint)]">Workflow boundary</div><h1 className="mt-2 text-2xl font-semibold tracking-tight text-[var(--spr-text)]">{title}</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--spr-text-muted)]">{description}</p>{extension && <button onClick={() => onNavigate(extension.entryPath)} className="spr-btn spr-btn-primary mt-5">Open {extension.name} →</button>}</section>;
+  return <section className="spr-panel p-6 md:p-8"><div className="text-[12px] font-semibold uppercase tracking-[.15em] text-[var(--spr-text-faint)]">Workflow boundary</div><h1 className="mt-2 text-2xl font-semibold tracking-tight text-[var(--spr-text)]">{title}</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--spr-text-muted)]">{description}</p>{extension && <button onClick={() => onNavigate(extension.entryPath)} className="spr-btn spr-btn-primary mt-5">Open {extension.name} →</button>}</section>;
 }
 
 export default function App() {

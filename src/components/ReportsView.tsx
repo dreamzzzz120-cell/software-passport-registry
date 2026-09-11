@@ -323,7 +323,7 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
           ['Findings / vulnerabilities', findingCount + vulnerabilityCount, 'Loaded finding and vulnerability records'],
         ].map(([label, value, detail]) => (
           <div key={String(label)} className="spr-panel p-4">
-            <div className="text-[10px] font-bold uppercase tracking-[.18em] text-[var(--spr-text-muted)]">{label}</div>
+            <div className="text-[12px] font-bold uppercase tracking-[.18em] text-[var(--spr-text-muted)]">{label}</div>
             <div className="mt-2 text-2xl font-semibold text-[var(--spr-text)]">{value}</div>
             <div className="mt-1 text-xs text-[var(--spr-text-muted)]">{detail}</div>
           </div>
@@ -340,7 +340,7 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
               <span className="text-xs text-[var(--spr-text-muted)]">{exportClientIds.size === 0 ? 'All clients' : `${exportClientIds.size} of ${clients.length} clients selected`}</span>
               <div className="flex flex-wrap gap-1.5">
                 {clients.map((client) => (
-                  <button key={client.id} onClick={() => toggleExportClient(client.id)} className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${exportClientIds.has(client.id) ? 'border-[var(--spr-accent)]/50 bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)]' : 'border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-text-muted)]'}`}>{client.name}</button>
+                  <button key={client.id} onClick={() => toggleExportClient(client.id)} className={`rounded-full border px-2 py-0.5 text-[12px] font-semibold ${exportClientIds.has(client.id) ? 'border-[var(--spr-accent)]/50 bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)]' : 'border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-text-muted)]'}`}>{client.name}</button>
                 ))}
               </div>
             </div>
@@ -407,7 +407,7 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
                         <span>{new Date(snapshot.generated_at).toLocaleString()}</span>
                         <span className="text-[var(--spr-text-muted)]">{snapshot.score == null ? 'unverified' : `score ${snapshot.score}`}</span>
                       </div>
-                      <div className="mt-1 truncate font-mono text-[10px] text-[var(--spr-text-muted)]">{snapshot.canonical_payload_hash}</div>
+                      <div className="mt-1 truncate font-mono text-[12px] text-[var(--spr-text-muted)]">{snapshot.canonical_payload_hash}</div>
                     </button>
                   </li>
                 ))}

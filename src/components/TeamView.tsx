@@ -264,13 +264,13 @@ export default function TeamView({ role }: { role: string }) {
             <div className="overflow-x-auto">
               <table className="w-full min-w-[560px] text-left text-sm">
                 <caption className="sr-only">Workspace team members</caption>
-                <thead className="border-b border-[var(--spr-border)] text-[10px] uppercase tracking-[.16em] text-[var(--spr-text-faint)]"><tr><th scope="col" className="px-3 py-3">Member</th><th scope="col" className="px-3 py-3">Role</th><th scope="col" className="px-3 py-3">Provisioned</th><th scope="col" className="px-3 py-3 text-right">Actions</th></tr></thead>
+                <thead className="border-b border-[var(--spr-border)] text-[12px] uppercase tracking-[.16em] text-[var(--spr-text-faint)]"><tr><th scope="col" className="px-3 py-3">Member</th><th scope="col" className="px-3 py-3">Role</th><th scope="col" className="px-3 py-3">Provisioned</th><th scope="col" className="px-3 py-3 text-right">Actions</th></tr></thead>
                 <tbody className="divide-y divide-[var(--spr-border)]">
                   {members.map((member) => <tr key={member.id}>
                     <td className="px-3 py-4">
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-[var(--spr-text)]">{member.displayName || member.email}</span>
-                        {isPending(member) && <span className="inline-flex items-center gap-1 rounded-full border border-[var(--spr-amber)]/40 bg-[var(--spr-amber)]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--spr-amber)]"><Clock className="h-3 w-3" />Pending</span>}
+                        {isPending(member) && <span className="inline-flex items-center gap-1 rounded-full border border-[var(--spr-amber)]/40 bg-[var(--spr-amber)]/15 px-2 py-0.5 text-[12px] font-semibold uppercase tracking-wide text-[var(--spr-amber)]"><Clock className="h-3 w-3" />Pending</span>}
                       </div>
                       {member.displayName && <div className="mt-0.5 text-xs text-[var(--spr-text-muted)]">{member.email}</div>}
                     </td>
@@ -329,7 +329,7 @@ export default function TeamView({ role }: { role: string }) {
               {sessions.map((session) => (
                 <li key={session.id} className="flex items-center justify-between gap-3 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2.5 text-xs">
                   <div>
-                    <div className="flex items-center gap-2 text-[var(--spr-text)]">{session.device}{session.current && <span className="rounded-full border border-[var(--spr-accent)]/50 bg-[var(--spr-accent-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--spr-highlight)]">This device</span>}</div>
+                    <div className="flex items-center gap-2 text-[var(--spr-text)]">{session.device}{session.current && <span className="rounded-full border border-[var(--spr-accent)]/50 bg-[var(--spr-accent-soft)] px-2 py-0.5 text-[12px] font-semibold text-[var(--spr-highlight)]">This device</span>}</div>
                     <div className="mt-1 text-[var(--spr-text-muted)]">{session.ip} · Last seen {formatDateTime(session.lastSeenAt)}</div>
                   </div>
                   {!session.current && (

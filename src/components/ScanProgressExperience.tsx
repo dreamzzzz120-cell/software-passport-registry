@@ -129,13 +129,13 @@ export default function ScanProgressExperience({ jobId, targetName, onComplete, 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-base font-semibold">{isDone ? 'Passport ready' : isFailed ? 'Scan needs attention' : retrying ? 'Recovering scan…' : 'Building your Software Passport'}</h2>
-            {!isDone && !isFailed && <span className="inline-flex items-center gap-1 rounded-full border border-[var(--spr-border)] px-2 py-0.5 text-[10px] uppercase tracking-wider text-[var(--spr-text-faint)]"><Activity className="h-3 w-3" /> Live</span>}
+            {!isDone && !isFailed && <span className="inline-flex items-center gap-1 rounded-full border border-[var(--spr-border)] px-2 py-0.5 text-[12px] uppercase tracking-wider text-[var(--spr-text-faint)]"><Activity className="h-3 w-3" /> Live</span>}
           </div>
           <p className="mt-1 truncate text-sm text-[var(--spr-text-muted)]">{targetName || 'Software asset'} · {currentName}</p>
         </div>
         <div className="text-right">
           <div className="text-2xl font-bold tabular-nums">{progress}%</div>
-          {eta && <div className="mt-0.5 flex items-center justify-end gap-1 text-[10px] text-[var(--spr-text-faint)]"><Clock3 className="h-3 w-3" />{eta}</div>}
+          {eta && <div className="mt-0.5 flex items-center justify-end gap-1 text-[12px] text-[var(--spr-text-faint)]"><Clock3 className="h-3 w-3" />{eta}</div>}
         </div>
       </div>
 

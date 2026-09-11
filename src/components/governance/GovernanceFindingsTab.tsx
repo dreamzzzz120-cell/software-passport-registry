@@ -85,7 +85,7 @@ export default function GovernanceFindingsTab({ canDispose }: { canDispose: bool
           ) : findings.map((f) => (
             <button key={f.id} onClick={() => setSelectedId(f.id)} className={`flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm transition ${selectedId === f.id ? 'bg-[var(--spr-accent-soft)]/45' : 'hover:bg-[var(--spr-surface-sunken)]'}`}>
               <span className="min-w-0"><span className="block truncate font-semibold text-[var(--spr-text)]">{f.title}</span><span className="block text-xs text-[var(--spr-text-faint)]">{f.passportName || f.passportId} · {f.severity}</span></span>
-              <span className={`shrink-0 rounded-sm border px-2 py-0.5 text-[10px] font-bold uppercase ${STATUS_STYLE[f.status]}`}>{f.status}</span>
+              <span className={`shrink-0 rounded-sm border px-2 py-0.5 text-[12px] font-bold uppercase ${STATUS_STYLE[f.status]}`}>{f.status}</span>
             </button>
           ))}
         </div>
@@ -98,11 +98,11 @@ export default function GovernanceFindingsTab({ canDispose }: { canDispose: bool
               <div><h2 className="text-sm font-bold text-[var(--spr-text)]">{selected.title}</h2><p className="text-xs text-[var(--spr-text-faint)]">Control: {selected.controlId} · Evidence-derived status is fixed by the trust engine and never changed here.</p></div>
               <button onClick={() => setWhyOpen(true)} className="inline-flex items-center gap-1 rounded-md border border-[var(--spr-border)] px-2.5 py-1 text-xs font-semibold text-[var(--spr-highlight)] hover:bg-[var(--spr-surface-sunken)]"><HelpCircle className="h-3.5 w-3.5" /> Why?</button>
             </div>
-            <span className={`inline-block rounded-sm border px-2 py-0.5 text-[10px] font-bold uppercase ${STATUS_STYLE[selected.status]}`}>Evidence status: {selected.status}</span>
+            <span className={`inline-block rounded-sm border px-2 py-0.5 text-[12px] font-bold uppercase ${STATUS_STYLE[selected.status]}`}>Evidence status: {selected.status}</span>
 
             <div className="border-t border-[var(--spr-border)] pt-4">
               <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--spr-text)]">Governance dispositions</h3>
-              <p className="mt-1 text-[10px] text-[var(--spr-text-faint)]">A human judgment layered on top of this finding -- it never overrides the evidence-derived status above.</p>
+              <p className="mt-1 text-[12px] text-[var(--spr-text-faint)]">A human judgment layered on top of this finding -- it never overrides the evidence-derived status above.</p>
               {canDispose && (
                 <form onSubmit={handleSubmit} className="mt-3 space-y-2 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] p-3">
                   {submitError && <div role="alert" className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 px-2.5 py-2 text-xs text-[var(--spr-red)]">{submitError}</div>}

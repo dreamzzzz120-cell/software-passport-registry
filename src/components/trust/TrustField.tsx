@@ -55,7 +55,7 @@ export default function TrustField({ dimensions, state, centerLabel = 'PASSPORT'
 
   return (
     <div className="relative" role="img" aria-label={`Trust Field for ${centerLabel}: ${dimensions.map((d) => `${d.label} ${d.value === null ? 'not available' : d.value}`).join(', ')}`}>
-      {demo && <span className="absolute left-1/2 top-0 -translate-x-1/2 rounded-full border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[.15em] text-[var(--spr-text-faint)]">Example data</span>}
+      {demo && <span className="absolute left-1/2 top-0 -translate-x-1/2 rounded-full border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[.15em] text-[var(--spr-text-faint)]">Example data</span>}
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="mx-auto">
         {positioned.map((dimension) => (
           <line key={`line-${dimension.key}`} x1={center} y1={center} x2={dimension.x} y2={dimension.y} stroke={dimension.value === null ? BORDER : `${centerColor}55`} strokeWidth={1.5} strokeDasharray={dimension.value === null ? '3 4' : undefined} />

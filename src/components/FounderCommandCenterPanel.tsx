@@ -139,7 +139,7 @@ export default function FounderCommandCenterPanel() {
           { label: 'CI Status', value: data.businessMetrics.ciStatus },
         ].map((m) => (
           <div key={m.label} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4">
-            <p className="text-[10px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">{m.label}</p>
+            <p className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">{m.label}</p>
             <p className="mt-2 text-xl font-bold text-[var(--spr-text)]">{m.value}</p>
           </div>
         ))}
@@ -153,7 +153,7 @@ export default function FounderCommandCenterPanel() {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="text-[10px] uppercase tracking-[0.18em] text-[var(--spr-text-muted)]">
+              <tr className="text-[12px] uppercase tracking-[0.18em] text-[var(--spr-text-muted)]">
                 <th className="pb-2 pr-3">Passport</th>
                 <th className="pb-2 pr-3">Holder</th>
                 <th className="pb-2 pr-3">Score</th>
@@ -180,7 +180,7 @@ export default function FounderCommandCenterPanel() {
                   </td>
                   <td className="py-2 pr-3 text-[var(--spr-text)]">{p.overallScore ?? 'Not verified'}</td>
                   <td className="py-2 pr-3">
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${p.verificationStatus === 'verified' ? 'bg-[var(--spr-green)]/15 text-[var(--spr-green)]' : p.verificationStatus === 'partial' ? 'bg-[var(--spr-amber)]/15 text-[var(--spr-amber)]' : 'bg-[var(--spr-text-muted)]/15 text-[var(--spr-text-muted)]'}`}>{p.verificationStatus}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-[12px] font-semibold uppercase ${p.verificationStatus === 'verified' ? 'bg-[var(--spr-green)]/15 text-[var(--spr-green)]' : p.verificationStatus === 'partial' ? 'bg-[var(--spr-amber)]/15 text-[var(--spr-amber)]' : 'bg-[var(--spr-text-muted)]/15 text-[var(--spr-text-muted)]'}`}>{p.verificationStatus}</span>
                   </td>
                   <td className="py-2 pr-3 text-[var(--spr-text-muted)]">{p.releaseDate || 'Not verified'}</td>
                 </tr>
@@ -219,14 +219,14 @@ export default function FounderCommandCenterPanel() {
 
         {(['open', 'in_progress', 'done'] as const).map((status) => (
           <div key={status} className="mb-4">
-            <p className="text-[10px] uppercase tracking-[0.2em] font-semibold text-[var(--spr-text-muted)] mb-1">
+            <p className="text-[12px] uppercase tracking-[0.2em] font-semibold text-[var(--spr-text-muted)] mb-1">
               {status.replace('_', ' ')} ({grouped[status].length})
             </p>
             <div className="space-y-1">
               {grouped[status].map((t) => (
                 <div key={t.id} className="flex items-center justify-between gap-3 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] px-3 py-2 text-sm">
                   <div>
-                    <span className="mr-2 rounded border border-[var(--spr-border)] px-1.5 py-0.5 text-[10px] uppercase text-[var(--spr-text-muted)]">{t.category}</span>
+                    <span className="mr-2 rounded border border-[var(--spr-border)] px-1.5 py-0.5 text-[12px] uppercase text-[var(--spr-text-muted)]">{t.category}</span>
                     <span className="text-[var(--spr-text)]">{t.title}</span>
                     {t.notes && <p className="text-xs text-[var(--spr-text-muted)] mt-0.5">{t.notes}</p>}
                   </div>

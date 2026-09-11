@@ -43,14 +43,14 @@ export default function GovernanceWhyModal({ kind, id, onClose }: { kind: 'contr
         {data && (
           <div className="mt-4 space-y-4">
             <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] p-4">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--spr-text-faint)]">Conclusion</div>
+              <div className="text-[12px] font-bold uppercase tracking-wider text-[var(--spr-text-faint)]">Conclusion</div>
               <p className="mt-1 text-sm font-semibold text-[var(--spr-text)]">{data.conclusion.title}</p>
               <p className="mt-0.5 text-xs text-[var(--spr-text-muted)]">Status: {data.conclusion.status}</p>
             </div>
 
             {data.latestTest !== undefined && (
               <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] p-4">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--spr-text-faint)]">Latest control test</div>
+                <div className="text-[12px] font-bold uppercase tracking-wider text-[var(--spr-text-faint)]">Latest control test</div>
                 {data.latestTest ? (
                   <div className="mt-1 text-xs text-[var(--spr-text-muted)]">
                     <p><span className="font-semibold text-[var(--spr-text)]">{data.latestTest.result}</span> by {data.latestTest.testerName} on {new Date(data.latestTest.testedAt).toLocaleString()}</p>
@@ -61,7 +61,7 @@ export default function GovernanceWhyModal({ kind, id, onClose }: { kind: 'contr
             )}
 
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--spr-text-faint)]">Evidence ({data.evidence.length})</div>
+              <div className="text-[12px] font-bold uppercase tracking-wider text-[var(--spr-text-faint)]">Evidence ({data.evidence.length})</div>
               {data.evidence.length === 0 ? (
                 <p className="mt-2 text-xs italic text-[var(--spr-text-faint)]">No evidence records were found for this conclusion.</p>
               ) : (
@@ -70,11 +70,11 @@ export default function GovernanceWhyModal({ kind, id, onClose }: { kind: 'contr
                     <div key={e.id} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] p-3 text-xs">
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-semibold text-[var(--spr-text)]">{e.provider} · {e.controlId}</span>
-                        <span className={`rounded-sm border px-1.5 py-0.5 text-[9px] font-bold uppercase ${e.status === 'PASS' ? 'border-[var(--spr-green)]/40 text-[var(--spr-green)]' : e.status === 'FAIL' ? 'border-[var(--spr-red)]/40 text-[var(--spr-red)]' : 'border-[var(--spr-border)] text-[var(--spr-text-muted)]'}`}>{e.status}</span>
+                        <span className={`rounded-sm border px-1.5 py-0.5 text-[11px] font-bold uppercase ${e.status === 'PASS' ? 'border-[var(--spr-green)]/40 text-[var(--spr-green)]' : e.status === 'FAIL' ? 'border-[var(--spr-red)]/40 text-[var(--spr-red)]' : 'border-[var(--spr-border)] text-[var(--spr-text-muted)]'}`}>{e.status}</span>
                       </div>
                       <p className="mt-1 text-[var(--spr-text-muted)]">Observed {new Date(e.observedAt).toLocaleString()} · {e.verificationMethod}</p>
                       {e.sourceUrl && <a href={e.sourceUrl} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-[var(--spr-highlight)] hover:underline">Source <ExternalLink className="h-3 w-3" /></a>}
-                      <p className="mt-1 break-all font-mono text-[10px] text-[var(--spr-text-faint)]">{e.evidenceHash}</p>
+                      <p className="mt-1 break-all font-mono text-[12px] text-[var(--spr-text-faint)]">{e.evidenceHash}</p>
                       {e.limitation && <p className="mt-1 italic text-[var(--spr-amber)]">{e.limitation}</p>}
                     </div>
                   ))}
