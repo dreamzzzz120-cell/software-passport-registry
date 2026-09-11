@@ -51,7 +51,19 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/* && groupadd --system --gid 10001 spr && useradd --system --uid 10001 --gid 10001 --create-home --shell /usr/sbin/nologin spr
+# The worker service is built from this same image (Railway config-as-code is
+# deprecated and the per-service Dockerfile path can no longer be changed), so
+# the repository-scan toolchain has to live here: unzip/tar for the codeload
+# archive and syft for SBOM generation. Without them every scan failed at
+# "unzip -Z1" with REPOSITORY_ACQUISITION_FAILED -- observed live on 2026-09-11.
+ENV SYFT_PATH=/usr/local/bin/syft
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl unzip tar && rm -rf /var/lib/apt/lists/* \
+  && curl -fsSL https://github.com/anchore/syft/releases/download/v1.49.0/syft_1.49.0_linux_amd64.tar.gz -o /tmp/syft.tar.gz \
+  && tar -xzf /tmp/syft.tar.gz -C /usr/local/bin syft \
+  && chmod 0755 /usr/local/bin/syft \
+  && rm -f /tmp/syft.tar.gz \
+  && /usr/local/bin/syft version | grep -F '1.49.0' \
+  && groupadd --system --gid 10001 spr && useradd --system --uid 10001 --gid 10001 --create-home --shell /usr/sbin/nologin spr
 
 COPY --from=builder --chown=10001:10001 /app/package.json ./
 COPY --from=builder --chown=10001:10001 /app/node_modules ./node_modules
