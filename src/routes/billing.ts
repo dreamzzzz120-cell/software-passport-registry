@@ -373,7 +373,47 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
           `);
           await appendAuditEntry(db, { tenantId, action: 'billing.subscription.activated', actor: 'stripe-webhook', payload: { plan, stripeEventId: event.id, stripeSubscriptionId: String(session.subscription), stripeCustomerId: customerId ?? null } });
         } else if (tenantId && session.mode === 'payment') {
-          await appendAuditEntry(db, { tenantId, action: 'billing.purchase.completed', actor: 'stripe-webhook', payload: { product: session.metadata?.product ?? null, stripeEventId: event.id, checkoutSessionId: session.id } });
+          const productId = session.metadata?.product ?? null;
+          await appendAuditEntry(db, { tenantId, action: 'billing.purchase.completed', actor: 'stripe-webhook', payload: { product: productId, stripeEventId: event.id, checkoutSessionId: session.id } });
+
+          // A one-time product is a deliverable somebody has to produce. Until
+          // this, a completed payment left only the audit row above: the buyer
+          // heard nothing and nobody was told a sale had happened. Both notices
+          // go through notification_outbox, so they queue durably and send once
+          // the email provider is configured, and they are keyed on the Stripe
+          // event id so a redelivered event cannot double-send.
+          const label = productId && productId in ONE_TIME_CONFIG ? ONE_TIME_CONFIG[productId as OneTimeProductId].label : (productId ?? 'a one-time purchase');
+          const buyerEmail = session.customer_details?.email ?? session.customer_email ?? null;
+          const amount = typeof session.amount_total === 'number' && session.currency
+            ? new Intl.NumberFormat('en-US', { style: 'currency', currency: session.currency.toUpperCase() }).format(session.amount_total / 100)
+            : null;
+          const orderRef = session.id.slice(-8).toUpperCase();
+
+          if (buyerEmail) {
+            const body = [
+              `Thanks — your order for ${label} has been received.${amount ? ` Amount: ${amount}.` : ''}`,
+              '',
+              `Order reference: ${orderRef}`,
+              '',
+              'What happens next: this is a produced deliverable, not an instant download. The SPR team will contact you at this address to confirm scope and schedule delivery.',
+              '',
+              'If you did not make this purchase, reply to this email.',
+            ].join('\n');
+            await db.execute(sql`INSERT INTO notification_outbox (id, tenant_id, channel, destination, subject, body) VALUES (${`purchase_${event.id}_buyer`}, ${tenantId}, 'email', ${buyerEmail}, ${`Order received: ${label} (ref ${orderRef})`}, ${body}) ON CONFLICT (id) DO NOTHING`);
+          }
+
+          const opsBody = [
+            `New one-time purchase to fulfil.`,
+            '',
+            `Product: ${label}`,
+            `Amount: ${amount ?? 'unknown'}`,
+            `Buyer: ${buyerEmail ?? 'unknown'}`,
+            `Tenant: ${tenantId}`,
+            `Order reference: ${orderRef}`,
+            `Stripe checkout session: ${session.id}`,
+          ].join('\n');
+          await db.execute(sql`INSERT INTO notification_outbox (id, tenant_id, channel, destination, subject, body) VALUES (${`purchase_${event.id}_ops`}, ${tenantId}, 'email', ${config.fulfilmentEmail}, ${`[SPR sale] ${label} — ${amount ?? ''} — ref ${orderRef}`}, ${opsBody}) ON CONFLICT (id) DO NOTHING`);
+          await appendAuditEntry(db, { tenantId, action: 'billing.purchase.notified', actor: 'stripe-webhook', payload: { product: productId, stripeEventId: event.id, buyerNotified: Boolean(buyerEmail), fulfilmentEmail: config.fulfilmentEmail } });
         } else if (tenantId && session.metadata?.addon) {
           // An add-on checkout completing left no trace at all: it is a
           // subscription, so it missed the plan branch above, and it is not a

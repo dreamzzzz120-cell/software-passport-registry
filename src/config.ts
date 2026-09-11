@@ -49,6 +49,9 @@ const envSchema = z.object({
   STRIPE_PRICE_CONTINUOUS_VERIFICATION: optionalTrimmedString, STRIPE_PRICE_TRUST_BADGE: optionalTrimmedString, STRIPE_PRICE_PUBLIC_PASSPORT: optionalTrimmedString, STRIPE_PRICE_API: optionalTrimmedString,
   GEMINI_API_KEY: optionalTrimmedString, GOOGLE_GENAI_API_KEY: optionalTrimmedString, AI_GATEWAY_API_KEY: optionalTrimmedString,
   SPR_INITIAL_OWNER_EMAIL: z.preprocess((value) => typeof value === 'string' ? (value.trim().toLowerCase() || undefined) : value, z.string().email().optional()),
+  // Where a completed one-time purchase is announced so it can be fulfilled.
+  // Falls back to the public contact address the app already publishes.
+  SPR_FULFILMENT_EMAIL: z.preprocess((value) => typeof value === 'string' ? (value.trim().toLowerCase() || undefined) : value, z.string().email().optional()),
   SPR_OWNER_BOOTSTRAP_SECRET: optionalTrimmedString,
   SPR_OWNER_BOOTSTRAP_SECRET_SHA256: z.preprocess((value) => typeof value === 'string' ? (value.trim().toLowerCase() || undefined) : value, z.string().regex(/^[a-f0-9]{64}$/).optional()),
   SPR_PUBLIC_PASSPORT_SECRET: optionalTrimmedString,
@@ -123,6 +126,7 @@ export const config = {
   },
   gemini: { apiKey: parsedEnv.GEMINI_API_KEY ?? parsedEnv.GOOGLE_GENAI_API_KEY }, aiGateway: { apiKey: parsedEnv.AI_GATEWAY_API_KEY },
   ownerBootstrap: { initialOwnerEmail: parsedEnv.SPR_INITIAL_OWNER_EMAIL, secret: parsedEnv.SPR_OWNER_BOOTSTRAP_SECRET, secretSha256: parsedEnv.SPR_OWNER_BOOTSTRAP_SECRET_SHA256 },
+  fulfilmentEmail: parsedEnv.SPR_FULFILMENT_EMAIL ?? 'contact@softwarepassportregistry.com',
   publicPassport: { secret: parsedEnv.SPR_PUBLIC_PASSPORT_SECRET },
   sentry: { dsn: parsedEnv.SENTRY_DSN }, redis: { url: parsedEnv.REDIS_URL, failOpen: parsedEnv.NODE_ENV !== 'production' && parseBoolean(parsedEnv.RATE_LIMIT_FAIL_OPEN, false) }, monitoring: { enabledTenantIds: parseCsv(parsedEnv.MONITORING_ENABLED_TENANT_IDS) },
   founder: {
@@ -171,6 +175,7 @@ export const configurationCatalog = [
   { name: 'SQL_SSL_CA', category: 'requiredWhenVerificationIsEnabled', requiredInProduction: false }, { name: 'REDIS_URL', category: 'requiredProduction', requiredInProduction: true }, { name: 'FIREBASE_SERVICE_ACCOUNT_KEY or FIREBASE_SERVICE_ACCOUNT_KEY_B64', category: 'requiredProduction', requiredInProduction: true },
   { name: 'SPR_PUBLIC_PASSPORT_SECRET', category: 'requiredProduction', requiredInProduction: true },
   { name: 'AI_GATEWAY_API_KEY', category: 'featureSpecific', requiredInProduction: false }, { name: 'SPR_OWNER_BOOTSTRAP_SECRET_SHA256', category: 'bootstrap-only', requiredInProduction: false },
+  { name: 'SPR_FULFILMENT_EMAIL', category: 'featureSpecific', requiredInProduction: false },
   { name: 'STRIPE_SECRET_KEY', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_WEBHOOK_SECRET', category: 'featureSpecific', requiredInProduction: false },
   { name: 'STRIPE_PRICE_MSP_PILOT', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_MSP_GROWTH', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_MSP_SCALE', category: 'featureSpecific', requiredInProduction: false },
   { name: 'STRIPE_PRICE_SOFTWARE_PASSPORT', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_EVIDENCE_REPORT', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_SECURITY_ASSESSMENT', category: 'featureSpecific', requiredInProduction: false },
