@@ -217,7 +217,7 @@ export default function TrustGraphView({ clients = [], passports = [], assets = 
                 <g key={key} role="button" tabIndex={0} onClick={() => { if (!draggedRef.current) selectEdge(edge); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') selectEdge(edge); }} className="cursor-pointer">
                   <title>{`${source.label} — ${edge.label} → ${target.label}`}</title>
                   <line x1={source.x} y1={source.y} x2={target.x} y2={target.y} stroke={isSelected || touchesActive ? 'var(--spr-highlight)' : 'var(--spr-gray)'} strokeOpacity={dimmed ? 0.08 : isSelected || touchesActive ? 0.85 : 0.25} strokeWidth={isSelected || touchesActive ? 2 : 1} />
-                  <text x={(source.x + target.x) / 2} y={(source.y + target.y) / 2 - 5} fill={isSelected || touchesActive ? 'var(--spr-highlight)' : 'var(--spr-text-faint)'} fillOpacity={dimmed ? 0.15 : 1} fontSize="9" textAnchor="middle">{edge.label}</text>
+                  <text x={(source.x + target.x) / 2} y={(source.y + target.y) / 2 - 5} fill={isSelected || touchesActive ? 'var(--spr-highlight)' : 'var(--spr-text-faint)'} fillOpacity={dimmed ? 0.15 : 1} fontSize="11" textAnchor="middle">{edge.label}</text>
                 </g>
               );
             })}
@@ -229,7 +229,7 @@ export default function TrustGraphView({ clients = [], passports = [], assets = 
                 <g key={node.id} role="button" tabIndex={0} onClick={() => { if (!draggedRef.current) selectNode(node.id); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') selectNode(node.id); }} onMouseEnter={() => setHoveredId(node.id)} onMouseLeave={() => setHoveredId(null)} className="cursor-pointer" opacity={dimmed ? 0.2 : 1}>
                   <title>{`${node.kind}: ${node.label} — ${node.detail}`}</title>
                   <circle cx={node.x} cy={node.y} r={selectedId === node.id ? 23 : isActive ? 21 : 18} fill={COLORS[node.kind]} fillOpacity={isActive ? 0.3 : 0.18} stroke={COLORS[node.kind]} strokeWidth={selectedId === node.id || isActive ? 3 : 1.5} />
-                  <text x={node.x} y={node.y + 3} fill={COLORS[node.kind]} fontSize="9" textAnchor="middle" fontWeight="700">{node.kind.slice(0, 4).toUpperCase()}</text>
+                  <text x={node.x} y={node.y + 3} fill={COLORS[node.kind]} fontSize="11" textAnchor="middle" fontWeight="700">{node.kind.slice(0, 4).toUpperCase()}</text>
                   <text x={node.x} y={node.y + 34} fill="var(--spr-text)" fontSize="11" textAnchor="middle">{node.label}</text>
                 </g>
               );

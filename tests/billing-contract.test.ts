@@ -254,3 +254,31 @@ describe('billing audit logging: material subscription events are recorded, not 
     expect(s).toContain("action: 'billing.payment.failed'");
   });
 });
+
+describe('one-time purchases are fulfilled, not just recorded', () => {
+  const source = () => read('src/routes/billing.ts');
+
+  // Before this, checkout.session.completed for mode:'payment' wrote a single
+  // audit row and stopped: the buyer heard nothing and nobody was told a sale
+  // had happened. A produced deliverable needs both.
+  it('queues a confirmation to the buyer and an alert to the fulfilment address', () => {
+    const s = source();
+    const branch = s.slice(s.indexOf("session.mode === 'payment'"), s.indexOf("session.metadata?.addon"));
+    expect(branch).toContain("INSERT INTO notification_outbox");
+    expect(branch).toContain("${`purchase_${event.id}_buyer`}");
+    expect(branch).toContain("${`purchase_${event.id}_ops`}");
+    expect(branch).toContain('config.fulfilmentEmail');
+  });
+
+  it('keys both notices on the Stripe event id so a redelivered event cannot double-send', () => {
+    const s = source();
+    const branch = s.slice(s.indexOf("session.mode === 'payment'"), s.indexOf("session.metadata?.addon"));
+    expect((branch.match(/ON CONFLICT \(id\) DO NOTHING/g) || []).length).toBe(2);
+  });
+
+  it('never invents the fulfilment address: it is configured or the published contact address', () => {
+    const c = read('src/config.ts');
+    expect(c).toContain("fulfilmentEmail: parsedEnv.SPR_FULFILMENT_EMAIL ?? 'contact@softwarepassportregistry.com'");
+    expect(c).toContain("{ name: 'SPR_FULFILMENT_EMAIL', category: 'featureSpecific'");
+  });
+});
