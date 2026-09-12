@@ -110,8 +110,21 @@ export async function checkStripeAndMrr(): Promise<{ connection: ConnectionStatu
     const stripe = new Stripe(config.stripe.secretKey);
     const [customers, subs] = await Promise.all([
       stripe.customers.list({ limit: 100 }),
-      stripe.subscriptions.list({ status: 'active', limit: 100 }),
+      stripe.subscriptions.list({ status: 'active', limit: 100, expand: ['data.discounts'] }),
     ]);
+    // MRR is what Stripe will actually bill each month: list price, then the
+    // subscription's own discounts. Ignoring discounts reported $1,145 MRR on
+    // 2026-09-11 when every active subscription carried a 100% test coupon.
+    const applyDiscounts = (cents: number, discounts: unknown[]): number => {
+      let value = cents;
+      for (const d of discounts) {
+        const coupon = (d as any)?.coupon ?? (d as any)?.source?.coupon;
+        if (!coupon) continue;
+        if (typeof coupon.percent_off === 'number') value -= value * (coupon.percent_off / 100);
+        else if (typeof coupon.amount_off === 'number') value -= coupon.amount_off;
+      }
+      return Math.max(0, Math.round(value));
+    };
     const mrrCents = subs.data.reduce((sum, sub) => {
       const itemTotal = sub.items.data.reduce((s, item) => {
         const amount = item.price?.unit_amount ?? 0;
@@ -120,7 +133,8 @@ export async function checkStripeAndMrr(): Promise<{ connection: ConnectionStatu
         const monthly = interval === 'year' ? amount / 12 : amount;
         return s + monthly * qty;
       }, 0);
-      return sum + itemTotal;
+      const discounts = ((sub as any).discounts ?? []).filter((d: unknown) => d && typeof d === 'object');
+      return sum + applyDiscounts(itemTotal, discounts);
     }, 0);
     return {
       connection: { name: 'Stripe', status: 'ok', detail: `${customers.data.length} customers, ${subs.data.length} active subs`, lastChecked: now() },
