@@ -14,7 +14,7 @@ import { verifyFreeReviewStatusToken } from './public-connect.ts';
 import { FREE_REVIEW_TENANT_ID } from './free-review-submit.ts';
 
 // Lead capture on a Free Review result. The visitor already holds the signed
-// status token for their own review; giving a name and business email records
+// status token for their own review; giving a name and email records
 // a lead and unlocks the client-side PDF of the result they can already see.
 // Nothing extra is revealed by the server -- the PDF is rendered in the
 // browser from the same payload -- so the gate is honest about what it gates.
@@ -56,7 +56,8 @@ export function createFreeReviewLeadsRouter() {
       if (!payload) return res.status(401).json({ error: 'Invalid or expired Free Review link.' });
       const parsed = leadSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Name, a valid email address and consent are required.', details: parsed.error.flatten() });
-      if (!isBusinessEmail(parsed.data.email)) return res.status(422).json({ error: 'Please use your work email address. Personal mailbox domains are not accepted for the PDF report.', code: 'BUSINESS_EMAIL_REQUIRED' });
+      // Founder decision 2026-09-11: any valid address is accepted; the
+      // consumer-domain refusal turned away solo MSP owners.
 
       const scopedDb = await attachTenantScope(FREE_REVIEW_TENANT_ID, res);
       const submission = (await scopedDb.execute(sql`SELECT repository_owner AS owner, repository_name AS repository FROM free_review_submissions WHERE tenant_id = ${FREE_REVIEW_TENANT_ID} AND passport_id = ${passportId} ORDER BY created_at DESC LIMIT 1`) as any).rows?.[0];
