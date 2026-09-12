@@ -31,6 +31,7 @@ const EXEMPTIONS: Record<string, string> = {
   'founder-command-center.ts': 'Intentionally cross-tenant: gated behind requireFounder, the platform-operator-only allowlist.',
   'free-review-legacy.ts': 'Pre-signup public funnel; uses the dedicated FREE_REVIEW_TENANT_ID sentinel tenant, never a real customer tenant.',
   'free-review.ts': 'Router-mounting wrapper only (free-review-legacy, universal-intake, traffic) -- no queries of its own.',
+  'whitepaper.ts': 'Public, static content only (renders data/whitepaper-software-vin.md); no database access at all.',
   'governance.ts': 'requireAuth-gated; queries route through req.db.',
   'integration-monitoring.ts': 'requireAuth-gated; queries route through req.db.',
   'integration.ts': 'Backward-compatible re-export of connect.ts only -- no queries of its own.',

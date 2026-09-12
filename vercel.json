@@ -34,6 +34,10 @@
       "destination": "https://spr-app-staging-production.up.railway.app/software/:path*"
     },
     {
+      "source": "/whitepaper",
+      "destination": "https://spr-app-staging-production.up.railway.app/whitepaper"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

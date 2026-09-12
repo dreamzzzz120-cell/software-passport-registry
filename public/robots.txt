@@ -18,6 +18,7 @@ Allow: /pricing
 Allow: /msp
 Allow: /passport/demo
 Allow: /software
+Allow: /whitepaper
 Allow: /terms
 Allow: /privacy
 
