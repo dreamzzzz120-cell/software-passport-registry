@@ -38,3 +38,6 @@ rotate-*.cjs
 rotate-*.mjs
 rotate-*.sh
 *.connstr
+
+# vitest artefacts copied under tests/
+tests/dist/

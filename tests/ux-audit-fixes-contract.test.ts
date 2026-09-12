@@ -7,21 +7,26 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (relative: string) => fs.readFileSync(path.join(root, relative), 'utf8');
 
 describe('SPR live-audit bug-fix contracts', () => {
-  it('never lets a DB hiccup at boot crash the whole process before app.listen() binds a port', () => {
-    // Reproduced live: without this fix, an unreachable DB during
-    // ensureInitialSelfPassport() made startServer() reject, and the
-    // top-level .catch(() => process.exit(1)) killed the process before
-    // /health, /ready, or any static asset could ever be served.
+  it('does no database work before app.listen() binds a port', () => {
+    // Reproduced live: an unreachable DB during the old boot-time
+    // ensureInitialSelfPassport() made startServer() reject, and the top-level
+    // .catch(() => process.exit(1)) killed the process before /health, /ready
+    // or any static asset could be served. That bootstrap inserted a
+    // placeholder self passport with an empty SBOM (migration 0080 removed
+    // it); the guarantee now is that startServer() touches nothing but the
+    // port before listening, so a database outage is reported by /ready
+    // rather than by a dead process.
     const server = read('server.ts');
+    expect(server).not.toContain('ensureInitialSelfPassport');
+    expect(server).not.toContain('passport_spr_self');
     const startFnStart = server.indexOf('export async function startServer()');
-    const startFnBody = server.slice(startFnStart, startFnStart + 1200);
-    expect(startFnBody).toContain('try {');
-    expect(startFnBody).toContain('await ensureInitialSelfPassport();');
-    expect(startFnBody).toContain('catch (error)');
-    const tryPos = startFnBody.indexOf('try {');
+    expect(startFnStart).toBeGreaterThan(0);
+    const startFnBody = server.slice(startFnStart, server.indexOf('\n', startFnStart));
     const listenPos = startFnBody.indexOf('server = app.listen(');
-    expect(tryPos).toBeGreaterThan(0);
-    expect(listenPos).toBeGreaterThan(tryPos);
+    expect(listenPos).toBeGreaterThan(0);
+    const beforeListen = startFnBody.slice(0, listenPos);
+    expect(beforeListen).not.toMatch(/\b(db|appPool|pool)\./);
+    expect(beforeListen).not.toContain('await ');
   });
 
   it('calls the monitoring endpoints at their real mounted path, not the unmounted root', () => {
