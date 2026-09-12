@@ -27,7 +27,9 @@ async function collectFiles(root: string) {
   let totalBytes = 0;
   async function walk(dir: string) {
     for (const entry of await readdir(dir, { withFileTypes: true })) {
-      if (entry.isSymbolicLink()) throw new Error('REPOSITORY_PATH_INVALID');
+      // Never follow a symlink (it could leave the tree); skip it rather than
+      // failing the review -- the repository worker removes them as well.
+      if (entry.isSymbolicLink()) continue;
       if (entry.isDirectory() && IGNORED.has(entry.name)) continue;
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) await walk(full);

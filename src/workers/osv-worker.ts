@@ -2,7 +2,7 @@ import { decryptCredentials } from '../integrations/credential-vault.ts';
 import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, mkdir, writeFile, readdir, lstat, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readdir, lstat, rm, unlink } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { appendAuditEntryViaPool } from '../security/audit-log.ts';
 import { Pool, PoolClient } from 'pg';
@@ -419,10 +419,14 @@ export function validateArchiveEntries(entries: string[]) {
 }
 
 export async function inspectTree(root: string) {
-  const manifests: string[] = []; let fileCount = 0; let totalBytes = 0;
+  const manifests: string[] = []; let fileCount = 0; let totalBytes = 0; let skippedSymlinks = 0;
   async function walk(directory: string): Promise<void> {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
-      if (entry.isSymbolicLink()) throw new Error('REPOSITORY_PATH_INVALID');
+      // A symlink could point the scanners outside the extracted tree, so it is
+      // never followed -- but one symlink (ripgrep's HomebrewFormula, for one)
+      // must not fail the whole review. Remove it and carry on; the count is
+      // recorded so the omission is visible, never silent.
+      if (entry.isSymbolicLink()) { await unlink(path.join(directory, entry.name)); skippedSymlinks++; continue; }
       if (entry.isDirectory() && ignoredDirectories.has(entry.name)) continue;
       const absolute = path.join(directory, entry.name);
       if (entry.isDirectory()) await walk(absolute);
@@ -433,7 +437,9 @@ export async function inspectTree(root: string) {
       }
     }
   }
-  await walk(root); manifests.sort(); if (manifests.length === 0) throw new Error('NO_SUPPORTED_MANIFESTS'); return manifests;
+  await walk(root); manifests.sort();
+  if (skippedSymlinks > 0) console.info(JSON.stringify({ event: 'scan_symlinks_removed', root: path.basename(root), count: skippedSymlinks }));
+  if (manifests.length === 0) throw new Error('NO_SUPPORTED_MANIFESTS'); return manifests;
 }
 
 async function locateSyft() {
