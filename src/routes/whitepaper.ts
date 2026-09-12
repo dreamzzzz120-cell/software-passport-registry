@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { Router, type Request, type Response } from 'express';
+import rateLimit from 'express-rate-limit';
 
 // Public, server-rendered whitepaper at /whitepaper, from the Markdown that
 // ships in the image (data/whitepaper-software-vin.md). A deliberately small
@@ -52,12 +53,16 @@ export function markdownToHtml(md: string): { title: string; html: string } {
 
 const STYLE = `:root{--ink:#111A24;--muted:#5C6670;--line:#D9DED9;--bg:#F6F7F4;--surface:#fff;--accent:#1F5F7A}@media(prefers-color-scheme:dark){:root{--ink:#E6EAEE;--muted:#97A2AB;--line:#263038;--bg:#0F1519;--surface:#161E25;--accent:#6FB3D2}}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 Georgia,"Times New Roman",serif;padding:32px 16px 72px}main{max-width:720px;margin:0 auto}h1{font:600 32px/1.2 system-ui,-apple-system,"Segoe UI",sans-serif;margin:0 0 8px;letter-spacing:-.01em}h2{font:600 20px/1.3 system-ui,-apple-system,"Segoe UI",sans-serif;margin:32px 0 8px}h3{font:600 17px/1.3 system-ui,sans-serif;margin:16px 0 6px;color:var(--muted)}p{margin:0 0 14px}ul,ol{margin:0 0 14px 22px;padding:0}li{margin:4px 0}hr{border:0;border-top:1px solid var(--line);margin:28px 0}a{color:var(--accent)}code{font:13px ui-monospace,Consolas,monospace;background:var(--surface);border:1px solid var(--line);padding:1px 5px}em{color:var(--muted)}.k{font:12px/1 system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:12px}.cta{display:inline-block;margin:6px 8px 0 0;padding:10px 16px;background:var(--accent);color:#fff;text-decoration:none;font:600 14px system-ui,sans-serif}.cta.alt{background:transparent;color:var(--accent);border:1px solid var(--accent)}.foot{margin-top:36px;padding-top:12px;border-top:1px solid var(--line);font:13px/1.5 system-ui,sans-serif;color:var(--muted)}`;
 
+const pageLimiter = rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: 'draft-7', legacyHeaders: false, validate: { trustProxy: false } });
+
 export function createWhitepaperRouter() {
   const router = Router();
-  router.get('/', (_req: Request, res: Response, next) => {
+  // Read and convert once per process; the document only changes with a deploy.
+  const rendered = fs.existsSync(SOURCE) ? markdownToHtml(fs.readFileSync(SOURCE, 'utf8')) : null;
+  router.get('/', pageLimiter, (_req: Request, res: Response, next) => {
     try {
-      if (!fs.existsSync(SOURCE)) return res.status(404).send('Whitepaper not available on this deployment.');
-      const { title, html } = markdownToHtml(fs.readFileSync(SOURCE, 'utf8'));
+      if (!rendered) return res.status(404).send('Whitepaper not available on this deployment.');
+      const { title, html } = rendered;
       const description = 'Why software needs a persistent identity to which independently observed evidence accumulates — and where SCA scanners stopped short.';
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('Cache-Control', 'public, max-age=3600');
