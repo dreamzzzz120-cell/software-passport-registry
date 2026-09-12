@@ -24,15 +24,21 @@ describe('real repository scanners', () => {
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 
-  it('does not report a GitHub Actions workflow reference as a missing licence, but still reports packages', () => {
+  it('does not report a GitHub Actions reference or a repository manifest file as a missing licence, but still reports packages', () => {
+    // Shapes taken from the production Syft 1.49.0 (linux) output for this
+    // repository: the action reference, the versionless file component Syft
+    // emits for a manifest it parsed, and the one genuinely undeclared package.
     const findings = scanLicenses({ bomFormat: 'CycloneDX', components: [
-      { name: 'actions/checkout', version: 'v5', purl: 'pkg:github/actions/checkout@v5' },
-      { name: 'limiter', version: '1.1.5', purl: 'pkg:npm/limiter@1.1.5' },
+      { name: 'actions/checkout', version: 'v5', purl: 'pkg:github/actions/checkout@v5', type: 'library' },
+      { name: '/tmp/scan/.github/workflows/ci.yml', type: 'file' },
+      { name: '/tmp/scan/package-lock.json', type: 'file' },
+      { name: 'limiter', version: '1.1.5', purl: 'pkg:npm/limiter@1.1.5', type: 'library' },
     ] });
     expect(findings.map(f => f.component)).toEqual(['limiter']);
-    expect(isLicenceEvaluable({ purl: 'pkg:github/actions/checkout@v5' })).toBe(false);
-    expect(isLicenceEvaluable({ purl: 'pkg:npm/limiter@1.1.5' })).toBe(true);
-    expect(isLicenceEvaluable({})).toBe(true);
+    expect(isLicenceEvaluable({ purl: 'pkg:github/actions/checkout@v5', version: 'v5' })).toBe(false);
+    expect(isLicenceEvaluable({ type: 'file' })).toBe(false);
+    expect(isLicenceEvaluable({ purl: 'pkg:npm/limiter@1.1.5' })).toBe(false); // versionless: never persisted, never counted
+    expect(isLicenceEvaluable({ purl: 'pkg:npm/limiter@1.1.5', version: '1.1.5' })).toBe(true);
   });
 
   it('reports missing SBOM license declarations as unknown evidence', () => {
