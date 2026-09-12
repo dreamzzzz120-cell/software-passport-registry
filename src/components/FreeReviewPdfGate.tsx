@@ -11,7 +11,7 @@ import { apiFetch } from '../utils/apiClient';
 
 // The PDF is rendered here, in the browser, from the result the visitor can
 // already see on screen -- nothing the server withheld is added to it. The
-// gate exists to capture a work email for a real result someone wanted to
+// gate exists to capture an email for a real result someone wanted to
 // keep, not to hide content behind a form.
 type Props = {
   passportId: string;
@@ -91,7 +91,7 @@ export default function FreeReviewPdfGate({ passportId, statusUrl, result, repos
   return (
     <div className="mt-4 rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface)] p-5" id="free-review-pdf-gate">
       <div className="flex items-center gap-2 text-sm font-bold text-[var(--spr-text)]"><FileDown className="h-4 w-4" />Download this result as a PDF</div>
-      <p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">A one-page summary of exactly what is shown above, generated in your browser. Enter your work email to download it.</p>
+      <p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">A one-page summary of exactly what is shown above, generated in your browser. Enter your email to download it.</p>
       {unlocked ? (
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <p className="text-xs text-[var(--spr-green)]">Thanks — your download has started.</p>
@@ -100,7 +100,7 @@ export default function FreeReviewPdfGate({ passportId, statusUrl, result, repos
       ) : (
         <form onSubmit={submit} className="mt-3 grid gap-2 sm:grid-cols-2">
           <input id="lead-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" required minLength={2} maxLength={120} className="rounded-lg border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-sm text-[var(--spr-text)]" />
-          <input id="lead-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Work email" required maxLength={254} className="rounded-lg border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-sm text-[var(--spr-text)]" />
+          <input id="lead-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required maxLength={254} className="rounded-lg border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-sm text-[var(--spr-text)]" />
           <input id="lead-company" value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Company (optional)" maxLength={160} className="rounded-lg border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-sm text-[var(--spr-text)] sm:col-span-2" />
           <label className="flex items-start gap-2 text-[11px] leading-4 text-[var(--spr-text-muted)] sm:col-span-2">
             <input id="lead-consent" type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} required className="mt-0.5" />
