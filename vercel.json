@@ -38,6 +38,10 @@
       "destination": "https://spr-app-staging-production.up.railway.app/whitepaper"
     },
     {
+      "source": "/roi",
+      "destination": "https://spr-app-staging-production.up.railway.app/roi"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
