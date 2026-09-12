@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { scanConfiguration, scanLicenses, scanSecrets } from '../src/scanners/real-repository-scanners.ts';
+import { isLicenceEvaluable, scanConfiguration, scanLicenses, scanSecrets } from '../src/scanners/real-repository-scanners.ts';
 
 describe('real repository scanners', () => {
   it('detects high-confidence secret patterns without returning secret values', async () => {
@@ -22,6 +22,17 @@ describe('real repository scanners', () => {
       const findings = await scanConfiguration(root);
       expect(findings.some(f => f.engineId === 'spr-iac-config-scanner-v1' && f.severity === 'high')).toBe(true);
     } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  it('does not report a GitHub Actions workflow reference as a missing licence, but still reports packages', () => {
+    const findings = scanLicenses({ bomFormat: 'CycloneDX', components: [
+      { name: 'actions/checkout', version: 'v5', purl: 'pkg:github/actions/checkout@v5' },
+      { name: 'limiter', version: '1.1.5', purl: 'pkg:npm/limiter@1.1.5' },
+    ] });
+    expect(findings.map(f => f.component)).toEqual(['limiter']);
+    expect(isLicenceEvaluable({ purl: 'pkg:github/actions/checkout@v5' })).toBe(false);
+    expect(isLicenceEvaluable({ purl: 'pkg:npm/limiter@1.1.5' })).toBe(true);
+    expect(isLicenceEvaluable({})).toBe(true);
   });
 
   it('reports missing SBOM license declarations as unknown evidence', () => {

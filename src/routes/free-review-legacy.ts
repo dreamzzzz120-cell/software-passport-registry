@@ -11,6 +11,7 @@ import { config } from '../config.ts';
 import { attachTenantScope } from '../middleware/tenant-scope.ts';
 import { signFreeReviewStatusToken, verifyFreeReviewStatusToken } from './public-connect.ts';
 import { assessTrust, severityBreakdown } from '../free-review/scoring.ts';
+import { isLicenceEvaluable } from '../scanners/real-repository-scanners.ts';
 
 export { FREE_REVIEW_TENANT_ID } from './free-review-submit.ts';
 import { enqueueFreeReview, FREE_REVIEW_TENANT_ID } from './free-review-submit.ts';
@@ -137,13 +138,16 @@ export function createLegacyFreeReviewRouter() {
       // read for its LENGTH only -- the licence ratio needs a real denominator --
       // and the components themselves never leave this function.
       const passportRow = (await scopedDb.execute(sql`SELECT id, name, version, publisher, category, verification_status AS "verificationStatus", sbom FROM passports WHERE id=${passportId} AND tenant_id=${FREE_REVIEW_TENANT_ID} LIMIT 1`) as any).rows?.[0] || null;
-      const sbomComponentCount = (() => {
-        if (!passportRow?.sbom) return null;
+      const { sbomComponentCount, licenceUnevaluatedComponentCount } = (() => {
+        if (!passportRow?.sbom) return { sbomComponentCount: null, licenceUnevaluatedComponentCount: 0 };
         try {
           const parsed = typeof passportRow.sbom === 'string' ? JSON.parse(passportRow.sbom) : passportRow.sbom;
-          return Array.isArray(parsed) && parsed.length > 0 ? parsed.length : null;
+          if (!Array.isArray(parsed) || parsed.length === 0) return { sbomComponentCount: null, licenceUnevaluatedComponentCount: 0 };
+          // Same rule the licence scanner applies, so the denominator matches
+          // the set the findings were drawn from.
+          return { sbomComponentCount: parsed.length, licenceUnevaluatedComponentCount: parsed.filter((c: any) => !isLicenceEvaluable(c)).length };
         } catch {
-          return null;
+          return { sbomComponentCount: null, licenceUnevaluatedComponentCount: 0 };
         }
       })();
       const passport = passportRow
@@ -217,6 +221,7 @@ export function createLegacyFreeReviewRouter() {
         repositoryEngineCompleted: jobs.some((j: any) => String(j.job_type) === 'repository_scan' && j.status === 'Completed'),
         findings: findings.map((f: any) => ({ severity: String(f.severity), category: String(f.category), status: String(f.status) })),
         sbomComponentCount,
+        licenceUnevaluatedComponentCount,
         evidence: evidence.map((e: any) => ({ type: String(e.type), verified: e.verified, engineId: e.engineId })),
       });
 

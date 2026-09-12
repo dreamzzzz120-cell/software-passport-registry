@@ -73,6 +73,22 @@ describe('licensing score', () => {
     expect(result.status === 'scored' && result.facts).toMatchObject({ components: 10, withLicence: 8, withoutLicence: 2 });
   });
 
+  it('excludes CI workflow action references from the denominator and says so', () => {
+    // Self-scan: 491 SBOM components, 19 of them GitHub Actions references
+    // that carry no licence metadata, 1 package genuinely without a
+    // declaration. The ratio is over the 472 evaluated packages, and the 19
+    // are named in the detail rather than silently dropped.
+    const result = scoreLicensing({ ...base, sbomComponentCount: 491, licenceUnevaluatedComponentCount: 19, findings: [finding('medium', 'License')] });
+    expect(result).toMatchObject({ status: 'scored', score: 100 });
+    expect(result.status === 'scored' && result.facts).toMatchObject({ components: 472, withLicence: 471, withoutLicence: 1, unevaluated: 19 });
+    expect(result.status === 'scored' && result.detail).toBe('471 of 472 package components carry an observed licence. 19 CI workflow action references not evaluated.');
+  });
+
+  it('is not observed, not 100, when every component is an unevaluated action reference', () => {
+    const result = scoreLicensing({ ...base, sbomComponentCount: 3, licenceUnevaluatedComponentCount: 3, findings: [] });
+    expect(result.status).toBe('not_observed');
+  });
+
   it('is 100 when every component declares a licence', () => {
     expect(scoreLicensing({ ...base, sbomComponentCount: 5, findings: [] })).toMatchObject({ score: 100 });
   });

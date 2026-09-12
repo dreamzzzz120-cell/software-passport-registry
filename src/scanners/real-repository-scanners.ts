@@ -162,10 +162,25 @@ export async function scanConfiguration(root: string): Promise<ScannerFinding[]>
 // again here is idempotent and deliberate: it guarantees no absolute scan
 // path can reach a finding's component/description (and therefore the
 // finding identity) even if this is ever called with a raw Syft document.
+// A GitHub Actions reference (`uses: actions/checkout@v5` in a workflow) is
+// catalogued by Syft as a component with a pkg:github/ purl. The workflow line
+// is the only thing in the repository that names it, and a workflow line has
+// nowhere to carry a licence, so "no licence declaration in the SBOM" is a
+// property of the reference format, not of the software. Found in a self-scan:
+// 19 of 20 "License not observed" findings were CI action references.
+// These stay in the SBOM (they are supply-chain inputs) but are not evaluated
+// for licence coverage, and every report states that scope.
+export function isLicenceEvaluable(component: { purl?: string | null } | null | undefined): boolean {
+  return !(typeof component?.purl === 'string' && component.purl.startsWith('pkg:github/'));
+}
+
+export const LICENCE_SCOPE_NOTE = 'Licence coverage is measured over package components. GitHub Actions referenced from CI workflows (pkg:github/ components) are inventoried in the SBOM but not evaluated for licence, because a workflow reference carries no licence metadata.';
+
 export function scanLicenses(cycloneDx: any, scanRoot?: string): ScannerFinding[] {
   const findings: ScannerFinding[] = [];
   const components = Array.isArray(cycloneDx?.components) ? cycloneDx.components : [];
   for (const component of components) {
+    if (!isLicenceEvaluable(component)) continue;
     const licenses = Array.isArray(component?.licenses) ? component.licenses : [];
     if (licenses.length === 0) {
       const name = normalizeComponentName(component?.name, scanRoot);

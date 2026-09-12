@@ -9,6 +9,7 @@ import { collectGitHubDeepEvidence } from '../integrations/github-deep.ts';
 import { persistTrustLoop, verifyRemediation } from '../trust/trust-loop.ts';
 import { classifyCanonicalChange, compareCanonicalObservations } from '../utils/observation-history.ts';
 import { explainChange, toPlainEnglish, type CanonicalReport } from '../trust/plain-english-report.ts';
+import { isLicenceEvaluable, LICENCE_SCOPE_NOTE } from '../scanners/real-repository-scanners.ts';
 
 const collectSchema = z.object({ passportId: z.string().trim().min(1).max(255), provider: z.string().trim().min(1).max(64) }).strict();
 const remediationSchema = z.object({
@@ -535,7 +536,8 @@ export async function buildAndPersistReport(db: any, tenantId: string, passportI
       evidence: scanEvidence,
       openFindingCount: scanFindings.filter((f: any) => !['resolved', 'closed', 'verified'].includes(String(f.status || '').toLowerCase())).length,
       // Stated so a reader never assumes test fixtures were scanned like code.
-      scope: 'Branded secret patterns (private keys, AWS/GitHub/Stripe/Google keys) are scanned in every file. The generic credential-assignment rule and all configuration rules skip test/spec files, fixture directories and .github/workflows, and ignore values shaped like environment-variable names or labelled placeholders.',
+      scope: `Branded secret patterns (private keys, AWS/GitHub/Stripe/Google keys) are scanned in every file. The generic credential-assignment rule and all configuration rules skip test/spec files, fixture directories and .github/workflows, and ignore values shaped like environment-variable names or labelled placeholders. ${LICENCE_SCOPE_NOTE}`,
+      licenceUnevaluatedComponentCount: sbomComponents.filter((c: any) => !isLicenceEvaluable(c)).length,
     },
     traceability: 'Report -> Passport -> Risk -> Finding -> Observation -> Provider -> Source -> Timestamp -> Hash',
     resolutionTraceability: 'Finding -> remediation -> new observation -> independent verification',
