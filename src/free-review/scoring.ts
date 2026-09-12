@@ -62,6 +62,13 @@ export interface ScoringInput {
   findings: ScoringFinding[];
   /** Components in the generated SBOM. null when no SBOM was produced. */
   sbomComponentCount: number | null;
+  /**
+   * SBOM components the licence scanner does not evaluate (CI workflow action
+   * references, which carry no licence metadata). Subtracted from the licence
+   * denominator so the ratio is over components that were actually assessed,
+   * and named in the detail so nobody reads the ratio as covering them.
+   */
+  licenceUnevaluatedComponentCount?: number;
   evidence: ScoringEvidence[];
 }
 
@@ -138,18 +145,24 @@ export function scoreLicensing(input: ScoringInput): CategoryResult {
   if (!input.repositoryEngineCompleted) {
     return { status: 'not_observed', reason: 'The repository engine did not complete, so the component list is incomplete and licence coverage could not be measured.' };
   }
-  const total = input.sbomComponentCount;
-  if (total === null || !Number.isFinite(total) || total <= 0) {
+  const sbomTotal = input.sbomComponentCount;
+  if (sbomTotal === null || !Number.isFinite(sbomTotal) || sbomTotal <= 0) {
     return { status: 'not_observed', reason: 'No SBOM was produced, so licence coverage could not be measured.' };
+  }
+  const unevaluated = Math.min(sbomTotal, Math.max(0, Math.floor(input.licenceUnevaluatedComponentCount ?? 0)));
+  const total = sbomTotal - unevaluated;
+  if (total <= 0) {
+    return { status: 'not_observed', reason: 'Every SBOM component is a CI workflow action reference, which carries no licence metadata, so licence coverage could not be measured.' };
   }
   const withoutLicence = Math.min(total, openFindings(input.findings).filter(isLicenceFinding).length);
   const withLicence = total - withoutLicence;
   const percent = Math.round((withLicence / total) * 100);
+  const scopeNote = unevaluated > 0 ? ` ${unevaluated} CI workflow action reference${unevaluated === 1 ? '' : 's'} not evaluated.` : '';
   return {
     status: 'scored',
     score: clampScore(percent),
-    detail: `${withLicence} of ${total} component${total === 1 ? '' : 's'} carry an observed licence.`,
-    facts: { components: total, withLicence, withoutLicence, percentWithLicence: percent },
+    detail: `${withLicence} of ${total} package component${total === 1 ? '' : 's'} carry an observed licence.${scopeNote}`,
+    facts: { components: total, withLicence, withoutLicence, percentWithLicence: percent, unevaluated },
   };
 }
 

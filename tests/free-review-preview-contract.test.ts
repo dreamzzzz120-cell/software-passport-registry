@@ -36,9 +36,12 @@ describe('the free preview response withholds paid detail server-side', () => {
     expect(source).toContain(code`for (const f of openFindings) {`);
   });
 
-  it('reads the SBOM for its length only, and never returns the components', () => {
+  it('reads the SBOM for its counts only, and never returns the components', () => {
     const source = route();
-    expect(source).toContain(code`return Array.isArray(parsed) && parsed.length > 0 ? parsed.length : null;`);
+    // Two counts leave the closure -- the SBOM size and how many components the
+    // licence scanner does not evaluate -- and nothing else does.
+    expect(source).toContain(code`return { sbomComponentCount: parsed.length, licenceUnevaluatedComponentCount: parsed.filter((c: any) => !isLicenceEvaluable(c)).length };`);
+    expect(source).not.toMatch(/sbomComponentss*:/);
     expect(source).toContain(code`sbom: { componentCount: sbomComponentCount }`);
     // The passport object handed back is rebuilt field by field, so the sbom
     // column cannot ride along on a SELECT *.
