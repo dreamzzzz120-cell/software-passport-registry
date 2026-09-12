@@ -18,6 +18,8 @@
 
 import { Router } from 'express';
 import { sql } from 'drizzle-orm';
+import rateLimit from 'express-rate-limit';
+const founderReadLimiter = rateLimit({ windowMs: 60_000, limit: 60, standardHeaders: 'draft-7', legacyHeaders: false, validate: { trustProxy: false } });
 import { z } from 'zod';
 import { AuthenticatedRequest, requireAuth, requireRole, requireFounder, rateLimiter } from '../middleware/security.ts';
 import { db } from '../db/index.ts';
@@ -163,6 +165,18 @@ export function createFounderCommandCenterRouter() {
     dueDate: z.string().trim().max(32).nullable().optional(),
   }).strict();
   const taskUpdateSchema = taskSchema.partial();
+
+  // Free Review leads: visitors who gave a work email to download their
+  // result PDF. Rows live in the Free Review system tenant; the owner
+  // connection reads them for the founder only.
+  router.get('/founder/leads', founderReadLimiter, requireAuth, requireRole('Owner'), requireFounder, async (_req: AuthenticatedRequest, res, next) => {
+    try {
+      const result = await db.execute(sql`SELECT id, name, email, company, repository, passport_id AS "passportId", consented_at AS "consentedAt", created_at AS "createdAt" FROM free_review_leads ORDER BY created_at DESC LIMIT 500`);
+      return res.json((result as any).rows ?? []);
+    } catch (error) {
+      return next(error);
+    }
+  });
 
   router.get('/founder/tasks', requireAuth, requireRole('Owner'), requireFounder, async (_req: AuthenticatedRequest, res, next) => {
     try {
