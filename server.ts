@@ -51,14 +51,6 @@ const requestHeaderTimeoutMs = Number(process.env.REQUEST_HEADER_TIMEOUT_MS || 1
 const requestTimeoutMs = Number(process.env.REQUEST_TIMEOUT_MS || 120_000);
 const keepAliveTimeoutMs = Number(process.env.KEEP_ALIVE_TIMEOUT_MS || 65_000);
 
-async function ensureInitialSelfPassport() {
-  const ownerResult = await db.execute(sql`SELECT tenant_id AS "tenantId" FROM users WHERE role = 'Owner' ORDER BY created_at ASC LIMIT 1`);
-  const rows = Array.isArray((ownerResult as any).rows) ? (ownerResult as any).rows as Array<{ tenantId?: string | null }> : [];
-  const owner = rows[0];
-  if (!owner?.tenantId) { console.warn('[SPR] Initial self-passport skipped: no Owner tenant exists yet.'); return; }
-  await db.execute(sql`INSERT INTO passports (id, tenant_id, name, version, publisher, category, overall_score, security_score, compliance_score, vendor_reputation_score, verification_status, release_date, file_hash, license_type, ai_summary, sbom, evidence, vulnerabilities, timeline) VALUES ('passport_spr_self', ${owner.tenantId}, 'Software Passport Registry', '1.0.0', 'SPR', 'Platform', NULL, NULL, NULL, NULL, 'unverified', CURRENT_DATE::text, 'not-observed', 'Unknown', 'Initial SPR self-passport. Evidence collection is pending.', '[]', '[]', '[]', '[]') ON CONFLICT (id) DO NOTHING`);
-  console.info('[SPR] Initial self-passport ready.');
-}
 export function normalizeAllowedOrigins(origins: string[]): string[] { return [...new Set(origins.map(origin => new URL(origin).origin))].sort(); }
 if (config.trustProxy) app.set('trust proxy', 1);
 app.disable('x-powered-by');
@@ -172,7 +164,9 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => { if (res
 export function rejectConnectTunnels(target: ReturnType<typeof app.listen>) { target.on('connect', (_req, socket) => { socket.end('HTTP/1.1 405 Method Not Allowed\r\nContent-Length: 0\r\nConnection: close\r\n\r\n'); }); return target; }
 let server: ReturnType<typeof app.listen> | undefined; let shuttingDown = false;
 async function shutdown(signal: string) { if (shuttingDown) return; shuttingDown = true; console.info(`[SPR] ${signal} received; shutting down gracefully.`); const forceTimer = setTimeout(() => process.exit(1), 15_000); forceTimer.unref(); if (server) await new Promise<void>(resolve => server!.close(() => resolve())); await closeDatabase().catch(error => console.error('[SPR] Database shutdown error:', error)); if (config.sentry.dsn) await Sentry.close(2_000).catch(() => undefined); clearTimeout(forceTimer); process.exit(0); }
-export async function startServer() { validateConfiguration(); try { await ensureInitialSelfPassport(); } catch (error) { console.error('[SPR] Initial self-passport bootstrap failed; continuing startup. /ready will report the database as unavailable.', error); } const host = process.env.HOST || '0.0.0.0'; server = app.listen(config.port, host, () => console.info(`[SPR] listening on http://${host}:${config.port}`)); rejectConnectTunnels(server); server.requestTimeout = Number.isFinite(requestTimeoutMs) && requestTimeoutMs > 0 ? requestTimeoutMs : 120_000; server.headersTimeout = Number.isFinite(requestHeaderTimeoutMs) && requestHeaderTimeoutMs > 0 ? requestHeaderTimeoutMs : 15_000; server.keepAliveTimeout = Number.isFinite(keepAliveTimeoutMs) && keepAliveTimeoutMs > 0 ? keepAliveTimeoutMs : 65_000; return server; }
+// No database work happens before the port is bound: /health, /ready and
+// static assets must be servable even when the database is unreachable.
+export async function startServer() { validateConfiguration(); const host = process.env.HOST || '0.0.0.0'; server = app.listen(config.port, host, () => console.info(`[SPR] listening on http://${host}:${config.port}`)); rejectConnectTunnels(server); server.requestTimeout = Number.isFinite(requestTimeoutMs) && requestTimeoutMs > 0 ? requestTimeoutMs : 120_000; server.headersTimeout = Number.isFinite(requestHeaderTimeoutMs) && requestHeaderTimeoutMs > 0 ? requestHeaderTimeoutMs : 15_000; server.keepAliveTimeout = Number.isFinite(keepAliveTimeoutMs) && keepAliveTimeoutMs > 0 ? keepAliveTimeoutMs : 65_000; return server; }
 process.once('SIGTERM', () => void shutdown('SIGTERM')); process.once('SIGINT', () => void shutdown('SIGINT')); process.on('unhandledRejection', reason => console.error('[SPR] Unhandled rejection:', reason)); process.on('uncaughtException', error => { console.error('[SPR] Uncaught exception:', error); void shutdown('uncaughtException'); });
 if (process.env.SPR_SKIP_AUTOSTART !== 'true') void startServer().catch(error => { console.error('[SPR] Startup failed:', error); process.exit(1); });
 export { app };

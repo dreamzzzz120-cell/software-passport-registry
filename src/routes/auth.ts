@@ -24,6 +24,10 @@ import { offboardTenantData } from '../db/sync.ts';
 import { canCreateClient, PLAN_CONFIG } from './billing.ts';
 import { normalizeClientRecord, normalizeClientRecords, normalizePassportRecords } from '../lib/clientJsonColumns.ts';
 import { adaptEvidenceForEvaluation } from '../lib/verification/evidenceAdapter.ts';
+
+// SPR's own source repository. The founder dashboard's "self passport" is the
+// newest completed scan of this repository in the founder's workspace.
+const SPR_SELF_REPOSITORY = { owner: 'dreamzzzz120-cell', name: 'software-passport-registry' } as const;
 import { evaluateVerification } from '../lib/verification/evaluateVerification.ts';
 import { VERIFICATION_POLICY_VERSION } from '../lib/verification/verificationPolicy.ts';
 import { verifySlsaProvenance } from '../utils/slsa-verification.ts';
@@ -541,13 +545,13 @@ export function createAuthRouter() {
     }
   });
 
-  // Owner-only self-passport retrieval. SPR's self-passport is a single
-  // platform-level record (id: passport_spr_self) -- it is NOT tenant data,
-  // so it is intentionally read via the unscoped `db` connection rather than
-  // req.db's tenant-scoped/RLS connection. Scoping this by req.user.tenantId
-  // previously caused false 404s for any Owner account other than whichever
-  // tenant happened to be first ever created. Absence of evidence is
-  // represented as a 404 instead of a fabricated passport or trust score.
+  // Owner-only self-passport retrieval. SPR's self passport is SPR's own
+  // repository, scanned by SPR like any other: the newest passport in the
+  // founder's tenant whose repository engine completed for the SPR repo. It
+  // used to be a placeholder row (passport_spr_self) inserted at boot with an
+  // empty SBOM; scans queued against it "completed" having examined nothing.
+  // Migration 0080 removed that row. Absence of a real scan is a 404, never
+  // a fabricated passport or score.
   // rateLimiter is applied a second time here (already global via
   // app.use('/api', rateLimiter) in server.ts) purely so CodeQL's per-route
   // static analysis -- which can't see rate-limiting middleware applied in a
@@ -555,20 +559,32 @@ export function createAuthRouter() {
   // it just increments the same shared counter twice per request.
   router.get('/passports/self-passport', requireAuth, requireRole('Owner'), requireFounder, rateLimiter, async (req: AuthenticatedRequest, res, next) => {
     try {
-      const result = await db.execute(sql`
+      const scopedDb = req.db!;
+      const result = await scopedDb.execute(sql`
         SELECT
-          id,
-          name,
-          version,
-          publisher,
-          release_date AS "releaseDate",
-          evidence
-        FROM passports
-        WHERE id = 'passport_spr_self'
+          p.id,
+          p.name,
+          p.version,
+          p.publisher,
+          p.release_date AS "releaseDate",
+          p.sbom,
+          j.updated_at AS "scannedAt",
+          (SELECT count(*)::int FROM evidence_items e WHERE e.tenant_id = p.tenant_id AND e.asset_id = p.id) AS "evidenceCount",
+          (SELECT count(*)::int FROM scan_findings f WHERE f.tenant_id = p.tenant_id AND f.asset_id = p.id AND lower(f.status) NOT IN ('resolved','closed','verified')) AS "openFindings",
+          (SELECT count(*)::int FROM scan_findings f WHERE f.tenant_id = p.tenant_id AND f.asset_id = p.id AND lower(f.status) NOT IN ('resolved','closed','verified') AND lower(f.severity) IN ('critical','high')) AS "criticalOrHigh"
+        FROM passports p
+        JOIN agent_jobs j ON j.passport_id = p.id AND j.tenant_id = p.tenant_id AND j.job_type = 'repository_scan' AND j.status = 'Completed'
+        WHERE p.tenant_id = ${req.user!.tenantId}
+          AND p.category = 'Repository'
+          AND p.publisher = ${SPR_SELF_REPOSITORY.owner}
+          AND p.name = ${SPR_SELF_REPOSITORY.name}
+        ORDER BY j.updated_at DESC
         LIMIT 1
       `);
       const row = (result as any).rows?.[0];
-      if (!row) return res.status(404).json({ error: 'Self passport evidence not found', code: 'SELF_PASSPORT_NOT_FOUND' });
+      if (!row) return res.status(404).json({ error: 'No completed scan of the SPR repository exists in this workspace yet.', code: 'SELF_PASSPORT_NOT_FOUND' });
+      let sbomComponentCount: number | null = null;
+      try { const parsed = typeof row.sbom === 'string' ? JSON.parse(row.sbom) : row.sbom; sbomComponentCount = Array.isArray(parsed) ? parsed.length : null; } catch { sbomComponentCount = null; }
       // Real health evidence, not a placeholder: the same three checks /ready
       // uses (database reachability, tenant-RLS enforcement, least-privilege
       // runtime role). Honest either way -- never fabricated as "Healthy".
@@ -579,11 +595,20 @@ export function createAuthRouter() {
       if (database.ok) { try { const scoped = await appPool.query('SELECT current_user AS role'); runtimeRole = scoped.rows?.[0]?.role ?? null; } catch { runtimeRole = null; } }
       const leastPrivilege = runtimeRole === 'spr_app_runtime';
       const healthStatus = database.ok && rlsOk === true && leastPrivilege ? 'Healthy' : 'Not verified';
+      // The sbom column is read for its length only and never returned.
       return res.json({
-        ...row,
+        id: row.id,
+        name: row.name,
+        version: row.version,
+        publisher: row.publisher,
+        releaseDate: row.releaseDate,
+        scannedAt: row.scannedAt,
+        sbomComponentCount,
+        evidenceCount: row.evidenceCount,
+        openFindings: row.openFindings,
+        criticalOrHigh: row.criticalOrHigh,
         overallScore: null,
         healthStatus,
-        evidence: Array.isArray(row.evidence) ? row.evidence : [],
       });
     } catch (error) {
       return next(error);
