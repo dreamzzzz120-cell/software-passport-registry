@@ -4,6 +4,7 @@ import { apiFetch } from '../utils/apiClient';
 import FounderCommandCenterPanel from './FounderCommandCenterPanel';
 import FounderMonitoringPanel from './FounderMonitoringPanel';
 import FounderLeadsPanel from './FounderLeadsPanel';
+import FounderTrafficPanel from './FounderTrafficPanel';
 
 interface FounderDashboardViewProps {
   userRole: string;
@@ -143,6 +144,7 @@ export default function FounderDashboardView({ userRole }: FounderDashboardViewP
       </div>
       <FounderMonitoringPanel />
       <FounderLeadsPanel />
+      <FounderTrafficPanel />
 
       <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
         <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-6">
