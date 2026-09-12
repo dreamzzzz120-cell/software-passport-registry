@@ -40,7 +40,8 @@ describe('component path normalization', () => {
     const scan2Root = '/tmp/spr-sec-job_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-ZZZZZZ/extracted/p-limit-df476048d023ff868cd45b35ee47f5fb0ca2b25a';
     const identityFor = (root: string) => {
       const [finding] = scanLicenses(
-        { bomFormat: 'CycloneDX', components: [{ name: `${root}/.github/workflows/main.yml` }] },
+        // Versioned so the licence scanner evaluates it (versionless file components are skipped).
+        { bomFormat: 'CycloneDX', components: [{ name: `${root}/.github/workflows/main.yml`, version: '1.0.0' }] },
         root,
       );
       return scanFindingIdentity({
@@ -108,7 +109,7 @@ describe('component path normalization', () => {
 
   it('7c. the license scanner emits no absolute path in either component or description', () => {
     const [finding] = scanLicenses(
-      { bomFormat: 'CycloneDX', components: [{ name: `${REAL_ROOT}/.github/workflows/main.yml` }] },
+      { bomFormat: 'CycloneDX', components: [{ name: `${REAL_ROOT}/.github/workflows/main.yml`, version: '1.0.0' }] },
       REAL_ROOT,
     );
     expect(finding.component).toBe('.github/workflows/main.yml');
