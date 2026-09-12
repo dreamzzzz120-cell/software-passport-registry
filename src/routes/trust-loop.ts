@@ -534,6 +534,8 @@ export async function buildAndPersistReport(db: any, tenantId: string, passportI
       findings: scanFindings,
       evidence: scanEvidence,
       openFindingCount: scanFindings.filter((f: any) => !['resolved', 'closed', 'verified'].includes(String(f.status || '').toLowerCase())).length,
+      // Stated so a reader never assumes test fixtures were scanned like code.
+      scope: 'Branded secret patterns (private keys, AWS/GitHub/Stripe/Google keys) are scanned in every file. The generic credential-assignment rule and all configuration rules skip test/spec files, fixture directories and .github/workflows, and ignore values shaped like environment-variable names or labelled placeholders.',
     },
     traceability: 'Report -> Passport -> Risk -> Finding -> Observation -> Provider -> Source -> Timestamp -> Hash',
     resolutionTraceability: 'Finding -> remediation -> new observation -> independent verification',

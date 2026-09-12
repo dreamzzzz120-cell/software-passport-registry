@@ -40,6 +40,13 @@ jobs:
       SPR_SECURITY_TEST_AUTH: 'true'
       SPR_TEST_DATABASE_URL: postgresql://spr_test:spr_test_only@127.0.0.1:5432/spr_security_test
       DATABASE_URL: postgresql://spr_test:spr_test_only@127.0.0.1:5432/spr_security_test
+      # tests/security/rls-tenant-isolation.test.ts only runs its live
+      # cross-tenant attack assertions when APP_DATABASE_URL is set, and it
+      # must point at the least-privileged spr_app_runtime role -- the same
+      # role production connects as -- not the migration-owning superuser,
+      # or the test would be proving nothing. The role exists after
+      # migrations run but has no password until the step below sets one.
+      APP_DATABASE_URL: postgresql://spr_app_runtime:spr_rls_test_only@127.0.0.1:5432/spr_security_test
       SPR_TEST_FIREBASE_PROJECT_ID: demo-spr-security
       FIREBASE_PROJECT_ID: demo-spr-security
       FIREBASE_AUTH_EMULATOR_HOST: 127.0.0.1:9099
@@ -146,6 +153,13 @@ jobs:
           for migration in migrations/*.sql; do
             PGPASSWORD=spr_test_only psql "$SPR_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
           done
+      - name: Configure spr_app_runtime for the RLS test
+        # migrations/0020_row_level_security.sql creates spr_app_runtime as a
+        # passwordless LOGIN role. Give it the password APP_DATABASE_URL above
+        # expects, so the live tenant-isolation test connects as the same
+        # restricted, non-bypassrls role production uses.
+        run: |
+          PGPASSWORD=spr_test_only psql "$SPR_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -c "ALTER ROLE spr_app_runtime WITH LOGIN PASSWORD 'spr_rls_test_only';" # gitleaks:allow
       - name: Seed isolated Tenant A/B resources
         run: |
           PGPASSWORD=spr_test_only psql "$SPR_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -v tenant_a_uid="$SPR_TEST_TENANT_A_UID" -v tenant_b_uid="$SPR_TEST_TENANT_B_UID" -f tests/security/seed-authz-fixtures.sql
