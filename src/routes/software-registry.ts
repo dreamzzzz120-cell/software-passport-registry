@@ -81,7 +81,9 @@ export function createSoftwareRegistryRouter() {
     try {
       const scopedDb = await attachTenantScope(FREE_REVIEW_TENANT_ID, res);
       const entries = await listCompleted(scopedDb, 50000);
-      const urls = [`${PUBLIC_ORIGIN}/software`, ...entries.map((e) => `${PUBLIC_ORIGIN}/software/${encodeURIComponent(e.owner)}/${encodeURIComponent(e.repository)}`)];
+      // Server-rendered public pages live in this sitemap; the static
+      // sitemap.xml is reserved for the prerendered SPA routes.
+      const urls = [`${PUBLIC_ORIGIN}/software`, `${PUBLIC_ORIGIN}/whitepaper`, ...entries.map((e) => `${PUBLIC_ORIGIN}/software/${encodeURIComponent(e.owner)}/${encodeURIComponent(e.repository)}`)];
       res.setHeader('Content-Type', 'application/xml; charset=utf-8');
       res.setHeader('Cache-Control', 'public, max-age=3600');
       return res.send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((u) => `  <url><loc>${escapeHtml(u)}</loc></url>`).join('\n')}\n</urlset>\n`);
