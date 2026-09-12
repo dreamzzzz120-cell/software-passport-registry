@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { AlertCircle, ArrowRight, CheckCircle2, Loader, Lock, ShieldCheck } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
+import FreeReviewPdfGate from './FreeReviewPdfGate';
 
 // Preview-safe shapes. The API deliberately does not send finding titles,
 // descriptions, affected components, evidence records or remediation to a free
@@ -454,6 +455,8 @@ export default function FreeReviewView({ onSignUp, initialResult }: FreeReviewVi
                     </ul>
                   </div>
                 ) : null}
+
+                <FreeReviewPdfGate passportId={result.passportId} statusUrl={statusUrl} result={result} repositoryLabel={result.passport?.name || result.passportId} />
 
                 {/* The gate. Counts of what is withheld, never the content --
                     which is not in this payload to reveal. */}
