@@ -162,19 +162,32 @@ export async function scanConfiguration(root: string): Promise<ScannerFinding[]>
 // again here is idempotent and deliberate: it guarantees no absolute scan
 // path can reach a finding's component/description (and therefore the
 // finding identity) even if this is ever called with a raw Syft document.
-// A GitHub Actions reference (`uses: actions/checkout@v5` in a workflow) is
-// catalogued by Syft as a component with a pkg:github/ purl. The workflow line
-// is the only thing in the repository that names it, and a workflow line has
-// nowhere to carry a licence, so "no licence declaration in the SBOM" is a
-// property of the reference format, not of the software. Found in a self-scan:
-// 19 of 20 "License not observed" findings were CI action references.
-// These stay in the SBOM (they are supply-chain inputs) but are not evaluated
-// for licence coverage, and every report states that scope.
-export function isLicenceEvaluable(component: { purl?: string | null } | null | undefined): boolean {
-  return !(typeof component?.purl === 'string' && component.purl.startsWith('pkg:github/'));
+// Licence coverage is a statement about the packages a repository depends on.
+// Two kinds of Syft component are not packages and are not evaluated:
+//
+//  - type "file": on Linux, Syft 1.49 emits the repository's own manifest
+//    files (package-lock.json, each .github/workflows/*.yml) as versionless
+//    file components with no purl. They are the scanned software itself, not
+//    a dependency, and the repository worker already drops versionless
+//    entries before persisting the SBOM -- so a finding against one counted
+//    a "missing licence" for a component that was not in the denominator.
+//  - pkg:github/ (a GitHub Actions `uses:` reference): the workflow line is
+//    the only thing that names it, and has nowhere to carry a licence.
+//
+// Found in a self-scan: 19 of 20 "License not observed" findings were one of
+// these two shapes. Both stay in the SBOM (actions are supply-chain inputs);
+// neither is evaluated, and every report states that scope.
+export function isLicenceEvaluable(component: { purl?: string | null; version?: string | null; type?: string | null } | null | undefined): boolean {
+  if (!component) return false;
+  if (component.type === 'file') return false;
+  // Mirrors the persistence rule (osv-worker keeps only versioned components)
+  // so findings and denominator are drawn from the same set.
+  if (typeof component.version !== 'string' || component.version.length === 0) return false;
+  if (typeof component.purl === 'string' && component.purl.startsWith('pkg:github/')) return false;
+  return true;
 }
 
-export const LICENCE_SCOPE_NOTE = 'Licence coverage is measured over package components. GitHub Actions referenced from CI workflows (pkg:github/ components) are inventoried in the SBOM but not evaluated for licence, because a workflow reference carries no licence metadata.';
+export const LICENCE_SCOPE_NOTE = 'Licence coverage is measured over versioned package components. GitHub Actions referenced from CI workflows (pkg:github/ components) and the repository manifest files that Syft records as file components are not evaluated for licence: a workflow reference carries no licence metadata, and a manifest file is the scanned software itself, not a dependency.';
 
 export function scanLicenses(cycloneDx: any, scanRoot?: string): ScannerFinding[] {
   const findings: ScannerFinding[] = [];
