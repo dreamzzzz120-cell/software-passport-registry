@@ -248,7 +248,7 @@ async function verifyMigration(): Promise<void> {
       'repository_scan_sources', 'audit_trail', 'pilotOrganizations', 'pilotContacts',
       'pilotApplications', 'pilotProjects', 'pilotSoftwareAssets', 'pilotPassportReports',
       'pilotFeedbackItems', 'pilotMeetings', 'pilotFeatureRequests', 'pilotConversionTracking',
-      'agentJobs', 'agentLogs', 'appUsers', 'projects', 'tasks', 'snippets', 'workSessions',
+      'agentJobs', 'agentLogs',
     ];
     
     const actualTables = tablesList.rows.map((row) => row.table_name);

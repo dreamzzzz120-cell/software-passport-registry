@@ -39,4 +39,49 @@ describe('real repository scanners', () => {
       expect(await scanSecrets(root)).toEqual([]);
     } finally { await rm(root, { recursive: true, force: true }); }
   });
+
+  // Regression coverage for a real self-scan: running these scanners over
+  // this repository reported 3 high-severity findings that were all false
+  // positives -- fixture strings inside the scanners' own test suite/CI
+  // config, an env-var *name* mistaken for a key value, and a labeled
+  // "missing config" placeholder. Each case below reproduces one of those
+  // shapes directly.
+  it('does not flag credential-shaped fixtures inside test/spec files or CI workflows', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'spr-secret-fixture-test-'));
+    try {
+      await writeFile(path.join(root, 'webhook.test.ts'), `const secret = 'tenant-webhook-secret-value';\n`); // gitleaks:allow
+      await mkdir(path.join(root, 'tests'));
+      await writeFile(path.join(root, 'tests', 'fixture.ts'), `const apiKey = 'inline-fixture-credential-value';\n`); // gitleaks:allow
+      await mkdir(path.join(root, '.github', 'workflows'), { recursive: true });
+      await writeFile(path.join(root, '.github', 'workflows', 'ci.yml'), `PASSWORD: 'ci-only-emulator-password'\n`); // gitleaks:allow
+      expect(await scanSecrets(root)).toEqual([]);
+
+      await mkdir(path.join(root, 'k8s-test'));
+      await writeFile(path.join(root, 'tests', 'scanner.test.ts'), 'spec:\n  hostNetwork: true\n');
+      expect(await scanConfiguration(root)).toEqual([]);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  it('does not flag an env-var name or an explicit placeholder used as a config value', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'spr-secret-placeholder-test-'));
+    try {
+      await writeFile(path.join(root, 'vite.config.ts'), `const required = { apiKey: 'VITE_FIREBASE_API_KEY' };\n`); // gitleaks:allow
+      await writeFile(path.join(root, 'firebase.ts'), `const fallback = { apiKey: 'spr-missing-firebase-config' };\n`); // gitleaks:allow
+      expect(await scanSecrets(root)).toEqual([]);
+      expect(await scanConfiguration(root)).toEqual([]);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  it('still flags a plausible hard-coded credential in application source', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'spr-secret-real-test-'));
+    try {
+      // Assembled at runtime so no commit ever contains a key-shaped literal.
+      const plausibleKey = ['a1B2c3', 'D4e5F6', 'g7H8i9J0'].join('');
+      await writeFile(path.join(root, 'config.ts'), `const apiKey = '${plausibleKey}';\n`);
+      const secretFindings = await scanSecrets(root);
+      expect(secretFindings.some(f => f.title === 'Hard-coded credential assignment')).toBe(true);
+      const configFindings = await scanConfiguration(root);
+      expect(configFindings.some(f => f.title === 'Static API key-like configuration')).toBe(true);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
 });
