@@ -2,7 +2,7 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { sql } from 'drizzle-orm';
-import { db } from '../db/index.ts';
+import { appPool, db } from '../db/index.ts';
 import { requireAuth, requireFounder, requireRole, type AuthenticatedRequest } from '../middleware/security.ts';
 import { DISTRIBUTION_TENANT_ID, enqueueResearchUrl, enqueueDistributionJob } from '../lib/distribution-engine.ts';
 
@@ -19,7 +19,7 @@ export function createDistributionRouter() {
     try {
       const parsed = urlSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'A valid HTTP(S) URL is required.' });
-      const jobId = await enqueueResearchUrl(db, parsed.data.url);
+      const jobId = await enqueueResearchUrl(appPool, parsed.data.url);
       return res.status(202).json({ jobId, status: 'queued' });
     } catch (error) { return next(error); }
   });
@@ -32,7 +32,7 @@ export function createDistributionRouter() {
       for (const value of urls) {
         const parsed = urlSchema.safeParse({ url: value });
         if (!parsed.success) return res.status(400).json({ error: 'Every URL must be a valid HTTP(S) URL.' });
-        ids.push(await enqueueResearchUrl(db, parsed.data.url));
+        ids.push(await enqueueResearchUrl(appPool, parsed.data.url));
       }
       return res.status(202).json({ status: 'queued', count: ids.length, jobIds: ids });
     } catch (error) { return next(error); }
@@ -45,7 +45,7 @@ export function createDistributionRouter() {
       const result = await db.execute(sql`SELECT id, name, email, company FROM free_review_leads WHERE tenant_id = ${DISTRIBUTION_TENANT_ID} AND id = ${parsed.data.leadId} LIMIT 1`);
       const lead = (result as any).rows?.[0];
       if (!lead) return res.status(404).json({ error: 'Lead not found.' });
-      const jobId = await enqueueDistributionJob(db, 'qualify_lead', { leadId: lead.id, name: lead.name, email: lead.email, company: lead.company ?? '' });
+      const jobId = await enqueueDistributionJob(appPool, 'qualify_lead', { leadId: lead.id, name: lead.name, email: lead.email, company: lead.company ?? '' });
       return res.status(202).json({ jobId, status: 'queued' });
     } catch (error) { return next(error); }
   });
