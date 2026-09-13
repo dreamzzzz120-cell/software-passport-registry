@@ -88,8 +88,8 @@ export function createFounderCommandCenterRouter() {
   // A repository can also have multiple historical passports from repeated
   // scans. The Founder registry is an inventory view, so show only the newest
   // passport for each tenant + publisher + software name and expose the number
-  // of historical versions separately. This prevents repeated scans from
-  // making the registry look like dozens of different software assets.
+  // of historical versions separately. The window functions run before the
+  // newest-row filter so versionCount represents the actual retained history.
   router.get('/founder/passports', requireAuth, requireRole('Owner'), requireFounder, rateLimiter, async (_req: AuthenticatedRequest, res, next) => {
     try {
       const result = await db.execute(sql`
@@ -107,16 +107,17 @@ export function createFounderCommandCenterRouter() {
           holder.email AS "holderEmail",
           holder.company_name AS "holderCompany"
         FROM (
-          SELECT
-            ranked.*,
-            COUNT(*) OVER (PARTITION BY tenant_id, LOWER(name), LOWER(publisher)) AS version_count
+          SELECT ranked.*
           FROM (
             SELECT
               p.*,
               ROW_NUMBER() OVER (
                 PARTITION BY p.tenant_id, LOWER(p.name), LOWER(p.publisher)
                 ORDER BY p.release_date DESC NULLS LAST, p.id DESC
-              ) AS rn
+              ) AS rn,
+              COUNT(*) OVER (
+                PARTITION BY p.tenant_id, LOWER(p.name), LOWER(p.publisher)
+              ) AS version_count
             FROM passports p
             WHERE p.tenant_id <> 'tenant-free-review-system'
           ) ranked
