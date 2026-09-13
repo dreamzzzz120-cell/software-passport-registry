@@ -1,5 +1,5 @@
 import { readdir, readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 async function collectTestFiles(dir: string): Promise<string[]> {
@@ -34,9 +34,17 @@ function isExplicitlyDocumentedGate(file: string, source: string): boolean {
 
 describe('test suite execution invariants', () => {
   it('does not contain silently environment-gated test suites', async () => {
-    const files = await collectTestFiles(join(process.cwd(), 'tests'));
+    const testsRoot = join(process.cwd(), 'tests');
+    const contractFile = relative(process.cwd(), __filename).replaceAll('\\', '/');
+    const files = await collectTestFiles(testsRoot);
     const findings: string[] = [];
+
     for (const file of files) {
+      const relativeFile = relative(process.cwd(), file).replaceAll('\\', '/');
+      // The detector necessarily contains the patterns it is designed to detect.
+      // Do not let the detector report its own pattern definitions as findings.
+      if (relativeFile === contractFile) continue;
+
       const source = await readFile(file, 'utf8');
       if (isExplicitlyDocumentedGate(file, source)) continue;
       for (const finding of findSilentEnvironmentGates(source)) {
