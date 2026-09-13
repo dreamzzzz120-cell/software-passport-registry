@@ -4,7 +4,7 @@ import net from 'node:net';
 import type { Pool } from 'pg';
 
 export const DISTRIBUTION_TENANT_ID = 'tenant-free-review-system';
-export type DistributionJobKind = 'research_url' | 'qualify_lead' | 'prepare_outreach';
+export type DistributionJobKind = 'research_url' | 'qualify_lead' | 'prepare_outreach' | 'send_outreach' | 'followup_outreach';
 
 const MAX_PAYLOAD_BYTES = 32_000;
 const REQUEST_TIMEOUT_MS = 8_000;
@@ -38,31 +38,6 @@ async function assertPublicResearchTarget(parsed: URL) {
   }
 }
 
-export async function enqueueDistributionJob(pool: Pool, kind: DistributionJobKind, payload: Record<string, unknown>) {
-  assertPayload(payload);
-  const id = `dist_${randomUUID().replace(/-/g, '')}`;
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    await client.query(`SELECT set_config('app.tenant_id', $1, true)`, [DISTRIBUTION_TENANT_ID]);
-    await client.query(`INSERT INTO distribution_jobs (id, tenant_id, kind, payload) VALUES ($1, $2, $3, $4::jsonb)`, [id, DISTRIBUTION_TENANT_ID, kind, JSON.stringify(payload)]);
-    await client.query('COMMIT');
-    return id;
-  } catch (error) {
-    await client.query('ROLLBACK').catch(() => undefined);
-    throw error;
-  } finally {
-    client.release();
-  }
-}
-
-export async function enqueueResearchUrl(pool: Pool, url: string) {
-  const parsed = new URL(url);
-  if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('DISTRIBUTION_URL_SCHEME_NOT_ALLOWED');
-  await assertPublicResearchTarget(parsed);
-  return enqueueDistributionJob(pool, 'research_url', { url: parsed.toString() });
-}
-
 async function readBoundedBody(response: Response) {
   const reader = response.body?.getReader();
   if (!reader) return '';
@@ -73,16 +48,22 @@ async function readBoundedBody(response: Response) {
       const { done, value } = await reader.read();
       if (done) break;
       total += value.byteLength;
-      if (total > MAX_BODY_BYTES) {
-        await reader.cancel();
-        throw new Error('DISTRIBUTION_RESPONSE_TOO_LARGE');
-      }
+      if (total > MAX_BODY_BYTES) { await reader.cancel(); throw new Error('DISTRIBUTION_RESPONSE_TOO_LARGE'); }
       chunks.push(value);
     }
-  } finally {
-    reader.releaseLock();
-  }
+  } finally { reader.releaseLock(); }
   return new TextDecoder().decode(Buffer.concat(chunks));
+}
+
+function publicRoleEmails(html: string) {
+  const found = new Set<string>();
+  for (const match of html.matchAll(/(?:mailto:)?([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})/gi)) {
+    const email = String(match[1]).toLowerCase();
+    const [local, domain] = email.split('@');
+    if (!local || !domain || ['gmail.com','googlemail.com','outlook.com','hotmail.com','live.com','yahoo.com','icloud.com','me.com','aol.com'].includes(domain)) continue;
+    if (/^(info|sales|hello|contact|security|support|office|admin|marketing|business|partners|partnerships|service|services)$/.test(local)) found.add(email);
+  }
+  return [...found].slice(0, 5);
 }
 
 function extractResearchSignals(url: URL, html: string) {
@@ -95,7 +76,29 @@ function extractResearchSignals(url: URL, html: string) {
     multiClient: /clients|customers|managed endpoints|businesses we serve/.test(text),
   };
   const score = (signals.msp ? 30 : 0) + (signals.cybersecurity ? 20 : 0) + (signals.compliance ? 15 : 0) + (signals.psa ? 15 : 0) + (signals.multiClient ? 10 : 0) + (html.length > 0 ? 10 : 0);
-  return { url: url.toString(), httpObserved: true, contentBytes: Buffer.byteLength(html, 'utf8'), signals, score, observedAt: new Date().toISOString() };
+  const title = (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
+  return { url: url.toString(), httpObserved: true, contentBytes: Buffer.byteLength(html, 'utf8'), title, publicRoleEmails: publicRoleEmails(html), signals, score, observedAt: new Date().toISOString() };
+}
+
+export async function enqueueDistributionJob(pool: Pool, kind: DistributionJobKind, payload: Record<string, unknown>) {
+  assertPayload(payload);
+  const id = `dist_${randomUUID().replace(/-/g, '')}`;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`SELECT set_config('app.tenant_id', $1, true)`, [DISTRIBUTION_TENANT_ID]);
+    await client.query(`INSERT INTO distribution_jobs (id, tenant_id, kind, payload) VALUES ($1, $2, $3, $4::jsonb)`, [id, DISTRIBUTION_TENANT_ID, kind, JSON.stringify(payload)]);
+    await client.query('COMMIT');
+    return id;
+  } catch (error) { await client.query('ROLLBACK').catch(() => undefined); throw error; }
+  finally { client.release(); }
+}
+
+export async function enqueueResearchUrl(pool: Pool, url: string) {
+  const parsed = new URL(url);
+  if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('DISTRIBUTION_URL_SCHEME_NOT_ALLOWED');
+  await assertPublicResearchTarget(parsed);
+  return enqueueDistributionJob(pool, 'research_url', { url: parsed.toString() });
 }
 
 export async function researchUrl(url: string) {
@@ -109,11 +112,7 @@ export async function researchUrl(url: string) {
     if (response.status >= 300 && response.status < 400) return { url: parsed.toString(), httpObserved: true, status: response.status, redirected: true, score: null, signals: null, observedAt: new Date().toISOString() };
     const html = await readBoundedBody(response);
     return { ...extractResearchSignals(parsed, html), status: response.status };
-  } finally {
-    clearTimeout(timeout);
-  }
+  } finally { clearTimeout(timeout); }
 }
 
-export function calculateBackoff(attempt: number) {
-  return Math.min(60_000, 1_000 * 2 ** Math.max(0, attempt - 1));
-}
+export function calculateBackoff(attempt: number) { return Math.min(60_000, 1_000 * 2 ** Math.max(0, attempt - 1)); }
