@@ -151,9 +151,16 @@ export function renderBrandedEmail(brand: EmailBrand, content: BrandedEmailConte
   return { html, text };
 }
 
-export async function sendBrandedEmail(destination: string, subject: string, brand: EmailBrand, content: BrandedEmailContent): Promise<string> {
+export interface SendOptions {
+  /** Override the From address (must be on the verified sending domain). */
+  from?: string;
+  /** Override Reply-To; defaults to the brand support address. */
+  replyTo?: string;
+}
+
+export async function sendBrandedEmail(destination: string, subject: string, brand: EmailBrand, content: BrandedEmailContent, options: SendOptions = {}): Promise<string> {
   const apiKey = process.env.RESEND_API_KEY?.trim();
-  const from = process.env.EMAIL_FROM?.trim();
+  const from = options.from?.trim() || process.env.EMAIL_FROM?.trim();
   if (!apiKey || !from) throw new Error('EMAIL_PROVIDER_NOT_CONFIGURED');
   const { html, text } = renderBrandedEmail(brand, content);
   // Display name carries the tenant's product name; the address stays ours so
@@ -162,7 +169,7 @@ export async function sendBrandedEmail(destination: string, subject: string, bra
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: fromAddress, to: [destination], subject, html, text, ...(brand.supportEmail ? { reply_to: brand.supportEmail } : {}) }),
+    body: JSON.stringify({ from: fromAddress, to: [destination], subject, html, text, ...((options.replyTo || brand.supportEmail) ? { reply_to: options.replyTo || brand.supportEmail } : {}) }),
   });
   const result = (await response.json().catch(() => ({}))) as { id?: string; message?: string };
   if (!response.ok) throw new Error(`EMAIL_PROVIDER_${response.status}:${result?.message ?? 'unknown'}`);
