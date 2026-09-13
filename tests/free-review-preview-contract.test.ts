@@ -3,6 +3,7 @@ import { readCode, code } from './helpers/source-contract.ts';
 
 const route = () => readCode('src/routes/free-review-legacy.ts');
 const view = () => readCode('src/components/FreeReviewView.tsx');
+const resultView = () => readCode('src/components/FreeReviewResultView.tsx');
 
 // The Free Review status endpoint is reachable by anyone holding the signed
 // status token, which every anonymous visitor receives. It used to return every
@@ -15,7 +16,6 @@ describe('the free preview response withholds paid detail server-side', () => {
     const source = route();
     expect(source).toContain(code`findings: { total: openFindings.length, elevated: criticalOrHigh.length, bySeverity, teasers }`);
     expect(source).toContain(code`evidence: { total: evidence.length, verified: verifiedEvidence, unverified: evidence.length - verifiedEvidence, byType: evidenceByType }`);
-    // The bare arrays must not be spread into the response any more.
     expect(source).not.toMatch(/return res\.json\(\{[^}]*\bfindings,/);
     expect(source).not.toMatch(/return res\.json\(\{[^}]*\bevidence,/);
   });
@@ -38,13 +38,9 @@ describe('the free preview response withholds paid detail server-side', () => {
 
   it('reads the SBOM for its counts only, and never returns the components', () => {
     const source = route();
-    // Two counts leave the closure -- the SBOM size and how many components the
-    // licence scanner does not evaluate -- and nothing else does.
     expect(source).toContain(code`return { sbomComponentCount: parsed.length, licenceUnevaluatedComponentCount: parsed.filter((c: any) => !isLicenceEvaluable(c)).length };`);
     expect(source).not.toMatch(/sbomComponentss*:/);
     expect(source).toContain(code`sbom: { componentCount: sbomComponentCount }`);
-    // The passport object handed back is rebuilt field by field, so the sbom
-    // column cannot ride along on a SELECT *.
     expect(source).toContain(code`const passport = passportRow ? { id: passportRow.id, name: passportRow.name, version: passportRow.version, publisher: passportRow.publisher, category: passportRow.category, verificationStatus: passportRow.verificationStatus } : null;`);
   });
 
@@ -61,30 +57,29 @@ describe('the free preview response withholds paid detail server-side', () => {
 
 describe('the preview page renders only what the API sends', () => {
   it('no longer maps over raw findings', () => {
-    const source = view();
+    const source = resultView();
     expect(source).not.toContain(code`result.findings.slice(0, 20).map`);
     expect(source).not.toContain(code`f.component`);
   });
 
   it('shows no score rather than a zero when nothing could be observed', () => {
-    const source = view();
-    expect(source).toContain(code`No trust area could be observed for this repository, so SPR reports no score. That is an absence of evidence, not a poor result.`);
+    expect(resultView()).toContain(code`No trust area could be observed for this repository, so SPR reports no score. That is an absence of evidence, not a poor result.`);
   });
 
   it('keeps the unobserved categories visible and neutrally worded', () => {
-    const source = view();
-    expect(source).toContain(code`['reliability', '🧱', 'Reliability'],`);
-    expect(source).toContain(code`['maintainability', '🔧', 'Maintainability'],`);
-    expect(source).toContain(code`Not observed`);
+    const source = resultView();
+    expect(source).toContain(code`['reliability', 'Reliability'],`);
+    expect(source).toContain(code`['maintainability', 'Maintainability'],`);
+    expect(source).toContain(code`'UNKNOWN'`);
   });
 
   it('states zero verification as zero verification', () => {
-    expect(view()).toContain(code`None of the ${'${result.evidence.total}'} evidence items are cryptographically verified.`.replace('${result.evidence.total}', '${result.evidence.total}'));
+    expect(resultView()).toContain(code`None of the ${'${result.evidence.total}'} evidence items are cryptographically verified.`.replace('${result.evidence.total}', '${result.evidence.total}'));
   });
 
   it('keeps the evidence-driven progress display', () => {
     const source = view();
-    expect(source).toContain(code`aria-valuenow={result?.progress?.percent ?? 0}`);
-    expect(source).toContain(code`elapsed`);
+    expect(source).toContain(code`aria-valuenow={result.progress?.percent ?? 0}`);
+    expect(source).toContain(code`formatElapsed(result.progress?.elapsedSeconds ?? 0)`);
   });
 });
