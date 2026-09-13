@@ -20,92 +20,119 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
+
           p = Path('src/components/ScansView.tsx')
           s = p.read_text()
 
-          replacements = [
-              (
-                  "const [schedules, setSchedules] = useState<ScanSchedule[]>([]);\n  const [loadingSchedules, setLoadingSchedules] = useState(false);",
-                  "const [schedules, setSchedules] = useState<ScanSchedule[]>([]);\n  const [loadingSchedules, setLoadingSchedules] = useState(false);\n  const [schedulesLoaded, setSchedulesLoaded] = useState(false);",
-              ),
-              (
-                  "        setSchedules(data);\n      } else {",
-                  "        setSchedules(Array.isArray(data) ? data : []);\n        setSchedulesLoaded(true);\n      } else {",
-              ),
-              (
-                  "    } finally {\n      setLoadingSchedules(false);\n    }",
-                  "    } finally {\n      setLoadingSchedules(false);\n    }",
-              ),
-              (
-                  "  const [customInputName, setCustomInputName] = useState('');\n  const [chosenClientName, setChosenClientName] = useState(() => (clients && clients.length > 0 ? clients[0].name : ''));\n  const [selectedPassportId, setSelectedPassportId] = useState('');\n\n  useEffect(() => {\n    if (clients && clients.length > 0 && !chosenClientName) {\n      setChosenClientName(clients[0].name);\n    }\n  }, [clients, chosenClientName]);\n\n  // Set default passport ID\n  useEffect(() => {\n    if (passports && passports.length > 0 && !selectedPassportId) {\n      setSelectedPassportId(passports[0].id);\n    }\n  }, [passports, selectedPassportId]);",
-                  "const [customInputName, setCustomInputName] = useState('');\n  // Do not silently select the first client or passport. In production that can\n  // surface a seeded/demo tenant as if it were the operator's intended target.\n  // A target must be explicitly selected from the data returned by the API.\n  const [chosenClientName, setChosenClientName] = useState('');\n  const [selectedPassportId, setSelectedPassportId] = useState('');\n\n  useEffect(() => {\n    if (chosenClientName && !(clients || []).some((client) => client.name === chosenClientName)) {\n      setChosenClientName('');\n    }\n  }, [clients, chosenClientName]);\n\n  useEffect(() => {\n    if (selectedPassportId && !(passports || []).some((passport) => passport.id === selectedPassportId)) {\n      setSelectedPassportId('');\n    }\n  }, [passports, selectedPassportId]);",
-              ),
-              (
-                  "    const matchedPassport = (passports || []).find(p => \n      targetLower.includes(p.name.toLowerCase()) || \n      p.name.toLowerCase().includes(targetLower)\n    ) || (passports && passports.find(p => p.id === selectedPassportId)) || (passports && passports[0]);",
-                  "    const matchedPassport = (passports || []).find(p => \n      targetLower.includes(p.name.toLowerCase()) || \n      p.name.toLowerCase().includes(targetLower)\n    ) || (passports || []).find(p => p.id === selectedPassportId);",
-              ),
-              (
-                  "            <p className=\"text-[12px] text-[var(--spr-text-muted)] font-sans\">Trigger the 8-engine AI Security pipeline and compile cryptographic evidence logs persistently in the database.</p>",
-                  "            <p className=\"text-[12px] text-[var(--spr-text-muted)] font-sans\">Trigger the configured software security analysis pipeline and persist its resulting evidence logs.</p>",
-              ),
-              (
-                  "                        {(passports || []).map(p => (\n                        <option key={p.id} value={p.id}>{p.name} (v{p.version}) • {p.publisher}</option>\n                      ))}",
-                  "                        <option value=\"\" disabled>Select a software passport</option>\n                        {(passports || []).map(p => (\n                        <option key={p.id} value={p.id}>{p.name} (v{p.version}) • {p.publisher}</option>\n                      ))}",
-              ),
-              (
-                  "                        {clients && clients.length > 0 ? (\n                          clients.map(c => (\n                            <option key={c.id} value={c.name}>{c.name}</option>\n                          ))\n                        ) : (\n                          <option value=\"\" disabled>No clients configured yet</option>\n                        )}",
-                  "                        <option value=\"\" disabled>\n                          {clients && clients.length > 0 ? 'Select a client' : 'UNKNOWN — no client context observed'}\n                        </option>\n                        {(clients || []).map(c => (\n                          <option key={c.id} value={c.name}>{c.name}</option>\n                        ))}",
-              ),
-              (
-                  "                  <div className=\"px-4 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer ${",
-                  "                  <div className=\"px-4 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer ${",
-              ),
-              (
-                  "              {schedules.length}\n            </span>",
-                  "              {schedulesLoaded ? schedules.length : '—'}\n            </span>",
-              ),
-              (
-                  "                      {schedules.filter(s => s.status === 'Active').length} / {schedules.length}",
-                  "                      {schedulesLoaded ? `${schedules.filter(s => s.status === 'Active').length} / ${schedules.length}` : 'UNKNOWN'}",
-              ),
-              (
-                  "                        const uniqueProtected = new Set(schedules.filter(s => s.status === 'Active').map(s => s.assetHostName)).size;\n                        return `${uniqueProtected} / ${prodAssets.length}`;",
-                  "                        if (!schedulesLoaded || prodAssets.length === 0) return schedulesLoaded ? '0 / 0' : 'UNKNOWN';\n                        const uniqueProtected = new Set(schedules.filter(s => s.status === 'Active').map(s => s.assetHostName)).size;\n                        return `${uniqueProtected} / ${prodAssets.length}`;",
-              ),
-              (
-                  "                        const uniqueProtected = new Set(schedules.filter(s => s.status === 'Active').map(s => s.assetHostName)).size;\n                        const pct = Math.round((uniqueProtected / prodAssets.length) * 100) || 0;\n                        return `${pct}%`;",
-                  "                        if (!schedulesLoaded) return 'UNKNOWN';\n                        if (prodAssets.length === 0) return '0%';\n                        const uniqueProtected = new Set(schedules.filter(s => s.status === 'Active').map(s => s.assetHostName)).size;\n                        const pct = Math.round((uniqueProtected / prodAssets.length) * 100);\n                        return `${pct}%`;",
-              ),
-          ]
+          def replace_once(pattern, replacement, label):
+              global s
+              s2, count = re.subn(pattern, replacement, s, count=1, flags=re.S)
+              if count != 1:
+                  raise SystemExit(f'Expected exactly one {label} match; found {count}')
+              s = s2
 
-          for old, new in replacements:
-              if old not in s:
-                  raise SystemExit(f'Expected source text not found for replacement: {old[:100]!r}')
-              s = s.replace(old, new, 1)
+          replace_once(
+              r"const \[schedules, setSchedules\] = useState<ScanSchedule\[\]>\(\[\]\);\n  const \[loadingSchedules, setLoadingSchedules\] = useState\(false\);",
+              "const [schedules, setSchedules] = useState<ScanSchedule[]>([]);\n  const [loadingSchedules, setLoadingSchedules] = useState(false);\n  const [schedulesLoaded, setSchedulesLoaded] = useState(false);",
+              'schedule loading state',
+          )
+          replace_once(
+              r"        setSchedules\(data\);\n      \} else \{",
+              "        setSchedules(Array.isArray(data) ? data : []);\n        setSchedulesLoaded(true);\n      } else {",
+              'schedule response handling',
+          )
+          replace_once(
+              r"  const \[customInputName, setCustomInputName\] = useState\(''\);\n  const \[chosenClientName, setChosenClientName\] = useState\(\(\) => \(clients && clients\.length > 0 \? clients\[0\]\.name : ''\)\);\n  const \[selectedPassportId, setSelectedPassportId\] = useState\(''\);\n\n  useEffect\(\(\) => \{\n    if \(clients && clients\.length > 0 && !chosenClientName\) \{\n      setChosenClientName\(clients\[0\]\.name\);\n    \}\n  \}, \[clients, chosenClientName\]\);\n\n  // Set default passport ID\n  useEffect\(\(\) => \{\n    if \(passports && passports\.length > 0 && !selectedPassportId\) \{\n      setSelectedPassportId\(passports\[0\]\.id\);\n    \}\n  \}, \[passports, selectedPassportId\]\);",
+              "const [customInputName, setCustomInputName] = useState('');\n  // Never silently select the first client or passport. Production UI must not\n  // turn a seeded/demo record into an apparent operator choice.\n  const [chosenClientName, setChosenClientName] = useState('');\n  const [selectedPassportId, setSelectedPassportId] = useState('');\n\n  useEffect(() => {\n    if (chosenClientName && !(clients || []).some((client) => client.name === chosenClientName)) {\n      setChosenClientName('');\n    }\n  }, [clients, chosenClientName]);\n\n  useEffect(() => {\n    if (selectedPassportId && !(passports || []).some((passport) => passport.id === selectedPassportId)) {\n      setSelectedPassportId('');\n    }\n  }, [passports, selectedPassportId]);",
+              'implicit target selection',
+          )
+          replace_once(
+              r"    const matchedPassport = \(passports \|\| \[\]\)\.find\(p => \n      targetLower\.includes\(p\.name\.toLowerCase\(\)\) \|\| \n      p\.name\.toLowerCase\(\)\.includes\(targetLower\)\n    \) \|\| \(passports && passports\.find\(p => p\.id === selectedPassportId\)\) \|\| \(passports && passports\[0\]\);",
+              "    const matchedPassport = (passports || []).find(p => \n      targetLower.includes(p.name.toLowerCase()) || \n      p.name.toLowerCase().includes(targetLower)\n    ) || (passports || []).find(p => p.id === selectedPassportId);",
+              'passport fallback',
+          )
+          replace_once(
+              r"Trigger the 8-engine AI Security pipeline and compile cryptographic evidence logs persistently in the database\.",
+              "Trigger the configured software security analysis pipeline and persist its resulting evidence logs.",
+              'fixed engine-count claim',
+          )
+          replace_once(
+              r"(\s*)\{\(passports \|\| \[\]\)\.map\(p => \(\n\s*<option key=\{p\.id\} value=\{p\.id\}\}>\{p\.name\} \(v\{p\.version\}\) • \{p\.publisher\}</option>\n\s*\)\)\}",
+              r"\1<option value=\"\" disabled>Select a software passport</option>\n\1{(passports || []).map(p => (\n\1  <option key={p.id} value={p.id}>{p.name} (v{p.version}) • {p.publisher}</option>\n\1))}",
+              'passport selector placeholder',
+          )
+          replace_once(
+              r"\{clients && clients\.length > 0 \? \(\n\s*clients\.map\(c => \(\n\s*<option key=\{c\.id\} value=\{c\.name\}>\{c\.name\}</option>\n\s*\)\)\n\s*\) : \(\n\s*<option value=\"\" disabled>No clients configured yet</option>\n\s*\)\}",
+              "<option value=\"\" disabled>{clients && clients.length > 0 ? 'Select a client' : 'UNKNOWN — no client context observed'}</option>\n                        {(clients || []).map(c => (\n                          <option key={c.id} value={c.name}>{c.name}</option>\n                        ))}",
+              'client selector placeholder',
+          )
+          replace_once(
+              r"\{schedules\.length\}\n\s*</span>",
+              "{schedulesLoaded ? schedules.length : '—'}\n            </span>",
+              'schedule tab count',
+          )
+          replace_once(
+              r"\{schedules\.filter\(s => s\.status === 'Active'\)\.length\} / \{schedules\.length\}",
+              "{schedulesLoaded ? `${schedules.filter(s => s.status === 'Active').length} / ${schedules.length}` : 'UNKNOWN'}",
+              'active schedule count',
+          )
+          replace_once(
+              r"const uniqueProtected = new Set\(schedules\.filter\(s => s\.status === 'Active'\)\.map\(s => s\.assetHostName\)\)\.size;\n\s*return `\$\{uniqueProtected\} / \$\{prodAssets\.length\}`;",
+              "if (!schedulesLoaded || prodAssets.length === 0) return schedulesLoaded ? '0 / 0' : 'UNKNOWN';\n                        const uniqueProtected = new Set(schedules.filter(s => s.status === 'Active').map(s => s.assetHostName)).size;\n                        return `${uniqueProtected} / ${prodAssets.length}`;",
+              'asset coverage fallback',
+          )
+          replace_once(
+              r"const uniqueProtected = new Set\(schedules\.filter\(s => s\.status === 'Active'\)\.map\(s => s\.assetHostName\)\)\.size;\n\s*const pct = Math\.round\(\(uniqueProtected / prodAssets\.length\) \* 100\) \|\| 0;\n\s*return `\$\{pct\}%`;",
+              "if (!schedulesLoaded) return 'UNKNOWN';\n                        if (prodAssets.length === 0) return '0%';\n                        const uniqueProtected = new Set(schedules.filter(s => s.status === 'Active').map(s => s.assetHostName)).size;\n                        const pct = Math.round((uniqueProtected / prodAssets.length) * 100);\n                        return `${pct}%`;",
+              'coverage ratio fallback',
+          )
 
           p.write_text(s)
           PY
 
       - name: Add regression coverage
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          p = Path('tests/scans-view-contract.test.ts')
-          content = '''import { readFileSync } from 'node:fs';\n\nconst source = readFileSync('src/components/ScansView.tsx', 'utf8');\n\ndescribe('ScansView evidence-backed UI contract', () => {\n  it('does not silently select the first client or passport', () => {\n    expect(source).toContain("useState('')");\n    expect(source).toContain('Select a software passport');\n    expect(source).toContain('Select a client');\n    expect(source).not.toContain("clients[0].name");\n    expect(source).not.toContain('passports[0].id');\n  });\n\n  it('does not claim a fixed eight-engine scanner count', () => {\n    expect(source).not.toContain('8-engine AI Security pipeline');\n    expect(source).toContain('configured software security analysis pipeline');\n  });\n\n  it('does not show an unconfirmed zero while schedules are loading', () => {\n    expect(source).toContain('schedulesLoaded ? schedules.length : \'—\'');\n    expect(source).toContain("!schedulesLoaded ? 'UNKNOWN'");\n  });\n});\n'''
-          if not p.exists():
-              p.write_text(content)
-          else:
-              existing = p.read_text()
-              if content not in existing:
-                  p.write_text(existing + '\n' + content)
-          PY
+          cat > tests/scans-view-contract.test.ts <<'EOF'
+          import { readFileSync } from 'node:fs';
+
+          const source = readFileSync('src/components/ScansView.tsx', 'utf8');
+
+          describe('ScansView evidence-backed UI contract', () => {
+            it('does not silently select the first client or passport', () => {
+              expect(source).toContain("const [chosenClientName, setChosenClientName] = useState('');");
+              expect(source).toContain("const [selectedPassportId, setSelectedPassportId] = useState('');");
+              expect(source).toContain('Select a software passport');
+              expect(source).toContain('Select a client');
+              expect(source).not.toContain('clients[0].name');
+              expect(source).not.toContain('passports[0].id');
+            });
+
+            it('does not claim a fixed eight-engine scanner count', () => {
+              expect(source).not.toContain('8-engine AI Security pipeline');
+              expect(source).toContain('configured software security analysis pipeline');
+            });
+
+            it('does not show an unconfirmed zero while schedules are loading', () => {
+              expect(source).toContain("schedulesLoaded ? schedules.length : '—'");
+              expect(source).toContain("!schedulesLoaded ? 'UNKNOWN'");
+            });
+          });
+          EOF
+
+      - name: Verify source changes
+        run: |
+          test "$(grep -c "8-engine AI Security pipeline" src/components/ScansView.tsx || true)" -eq 0
+          test "$(grep -c "clients\[0\]\.name" src/components/ScansView.tsx || true)" -eq 0
+          test "$(grep -c "passports\[0\]\.id" src/components/ScansView.tsx || true)" -eq 0
+          grep -q "schedulesLoaded" src/components/ScansView.tsx
 
       - name: Commit repaired UI and remove one-time workflow
         run: |
-          rm -f .github/workflows/repair-scanner-ui.yml
+          rm -f .github/workflows/repair-scanner-ui.yml .scanner-ui-trigger
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/components/ScansView.tsx tests/scans-view-contract.test.ts .github/workflows/repair-scanner-ui.yml
+          git add src/components/ScansView.tsx tests/scans-view-contract.test.ts .github/workflows/repair-scanner-ui.yml .scanner-ui-trigger
           git diff --cached --check
           git commit -m "fix: make scanner UI evidence-backed [scanner-ui-repair]"
           git push
