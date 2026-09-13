@@ -18,8 +18,10 @@ describe('persistent white-label branding', () => {
 
   it('validates brand color and logo shape server-side, not just in the UI', () => {
     const auth = read('src/routes/auth.ts');
-    expect(auth).toContain('brandColor must be a #rrggbb hex color');
-    expect(auth).toContain('logoDataUrl must be a base64 image data URL');
+    expect(auth).toContain("'colours must be #rrggbb hex'");
+    expect(auth).toContain("'must be a base64 image data URL'");
+    expect(auth).toContain('brandColor: hexColor.nullable().optional()');
+    expect(auth).toContain('logoDataUrl: imageDataUrl(300_000).nullable().optional()');
   });
 
   it('persists via a real migration with row-level security, matching every other tenant-scoped table', () => {
@@ -37,7 +39,14 @@ describe('persistent white-label branding', () => {
 
   it('SettingsView lets only Owner/Admin edit branding, matching the same canManageTeam gate as team management', () => {
     const settingsView = read('src/components/SettingsView.tsx');
-    expect(settingsView).toContain("apiFetch('/api/organization/branding')");
-    expect(settingsView).toContain('disabled={!canManageTeam}');
+    // Branding editing moved to its own page (WhiteLabelView); Settings only
+    // links to it. The page gates editing on Owner/Admin exactly as the
+    // server does.
+    expect(settingsView).not.toContain("apiFetch('/api/organization/branding'");
+    expect(settingsView).toContain("'/white-label'");
+    const whiteLabel = read('src/components/WhiteLabelView.tsx');
+    expect(whiteLabel).toContain("const canEdit = role === 'Owner' || role === 'Admin';");
+    expect(whiteLabel).toContain("apiFetch('/api/organization/branding', { method: 'PUT'");
+    expect(whiteLabel).toContain('disabled={!canEdit || !dirty || saving}');
   });
 });

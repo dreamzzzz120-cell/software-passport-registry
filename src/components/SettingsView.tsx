@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Settings, Shield, Sliders, KeyRound, HelpCircle, CheckCircle,
-  Sun, Moon, RefreshCw, Trash2, Fingerprint, Lock, FileText, Globe, FileCode,
+  Sun, Moon, RefreshCw, Trash2, Fingerprint, Lock, FileText, FileCode,
   PlusCircle, AlertTriangle, Check,
   Layers, ShieldAlert, CheckCircle2, AlertCircle
 } from 'lucide-react';
@@ -30,7 +30,6 @@ function formatUptime(totalSeconds: number): string {
 
 export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps) {
   const [activeSubTab, setActiveSubTab] = useState<'configurations' | 'organization' | 'guide'>('configurations');
-  const [saveSuccess, setSaveSuccess] = useState(false);
   const [offboarding, setOffboarding] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResults, setTestResults] = useState<any[]>([]);
@@ -50,15 +49,6 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
   const [teamError, setTeamError] = useState<string | null>(null);
   const [teamSuccess, setTeamSuccess] = useState<string | null>(null);
 
-  // Persistent white-label branding (migration 0030) -- set once, applied to
-  // every future white-label report export instead of retyping it each time.
-  const [brandingCompanyName, setBrandingCompanyName] = useState('');
-  const [brandingColor, setBrandingColor] = useState('var(--spr-highlight)');
-  const [brandingLogoDataUrl, setBrandingLogoDataUrl] = useState<string | null>(null);
-  const [brandingUpdatedAt, setBrandingUpdatedAt] = useState<string | null>(null);
-  const [savingBranding, setSavingBranding] = useState(false);
-  const [brandingError, setBrandingError] = useState<string | null>(null);
-  const [brandingSuccess, setBrandingSuccess] = useState<string | null>(null);
 
   // profile is fetched from /api/user/me, which already returns the caller's
   // role — derive gating from it directly rather than requiring a separate
@@ -92,55 +82,6 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
       console.error('Error fetching profile or organization team:', err);
     } finally {
       setLoadingTeam(false);
-    }
-  };
-
-  const fetchBranding = async () => {
-    try {
-      const res = await apiFetch('/api/organization/branding');
-      if (res.ok) {
-        const data = await res.json();
-        setBrandingCompanyName(data.companyName || '');
-        setBrandingColor(data.brandColor || 'var(--spr-highlight)');
-        setBrandingLogoDataUrl(data.logoDataUrl || null);
-        setBrandingUpdatedAt(data.updatedAt || null);
-      }
-    } catch (err) {
-      console.error('Error fetching branding:', err);
-    }
-  };
-
-  const handleBrandingLogoFile = (file: File | null) => {
-    if (!file) return;
-    if (file.size > 220_000) { setBrandingError('Logo file is too large. Use an image under ~200KB.'); return; }
-    const reader = new FileReader();
-    reader.onload = () => { if (typeof reader.result === 'string') setBrandingLogoDataUrl(reader.result); };
-    reader.readAsDataURL(file);
-  };
-
-  const handleSaveBranding = async () => {
-    if (!canManageTeam) return;
-    setSavingBranding(true);
-    setBrandingError(null);
-    setBrandingSuccess(null);
-    try {
-      const res = await apiFetch('/api/organization/branding', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          companyName: brandingCompanyName.trim() || null,
-          brandColor: brandingColor || null,
-          logoDataUrl: brandingLogoDataUrl || null,
-        }),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || 'Failed to save branding.');
-      setBrandingUpdatedAt(data.updatedAt || null);
-      setBrandingSuccess('Branding saved. Future white-label reports will use it automatically.');
-    } catch (err) {
-      setBrandingError(err instanceof Error ? err.message : 'Failed to save branding.');
-    } finally {
-      setSavingBranding(false);
     }
   };
 
@@ -316,7 +257,6 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
   useEffect(() => {
     fetchAuthDataLedgers();
     fetchProfileAndTeam();
-    fetchBranding();
     fetchClientsList();
   }, []);
 
@@ -388,16 +328,6 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
     } finally {
       setOffboarding(false);
     }
-  };
-
-  // No backend endpoint persists these fields (SLA target, MFA toggle, SSO
-  // config, daily-scan cadence) — they are local component state only and
-  // reset on reload/navigation. This used to show a "Portal configuration
-  // updated!" success message that implied a real save; keep that claim
-  // honest until real persistence exists rather than build a fake one.
-  const handleSaveSettings = () => {
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 4000);
   };
 
   return (
@@ -472,30 +402,6 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
           {/* Left Column: Core Preferences */}
           <div className="lg:col-span-2 space-y-6">
             
-            {/* General platform settings card */}
-            <div className="spr-panel p-5 space-y-4">
-              <h3 className="text-xs font-bold text-[var(--spr-text)] flex items-center gap-1.5 pb-2 border-b border-[var(--spr-border)]">
-                <Sliders className="w-4.5 h-4.5 text-[var(--spr-highlight)]" />
-                <span>General Platform Parameters</span>
-              </h3>
-
-              <div className="space-y-3.5 text-xs">
-                <div className="flex flex-col gap-1">
-                  <label className="font-semibold text-[var(--spr-text)]">Audit Trust SLA Target Threshold</label>
-                  <div className="rounded-md border border-dashed border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2.5 text-[11px] text-[var(--spr-text-muted)]">
-                    Not yet implemented -- no per-tenant alert threshold is configurable or read by the alert pipeline today. Alerts are generated from real findings and vulnerability evidence, not from a score cutoff.
-                  </div>
-                </div>
-
-                <div className="flex justify-between items-center border-t border-[var(--spr-border)] pt-3">
-                  <div>
-                    <span className="font-semibold text-[var(--spr-text)] block">Automated Daily Recalculation Scans</span>
-                    <p className="text-[12px] text-[var(--spr-text-faint)] leading-snug">Not yet implemented -- no scheduled job re-scans client inventory on CVE database updates today. Use Scans → Automated Scanning Schedules for real, working recurring scans.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
             {/* Theme & Interface Customization Card */}
             <div className="spr-panel p-5 space-y-4">
               <h3 className="text-xs font-bold text-[var(--spr-text)] flex items-center gap-1.5 pb-2 border-b border-[var(--spr-border)]">
@@ -536,17 +442,6 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                     <span>Dark Mode</span>
                   </button>
                 </div>
-              </div>
-            </div>
-
-            {/* SAML SSO Configuration Card */}
-            <div className="spr-panel p-5 space-y-4">
-              <h3 className="text-xs font-bold text-[var(--spr-text)] flex items-center gap-1.5 pb-2 border-b border-[var(--spr-border)]">
-                <Globe className="w-4.5 h-4.5 text-[var(--spr-highlight)]" />
-                <span>Enterprise SAML / SSO Integration</span>
-              </h3>
-              <div className="rounded-md border border-dashed border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2.5 text-[11px] text-[var(--spr-text-muted)]">
-                Not yet implemented. There is no SAML/SSO enforcement anywhere in the authentication pipeline today -- this card previously showed a permanently-"Active" status with a pre-filled example provider and client ID that were never sent anywhere, never saved, and did not reflect any real integration. Sign-in is by Firebase-issued credential only.
               </div>
             </div>
 
@@ -796,21 +691,6 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
               </div>
             </div>
 
-            <div className="flex justify-end gap-2">
-              {saveSuccess && (
-                <span className="text-xs text-[var(--spr-amber)] font-semibold flex items-center gap-1">
-                  <CheckCircle className="w-4 h-4" />
-                  <span>Not saved to a server — these fields are local to this browser session only.</span>
-                </span>
-              )}
-              <button
-                onClick={handleSaveSettings}
-                title="These settings are not persisted to a backend yet."
-                className="px-4 py-2 bg-[var(--spr-accent)] hover:bg-[var(--spr-accent-hover)] text-white font-sans font-semibold text-xs rounded-lg shadow-sm cursor-pointer transition-all"
-              >
-                Save Platform Settings
-              </button>
-            </div>
           </div>
 
           {/* Right Column: Information panel & Live CI/CD Diagnostics */}
@@ -1041,88 +921,16 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
               </p>
             </div>
 
-            {/* Persistent white-label branding */}
-            <div className="spr-panel p-5 space-y-4 text-left">
+            {/* White-label branding moved to its own page */}
+            <div className="spr-panel p-5 space-y-3 text-left">
               <h3 className="text-xs font-bold text-[var(--spr-text)] flex items-center gap-2 pb-2 border-b border-[var(--spr-border)]">
                 <FileText className="w-4.5 h-4.5 text-[var(--spr-highlight)]" />
-                <span>White-label Branding</span>
+                <span>White-label</span>
               </h3>
               <p className="text-[12px] leading-relaxed text-[var(--spr-text-muted)]">
-                Set once here; the Reports page's white-label export uses this automatically instead of asking you to retype it every time. This only changes report packaging — it never changes any score or evidence.
+                Logo, favicon, product name, every colour in light and dark mode, typography, corners, footer and support details now live on their own page with a live preview.
               </p>
-
-              {brandingError && (
-                <div className="p-3 bg-[var(--spr-surface-sunken)] text-[var(--spr-red)] border border-[var(--spr-border)] rounded-md flex gap-2 text-[11px]">
-                  <ShieldAlert className="w-4 h-4 shrink-0" />
-                  <p>{brandingError}</p>
-                </div>
-              )}
-              {brandingSuccess && (
-                <div className="p-3 bg-[var(--spr-surface-sunken)] text-[var(--spr-green)] border border-[var(--spr-border)] rounded-md flex gap-2 text-[11px]">
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  <p>{brandingSuccess}</p>
-                </div>
-              )}
-
-              <div className="flex flex-col gap-1">
-                <label className="font-semibold text-[var(--spr-text-muted)] text-[11px]">Company / MSP name</label>
-                <input
-                  type="text"
-                  value={brandingCompanyName}
-                  onChange={(e) => setBrandingCompanyName(e.target.value)}
-                  disabled={!canManageTeam}
-                  placeholder="Your MSP name"
-                  className="rounded-md border border-[var(--spr-border)] text-[var(--spr-text)] focus:outline-none focus:border-[var(--spr-highlight)] p-2.5 bg-[var(--spr-surface-sunken)] text-xs disabled:opacity-50"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="font-semibold text-[var(--spr-text-muted)] text-[11px]">Brand color</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={brandingColor}
-                    onChange={(e) => setBrandingColor(e.target.value)}
-                    disabled={!canManageTeam}
-                    className="h-9 w-14 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] disabled:opacity-50"
-                  />
-                  <span className="font-mono text-[11px] text-[var(--spr-text-muted)]">{brandingColor}</span>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="font-semibold text-[var(--spr-text-muted)] text-[11px]">Logo (under ~200KB)</label>
-                {brandingLogoDataUrl && (
-                  <div className="mb-1 flex items-center gap-2">
-                    <img src={brandingLogoDataUrl} alt="Logo preview" className="h-10 w-auto rounded border border-[var(--spr-border)] bg-white p-1" />
-                    {canManageTeam && (
-                      <button type="button" onClick={() => setBrandingLogoDataUrl(null)} className="text-[12px] text-[var(--spr-red)] hover:underline">Remove</button>
-                    )}
-                  </div>
-                )}
-                {canManageTeam && (
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/svg+xml,image/webp"
-                    onChange={(e) => handleBrandingLogoFile(e.target.files?.[0] || null)}
-                    className="text-[12px] text-[var(--spr-text-muted)] file:mr-2 file:rounded-md file:border file:border-[var(--spr-border)] file:bg-[var(--spr-surface-sunken)] file:px-2.5 file:py-1.5 file:text-[12px] file:text-[var(--spr-text)]"
-                  />
-                )}
-              </div>
-
-              {canManageTeam ? (
-                <button
-                  type="button"
-                  onClick={handleSaveBranding}
-                  disabled={savingBranding}
-                  className="w-full py-2 bg-[var(--spr-accent)] hover:bg-[var(--spr-accent-hover)] text-white font-sans font-bold text-xs rounded-lg cursor-pointer transition-colors disabled:opacity-50"
-                >
-                  {savingBranding ? 'Saving…' : 'Save branding'}
-                </button>
-              ) : (
-                <p className="text-[12px] text-[var(--spr-text-faint)]">Only Owner/Admin can change branding.</p>
-              )}
-              {brandingUpdatedAt && <p className="text-[11px] text-[var(--spr-text-faint)]">Last updated {new Date(brandingUpdatedAt).toLocaleString()}</p>}
+              <button type="button" onClick={() => { window.history.pushState({}, '', '/white-label'); window.dispatchEvent(new PopStateEvent('popstate')); }} className="spr-btn spr-btn-secondary w-full">Open White-label</button>
             </div>
           </div>
 
@@ -1346,9 +1154,9 @@ function GettingStartedGuide() {
         <div className="spr-panel p-5 space-y-3">
           <h4 className="text-[11px] font-bold text-[var(--spr-text)] uppercase tracking-wide">Persistent white-label branding</h4>
           <ol className="space-y-2.5 list-decimal list-inside leading-relaxed">
-            {step('Settings → Team & Profile', 'Find the White-label Branding panel.')}
-            {step('Set company name, brand color, logo', 'Under ~200KB.')}
-            {step('Save branding', 'Owner/Admin only — this is saved once for the whole tenant.')}
+            {step('Open White-label from the left rail', 'Its own page, with a live preview rendered from your real passports.')}
+            {step('Set identity, colours, typography, footer', 'Logo and favicon under 200 KB / 45 KB; every palette token for light and dark mode; font; corner radius; support email and URL.')}
+            {step('Save', 'Owner/Admin only — saved once for the whole tenant and applied to the workspace, PDF report exports and the public passport API (name, colour, product name, support URL).')}
           </ol>
         </div>
 
@@ -1384,7 +1192,7 @@ function GettingStartedGuide() {
           <h4 className="text-[11px] font-bold text-[var(--spr-amber)] uppercase tracking-wide flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> Not available yet</h4>
           <ul className="space-y-1.5 list-disc list-inside leading-relaxed">
             <li><strong className="text-[var(--spr-text)]">Custom domains</strong> — not implemented.</li>
-            <li><strong className="text-[var(--spr-text)]">Branding on the public passport / emails</strong> — your saved branding currently only feeds the Reports PDF export, not yet the public passport page itself.</li>
+            <li><strong className="text-[var(--spr-text)]">Branded sign-in emails</strong> — verification and reset emails are sent by the identity provider and are not branded.</li>
           </ul>
         </div>
       </div>

@@ -16,7 +16,10 @@ describe('SettingsView no longer fabricates security/infrastructure status', () 
     expect(s).not.toContain("useState('Okta Enterprise IdP')");
     expect(s).not.toContain("useState('spr_msp_okta_prod_01')");
     expect(s).not.toContain("{ssoEnabled ? 'SSO Active' : 'SSO Inactive'}");
-    expect(s).toContain('Not yet implemented. There is no SAML/SSO enforcement anywhere in the authentication pipeline today');
+    // The "not yet implemented" SSO card has since been removed outright: a
+    // card describing an absent feature is still a placeholder.
+    expect(s).not.toContain('Enterprise SAML / SSO Integration');
+    expect(s).not.toContain('SAML/SSO');
   });
 
   it('the audit-chain "Tamper-Proof SLA verified" badge is state-driven from a real verification result, not shown unconditionally on page load', () => {
@@ -29,8 +32,11 @@ describe('SettingsView no longer fabricates security/infrastructure status', () 
     const s = source();
     expect(s).not.toContain('type="range"');
     expect(s).not.toContain('defaultChecked');
-    expect(s).toContain('no per-tenant alert threshold is configurable or read by the alert pipeline today');
-    expect(s).toContain('no scheduled job re-scans client inventory on CVE database updates today');
+    // Both cards were removed rather than left as disclosures; the fake
+    // "Save Platform Settings" button that saved nothing went with them.
+    expect(s).not.toContain('Audit Trust SLA Target Threshold');
+    expect(s).not.toContain('Automated Daily Recalculation Scans');
+    expect(s).not.toContain('Save Platform Settings');
   });
 
   it('the PGP signing key section is honestly disclosed as unimplemented, not a button with no onClick handler and a false passport-signing claim', () => {
