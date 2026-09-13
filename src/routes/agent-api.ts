@@ -4,10 +4,12 @@ import { z } from 'zod';
 import { requireAuth, AuthenticatedRequest } from '../middleware/security.ts';
 import type { ScopedDb } from '../middleware/tenant-scope.ts';
 import { evaluateVendorRisk } from '../agents/vendor-risk-agent.ts';
+import { evaluateCompliance } from '../agents/compliance-agent.ts';
 
 const passportInput = z.object({ passportId: z.string().trim().min(1).max(255) }).strict();
 const softwareInput = z.object({ query: z.string().trim().min(1).max(500) }).strict();
 const vendorRiskInput = z.object({ passportId: z.string().trim().min(1).max(255), staleAfterDays: z.number().int().min(1).max(3650).optional() }).strict();
+const complianceInput = z.object({ passportId: z.string().trim().min(1).max(255), staleAfterDays: z.number().int().min(1).max(3650).optional() }).strict();
 
 export function createAgentApiRouter() {
   const router = Router();
@@ -111,6 +113,47 @@ export function createAgentApiRouter() {
     } catch (error) { return next(error); }
   });
 
+  // Compliance Agent: deterministic control-level assessment over the same
+  // tenant-scoped evidence ledger and findings. It only reports PASS when
+  // current observed evidence supports the control and no finding contradicts it.
+  router.post('/compliance', async (req: AuthenticatedRequest, res, next) => {
+    const parsed = complianceInput.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'INVALID_COMPLIANCE_REQUEST', details: parsed.error.flatten() });
+    try {
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const passport = (await db.execute(sql`
+        SELECT id,name FROM passports
+        WHERE tenant_id=${tenantId} AND id=${parsed.data.passportId}
+        LIMIT 1
+      `) as any).rows?.[0];
+      if (!passport) return res.status(404).json({ status: 'UNKNOWN', reason: 'PASSPORT_NOT_FOUND', passportId: parsed.data.passportId });
+
+      const findings = (await db.execute(sql`
+        SELECT id,control_id,severity,status,title
+        FROM trust_findings
+        WHERE tenant_id=${tenantId} AND passport_id=${passport.id}
+        ORDER BY control_id ASC, id ASC
+        LIMIT 500
+      `) as any).rows || [];
+      const evidence = (await db.execute(sql`
+        SELECT id,control_id,status,observed_at,verification_method,limitation
+        FROM evidence_ledger
+        WHERE tenant_id=${tenantId} AND passport_id=${passport.id}
+        ORDER BY control_id ASC, observed_at DESC, id ASC
+        LIMIT 1000
+      `) as any).rows || [];
+
+      return res.json(evaluateCompliance({
+        passport: { id: passport.id, name: passport.name },
+        findings: findings.map((finding: any) => ({ id: String(finding.id), controlId: finding.control_id == null ? null : String(finding.control_id), severity: String(finding.severity || 'unknown'), status: String(finding.status || 'unknown'), title: String(finding.title || 'Untitled finding') })),
+        evidence: evidence.map((item: any) => ({ id: String(item.id), controlId: item.control_id == null ? null : String(item.control_id), status: item.status == null ? null : String(item.status), observedAt: item.observed_at ? new Date(item.observed_at).toISOString() : null, verificationMethod: item.verification_method == null ? null : String(item.verification_method), limitation: item.limitation == null ? null : String(item.limitation) })),
+        evaluatedAt: Date.now(),
+        staleAfterDays: parsed.data.staleAfterDays,
+      }));
+    } catch (error) { return next(error); }
+  });
+
   return router;
 }
 
@@ -141,9 +184,6 @@ async function buildVerificationResponse(db: ScopedDb, tenantId: string, passpor
       schemaVersion: 'spr-agent-v1',
       status,
       software: { passportId: passport.id, name: passport.name },
-      // Legacy passport score columns are retained for migration compatibility,
-      // but are deliberately never exposed as authoritative verification scores.
-      // Trust decisions must come from the evidence ledger and current observation.
       scores: { overall: null, security: null, compliance: null, status: 'not_authoritatively_scored' },
       evidence: { count: evidence.length, completeness, latestObservationAt: latest?.generated_at ?? null, latestHash: latest?.canonical_payload_hash ?? null },
       findings: { total: findings.length, open: openFindings.length, criticalOrHigh: criticalOrHigh.length, items: findings.slice(0, 50) },
