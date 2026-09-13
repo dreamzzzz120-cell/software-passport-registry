@@ -10,9 +10,18 @@ const MAX_BODY_BYTES = 256_000;
 
 function assertPayload(payload: Record<string, unknown>) {
   const encoded = JSON.stringify(payload);
-  if (Buffer.byteLength(encoded, 'utf8') > MAX_PAYLOAD_BYTES) {
-    throw new Error('DISTRIBUTION_PAYLOAD_TOO_LARGE');
+  if (Buffer.byteLength(encoded, 'utf8') > MAX_PAYLOAD_BYTES) throw new Error('DISTRIBUTION_PAYLOAD_TOO_LARGE');
+}
+
+function assertPublicResearchTarget(parsed: URL) {
+  const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host === '::1') {
+    throw new Error('DISTRIBUTION_PRIVATE_TARGET_BLOCKED');
   }
+  if (/^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) || /^169\.254\./.test(host) || /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)) {
+    throw new Error('DISTRIBUTION_PRIVATE_TARGET_BLOCKED');
+  }
+  if (host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80:')) throw new Error('DISTRIBUTION_PRIVATE_TARGET_BLOCKED');
 }
 
 export async function enqueueDistributionJob(pool: Pool, kind: DistributionJobKind, payload: Record<string, unknown>) {
@@ -28,6 +37,7 @@ export async function enqueueDistributionJob(pool: Pool, kind: DistributionJobKi
 export async function enqueueResearchUrl(pool: Pool, url: string) {
   const parsed = new URL(url);
   if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('DISTRIBUTION_URL_SCHEME_NOT_ALLOWED');
+  assertPublicResearchTarget(parsed);
   return enqueueDistributionJob(pool, 'research_url', { url: parsed.toString() });
 }
 
@@ -69,6 +79,7 @@ function extractResearchSignals(url: URL, html: string) {
 export async function researchUrl(url: string) {
   const parsed = new URL(url);
   if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('DISTRIBUTION_URL_SCHEME_NOT_ALLOWED');
+  assertPublicResearchTarget(parsed);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
