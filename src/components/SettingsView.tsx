@@ -1123,7 +1123,7 @@ function GettingStartedGuide() {
           <span>Getting Started</span>
         </h3>
         <p className="mt-3 text-[var(--spr-text-muted)] leading-relaxed">
-          Every capability below is real and connected to the backend — nothing here is a UI-only mockup. Where something isn't built yet, it's listed honestly under "Not available yet" instead of being left for you to discover the hard way.
+          Every capability below is real and connected to the backend — nothing here is a UI-only mockup. Where a step depends on an outside system (DNS, the hosting provider, the identity provider, an email provider) the page shows that system’s actual answer rather than assuming success.
         </p>
       </div>
 
@@ -1207,11 +1207,13 @@ function GettingStartedGuide() {
           <p className="leading-relaxed">Real Stripe Checkout for MSP plans, one-time reports and recurring add-ons, with the Stripe billing portal for payment methods, invoices and cancellation. Every price shown is read from the live Stripe price that checkout charges against — a price SPR cannot read is shown as unavailable rather than guessed. Your plan's client limit is enforced server-side when you add a client.</p>
         </div>
 
-        <div className="spr-panel p-5 space-y-3 border-dashed">
-          <h4 className="text-[11px] font-bold text-[var(--spr-amber)] uppercase tracking-wide flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> Not available yet</h4>
-          <ul className="space-y-1.5 list-disc list-inside leading-relaxed">
-            <li><strong className="text-[var(--spr-text)]">Custom domains</strong> — not implemented.</li>
-          </ul>
+        <div className="spr-panel p-5 space-y-3">
+          <h4 className="text-[11px] font-bold text-[var(--spr-text)] uppercase tracking-wide">Custom domains</h4>
+          <ol className="space-y-2.5 list-decimal list-inside leading-relaxed">
+            {step('White-label → Custom domain → Add hostname', 'Owner only. The hostname is registered with the hosting provider and the DNS records it requires are shown.')}
+            {step('Create the DNS records at your registrar, then click Verify', 'Status becomes Active only when the provider itself reports the domain verified and correctly configured; the time of that answer is shown.')}
+            {step('Sign in on your hostname', 'On activation the hostname is added to the identity provider’s authorized domains. If that step fails the panel says so — pages are served but sign-in is refused until it succeeds.')}
+          </ol>
         </div>
       </div>
     </div>

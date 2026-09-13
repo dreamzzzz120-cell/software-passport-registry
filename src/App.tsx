@@ -32,7 +32,7 @@ import FounderDashboardView from './components/FounderDashboardView';
 import InvestorHomeView from './components/InvestorHomeView';
 import SettingsView from './components/SettingsView';
 import WhiteLabelView from './components/WhiteLabelView';
-import { EMPTY_BRANDING, applyBrandingTheme, parseBrandingResponse, type TenantBranding } from './lib/brandingTheme';
+import { DEFAULT_PRODUCT_NAME, EMPTY_BRANDING, applyBrandingTheme, parseBrandingResponse, type TenantBranding } from './lib/brandingTheme';
 import TeamView from './components/TeamView';
 import AuditLogView from './components/AuditLogView';
 import MonitoringView from './components/MonitoringView';
@@ -88,6 +88,13 @@ function parseFreeReviewResultPath(path: string): { passportId: string; token: s
   } catch {
     return null;
   }
+}
+
+// Hostnames SPR itself is served from. Anything else is a candidate
+// white-label custom domain (see src/routes/custom-domains.ts).
+const SPR_OWN_HOST_SUFFIXES = ['softwarepassportregistry.com', 'vercel.app', 'railway.app', 'localhost', '127.0.0.1'];
+function isSprOwnHost(host: string): boolean {
+  return SPR_OWN_HOST_SUFFIXES.some((suffix) => host === suffix || host.endsWith(`.${suffix}`));
 }
 
 function isPublicPath(path: string): boolean {
@@ -229,12 +236,31 @@ export default function App() {
   // surface repaints without any component knowing about branding.
   const [branding, setBranding] = useState<TenantBranding>(EMPTY_BRANDING);
   const [brandingPreview, setBrandingPreview] = useState<TenantBranding | null>(null);
-  const effectiveBranding = brandingPreview ?? branding;
+  // White-label custom domain: when the app is loaded on a hostname that is
+  // not SPR's own, the tenant that owns that hostname supplies the baseline
+  // branding -- sign-in page included -- until (and unless) a signed-in
+  // user's own workspace branding replaces it. Read once per page load from
+  // GET /api/public/branding/by-host; a 404 means the host is not an active
+  // custom domain and SPR defaults stay.
+  const [hostBranding, setHostBranding] = useState<TenantBranding | null>(null);
+  useEffect(() => {
+    const host = window.location.hostname.toLowerCase();
+    if (isSprOwnHost(host)) return;
+    let cancelled = false;
+    apiFetch(`/api/public/branding/by-host?host=${encodeURIComponent(host)}`).then(async (response) => {
+      if (!response.ok || cancelled) return;
+      const data = await response.json().catch(() => null);
+      if (!cancelled && data?.branding) setHostBranding(parseBrandingResponse(data.branding));
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
+  const effectiveBranding = brandingPreview ?? (branding !== EMPTY_BRANDING ? branding : (hostBranding ?? branding));
+  const hostBrand = hostBranding ? { productName: hostBranding.theme.productName?.trim() || hostBranding.companyName?.trim() || DEFAULT_PRODUCT_NAME, logoDataUrl: hostBranding.logoDataUrl } : null;
   useEffect(() => { applyBrandingTheme(effectiveBranding.theme, theme); }, [effectiveBranding, theme]);
   useEffect(() => {
     // Sign-out returns the document to SPR defaults; a tenant's palette must
     // not bleed onto the public pages or the next person's sign-in.
-    if (!user) { setBranding(EMPTY_BRANDING); setBrandingPreview(null); applyBrandingTheme(null, theme); }
+    if (!user) { setBranding(EMPTY_BRANDING); setBrandingPreview(null); applyBrandingTheme(hostBranding?.theme ?? null, theme); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
   const onBrandingPreview = useCallback((draft: TenantBranding | null) => setBrandingPreview(draft), []);
@@ -445,8 +471,11 @@ export default function App() {
   const signOutUser = async () => { await signOut(auth); navigate('/login'); };
 
   if (!authReady) return <AuthLoading />;
+  // On a tenant's own hostname the root is that tenant's portal, not SPR's
+  // marketing site: signed-out visitors get the branded sign-in page.
+  if (path === '/' && hostBrand && !user) return <LoginView onLoginSuccess={() => navigate(returnPathFromLocation())} brand={hostBrand} />;
   if (path === '/') return <HomePage onCreatePassport={() => navigate('/login')} onExploreTrustNetwork={() => navigate('/free-review')} onViewSamplePassport={() => navigate('/passport/demo')} />;
-  if (path === '/login') return <LoginView onLoginSuccess={() => navigate(returnPathFromLocation())} />;
+  if (path === '/login') return <LoginView onLoginSuccess={() => navigate(returnPathFromLocation())} brand={hostBrand} />;
   // Public legal documents -- always reachable regardless of auth state,
   // since /terms has no existing authenticated route to preserve. /privacy
   // is intentionally only handled here for signed-out visitors: the existing
