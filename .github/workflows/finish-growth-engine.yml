@@ -1,0 +1,79 @@
+name: finish-growth-engine
+
+on:
+  push:
+    branches: [feat/founder-growth-engine]
+
+permissions:
+  contents: write
+
+jobs:
+  wire-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Wire growth API and Founder UI
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          server = Path('server.ts')
+          text = server.read_text()
+          imp = "import { createDistributionGrowthRouter } from './src/routes/distribution-growth.ts';\n"
+          anchor = "import { createDistributionRouter } from './src/routes/distribution.ts';\n"
+          if imp not in text:
+              text = text.replace(anchor, anchor + imp)
+          mount = "app.use('/api', createDistributionGrowthRouter());\n"
+          anchor2 = "app.use('/api', createDistributionRouter());\n"
+          if mount not in text:
+              text = text.replace(anchor2, anchor2 + mount)
+          server.write_text(text)
+
+          founder = Path('src/components/FounderDashboardView.tsx')
+          text = founder.read_text()
+          imp = "import FounderGrowthHub from './FounderGrowthHub';\n"
+          anchor = "import FounderDistributionOpportunities from './FounderDistributionOpportunities';\n"
+          if imp not in text:
+              text = text.replace(anchor, anchor + imp)
+          anchor2 = "    <FounderDistributionOpportunities />\n"
+          insertion = "    <FounderDistributionOpportunities />\n    <FounderGrowthHub />\n"
+          if "<FounderGrowthHub />" not in text:
+              text = text.replace(anchor2, insertion)
+          founder.write_text(text)
+          PY
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Growth contract tests
+        run: npx vitest run tests/distribution-growth-contract.test.ts
+
+      - name: Full test suite
+        run: npm test -- --run
+
+      - name: Commit wiring only when verification is green
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo 'No wiring changes required.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server.ts src/components/FounderDashboardView.tsx
+          git commit -m 'feat(distribution): wire founder growth hub'
+          git push
