@@ -2,10 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Global feedback widget: the backend (POST/GET /api/feedback,
- * src/routes/feedback.ts) has existed since the founder-command-center
- * work but had no UI to actually submit from -- this is that UI. Mounted
- * once in CommandCenter so it is available from every authenticated page.
+ * Global feedback widget with the authenticated trust workflow rail.
  */
 import { useState } from 'react';
 import { MessageSquarePlus, ThumbsDown, ThumbsUp, X } from 'lucide-react';
@@ -31,19 +28,29 @@ const TRUST_WORKFLOW = [
   { path: '/reports', label: 'Reports' },
 ];
 
+const WORKFLOW_ACTIVE =
+  'inline-flex shrink-0 items-center gap-1 rounded-full bg-[var(--spr-accent)] px-3 py-1.5 text-[11px] font-semibold text-white';
+const WORKFLOW_IDLE =
+  'inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-semibold text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)] hover:text-[var(--spr-text)]';
+
 function WorkflowRail({ currentPath }: { currentPath: string }) {
   return (
-    <nav aria-label="Trust workflow" className="fixed bottom-5 left-5 z-40 hidden max-w-[calc(100vw-8rem)] overflow-x-auto rounded-full border border-[var(--spr-border)] bg-[var(--spr-surface-alt)]/95 p-1 shadow-lg backdrop-blur-sm md:flex">
+    <nav
+      aria-label="Trust workflow"
+      className="fixed bottom-5 left-5 z-40 hidden max-w-[calc(100vw-8rem)] overflow-x-auto rounded-full border border-[var(--spr-border)] bg-[var(--spr-surface-alt)]/95 p-1 shadow-lg backdrop-blur-sm md:flex"
+    >
       {TRUST_WORKFLOW.map((step, index) => {
-        const active = currentPath === step.path || currentPath.startsWith(`${step.path}/`);
+        const active = currentPath === step.path || currentPath.startsWith(step.path + '/');
         return (
           <a
             key={step.path}
             href={step.path}
             aria-current={active ? 'page' : undefined}
-            className={`inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors ${active ? 'bg-[var(--spr-accent)] text-white' : 'text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)] hover:text-[var(--spr-text)]'}`}
+            className={active ? WORKFLOW_ACTIVE : WORKFLOW_IDLE}
           >
-            <span aria-hidden="true" className={active ? 'opacity-80' : 'opacity-40'}>{index + 1}</span>
+            <span aria-hidden="true" className={active ? 'opacity-80' : 'opacity-40'}>
+              {index + 1}
+            </span>
             {step.label}
           </a>
         );
@@ -61,17 +68,33 @@ export default function FeedbackWidget({ currentPath }: { currentPath: string })
   const [error, setError] = useState('');
   const [sent, setSent] = useState(false);
 
-  const reset = () => { setSentiment('neutral'); setCategory('general'); setMessage(''); setError(''); setSent(false); };
-  const close = () => { setOpen(false); reset(); };
+  const reset = () => {
+    setSentiment('neutral');
+    setCategory('general');
+    setMessage('');
+    setError('');
+    setSent(false);
+  };
+
+  const close = () => {
+    setOpen(false);
+    reset();
+  };
 
   const submit = async () => {
     if (!message.trim() || submitting) return;
-    setSubmitting(true); setError('');
+    setSubmitting(true);
+    setError('');
     try {
       const response = await apiFetch('/api/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sentiment, category, page: currentPath, message: message.trim() }),
+        body: JSON.stringify({
+          sentiment,
+          category,
+          page: currentPath,
+          message: message.trim(),
+        }),
       });
       if (!response.ok) {
         const data = await response.json().catch(() => null);
@@ -79,8 +102,9 @@ export default function FeedbackWidget({ currentPath }: { currentPath: string })
       }
       setSent(true);
       setTimeout(close, 1400);
-    } catch (cause: any) {
-      setError(cause?.message || 'Unable to send feedback.');
+    } catch (cause: unknown) {
+      const messageText = cause instanceof Error ? cause.message : 'Unable to send feedback.';
+      setError(messageText);
     } finally {
       setSubmitting(false);
     }
@@ -105,27 +129,73 @@ export default function FeedbackWidget({ currentPath }: { currentPath: string })
   return (
     <>
       <WorkflowRail currentPath={currentPath} />
-      <div className="fixed inset-0 z-50 flex items-end justify-end bg-black/40 p-4 sm:items-center sm:justify-center" role="dialog" aria-modal="true" aria-labelledby="feedback-title" onMouseDown={close}>
-        <div className="w-full max-w-sm rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+      <div
+        className="fixed inset-0 z-50 flex items-end justify-end bg-black/40 p-4 sm:items-center sm:justify-center"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="feedback-title"
+        onMouseDown={close}
+      >
+        <div
+          className="w-full max-w-sm rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5 shadow-2xl"
+          onMouseDown={(event) => event.stopPropagation()}
+        >
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[.16em] text-[var(--spr-highlight)]"><MessageSquarePlus className="h-3.5 w-3.5" /> Feedback</div>
-              <h2 id="feedback-title" className="mt-1 text-sm font-bold text-[var(--spr-text)]">What's on your mind?</h2>
+              <div className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[.16em] text-[var(--spr-highlight)]">
+                <MessageSquarePlus className="h-3.5 w-3.5" /> Feedback
+              </div>
+              <h2 id="feedback-title" className="mt-1 text-sm font-bold text-[var(--spr-text)]">
+                What's on your mind?
+              </h2>
             </div>
-            <button onClick={close} aria-label="Close" className="rounded-md p-1 text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)] hover:text-[var(--spr-text)]"><X className="h-4 w-4" /></button>
+            <button
+              onClick={close}
+              aria-label="Close"
+              className="rounded-md p-1 text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)] hover:text-[var(--spr-text)]"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
 
           {sent ? (
-            <p className="mt-4 text-sm text-[var(--spr-green)]">Sent. Thanks — this goes straight to the team.</p>
+            <p className="mt-4 text-sm text-[var(--spr-green)]">
+              Sent. Thanks — this goes straight to the team.
+            </p>
           ) : (
             <div className="mt-4 space-y-3">
               <div className="flex gap-2">
-                <button type="button" onClick={() => setSentiment(sentiment === 'like' ? 'neutral' : 'like')} aria-pressed={sentiment === 'like'} title="Like" className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold ${sentiment === 'like' ? 'border-[var(--spr-green)] text-[var(--spr-green)] bg-[var(--spr-green)]/10' : 'border-[var(--spr-border)] text-[var(--spr-text-muted)]}`}><ThumbsUp className="h-3.5 w-3.5" /> Like</button>
-                <button type="button" onClick={() => setSentiment(sentiment === 'dislike' ? 'neutral' : 'dislike')} aria-pressed={sentiment === 'dislike'} title="Dislike" className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold ${sentiment === 'dislike' ? 'border-[var(--spr-red)] text-[var(--spr-red)] bg-[var(--spr-red)]/10' : 'border-[var(--spr-border)] text-[var(--spr-text-muted)]}`}><ThumbsDown className="h-3.5 w-3.5" /> Dislike</button>
+                <button
+                  type="button"
+                  onClick={() => setSentiment(sentiment === 'like' ? 'neutral' : 'like')}
+                  aria-pressed={sentiment === 'like'}
+                  title="Like"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-[var(--spr-border)] px-3 py-1.5 text-xs font-semibold text-[var(--spr-text-muted)]"
+                >
+                  <ThumbsUp className="h-3.5 w-3.5" /> Like
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSentiment(sentiment === 'dislike' ? 'neutral' : 'dislike')}
+                  aria-pressed={sentiment === 'dislike'}
+                  title="Dislike"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-[var(--spr-border)] px-3 py-1.5 text-xs font-semibold text-[var(--spr-text-muted)]"
+                >
+                  <ThumbsDown className="h-3.5 w-3.5" /> Dislike
+                </button>
               </div>
 
-              <select value={category} onChange={(event) => setCategory(event.target.value as Category)} aria-label="Feedback category" className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]">
-                {CATEGORIES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+              <select
+                value={category}
+                onChange={(event) => setCategory(event.target.value as Category)}
+                aria-label="Feedback category"
+                className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]"
+              >
+                {CATEGORIES.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
               </select>
 
               <textarea
@@ -139,11 +209,29 @@ export default function FeedbackWidget({ currentPath }: { currentPath: string })
                 className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2.5 text-xs text-[var(--spr-text)] placeholder:text-[var(--spr-text-faint)]"
               />
 
-              {error && <div role="alert" className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 px-3 py-2 text-xs text-[var(--spr-red)]">{error}</div>}
+              {error && (
+                <div
+                  role="alert"
+                  className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 px-3 py-2 text-xs text-[var(--spr-red)]"
+                >
+                  {error}
+                </div>
+              )}
 
               <div className="flex justify-end gap-2">
-                <button type="button" onClick={close} className="rounded-md border border-[var(--spr-border)] px-3 py-2 text-xs font-semibold text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)]">Cancel</button>
-                <button type="button" onClick={() => void submit()} disabled={!message.trim() || submitting} className="inline-flex items-center gap-1.5 rounded-md bg-[var(--spr-accent)] px-3.5 py-2 text-xs font-bold text-white hover:bg-[var(--spr-accent-hover)] disabled:cursor-not-allowed disabled:opacity-40">
+                <button
+                  type="button"
+                  onClick={close}
+                  className="rounded-md border border-[var(--spr-border)] px-3 py-2 text-xs font-semibold text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void submit()}
+                  disabled={!message.trim() || submitting}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-[var(--spr-accent)] px-3.5 py-2 text-xs font-bold text-white hover:bg-[var(--spr-accent-hover)] disabled:cursor-not-allowed disabled:opacity-40"
+                >
                   {submitting ? 'Sending…' : 'Send feedback'}
                 </button>
               </div>
