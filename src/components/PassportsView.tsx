@@ -1,3 +1,4 @@
+import TrustVectorPanel from './TrustVectorPanel';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, FileCheck2, Search, ShieldCheck, TriangleAlert } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
@@ -189,6 +190,7 @@ export default function PassportsView({ passports, selectedPassportId, setSelect
             canSharePassport={['Owner', 'Admin', 'Operator'].includes(role)}
           />
         )}
+        {selected && <TrustVectorPanel passportId={selected.id} />}
       </>}
     </section>
   );

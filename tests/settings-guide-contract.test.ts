@@ -32,8 +32,12 @@ describe('Settings "Getting Started" guide stays honest about real gaps', () => 
     expect(s).toContain('Real Stripe Checkout');
   });
 
-  it('still discloses custom domains are not implemented', () => {
-    expect(source()).toContain('Custom domains</strong> — not implemented');
+  it('describes custom domains as the provider-verified flow they now are', () => {
+    // src/routes/custom-domains.ts registers the hostname with the hosting
+    // provider and only marks it active on the provider's own answer.
+    expect(source()).not.toContain('Custom domains</strong> — not implemented');
+    expect(source()).toContain('Custom domains</h4>');
+    expect(source()).toContain('provider itself reports the domain verified');
   });
 
   it('no longer lists branded sign-in email as a gap, because the branded sender exists', () => {

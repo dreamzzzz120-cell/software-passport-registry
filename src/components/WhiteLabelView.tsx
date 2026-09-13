@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { AlertTriangle, CheckCircle2, Eye, EyeOff, Image as ImageIcon, Palette, RotateCcw, Save, Type, Undo2, LifeBuoy, Building2 } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
+import CustomDomainsPanel from './CustomDomainsPanel';
 import type { SoftwarePassport } from '../types';
 import {
   DEFAULT_PALETTES, DEFAULT_PRODUCT_NAME, DEFAULT_RADIUS, DEFAULT_TAGLINE, FONT_CHOICES, RADIUS_MAX, RADIUS_MIN,
@@ -409,10 +410,7 @@ export default function WhiteLabelView({ role, passports, branding, theme: activ
                 <input type="checkbox" disabled={!canEdit} checked={Boolean(draft.theme.hideSprAttribution)} onChange={(e) => updateTheme({ hideSprAttribution: e.target.checked })} className="mt-0.5" />
                 <span>Hide the “Powered by Software Passport Registry” line in the sidebar and report footers.</span>
               </label>
-              <div className="rounded-[var(--spr-radius)] border border-dashed border-[var(--spr-border)] p-3 text-[12px] text-[var(--spr-text-muted)]">
-                <p className="font-semibold text-[var(--spr-text)]">Not available</p>
-                <p className="mt-1">Custom domains (serving the workspace from your own hostname) are not implemented yet.</p>
-              </div>
+              <CustomDomainsPanel role={role} />
               <div className="rounded-[var(--spr-radius)] border border-[var(--spr-border)] p-3 text-[12px] text-[var(--spr-text-muted)]">
                 <p className="font-semibold text-[var(--spr-text)]">Branded email</p>
                 <p className="mt-1">Verification, password-reset and invitation emails to members of this workspace use the product name, brand colour, logo, support address and footer saved here, and are sent from SPR’s own mail domain with this workspace’s product name as the sender name.</p>
