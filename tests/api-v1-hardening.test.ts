@@ -8,7 +8,7 @@ const migration = readFileSync(resolve(process.cwd(), 'migrations/0062_public_ap
 describe('public API v1 hardening invariants', () => {
   it('uses high-entropy live API keys with an exact accepted shape', () => {
     expect(route).toContain("randomBytes(32).toString('base64url')");
-    expect(route).toMatch(/\/^spr_live_[A-Za-z0-9_-]{43}\$/);
+    expect(route).toMatch(/^spr_live_[A-Za-z0-9_-]{43}$/);
   });
 
   it('stores only the API-key hash and never returns the hash as the secret', () => {
