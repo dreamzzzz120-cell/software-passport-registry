@@ -503,8 +503,26 @@ export function createAuthRouter() {
       // Purges via the owner-role connection (not req.db): offboarding must be
       // able to see every table it enumerates from information_schema, and it
       // already scopes every DELETE to exactly this caller's own tenant_id.
-      await offboardTenantData(req.user!.tenantId);
-      return res.status(200).json({ message: 'Tenant data purged.' });
+      //
+      // The identity-provider accounts are collected first: after the purge
+      // the users table no longer knows who belonged to this tenant. Each
+      // Firebase account is then deleted, so the DPA's "removes the tenant's
+      // user accounts from the identity provider" is what actually happens.
+      // A Firebase failure is reported, not hidden -- the database purge has
+      // already committed and cannot be undone by then.
+      const tenantId = req.user!.tenantId;
+      const members = (await req.db!.execute(sql`SELECT uid, email FROM users WHERE tenant_id = ${tenantId}`) as any).rows ?? [];
+      await offboardTenantData(tenantId);
+      const identityFailures: string[] = [];
+      for (const member of members) {
+        try { await adminAuth.deleteUser(member.uid); } catch (error) {
+          const code = (error as { code?: string })?.code;
+          if (code === 'auth/user-not-found') continue;
+          identityFailures.push(member.email);
+          console.error('[SPR] offboard: Firebase deleteUser failed', member.uid, error instanceof Error ? error.message : String(error));
+        }
+      }
+      return res.status(200).json({ message: 'Tenant data purged.', identityAccountsRemoved: members.length - identityFailures.length, identityAccountsNotRemoved: identityFailures });
     } catch (error) {
       return next(error);
     }

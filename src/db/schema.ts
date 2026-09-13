@@ -676,4 +676,5 @@ export const auditTrail = pgTable('audit_trail', {
 // NOTE: app_users/projects/tasks/snippets/work_sessions ("Additional developer
 // productivity tables from requested GraphQL schema") were unused scaffold
 // tables unrelated to the SPR domain model. Audited, confirmed dead (no code
-// path anywhere read or wrote them), and dropped in migration 0080.
+// path anywhere read or wrote them), and dropped in migration 0084 -- which
+// refuses to run if any of them holds a row.

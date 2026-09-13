@@ -13,6 +13,7 @@ import {
 import { auth } from '../lib/firebase';
 import { apiFetch } from '../utils/apiClient';
 import MfaSettingsPanel from './MfaSettingsPanel';
+import DataGovernancePanel from './DataGovernancePanel';
 
 interface SettingsViewProps {
   theme: 'light' | 'dark';
@@ -314,7 +315,11 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
         method: 'POST',
       });
       if (res.ok) {
-        alert("Offboarding complete. Your tenant profile and isolated workspaces have been purged from storage nodes.");
+        const result = await res.json().catch(() => ({} as { identityAccountsRemoved?: number; identityAccountsNotRemoved?: string[] }));
+        const notRemoved: string[] = Array.isArray(result.identityAccountsNotRemoved) ? result.identityAccountsNotRemoved : [];
+        alert(notRemoved.length
+          ? `Workspace data purged. ${result.identityAccountsRemoved ?? 0} sign-in account(s) removed; these could not be removed and need manual deletion: ${notRemoved.join(', ')}.`
+          : `Workspace data purged and ${result.identityAccountsRemoved ?? 0} sign-in account(s) removed from the identity provider.`);
         localStorage.removeItem('msp_user');
         await auth.signOut().catch(() => {});
         window.location.reload();
@@ -652,6 +657,8 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                 ))}
               </div>
             </div>
+
+            <DataGovernancePanel role={currentRole} />
 
             {/* Security Credentials settings */}
             <div className="spr-panel p-5 space-y-4">
@@ -1165,6 +1172,15 @@ function GettingStartedGuide() {
           <ol className="space-y-2.5 list-decimal list-inside leading-relaxed">
             {step('Reports → "White-label client report"', 'Your saved branding pre-fills automatically; you can still override it just for this export.')}
             {step('Pick the client and sections, Generate white-label PDF', 'Uses that client’s real, already-loaded inventory and scores — nothing is fabricated for the export.')}
+          </ol>
+        </div>
+
+        <div className="spr-panel p-5 space-y-3">
+          <h4 className="text-[11px] font-bold text-[var(--spr-text)] uppercase tracking-wide">Data Processing Agreement & retention</h4>
+          <ol className="space-y-2.5 list-decimal list-inside leading-relaxed">
+            {step('Read the DPA at /dpa', 'Public, versioned, and hashed: the page shows the SHA-256 of the exact wording.')}
+            {step('Owner executes it under Settings → Configurations', 'The execution record is signed by the server; download the PDF or open the verification link on any copy.')}
+            {step('Set a retention policy in the same panel', 'Until one is saved nothing is purged on a schedule; once saved, the retention worker enforces it.')}
           </ol>
         </div>
 

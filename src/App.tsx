@@ -48,6 +48,7 @@ import { normalizeClientRecord, toJsonArrayColumn } from './lib/clientJsonColumn
 import TermsView from './components/legal/TermsView';
 import PublicTrustCenterView from './components/PublicTrustCenterView';
 import PrivacyPolicyView from './components/legal/PrivacyPolicyView';
+import DpaView from './components/legal/DpaView';
 import ReportsView from './components/ReportsView';
 import TrustGraphView from './components/TrustGraphView';
 import type { VerificationDecisionState } from './components/trust/TrustStateBadge';
@@ -61,7 +62,11 @@ import { EXTENSIONS } from './workflows/extensionRegistry';
 // bounced every signed-out visitor to /login. It is a tab in the public Trust
 // Center nav (PublicTrustCenterView), so that was reachable by clicking.
 // Listing all four keeps them public whether or not a static page exists.
-const PUBLIC_PATHS = new Set(['/','/login','/free-review','/pricing','/msp','/terms','/privacy','/passport/demo','/trust/','/about/','/methodology/','/security-center/']);
+const PUBLIC_PATHS = new Set(['/','/login','/free-review','/pricing','/msp','/terms','/privacy','/dpa','/passport/demo','/trust/','/about/','/methodology/','/security/','/security-center/','/contact/','/data-retention/','/subprocessors/']);
+
+// /dpa/verify/<executionId>/<signature>: public signature check for an
+// executed Data Processing Agreement. The signature is the only credential.
+const DPA_VERIFY_PATH = /^\/dpa\/verify\/(dpa_[0-9a-f]{32})\/([0-9a-f]{64})\/?$/;
 
 // A completed Free Review result is addressable at
 //   /free-review/result/<passportId>/<token>
@@ -86,7 +91,7 @@ function parseFreeReviewResultPath(path: string): { passportId: string; token: s
 }
 
 function isPublicPath(path: string): boolean {
-  return PUBLIC_PATHS.has(path) || FREE_REVIEW_RESULT_PATH.test(path);
+  return PUBLIC_PATHS.has(path) || FREE_REVIEW_RESULT_PATH.test(path) || DPA_VERIFY_PATH.test(path);
 }
 const EMPTY_CLIENTS: Client[] = [];
 const EMPTY_PASSPORTS: SoftwarePassport[] = [];
@@ -448,6 +453,11 @@ export default function App() {
   // authenticated '/privacy' route (below, in the CommandCenter switch) is
   // the unrelated internal Privacy Governance tool and must not be replaced.
   if (path === '/terms') return <TermsView />;
+  if (path === '/dpa') return <DpaView />;
+  {
+    const dpaVerify = path.match(DPA_VERIFY_PATH);
+    if (dpaVerify) return <DpaView verify={{ executionId: dpaVerify[1], signature: dpaVerify[2] }} />;
+  }
   if (!user && path === '/privacy') return <PrivacyPolicyView />;
   // Public trust center. Always reachable regardless of auth state -- these
   // are the exact paths LegalFooterLinks has linked to from every public
@@ -457,7 +467,12 @@ export default function App() {
   if (path === '/trust/') return <PublicTrustCenterView section="trust" onNavigate={navigate} />;
   if (path === '/about/') return <PublicTrustCenterView section="about" onNavigate={navigate} />;
   if (path === '/methodology/') return <PublicTrustCenterView section="methodology" onNavigate={navigate} />;
-  if (path === '/security-center/') return <PublicTrustCenterView section="security" onNavigate={navigate} />;
+  // /security/ is the canonical public security page (it is what the sitemap
+  // lists); /security-center/ stays as an alias for links already in the wild.
+  if (path === '/security/' || path === '/security-center/') return <PublicTrustCenterView section="security" onNavigate={navigate} />;
+  if (path === '/contact/') return <PublicTrustCenterView section="contact" onNavigate={navigate} />;
+  if (path === '/data-retention/') return <PublicTrustCenterView section="data-retention" onNavigate={navigate} />;
+  if (path === '/subprocessors/') return <PublicTrustCenterView section="subprocessors" onNavigate={navigate} />;
   // Static sample Passport. Reads no database and no tenant - see
   // DemoPassport.tsx. Public by design and explicitly labelled DEMO.
   if (path === '/passport/demo') return <DemoPassport onRunFreeReview={() => navigate('/free-review')} onHome={() => navigate('/')} />;

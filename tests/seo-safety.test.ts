@@ -12,7 +12,7 @@ const app = read('src/App.tsx');
 const stripComments = (source: string) => source.replace(/<!--[\s\S]*?-->/g, '');
 const sitemapMarkup = stripComments(sitemap);
 const indexMarkup = stripComments(indexHtml);
-const PUBLIC_INDEXABLE = ['/', '/free-review', '/passport/demo', '/pricing', '/msp', '/about/', '/trust/', '/methodology/', '/security/', '/contact/', '/data-retention/', '/subprocessors/', '/terms', '/privacy'];
+const PUBLIC_INDEXABLE = ['/', '/free-review', '/passport/demo', '/pricing', '/msp', '/about/', '/trust/', '/methodology/', '/security/', '/contact/', '/data-retention/', '/subprocessors/', '/terms', '/privacy', '/dpa'];
 const AUTHENTICATED_ROUTES = ['/dashboard', '/registry', '/passports', '/clients', '/evidence-explorer', '/reports', '/monitoring', '/settings', '/team', '/billing', '/audit-log', '/trust-graph', '/vendors', '/governance', '/compliance'];
 const SITE = (() => {
   const { origin } = JSON.parse(read('src/seo/public-pages.json')) as { origin?: string };
