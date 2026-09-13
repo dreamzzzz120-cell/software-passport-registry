@@ -102,27 +102,14 @@ async function getRiskSummary(db: ScopedDb, tenantId: string) {
     db.execute(sql`SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE LOWER(severity) IN ('critical','high') AND LOWER(status) NOT IN ('resolved','closed','verified'))::int AS critical_high, COUNT(*) FILTER (WHERE LOWER(status) NOT IN ('resolved','closed','verified'))::int AS open FROM trust_findings WHERE tenant_id=${tenantId}`),
     db.execute(sql`SELECT COUNT(*) FILTER (WHERE LOWER(status) NOT IN ('resolved','closed'))::int AS active FROM alerts WHERE tenant_id=${tenantId}`),
   ]);
-  const top = (await db.execute(sql`SELECT p.id AS passport_id, p.name, p.client_id, COUNT(f.id)::int AS open_findings, COUNT(f.id) FILTER (WHERE LOWER(f.severity) IN ('critical','high'))::int AS critical_high, ARRAY_REMOVE(ARRAY_AGG(f.id) FILTER (WHERE f.id IS NOT NULL AND LOWER(f.status) NOT IN ('resolved','closed','verified')), NULL) AS finding_ids FROM passports p LEFT JOIN trust_findings f ON f.passport_id=p.id AND f.tenant_id=${tenantId} AND LOWER(f.status) NOT IN ('resolved','closed','verified') WHERE p.tenant_id=${tenantId} GROUP BY p.id,p.name,p.client_id ORDER BY critical_high DESC, open_findings DESC, p.name ASC LIMIT 10`) as any).rows || [];
+  const top = (await db.execute(sql`SELECT p.id AS passport_id, p.name, p.client_id, COUNT(f.id)::int AS open_findings, COUNT(f.id) FILTER (WHERE LOWER(f.severity) IN ('critical','high'))::int AS critical_high, ARRAY_AGG(f.id) FILTER (WHERE f.id IS NOT NULL AND LOWER(f.status) NOT IN ('resolved','closed','verified')) AS finding_ids FROM passports p LEFT JOIN trust_findings f ON f.passport_id=p.id AND f.tenant_id=${tenantId} AND LOWER(f.status) NOT IN ('resolved','closed','verified') WHERE p.tenant_id=${tenantId} GROUP BY p.id,p.name,p.client_id ORDER BY critical_high DESC, open_findings DESC, p.name ASC LIMIT 10`) as any).rows || [];
   const clientRows = (await db.execute(sql`SELECT id,name FROM clients WHERE tenant_id=${tenantId} ORDER BY name ASC LIMIT 10`) as any).rows || [];
   const c = (clients as any).rows?.[0]?.count ?? 0;
   const p = (passports as any).rows?.[0]?.count ?? 0;
   const f = (findings as any).rows?.[0] ?? {};
   const a = (alerts as any).rows?.[0]?.active ?? 0;
   const generatedAt = new Date().toISOString();
-  return {
-    reply: `I found ${c} client(s), ${p} passport(s), ${f.open ?? 0} open finding(s), ${f.critical_high ?? 0} critical/high open finding(s), and ${a} active alert(s). These are database observations, not invented estimates.`,
-    data: { counts: { clients: c, passports: p, openFindings: f.open ?? 0, criticalHighFindings: f.critical_high ?? 0, activeAlerts: a }, topPassports: top, topClients: clientRows },
-    provenance: {
-      generatedAt,
-      tenantScoped: true,
-      sources: [
-        { table: 'clients', fields: ['id'], observation: 'COUNT(*)', filter: 'tenant_id = authenticated tenant' },
-        { table: 'passports', fields: ['id'], observation: 'COUNT(*)', filter: 'tenant_id = authenticated tenant' },
-        { table: 'trust_findings', fields: ['id', 'severity', 'status'], observation: 'open and critical/high counts plus finding IDs for ranked passports', filter: 'tenant_id = authenticated tenant' },
-        { table: 'alerts', fields: ['status'], observation: 'active alert count', filter: 'tenant_id = authenticated tenant' },
-      ],
-    },
-  };
+  return { reply: `I found ${c} client(s), ${p} passport(s), ${f.open ?? 0} open finding(s), ${f.critical_high ?? 0} critical/high open finding(s), and ${a} active alert(s). These are database observations, not invented estimates.`, data: { counts: { clients: c, passports: p, openFindings: f.open ?? 0, criticalHighFindings: f.critical_high ?? 0, activeAlerts: a }, topPassports: top, topClients: clientRows }, provenance: { generatedAt, tenantScoped: true, sources: [{ table: 'clients', fields: ['id'], observation: 'COUNT(*)', filter: 'tenant_id = authenticated tenant' }, { table: 'passports', fields: ['id'], observation: 'COUNT(*)', filter: 'tenant_id = authenticated tenant' }, { table: 'trust_findings', fields: ['id', 'severity', 'status'], observation: 'open and critical/high counts plus finding IDs for ranked passports', filter: 'tenant_id = authenticated tenant' }, { table: 'alerts', fields: ['status'], observation: 'active alert count', filter: 'tenant_id = authenticated tenant' }] } };
 }
 
 async function buildVerificationResponse(db: ScopedDb, tenantId: string, passport: any, res: any, next: any) {
@@ -135,23 +122,6 @@ async function buildVerificationResponse(db: ScopedDb, tenantId: string, passpor
     const criticalOrHigh = openFindings.filter((f: any) => ['critical','high'].includes(String(f.severity).toLowerCase()));
     const completeness = latest?.completeness_basis_points == null ? null : Number(latest.completeness_basis_points) / 10000;
     const observed = Boolean(latest || evidence.length || findings.length);
-    return res.json({
-      schemaVersion: 'spr-agent-v1',
-      status: observed ? 'OBSERVED' : 'UNKNOWN',
-      software: { passportId: passport.id, name: passport.name },
-      trustDecision: { status: 'NOT_EVALUATED_BY_EXPERIENCE_AGENT', reason: 'The Experience Agent reports observed records and does not create or duplicate SPR trust decisions.' },
-      evidence: { count: evidence.length, completeness, latestObservationAt: latest?.generated_at ?? null, latestHash: latest?.canonical_payload_hash ?? null },
-      findings: { total: findings.length, open: openFindings.length, criticalOrHigh: criticalOrHigh.length, items: findings.slice(0, 50) },
-      verification: { observed, evidenceBacked: evidence.length > 0, generatedAt: latest?.generated_at ?? null },
-      sources: evidence.slice(0, 50).map((e: any) => ({ evidenceId: String(e.id), provider: e.provider, sourceUrl: e.source_url, observedAt: e.observed_at, verificationMethod: e.verification_method, evidenceHash: e.evidence_hash, limitation: e.limitation })),
-      provenance: {
-        tenantScoped: true,
-        passportRecord: { table: 'passports', fields: ['id', 'name'], passportId: passport.id },
-        findingRecords: { table: 'trust_findings', fields: ['id', 'control_id', 'title', 'severity', 'status', 'description', 'remediation', 'evidence_ids', 'updated_at', 'resolved_at'], findingIds: findings.map((f: any) => String(f.id)) },
-        evidenceRecords: { table: 'evidence_ledger', fields: ['id', 'provider', 'control_id', 'subject', 'source_url', 'observed_at', 'verification_method', 'status', 'severity', 'evidence_hash', 'limitation'], evidenceIds: evidence.map((e: any) => String(e.id)) },
-        observationRecords: { table: 'trust_observations', fields: ['id', 'observation_version', 'generated_at', 'previous_observation_id', 'evidence_ids', 'finding_ids', 'canonical_payload_hash', 'completeness_basis_points', 'open_finding_count', 'unknown_dimension_count'], observationIds: observations.map((o: any) => String(o.id)) },
-      },
-      policy: { rule: 'The Experience Agent reports only records it can retrieve from the authenticated tenant scope. Missing evidence is UNKNOWN. It does not manufacture, infer, or silently alter trust.' },
-    });
+    return res.json({ schemaVersion: 'spr-agent-v1', status: observed ? 'OBSERVED' : 'UNKNOWN', software: { passportId: passport.id, name: passport.name }, trustDecision: { status: 'NOT_EVALUATED_BY_EXPERIENCE_AGENT', reason: 'The Experience Agent reports observed records and does not create or duplicate SPR trust decisions.' }, evidence: { count: evidence.length, completeness, latestObservationAt: latest?.generated_at ?? null, latestHash: latest?.canonical_payload_hash ?? null }, findings: { total: findings.length, open: openFindings.length, criticalOrHigh: criticalOrHigh.length, items: findings.slice(0, 50) }, verification: { observed, evidenceBacked: evidence.length > 0, generatedAt: latest?.generated_at ?? null }, sources: evidence.slice(0, 50).map((e: any) => ({ evidenceId: String(e.id), provider: e.provider, sourceUrl: e.source_url, observedAt: e.observed_at, verificationMethod: e.verification_method, evidenceHash: e.evidence_hash, limitation: e.limitation })), provenance: { tenantScoped: true, passportRecord: { table: 'passports', fields: ['id', 'name'], passportId: passport.id }, findingRecords: { table: 'trust_findings', fields: ['id', 'control_id', 'title', 'severity', 'status', 'description', 'remediation', 'evidence_ids', 'updated_at', 'resolved_at'], findingIds: findings.map((f: any) => String(f.id)) }, evidenceRecords: { table: 'evidence_ledger', fields: ['id', 'provider', 'control_id', 'subject', 'source_url', 'observed_at', 'verification_method', 'status', 'severity', 'evidence_hash', 'limitation'], evidenceIds: evidence.map((e: any) => String(e.id)) }, observationRecords: { table: 'trust_observations', fields: ['id', 'observation_version', 'generated_at', 'previous_observation_id', 'evidence_ids', 'finding_ids', 'canonical_payload_hash', 'completeness_basis_points', 'open_finding_count', 'unknown_dimension_count'], observationIds: observations.map((o: any) => String(o.id)) } }, policy: { rule: 'The Experience Agent reports only records it can retrieve from the authenticated tenant scope. Missing evidence is UNKNOWN. It does not manufacture, infer, or silently alter trust.' } });
   } catch (error) { return next(error); }
 }
