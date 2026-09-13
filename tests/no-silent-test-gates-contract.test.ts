@@ -30,7 +30,9 @@ function isExplicitlyDocumentedGate(file: string, source: string): boolean {
   // This is the one intentional infrastructure gate: the RLS regression suite
   // requires the restricted runtime database connection. The suite remains a
   // real test and CI supplies APP_DATABASE_URL in the security-route workflow.
-  return file.endsWith('tests/security/rls-tenant-isolation.test.ts')
+  // Compared with forward slashes so the invariant behaves the same on
+  // Windows checkouts as in CI.
+  return file.replaceAll('\\', '/').endsWith('tests/security/rls-tenant-isolation.test.ts')
     && source.includes('process.env.APP_DATABASE_URL')
     && source.includes('const describeIfConfigured = appDatabaseUrl ? describe : describe.skip;');
 }
