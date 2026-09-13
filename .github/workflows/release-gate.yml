@@ -58,7 +58,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          approved='./migrations/0084_retire_legacy_productivity_tables.sql'
+          approved='./migrations/0085_retire_legacy_productivity_tables.sql'
           matches=$(grep -RniE --include='*.sql' --exclude-dir=node_modules \
             -E '\bDROP[[:space:]]+(TABLE|SCHEMA|DATABASE)\b|\bTRUNCATE[[:space:]]+TABLE\b' . \
             | grep -vE ':[0-9]+:[[:space:]]*--' || true)
@@ -73,7 +73,7 @@ jobs:
             exit 1
           fi
 
-          unexpected=$(printf '%s\n' "$matches" | grep -vE '^\./migrations/0084_retire_legacy_productivity_tables\.sql:[0-9]+:[[:space:]]*DROP TABLE IF EXISTS (work_sessions|snippets|tasks|projects|app_users);$' || true)
+          unexpected=$(printf '%s\n' "$matches" | grep -vE '^\./migrations/0085_retire_legacy_productivity_tables\.sql:[0-9]+:[[:space:]]*DROP TABLE IF EXISTS (work_sessions|snippets|tasks|projects|app_users);$' || true)
           if [[ -n "$unexpected" ]]; then
             printf '%s\n' "$unexpected"
             echo 'Unexpected destructive migration detected outside the approved legacy-table retirement.'
