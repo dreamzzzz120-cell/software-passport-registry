@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const route = readFileSync(resolve(process.cwd(), 'src/routes/agent-api.ts'), 'utf8');
-const migration = readFileSync(resolve(process.cwd(), 'migrations/0062_public_api_v1.sql'), 'utf8');
+const migration = readFileSync(resolve(process.cwd(), 'migrations/0093_public_api_v1.sql'), 'utf8');
 
 describe('public API v1 hardening invariants', () => {
   it('uses high-entropy live API keys with an exact accepted shape', () => {
