@@ -15,7 +15,7 @@ describe('distribution growth production contracts', () => {
   });
 
   it('keeps followups disabled after response/conversion stages', () => {
-    const migration = read('migrations/0093_distribution_followup_stage_guard.sql');
+    const migration = read('migrations/0094_distribution_followup_stage_guard.sql');
     for (const stage of ['replied','demo','pilot','customer','lost']) expect(migration).toContain(`'${stage}'`);
     expect(migration).toContain('NEW.next_followup_at := NULL');
   });
