@@ -9,23 +9,12 @@ import { installPageViewTracking } from './analytics';
 
 const root = document.getElementById('root');
 
-if (!root) {
-  throw new Error('SPR bootstrap failed: #root element is missing from index.html');
-}
+if (!root) throw new Error('SPR bootstrap failed: #root element is missing from index.html');
 
 installPageViewTracking();
 
 function SprApplication() {
-  return (
-    <>
-      <App />
-      <ExperienceAgent />
-    </>
-  );
+  return (<><App /><ExperienceAgent /></>);
 }
 
-ReactDOM.createRoot(root).render(
-  <React.StrictMode>
-    <SprApplication />
-  </React.StrictMode>,
-);
+ReactDOM.createRoot(root).render(<React.StrictMode><SprApplication /></React.StrictMode>);
