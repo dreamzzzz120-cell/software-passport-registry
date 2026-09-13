@@ -5,36 +5,11 @@ import FounderCommandCenterPanel from './FounderCommandCenterPanel';
 import FounderMonitoringPanel from './FounderMonitoringPanel';
 import FounderLeadsPanel from './FounderLeadsPanel';
 import FounderTrafficPanel from './FounderTrafficPanel';
+import FounderDistributionOpportunities from './FounderDistributionOpportunities';
 
-interface FounderDashboardViewProps {
-  userRole: string;
-}
-
-interface FounderMetrics {
-  latency: number | null;
-  capitalProtected: string;
-  throughput: number;
-  mitigations: number;
-  overallScore?: number;
-  auditEvents?: number;
-  activeThreats?: number;
-  systemIntegrity?: string;
-}
-
-interface SelfPassportSummary {
-  id?: string;
-  name?: string;
-  version?: string;
-  overallScore?: number;
-  healthStatus?: string;
-  releaseDate?: string;
-  publisher?: string;
-  scannedAt?: string;
-  sbomComponentCount?: number | null;
-  evidenceCount?: number;
-  openFindings?: number;
-  criticalOrHigh?: number;
-}
+interface FounderDashboardViewProps { userRole: string; }
+interface FounderMetrics { latency: number | null; capitalProtected: string; throughput: number; mitigations: number; overallScore?: number; auditEvents?: number; activeThreats?: number; systemIntegrity?: string; }
+interface SelfPassportSummary { id?: string; name?: string; version?: string; overallScore?: number; healthStatus?: string; releaseDate?: string; publisher?: string; scannedAt?: string; sbomComponentCount?: number | null; evidenceCount?: number; openFindings?: number; criticalOrHigh?: number; }
 
 export default function FounderDashboardView({ userRole }: FounderDashboardViewProps) {
   const [metrics, setMetrics] = useState<FounderMetrics | null>(null);
@@ -42,165 +17,47 @@ export default function FounderDashboardView({ userRole }: FounderDashboardViewP
   const [loadingMetrics, setLoadingMetrics] = useState(false);
   const [loadingPassport, setLoadingPassport] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
   const ownerAccess = userRole === 'Owner';
 
   useEffect(() => {
     if (!ownerAccess) return;
     const loadFounderData = async () => {
-      setLoadingMetrics(true);
-      setError(null);
-      try {
-        const response = await apiFetch('/api/founder/metrics');
-        if (!response.ok) throw new Error(`Founder metrics failed (${response.status})`);
-        setMetrics(await response.json());
-      } catch (err: any) {
-        setError(err?.message || 'Unable to fetch founder metrics.');
-      } finally {
-        setLoadingMetrics(false);
-      }
+      setLoadingMetrics(true); setError(null);
+      try { const response = await apiFetch('/api/founder/metrics'); if (!response.ok) throw new Error(`Founder metrics failed (${response.status})`); setMetrics(await response.json()); }
+      catch (err: any) { setError(err?.message || 'Unable to fetch founder metrics.'); }
+      finally { setLoadingMetrics(false); }
     };
     void loadFounderData();
   }, [ownerAccess]);
 
   const fetchSelfPassport = async () => {
-    setLoadingPassport(true);
-    setError(null);
+    setLoadingPassport(true); setError(null);
     try {
       const response = await apiFetch('/api/passports/self-passport');
       const data = await response.json().catch(() => null);
-      if (response.status === 404) {
-        // Not an error: there is simply no completed scan of the SPR repository
-        // in this workspace yet. The card explains what to do.
-        setPassport(null);
-        return;
-      }
+      if (response.status === 404) { setPassport(null); return; }
       if (!response.ok) throw new Error(data?.error || `Self passport request failed (${response.status})`);
-      setPassport({
-        id: data.id,
-        name: data.name,
-        version: data.version,
-        overallScore: data.overallScore,
-        healthStatus: data.healthStatus,
-        releaseDate: data.releaseDate,
-        publisher: data.publisher,
-        scannedAt: data.scannedAt,
-        sbomComponentCount: data.sbomComponentCount,
-        evidenceCount: data.evidenceCount,
-        openFindings: data.openFindings,
-        criticalOrHigh: data.criticalOrHigh,
-      });
-    } catch (err: any) {
-      setError(err?.message || 'Unable to fetch SPR self passport.');
-    } finally {
-      setLoadingPassport(false);
-    }
+      setPassport({ id:data.id, name:data.name, version:data.version, overallScore:data.overallScore, healthStatus:data.healthStatus, releaseDate:data.releaseDate, publisher:data.publisher, scannedAt:data.scannedAt, sbomComponentCount:data.sbomComponentCount, evidenceCount:data.evidenceCount, openFindings:data.openFindings, criticalOrHigh:data.criticalOrHigh });
+    } catch (err: any) { setError(err?.message || 'Unable to fetch SPR self passport.'); }
+    finally { setLoadingPassport(false); }
   };
 
-  if (!ownerAccess) {
-    return (
-      <div className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 p-8 text-[var(--spr-text)]">
-        <div className="flex items-center gap-3 mb-4">
-          <ShieldCheck className="w-6 h-6 text-[var(--spr-red)]" />
-          <div>
-            <h1 className="text-xl font-semibold">Founder Admin Access Required</h1>
-            <p className="text-sm text-[var(--spr-text-muted)]">You must be signed in as an Owner to view the Founder/Admin Control Center.</p>
-          </div>
-        </div>
-        <div className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-surface)] p-6">
-          <p className="text-sm text-[var(--spr-text-muted)]">This dashboard contains privileged SPR system telemetry, self-verification reports, and high-confidence executive controls. Please contact your administrator to request Owner role access.</p>
-        </div>
-      </div>
-    );
-  }
+  if (!ownerAccess) return <div className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 p-8 text-[var(--spr-text)]"><div className="flex items-center gap-3 mb-4"><ShieldCheck className="w-6 h-6 text-[var(--spr-red)]" /><div><h1 className="text-xl font-semibold">Founder Admin Access Required</h1><p className="text-sm text-[var(--spr-text-muted)]">You must be signed in as an Owner to view the Founder/Admin Control Center.</p></div></div><div className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-surface)] p-6"><p className="text-sm text-[var(--spr-text-muted)]">This dashboard contains privileged SPR system telemetry, self-verification reports, and high-confidence executive controls. Please contact your administrator to request Owner role access.</p></div></div>;
 
-  return (
-    <div className="space-y-8">
-      <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-8">
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
-          <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 rounded-full bg-[var(--spr-red)]/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--spr-red)]">
-              <Sparkles className="w-4 h-4" /> SPR Sovereign Control Center
-            </div>
-            <h1 className="text-2xl font-display font-bold text-[var(--spr-text)]">Founder / Owner Command Center</h1>
-            <p className="max-w-2xl text-sm text-[var(--spr-text-muted)]">View observed founder/admin metrics and self-passport evidence for SPR. Unavailable information is shown as not verified.</p>
-          </div>
-          <button onClick={fetchSelfPassport} disabled={loadingPassport} className="spr-btn spr-btn-primary inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-60">
-            <RefreshCw className="w-4 h-4" />
-            {loadingPassport ? 'Refreshing Passport' : 'Fetch SPR Self Passport'}
-          </button>
-        </div>
-
-        {error && <div className="mt-6 rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 p-4 text-sm text-[var(--spr-red)]">{error}</div>}
-
-        <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5">
-            <div className="flex items-center gap-3 text-[var(--spr-text-muted)]"><Lock className="w-4 h-4" /><span className="text-[11px] uppercase tracking-[0.24em] font-semibold">Access Level</span></div>
-            <p className="mt-4 text-3xl font-bold text-[var(--spr-text)]">Owner</p>
-            <p className="mt-2 text-sm text-[var(--spr-text-muted)]">Server-authorized owner access.</p>
-          </div>
-          <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5">
-            <div className="flex items-center gap-3 text-[var(--spr-text-muted)]"><Database className="w-4 h-4" /><span className="text-[11px] uppercase tracking-[0.24em] font-semibold">Autonomy Score</span></div>
-            <p className="mt-4 text-3xl font-bold text-[var(--spr-text)]">{loadingMetrics ? '—' : metrics?.overallScore ?? 'Not verified'}</p>
-            <p className="mt-2 text-sm text-[var(--spr-text-muted)]">Observed founder metrics only.</p>
-          </div>
-          <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5">
-            <div className="flex items-center gap-3 text-[var(--spr-text-muted)]"><ShieldCheck className="w-4 h-4" /><span className="text-[11px] uppercase tracking-[0.24em] font-semibold">Health Status</span></div>
-            <p className="mt-4 text-3xl font-bold text-[var(--spr-text)]">{loadingMetrics ? '—' : metrics?.systemIntegrity ?? 'Not verified'}</p>
-            <p className="mt-2 text-sm text-[var(--spr-text-muted)]">Only backend-reported system integrity is shown.</p>
-          </div>
-          <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5">
-            <div className="flex items-center gap-3 text-[var(--spr-text-muted)]"><ArrowRight className="w-4 h-4" /><span className="text-[11px] uppercase tracking-[0.24em] font-semibold">Mitigations</span></div>
-            <p className="mt-4 text-3xl font-bold text-[var(--spr-text)]">{loadingMetrics ? '—' : metrics?.mitigations ?? 'Not verified'}</p>
-            <p className="mt-2 text-sm text-[var(--spr-text-muted)]">Backend-reported mitigation evidence only.</p>
-          </div>
-        </div>
-      </div>
-      <FounderMonitoringPanel />
-      <FounderLeadsPanel />
-      <FounderTrafficPanel />
-
-      <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
-        <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-6">
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full bg-[var(--spr-accent-soft)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--spr-highlight)]"><Sparkles className="w-4 h-4" /> Evidence-backed self passport</div>
-              <h2 className="mt-4 text-xl font-semibold text-[var(--spr-text)]">SPR Self Passport</h2>
-              <p className="mt-2 text-sm text-[var(--spr-text-muted)]">The newest completed scan of SPR's own repository in this workspace, read from the same tables every other passport uses. Nothing here is seeded or defaulted.</p>
-            </div>
-            <button onClick={fetchSelfPassport} disabled={loadingPassport} className="spr-btn spr-btn-secondary inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"><RefreshCw className="w-4 h-4" />Refresh Passport</button>
-          </div>
-
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">Passport Name</span><p className="mt-2 text-lg font-semibold text-[var(--spr-text)]">{passport?.name ?? 'Not verified'}</p></div>
-            <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">Commit</span><p className="mt-2 text-lg font-semibold text-[var(--spr-text)] font-mono break-all">{passport?.version ? passport.version.slice(0, 12) : 'Not verified'}</p></div>
-            <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">Health</span><p className="mt-2 text-lg font-semibold text-[var(--spr-text)]">{passport?.healthStatus ?? 'Not verified'}</p></div>
-            <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">Acquired</span><p className="mt-2 text-lg font-semibold text-[var(--spr-text)]">{passport?.releaseDate ?? 'Not verified'}</p></div>
-          </div>
-
-          {passport?.publisher && <div className="mt-6 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">Publisher</span><p className="mt-2 text-base font-semibold text-[var(--spr-text)]">{passport.publisher}</p></div>}
-
-          {passport && <div className="mt-6 grid gap-4 sm:grid-cols-4">
-            <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">SBOM Components</span><p className="mt-2 text-lg font-semibold text-[var(--spr-text)]">{typeof passport.sbomComponentCount === 'number' ? passport.sbomComponentCount : 'Not verified'}</p><p className="mt-1 text-[11px] text-[var(--spr-text-muted)]">Syft, from the scanned commit.</p></div>
-            <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">Evidence Items</span><p className="mt-2 text-lg font-semibold text-[var(--spr-text)]">{typeof passport.evidenceCount === 'number' ? passport.evidenceCount : 'Not verified'}</p><p className="mt-1 text-[11px] text-[var(--spr-text-muted)]">Persisted scanner responses.</p></div>
-            <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">Open Findings</span><p className="mt-2 text-lg font-semibold text-[var(--spr-text)]">{typeof passport.openFindings === 'number' ? passport.openFindings : 'Not verified'}</p><p className="mt-1 text-[11px] text-[var(--spr-text-muted)]">Not resolved, closed or verified.</p></div>
-            <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">Critical / High</span><p className="mt-2 text-lg font-semibold text-[var(--spr-text)]">{typeof passport.criticalOrHigh === 'number' ? passport.criticalOrHigh : 'Not verified'}</p><p className="mt-1 text-[11px] text-[var(--spr-text-muted)]">Of the open findings.</p></div>
-          </div>}
-          {passport?.scannedAt && <p className="mt-4 text-[12px] text-[var(--spr-text-muted)]">Scanned {new Date(passport.scannedAt).toLocaleString()} · passport <span className="font-mono">{passport.id}</span></p>}
-          {!loadingPassport && !passport && !error && <p className="mt-6 text-sm text-[var(--spr-text-muted)]">No completed scan of the SPR repository exists in this workspace yet. Run a repository scan of dreamzzzz120-cell/software-passport-registry from the Scans page; this card fills in from that scan and from nothing else.</p>}
-        </div>
-
-        <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6">
-          <div className="flex items-center gap-3 text-[var(--spr-text-muted)]"><Database className="w-4 h-4" /><span className="text-[11px] uppercase tracking-[0.24em] font-semibold">Founder Intelligence Snapshot</span></div>
-          <div className="mt-5 grid gap-4 sm:grid-cols-3">
-            <div className="rounded-md bg-[var(--spr-surface)] p-4 text-[var(--spr-text)] border border-[var(--spr-border)]"><p className="text-[11px] uppercase tracking-[0.18em] text-[var(--spr-text-muted)]">Point-of-Trust</p><p className="mt-3 text-3xl font-bold">{loadingMetrics ? '—' : metrics?.throughput ?? 'Not verified'}</p><p className="mt-2 text-sm text-[var(--spr-text-muted)]">Backend-reported throughput.</p></div>
-            <div className="rounded-md bg-[var(--spr-surface)] p-4 text-[var(--spr-text)] border border-[var(--spr-border)]"><p className="text-[11px] uppercase tracking-[0.18em] text-[var(--spr-text-muted)]">Capital Protected</p><p className="mt-3 text-3xl font-bold">{loadingMetrics ? '—' : metrics?.capitalProtected ?? 'Not verified'}</p><p className="mt-2 text-sm text-[var(--spr-text-muted)]">Only shown when reported by the owner endpoint.</p></div>
-            <div className="rounded-md bg-[var(--spr-surface)] p-4 text-[var(--spr-text)] border border-[var(--spr-border)]"><p className="text-[11px] uppercase tracking-[0.18em] text-[var(--spr-text-muted)]">Active Threat Mitigations</p><p className="mt-3 text-3xl font-bold">{loadingMetrics ? '—' : metrics?.mitigations ?? 'Not verified'}</p><p className="mt-2 text-sm text-[var(--spr-text-muted)]">Backend-reported mitigation evidence.</p></div>
-          </div>
-        </div>
-      </div>
-
-      <FounderCommandCenterPanel />
+  return <div className="space-y-8">
+    <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-8">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4"><div className="space-y-3"><div className="inline-flex items-center gap-2 rounded-full bg-[var(--spr-red)]/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--spr-red)]"><Sparkles className="w-4 h-4" /> SPR Sovereign Control Center</div><h1 className="text-2xl font-display font-bold text-[var(--spr-text)]">Founder / Owner Command Center</h1><p className="max-w-2xl text-sm text-[var(--spr-text-muted)]">View observed founder/admin metrics and self-passport evidence for SPR. Unavailable information is shown as not verified.</p></div><button onClick={fetchSelfPassport} disabled={loadingPassport} className="spr-btn spr-btn-primary inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"><RefreshCw className="w-4 h-4" />{loadingPassport ? 'Refreshing Passport' : 'Fetch SPR Self Passport'}</button></div>
+      {error && <div className="mt-6 rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 p-4 text-sm text-[var(--spr-red)]">{error}</div>}
+      <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4"><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5"><div className="flex items-center gap-3 text-[var(--spr-text-muted)]"><Lock className="w-4 h-4" /><span className="text-[11px] uppercase tracking-[0.24em] font-semibold">Access Level</span></div><p className="mt-4 text-3xl font-bold text-[var(--spr-text)]">Owner</p><p className="mt-2 text-sm text-[var(--spr-text-muted)]">Server-authorized owner access.</p></div><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5"><div className="flex items-center gap-3 text-[var(--spr-text-muted)]"><Database className="w-4 h-4" /><span className="text-[11px] uppercase tracking-[0.24em] font-semibold">Autonomy Score</span></div><p className="mt-4 text-3xl font-bold text-[var(--spr-text)]">{loadingMetrics ? '—' : metrics?.overallScore ?? 'Not verified'}</p><p className="mt-2 text-sm text-[var(--spr-text-muted)]">Observed founder metrics only.</p></div><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5"><div className="flex items-center gap-3 text-[var(--spr-text-muted)]"><ShieldCheck className="w-4 h-4" /><span className="text-[11px] uppercase tracking-[0.24em] font-semibold">Health Status</span></div><p className="mt-4 text-3xl font-bold text-[var(--spr-text)]">{loadingMetrics ? '—' : metrics?.systemIntegrity ?? 'Not verified'}</p><p className="mt-2 text-sm text-[var(--spr-text-muted)]">Only backend-reported system integrity is shown.</p></div><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5"><div className="flex items-center gap-3 text-[var(--spr-text-muted)]"><ArrowRight className="w-4 h-4" /><span className="text-[11px] uppercase tracking-[0.24em] font-semibold">Mitigations</span></div><p className="mt-4 text-3xl font-bold text-[var(--spr-text)]">{loadingMetrics ? '—' : metrics?.mitigations ?? 'Not verified'}</p><p className="mt-2 text-sm text-[var(--spr-text-muted)]">Backend-reported mitigation evidence only.</p></div></div>
     </div>
-  );
+    <FounderMonitoringPanel />
+    <FounderLeadsPanel />
+    <FounderTrafficPanel />
+    <FounderDistributionOpportunities />
+    <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
+      <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-6"><div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4"><div><div className="inline-flex items-center gap-2 rounded-full bg-[var(--spr-accent-soft)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--spr-highlight)]"><Sparkles className="w-4 h-4" /> Evidence-backed self passport</div><h2 className="mt-4 text-xl font-semibold text-[var(--spr-text)]">SPR Self Passport</h2><p className="mt-2 text-sm text-[var(--spr-text-muted)]">The newest completed scan of SPR's own repository in this workspace, read from the same tables every other passport uses. Nothing here is seeded or defaulted.</p></div><button onClick={fetchSelfPassport} disabled={loadingPassport} className="spr-btn spr-btn-secondary inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"><RefreshCw className="w-4 h-4" />Refresh Passport</button></div><div className="mt-6 grid gap-4 sm:grid-cols-2"><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">Passport Name</span><p className="mt-2 text-lg font-semibold text-[var(--spr-text)]">{passport?.name ?? 'Not verified'}</p></div><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">Commit</span><p className="mt-2 text-lg font-semibold text-[var(--spr-text)] font-mono break-all">{passport?.version ? passport.version.slice(0, 12) : 'Not verified'}</p></div><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">Health</span><p className="mt-2 text-lg font-semibold text-[var(--spr-text)]">{passport?.healthStatus ?? 'Not verified'}</p></div><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">Acquired</span><p className="mt-2 text-lg font-semibold text-[var(--spr-text)]">{passport?.releaseDate ?? 'Not verified'}</p></div></div>{passport?.publisher && <div className="mt-6 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">Publisher</span><p className="mt-2 text-base font-semibold text-[var(--spr-text)]">{passport.publisher}</p></div>}{passport && <div className="mt-6 grid gap-4 sm:grid-cols-4"><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">SBOM Components</span><p className="mt-2 text-lg font-semibold text-[var(--spr-text)]">{typeof passport.sbomComponentCount === 'number' ? passport.sbomComponentCount : 'Not verified'}</p><p className="mt-1 text-[11px] text-[var(--spr-text-muted)]">Syft, from the scanned commit.</p></div><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">Evidence Items</span><p className="mt-2 text-lg font-semibold text-[var(--spr-text)]">{typeof passport.evidenceCount === 'number' ? passport.evidenceCount : 'Not verified'}</p><p className="mt-1 text-[11px] text-[var(--spr-text-muted)]">Persisted scanner responses.</p></div><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">Open Findings</span><p className="mt-2 text-lg font-semibold text-[var(--spr-text)]">{typeof passport.openFindings === 'number' ? passport.openFindings : 'Not verified'}</p><p className="mt-1 text-[11px] text-[var(--spr-text-muted)]">Not resolved, closed or verified.</p></div><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">Critical / High</span><p className="mt-2 text-lg font-semibold text-[var(--spr-text)]">{typeof passport.criticalOrHigh === 'number' ? passport.criticalOrHigh : 'Not verified'}</p><p className="mt-1 text-[11px] text-[var(--spr-text-muted)]">Of the open findings.</p></div></div>}{passport?.scannedAt && <p className="mt-4 text-[12px] text-[var(--spr-text-muted)]">Scanned {new Date(passport.scannedAt).toLocaleString()} · passport <span className="font-mono">{passport.id}</span></p>}{!loadingPassport && !passport && !error && <p className="mt-6 text-sm text-[var(--spr-text-muted)]">No completed scan of the SPR repository exists in this workspace yet. Run a repository scan of dreamzzzz120-cell/software-passport-registry from the Scans page; this card fills in from that scan and from nothing else.</p>}</div>
+      <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6"><div className="flex items-center gap-3 text-[var(--spr-text-muted)]"><Database className="w-4 h-4" /><span className="text-[11px] uppercase tracking-[0.24em] font-semibold">Founder Intelligence Snapshot</span></div><div className="mt-5 grid gap-4 sm:grid-cols-3"><div className="rounded-md bg-[var(--spr-surface)] p-4 text-[var(--spr-text)] border border-[var(--spr-border)]"><p className="text-[11px] uppercase tracking-[0.18em] text-[var(--spr-text-muted)]">Point-of-Trust</p><p className="mt-3 text-3xl font-bold">{loadingMetrics ? '—' : metrics?.throughput ?? 'Not verified'}</p><p className="mt-2 text-sm text-[var(--spr-text-muted)]">Backend-reported throughput.</p></div><div className="rounded-md bg-[var(--spr-surface)] p-4 text-[var(--spr-text)] border border-[var(--spr-border)]"><p className="text-[11px] uppercase tracking-[0.18em] text-[var(--spr-text-muted)]">Capital Protected</p><p className="mt-3 text-3xl font-bold">{loadingMetrics ? '—' : metrics?.capitalProtected ?? 'Not verified'}</p><p className="mt-2 text-sm text-[var(--spr-text-muted)]">Only shown when reported by the owner endpoint.</p></div><div className="rounded-md bg-[var(--spr-surface)] p-4 text-[var(--spr-text)] border border-[var(--spr-border)]"><p className="text-[11px] uppercase tracking-[0.18em] text-[var(--spr-text-muted)]">Active Threat Mitigations</p><p className="mt-3 text-3xl font-bold">{loadingMetrics ? '—' : metrics?.mitigations ?? 'Not verified'}</p><p className="mt-2 text-sm text-[var(--spr-text-muted)]">Backend-reported mitigation evidence.</p></div></div></div>
+    </div>
+    <FounderCommandCenterPanel />
+  </div>;
 }
