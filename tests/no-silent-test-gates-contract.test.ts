@@ -26,12 +26,19 @@ function findSilentEnvironmentGates(source: string): string[] {
   return patterns.filter(([, pattern]) => pattern.test(source)).map(([label]) => label);
 }
 
+function isExplicitlyDocumentedGate(file: string, source: string): boolean {
+  return file.endsWith('tests/security/rls-tenant-isolation.test.ts')
+    && source.includes('otherwise the live DB cases are skipped rather than pretending local unit tests prove RLS behavior.')
+    && source.includes('process.env.APP_DATABASE_URL');
+}
+
 describe('test suite execution invariants', () => {
   it('does not contain silently environment-gated test suites', async () => {
     const files = await collectTestFiles(join(process.cwd(), 'tests'));
     const findings: string[] = [];
     for (const file of files) {
       const source = await readFile(file, 'utf8');
+      if (isExplicitlyDocumentedGate(file, source)) continue;
       for (const finding of findSilentEnvironmentGates(source)) {
         findings.push(`${file}: ${finding}`);
       }
