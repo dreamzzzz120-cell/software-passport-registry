@@ -1,53 +1,27 @@
-import { useMemo, useRef, useState, type MouseEvent, type WheelEvent } from 'react';
+import { useMemo, useState } from 'react';
 import { CircleHelp, Filter, Maximize2, Search, Share2, X, ZoomIn, ZoomOut } from 'lucide-react';
 import type { Client, SoftwarePassport } from '../types';
+import { explicitComponentReference, persistedIdentity } from '../lib/trustGraphSecurity';
 
-type GraphAsset = { id: string; name?: string; hostName?: string; type?: string; clientId?: string; clientName?: string; version?: string };
-type GraphFinding = { id?: string; title?: string; control_id?: string; passport_id?: string; passportId?: string; asset_id?: string; client_id?: string; severity?: string; status?: string; description?: string; updated_at?: string };
-type GraphKind = 'client' | 'passport' | 'asset' | 'evidence' | 'finding' | 'vendor' | 'component' | 'vulnerability';
+type GraphAsset = { id: string; name?: string; hostName?: string; type?: string; version?: string };
+type GraphFinding = { id?: string; title?: string; control_id?: string; passport_id?: string; passportId?: string; asset_id?: string; client_id?: string; severity?: string; status?: string; description?: string };
+type GraphKind = 'client' | 'passport' | 'asset' | 'evidence' | 'finding' | 'component' | 'vulnerability';
 type GraphNode = { id: string; label: string; kind: GraphKind; detail: string; meta?: string; x: number; y: number };
 type GraphEdge = { source: string; target: string; label: string };
 
-interface TrustGraphViewProps {
-  clients?: Client[];
-  passports?: SoftwarePassport[];
-  assets?: GraphAsset[];
-  findings?: unknown[];
-}
+interface TrustGraphViewProps { clients?: Client[]; passports?: SoftwarePassport[]; assets?: GraphAsset[]; findings?: unknown[]; }
 
-const COLORS: Record<GraphKind, string> = {
-  vendor: '#c586c0',
-  client: 'var(--spr-highlight)',
-  passport: '#4ec9b0',
-  component: '#9cdcfe',
-  asset: 'var(--spr-amber)',
-  evidence: 'var(--spr-green)',
-  finding: 'var(--spr-red)',
-  vulnerability: '#d16969',
-};
-
-const KIND_ORDER: GraphKind[] = ['vendor', 'client', 'passport', 'component', 'asset', 'evidence', 'finding', 'vulnerability'];
-
-// Plain-English justification for why an edge was drawn. Every relationship
-// must trace to an explicit persisted relationship or an evidence collection.
+const COLORS: Record<GraphKind, string> = { client: 'var(--spr-highlight)', passport: '#4ec9b0', component: '#9cdcfe', asset: 'var(--spr-amber)', evidence: 'var(--spr-green)', finding: 'var(--spr-red)', vulnerability: '#d16969' };
+const KIND_ORDER: GraphKind[] = ['client', 'passport', 'component', 'asset', 'evidence', 'finding', 'vulnerability'];
 const EDGE_RATIONALE: Record<string, string> = {
-  publishes: "Drawn from the passport's persisted publisher relationship.",
   owns: "Drawn from the passport's persisted clientId relationship.",
-  contains: "Drawn because this component is present in the passport's SBOM evidence.",
+  contains: "Drawn because this component is present in the passport's SBOM evidence collection.",
   supports: "Drawn because this evidence record is present in the passport's evidence collection.",
   'has finding': "Drawn because the finding explicitly references this passport, asset, or client by persisted ID.",
-  'has vulnerability': "Drawn because this vulnerability is present in the passport's vulnerability collection.",
-  'affected by': "Drawn because the vulnerability explicitly identifies this SBOM component by its persisted component identity.",
+  'affected by': "Drawn only because the vulnerability contains an explicit persisted componentId/component_id that resolves to this component in the same passport.",
+  'has vulnerability': "Drawn because the vulnerability is explicitly present in the passport's vulnerability collection; no component identity was inferred.",
 };
-
-function short(value: unknown, fallback: string) {
-  const text = String(value || fallback);
-  return text.length > 23 ? `${text.slice(0, 21)}…` : text;
-}
-
-function slug(value: string) {
-  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'unknown';
-}
+const short = (value: unknown, fallback: string) => { const text = String(value || fallback); return text.length > 23 ? `${text.slice(0, 21)}…` : text; };
 
 export default function TrustGraphView({ clients = [], passports = [], assets = [], findings = [] }: TrustGraphViewProps) {
   const [query, setQuery] = useState('');
@@ -56,203 +30,127 @@ export default function TrustGraphView({ clients = [], passports = [], assets = 
   const [selectedEdgeKey, setSelectedEdgeKey] = useState<string | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [view, setView] = useState({ x: 0, y: 0, k: 1 });
-  const dragRef = useRef<{ x: number; y: number } | null>(null);
-  const draggedRef = useRef(false);
+  const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
 
   const { nodes, edges } = useMemo(() => {
-    const graphNodes: GraphNode[] = [];
-    const graphEdges: GraphEdge[] = [];
-    const addNode = (node: GraphNode) => { if (!graphNodes.some((item) => item.id === node.id)) graphNodes.push(node); };
-    const addEdge = (source: string, target: string, label: string) => {
-      if (source !== target && !graphEdges.some((edge) => edge.source === source && edge.target === target && edge.label === label)) graphEdges.push({ source, target, label });
-    };
+    const ns: GraphNode[] = [], es: GraphEdge[] = [];
+    const componentNodeByPersistedId = new Map<string, string>();
+    const addNode = (node: GraphNode) => { if (!ns.some(n => n.id === node.id)) ns.push(node); };
+    const addEdge = (source: string, target: string, label: string) => { if (source !== target && !es.some(e => e.source === source && e.target === target && e.label === label)) es.push({ source, target, label }); };
 
-    const columns = [
-      { kind: 'client' as const, items: clients, y: 110, x: 250, getId: (item: Client) => `client:${item.id}`, getLabel: (item: Client) => item.name, getDetail: (item: Client) => `${item.domain || 'No domain'} · client record` },
-      { kind: 'passport' as const, items: passports, y: 250, x: 420, getId: (item: SoftwarePassport) => `passport:${item.id}`, getLabel: (item: SoftwarePassport) => item.name, getDetail: (item: SoftwarePassport) => `v${item.version} · ${item.publisher || 'publisher unavailable'}` },
-    ];
-    columns.forEach((column) => column.items.forEach((item, index) => addNode({ id: column.getId(item), label: short(column.getLabel(item), column.kind), kind: column.kind, detail: column.getDetail(item), x: column.x, y: column.y + (index % 5) * 70 })));
+    clients.forEach((c, i) => {
+      const id = persistedIdentity(c.id);
+      if (!id) return;
+      addNode({ id: `client:${id}`, label: short(c.name, 'Client'), kind: 'client', detail: `${c.domain || 'No domain'} · client record`, x: 170, y: 100 + (i % 6) * 85 });
+    });
+    passports.forEach((p, i) => {
+      const id = persistedIdentity(p.id);
+      if (!id) return;
+      addNode({ id: `passport:${id}`, label: short(p.name, 'Passport'), kind: 'passport', detail: `v${p.version} · ${p.publisher || 'publisher unavailable'}`, x: 410, y: 140 + (i % 6) * 85 });
+    });
+    assets.forEach((a, i) => {
+      const id = persistedIdentity(a.id);
+      if (!id) return;
+      addNode({ id: `asset:${id}`, label: short(a.name || a.hostName, 'Asset'), kind: 'asset', detail: `${a.type || 'asset'} · ${a.version || 'version unavailable'}`, x: 780, y: 80 + (i % 7) * 80 });
+    });
 
-    assets.forEach((asset, index) => addNode({ id: `asset:${asset.id}`, label: short(asset.name || asset.hostName, 'Asset'), kind: 'asset', detail: `${asset.type || 'asset'} · ${asset.version || 'version unavailable'}`, x: 760, y: 80 + (index % 7) * 70 }));
+    passports.forEach((p, pi) => {
+      const passportId = persistedIdentity(p.id);
+      if (!passportId) return;
+      const pid = `passport:${passportId}`;
+      const clientId = persistedIdentity((p as SoftwarePassport & { clientId?: string }).clientId);
+      if (clientId && clients.some(c => persistedIdentity(c.id) === clientId)) addEdge(`client:${clientId}`, pid, 'owns');
 
-    let vendorIndex = 0;
-    const seenVendors = new Set<string>();
-    passports.forEach((passport, index) => {
-      const passportId = `passport:${passport.id}`;
-      const clientId = String((passport as SoftwarePassport & { clientId?: string }).clientId || '');
-      if (clientId && clients.some((client) => client.id === clientId)) addEdge(`client:${clientId}`, passportId, 'owns');
+      // Publisher text is descriptive metadata. It is NOT a persisted Vendor FK.
+      // Therefore this graph intentionally creates no Vendor node and no publishes edge.
 
-      if (passport.publisher) {
-        const vendorId = `vendor:${slug(passport.publisher)}`;
-        if (!seenVendors.has(vendorId)) {
-          seenVendors.add(vendorId);
-          addNode({ id: vendorId, label: short(passport.publisher, 'Vendor'), kind: 'vendor', detail: 'Publisher of one or more registered passports', x: 90, y: 80 + (vendorIndex % 6) * 70 });
-          vendorIndex += 1;
-        }
-        addEdge(vendorId, passportId, 'publishes');
-      }
-
-      // Never infer Passport → Asset from matching names or IDs. An apparent
-      // match is not evidence of identity or ownership. Asset relationships
-      // are rendered only when an authoritative persisted FK is supplied by
-      // the graph data model; this component currently has no such field.
-
-      passport.evidence.forEach((evidence: any, evidenceIndex) => {
-        const id = `evidence:${passport.id}:${String(evidence.id || evidenceIndex)}`;
-        addNode({ id, label: short(evidence.name, 'Evidence'), kind: 'evidence', detail: `${evidence.status || 'status unavailable'} · ${evidence.type || 'record'}`, meta: [evidence.hash && `hash ${evidence.hash}`, evidence.signer && `signer ${evidence.signer}`, evidence.timestamp && `observed ${evidence.timestamp}`].filter(Boolean).join(' · ') || undefined, x: 1090, y: 45 + ((index * 3 + evidenceIndex) % 9) * 60 });
-        addEdge(passportId, id, 'supports');
+      p.evidence.forEach((e: any, ei) => {
+        const evidenceId = persistedIdentity(e.id);
+        const id = evidenceId ? `evidence:${passportId}:${evidenceId}` : `evidence:${passportId}:index:${ei}`;
+        addNode({ id, label: short(e.name, 'Evidence'), kind: 'evidence', detail: `${e.status || 'status unavailable'} · ${e.type || 'record'}`, meta: [e.hash && `hash ${e.hash}`, e.signer && `signer ${e.signer}`, e.timestamp && `observed ${e.timestamp}`].filter(Boolean).join(' · ') || undefined, x: 1040, y: 45 + ((pi * 3 + ei) % 9) * 60 });
+        addEdge(pid, id, 'supports');
       });
 
-      // Rendering every SBOM component would overwhelm the graph for large
-      // manifests, so only components that are flagged or tied to a known
-      // vulnerability get their own node — the rest are summarized in the
-      // passport's own detail text rather than fabricated as "safe" nodes.
-      const components = Array.isArray(passport.sbom) ? passport.sbom : [];
-      const vulnerableComponentNames = new Set((passport.vulnerabilities || []).map((v: any) => v.component));
-      const riskComponents = components.filter((c: any) => c.trustLevel !== 'Trusted' || vulnerableComponentNames.has(c.name));
-      riskComponents.forEach((component: any, componentIndex: number) => {
-        const id = `component:${passport.id}:${slug(component.name || String(componentIndex))}`;
-        addNode({ id, label: short(component.name, 'Component'), kind: 'component', detail: `${component.dependencyType || 'dependency'} · ${component.trustLevel || 'trust level unavailable'}`, meta: component.purl, x: 600, y: 60 + ((index * 4 + componentIndex) % 8) * 70 });
-        addEdge(passportId, id, 'contains');
+      const components = Array.isArray(p.sbom) ? p.sbom : [];
+      const vulnerabilities = Array.isArray(p.vulnerabilities) ? p.vulnerabilities : [];
+      const explicitComponentRefs = new Set(vulnerabilities.map((v: any) => explicitComponentReference(v)).filter((id): id is string => Boolean(id)));
+      const riskComponents = components.filter((c: any) => c.trustLevel !== 'Trusted');
+      const componentsToShow = components.filter((c: any) => {
+        const componentId = persistedIdentity(c.id) ?? persistedIdentity(c.componentId);
+        return c.trustLevel !== 'Trusted' || Boolean(componentId && explicitComponentRefs.has(componentId));
+      });
+
+      componentsToShow.forEach((c: any, ci) => {
+        const componentId = persistedIdentity(c.id) ?? persistedIdentity(c.componentId);
+        const purl = persistedIdentity(c.purl);
+        const identity = componentId ? `id:${componentId}` : purl ? `purl:${purl}` : `index:${ci}`;
+        const id = `component:${passportId}:${identity}`;
+        addNode({ id, label: short(c.name, 'Component'), kind: 'component', detail: `${c.dependencyType || 'dependency'} · ${c.trustLevel || 'trust level unavailable'}`, meta: purl, x: 610, y: 60 + ((pi * 4 + ci) % 8) * 70 });
+        if (componentId) componentNodeByPersistedId.set(`${passportId}:${componentId}`, id);
+        addEdge(pid, id, 'contains');
       });
       if (components.length > riskComponents.length) {
-        const extra = components.length - riskComponents.length;
-        const existing = graphNodes.find((n) => n.id === passportId);
-        if (existing) existing.detail = `${existing.detail} · ${extra} additional trusted component${extra === 1 ? '' : 's'} not shown`;
+        const node = ns.find(n => n.id === pid);
+        if (node) node.detail += ` · ${components.length - riskComponents.length} additional trusted component${components.length - riskComponents.length === 1 ? '' : 's'} not shown unless explicitly vulnerability-referenced`;
       }
 
-      (passport.vulnerabilities || []).forEach((vuln: any, vulnIndex: number) => {
-        const id = `vulnerability:${passport.id}:${String(vuln.id || vulnIndex)}`;
-        addNode({ id, label: short(vuln.title || vuln.component, 'Vulnerability'), kind: 'vulnerability', detail: `${vuln.severity || 'severity unavailable'} · ${vuln.status || 'status unavailable'}`, meta: [vuln.cvss != null && `CVSS ${vuln.cvss}`, vuln.fixedVersion && `fix ${vuln.fixedVersion}`, vuln.description].filter(Boolean).join(' · ') || undefined, x: 1260, y: 60 + (vulnIndex % 8) * 70 });
-        const matchedComponent = riskComponents.find((c: any) => c.name === vuln.component);
-        if (matchedComponent) addEdge(`component:${passport.id}:${slug(matchedComponent.name || '')}`, id, 'affected by');
-        else addEdge(passportId, id, 'has vulnerability');
+      vulnerabilities.forEach((v: any, vi) => {
+        const vulnerabilityId = persistedIdentity(v.id) ?? `index:${vi}`;
+        const id = `vulnerability:${passportId}:${vulnerabilityId}`;
+        addNode({ id, label: short(v.title || v.component, 'Vulnerability'), kind: 'vulnerability', detail: `${v.severity || 'severity unavailable'} · ${v.status || 'status unavailable'}`, meta: [v.cvss != null && `CVSS ${v.cvss}`, v.fixedVersion && `fix ${v.fixedVersion}`, v.description].filter(Boolean).join(' · ') || undefined, x: 1270, y: 60 + (vi % 8) * 70 });
+
+        // A component → vulnerability edge is valid only when the vulnerability
+        // carries an explicit persisted component foreign key that resolves to a
+        // component in this same passport. Never join by name, PURL, version, or index.
+        const componentId = explicitComponentReference(v);
+        const componentNodeId = componentId ? componentNodeByPersistedId.get(`${passportId}:${componentId}`) : undefined;
+        if (componentNodeId) addEdge(componentNodeId, id, 'affected by');
+        else addEdge(pid, id, 'has vulnerability');
       });
     });
 
-    findings.forEach((raw, index) => {
-      const finding = raw as GraphFinding;
-      const id = `finding:${String(finding.id || index)}`;
-      const linkedPassportId = finding.passport_id || finding.passportId;
-      addNode({ id, label: short(finding.title || finding.control_id, 'Finding'), kind: 'finding', detail: `${finding.severity || 'severity unavailable'} · ${finding.status || 'status unavailable'}`, meta: finding.description, x: 930, y: 90 + (index % 9) * 65 });
-      if (linkedPassportId && passports.some((passport) => passport.id === linkedPassportId)) addEdge(`passport:${linkedPassportId}`, id, 'has finding');
-      else if (finding.asset_id && assets.some((asset) => asset.id === finding.asset_id)) addEdge(`asset:${finding.asset_id}`, id, 'has finding');
-      else if (finding.client_id && clients.some((client) => client.id === finding.client_id)) addEdge(`client:${finding.client_id}`, id, 'has finding');
+    findings.forEach((raw, i) => {
+      const f = raw as GraphFinding;
+      const findingId = persistedIdentity(f.id);
+      const id = findingId ? `finding:${findingId}` : `finding:index:${i}`;
+      const linkedPassport = persistedIdentity(f.passport_id) ?? persistedIdentity(f.passportId);
+      const linkedAsset = persistedIdentity(f.asset_id);
+      const linkedClient = persistedIdentity(f.client_id);
+      addNode({ id, label: short(f.title || f.control_id, 'Finding'), kind: 'finding', detail: `${f.severity || 'severity unavailable'} · ${f.status || 'status unavailable'}`, meta: f.description, x: 930, y: 90 + (i % 9) * 65 });
+      if (linkedPassport && passports.some(p => persistedIdentity(p.id) === linkedPassport)) addEdge(`passport:${linkedPassport}`, id, 'has finding');
+      else if (linkedAsset && assets.some(a => persistedIdentity(a.id) === linkedAsset)) addEdge(`asset:${linkedAsset}`, id, 'has finding');
+      else if (linkedClient && clients.some(c => persistedIdentity(c.id) === linkedClient)) addEdge(`client:${linkedClient}`, id, 'has finding');
     });
-
-    return { nodes: graphNodes, edges: graphEdges };
+    return { nodes: ns, edges: es };
   }, [assets, clients, findings, passports]);
 
-  const visibleNodes = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return nodes.filter((node) => (kindFilter === 'all' || node.kind === kindFilter) && (!needle || `${node.label} ${node.detail} ${node.meta || ''}`.toLowerCase().includes(needle)));
-  }, [kindFilter, nodes, query]);
-  const visibleIds = new Set(visibleNodes.map((node) => node.id));
-  const visibleEdges = edges.filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target));
-  const selected = nodes.find((node) => node.id === selectedId);
-  const nodeById = new Map<string, GraphNode>(nodes.map((node): [string, GraphNode] => [node.id, node]));
-  const selectedEdge = selectedEdgeKey ? edges.find((edge) => `${edge.source}-${edge.target}-${edge.label}` === selectedEdgeKey) : undefined;
-
-  const selectNode = (id: string) => { setSelectedId(id); setSelectedEdgeKey(null); };
-  const selectEdge = (edge: GraphEdge) => { setSelectedEdgeKey(`${edge.source}-${edge.target}-${edge.label}`); setSelectedId(null); };
-
+  const visibleNodes = useMemo(() => { const q = query.trim().toLowerCase(); return nodes.filter(n => (kindFilter === 'all' || n.kind === kindFilter) && (!q || `${n.label} ${n.detail} ${n.meta || ''}`.toLowerCase().includes(q))); }, [kindFilter, nodes, query]);
+  const visibleIds = new Set(visibleNodes.map(n => n.id));
+  const visibleEdges = edges.filter(e => visibleIds.has(e.source) && visibleIds.has(e.target));
+  const nodeById = new Map(nodes.map(n => [n.id, n]));
+  const selected = nodes.find(n => n.id === selectedId);
+  const selectedEdge = selectedEdgeKey ? edges.find(e => `${e.source}-${e.target}-${e.label}` === selectedEdgeKey) : undefined;
   const activeId = hoveredId || selectedId;
-  const activeNeighbors = useMemo(() => {
-    if (!activeId) return null;
-    const set = new Set<string>([activeId]);
-    visibleEdges.forEach((edge) => { if (edge.source === activeId) set.add(edge.target); if (edge.target === activeId) set.add(edge.source); });
-    return set;
-  }, [activeId, visibleEdges]);
-  const connectedEdges = selected ? visibleEdges.filter((edge) => edge.source === selected.id || edge.target === selected.id) : [];
+  const activeNeighbors = useMemo(() => { if (!activeId) return null; const set = new Set<string>([activeId]); visibleEdges.forEach(e => { if (e.source === activeId) set.add(e.target); if (e.target === activeId) set.add(e.source); }); return set; }, [activeId, visibleEdges]);
+  const connectedEdges = selected ? visibleEdges.filter(e => e.source === selected.id || e.target === selected.id) : [];
+  const selectNode = (id: string) => { setSelectedId(id); setSelectedEdgeKey(null); };
+  const selectEdge = (e: GraphEdge) => { setSelectedEdgeKey(`${e.source}-${e.target}-${e.label}`); setSelectedId(null); };
+  const zoomBy = (factor: number) => setView(v => ({ ...v, k: Math.min(2.5, Math.max(0.5, v.k * factor)) }));
 
-  const clampZoom = (k: number) => Math.min(2.5, Math.max(0.5, k));
-  const zoomBy = (factor: number) => setView((v) => ({ ...v, k: clampZoom(v.k * factor) }));
-  const resetView = () => setView({ x: 0, y: 0, k: 1 });
-  const onWheel = (event: WheelEvent<SVGSVGElement>) => { event.preventDefault(); zoomBy(event.deltaY > 0 ? 0.9 : 1.1); };
-  const onPointerDown = (event: MouseEvent<SVGSVGElement>) => { dragRef.current = { x: event.clientX, y: event.clientY }; draggedRef.current = false; };
-  const onPointerMove = (event: MouseEvent<SVGSVGElement>) => {
-    if (!dragRef.current) return;
-    const dx = event.clientX - dragRef.current.x; const dy = event.clientY - dragRef.current.y;
-    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) draggedRef.current = true;
-    dragRef.current = { x: event.clientX, y: event.clientY };
-    setView((v) => ({ ...v, x: v.x + dx, y: v.y + dy }));
-  };
-  const onPointerUp = () => { dragRef.current = null; };
+  return <section className="space-y-6" aria-labelledby="trust-graph-title">
+    <header className="spr-panel p-6"><div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[.06em] text-[#9cdcfe]"><Share2 className="h-4 w-4" /> Trust graph</div><h1 id="trust-graph-title" className="mt-2 text-3xl font-semibold tracking-tight">Observed relationships</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--spr-text-muted)]">Relationships are drawn only from explicit persisted relationships or authoritative evidence collections. Matching names, labels, PURLs, versions, or unrelated IDs never create a relationship. Click a node for its record, or click a relationship line for why it was drawn.</p></div><div className="flex gap-2 text-xs text-[var(--spr-text-muted)]"><span>{nodes.length} nodes</span><span>·</span><span>{edges.length} relationships</span></div></div>
+      <div className="mt-5 flex flex-col gap-3 md:flex-row"><label className="relative min-w-0 flex-1"><Search size={16} className="absolute left-3 top-3 text-[var(--spr-text-muted)]" /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search loaded records…" className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] py-2.5 pl-9 pr-9 text-sm text-[var(--spr-text)] outline-none" />{query && <button onClick={() => setQuery('')} aria-label="Clear search" className="absolute right-2 top-2 p-1"><X size={15} /></button>}</label><label className="flex items-center gap-2 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-3"><Filter size={15} /><select value={kindFilter} onChange={e => setKindFilter(e.target.value as typeof kindFilter)} className="bg-transparent py-2.5 text-sm"><option value="all">All record types</option>{KIND_ORDER.map(k => <option key={k} value={k}>{k}</option>)}</select></label></div>
+    </header>
+    <div className="overflow-hidden spr-panel relative"><div className="absolute right-3 top-3 z-10 flex gap-1"><button onClick={() => zoomBy(1.2)} aria-label="Zoom in" className="grid h-7 w-7 place-items-center rounded-md border"><ZoomIn size={14} /></button><button onClick={() => zoomBy(1 / 1.2)} aria-label="Zoom out" className="grid h-7 w-7 place-items-center rounded-md border"><ZoomOut size={14} /></button><button onClick={() => setView({ x: 0, y: 0, k: 1 })} aria-label="Reset view" className="grid h-7 w-7 place-items-center rounded-md border"><Maximize2 size={13} /></button></div>
+      <div className="overflow-x-auto"><svg viewBox="0 0 1400 680" role="img" aria-label="Trust graph of loaded tenant records" className="h-[560px] min-w-[1200px] w-full cursor-grab" onWheel={e => { e.preventDefault(); zoomBy(e.deltaY > 0 ? .9 : 1.1); }} onMouseDown={e => setDrag({ x: e.clientX, y: e.clientY })} onMouseMove={e => { if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; setDrag({ x: e.clientX, y: e.clientY }); setView(v => ({ ...v, x: v.x + dx, y: v.y + dy })); }} onMouseUp={() => setDrag(null)} onMouseLeave={() => setDrag(null)}><defs><pattern id="graph-grid" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M 32 0 L 0 0 0 32" fill="none" stroke="#ffffff" strokeOpacity=".035" /></pattern></defs><rect width="1400" height="680" fill="url(#graph-grid)" /><g transform={`translate(${view.x} ${view.y}) scale(${view.k})`}>
+        {visibleEdges.map(e => { const s = nodeById.get(e.source), t = nodeById.get(e.target); if (!s || !t) return null; const key = `${e.source}-${e.target}-${e.label}`, active = selectedEdgeKey === key || !!activeId && (e.source === activeId || e.target === activeId); return <g key={key} role="button" tabIndex={0} onClick={() => selectEdge(e)} onKeyDown={ev => { if (ev.key === 'Enter' || ev.key === ' ') selectEdge(e); }}><title>{`${s.label} — ${e.label} → ${t.label}`}</title><line x1={s.x} y1={s.y} x2={t.x} y2={t.y} stroke={active ? 'var(--spr-highlight)' : 'var(--spr-gray)'} strokeOpacity={active ? .85 : activeId ? .08 : .25} strokeWidth={active ? 2 : 1} /><text x={(s.x + t.x) / 2} y={(s.y + t.y) / 2 - 5} fill={active ? 'var(--spr-highlight)' : 'var(--spr-text-faint)'} fontSize="11" textAnchor="middle">{e.label}</text></g>; })}
+        {visibleNodes.map(n => { const active = activeId === n.id, neighbor = activeNeighbors ? activeNeighbors.has(n.id) : true; return <g key={n.id} role="button" tabIndex={0} onClick={() => selectNode(n.id)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') selectNode(n.id); }} onMouseEnter={() => setHoveredId(n.id)} onMouseLeave={() => setHoveredId(null)} opacity={activeId && !neighbor ? .2 : 1}><title>{`${n.kind}: ${n.label} — ${n.detail}`}</title><circle cx={n.x} cy={n.y} r={selectedId === n.id ? 23 : active ? 21 : 18} fill={COLORS[n.kind]} fillOpacity={active ? .3 : .18} stroke={COLORS[n.kind]} strokeWidth={selectedId === n.id || active ? 3 : 1.5} /><text x={n.x} y={n.y + 3} fill={COLORS[n.kind]} fontSize="11" textAnchor="middle" fontWeight="700">{n.kind.slice(0, 4).toUpperCase()}</text><text x={n.x} y={n.y + 34} fill="var(--spr-text)" fontSize="11" textAnchor="middle">{n.label}</text></g>; })}
+        {!visibleNodes.length && <text x="700" y="340" fill="var(--spr-text-muted)" fontSize="15" textAnchor="middle">No loaded records match this filter.</text>}
+      </g></svg></div>
+      <div className="flex flex-wrap items-center gap-2 border-t border-[var(--spr-border)] px-5 py-4 text-xs text-[var(--spr-text-muted)]">{KIND_ORDER.map(k => { const count = nodes.filter(n => n.kind === k).length, active = kindFilter === k; return <button key={k} onClick={() => setKindFilter(active ? 'all' : k)} className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1" style={{ borderColor: active ? COLORS[k] : 'var(--spr-border)', color: active ? COLORS[k] : 'var(--spr-text-muted)' }}><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: COLORS[k] }} />{k}<span>{count}</span></button>; })}<span className="ml-auto inline-flex items-center gap-1"><CircleHelp size={14} /> hover to trace connections, click for details</span></div>
+    </div>
 
-  return (
-    <section className="space-y-6" aria-labelledby="trust-graph-title">
-      <header className="spr-panel p-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[.06em] text-[#9cdcfe]"><Share2 className="h-4 w-4" /> Trust graph</div>
-            <h1 id="trust-graph-title" className="mt-2 text-3xl font-semibold tracking-tight">Observed relationships</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--spr-text-muted)]">Relationships are drawn only from explicit persisted relationships or evidence collections. Matching names or IDs alone never create a trust relationship. Click a node for its record, or click a relationship line for why it was drawn.</p>
-          </div>
-          <div className="flex flex-wrap gap-2 text-xs text-[var(--spr-text-muted)]"><span>{nodes.length} nodes</span><span>·</span><span>{edges.length} relationships</span></div>
-        </div>
-        <div className="mt-5 flex flex-col gap-3 md:flex-row">
-          <label className="relative min-w-0 flex-1"><Search size={16} className="absolute left-3 top-3 text-[var(--spr-text-muted)]" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search loaded records…" className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] py-2.5 pl-9 pr-9 text-sm text-[var(--spr-text)] outline-none placeholder:text-[var(--spr-text-faint)] focus:border-[var(--spr-highlight)]/40" />{query && <button onClick={() => setQuery('')} aria-label="Clear search" className="absolute right-2 top-2 rounded-lg p-1 text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]"><X size={15} /></button>}</label>
-          <label className="flex items-center gap-2 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-3"><Filter size={15} className="text-[var(--spr-text-muted)]" /><select value={kindFilter} onChange={(event) => setKindFilter(event.target.value as typeof kindFilter)} className="bg-transparent py-2.5 text-sm text-[var(--spr-text)] outline-none"><option value="all">All record types</option>{KIND_ORDER.map((kind) => <option key={kind} value={kind}>{kind}</option>)}</select></label>
-        </div>
-      </header>
-
-      <div className="overflow-hidden spr-panel relative">
-        <div className="absolute right-3 top-3 z-10 flex gap-1" title="Scroll to zoom, drag to pan">
-          <button onClick={() => zoomBy(1.2)} aria-label="Zoom in" title="Zoom in" className="grid h-7 w-7 place-items-center rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]"><ZoomIn size={14} /></button>
-          <button onClick={() => zoomBy(1 / 1.2)} aria-label="Zoom out" title="Zoom out" className="grid h-7 w-7 place-items-center rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]"><ZoomOut size={14} /></button>
-          <button onClick={resetView} aria-label="Reset view" title="Reset zoom and pan" className="grid h-7 w-7 place-items-center rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]"><Maximize2 size={13} /></button>
-        </div>
-        <div className="overflow-x-auto">
-          <svg viewBox="0 0 1400 680" role="img" aria-label="Trust graph of loaded tenant records" className="h-[560px] min-w-[1200px] w-full cursor-grab active:cursor-grabbing" onWheel={onWheel} onMouseDown={onPointerDown} onMouseMove={onPointerMove} onMouseUp={onPointerUp} onMouseLeave={onPointerUp}>
-            <defs><pattern id="graph-grid" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M 32 0 L 0 0 0 32" fill="none" stroke="#ffffff" strokeOpacity=".035" /></pattern></defs>
-            <rect width="1400" height="680" fill="url(#graph-grid)" />
-            <g transform={`translate(${view.x} ${view.y}) scale(${view.k})`}>
-            {visibleEdges.map((edge) => {
-              const source = nodeById.get(edge.source); const target = nodeById.get(edge.target); if (!source || !target) return null;
-              const key = `${edge.source}-${edge.target}-${edge.label}`;
-              const isSelected = selectedEdgeKey === key;
-              const touchesActive = activeId ? (edge.source === activeId || edge.target === activeId) : false;
-              const dimmed = activeId ? !touchesActive : false;
-              return (
-                <g key={key} role="button" tabIndex={0} onClick={() => { if (!draggedRef.current) selectEdge(edge); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') selectEdge(edge); }} className="cursor-pointer">
-                  <title>{`${source.label} — ${edge.label} → ${target.label}`}</title>
-                  <line x1={source.x} y1={source.y} x2={target.x} y2={target.y} stroke={isSelected || touchesActive ? 'var(--spr-highlight)' : 'var(--spr-gray)'} strokeOpacity={dimmed ? 0.08 : isSelected || touchesActive ? 0.85 : 0.25} strokeWidth={isSelected || touchesActive ? 2 : 1} />
-                  <text x={(source.x + target.x) / 2} y={(source.y + target.y) / 2 - 5} fill={isSelected || touchesActive ? 'var(--spr-highlight)' : 'var(--spr-text-faint)'} fillOpacity={dimmed ? 0.15 : 1} fontSize="11" textAnchor="middle">{edge.label}</text>
-                </g>
-              );
-            })}
-            {visibleNodes.map((node) => {
-              const isActive = activeId === node.id;
-              const isNeighbor = activeNeighbors ? activeNeighbors.has(node.id) : true;
-              const dimmed = activeId ? !isNeighbor : false;
-              return (
-                <g key={node.id} role="button" tabIndex={0} onClick={() => { if (!draggedRef.current) selectNode(node.id); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') selectNode(node.id); }} onMouseEnter={() => setHoveredId(node.id)} onMouseLeave={() => setHoveredId(null)} className="cursor-pointer" opacity={dimmed ? 0.2 : 1}>
-                  <title>{`${node.kind}: ${node.label} — ${node.detail}`}</title>
-                  <circle cx={node.x} cy={node.y} r={selectedId === node.id ? 23 : isActive ? 21 : 18} fill={COLORS[node.kind]} fillOpacity={isActive ? 0.3 : 0.18} stroke={COLORS[node.kind]} strokeWidth={selectedId === node.id || isActive ? 3 : 1.5} />
-                  <text x={node.x} y={node.y + 3} fill={COLORS[node.kind]} fontSize="11" textAnchor="middle" fontWeight="700">{node.kind.slice(0, 4).toUpperCase()}</text>
-                  <text x={node.x} y={node.y + 34} fill="var(--spr-text)" fontSize="11" textAnchor="middle">{node.label}</text>
-                </g>
-              );
-            })}
-            {!visibleNodes.length && <text x="700" y="340" fill="var(--spr-text-muted)" fontSize="15" textAnchor="middle">No loaded records match this filter.</text>}
-            </g>
-          </svg>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 border-t border-[var(--spr-border)] px-5 py-4 text-xs text-[var(--spr-text-muted)]">
-          {KIND_ORDER.map((kind) => { const count = nodes.filter((n) => n.kind === kind).length; const isActive = kindFilter === kind; return (<button key={kind} onClick={() => setKindFilter(isActive ? 'all' : kind)} title={`${count} ${kind} node${count === 1 ? '' : 's'} — click to ${isActive ? 'clear this' : 'show only this'} filter`} className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 transition-colors" style={{ borderColor: isActive ? COLORS[kind] : 'var(--spr-border)', backgroundColor: isActive ? `${COLORS[kind]}22` : 'transparent', color: isActive ? COLORS[kind] : 'var(--spr-text-muted)' }}><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: COLORS[kind] }} />{kind}<span className="text-[var(--spr-text-faint)]">{count}</span></button>); })}
-          <span className="ml-auto inline-flex items-center gap-1 text-[var(--spr-text-muted)]" title="Hover a node to see its direct relationships highlighted; click for full details."><CircleHelp size={14} /> hover to trace connections, click for details</span>
-        </div>
-      </div>
-
-      {selected && (
-        <aside className="rounded-md border border-[var(--spr-accent)] bg-[var(--spr-accent-soft)] p-5" aria-label="Selected graph record">
-          <div className="flex items-start justify-between gap-4"><div><div className="text-[12px] font-bold uppercase tracking-[.2em]" style={{ color: COLORS[selected.kind] }}>{selected.kind}</div><h2 className="mt-1 text-lg font-semibold text-[var(--spr-text)]">{selected.label}</h2><p className="mt-2 text-sm text-[var(--spr-text)]">{selected.detail}</p>{selected.meta && <p className="mt-2 text-xs leading-5 text-[var(--spr-text-muted)]">{selected.meta}</p>}</div><button onClick={() => setSelectedId(null)} aria-label="Close selected record" className="rounded-lg p-1 text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]"><X size={16} /></button></div>
-          <div className="mt-4 text-xs text-[var(--spr-text-muted)]">Record ID: <code className="text-[var(--spr-text-muted)]">{selected.id.split(':').slice(1).join(':')}</code></div>
-          {connectedEdges.length > 0 && (<div className="mt-4 border-t border-[var(--spr-accent)] pt-4"><div className="text-[12px] font-semibold uppercase tracking-[.06em] text-[var(--spr-text-muted)]">{connectedEdges.length} connected record{connectedEdges.length === 1 ? '' : 's'}</div><div className="mt-2 flex flex-wrap gap-2">{connectedEdges.map((edge) => { const otherId = edge.source === selected.id ? edge.target : edge.source; const other = nodeById.get(otherId); if (!other) return null; const direction = edge.source === selected.id ? '→' : '←'; return (<button key={`${edge.source}-${edge.target}-${edge.label}`} onClick={() => selectNode(other.id)} title={`${edge.label}: jump to ${other.label}`} className="inline-flex items-center gap-1.5 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-2 py-1 text-xs hover:border-[var(--spr-highlight)]/40"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: COLORS[other.kind] }} /><span className="text-[var(--spr-text-faint)]">{direction} {edge.label}</span><span className="text-[var(--spr-text)]">{other.label}</span></button>); })}</div></div>)}
-        </aside>
-      )}
-
-      {selectedEdge && (() => { const source = nodeById.get(selectedEdge.source); const target = nodeById.get(selectedEdge.target); if (!source || !target) return null; return (<aside className="rounded-md border border-[var(--spr-accent)] bg-[var(--spr-accent-soft)] p-5" aria-label="Selected relationship"><div className="flex items-start justify-between gap-4"><div><div className="text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--spr-text-faint)]">Relationship</div><h2 className="mt-1 text-lg font-semibold text-[var(--spr-text)]">{source.label} <span className="text-[var(--spr-text-muted)]">— {selectedEdge.label} →</span> {target.label}</h2><p className="mt-2 text-sm text-[var(--spr-text)]">{EDGE_RATIONALE[selectedEdge.label] || 'Drawn because the records contain an explicit persisted relationship.'}</p><div className="mt-3 grid gap-3 sm:grid-cols-2"><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] p-3 text-xs"><div className="font-semibold" style={{ color: COLORS[source.kind] }}>{source.kind} · {source.label}</div><div className="mt-1 text-[var(--spr-text-muted)]">{source.detail}</div></div><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] p-3 text-xs"><div className="font-semibold" style={{ color: COLORS[target.kind] }}>{target.kind} · {target.label}</div><div className="mt-1 text-[var(--spr-text-muted)]">{target.detail}</div></div></div></div><button onClick={() => setSelectedEdgeKey(null)} aria-label="Close selected relationship" className="rounded-lg p-1 text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]"><X size={16} /></button></div></aside>); })()}
-    </section>
-  );
+    {selected && <aside className="rounded-md border border-[var(--spr-accent)] bg-[var(--spr-accent-soft)] p-5"><div className="flex items-start justify-between gap-4"><div><div className="text-xs font-bold uppercase tracking-[.2em]" style={{ color: COLORS[selected.kind] }}>{selected.kind}</div><h2 className="mt-1 text-lg font-semibold">{selected.label}</h2><p className="mt-2 text-sm">{selected.detail}</p>{selected.meta && <p className="mt-2 text-xs leading-5 text-[var(--spr-text-muted)]">{selected.meta}</p>}</div><button onClick={() => setSelectedId(null)} aria-label="Close selected record"><X size={16} /></button></div><div className="mt-4 text-xs">Record ID: <code>{selected.id.split(':').slice(1).join(':')}</code></div>{connectedEdges.length > 0 && <div className="mt-4 border-t pt-4"><div className="text-xs font-semibold uppercase">{connectedEdges.length} connected record{connectedEdges.length === 1 ? '' : 's'}</div><div className="mt-2 flex flex-wrap gap-2">{connectedEdges.map(e => { const other = nodeById.get(e.source === selected.id ? e.target : e.source); return other ? <button key={`${e.source}-${e.target}-${e.label}`} onClick={() => selectNode(other.id)} className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs"><span style={{ color: COLORS[other.kind] }}>●</span>{e.source === selected.id ? '→' : '←'} {e.label} {other.label}</button> : null; })}</div></div>}</aside>}
+    {selectedEdge && (() => { const s = nodeById.get(selectedEdge.source), t = nodeById.get(selectedEdge.target); if (!s || !t) return null; return <aside className="rounded-md border border-[var(--spr-accent)] bg-[var(--spr-accent-soft)] p-5"><div className="flex items-start justify-between gap-4"><div><div className="text-xs font-semibold uppercase">Relationship</div><h2 className="mt-1 text-lg font-semibold">{s.label} <span className="text-[var(--spr-text-muted)]">— {selectedEdge.label} →</span> {t.label}</h2><p className="mt-2 text-sm">{EDGE_RATIONALE[selectedEdge.label] || 'Drawn because the records contain an explicit persisted relationship.'}</p></div><button onClick={() => setSelectedEdgeKey(null)} aria-label="Close selected relationship"><X size={16} /></button></div></aside>; })()}
+  </section>;
 }
