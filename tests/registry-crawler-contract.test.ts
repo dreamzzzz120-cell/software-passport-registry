@@ -38,7 +38,9 @@ describe('registry crawler guardrails', () => {
     expect(worker).toContain("INSERT INTO registry_crawl_runs (id, started_at)");
     expect(worker).toContain('UPDATE registry_crawl_runs SET finished_at = CURRENT_TIMESTAMP, discovered = $2, enqueued = $3, skipped = $4, error = $5, note = $6');
     expect(worker).toContain("github search rate-limited");
-    expect(read('worker.ts')).toContain("supervise('registry-crawler',runRegistryCrawlerLoop)");
+    const runtimeWorker = read('worker.ts');
+    expect(runtimeWorker).toContain("import { runPublicRepositoryAgentTeamLoop } from './src/agents/public-repository-team-v2.ts';");
+    expect(runtimeWorker).toContain("supervise('registry-crawler',runPublicRepositoryAgentTeamLoop)");
   });
 
   it('the public registry scales: paginated index, total count, direct detail lookup', () => {
