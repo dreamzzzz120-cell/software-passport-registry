@@ -172,7 +172,7 @@ export default function FounderCommandCenterPanel() {
                         {p.holderCompany && <div className="text-xs text-[var(--spr-text-muted)]">{p.holderEmail}</div>}
                       </div>
                     ) : (
-                      <span className="text-[var(--spr-text-muted)]">No Owner on tenant {p.tenantId}</span>
+                      <span className="text-[var(--spr-text-muted)]">No owner recorded</span>
                     )}
                   </td>
                   <td className="py-2 pr-3 text-[var(--spr-text)]">{p.overallScore ?? 'Not verified'}</td>
