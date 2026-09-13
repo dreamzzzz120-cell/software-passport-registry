@@ -20,8 +20,8 @@ CREATE INDEX IF NOT EXISTS distribution_contacts_pipeline_stage_idx ON distribut
 
 CREATE TABLE IF NOT EXISTS distribution_campaign_settings (
   tenant_id text PRIMARY KEY DEFAULT 'tenant-free-review-system' CHECK (tenant_id = 'tenant-free-review-system'),
-  discovery_enabled boolean NOT NULL DEFAULT false,
-  outreach_enabled boolean NOT NULL DEFAULT false,
+  discovery_enabled boolean NOT NULL DEFAULT true,
+  outreach_enabled boolean NOT NULL DEFAULT true,
   daily_send_cap integer NOT NULL DEFAULT 50 CHECK (daily_send_cap BETWEEN 1 AND 500),
   followup_delay_days integer NOT NULL DEFAULT 5 CHECK (followup_delay_days BETWEEN 1 AND 30),
   max_followups integer NOT NULL DEFAULT 2 CHECK (max_followups BETWEEN 0 AND 3),
