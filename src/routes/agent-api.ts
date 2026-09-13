@@ -10,6 +10,10 @@ const softwareInput = z.object({ query: z.string().trim().min(1).max(500) }).str
 const vendorRiskInput = z.object({ passportId: z.string().trim().min(1).max(255), staleAfterDays: z.number().int().min(1).max(3650).optional() }).strict();
 const commandInput = z.object({ input: z.string().trim().min(1).max(500), context: z.object({ path: z.string().max(500).optional() }).optional() }).strict();
 
+// Verbs that ask the agent to change state or hand down a decision. None of
+// these has (or will have) a wired action; see the refusal in /command.
+const MUTATION_INTENT = /\b(delete|remove|purge|drop|wipe|erase|destroy|update|edit|modify|change|override|overwrite|set|mark|flag|resolve|close|reopen|approve|reject|revoke|certify|whitelist|blocklist|ban)\b/;
+
 export function createAgentApiRouter() {
   const router = Router();
   router.use(requireAuth);
@@ -23,6 +27,12 @@ export function createAgentApiRouter() {
       const input = parsed.data.input;
       const q = input.toLowerCase();
       if (/what can you do|help|how do you work/.test(q)) return res.json({ schemaVersion: 'spr-experience-agent-v1', intent: 'help', reply: 'I can summarize observed workspace data, inspect a passport, review vendor risk, and take you to the right workspace. Every factual result includes provenance. I do not invent evidence or silently change trust decisions.', actions: [{ label: 'Show my risk', command: 'What is my biggest risk today?' }, { label: 'Show clients', path: '/clients' }, { label: 'Show passports', path: '/passports' }, { label: 'Show vendor risk', path: '/vendors' }] });
+      // The agent has no write actions at all. A request to delete, change or
+      // decide something is refused here, explicitly, before any other intent
+      // can match: "delete all passports" must not quietly become "open the
+      // Passports page", and "mark X as VERIFIED" must not become a lookup
+      // whose answer could be read as agreement.
+      if (MUTATION_INTENT.test(q)) return res.json({ schemaVersion: 'spr-experience-agent-v1', intent: 'refused_mutation', reply: 'I can’t do that. The SPR Agent has no ability to create, change, delete, resolve or decide anything — it only reports records it can retrieve from your workspace. Use the relevant SPR workspace for changes; every change there is authorised and recorded on its own.', actions: [{ label: 'Risk summary', command: 'What is my biggest risk today?' }, { label: 'Open Passports', path: '/passports' }] });
       const nav = navigationIntent(q);
       if (nav) return res.json({ schemaVersion: 'spr-experience-agent-v1', intent: 'navigation', ...nav });
       if (/biggest risk|highest risk|most risky|risk today|what should i (do|work on)|priority|priorities|overview|summary|how are we doing/.test(q)) {
