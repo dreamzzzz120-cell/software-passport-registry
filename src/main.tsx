@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import ExperienceAgent from './components/ExperienceAgent';
 import './index.css';
 import './styles/spr-shell.css';
 import './styles/command-center.css';
@@ -14,8 +15,17 @@ if (!root) {
 
 installPageViewTracking();
 
+function SprApplication() {
+  return (
+    <>
+      <App />
+      <ExperienceAgent />
+    </>
+  );
+}
+
 ReactDOM.createRoot(root).render(
   <React.StrictMode>
-    <App />
+    <SprApplication />
   </React.StrictMode>,
 );
