@@ -533,7 +533,7 @@ export default function App() {
     case '/msp': view = <MSPCommandCenter clients={clients} alerts={alerts} passports={passports} role={role} onSelectClient={setSelectedClientId} onSelectPassport={setSelectedPassportId} onNavigate={navigate} verificationDecisions={verificationDecisions} dataStatus={dataStatus} onRetry={() => setReloadKey((n) => n + 1)} />; break;
     // Guided wrapper around the existing Universal Intake endpoints. It adds no
     case '/agent-trust': view = <AgentTrustView />; break;
-    case '/ai-trust-center': view = <AITrustCenterView role={role} />; break;
+    case '/ai-trust-center': view = <AITrustCenterView role={role} passports={passports} />; break;
     case '/enterprise-readiness': view = <EnterpriseReadinessView clients={clients} />; break;
     case '/investor': view = <InvestorHomeView passports={passports} clients={clients} alerts={alerts} onShowTelemetry={() => navigate('/scans')} onNavigateTab={onNavigateTab} />; break;
     // Hiding the tile is not enough: the path is still typeable. A non-founder

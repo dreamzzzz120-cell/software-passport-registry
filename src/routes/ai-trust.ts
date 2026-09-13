@@ -6,6 +6,8 @@ import { z } from 'zod';
 import { AuthenticatedRequest, requireRole } from '../middleware/security.ts';
 import { appendAuditEntry } from '../security/audit-log.ts';
 import { validateAIProvenance, type AIProvenance } from '../security/ai-provenance.ts';
+import { claudeStructured, isClaudeConfigured, claudeModel, CLAUDE_PROVIDER_NAME, EVIDENCE_READER_RULES } from '../lib/server/claude.ts';
+import { COUNCIL_SEATS, COUNCIL_POLICY, REVIEW_JSON_SCHEMA, CHAIR_JSON_SCHEMA, acceptReview, acceptChair, floorVerdict, reviewerSystemPrompt, chairSystemPrompt, type SeatOutcome, type CouncilResult } from '../agents/trust-council.ts';
 
 const DATA_CLASSIFICATIONS = ['unclassified', 'internal', 'confidential', 'regulated'] as const;
 const STATUSES = ['active', 'under_review', 'deprecated', 'blocked'] as const;
@@ -50,8 +52,58 @@ function extractJson(text: string): unknown {
   try { return JSON.parse(trimmed); } catch { return null; }
 }
 
-const AI_PROMPT_VERSION = 'spr.ai.explanation.v1';
+const AI_PROMPT_VERSION = 'spr.ai.explanation.v2';
+const COUNCIL_PROMPT_VERSION = 'spr.ai.trust-council.v1';
+const ASK_PROMPT_VERSION = 'spr.ai.ask.v1';
+// AI Gateway is the fallback provider when Claude is not configured.
 const AI_MODEL = process.env.AI_MODEL || 'openai/gpt-5.4';
+
+const EXPLANATION_JSON_SCHEMA = {
+  type: 'object', additionalProperties: false, required: ['summary', 'keyFindings', 'unknowns', 'recommendedNextSteps', 'evidenceIds'],
+  properties: {
+    summary: { type: 'string' },
+    keyFindings: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['statement', 'evidenceIds'], properties: { statement: { type: 'string' }, evidenceIds: { type: 'array', items: { type: 'string' } } } } },
+    unknowns: { type: 'array', items: { type: 'string' } },
+    recommendedNextSteps: { type: 'array', items: { type: 'string' } },
+    evidenceIds: { type: 'array', items: { type: 'string' } },
+  },
+};
+
+const askSchema = z.object({
+  passportId: z.string().trim().min(1).max(255),
+  question: z.string().trim().min(3).max(2000),
+  history: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().trim().min(1).max(4000) }).strict()).max(10).default([]),
+}).strict();
+const askAnswerSchema = z.object({
+  answer: z.string().trim().min(1).max(4000),
+  citedIds: z.array(z.string().trim().min(1).max(200)).max(100),
+  unknowns: z.array(z.string().trim().min(1).max(600)).max(15),
+}).strict();
+const ASK_JSON_SCHEMA = {
+  type: 'object', additionalProperties: false, required: ['answer', 'citedIds', 'unknowns'],
+  properties: { answer: { type: 'string' }, citedIds: { type: 'array', items: { type: 'string' } }, unknowns: { type: 'array', items: { type: 'string' } } },
+};
+
+function aiProviderAvailable(): 'claude' | 'gateway' | null {
+  if (isClaudeConfigured()) return 'claude';
+  if (process.env.AI_GATEWAY_API_KEY) return 'gateway';
+  return null;
+}
+
+/**
+ * The tenant-scoped, read-only snapshot every AI surface reasons over.
+ * Returns null when the passport is not this tenant's.
+ */
+async function loadEvidenceSnapshot(db: any, tenantId: string, passportId: string) {
+  const passport = ((await db.execute(sql`SELECT id,name,version,publisher,overall_score AS "overallScore",verification_status AS "verificationStatus" FROM passports WHERE id=${passportId} AND tenant_id=${tenantId} LIMIT 1`)) as any).rows?.[0];
+  if (!passport) return null;
+  const observations = ((await db.execute(sql`SELECT id,observation_version,generated_at,immutable_payload FROM trust_observations WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY observation_version DESC LIMIT 20`)) as any).rows || [];
+  const findings = ((await db.execute(sql`SELECT id,control_id,title,severity,status,description,evidence_ids FROM trust_findings WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY updated_at DESC LIMIT 100`)) as any).rows || [];
+  const evidence = ((await db.execute(sql`SELECT id,provider,control_id,subject,source_url,observed_at,verification_method,status,severity,value,evidence_hash,limitation FROM evidence_ledger WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY observed_at DESC LIMIT 200`)) as any).rows || [];
+  // Findings are citable too: the council's concerns point at them.
+  const allowedIds = new Set<string>([...evidence.map((row: any) => String(row.id)), ...findings.map((row: any) => String(row.id))]);
+  return { passport, observations, findings, evidence, allowedIds, context: buildEvidenceContext(passport, observations, findings, evidence) };
+}
 const AI_TRUST_READ_ROLES = ['Owner', 'Admin', 'Operator'] as const;
 
 function buildEvidenceContext(passport: any, observations: any[], findings: any[], evidence: any[]): string {
@@ -190,22 +242,19 @@ export function createAiTrustRouter() {
   router.post('/explain-passport', requireRole([...AI_TRUST_READ_ROLES]), async (req: AuthenticatedRequest, res, next) => {
     const passportId = typeof req.body?.passportId === 'string' ? req.body.passportId.trim() : '';
     if (!passportId) return res.status(400).json({ error: 'PASSPORT_ID_REQUIRED' });
-    if (!process.env.AI_GATEWAY_API_KEY) return res.status(503).json({ error: 'AI_NOT_CONFIGURED', message: 'AI explanation is unavailable until AI_GATEWAY_API_KEY is configured.' });
+    const provider = aiProviderAvailable();
+    if (!provider) return res.status(503).json({ error: 'AI_NOT_CONFIGURED', message: 'AI explanation is unavailable until ANTHROPIC_API_KEY (or the fallback AI_GATEWAY_API_KEY) is configured.' });
     try {
       const db = req.db!;
       const tenantId = req.user!.tenantId;
-      const passportResult = await db.execute(sql`SELECT id,name,version,publisher,overall_score AS "overallScore",verification_status AS "verificationStatus" FROM passports WHERE id=${passportId} AND tenant_id=${tenantId} LIMIT 1`);
-      const passport = (passportResult as any).rows?.[0];
-      if (!passport) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
-
-      const observationsResult = await db.execute(sql`SELECT id,observation_version,generated_at,immutable_payload FROM trust_observations WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY observation_version DESC LIMIT 20`);
-      const findingsResult = await db.execute(sql`SELECT id,control_id,title,severity,status,description,evidence_ids FROM trust_findings WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY updated_at DESC LIMIT 100`);
-      const evidenceResult = await db.execute(sql`SELECT id,provider,control_id,subject,source_url,observed_at,verification_method,status,severity,value,evidence_hash,limitation FROM evidence_ledger WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY observed_at DESC LIMIT 200`);
-      const observations = (observationsResult as any).rows || [];
-      const findings = (findingsResult as any).rows || [];
-      const evidence = (evidenceResult as any).rows || [];
+      // Tenant-scoped snapshot: WHERE id=${passportId} AND tenant_id=${tenantId}
+      // and WHERE tenant_id=${tenantId} AND passport_id=${passportId} inside
+      // loadEvidenceSnapshot; nothing outside this tenant can reach the model.
+      const snapshot = await loadEvidenceSnapshot(db, tenantId, passportId);
+      if (!snapshot) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
+      const { passport, evidence } = snapshot;
       const allowedEvidenceIds = new Set(evidence.map((row: any) => String(row.id)));
-      const evidenceContext = buildEvidenceContext(passport, observations, findings, evidence);
+      const evidenceContext = snapshot.context;
 
       const system = [
         'You are the SPR Evidence Explanation Engine.',
@@ -218,18 +267,126 @@ export function createAiTrustRouter() {
         'Every keyFinding must cite one or more evidence IDs from the supplied snapshot. Recommendations may be based only on observed findings and limitations.',
       ].join('\n');
       const prompt = `Evidence snapshot (authoritative, read-only):\n${evidenceContext}\n\nExplain this passport for a human MSP operator. Do not make any claim that cannot be grounded in the snapshot.`;
-      const result = await generateText({ model: AI_MODEL, system, prompt, maxOutputTokens: 3000 });
-      const parsed = aiExplanationSchema.safeParse(extractJson(result.text));
+      let modelOutput: unknown;
+      let modelUsed: string;
+      let providerName: string;
+      if (provider === 'claude') {
+        const result = await claudeStructured({ system, user: prompt, schema: EXPLANATION_JSON_SCHEMA, maxTokens: 3000 });
+        modelOutput = result.data; modelUsed = result.model; providerName = CLAUDE_PROVIDER_NAME;
+      } else {
+        const result = await generateText({ model: AI_MODEL, system, prompt, maxOutputTokens: 3000 });
+        modelOutput = extractJson(result.text); modelUsed = AI_MODEL; providerName = 'AI Gateway';
+      }
+      const parsed = aiExplanationSchema.safeParse(modelOutput);
       if (!parsed.success) return res.status(502).json({ error: 'AI_OUTPUT_INVALID', message: 'The AI returned an invalid explanation; no authoritative state was changed.' });
       const explanation: AiExplanation = parsed.data;
       const referencedIds = new Set([...explanation.evidenceIds, ...explanation.keyFindings.flatMap((finding) => finding.evidenceIds)]);
       for (const evidenceId of referencedIds) {
         if (!allowedEvidenceIds.has(evidenceId)) return res.status(502).json({ error: 'AI_OUTPUT_UNSUPPORTED_EVIDENCE', message: 'The AI referenced evidence that was not present in the authoritative snapshot; no authoritative state was changed.' });
       }
-      const provenance: AIProvenance = { model: 'AI Gateway', modelVersion: AI_MODEL, promptVersion: AI_PROMPT_VERSION, evidenceIds: [...referencedIds], generatedAt: new Date().toISOString() };
+      const provenance: AIProvenance = { model: providerName, modelVersion: modelUsed, promptVersion: AI_PROMPT_VERSION, evidenceIds: [...referencedIds], generatedAt: new Date().toISOString() };
       if (!validateAIProvenance(provenance)) return res.status(500).json({ error: 'AI_PROVENANCE_INVALID' });
       await appendAuditEntry(db, { tenantId, action: 'ai.explanation.generated', actor: req.user!.email, payload: { passportId, model: provenance.modelVersion, promptVersion: provenance.promptVersion, evidenceIds: provenance.evidenceIds } });
       return res.json({ passportId, explanation, provenance, authoritative: false, note: 'AI explanation only. SPR trust state remains determined by authoritative evidence and deterministic scoring.' });
+    } catch (error) { return next(error); }
+  });
+
+  // Reports which AI provider this deployment will use, so the UI can say
+  // "unavailable" before offering a button that would fail.
+  router.get('/ai-status', requireRole([...AI_TRUST_READ_ROLES]), (_req: AuthenticatedRequest, res) => {
+    const provider = aiProviderAvailable();
+    return res.json({ available: provider !== null, provider: provider === 'claude' ? CLAUDE_PROVIDER_NAME : provider === 'gateway' ? 'AI Gateway' : null, model: provider === 'claude' ? claudeModel() : provider === 'gateway' ? AI_MODEL : null, trustCouncil: provider === 'claude', ask: provider === 'claude' });
+  });
+
+  /**
+   * Trust Council: four specialist reviews and a chair synthesis, each a
+   * separate Claude call over the same tenant-scoped snapshot. Reviews that
+   * cite anything outside the snapshot are discarded and reported as such.
+   * The session is stored with provenance as its own record; it never
+   * touches passports, findings or scores.
+   */
+  router.post('/trust-council', requireRole([...AI_TRUST_READ_ROLES]), async (req: AuthenticatedRequest, res, next) => {
+    const passportId = typeof req.body?.passportId === 'string' ? req.body.passportId.trim() : '';
+    if (!passportId) return res.status(400).json({ error: 'PASSPORT_ID_REQUIRED' });
+    if (!isClaudeConfigured()) return res.status(503).json({ error: 'AI_NOT_CONFIGURED', message: 'The Trust Council requires ANTHROPIC_API_KEY to be configured on this deployment.' });
+    try {
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const snapshot = await loadEvidenceSnapshot(db, tenantId, passportId);
+      if (!snapshot) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
+      const userMessage = `Evidence snapshot (authoritative, read-only):\n${snapshot.context}\n\nReview this software passport from your seat. Cite only ids present in the snapshot.`;
+
+      const seats: SeatOutcome[] = await Promise.all(COUNCIL_SEATS.map(async (seat) => {
+        try {
+          const result = await claudeStructured({ system: reviewerSystemPrompt(seat, EVIDENCE_READER_RULES), user: userMessage, schema: REVIEW_JSON_SCHEMA, maxTokens: 2500 });
+          return acceptReview(seat, result.data, snapshot.allowedIds);
+        } catch (error) {
+          return { seat: seat.id, title: seat.title, status: 'failed' as const, review: null, reason: `MODEL_CALL_FAILED: ${error instanceof Error ? error.message.slice(0, 200) : 'unknown'}` };
+        }
+      }));
+
+      let chairOutcome: ReturnType<typeof acceptChair>;
+      const accepted = seats.filter((s) => s.status === 'reviewed');
+      if (accepted.length === 0) {
+        chairOutcome = { chair: null, verdict: 'INSUFFICIENT_EVIDENCE', reason: 'NO_ACCEPTED_REVIEWS: every seat failed or was discarded, so there is nothing to synthesise.' };
+      } else {
+        try {
+          const chairInput = `Evidence snapshot (authoritative, read-only):\n${snapshot.context}\n\nReviewer outputs:\n${JSON.stringify(accepted.map((s) => ({ seat: s.seat, title: s.title, review: s.review })))}\n\nSynthesise the council verdict. Cite only ids present in the snapshot.`;
+          const result = await claudeStructured({ system: chairSystemPrompt(EVIDENCE_READER_RULES), user: chairInput, schema: CHAIR_JSON_SCHEMA, maxTokens: 2500 });
+          chairOutcome = acceptChair(result.data, seats, snapshot.allowedIds);
+        } catch (error) {
+          chairOutcome = { chair: null, verdict: floorVerdict(seats), reason: `MODEL_CALL_FAILED: ${error instanceof Error ? error.message.slice(0, 200) : 'unknown'}` };
+        }
+      }
+
+      const citedIds = [...new Set<string>([
+        ...seats.flatMap((s) => (s.review ? [...s.review.citedIds, ...s.review.concerns.flatMap((c) => c.evidenceIds)] : [])),
+        ...(chairOutcome.chair?.citedIds ?? []),
+      ])].filter((cid) => snapshot.allowedIds.has(cid));
+
+      const council: CouncilResult = { verdict: chairOutcome.verdict, chair: chairOutcome.chair, seats, evidenceCount: snapshot.evidence.length, findingCount: snapshot.findings.length, citedIds, policy: COUNCIL_POLICY };
+      const provenance: AIProvenance = { model: CLAUDE_PROVIDER_NAME, modelVersion: claudeModel(), promptVersion: COUNCIL_PROMPT_VERSION, evidenceIds: citedIds, generatedAt: new Date().toISOString() };
+      if (!validateAIProvenance(provenance)) return res.status(500).json({ error: 'AI_PROVENANCE_INVALID' });
+      const sessionId = id('council');
+      await db.execute(sql`
+        INSERT INTO trust_council_sessions (id, tenant_id, passport_id, verdict, result_json, provenance_json, chair_note, requested_by)
+        VALUES (${sessionId}, ${tenantId}, ${passportId}, ${council.verdict}, ${JSON.stringify(council)}::jsonb, ${JSON.stringify(provenance)}::jsonb, ${chairOutcome.reason}, ${req.user!.email})
+      `);
+      await appendAuditEntry(db, { tenantId, action: 'ai.trust_council.convened', actor: req.user!.email, payload: { passportId, sessionId, verdict: council.verdict, seatsReviewed: accepted.length, seatsDiscarded: seats.filter((s) => s.status !== 'reviewed').length } });
+      return res.status(201).json({ sessionId, passportId, council, chairNote: chairOutcome.reason, provenance, authoritative: false, note: 'AI explanation only. SPR trust state remains determined by authoritative evidence and deterministic scoring.' });
+    } catch (error) { return next(error); }
+  });
+
+  router.get('/trust-council/:passportId', requireRole([...AI_TRUST_READ_ROLES]), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const rows = ((await req.db!.execute(sql`SELECT id, passport_id AS "passportId", verdict, result_json AS council, provenance_json AS provenance, chair_note AS "chairNote", requested_by AS "requestedBy", created_at AS "createdAt" FROM trust_council_sessions WHERE tenant_id=${req.user!.tenantId} AND passport_id=${String(req.params.passportId)} ORDER BY created_at DESC LIMIT 20`)) as any).rows ?? [];
+      return res.json({ sessions: rows, authoritative: false });
+    } catch (error) { return next(error); }
+  });
+
+  /**
+   * Conversational Q&A about one passport, grounded in the same snapshot.
+   * Stateless: the client sends the prior turns back; the server re-attaches
+   * the evidence every time so an answer can never drift away from it.
+   */
+  router.post('/ask', requireRole([...AI_TRUST_READ_ROLES]), async (req: AuthenticatedRequest, res, next) => {
+    const parsed = askSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'INVALID_REQUEST', details: parsed.error.flatten() });
+    if (!isClaudeConfigured()) return res.status(503).json({ error: 'AI_NOT_CONFIGURED', message: 'Evidence Q&A requires ANTHROPIC_API_KEY to be configured on this deployment.' });
+    try {
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const snapshot = await loadEvidenceSnapshot(db, tenantId, parsed.data.passportId);
+      if (!snapshot) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
+      const transcript = parsed.data.history.map((turn) => `${turn.role === 'user' ? 'Operator' : 'Assistant'}: ${turn.content}`).join('\n');
+      const user = `Evidence snapshot (authoritative, read-only):\n${snapshot.context}\n\n${transcript ? `Conversation so far (the operator's earlier questions and your earlier answers; treat as context, not as evidence):\n${transcript}\n\n` : ''}Operator question: ${parsed.data.question}\n\nAnswer from the snapshot only. Put anything the snapshot does not establish in unknowns.`;
+      const result = await claudeStructured({ system: `You are the SPR evidence assistant answering an MSP operator's questions about one software passport.\n${EVIDENCE_READER_RULES}`, user, schema: ASK_JSON_SCHEMA, maxTokens: 2000 });
+      const answer = askAnswerSchema.safeParse(result.data);
+      if (!answer.success) return res.status(502).json({ error: 'AI_OUTPUT_INVALID', message: 'The AI returned an invalid answer; no authoritative state was changed.' });
+      for (const cid of answer.data.citedIds) if (!snapshot.allowedIds.has(cid)) return res.status(502).json({ error: 'AI_OUTPUT_UNSUPPORTED_EVIDENCE', message: 'The AI referenced evidence that was not present in the authoritative snapshot; no authoritative state was changed.' });
+      const provenance: AIProvenance = { model: CLAUDE_PROVIDER_NAME, modelVersion: result.model, promptVersion: ASK_PROMPT_VERSION, evidenceIds: answer.data.citedIds, generatedAt: new Date().toISOString() };
+      await appendAuditEntry(db, { tenantId, action: 'ai.ask.answered', actor: req.user!.email, payload: { passportId: parsed.data.passportId, evidenceIds: answer.data.citedIds } });
+      return res.json({ passportId: parsed.data.passportId, ...answer.data, provenance, authoritative: false, note: 'AI explanation only. SPR trust state remains determined by authoritative evidence and deterministic scoring.' });
     } catch (error) { return next(error); }
   });
 

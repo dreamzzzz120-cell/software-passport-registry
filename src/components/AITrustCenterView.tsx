@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Bot, ChevronRight, Plus, Shield, Trash2 } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
+import TrustCouncilPanel from './TrustCouncilPanel';
+import type { SoftwarePassport } from '../types';
 
 type AiSystem = {
   id: string; name: string; vendor: string; model: string; version: string; purpose: string;
@@ -28,7 +30,7 @@ function parseList(value: string): string[] {
   return value.split(',').map((item) => item.trim()).filter(Boolean);
 }
 
-export default function AITrustCenterView({ role = 'Viewer' }: { role?: string }) {
+export default function AITrustCenterView({ role = 'Viewer', passports = [] }: { role?: string; passports?: SoftwarePassport[] }) {
   const [systems, setSystems] = useState<AiSystem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -126,6 +128,8 @@ export default function AITrustCenterView({ role = 'Viewer' }: { role?: string }
       </header>
 
       {error && <p role="alert" className="rounded-md border border-[var(--spr-red)]/30 bg-[var(--spr-red)]/10 px-4 py-3 text-sm text-[var(--spr-red)]">{error}</p>}
+
+      <TrustCouncilPanel passports={passports.map((p) => ({ id: p.id, name: p.name, version: p.version }))} />
 
       {showForm && (
         <div className="rounded-md border border-[var(--spr-accent)] bg-[var(--spr-accent-soft)] p-5 space-y-3">
