@@ -68,8 +68,14 @@ export default function FounderDashboardView({ userRole }: FounderDashboardViewP
     setError(null);
     try {
       const response = await apiFetch('/api/passports/self-passport');
-      if (!response.ok) throw new Error(`Self passport request failed (${response.status})`);
-      const data = await response.json();
+      const data = await response.json().catch(() => null);
+      if (response.status === 404) {
+        // Not an error: there is simply no completed scan of the SPR repository
+        // in this workspace yet. The card explains what to do.
+        setPassport(null);
+        return;
+      }
+      if (!response.ok) throw new Error(data?.error || `Self passport request failed (${response.status})`);
       setPassport({
         id: data.id,
         name: data.name,
