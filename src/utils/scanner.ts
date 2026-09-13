@@ -22,13 +22,23 @@ import { verifyEvidenceIntegrity } from './evidence-integrity.ts';
 import { config } from '../config.ts';
 import { calculateAndPersistPassportScore, type CanonicalFinding } from '../trust/scoring-engine.ts';
 import { guardAIClaims } from '../security/ai-claim-guard.ts';
+import { claudeStructured, isClaudeConfigured, EVIDENCE_READER_RULES } from '../lib/server/claude.ts';
 
-// Structured, validated shape required from the Gemini evidence-reasoning
-// call below - see the MODULE 8 comment for why this exists.
-const geminiReasoningSchema = z.object({
+// Structured, validated shape required from the AI evidence-reasoning call
+// below (Claude first, Gemini as fallback) - see the MODULE 8 comment.
+const aiReasoningSchema = z.object({
   summary: z.string().trim().min(1).max(6000),
   citedIds: z.array(z.string().trim().min(1).max(200)).max(200),
 }).strict();
+const AI_REASONING_JSON_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['summary', 'citedIds'],
+  properties: {
+    summary: { type: 'string', description: '3-4 dense, professional paragraphs, objective tone, no fluff.' },
+    citedIds: { type: 'array', items: { type: 'string' }, description: 'Only ids that appear in EVIDENCE COLLECTED or FINDINGS DISCOVERED.' },
+  },
+} as const;
 
 // Helper to write a cryptographic audit log into the Postgres blockchain
 export async function addPostgresAuditLog(tenantId: string, action: string, actor: string, payload: any) {
@@ -711,7 +721,7 @@ export async function runComprehensiveScan(
     }
 
     // ==========================================
-    // MODULE 8: AI Evidence Reasoning Engine (Gemini-3.5-flash)
+    // MODULE 8: AI Evidence Reasoning Engine (Claude; Gemini fallback)
     //
     // Evidence/finding content originates from scanned third-party
     // repositories and is therefore untrusted (an attacker can control
@@ -723,7 +733,7 @@ export async function runComprehensiveScan(
     // heuristic summary below, mirroring the pattern already used in
     // src/routes/ai-trust.ts.
     // ==========================================
-    await logJobStep(jobId, 'ai-evidence-reasoning', 'Aggregating all collected evidence and compiling a professional risk audit via Gemini...');
+    await logJobStep(jobId, 'ai-evidence-reasoning', `Aggregating all collected evidence and compiling a professional risk audit via ${isClaudeConfigured() ? 'Claude' : config.gemini.apiKey ? 'Gemini' : 'the deterministic compiler (no AI provider configured)'}...`);
     await db.update(agentJobs).set({ progress: 92, updatedAt: new Date() });
 
     // Gather all stored evidence items and scan findings for this asset run
@@ -735,16 +745,16 @@ export async function runComprehensiveScan(
       .from(evidenceItems)
       .where(and(eq(evidenceItems.assetId, passportId), eq(evidenceItems.tenantId, tenantId)));
 
-    // mathematically calculate derived score beforehand to pass into Gemini as context
+    // mathematically calculate derived score beforehand to pass into the model as context
     const calculatedScores = await calculateAndStoreTrustScore(passportId, tenantId);
 
     const geminiKey = config.gemini.apiKey;
+    const aiProvider: 'claude' | 'gemini' | null = isClaudeConfigured() ? 'claude' : geminiKey ? 'gemini' : null;
     let aiSummaryText = '';
+    let aiModelUsed = '';
 
-    if (geminiKey) {
+    if (aiProvider) {
       try {
-        const ai = new GoogleGenAI({ apiKey: geminiKey });
-
         const evidenceForPrompt = collectedEvidence.map(e => ({ id: e.id, type: e.type, verified: e.verified === 1, signer: e.signer, details: e.rawContent }));
         const findingsForPrompt = collectedFindings.map(f => ({ id: f.id, category: f.category, severity: f.severity, title: f.title, description: f.description }));
         const allowedEvidenceIds = new Set<string>([...evidenceForPrompt.map(e => String(e.id)), ...findingsForPrompt.map(f => String(f.id))]);
@@ -782,22 +792,37 @@ Respond with ONLY a JSON object, no markdown code fences, matching exactly this 
   "citedIds": string[] (the "id" values from EVIDENCE COLLECTED / FINDINGS DISCOVERED above that support the summary; never include an id that is not present in those lists)
 }`;
 
-        const response = await ai.models.generateContent({
-          model: 'gemini-3.5-flash',
-          contents: reasoningPrompt
-        });
-
-        const rawText = response.text || '';
-        const jsonText = rawText.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-        const parsedJson = (() => { try { return JSON.parse(jsonText); } catch { return null; } })();
-        const parsed = geminiReasoningSchema.safeParse(parsedJson);
+        let parsedJson: unknown = null;
+        if (aiProvider === 'claude') {
+          // Claude: the JSON shape is enforced by the API (output_config) and
+          // re-validated below exactly like the Gemini path.
+          const result = await claudeStructured({
+            system: `You are the core AI Evidence Reasoning Engine of the Software Passport Registry.\n${EVIDENCE_READER_RULES}`,
+            user: reasoningPrompt,
+            schema: AI_REASONING_JSON_SCHEMA as unknown as Record<string, unknown>,
+            maxTokens: 3000,
+          });
+          parsedJson = result.data;
+          aiModelUsed = result.model;
+        } else {
+          const ai = new GoogleGenAI({ apiKey: geminiKey! });
+          const response = await ai.models.generateContent({
+            model: 'gemini-3.5-flash',
+            contents: reasoningPrompt
+          });
+          const rawText = response.text || '';
+          const jsonText = rawText.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+          parsedJson = (() => { try { return JSON.parse(jsonText); } catch { return null; } })();
+          aiModelUsed = 'gemini-3.5-flash';
+        }
+        const parsed = aiReasoningSchema.safeParse(parsedJson);
 
         if (!parsed.success) {
-          throw new Error('AI_OUTPUT_INVALID: Gemini response did not match the required structured shape.');
+          throw new Error(`AI_OUTPUT_INVALID: ${aiModelUsed || aiProvider} response did not match the required structured shape.`);
         }
         const unsupportedId = parsed.data.citedIds.find((citedId) => !allowedEvidenceIds.has(citedId));
         if (unsupportedId !== undefined) {
-          throw new Error('AI_OUTPUT_UNSUPPORTED_EVIDENCE: Gemini cited an evidence/finding id that was not present in the supplied snapshot.');
+          throw new Error(`AI_OUTPUT_UNSUPPORTED_EVIDENCE: ${aiModelUsed || aiProvider} cited an evidence/finding id that was not present in the supplied snapshot.`);
         }
 
         const groundedSummary = parsed.data.summary;
@@ -832,15 +857,15 @@ Respond with ONLY a JSON object, no markdown code fences, matching exactly this 
         await addPostgresAuditLog(tenantId, 'AI_SUMMARY_PUBLISHED', 'ai-evidence-reasoning', {
           passportId,
           jobId,
-          model: 'gemini-3.5-flash',
-          promptVersion: 'scanner-ai-evidence-v3',
+          model: aiModelUsed,
+          promptVersion: 'scanner-ai-evidence-v4',
           evidenceIds: parsed.data.citedIds,
           generatedAt: new Date().toISOString(),
         });
-        await logJobStep(jobId, 'ai-evidence-reasoning', 'Gemini Reasoning complete. Executive audit successfully compiled and claim-guard verified.');
-      } catch (geminiError: any) {
-        console.error('[Gemini Reasoning Failed]', geminiError instanceof Error ? geminiError.message : 'unknown error');
-        await logJobStep(jobId, 'ai-evidence-reasoning', 'Gemini API call timed out, failed, or returned unsupported output. Falling back to secure static compiler.', 'Warning');
+        await logJobStep(jobId, 'ai-evidence-reasoning', `${aiModelUsed} reasoning complete. Executive audit successfully compiled and claim-guard verified.`);
+      } catch (aiError: any) {
+        console.error('[AI Reasoning Failed]', aiProvider, aiError instanceof Error ? aiError.message : 'unknown error');
+        await logJobStep(jobId, 'ai-evidence-reasoning', `${aiProvider === 'claude' ? 'Claude' : 'Gemini'} call timed out, failed, or returned unsupported output. Falling back to secure static compiler.`, 'Warning');
       }
     }
 
