@@ -1,0 +1,67 @@
+name: wire-growth-controls
+
+on:
+  push:
+    branches: [feat/founder-growth-engine]
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git clone --depth 50 --branch "$GITHUB_REF_NAME" "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" repo
+      - name: Patch worker and verify
+        working-directory: repo
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/workers/distribution-worker.ts')
+          s=p.read_text()
+          helper="""
+          async function campaignControls(pool: ReturnType<typeof createWorkerPool>) {
+            const client = await pool.connect();
+            try {
+              await client.query('BEGIN');
+              await client.query(`SELECT set_config('app.tenant_id',$1,true)`,[DISTRIBUTION_TENANT_ID]);
+              const result = await client.query(`SELECT discovery_enabled,outreach_enabled FROM distribution_campaign_settings WHERE tenant_id=$1 LIMIT 1`,[DISTRIBUTION_TENANT_ID]);
+              await client.query('COMMIT');
+              const row=result.rows?.[0];
+              return { discoveryEnabled: row?.discovery_enabled !== false, outreachEnabled: row?.outreach_enabled !== false };
+            } catch(error) { await client.query('ROLLBACK').catch(()=>undefined); throw error; }
+            finally { client.release(); }
+          }
+          """
+          anchor="const WORKER_ID = `distribution-${os.hostname()}-${process.pid}`;\n"
+          if 'async function campaignControls(' not in s:
+              s=s.replace(anchor,anchor+helper)
+          old="if(autonomousOutreachEnabled()&&contactsQueued>0)for(const contactId of await getContactIdsForSource(pool,payload.url))await enqueueDistributionJob(pool,'send_outreach',{contactId});"
+          new="if(autonomousOutreachEnabled()&&contactsQueued>0&&(await campaignControls(pool)).outreachEnabled)for(const contactId of await getContactIdsForSource(pool,payload.url))await enqueueDistributionJob(pool,'send_outreach',{contactId});"
+          if old not in s: raise SystemExit('send scheduling anchor not found')
+          s=s.replace(old,new,1)
+          old2="}else if(job.kind==='send_outreach'){if(typeof payload.contactId!=='string')throw new Error('DISTRIBUTION_CONTACT_ID_REQUIRED');await finishJob(pool,job.id,await sendInitial(payload.contactId));}else if(job.kind==='followup_outreach')await finishJob(pool,job.id,{sent:await sendDueFollowups(),observedAt:new Date().toISOString()});"
+          new2="}else if(job.kind==='send_outreach'){if(typeof payload.contactId!=='string')throw new Error('DISTRIBUTION_CONTACT_ID_REQUIRED');if(!(await campaignControls(pool)).outreachEnabled)throw new Error('DISTRIBUTION_OUTREACH_PAUSED');await finishJob(pool,job.id,await sendInitial(payload.contactId));}else if(job.kind==='followup_outreach'){if(!(await campaignControls(pool)).outreachEnabled)throw new Error('DISTRIBUTION_OUTREACH_PAUSED');await finishJob(pool,job.id,{sent:await sendDueFollowups(),observedAt:new Date().toISOString()});}"
+          if old2 not in s: raise SystemExit('job processing anchor not found')
+          s=s.replace(old2,new2,1)
+          old3="const endpoint=process.env.DISTRIBUTION_DISCOVERY_PROVIDER_URL?.trim();if(process.env.DISTRIBUTION_AUTONOMOUS_DISCOVERY!=='true'||!endpoint)return 0;"
+          new3="const endpoint=process.env.DISTRIBUTION_DISCOVERY_PROVIDER_URL?.trim();if(process.env.DISTRIBUTION_AUTONOMOUS_DISCOVERY!=='true'||!endpoint)return 0;"
+          # Discovery remains environment-gated; the Founder control is authoritative for outreach sends.
+          p.write_text(s)
+          PY
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run typecheck
+          npx vitest run tests/distribution-growth-contract.test.ts
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/workers/distribution-worker.ts
+          git commit -m 'feat(distribution): enforce founder outreach pause server-side'
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:"$GITHUB_REF_NAME"
+        env:
+          GH_TOKEN: ${{ github.token }}
