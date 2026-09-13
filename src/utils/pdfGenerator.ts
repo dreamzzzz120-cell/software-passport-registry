@@ -342,7 +342,7 @@ export function generateClientCompliancePDF(client: Client) {
     doc.setFont('helvetica', 'bold');
     doc.text(`Page ${i} of ${pageCount}`, startX + 163, 286);
     doc.setFont('helvetica', 'normal');
-    doc.text('MSP Registry System', startX + 158, 290);
+    doc.text('Software Passport Registry', startX + 180, 290, { align: 'right' });
   }
 
   // Save the PDF locally on the browser side with client name slug
@@ -374,7 +374,11 @@ export function generateCoBrandedTrustReport(
   includeInventory: boolean = true,
   includeComplianceChecklist: boolean = true,
   includeSignatures: boolean = true,
-  selectedAssetNames: string[] = []
+  selectedAssetNames: string[] = [],
+  // White-label footer: the tenant's saved footer text and whether the SPR
+  // attribution line is shown. Both come from /api/organization/branding.
+  footerText: string = '',
+  showSprAttribution: boolean = true
 ) {
   const doc = new jsPDF('p', 'mm', 'a4');
   const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
@@ -662,13 +666,16 @@ export function generateCoBrandedTrustReport(
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(6);
     doc.setTextColor(148, 163, 184);
-    doc.text(`CO-BRANDED REPORT DELIVERED BY ${mspName.toUpperCase()}`, startX, 286);
-    doc.text(`VERIFICATION PROTOCOL: HYBRID ATTESTATION REGISTRY | RUNTIME: ${timestamp}`, startX, 290);
+    doc.text(`REPORT DELIVERED BY ${mspName.toUpperCase()}`, startX, 286);
+    doc.text(`OBSERVED EVIDENCE ONLY | GENERATED: ${timestamp}`, startX, 290);
     
     doc.setFont('helvetica', 'bold');
     doc.text(`Page ${i} of ${pageCount}`, startX + 163, 286);
     doc.setFont('helvetica', 'normal');
-    doc.text('Software Trust Ledger', startX + 158, 290);
+    // White-label footer: attribution can be hidden by the tenant; the
+    // footer text is whatever they saved on the White-label page.
+    if (showSprAttribution) doc.text('Generated with Software Passport Registry', startX + 180, 290, { align: 'right' });
+    if (footerText) doc.text(footerText.slice(0, 160), startX, 294);
   }
 
   const clientSlug = client.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');

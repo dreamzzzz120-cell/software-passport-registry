@@ -2,11 +2,12 @@ import { useState, type Key, type ReactNode } from 'react';
 import {
   Activity, Bell, Bot, Boxes, Building, Building2, ClipboardCheck, CreditCard, Crown, FileBadge, FileText,
   Home, LayoutGrid, Lock, MessageSquareText, Network, PiggyBank, Plug, Puzzle, Scale, ScanLine, ScrollText,
-  Search, Settings, ShieldAlert, ShieldCheck, Sparkles, Store, TrendingUp, Users, type LucideIcon,
+  Search, Settings, ShieldAlert, ShieldCheck, Sparkles, Store, TrendingUp, Users, Paintbrush, type LucideIcon,
 } from 'lucide-react';
 import { EXTENSIONS, type ExtensionDefinition } from '../workflows/extensionRegistry';
 import { AMBER, BLUE, CYAN, GREEN, ORANGE, PURPLE, RED, TEAL } from '../workflows/featureColors';
 import FeedbackWidget from './FeedbackWidget';
+import { DEFAULT_PRODUCT_NAME, DEFAULT_TAGLINE, EMPTY_BRANDING, type TenantBranding } from '../lib/brandingTheme';
 
 type NavItem = { id: string; label: string; icon: LucideIcon; path: string; color: string; desc: string };
 
@@ -51,6 +52,7 @@ const SYSTEM: NavItem[] = [
   { id: 'team', label: 'Team', icon: Users, path: '/team', color: TEAL, desc: 'Manage teammates and their roles in this workspace.' },
   { id: 'extensions', label: 'Extension Marketplace', icon: Puzzle, path: '/extensions', color: PURPLE, desc: 'Optional workflow extensions you can add to SPR.' },
   { id: 'billing', label: 'Billing', icon: CreditCard, path: '/billing', color: AMBER, desc: 'Subscription plan and billing details.' },
+  { id: 'white-label', label: 'White-label', icon: Paintbrush, path: '/white-label', color: PURPLE, desc: 'Your logo, colours, typography and support details across the workspace, reports and public passports.' },
   { id: 'settings', label: 'Settings', icon: Settings, path: '/settings', color: CYAN, desc: 'Workspace configuration and preferences.' },
 ];
 
@@ -111,7 +113,17 @@ function ExtensionButton({ extension, active, onNavigate }: ExtensionButtonProps
   );
 }
 
-export default function CommandCenter({ children, path, userEmail, role, isFounder = false, onNavigate, onSignOut }: { children: ReactNode; path: string; userEmail?: string | null; role: string; isFounder?: boolean; onNavigate: (path: string) => void; onSignOut: () => void }) {
+export default function CommandCenter({ children, path, userEmail, role, isFounder = false, branding = EMPTY_BRANDING, onNavigate, onSignOut }: { children: ReactNode; path: string; userEmail?: string | null; role: string; isFounder?: boolean; branding?: TenantBranding; onNavigate: (path: string) => void; onSignOut: () => void }) {
+  // Tenant white-label packaging for the shell. Falls back to SPR's own mark
+  // and name token by token, so a tenant that only uploaded a logo keeps
+  // the default product name, and so on.
+  const logoSrc = branding.logoDataUrl || '/brand/spr-icon.png';
+  const productName = branding.theme.productName?.trim() || DEFAULT_PRODUCT_NAME;
+  const tagline = branding.theme.tagline?.trim() || DEFAULT_TAGLINE;
+  const footerText = branding.theme.footerText?.trim() || '';
+  const supportEmail = branding.theme.supportEmail?.trim() || '';
+  const supportUrl = branding.theme.supportUrl?.trim() || '';
+  const showAttribution = !branding.theme.hideSprAttribution;
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const extensionActive = path.startsWith('/extensions/');
   const active = (candidate: string) => path === candidate || (candidate !== '/dashboard' && path.startsWith(`${candidate}/`));
@@ -138,10 +150,10 @@ export default function CommandCenter({ children, path, userEmail, role, isFound
             title="Go to the Overview dashboard."
             className="mb-3 flex items-center gap-2.5 rounded-md border border-[var(--spr-border)] p-2 text-left hover:bg-[var(--spr-surface-alt)] focus:outline-none focus:ring-2 focus:ring-[var(--spr-highlight)]/40"
           >
-            <img src="/brand/spr-icon.png" alt="SPR" className="h-11 w-11 shrink-0 rounded-md border border-[var(--spr-border)] object-contain" />
+            <img src={logoSrc} alt={productName} className="h-11 w-11 shrink-0 rounded-md border border-[var(--spr-border)] bg-white object-contain" />
             <span className="min-w-0">
-              <span className="block text-[13px] font-semibold leading-tight">Software Passport Registry</span>
-              <span className="block text-[12px] leading-tight text-[var(--spr-text-faint)]">Software Trust OS</span>
+              <span className="block truncate text-[13px] font-semibold leading-tight">{productName}</span>
+              <span className="block truncate text-[12px] leading-tight text-[var(--spr-text-faint)]">{tagline}</span>
             </span>
           </button>
           <NavGroup group={{ label: 'Core workflow', items: CORE }} activePath={active} onNavigate={onNavigate} defaultOpen />
@@ -170,6 +182,19 @@ export default function CommandCenter({ children, path, userEmail, role, isFound
                 <span className="flex-1 truncate">{item.label}</span>
               </button>
             ))}
+            {(footerText || supportEmail || supportUrl || showAttribution) && (
+              <div className="mt-2 space-y-0.5 px-3 pt-2 text-[11px] leading-snug text-[var(--spr-text-faint)]">
+                {footerText && <p className="break-words">{footerText}</p>}
+                {(supportEmail || supportUrl) && (
+                  <p className="truncate">
+                    Support: {supportEmail ? <a href={`mailto:${supportEmail}`} className="text-[var(--spr-highlight)] hover:underline">{supportEmail}</a> : null}
+                    {supportEmail && supportUrl ? ' · ' : ''}
+                    {supportUrl ? <a href={supportUrl} target="_blank" rel="noopener noreferrer" className="text-[var(--spr-highlight)] hover:underline">{supportUrl.replace(/^https:\/\//i, '')}</a> : null}
+                  </p>
+                )}
+                {showAttribution && <p>Powered by Software Passport Registry</p>}
+              </div>
+            )}
           </div>
         </aside>
 
@@ -182,7 +207,7 @@ export default function CommandCenter({ children, path, userEmail, role, isFound
                 title="Go to the Overview dashboard."
                 className="rounded-md border border-[var(--spr-border)] focus:outline-none focus:ring-2 focus:ring-[var(--spr-highlight)]/40 lg:hidden"
               >
-                <img src="/brand/spr-icon.png" alt="SPR" className="h-9 w-9 rounded-md object-contain" />
+                <img src={logoSrc} alt={productName} className="h-9 w-9 rounded-md bg-white object-contain" />
               </button>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5 text-[11px] text-[var(--spr-text-faint)]">

@@ -37,6 +37,10 @@ describe('Settings "Getting Started" guide stays honest about real gaps', () => 
   });
 
   it('still discloses branding does not yet reach the public passport/emails', () => {
-    expect(source()).toContain('only feeds the Reports PDF export, not yet the public passport page itself');
+    // Branding now reaches the workspace shell, the PDF export and the public
+    // passport API; the remaining real gap is sign-in email, which the
+    // identity provider sends.
+    expect(source()).toContain('Branded sign-in emails</strong> — verification and reset emails are sent by the identity provider and are not branded');
+    expect(source()).not.toContain('not yet the public passport page itself');
   });
 });

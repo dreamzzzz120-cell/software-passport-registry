@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { getRedirectResult, onAuthStateChanged, signOut, type User } from 'firebase/auth';
 import type { Alert, Client, Integration, Scan, SoftwarePassport, Vendor } from './types';
 import { apiFetch } from './utils/apiClient';
@@ -31,6 +31,8 @@ import EnterpriseReadinessView from './components/EnterpriseReadinessView';
 import FounderDashboardView from './components/FounderDashboardView';
 import InvestorHomeView from './components/InvestorHomeView';
 import SettingsView from './components/SettingsView';
+import WhiteLabelView from './components/WhiteLabelView';
+import { EMPTY_BRANDING, applyBrandingTheme, parseBrandingResponse, type TenantBranding } from './lib/brandingTheme';
 import TeamView from './components/TeamView';
 import AuditLogView from './components/AuditLogView';
 import MonitoringView from './components/MonitoringView';
@@ -215,6 +217,22 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', theme);
     window.localStorage.setItem('spr-theme', theme);
   }, [theme]);
+  // Tenant white-label branding (GET /api/organization/branding). `branding`
+  // is what is saved; `brandingPreview` is an unsaved draft the White-label
+  // page pushes in while "Preview live in app" is on. The effective one is
+  // written onto the document root as CSS custom properties, so every
+  // surface repaints without any component knowing about branding.
+  const [branding, setBranding] = useState<TenantBranding>(EMPTY_BRANDING);
+  const [brandingPreview, setBrandingPreview] = useState<TenantBranding | null>(null);
+  const effectiveBranding = brandingPreview ?? branding;
+  useEffect(() => { applyBrandingTheme(effectiveBranding.theme, theme); }, [effectiveBranding, theme]);
+  useEffect(() => {
+    // Sign-out returns the document to SPR defaults; a tenant's palette must
+    // not bleed onto the public pages or the next person's sign-in.
+    if (!user) { setBranding(EMPTY_BRANDING); setBrandingPreview(null); applyBrandingTheme(null, theme); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+  const onBrandingPreview = useCallback((draft: TenantBranding | null) => setBrandingPreview(draft), []);
   // Authoritative verification decisions for every visible passport, fetched
   // once via the batch endpoint. Surfaces consume this map instead of the
   // legacy verification_status column, and no surface issues a per-passport
@@ -333,6 +351,20 @@ export default function App() {
       if (clientsResponse.ok) { const data = await clientsResponse.json().catch(() => []); const rows = Array.isArray(data) ? data : data?.clients; if (!cancelled && Array.isArray(rows)) setClients(rows.map((row: any) => normalizeClientRecord({ ...row, id: String(row.id), name: String(row.name || row.company_name || 'Unnamed client') })) as Client[]); }
       if (integrationsResponse.ok) { const data = await integrationsResponse.json().catch(() => []); if (!cancelled && Array.isArray(data)) setIntegrations(data); }
       if (vendorsResponse.ok) { const data = await vendorsResponse.json().catch(() => []); if (!cancelled && Array.isArray(data)) setVendors(data as Vendor[]); } else if (!cancelled) { setVendors(EMPTY_VENDORS); }
+      try {
+        const brandingResponse = await apiFetch('/api/organization/branding');
+        if (brandingResponse.ok) {
+          const parsed = parseBrandingResponse(await brandingResponse.json().catch(() => null));
+          if (!cancelled) {
+            setBranding(parsed);
+            // A workspace default appearance applies only until this viewer
+            // has made their own choice in Settings.
+            if ((parsed.theme.defaultMode === 'light' || parsed.theme.defaultMode === 'dark') && !window.localStorage.getItem('spr-theme-choice')) setTheme(parsed.theme.defaultMode);
+          }
+        }
+      } catch {
+        // Branding is cosmetic; a failed fetch leaves SPR defaults in place.
+      }
       // One batch call for every visible passport's authoritative decision.
       // A failure leaves the map empty, which renders UNINITIALIZED - it is
       // never converted into a verified or otherwise reassuring state.
@@ -497,7 +529,8 @@ export default function App() {
       break;
     case '/billing': view = <BillingView />; break;
     case '/pricing': view = <MspPricingView isAuthenticated={true} onPrimaryAction={() => navigate('/billing')} />; break;
-    case '/settings': view = <SettingsView theme={theme} onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} />; break;
+    case '/settings': view = <SettingsView theme={theme} onToggleTheme={() => { window.localStorage.setItem('spr-theme-choice', '1'); setTheme((current) => current === 'dark' ? 'light' : 'dark'); }} />; break;
+    case '/white-label': view = <WhiteLabelView role={role} passports={passports} branding={branding} theme={theme} onBrandingSaved={setBranding} onPreview={onBrandingPreview} />; break;
     case '/team': view = <TeamView role={role} />; break;
     case '/audit-log': view = <AuditLogView />; break;
     case '/extensions': view = <ExtensionMarketplace onNavigateTab={onNavigateTab} role={role} />; break;
@@ -509,7 +542,7 @@ export default function App() {
   }
 
   return (
-    <CommandCenter path={path} userEmail={user.email} role={role} isFounder={isFounder} onNavigate={navigate} onSignOut={() => void signOutUser()}>
+    <CommandCenter path={path} userEmail={user.email} role={role} isFounder={isFounder} branding={effectiveBranding} onNavigate={navigate} onSignOut={() => void signOutUser()}>
       <ViewErrorBoundary routeKey={path}>{view}</ViewErrorBoundary>
     </CommandCenter>
   );

@@ -100,7 +100,9 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
 
   const [whiteLabelClientId, setWhiteLabelClientId] = useState(clients[0]?.id || '');
   const [mspName, setMspName] = useState('');
-  const [brandColor, setBrandColor] = useState('var(--spr-highlight)');
+  const [brandColor, setBrandColor] = useState('#0f6cbd');
+  const [brandFooterText, setBrandFooterText] = useState('');
+  const [showSprAttribution, setShowSprAttribution] = useState(true);
   const [reportTitle, setReportTitle] = useState('Software Trust & Compliance Ledger');
   const [executiveSummary, setExecutiveSummary] = useState('');
   const [logoBase64, setLogoBase64] = useState<string | undefined>(undefined);
@@ -120,7 +122,7 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
     }
   }, [clients, whiteLabelClientId]);
 
-  // Pre-fill from the tenant's saved branding (Settings -> Team & Profile)
+  // Pre-fill from the tenant's saved branding (White-label page)
   // instead of leaving these blank every time -- still fully editable per
   // export, this only changes the starting values.
   useEffect(() => {
@@ -129,6 +131,10 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
       if (data.companyName) setMspName(data.companyName);
       if (data.brandColor) setBrandColor(data.brandColor);
       if (data.logoDataUrl) setLogoBase64(data.logoDataUrl);
+      if (data.theme && typeof data.theme === 'object') {
+        if (typeof data.theme.footerText === 'string') setBrandFooterText(data.theme.footerText);
+        setShowSprAttribution(data.theme.hideSprAttribution !== true);
+      }
     }).catch(() => {});
   }, []);
 
@@ -287,7 +293,7 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
     // zero patches regardless of the client's actual remediation history.
     const clientPassports = passports.filter((passport) => String((passport as any).clientId || '') === client.id);
     const patchedCvesCount = clientPassports.reduce((total, passport) => total + (passport.vulnerabilities || []).filter((v: any) => v.status === 'Resolved' || v.status === 'Mitigated').length, 0);
-    generateCoBrandedTrustReport(client, mspName.trim(), brandColor, reportTitle, patchedCvesCount, executiveSummary, logoBase64, sections.summary, sections.metrics, sections.inventory, sections.compliance, sections.signatures);
+    generateCoBrandedTrustReport(client, mspName.trim(), brandColor, reportTitle, patchedCvesCount, executiveSummary, logoBase64, sections.summary, sections.metrics, sections.inventory, sections.compliance, sections.signatures, [], brandFooterText, showSprAttribution);
   };
 
   const reportText = useMemo(() => {

@@ -24,6 +24,7 @@ import { offboardTenantData } from '../db/sync.ts';
 import { canCreateClient, PLAN_CONFIG } from './billing.ts';
 import { normalizeClientRecord, normalizeClientRecords, normalizePassportRecords } from '../lib/clientJsonColumns.ts';
 import { adaptEvidenceForEvaluation } from '../lib/verification/evidenceAdapter.ts';
+import { FONT_CHOICES, RADIUS_MAX, RADIUS_MIN, THEME_COLOR_KEYS, type ThemeColorKey } from '../lib/brandingTheme.ts';
 
 // SPR's own source repository. The founder dashboard's "self passport" is the
 // newest completed scan of this repository in the founder's workspace.
@@ -64,10 +65,32 @@ const slsaProvenanceSchema = z.object({
 // 300KB base64 comfortably fits a small compressed logo (PNG/JPEG at
 // reasonable dimensions) while keeping a single UPDATE well under any
 // practical row-size or request-body concern.
+const hexColor = z.string().trim().regex(/^#[0-9a-fA-F]{6}$/, 'colours must be #rrggbb hex');
+const imageDataUrl = (max: number) => z.string().trim().max(max).regex(/^data:image\/(png|jpeg|jpg|svg\+xml|webp);base64,/, 'must be a base64 image data URL');
+const paletteSchema = z.object(Object.fromEntries(THEME_COLOR_KEYS.map((key) => [key, hexColor.nullable().optional()])) as Record<ThemeColorKey, z.ZodOptional<z.ZodNullable<typeof hexColor>>>).strict();
+// The whole-workspace theme edited on the White-label page. Every field is
+// optional so a tenant can override one token and inherit the rest; the
+// document is bounded (strict keys, hex colours, allow-listed font ids, a
+// radius range, a small favicon) so it can never carry markup or a URL that
+// the shell would inject. See src/lib/brandingTheme.ts for how it is applied.
+const themeSchema = z.object({
+  productName: z.string().trim().max(80).nullable().optional(),
+  tagline: z.string().trim().max(120).nullable().optional(),
+  fontId: z.enum(FONT_CHOICES.map((font) => font.id) as [string, ...string[]]).nullable().optional(),
+  radius: z.number().int().min(RADIUS_MIN).max(RADIUS_MAX).nullable().optional(),
+  defaultMode: z.enum(['light', 'dark']).nullable().optional(),
+  colors: z.object({ light: paletteSchema.optional(), dark: paletteSchema.optional() }).strict().optional(),
+  faviconDataUrl: imageDataUrl(60_000).nullable().optional(),
+  supportEmail: z.string().trim().email().max(200).nullable().optional(),
+  supportUrl: z.string().trim().url().max(500).refine((value) => /^https:\/\//i.test(value), 'supportUrl must be https').nullable().optional(),
+  footerText: z.string().trim().max(300).nullable().optional(),
+  hideSprAttribution: z.boolean().optional(),
+}).strict();
 const brandingSchema = z.object({
   companyName: z.string().trim().max(200).nullable().optional(),
-  brandColor: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/, 'brandColor must be a #rrggbb hex color').nullable().optional(),
-  logoDataUrl: z.string().trim().max(300_000).regex(/^data:image\/(png|jpeg|jpg|svg\+xml|webp);base64,/, 'logoDataUrl must be a base64 image data URL').nullable().optional(),
+  brandColor: hexColor.nullable().optional(),
+  logoDataUrl: imageDataUrl(300_000).nullable().optional(),
+  theme: themeSchema.optional(),
 }).strict();
 
 export function createAuthRouter() {
@@ -237,11 +260,11 @@ export function createAuthRouter() {
     try {
       const db = req.db!;
       const result = await db.execute(sql`
-        SELECT company_name AS "companyName", brand_color AS "brandColor", logo_data_url AS "logoDataUrl", updated_at AS "updatedAt"
+        SELECT company_name AS "companyName", brand_color AS "brandColor", logo_data_url AS "logoDataUrl", theme, updated_at AS "updatedAt"
         FROM tenant_branding WHERE tenant_id = ${req.user!.tenantId} LIMIT 1
       `);
       const row = (result as any).rows?.[0];
-      return res.json(row ?? { companyName: null, brandColor: null, logoDataUrl: null, updatedAt: null });
+      return res.json(row ?? { companyName: null, brandColor: null, logoDataUrl: null, theme: {}, updatedAt: null });
     } catch (error) {
       return next(error);
     }
@@ -254,15 +277,16 @@ export function createAuthRouter() {
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
       const tenantId = req.user!.tenantId;
       const result = await db.execute(sql`
-        INSERT INTO tenant_branding (tenant_id, company_name, brand_color, logo_data_url, updated_at, updated_by)
-        VALUES (${tenantId}, ${parsed.data.companyName ?? null}, ${parsed.data.brandColor ?? null}, ${parsed.data.logoDataUrl ?? null}, CURRENT_TIMESTAMP, ${req.user!.email})
+        INSERT INTO tenant_branding (tenant_id, company_name, brand_color, logo_data_url, theme, updated_at, updated_by)
+        VALUES (${tenantId}, ${parsed.data.companyName ?? null}, ${parsed.data.brandColor ?? null}, ${parsed.data.logoDataUrl ?? null}, ${JSON.stringify(parsed.data.theme ?? {})}::jsonb, CURRENT_TIMESTAMP, ${req.user!.email})
         ON CONFLICT (tenant_id) DO UPDATE SET
           company_name = EXCLUDED.company_name,
           brand_color = EXCLUDED.brand_color,
           logo_data_url = EXCLUDED.logo_data_url,
+          theme = EXCLUDED.theme,
           updated_at = EXCLUDED.updated_at,
           updated_by = EXCLUDED.updated_by
-        RETURNING company_name AS "companyName", brand_color AS "brandColor", logo_data_url AS "logoDataUrl", updated_at AS "updatedAt"
+        RETURNING company_name AS "companyName", brand_color AS "brandColor", logo_data_url AS "logoDataUrl", theme, updated_at AS "updatedAt"
       `);
       await appendAuditEntry(db, { tenantId, action: 'branding.updated', actor: req.user!.email, payload: {} });
       return res.json((result as any).rows?.[0]);

@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { AlertTriangle, ArrowRight, CheckCircle2, ExternalLink, FileSearch, Loader2, Radio, ShieldQuestion } from 'lucide-react';
 import { apiFetch } from '../../utils/apiClient';
 import TrustField from './TrustField';
-import TrustStateBadge, { trustStateFromDecision, type VerificationDecisionState } from './TrustStateBadge';
+import TrustStateBadge, { EvidenceStatusBadge, evidenceStatusMeta, trustStateFromDecision, type VerificationDecisionState } from './TrustStateBadge';
 import { DecisionHero } from '../design/CommandCenter';
 import type { Client, SoftwarePassport } from '../../types';
 
@@ -86,13 +86,16 @@ export default function TrustRoom({ passport, client, canRunAudit, auditBusy, on
   // evidence items don't carry a dimension field, so doing that would
   // fabricate a causal link the data doesn't actually support.
   const verifiedEvidenceCount = evidence.filter((item) => item.status === 'VERIFIED').length;
+  // The rest are described by what they actually are (observed responses,
+  // declared statements, failures ...), never lumped together as "unresolved".
+  const statusBreakdown = (() => {
+    const counts = new Map<string, number>();
+    for (const item of evidence) { if (item.status === 'VERIFIED') continue; const label = evidenceStatusMeta(item.status).label.toLowerCase(); counts.set(label, (counts.get(label) ?? 0) + 1); }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([label, n]) => `${n} ${label}`).join(', ');
+  })();
   const whyText = evidence.length === 0
     ? 'No evidence has been recorded for this software yet.'
-    : trustState === 'VERIFIED'
-      ? `${verifiedEvidenceCount} of ${evidence.length} recorded evidence items are independently verified.`
-      : trustState === 'PARTIALLY_VERIFIED'
-        ? `${verifiedEvidenceCount} of ${evidence.length} recorded evidence items are independently verified; the remainder are unresolved.`
-        : `${verifiedEvidenceCount} of ${evidence.length} recorded evidence items are independently verified -- not enough to establish a verified trust state.`;
+    : `${verifiedEvidenceCount} of ${evidence.length} recorded evidence items are independently verified${statusBreakdown ? ` (${statusBreakdown})` : ''}.${trustState === 'VERIFIED' ? '' : trustState === 'PARTIALLY_VERIFIED' ? ' Observed third-party responses support the claims they cover; a verified state additionally requires a publisher attestation for build provenance (verification policy 1.0.0).' : ' Not enough independent verification to establish a verified trust state.'}`;
 
   const lastObserved = (() => {
     const timestamps = [
@@ -199,7 +202,7 @@ export default function TrustRoom({ passport, client, canRunAudit, auditBusy, on
               <li key={item.id} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm font-semibold text-[var(--spr-text)]">{item.name || item.type}</p>
-                  <TrustStateBadge state={item.status === 'VERIFIED' ? 'VERIFIED' : item.status === 'PARTIALLY_VERIFIED' ? 'PARTIALLY_VERIFIED' : item.status === 'FAILED' ? 'VERIFICATION_FAILED' : 'EVIDENCE_INCOMPLETE'} />
+                  <EvidenceStatusBadge status={item.status} />
                 </div>
                 <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-[var(--spr-text-muted)] sm:grid-cols-4">
                   <div><dt className="text-[var(--spr-text-faint)]">Source</dt><dd className="text-[var(--spr-text)]">{item.signer || 'Not available'}</dd></div>

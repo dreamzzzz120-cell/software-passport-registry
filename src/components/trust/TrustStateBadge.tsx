@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { CheckCircle2, HelpCircle, ShieldAlert, XCircle, Circle } from 'lucide-react';
-import type { VerificationStatus } from '../../types';
-import { GREEN, AMBER, RED } from '../../workflows/featureColors';
+import { CheckCircle2, HelpCircle, ShieldAlert, XCircle, Circle, Eye, FileText, Clock, Unplug } from 'lucide-react';
+import type { EvidenceStatus, VerificationStatus } from '../../types';
+import { GREEN, AMBER, RED, BLUE } from '../../workflows/featureColors';
 
 const NEUTRAL = 'var(--spr-text-faint)';
 
@@ -76,6 +76,40 @@ export default function TrustStateBadge({ state, showDescription = false, classN
         {meta.label}
       </span>
       {showDescription && <span className="text-xs text-[var(--spr-text-muted)]">{meta.description}</span>}
+    </span>
+  );
+}
+
+// Per-evidence-item status. Distinct from the passport-level trust state
+// above on purpose: an OSV response with status OBSERVED is a complete,
+// hashed record of what api.osv.dev returned -- rendering it as "Evidence
+// Incomplete" (which is what happened when every non-VERIFIED status was
+// collapsed into the passport-level badge) described something that did not
+// happen. Each status here says exactly what SPR did and did not do.
+const EVIDENCE_STATUS_META: Record<EvidenceStatus, { label: string; color: string; icon: typeof CheckCircle2; description: string }> = {
+  VERIFIED: { label: 'Verified', color: GREEN, icon: CheckCircle2, description: 'Independently verified against its source.' },
+  PARTIALLY_VERIFIED: { label: 'Partially verified', color: AMBER, icon: ShieldAlert, description: 'Some checks passed; others could not be completed.' },
+  OBSERVED: { label: 'Observed', color: BLUE, icon: Eye, description: 'Response recorded from the named source and hashed as received. Not a cryptographic verification.' },
+  DECLARED: { label: 'Declared', color: NEUTRAL, icon: FileText, description: 'Stated by the submitter; not checked against an independent source.' },
+  CONFIGURED: { label: 'Configured', color: NEUTRAL, icon: Circle, description: 'Source is set up; no observation has been recorded from it yet.' },
+  FAILED: { label: 'Verification failed', color: RED, icon: XCircle, description: 'Verification was attempted and did not pass.' },
+  UNKNOWN: { label: 'Unknown', color: NEUTRAL, icon: HelpCircle, description: 'The scanner recorded this item without classifying it.' },
+  STALE: { label: 'Stale', color: AMBER, icon: Clock, description: 'Recorded, but older than the policy allows for a current decision.' },
+  SOURCE_DISCONNECTED: { label: 'Source disconnected', color: AMBER, icon: Unplug, description: 'The source that produced this item is no longer connected.' },
+  NOT_APPLICABLE: { label: 'Not applicable', color: NEUTRAL, icon: Circle, description: 'Does not apply to this software.' },
+};
+
+export function evidenceStatusMeta(status: string | null | undefined) {
+  return EVIDENCE_STATUS_META[(status as EvidenceStatus) in EVIDENCE_STATUS_META ? (status as EvidenceStatus) : 'UNKNOWN'];
+}
+
+export function EvidenceStatusBadge({ status, className = '' }: { status: string | null | undefined; className?: string }) {
+  const meta = evidenceStatusMeta(status);
+  const Icon = meta.icon;
+  return (
+    <span title={meta.description} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] font-bold uppercase tracking-wider ${className}`} style={{ borderColor: `${meta.color}66`, color: meta.color, backgroundColor: `${meta.color}14` }}>
+      <Icon className="h-3 w-3" style={{ color: meta.color }} />
+      {meta.label}
     </span>
   );
 }

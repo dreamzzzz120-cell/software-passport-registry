@@ -65,6 +65,12 @@ export async function publicTrustResponse(scopedDb: ScopedDb, passport: any) {
   const findings = (await scopedDb.execute(sql`SELECT id,control_id,title,severity,status,updated_at,resolved_at FROM trust_findings WHERE tenant_id=${passport.tenant_id} AND passport_id=${passport.id} ORDER BY CASE severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 WHEN 'low' THEN 4 ELSE 5 END, updated_at DESC LIMIT 50`) as any).rows || [];
   const legacyEvidence = (await scopedDb.execute(sql`SELECT id,provider,control_id,subject,observed_at,verification_method,status,severity,evidence_hash,limitation FROM evidence_ledger WHERE tenant_id=${passport.tenant_id} AND passport_id=${passport.id} ORDER BY observed_at DESC LIMIT 100`) as any).rows || [];
   const observations = (await scopedDb.execute(sql`SELECT id,observation_version,generated_at,canonical_payload_hash,completeness_basis_points,open_finding_count,unknown_dimension_count FROM trust_observations WHERE tenant_id=${passport.tenant_id} AND passport_id=${passport.id} ORDER BY observation_version DESC LIMIT 1`) as any).rows || [];
+  // Tenant white-label identity for consumers that render this passport
+  // (name, colour, product name, support URL). The logo is deliberately not
+  // included: a base64 image does not belong in a cached public JSON body.
+  const brandingRow = (await scopedDb.execute(sql`SELECT company_name AS "companyName", brand_color AS "brandColor", theme FROM tenant_branding WHERE tenant_id=${passport.tenant_id} LIMIT 1`) as any).rows?.[0];
+  const brandingTheme = brandingRow && brandingRow.theme && typeof brandingRow.theme === 'object' ? brandingRow.theme : {};
+  const branding = brandingRow ? { companyName: brandingRow.companyName ?? null, brandColor: brandingRow.brandColor ?? null, productName: typeof brandingTheme.productName === 'string' ? brandingTheme.productName : null, supportUrl: typeof brandingTheme.supportUrl === 'string' ? brandingTheme.supportUrl : null } : null;
   const latest = observations[0]; const openFindings = findings.filter((f: any) => !['resolved','closed','verified'].includes(String(f.status).toLowerCase())); const criticalOrHigh = openFindings.filter((f: any) => ['critical','high'].includes(String(f.severity).toLowerCase())); const completeness = latest?.completeness_basis_points == null ? null : Number(latest.completeness_basis_points) / 10000;
 
   return {
@@ -72,6 +78,7 @@ export async function publicTrustResponse(scopedDb: ScopedDb, passport: any) {
     status: decision.state,
     decision,
     passport: { id: passport.id, name: passport.name, version: passport.version, publisher: passport.publisher, category: passport.category },
+    branding,
     scores: null,
     scoreStatus: 'not_authoritatively_scored',
     evidence: { count: evidenceRows.length, uniqueEvidence: decision.uniqueEvidenceCount, independentSources: decision.independentSourceCount },
