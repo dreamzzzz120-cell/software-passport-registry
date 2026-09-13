@@ -170,5 +170,8 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
-          live_tests=(tests/security/*.test.ts)
+          # Every suite that needs a real Postgres (DATABASE_URL) lives here;
+          # under plain "npm test" those describe blocks are skipped, so this
+          # is the only place they actually execute.
+          live_tests=(tests/security/*.test.ts tests/remediation-tasks-contract.test.ts)
           npx vitest run "${live_tests[@]}"
