@@ -3,12 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// Renders inside FounderDashboardView, below the existing per-tenant metrics.
-// Fetches /api/founder/command-center + /api/founder/tasks, both gated
-// server-side by requireRole('Owner') + requireFounder (FOUNDER_EMAILS
-// allowlist). Any Owner who isn't on that allowlist gets a 403 — this
-// component renders nothing in that case rather than showing an error, since
-// most Owners (every paying customer) are expected to hit that 403.
+// Founder-only platform control panel. All privileged data is server-authorized
+// and unavailable values are rendered as "Not verified", never as invented zeroes.
 
 import { useCallback, useEffect, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
@@ -17,7 +13,7 @@ import { apiFetch } from '../utils/apiClient';
 type Connection = { name: string; status: 'ok' | 'error' | 'not_configured'; detail: string; lastChecked: string };
 type CommandCenterData = {
   connections: Connection[];
-  businessMetrics: { organizationCount: number; userCount: number; mrrCents: number; stripeCustomerCount: number; ciStatus: string };
+  businessMetrics: { organizationCount: number | null; userCount: number | null; mrrCents: number | null; stripeCustomerCount: number | null; ciStatus: string };
   generatedAt: string;
 };
 type Task = { id: number; title: string; category: 'seo' | 'backlinks' | 'outreach' | 'infra' | 'general'; status: 'open' | 'in_progress' | 'done'; notes: string | null; due_date: string | null };
@@ -41,22 +37,26 @@ const DOT_CLASS: Record<Connection['status'], string> = {
   not_configured: 'spr-status-dot spr-status-dot--gray',
 };
 
-function money(cents: number) {
-  return `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function money(cents: number | null) {
+  return cents === null ? 'Not verified' : `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function observedCount(value: number | null) {
+  return value === null ? 'Not verified' : String(value);
 }
 
 export default function FounderCommandCenterPanel() {
   const [data, setData] = useState<CommandCenterData | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [passports, setPassports] = useState<PassportRow[]>([]);
-  const [visible, setVisible] = useState(false); // stays false (renders nothing) unless the founder-only fetch succeeds
+  const [visible, setVisible] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState<Task['category']>('general');
 
   const load = useCallback(async () => {
     try {
       const ccRes = await apiFetch('/api/founder/command-center');
-      if (!ccRes.ok) return; // 403 for any non-founder Owner — render nothing, not an error
+      if (!ccRes.ok) return;
       const cc = await ccRes.json();
       const tasksRes = await apiFetch('/api/founder/tasks');
       const taskList = tasksRes.ok ? await tasksRes.json() : [];
@@ -67,7 +67,7 @@ export default function FounderCommandCenterPanel() {
       setPassports(passportList);
       setVisible(true);
     } catch {
-      // Silent — this panel is a bonus for the founder, not core UI.
+      // Founder-only bonus panel; core product remains available if this fails.
     }
   }, []);
 
@@ -114,7 +114,6 @@ export default function FounderCommandCenterPanel() {
         </button>
       </div>
 
-      {/* Connections */}
       <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-5">
         <p className="text-[11px] uppercase tracking-[0.24em] font-semibold text-[var(--spr-text-muted)] mb-3">Connections</p>
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
@@ -130,13 +129,12 @@ export default function FounderCommandCenterPanel() {
         </div>
       </div>
 
-      {/* Business metrics */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
           { label: 'MRR', value: money(data.businessMetrics.mrrCents) },
-          { label: 'Organizations', value: String(data.businessMetrics.organizationCount) },
-          { label: 'Users', value: String(data.businessMetrics.userCount) },
-          { label: 'CI Status', value: data.businessMetrics.ciStatus },
+          { label: 'Organizations', value: observedCount(data.businessMetrics.organizationCount) },
+          { label: 'Users', value: observedCount(data.businessMetrics.userCount) },
+          { label: 'CI Status', value: data.businessMetrics.ciStatus || 'Not verified' },
         ].map((m) => (
           <div key={m.label} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4">
             <p className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">{m.label}</p>
@@ -145,10 +143,9 @@ export default function FounderCommandCenterPanel() {
         ))}
       </div>
 
-      {/* Passport registry — every passport, every tenant, who holds it */}
       <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-5">
         <div className="mb-3 flex items-center justify-between">
-          <p className="text-[11px] uppercase tracking-[0.24em] font-semibold text-[var(--spr-text-muted)]">Passport Registry — All Tenants ({passports.length})</p>
+          <p className="text-[11px] uppercase tracking-[0.24em] font-semibold text-[var(--spr-text-muted)]">Customer Passport Registry ({passports.length})</p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -186,54 +183,31 @@ export default function FounderCommandCenterPanel() {
                 </tr>
               ))}
               {passports.length === 0 && (
-                <tr><td colSpan={5} className="py-4 text-center text-[var(--spr-text-muted)]">No passports issued yet.</td></tr>
+                <tr><td colSpan={5} className="py-4 text-center text-[var(--spr-text-muted)]">No customer passports issued yet.</td></tr>
               )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Growth tasks */}
       <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-5">
         <p className="text-[11px] uppercase tracking-[0.24em] font-semibold text-[var(--spr-text-muted)] mb-3">Growth Tasks</p>
         <div className="flex gap-2 mb-4">
-          <input
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            placeholder="Add a task…"
-            className="flex-1 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] px-3 py-1.5 text-sm text-[var(--spr-text)]"
-          />
-          <select
-            value={newCategory}
-            onChange={(e) => setNewCategory(e.target.value as Task['category'])}
-            className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] px-2 py-1.5 text-sm text-[var(--spr-text)]"
-          >
-            <option value="general">General</option>
-            <option value="seo">SEO</option>
-            <option value="backlinks">Backlinks</option>
-            <option value="outreach">Outreach</option>
-            <option value="infra">Infra</option>
+          <input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="Add a task…" className="flex-1 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] px-3 py-1.5 text-sm text-[var(--spr-text)]" />
+          <select value={newCategory} onChange={(e) => setNewCategory(e.target.value as Task['category'])} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] px-2 py-1.5 text-sm text-[var(--spr-text)]">
+            <option value="general">General</option><option value="seo">SEO</option><option value="backlinks">Backlinks</option><option value="outreach">Outreach</option><option value="infra">Infra</option>
           </select>
           <button onClick={() => void addTask()} className="spr-btn spr-btn-primary text-sm">Add</button>
         </div>
 
         {(['open', 'in_progress', 'done'] as const).map((status) => (
           <div key={status} className="mb-4">
-            <p className="text-[12px] uppercase tracking-[0.2em] font-semibold text-[var(--spr-text-muted)] mb-1">
-              {status.replace('_', ' ')} ({grouped[status].length})
-            </p>
+            <p className="text-[12px] uppercase tracking-[0.2em] font-semibold text-[var(--spr-text-muted)] mb-1">{status.replace('_', ' ')} ({grouped[status].length})</p>
             <div className="space-y-1">
               {grouped[status].map((t) => (
                 <div key={t.id} className="flex items-center justify-between gap-3 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] px-3 py-2 text-sm">
-                  <div>
-                    <span className="mr-2 rounded border border-[var(--spr-border)] px-1.5 py-0.5 text-[12px] uppercase text-[var(--spr-text-muted)]">{t.category}</span>
-                    <span className="text-[var(--spr-text)]">{t.title}</span>
-                    {t.notes && <p className="text-xs text-[var(--spr-text-muted)] mt-0.5">{t.notes}</p>}
-                  </div>
-                  <div className="flex gap-3 shrink-0">
-                    <button onClick={() => void cycleStatus(t)} className="text-xs text-[var(--spr-highlight)]">Advance</button>
-                    <button onClick={() => void deleteTask(t.id)} className="text-xs text-[var(--spr-red)]">Delete</button>
-                  </div>
+                  <div><span className="mr-2 rounded border border-[var(--spr-border)] px-1.5 py-0.5 text-[12px] uppercase text-[var(--spr-text-muted)]">{t.category}</span><span className="text-[var(--spr-text)]">{t.title}</span>{t.notes && <p className="text-xs text-[var(--spr-text-muted)] mt-0.5">{t.notes}</p>}</div>
+                  <div className="flex gap-3 shrink-0"><button onClick={() => void cycleStatus(t)} className="text-xs text-[var(--spr-highlight)]">Advance</button><button onClick={() => void deleteTask(t.id)} className="text-xs text-[var(--spr-red)]">Delete</button></div>
                 </div>
               ))}
               {grouped[status].length === 0 && <p className="text-xs text-[var(--spr-text-muted)]">Nothing here.</p>}
