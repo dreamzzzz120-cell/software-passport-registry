@@ -198,6 +198,28 @@ export function createFounderCommandCenterRouter() {
     }
   });
 
+  // Public registry crawler telemetry: the registry's real size (completed
+  // reviews), the Free Review queue depth, the discovery cursor and the
+  // last passes exactly as registry_crawl_runs recorded them.
+  router.get('/founder/registry-crawler', founderReadLimiter, requireAuth, requireRole('Owner'), requireFounder, async (_req: AuthenticatedRequest, res, next) => {
+    try {
+      const size = (await db.execute(sql`
+        SELECT count(*)::int AS n FROM (
+          SELECT DISTINCT lower(s.repository_owner), lower(s.repository_name)
+          FROM agent_jobs j JOIN repository_scan_sources s ON s.job_id = j.id AND s.tenant_id = j.tenant_id
+          WHERE j.tenant_id = 'tenant-free-review-system' AND j.job_type = 'repository_scan' AND j.status = 'Completed'
+            AND EXISTS (SELECT 1 FROM agent_jobs sj WHERE sj.tenant_id = j.tenant_id AND sj.passport_id = j.passport_id AND sj.job_type = 'repository_security_scan' AND sj.status = 'Completed')
+        ) d
+      `) as any).rows?.[0];
+      const queue = (await db.execute(sql`SELECT status, count(*)::int AS n FROM agent_jobs WHERE tenant_id = 'tenant-free-review-system' AND job_type = 'repository_scan' GROUP BY status`) as any).rows ?? [];
+      const cursor = (await db.execute(sql`SELECT language_index AS "languageIndex", page, updated_at AS "updatedAt" FROM registry_crawl_state WHERE id = 'default'`) as any).rows?.[0] ?? null;
+      const runs = (await db.execute(sql`SELECT id, started_at AS "startedAt", finished_at AS "finishedAt", discovered, enqueued, skipped, error, note FROM registry_crawl_runs ORDER BY started_at DESC LIMIT 48`) as any).rows ?? [];
+      return res.json({ registrySize: Number(size?.n ?? 0), queue: Object.fromEntries(queue.map((r: any) => [String(r.status), Number(r.n)])), cursor, runs, enabled: process.env.REGISTRY_CRAWLER_ENABLED !== 'false' });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
   router.get('/founder/tasks', requireAuth, requireRole('Owner'), requireFounder, async (_req: AuthenticatedRequest, res, next) => {
     try {
       const result = await db.execute(sql`SELECT * FROM founder_tasks ORDER BY status, created_at DESC`);

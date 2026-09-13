@@ -5,6 +5,7 @@ import FounderCommandCenterPanel from './FounderCommandCenterPanel';
 import FounderMonitoringPanel from './FounderMonitoringPanel';
 import FounderLeadsPanel from './FounderLeadsPanel';
 import FounderInquiriesPanel from './FounderInquiriesPanel';
+import FounderRegistryCrawlerPanel from './FounderRegistryCrawlerPanel';
 import FounderTrafficPanel from './FounderTrafficPanel';
 import FounderDistributionOpportunities from './FounderDistributionOpportunities';
 
@@ -54,6 +55,7 @@ export default function FounderDashboardView({ userRole }: FounderDashboardViewP
     <FounderMonitoringPanel />
     <FounderLeadsPanel />
     <FounderInquiriesPanel />
+    <FounderRegistryCrawlerPanel />
     <FounderTrafficPanel />
     <FounderDistributionOpportunities />
     <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">

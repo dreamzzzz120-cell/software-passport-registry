@@ -33,8 +33,23 @@ function escapeHtml(value: unknown): string {
   return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
 }
 
-async function listCompleted(scopedDb: any, limit = 5000): Promise<Entry[]> {
+async function countCompleted(scopedDb: any): Promise<number> {
+  const row = (await scopedDb.execute(sql`
+    SELECT count(*)::int AS n FROM (
+      SELECT DISTINCT lower(s.repository_owner), lower(s.repository_name)
+      FROM agent_jobs j JOIN repository_scan_sources s ON s.job_id = j.id AND s.tenant_id = j.tenant_id
+      WHERE j.tenant_id = ${FREE_REVIEW_TENANT_ID} AND j.job_type = 'repository_scan' AND j.status = 'Completed'
+        AND EXISTS (SELECT 1 FROM agent_jobs sj WHERE sj.tenant_id = j.tenant_id AND sj.passport_id = j.passport_id AND sj.job_type = 'repository_security_scan' AND sj.status = 'Completed')
+    ) d
+  `) as any).rows?.[0];
+  return Number(row?.n ?? 0);
+}
+
+async function listCompleted(scopedDb: any, limit = 5000, offset = 0, only?: { owner: string; repository: string }): Promise<Entry[]> {
   // Latest completed review per owner/repo. Both jobs must be Completed.
+  // `only` narrows to one repository so a detail page is one indexed
+  // lookup rather than a scan of the whole registry.
+  const ownerFilter = only ? sql` AND lower(s.repository_owner) = ${only.owner.toLowerCase()} AND lower(s.repository_name) = ${only.repository.toLowerCase()}` : sql``;
   const rows = (await scopedDb.execute(sql`
     WITH completed AS (
       SELECT s.repository_owner AS owner, s.repository_name AS repository, j.passport_id, s.resolved_commit_sha AS commit_sha, s.acquired_at, s.default_branch, j.created_at,
@@ -42,11 +57,11 @@ async function listCompleted(scopedDb: any, limit = 5000): Promise<Entry[]> {
       FROM agent_jobs j
       JOIN repository_scan_sources s ON s.job_id = j.id AND s.tenant_id = j.tenant_id
       WHERE j.tenant_id = ${FREE_REVIEW_TENANT_ID} AND j.job_type = 'repository_scan' AND j.status = 'Completed'
-        AND EXISTS (SELECT 1 FROM agent_jobs sj WHERE sj.tenant_id = j.tenant_id AND sj.passport_id = j.passport_id AND sj.job_type = 'repository_security_scan' AND sj.status = 'Completed')
+        AND EXISTS (SELECT 1 FROM agent_jobs sj WHERE sj.tenant_id = j.tenant_id AND sj.passport_id = j.passport_id AND sj.job_type = 'repository_security_scan' AND sj.status = 'Completed')${ownerFilter}
     )
     SELECT c.owner, c.repository, c.passport_id AS "passportId", c.commit_sha AS "commitSha", c.acquired_at AS "acquiredAt", c.default_branch AS "defaultBranch", p.sbom
     FROM completed c JOIN passports p ON p.id = c.passport_id AND p.tenant_id = ${FREE_REVIEW_TENANT_ID}
-    WHERE c.rn = 1 ORDER BY c.acquired_at DESC NULLS LAST LIMIT ${limit}
+    WHERE c.rn = 1 ORDER BY c.acquired_at DESC NULLS LAST LIMIT ${limit} OFFSET ${offset}
   `) as any).rows ?? [];
   const entries: Entry[] = [];
   for (const row of rows) {
@@ -94,19 +109,24 @@ export function createSoftwareRegistryRouter() {
     try {
       const scopedDb = await attachTenantScope(FREE_REVIEW_TENANT_ID, res);
       res.setHeader('Cache-Control', 'public, max-age=300');
-      return res.json({ generatedAt: new Date().toISOString(), entries: await listCompleted(scopedDb) });
+      return res.json({ generatedAt: new Date().toISOString(), total: await countCompleted(scopedDb), entries: await listCompleted(scopedDb) });
     } catch (error) { return next(error); }
   });
 
-  router.get('/', async (_req: Request, res: Response, next) => {
+  router.get('/', async (req: Request, res: Response, next) => {
     try {
       const scopedDb = await attachTenantScope(FREE_REVIEW_TENANT_ID, res);
-      const entries = await listCompleted(scopedDb, 2000);
+      const PAGE_SIZE = 200;
+      const total = await countCompleted(scopedDb);
+      const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+      const page = Math.min(pages, Math.max(1, Number.parseInt(String(req.query.page ?? '1'), 10) || 1));
+      const entries = await listCompleted(scopedDb, PAGE_SIZE, (page - 1) * PAGE_SIZE);
+      const pager = pages > 1 ? `<p class="note" style="margin-top:12px">Page ${page} of ${pages} (${total} repositories). ${page > 1 ? `<a href="/software?page=${page - 1}">Previous</a> ` : ''}${page < pages ? `<a href="/software?page=${page + 1}">Next</a>` : ''}</p>` : '';
       const rows = entries.map((e) => `<tr><td><a href="/software/${encodeURIComponent(e.owner)}/${encodeURIComponent(e.repository)}">${escapeHtml(e.owner)}/${escapeHtml(e.repository)}</a></td><td>${e.componentCount ?? '—'}</td><td>${e.openFindings}${e.findings.critical ? ` <span class="sev-critical">(${e.findings.critical} critical)</span>` : ''}${e.findings.high ? ` <span class="sev-high">(${e.findings.high} high)</span>` : ''}</td><td>${e.evidenceCount}</td><td>${e.acquiredAt ? escapeHtml(e.acquiredAt.slice(0, 10)) : '—'}</td></tr>`).join('');
-      const body = `<p class="k">Software Passport Registry</p><h1>Observed software passports</h1><p>${entries.length} public repositories reviewed by SPR's own scanners: SBOM generated with Syft, dependency vulnerabilities checked against OSV, secrets and licences scanned. Each page shows exactly what was observed at a specific commit.</p><a class="cta" href="${PUBLIC_ORIGIN}/free-review">Review a public repository free</a><h2>All reviewed software</h2><table><thead><tr><th>Repository</th><th>SBOM components</th><th>Open findings</th><th>Evidence items</th><th>Reviewed</th></tr></thead><tbody>${rows || '<tr><td colspan="5">No completed reviews yet.</td></tr>'}</tbody></table>`;
+      const body = `<p class="k">Software Passport Registry</p><h1>Observed software passports</h1><p>${total} public repositories reviewed by SPR's own scanners: SBOM generated with Syft, dependency vulnerabilities checked against OSV, secrets and licences scanned. Each page shows exactly what was observed at a specific commit. The registry grows continuously: widely-used public repositories are discovered and reviewed through the same pipeline as a visitor's Free Review.</p><a class="cta" href="${PUBLIC_ORIGIN}/free-review">Review a public repository free</a><h2>${pages > 1 ? `Reviewed software (page ${page} of ${pages})` : 'All reviewed software'}</h2><table><thead><tr><th>Repository</th><th>SBOM components</th><th>Open findings</th><th>Evidence items</th><th>Reviewed</th></tr></thead><tbody>${rows || '<tr><td colspan="5">No completed reviews yet.</td></tr>'}</tbody></table>${pager}`;
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('Cache-Control', 'public, max-age=300');
-      return res.send(layout('Observed software passports — Software Passport Registry', `${entries.length} public repositories reviewed with real SBOM, vulnerability and evidence data.`, `${PUBLIC_ORIGIN}/software`, body));
+      return res.send(layout(`Observed software passports${page > 1 ? ` (page ${page})` : ''} — Software Passport Registry`, `${total} public repositories reviewed with real SBOM, vulnerability and evidence data.`, `${PUBLIC_ORIGIN}/software${page > 1 ? `?page=${page}` : ''}`, body));
     } catch (error) { return next(error); }
   });
 
@@ -115,8 +135,7 @@ export function createSoftwareRegistryRouter() {
       const owner = String(req.params.owner ?? ''); const repository = String(req.params.repository ?? '');
       if (!OWNER_PATTERN.test(owner) || !OWNER_PATTERN.test(repository)) return res.status(404).send('Not found');
       const scopedDb = await attachTenantScope(FREE_REVIEW_TENANT_ID, res);
-      const entries = await listCompleted(scopedDb, 50000);
-      const entry = entries.find((e) => e.owner.toLowerCase() === owner.toLowerCase() && e.repository.toLowerCase() === repository.toLowerCase());
+      const entry = (await listCompleted(scopedDb, 1, 0, { owner, repository }))[0];
       if (!entry) { res.setHeader('Cache-Control', 'no-store'); return res.status(404).send(layout('Not reviewed — Software Passport Registry', 'No completed review exists for this repository.', `${PUBLIC_ORIGIN}/software`, `<p class="k">Software Passport Registry</p><h1>${escapeHtml(owner)}/${escapeHtml(repository)}</h1><p>SPR has not completed a review of this repository, so there is nothing to show. No score or estimate is substituted.</p><a class="cta" href="${PUBLIC_ORIGIN}/free-review">Run a free review</a>`)); }
       const findings = await findingDetails(scopedDb, entry.passportId);
       const sev = (s: string) => entry.findings[s] ?? 0;
