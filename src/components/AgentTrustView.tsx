@@ -15,7 +15,7 @@ const agents = [
   { name: 'Trust Agent', status: 'LIVE', description: 'Answers software-trust questions from observed SPR evidence.', action: 'Verify software', icon: ShieldCheck },
   { name: 'Distribution Agent', status: 'LIVE', description: 'Discovers and researches potential MSP opportunities using evidence-first workflows.', action: 'Open distribution', icon: Activity },
   { name: 'Vendor Risk Agent', status: 'LIVE', description: 'Turns vendor evidence, findings, freshness and completeness into a deterministic operational review.', action: 'Run vendor risk review', icon: ShieldCheck },
-  { name: 'Compliance Agent', status: 'NEXT', description: 'Will map observed evidence to supported controls and surface evidence gaps without inventing compliance.', action: 'Planned', icon: CheckCircle2 },
+  { name: 'Compliance Agent', status: 'LIVE', description: 'Maps observed evidence to supported controls and surfaces evidence gaps without inventing compliance.', action: 'Run compliance review via API', icon: CheckCircle2 },
   { name: 'Monitoring Agent', status: 'NEXT', description: 'Will continuously watch passports and evidence for material changes and prepare alerts.', action: 'Planned', icon: Activity },
   { name: 'Report Agent', status: 'NEXT', description: 'Will turn verified evidence and findings into customer-ready reports.', action: 'Planned', icon: Copy },
   { name: 'Revenue Agent', status: 'NEXT', description: 'Will identify observable service opportunities an MSP can package and sell to clients.', action: 'Planned', icon: Sparkles },
