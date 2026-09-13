@@ -595,13 +595,13 @@ export default function FreeReviewView({
                               {result.evidence?.total ?? result.summary.evidenceCount}
                             </div>
                             <div className="text-xs text-[var(--spr-text-muted)]">
-                              evidence items + {result.sbom?.componentCount ?? 0} SBOM components
+                              evidence items + {result.sbom?.componentCount ?? 'UNKNOWN'} SBOM components
                             </div>
                           </div>
                           <div className="rounded-xl border border-[var(--spr-border)] p-4">
                             <div className="text-xs text-[var(--spr-text-muted)]">Verified</div>
                             <div className="mt-2 text-2xl font-bold">
-                              {result.verifiedCapabilities?.length ?? 0}
+                              {result.verifiedCapabilities ? result.verifiedCapabilities.length : 'UNKNOWN'}
                             </div>
                             <div className="text-xs text-[var(--spr-text-muted)]">
                               capabilities with evidence
@@ -715,13 +715,13 @@ export default function FreeReviewView({
                       <div className="rounded-xl border border-[var(--spr-border)] p-4">
                         <div className="text-xs text-[var(--spr-text-muted)]">SBOM</div>
                         <div className="mt-1 text-sm font-semibold">
-                          {result.sbom?.componentCount ?? 'UNKNOWN'} components
+                          {result.sbom?.componentCount !== null && result.sbom?.componentCount !== undefined ? `${result.sbom.componentCount} components` : 'UNKNOWN — SBOM component count not observed'}
                         </div>
                       </div>
                       <div className="rounded-xl border border-[var(--spr-border)] p-4">
                         <div className="text-xs text-[var(--spr-text-muted)]">Freshness</div>
                         <div className="mt-1 text-sm font-semibold">
-                          Exact timestamps in full Passport
+                          UNKNOWN — exact evidence timestamps are not exposed in the free preview
                         </div>
                       </div>
                     </div>
