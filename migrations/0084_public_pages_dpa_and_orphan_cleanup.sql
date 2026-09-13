@@ -1,29 +1,10 @@
 BEGIN;
 
--- 1. Orphaned developer-productivity tables.
---
--- app_users / projects / tasks / snippets / work_sessions were scaffold
--- tables from an unrelated GraphQL template. No code path has ever read or
--- written them. The schema.ts comment claimed they were dropped in 0080, but
--- 0080 removed the placeholder self-passport; the only DROP for these tables
--- was commented-out rollback text in 0000. This migration actually drops
--- them -- guarded: if any of them holds a row the drop is refused, because a
--- table with data is not orphaned and must be looked at by a person.
-DO $$
-DECLARE
-  t text;
-  n bigint;
-BEGIN
-  FOREACH t IN ARRAY ARRAY['work_sessions', 'snippets', 'tasks', 'projects', 'app_users'] LOOP
-    IF to_regclass('public.' || t) IS NOT NULL THEN
-      EXECUTE format('SELECT count(*) FROM %I', t) INTO n;
-      IF n > 0 THEN
-        RAISE EXCEPTION 'refusing to drop %: it holds % row(s); it is not orphaned', t, n;
-      END IF;
-      EXECUTE format('DROP TABLE %I', t);
-    END IF;
-  END LOOP;
-END $$;
+-- 1. Orphaned developer-productivity tables (app_users / projects / tasks /
+-- snippets / work_sessions) are NOT dropped here: the release gate rejects
+-- table drops inside migrations so that destructive changes get explicit review.
+-- scripts/drop-orphan-developer-tables.ts performs the drop as a reviewed,
+-- one-off operation and refuses if any of the tables holds a row.
 
 -- 2. Public contact form (/contact/). Rows belong to the system tenant, the
 -- same one Free Review and distribution use, so RLS applies and the founder

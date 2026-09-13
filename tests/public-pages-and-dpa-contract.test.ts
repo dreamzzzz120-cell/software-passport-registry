@@ -66,17 +66,18 @@ describe('Data Processing Agreement execution and signing', () => {
 
   it('execution is Owner-only and refuses to run unsigned', () => {
     const routes = read('src/routes/public-pages.ts');
-    expect(routes).toContain("router.post('/organization/dpa/execute', requireAuth, requireRole('Owner')");
+    expect(routes).toContain("router.post('/organization/dpa/execute', requireAuth, requireRole('Owner'), rateLimiter");
     expect(routes).toContain("'DPA_SIGNING_NOT_CONFIGURED'");
   });
 });
 
 describe('orphaned developer tables', () => {
-  it('are dropped by 0084 with a non-empty guard, and schema.ts says so', () => {
-    const migration = read('migrations/0084_public_pages_dpa_and_orphan_cleanup.sql');
-    for (const t of ['work_sessions', 'snippets', 'tasks', 'projects', 'app_users']) expect(migration).toContain(`'${t}'`);
-    expect(migration).toContain('RAISE EXCEPTION');
-    expect(read('src/db/schema.ts')).toContain('dropped in migration 0084');
+  it('are dropped by a reviewed script with a non-empty guard, never by a migration, and schema.ts says so', () => {
+    const script = read('scripts/drop-orphan-developer-tables.ts');
+    for (const t of ['work_sessions', 'snippets', 'tasks', 'projects', 'app_users']) expect(script).toContain(`'${t}'`);
+    expect(script).toContain('holds');
+    expect(read('migrations/0084_public_pages_dpa_and_orphan_cleanup.sql')).not.toMatch(/DROP TABLE/i);
+    expect(read('src/db/schema.ts')).toContain('scripts/drop-orphan-developer-tables.ts');
     expect(read('src/db/schema.ts')).not.toContain('dropped in migration 0080');
   });
 });

@@ -17,7 +17,8 @@ import { db, checkDatabaseHealth, appPool } from '../db/index.ts';
 import { attachTenantScope } from '../middleware/tenant-scope.ts';
 import { AuthenticatedRequest, requireAuth, requireRole, requireFounder, rateLimiter } from '../middleware/security.ts';
 import { adminAuth, setUserCustomClaims } from '../lib/firebase-admin.ts';
-import { isEmailProviderConfigured, sendEmailDirect } from '../lib/email.ts';
+import { isEmailProviderConfigured } from '../lib/email.ts';
+import { loadEmailBrand, renderBrandedEmail, sendBrandedEmail, tenantIdForEmail, tenantIdForUid } from '../lib/branded-email.ts';
 import { appendAuditEntry, verifyAuditChain } from '../security/audit-log.ts';
 import { describeUserAgent, sessionFingerprint } from '../security/session-tracking.ts';
 import { offboardTenantData } from '../db/sync.ts';
@@ -333,8 +334,33 @@ export function createAuthRouter() {
       let inviteLink: string | null = null;
       try { inviteLink = await adminAuth.generatePasswordResetLink(email); } catch { inviteLink = null; }
 
-      await appendAuditEntry(db, { tenantId: req.user!.tenantId, action: 'team.invited', actor: req.user!.email, payload: { invitedEmail: email, role: parsed.data.role, clientId } });
-      return res.status(201).json({ ...(inserted as any).rows?.[0], inviteLink });
+      // Email the invitation, branded for this workspace. `emailed` is only
+      // true when the provider accepted the message; otherwise the inviter is
+      // shown the link and told to share it themselves.
+      let emailed = false;
+      let emailError: string | null = null;
+      if (inviteLink && isEmailProviderConfigured()) {
+        try {
+          const brand = await loadEmailBrand(req.user!.tenantId);
+          await sendBrandedEmail(email, `You have been invited to ${brand.productName}`, brand, {
+            heading: `Join ${brand.productName}`,
+            intro: [`${req.user!.email} has invited you to the ${brand.companyName ?? brand.productName} workspace as ${parsed.data.role}.`, 'Set a password to activate your account; you will then sign in with this email address.'],
+            cta: { label: 'Set your password and join', url: inviteLink },
+            outro: ['If you were not expecting this invitation, you can ignore it.'],
+          });
+          emailed = true;
+        } catch (error) {
+          emailError = error instanceof Error ? error.message.slice(0, 200) : 'send failed';
+          console.error('[SPR] invite email failed', email, emailError);
+        }
+      } else if (!inviteLink) {
+        emailError = 'INVITE_LINK_UNAVAILABLE';
+      } else {
+        emailError = 'EMAIL_PROVIDER_NOT_CONFIGURED';
+      }
+
+      await appendAuditEntry(db, { tenantId: req.user!.tenantId, action: 'team.invited', actor: req.user!.email, payload: { invitedEmail: email, role: parsed.data.role, clientId, emailed } });
+      return res.status(201).json({ ...(inserted as any).rows?.[0], inviteLink, emailed, emailError });
     } catch (error) {
       return next(error);
     }
@@ -1054,19 +1080,17 @@ export function createAuthRouter() {
       const email = typeof decoded.email === 'string' ? decoded.email.trim() : '';
       if (!email || !isEmailProviderConfigured()) return res.json({ sent: false, via: 'firebase' });
 
+      // Branded with the workspace the account belongs to, when it has been
+      // provisioned into one; a brand-new signup gets SPR's own branding.
+      const brand = await loadEmailBrand(await tenantIdForUid(decoded.uid));
       const link = await adminAuth.generateEmailVerificationLink(email);
-      await sendEmailDirect(
-        email,
-        'Confirm your Software Passport Registry email',
-        [
-          'Confirm your email address to finish setting up Software Passport Registry.',
-          '',
-          link,
-          '',
-          'If you did not create this account, ignore this message and nothing further will happen.',
-        ].join('\n')
-      );
-      return res.json({ sent: true, via: 'provider' });
+      await sendBrandedEmail(email, `Confirm your ${brand.productName} email`, brand, {
+        heading: 'Confirm your email address',
+        intro: [`Confirm this address to finish setting up your ${brand.productName} account.`],
+        cta: { label: 'Confirm email', url: link },
+        outro: ['If you did not create this account, ignore this message and nothing further will happen.'],
+      });
+      return res.json({ sent: true, via: 'provider', branded: brand.tenantId !== null });
     } catch (error) {
       // A provider failure must not strand the caller: report it as unsent so
       // the client falls back to Firebase rather than showing a dead end.
@@ -1114,23 +1138,66 @@ export function createAuthRouter() {
       const email = req.user!.email?.trim();
       if (!providerConfigured || !email) return res.json({ sent: false, via: 'firebase' });
 
+      const brand = await loadEmailBrand(req.user!.tenantId);
       const link = await adminAuth.generateEmailVerificationLink(email);
-      const body = [
-        'Confirm your email address to finish setting up Software Passport Registry.',
-        '',
-        link,
-        '',
-        'If you did not create this account, ignore this message and nothing further will happen.',
-      ].join('\n');
-
-      await req.db!.execute(sql`
-        INSERT INTO notification_outbox (id, tenant_id, channel, destination, subject, body)
-        VALUES (${`verify_${crypto.randomUUID()}`}, ${req.user!.tenantId}, 'email', ${email},
-                ${'Confirm your Software Passport Registry email'}, ${body})
-      `);
-      return res.json({ sent: true, via: 'provider' });
+      const content = {
+        heading: 'Confirm your email address',
+        intro: [`Confirm this address to finish setting up your ${brand.productName} account.`],
+        cta: { label: 'Confirm email', url: link },
+        outro: ['If you did not create this account, ignore this message and nothing further will happen.'],
+      };
+      try {
+        await sendBrandedEmail(email, `Confirm your ${brand.productName} email`, brand, content);
+        return res.json({ sent: true, via: 'provider', branded: true });
+      } catch (sendError) {
+        // The provider refused right now: queue the same message through
+        // notification_outbox, which retries with backoff and records
+        // last_error, and say so rather than claiming it was sent.
+        const { html, text } = renderBrandedEmail(brand, content);
+        await req.db!.execute(sql`
+          INSERT INTO notification_outbox (id, tenant_id, channel, destination, subject, body, html)
+          VALUES (${`verify_${crypto.randomUUID()}`}, ${req.user!.tenantId}, 'email', ${email}, ${`Confirm your ${brand.productName} email`}, ${text}, ${html})
+        `);
+        console.error('[SPR] resend-verification direct send failed; queued', sendError instanceof Error ? sendError.message : String(sendError));
+        return res.json({ sent: false, via: 'queued', branded: true });
+      }
     } catch (error) {
       return next(error);
+    }
+  });
+
+
+  /**
+   * Password reset from our own domain, branded for the workspace the
+   * address belongs to. Public and rate-limited. The response is identical
+   * whether or not an account exists -- an attacker learns nothing from it --
+   * and only the provider's configuration changes the answer: when no
+   * provider is configured the client is told to fall back to Firebase's
+   * unbranded sender, exactly as before.
+   */
+  router.post('/auth/send-password-reset', rateLimiter, async (req, res) => {
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'A valid email address is required.' });
+    if (!isEmailProviderConfigured()) return res.json({ accepted: false, via: 'firebase' });
+    try {
+      const brand = await loadEmailBrand(await tenantIdForEmail(email));
+      let link: string | null = null;
+      try { link = await adminAuth.generatePasswordResetLink(email); } catch (error) {
+        const code = (error as { code?: string })?.code;
+        if (code !== 'auth/user-not-found' && code !== 'auth/email-not-found') throw error;
+      }
+      if (link) {
+        await sendBrandedEmail(email, `Reset your ${brand.productName} password`, brand, {
+          heading: 'Reset your password',
+          intro: [`Someone asked to reset the password for the ${brand.productName} account at ${email}. Use the button below to choose a new one; the link expires after a short time.`],
+          cta: { label: 'Choose a new password', url: link },
+          outro: ['If you did not ask for this, ignore this message: your password has not changed.'],
+        });
+      }
+      return res.json({ accepted: true, via: 'provider' });
+    } catch (error) {
+      console.error('[SPR] send-password-reset failed', error instanceof Error ? error.message : String(error));
+      return res.json({ accepted: false, via: 'firebase' });
     }
   });
 

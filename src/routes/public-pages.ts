@@ -15,6 +15,10 @@
  *  - GET  /api/organization/dpa            this tenant's current execution.
  *  - POST /api/organization/dpa/execute    Owner accepts the current version.
  *  - GET  /api/founder/contact-inquiries   founder reads what came in.
+ *  - GET  /api/public/branding/logo/:tenantId/:token
+ *        a tenant's saved logo as an image, for branded email. The token is
+ *        an HMAC of the tenant id (see brandingLogoToken), so the route
+ *        cannot be used to enumerate tenants.
  */
 
 import crypto from 'node:crypto';
@@ -25,12 +29,13 @@ import rateLimit from 'express-rate-limit';
 import { config } from '../config.ts';
 import { db } from '../db/index.ts';
 import { attachTenantScope } from '../middleware/tenant-scope.ts';
-import { AuthenticatedRequest, requireAuth, requireRole, requireFounder } from '../middleware/security.ts';
+import { AuthenticatedRequest, requireAuth, requireRole, requireFounder, rateLimiter } from '../middleware/security.ts';
 import { isEmailProviderConfigured, sendEmailDirect } from '../lib/email.ts';
 import { appendAuditEntry } from '../security/audit-log.ts';
 import { SUBPROCESSORS, SUBPROCESSORS_LAST_UPDATED } from '../legal/subprocessors.ts';
 import { DPA_VERSION, DPA_EFFECTIVE_DATE, dpaCanonicalText } from '../legal/dpa-document.ts';
 import { FREE_REVIEW_TENANT_ID } from './free-review-submit.ts';
+import { brandingLogoToken } from '../lib/branded-email.ts';
 
 const PUBLIC_ORIGIN = 'https://www.softwarepassportregistry.com';
 
@@ -203,7 +208,7 @@ export function createPublicPagesRouter() {
     } catch (error) { return next(error); }
   });
 
-  router.get('/organization/dpa', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  router.get('/organization/dpa', requireAuth, rateLimiter, async (req: AuthenticatedRequest, res, next) => {
     try {
       const row = (await req.db!.execute(sql`SELECT ${EXECUTION_COLUMNS} FROM tenant_dpa_executions WHERE tenant_id = ${req.user!.tenantId} ORDER BY executed_at DESC LIMIT 1`) as any).rows?.[0];
       const current = { version: DPA_VERSION, effectiveDate: DPA_EFFECTIVE_DATE, sha256: dpaDocumentSha256() };
@@ -213,7 +218,7 @@ export function createPublicPagesRouter() {
     } catch (error) { return next(error); }
   });
 
-  router.post('/organization/dpa/execute', requireAuth, requireRole('Owner'), async (req: AuthenticatedRequest, res, next) => {
+  router.post('/organization/dpa/execute', requireAuth, requireRole('Owner'), rateLimiter, async (req: AuthenticatedRequest, res, next) => {
     try {
       const secret = documentSigningKey();
       if (!secret) return res.status(503).json({ error: 'DPA_SIGNING_NOT_CONFIGURED', message: 'No document-signing key is configured on this deployment, so an execution could not be signed. Nothing was recorded.' });
@@ -239,7 +244,23 @@ export function createPublicPagesRouter() {
     } catch (error) { return next(error); }
   });
 
-  router.get('/founder/contact-inquiries', requireAuth, requireRole('Owner'), requireFounder, async (req: AuthenticatedRequest, res, next) => {
+  router.get('/public/branding/logo/:tenantId/:token', verifyLimiter, async (req, res, next) => {
+    try {
+      const tenantId = String(req.params.tenantId ?? '');
+      const token = String(req.params.token ?? '');
+      const expected = tenantId.length > 0 && tenantId.length <= 256 ? brandingLogoToken(tenantId) : null;
+      if (!expected || token.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected))) return res.status(404).end();
+      const row = (await db.execute(sql`SELECT logo_data_url AS "logoDataUrl" FROM tenant_branding WHERE tenant_id = ${tenantId} LIMIT 1`) as any).rows?.[0];
+      const match = typeof row?.logoDataUrl === 'string' ? row.logoDataUrl.match(/^data:(image\/(?:png|jpeg|gif|webp|svg\+xml));base64,([A-Za-z0-9+/=]+)$/) : null;
+      if (!match) return res.status(404).end();
+      res.setHeader('Content-Type', match[1]);
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      return res.send(Buffer.from(match[2], 'base64'));
+    } catch (error) { return next(error); }
+  });
+
+  router.get('/founder/contact-inquiries', requireAuth, requireRole('Owner'), requireFounder, rateLimiter, async (req: AuthenticatedRequest, res, next) => {
     try {
       const scopedDb = await attachTenantScope(FREE_REVIEW_TENANT_ID, res);
       const rows = (await scopedDb.execute(sql`

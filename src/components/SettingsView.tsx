@@ -103,7 +103,10 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
         body: JSON.stringify({ email: inviteEmail, role: inviteRole, clientId: inviteRole === 'Client' ? inviteClientId : undefined })
       });
       if (res.ok) {
-        setTeamSuccess(`Successfully sent security invitation to ${inviteEmail}`);
+        const invited = await res.json().catch(() => ({} as { emailed?: boolean; inviteLink?: string | null; emailError?: string | null }));
+        if (invited.emailed === true) setTeamSuccess(`Invitation emailed to ${inviteEmail}.`);
+        else if (invited.inviteLink) setTeamSuccess(`${inviteEmail} was added, but the invitation email was not sent (${invited.emailError || 'no email provider'}). Share this link with them directly: ${invited.inviteLink}`);
+        else setTeamSuccess(`${inviteEmail} was added. No invitation link could be generated; they can use “Forgot password” on the sign-in page with this address.`);
         setInviteEmail('');
         setInviteClientId('');
         fetchProfileAndTeam();
@@ -1163,7 +1166,7 @@ function GettingStartedGuide() {
           <ol className="space-y-2.5 list-decimal list-inside leading-relaxed">
             {step('Open White-label from the left rail', 'Its own page, with a live preview rendered from your real passports.')}
             {step('Set identity, colours, typography, footer', 'Logo and favicon under 200 KB / 45 KB; every palette token for light and dark mode; font; corner radius; support email and URL.')}
-            {step('Save', 'Owner/Admin only — saved once for the whole tenant and applied to the workspace, PDF report exports and the public passport API (name, colour, product name, support URL).')}
+            {step('Save', 'Owner/Admin only — saved once for the whole tenant and applied to the workspace, PDF report exports, the public passport API (name, colour, product name, support URL), and the verification, password-reset and invitation emails sent to members of this workspace.')}
           </ol>
         </div>
 
@@ -1208,7 +1211,6 @@ function GettingStartedGuide() {
           <h4 className="text-[11px] font-bold text-[var(--spr-amber)] uppercase tracking-wide flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> Not available yet</h4>
           <ul className="space-y-1.5 list-disc list-inside leading-relaxed">
             <li><strong className="text-[var(--spr-text)]">Custom domains</strong> — not implemented.</li>
-            <li><strong className="text-[var(--spr-text)]">Branded sign-in emails</strong> — verification and reset emails are sent by the identity provider and are not branded.</li>
           </ul>
         </div>
       </div>
