@@ -1,5 +1,6 @@
 import { ArrowRight, FileSearch, Lock, Radar, Share2, ShieldCheck } from 'lucide-react';
 import FreeReviewPdfGate from './FreeReviewPdfGate';
+import type { ReactNode } from 'react';
 
 type CategoryId = 'security' | 'licensing' | 'supplyChain' | 'reliability' | 'maintainability';
 type CategoryResult =
@@ -8,7 +9,7 @@ type CategoryResult =
 
 export interface FreeReviewResultData {
   passportId: string;
-  scanStatus: 'complete' | 'partial' | 'failed';
+  scanStatus: 'scanning' | 'complete' | 'partial' | 'failed';
   failureReason?: string | null;
   passport: { id?: string; name: string; version: string; publisher: string; verificationStatus: string } | null;
   summary: { openFindings: number; criticalOrHigh: number; evidenceCount: number };
@@ -27,7 +28,7 @@ const trustAreas: [CategoryId, string][] = [
   ['security', 'Security'], ['licensing', 'Licensing'], ['supplyChain', 'Buyer readiness'], ['reliability', 'Reliability'], ['maintainability', 'Maintainability'],
 ];
 
-function ActionButton({ href, children, primary = false }: { href: string; children: React.ReactNode; primary?: boolean }) {
+function ActionButton({ href, children, primary = false }: { href: string; children: ReactNode; primary?: boolean }) {
   const className = `inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${primary ? 'bg-[var(--spr-accent)] text-white' : 'border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] text-[var(--spr-text)] hover:bg-[var(--spr-surface-hover)]'}`;
   return <a className={className} href={href}>{children}</a>;
 }
