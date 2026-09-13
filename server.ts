@@ -41,6 +41,7 @@ import { createSavingsRouter } from './src/routes/savings.ts';
 import { createGovernanceRouter } from './src/routes/governance.ts';
 import { createPrivacyRouter } from './src/routes/privacy.ts';
 import { createCommercialRouter } from './src/routes/commercial.ts';
+import { createDistributionRouter } from './src/routes/distribution.ts';
 import { createMcpTransport } from './src/mcp/transport.ts';
 import { executePublicMcpTool } from './src/mcp/execute.ts';
 
@@ -65,37 +66,19 @@ const corsOrigin = (origin: string | undefined, callback: (error: Error | null, 
 app.use(helmet({ contentSecurityPolicy: { useDefaults: false, directives: { defaultSrc: ["'self'"], baseUri: ["'self'"], objectSrc: ["'none'"], frameAncestors: ["'none'"], formAction: ["'self'"], scriptSrc: ["'self'", "'sha256-kWQT+628v4D1A4MJk9hTD6a0W1AdPlPKtzhPlYKIpZc='"], styleSrc: ["'self'", "'unsafe-inline'"], imgSrc: ["'self'", 'data:', 'blob:', 'https:'], fontSrc: ["'self'", 'data:', 'https:'], connectSrc, frameSrc: ["'self'", 'https:'], workerSrc: ["'self'", 'blob:'], manifestSrc: ["'self'"], upgradeInsecureRequests: [] } }, crossOriginEmbedderPolicy: false, frameguard: { action: 'deny' }, referrerPolicy: { policy: 'no-referrer' } }));
 const PERMISSIONS_POLICY = ['accelerometer=()', 'autoplay=()', 'bluetooth=()', 'camera=()', 'display-capture=()', 'encrypted-media=()', 'geolocation=()', 'gyroscope=()', 'magnetometer=()', 'microphone=()', 'midi=()', 'usb=()', 'serial=()', 'xr-spatial-tracking=()', 'fullscreen=(self)', 'payment=(self)'].join(', ');
 app.use((_req, res, next) => { res.setHeader('Permissions-Policy', PERMISSIONS_POLICY); next(); });
-// Mounted ahead of the app-wide cors() on purpose. That policy is an origin
-// allowlist with credentials: true and denies every origin it does not know,
-// which is correct for the app and fatal for a badge that is embedded on MSP
-// client domains we do not control. The badge router sets its own
-// Access-Control-Allow-Origin: * and is read-only, credential-free, and gated
-// on the same signed Passport token as /api/public/v1/.../trust/:token.
 app.use('/badge', rateLimiter, createBadgeRouter());
-// Public, server-rendered software pages (indexable; only completed reviews).
 app.use('/software', rateLimiter, createSoftwareRegistryRouter());
 app.use('/whitepaper', rateLimiter, createWhitepaperRouter());
-// Public MSP ROI calculator: SPR prices from the live catalog, visitor's own assumptions.
 app.use('/roi', rateLimiter, createRoiRouter());
 app.use(cors({ origin: corsOrigin, credentials: true, methods: ['GET','HEAD','POST','PUT','PATCH','DELETE','OPTIONS'], allowedHeaders: ['Authorization','Content-Type','X-Request-ID','X-API-Key'] }));
 app.use((req, res, next) => { if (req.method === 'TRACE' || req.method === 'CONNECT') return res.status(405).json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'HTTP method is not allowed.' } }); if (req.headers['content-length'] && !/^\d+$/.test(String(req.headers['content-length']))) return res.status(400).json({ error: { code: 'INVALID_CONTENT_LENGTH', message: 'Invalid Content-Length header.' } }); return next(); });
 app.post('/api/billing/webhook', express.raw({ type: 'application/json', limit: requestBodyLimit }), stripeWebhookHandler);
-// Mounted here, above express.json(), for the same reason the Stripe webhook is:
-// the signature is an HMAC over the bytes the sender signed. Once the JSON parser
-// has run, the original bytes are gone and no handler can reconstruct them.
 app.use('/api/psa/webhooks', express.raw({ type: 'application/json', limit: requestBodyLimit }), createPsaWebhookRouter());
 app.use(express.json({ limit: requestBodyLimit, strict: true, type: ['application/json','application/*+json'] }));
 app.use(express.urlencoded({ extended: false, limit: requestBodyLimit }));
 app.use((req, res, next) => { const supplied = req.headers['x-request-id']; const requestId = typeof supplied === 'string' && /^[A-Za-z0-9._:-]{1,100}$/.test(supplied) ? supplied : `req_${randomUUID()}`; res.setHeader('X-Request-ID', requestId); res.setHeader('Cache-Control', req.path.startsWith('/api/') ? 'no-store, max-age=0' : 'public, max-age=0, must-revalidate'); res.locals.requestId = requestId; next(); });
 app.use((req, res, next) => { if (config.isProduction && config.enforceHttps && !req.secure && req.path !== '/health' && req.path !== '/ready' && req.path !== '/api/health') { if (!appOrigin) return res.status(503).json({ error: { code: 'HTTPS_CONFIGURATION_ERROR', message: 'HTTPS redirect target is not configured.' } }); return res.redirect(308, `${appOrigin}${req.originalUrl}`); } return next(); });
 app.get('/health', (_req, res) => res.status(200).json({ status: 'ok', service: 'spr-app', uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000), mcpAvailable: Boolean(process.env.SPR_MCP_BEARER_TOKEN) }));
-// /api/ready is the same probe reached through the Vercel /api/* rewrite; the
-// Settings diagnostics panel calls it, so it must exist under both paths.
-// Readiness is probed by the platform healthcheck and by the Settings diagnostics panel. It runs
-// real database queries, so it is rate-limited -- but with an in-memory,
-// fail-open limiter rather than the Redis-backed fail-closed one used for
-// /api: a readiness probe must not report 503 because the rate-limit store
-// is unreachable, and the shared limiter's dependency is exactly that store.
 const readinessLimiter = rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: 'draft-7', legacyHeaders: false, validate: { trustProxy: false } });
 const readinessHandler = async (_req: Request, res: Response) => { const database = await checkDatabaseHealth(); let rls: boolean | null = null; let runtimeRole: string | null = null; if (database.ok) { const [rlsResult, roleResult] = await Promise.all([ db.execute(sql`SELECT spr_assert_tenant_rls()`).then(() => true).catch(() => false), appPool.query('SELECT current_user AS role').then((scoped) => scoped.rows?.[0]?.role ?? null).catch(() => null) ]); rls = rlsResult; runtimeRole = roleResult; } const leastPrivilege = runtimeRole === 'spr_app_runtime'; const ready = database.ok && rls === true && leastPrivilege; res.status(ready ? 200 : 503).json({ status: ready ? 'ready' : 'not_ready', checks: { database: database.ok ? database : { ok: false, latencyMs: database.latencyMs, error: 'DATABASE_UNAVAILABLE' }, tenantRls: { ok: rls }, runtimeRole: { role: runtimeRole, leastPrivilege } }, uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000) }); };
 app.get('/ready', readinessLimiter, readinessHandler);
@@ -104,6 +87,7 @@ app.get('/api/health', async (_req, res) => { const database = await checkDataba
 app.use('/api', rateLimiter);
 app.use('/api', createAuthRouter());
 app.use('/api', createFounderCommandCenterRouter());
+app.use('/api', createDistributionRouter());
 app.use('/api', createFeedbackRouter());
 app.use('/api', createOrganizationProvisioningRouter());
 app.use('/api', createPublicConnectRouter());
@@ -122,9 +106,7 @@ const requireClientTrustReadScope = async (req: AuthenticatedRequest, res: Respo
     if (!rows.length) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
     return next();
   }
-  if (req.path === '/monitoring' && typeof req.query.passportId !== 'string') {
-    return res.status(400).json({ error: 'PASSPORT_SCOPE_REQUIRED' });
-  }
+  if (req.path === '/monitoring' && typeof req.query.passportId !== 'string') return res.status(400).json({ error: 'PASSPORT_SCOPE_REQUIRED' });
   if (req.path === '/monitoring' && typeof req.query.passportId === 'string') {
     const passportId = req.query.passportId;
     const rows = (await req.db!.execute(sql`SELECT id FROM passports WHERE id=${passportId} AND tenant_id=${req.user.tenantId} AND client_id=${req.user.clientId} LIMIT 1`) as any).rows ?? [];
@@ -160,12 +142,10 @@ const sendSpaShell = (req: Request, res: Response, next: NextFunction) => { if (
 app.get('/', sendSpaShell);
 app.get('/*splat', sendSpaShell);
 app.use((req, res, next) => { if (req.path.startsWith('/api/') || req.path === '/mcp') return res.status(404).json({ error: 'Route not found.', code: 'NOT_FOUND', requestId: res.locals.requestId }); return next(); });
-app.use((err: any, req: Request, res: Response, next: NextFunction) => { if (res.headersSent) return next(err); const requestId = res.locals.requestId || `req_${randomUUID()}`; const status = Number.isInteger(err?.status) && err.status >= 400 && err.status < 600 ? err.status : 500; const errCause = (err as { cause?: unknown })?.cause as { code?: string; message?: string; detail?: string; table?: string; column?: string; constraint?: string } | undefined; console.error('[HTTP_ERROR]', { requestId, status, method: req.method, path: req.path, message: err?.message || String(err), causeCode: errCause?.code ?? null, causeMessage: errCause?.message ?? null, causeDetail: errCause?.detail ?? null, causeTable: errCause?.table ?? null, causeColumn: errCause?.column ?? null, causeConstraint: errCause?.constraint ?? null }); if (config.sentry.dsn && status >= 500) Sentry.captureException(err, { tags: { requestId } }); /* 4xx are client mistakes (malformed body, bad input), not failures to page on */ return res.status(status).json({ error: status === 500 ? 'An unexpected server error occurred.' : err?.message || 'Request failed.', code: status === 500 ? 'INTERNAL_SERVER_ERROR' : 'REQUEST_FAILED', requestId }); });
+app.use((err: any, req: Request, res: Response, next: NextFunction) => { if (res.headersSent) return next(err); const requestId = res.locals.requestId || `req_${randomUUID()}`; const status = Number.isInteger(err?.status) && err.status >= 400 && err.status < 600 ? err.status : 500; const errCause = (err as { cause?: unknown })?.cause as { code?: string; message?: string; detail?: string; table?: string; column?: string; constraint?: string } | undefined; console.error('[HTTP_ERROR]', { requestId, status, method: req.method, path: req.path, message: err?.message || String(err), causeCode: errCause?.code ?? null, causeMessage: errCause?.message ?? null, causeDetail: errCause?.detail ?? null, causeTable: errCause?.table ?? null, causeColumn: errCause?.column ?? null, causeConstraint: errCause?.constraint ?? null }); if (config.sentry.dsn && status >= 500) Sentry.captureException(err, { tags: { requestId } }); return res.status(status).json({ error: status === 500 ? 'An unexpected server error occurred.' : err?.message || 'Request failed.', code: status === 500 ? 'INTERNAL_SERVER_ERROR' : 'REQUEST_FAILED', requestId }); });
 export function rejectConnectTunnels(target: ReturnType<typeof app.listen>) { target.on('connect', (_req, socket) => { socket.end('HTTP/1.1 405 Method Not Allowed\r\nContent-Length: 0\r\nConnection: close\r\n\r\n'); }); return target; }
 let server: ReturnType<typeof app.listen> | undefined; let shuttingDown = false;
 async function shutdown(signal: string) { if (shuttingDown) return; shuttingDown = true; console.info(`[SPR] ${signal} received; shutting down gracefully.`); const forceTimer = setTimeout(() => process.exit(1), 15_000); forceTimer.unref(); if (server) await new Promise<void>(resolve => server!.close(() => resolve())); await closeDatabase().catch(error => console.error('[SPR] Database shutdown error:', error)); if (config.sentry.dsn) await Sentry.close(2_000).catch(() => undefined); clearTimeout(forceTimer); process.exit(0); }
-// No database work happens before the port is bound: /health, /ready and
-// static assets must be servable even when the database is unreachable.
 export async function startServer() { validateConfiguration(); const host = process.env.HOST || '0.0.0.0'; server = app.listen(config.port, host, () => console.info(`[SPR] listening on http://${host}:${config.port}`)); rejectConnectTunnels(server); server.requestTimeout = Number.isFinite(requestTimeoutMs) && requestTimeoutMs > 0 ? requestTimeoutMs : 120_000; server.headersTimeout = Number.isFinite(requestHeaderTimeoutMs) && requestHeaderTimeoutMs > 0 ? requestHeaderTimeoutMs : 15_000; server.keepAliveTimeout = Number.isFinite(keepAliveTimeoutMs) && keepAliveTimeoutMs > 0 ? keepAliveTimeoutMs : 65_000; return server; }
 process.once('SIGTERM', () => void shutdown('SIGTERM')); process.once('SIGINT', () => void shutdown('SIGINT')); process.on('unhandledRejection', reason => console.error('[SPR] Unhandled rejection:', reason)); process.on('uncaughtException', error => { console.error('[SPR] Uncaught exception:', error); void shutdown('uncaughtException'); });
 if (process.env.SPR_SKIP_AUTOSTART !== 'true') void startServer().catch(error => { console.error('[SPR] Startup failed:', error); process.exit(1); });

@@ -16,6 +16,7 @@
     "release": "node dist/migrate.cjs && if [ \"$PROCESS_ROLE\" != \"worker\" ]; then node dist/provision-runtime-roles.cjs; fi",
     "worker": "cross-env NODE_ENV=production node dist/worker.cjs",
     "worker:dev": "tsx worker.ts",
+    "distribution": "tsx scripts/distribution-agent.ts",
     "ai:gateway": "tsx index.ts",
     "migrate": "tsx scripts/migrate.ts",
     "provision:roles": "tsx scripts/provision-runtime-roles.ts",
