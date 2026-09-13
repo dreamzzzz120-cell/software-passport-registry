@@ -48,12 +48,12 @@ export default function ExperienceAgent() {
       const response = await apiFetch('/api/agent/v1/command', { method: 'POST', body: JSON.stringify({ input: text, context: { path: window.location.pathname } }), timeout: 30_000 });
       const payload = await response.json().catch(() => ({})) as CommandResponse;
       if (!response.ok) throw new Error(typeof payload.reply === 'string' ? payload.reply : 'SPR Agent could not complete the request.');
-      setMessages((current) => [...current, { role: 'agent', text: payload.reply || 'Done.', data: payload.data, provenance: payload.provenance, actions: payload.actions }]);
+      setMessages((current) => [...current, { role: 'agent', text: payload.reply || 'The request completed without a factual response.', data: payload.data, provenance: payload.provenance, actions: payload.actions }]);
       if (payload.path) { navigate(payload.path); setOpen(false); return; }
       if (payload.action?.type === 'verify' && payload.action.endpoint && payload.action.payload) {
         const verify = await apiFetch(payload.action.endpoint, { method: 'POST', body: JSON.stringify(payload.action.payload), timeout: 30_000 });
         const result = await verify.json().catch(() => ({})) as AgentResult;
-        const textResult = verify.status === 404 ? 'That software is UNKNOWN because no matching passport record was observed in your authorized workspace. No negative trust claim was made.' : verify.ok ? `I observed ${result.evidence?.count ?? 0} evidence record(s). I am not assigning a separate trust decision.` : 'Verification could not be completed. No trust claim was made.';
+        const textResult = verify.status === 404 ? 'That software is UNKNOWN because no matching passport record was observed in your authorized workspace. No negative trust claim was made.' : verify.ok ? `I observed ${result.evidence?.count ?? 0} evidence record(s). I am not assigning a separate trust decision.` : 'Verification could not be completed. No factual claim was made.';
         setMessages((current) => [...current, { role: 'agent', text: textResult, result }]);
       }
     } catch (error) {
