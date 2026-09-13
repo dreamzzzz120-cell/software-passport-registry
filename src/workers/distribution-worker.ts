@@ -41,29 +41,49 @@ async function claimJob(pool: ReturnType<typeof createWorkerPool>) {
   }
 }
 
+async function updateJob(pool: ReturnType<typeof createWorkerPool>, jobId: string, values: { status: string; result?: unknown; error?: string; delayMs?: number }) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`SELECT set_config('app.tenant_id', $1, true)`, [DISTRIBUTION_TENANT_ID]);
+    if (values.status === 'succeeded') {
+      await client.query(
+        `UPDATE distribution_jobs
+         SET status = 'succeeded', result = $2::jsonb, last_error = NULL,
+             locked_at = NULL, locked_by = NULL, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1 AND status = 'running'`,
+        [jobId, JSON.stringify(values.result ?? null)],
+      );
+    } else {
+      await client.query(
+        `UPDATE distribution_jobs
+         SET status = $2, available_at = CASE WHEN $2 = 'queued' THEN CURRENT_TIMESTAMP + ($3 * INTERVAL '1 millisecond') ELSE available_at END,
+             last_error = $4, locked_at = NULL, locked_by = NULL, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1 AND status = 'running'`,
+        [jobId, values.status, values.delayMs ?? 0, values.error ?? null],
+      );
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function finishJob(pool: ReturnType<typeof createWorkerPool>, jobId: string, result: unknown) {
-  await pool.query(`SELECT set_config('app.tenant_id', $1, false)`, [DISTRIBUTION_TENANT_ID]);
-  await pool.query(
-    `UPDATE distribution_jobs
-     SET status = 'succeeded', result = $2::jsonb, last_error = NULL,
-         locked_at = NULL, locked_by = NULL, updated_at = CURRENT_TIMESTAMP
-     WHERE id = $1 AND status = 'running'`,
-    [jobId, JSON.stringify(result)],
-  );
+  await updateJob(pool, jobId, { status: 'succeeded', result });
 }
 
 async function failJob(pool: ReturnType<typeof createWorkerPool>, job: any, error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   const dead = job.attempts >= job.max_attempts;
-  const delay = calculateBackoff(job.attempts);
-  await pool.query(`SELECT set_config('app.tenant_id', $1, false)`, [DISTRIBUTION_TENANT_ID]);
-  await pool.query(
-    `UPDATE distribution_jobs
-     SET status = $2, available_at = CASE WHEN $2 = 'queued' THEN CURRENT_TIMESTAMP + ($3 * INTERVAL '1 millisecond') ELSE available_at END,
-         last_error = $4, locked_at = NULL, locked_by = NULL, updated_at = CURRENT_TIMESTAMP
-     WHERE id = $1 AND status = 'running'`,
-    [job.id, dead ? 'dead_letter' : 'queued', delay, message.slice(0, 2000)],
-  );
+  await updateJob(pool, job.id, {
+    status: dead ? 'dead_letter' : 'queued',
+    delayMs: calculateBackoff(job.attempts),
+    error: message.slice(0, 2000),
+  });
 }
 
 async function processJob(pool: ReturnType<typeof createWorkerPool>) {
@@ -82,8 +102,6 @@ async function processJob(pool: ReturnType<typeof createWorkerPool>) {
       const score = (businessEmail ? 25 : 0) + (company ? 10 : 0) + (/msp|managed|it services|cyber|security/.test(text) ? 35 : 0);
       await finishJob(pool, job.id, { score, businessEmail, observedAt: new Date().toISOString() });
     } else if (job.kind === 'prepare_outreach') {
-      // Deliberately prepares rather than sends. Outbound delivery must be wired
-      // to an approved provider with its own consent, rate and suppression rules.
       await finishJob(pool, job.id, { status: 'prepared_only', observedAt: new Date().toISOString() });
     } else {
       throw new Error(`DISTRIBUTION_UNKNOWN_JOB_KIND:${job.kind}`);
