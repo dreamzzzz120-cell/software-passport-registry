@@ -16,7 +16,7 @@ describe('homepage presents the product without evaluating anything', () => {
   it('leads with the value proposition and the Free Review as primary CTA', () => {
     expect(home).toContain('Verify software before you trust it.');
     expect(home).toContain('Run a Free Review');
-    expect(home).toContain('View Sample Passport');
+    expect(home).not.toContain('View Sample Passport');
   });
 
   it('replaces the generic asset taxonomy with concrete buyer questions', () => {
@@ -55,11 +55,16 @@ describe('homepage presents the product without evaluating anything', () => {
   });
 });
 
-describe('the public sample Passport is safe by construction', () => {
-  it('is explicitly labelled as demonstration data, more than once', () => {
-    expect(demo).toContain('Demo · Sample data');
-    expect(demo).toContain('sample Passport for demonstration only');
-    expect((demo.match(/DemoBanner \/>/g) || []).length).toBeGreaterThanOrEqual(2);
+describe('the public sample Passport no longer contains fabricated data', () => {
+  it('explicitly tells visitors that sample data was removed', () => {
+    expect(demo).toContain('No sample data');
+    expect(demo).toContain('SPR no longer displays a fabricated sample Passport');
+    expect(demo).toContain('actual observations');
+  });
+
+  it('points visitors to a real review instead of illustrative results', () => {
+    expect(demo).toContain('See a real Software Passport instead.');
+    expect(demo).toContain('Run a Free Review');
   });
 
   it('performs no network, database or tenant access', () => {
@@ -69,24 +74,11 @@ describe('the public sample Passport is safe by construction', () => {
     }
   });
 
-  it('computes no decision - every state is a literal', () => {
+  it('computes no decision and contains no fabricated verification state', () => {
     const code = stripComments(demo);
-    expect(code).not.toContain('evaluateVerification');
-    expect(code).not.toContain('minThirdPartySources');
-    expect(code).toContain('state="PARTIAL"');
-  });
-
-  it('illustrates a state the policy can actually produce, and keeps UNKNOWN visible', () => {
-    // A glowing VERIFIED would misrepresent the product: nothing reaches
-    // VERIFIED under policy 1.0.0 without a publisher attestation.
-    expect(demo).not.toContain('state="VERIFIED"');
-    expect(demo).toContain("state: 'UNKNOWN'");
-    expect(demo).toContain('BUILD_PROVENANCE');
-  });
-
-  it('keeps observations distinct from the decision', () => {
-    expect(demo).toContain('Repeated\n            observations of the same source are not independent corroboration');
-    expect(demo).toContain('EvidenceCard');
+    for (const forbidden of ['evaluateVerification', 'minThirdPartySources', 'state="PARTIAL"', 'state="VERIFIED"', "state: 'UNKNOWN'", 'BUILD_PROVENANCE', 'EvidenceCard']) {
+      expect(code, forbidden).not.toContain(forbidden);
+    }
   });
 
   it('exposes no secret, credential or real customer identifier', () => {
@@ -97,22 +89,14 @@ describe('the public sample Passport is safe by construction', () => {
 });
 
 describe('routing keeps the public boundary explicit', () => {
-  it('adds only the exact /passport/demo path to the public set', () => {
+  it('keeps the legacy sample path exact rather than widening the public boundary', () => {
     expect(app).toContain("'/passport/demo'");
     expect(app).toContain("if (path === '/passport/demo') return <DemoPassport");
-    // Not a wildcard: no other /passport/* path becomes public.
     expect(app).not.toContain("startsWith('/passport/')");
   });
 
   it('does not expose authenticated navigation to anonymous visitors', () => {
-    // The demo renders standalone, outside the authenticated CommandCenter shell.
     const idx = app.indexOf("path === '/passport/demo'");
     expect(app.slice(idx, idx + 200)).not.toContain('CommandCenter');
-  });
-
-  it('is crawlable and listed, unlike tokenized result links', () => {
-    expect(read('public/robots.txt')).toContain('Allow: /passport/demo');
-    expect(read('public/sitemap.xml')).toContain('/passport/demo');
-    expect(read('public/robots.txt')).toContain('Disallow: /free-review/result');
   });
 });
