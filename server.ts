@@ -45,6 +45,7 @@ import { createGovernanceRouter } from './src/routes/governance.ts';
 import { createPrivacyRouter } from './src/routes/privacy.ts';
 import { createCommercialRouter } from './src/routes/commercial.ts';
 import { createDistributionRouter } from './src/routes/distribution.ts';
+import { createDistributionGrowthRouter } from './src/routes/distribution-growth.ts';
 import { createMcpTransport } from './src/mcp/transport.ts';
 import { executePublicMcpTool } from './src/mcp/execute.ts';
 
@@ -91,6 +92,7 @@ app.use('/api', rateLimiter);
 app.use('/api', createAuthRouter());
 app.use('/api', createFounderCommandCenterRouter());
 app.use('/api', createDistributionRouter());
+app.use('/api', createDistributionGrowthRouter());
 app.use('/api', createFeedbackRouter());
 app.use('/api', createOrganizationProvisioningRouter());
 app.use('/api', createPublicConnectRouter());
