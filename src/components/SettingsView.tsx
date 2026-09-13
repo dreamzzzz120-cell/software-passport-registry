@@ -13,10 +13,7 @@ import {
 import { auth } from '../lib/firebase';
 import { apiFetch } from '../utils/apiClient';
 import MfaSettingsPanel from './MfaSettingsPanel';
-<<<<<<< Updated upstream
 import DataGovernancePanel from './DataGovernancePanel';
-=======
->>>>>>> Stashed changes
 
 interface SettingsViewProps {
   theme: 'light' | 'dark';
@@ -33,13 +30,7 @@ function formatUptime(totalSeconds: number): string {
 }
 
 export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps) {
-<<<<<<< Updated upstream
   const [activeSubTab, setActiveSubTab] = useState<'configurations' | 'organization' | 'guide'>('configurations');
-=======
-  const [activeSubTab, setActiveSubTab] = useState<'configurations' | 'bible' | 'organization' | 'guide'>('configurations');
-  const [slaTarget, setSlaTarget] = useState(85);
-  const [saveSuccess, setSaveSuccess] = useState(false);
->>>>>>> Stashed changes
   const [offboarding, setOffboarding] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResults, setTestResults] = useState<any[]>([]);
@@ -347,158 +338,6 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
     }
   };
 
-<<<<<<< Updated upstream
-=======
-  // No backend endpoint persists these fields (SLA target, SSO config,
-  // daily-scan cadence) — they are local component state only and reset on
-  // reload/navigation. This used to show a "Portal configuration updated!"
-  // success message that implied a real save; keep that claim honest until
-  // real persistence exists rather than build a fake one. MFA is the
-  // exception: MfaSettingsPanel above is real, backed by Firebase's actual
-  // TOTP multi-factor APIs, not local state.
-  const handleSaveSettings = () => {
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 4000);
-  };
-
-  const activeBibleProduct = useMemo(() => {
-    return bibleProducts.find(p => p.id === selectedBibleProductId) || bibleProducts[0];
-  }, [bibleProducts, selectedBibleProductId]);
-
-  const filteredBibleProducts = useMemo(() => {
-    return bibleProducts.filter(bp => {
-      const matchSearch = bp.name.toLowerCase().includes(bibleSearchQuery.toLowerCase()) || 
-                          bp.type.toLowerCase().includes(bibleSearchQuery.toLowerCase()) ||
-                          bp.complianceTarget.toLowerCase().includes(bibleSearchQuery.toLowerCase());
-      const matchRisk = bibleFilterRisk === 'all' || bp.riskTier.toLowerCase() === bibleFilterRisk.toLowerCase();
-      return matchSearch && matchRisk;
-    });
-  }, [bibleProducts, bibleSearchQuery, bibleFilterRisk]);
-
-  const handleAddBibleProduct = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newBpName || !newBpVersion) {
-      alert('Please enter a product name and baseline secure version.');
-      return;
-    }
-
-    const newProduct = {
-      id: `pb-custom-${Date.now()}`,
-      name: newBpName,
-      type: newBpType,
-      baselineSecureVersion: newBpVersion,
-      allowedLicenses: newBpAllowedLics.split(',').map(s => s.trim()).filter(Boolean),
-      disallowedLicenses: newBpDisallowedLics.split(',').map(s => s.trim()).filter(Boolean),
-      riskTier: newBpRisk,
-      complianceTarget: newBpCompliance || 'Standard Compliance Profile',
-      safeguardPolicy: newBpSafeguard || 'Verify cryptographic signature and restrict host execution capabilities on staging.'
-    };
-
-    setBibleProducts(prev => [newProduct, ...prev]);
-    setSelectedBibleProductId(newProduct.id);
-    setShowAddBibleProduct(false);
-
-    // Reset inputs
-    setNewBpName('');
-    setNewBpVersion('');
-    setNewBpCompliance('');
-    setNewBpSafeguard('');
-  };
-
-  const handleRunSandboxAudit = () => {
-    let targetName = sandboxProduct;
-    if (sandboxProduct === 'custom' && sandboxCustomName) {
-      targetName = sandboxCustomName;
-    }
-
-    const matchedBp = bibleProducts.find(bp =>
-      bp.name.toLowerCase() === targetName.toLowerCase() ||
-      targetName.toLowerCase().includes(bp.name.toLowerCase())
-    );
-
-    let versionStatus: 'Compliant' | 'Warning' | 'Fail' = 'Compliant';
-    let versionDetails = '';
-
-    const inputVer = sandboxVersion.trim();
-    if (!inputVer) {
-      versionStatus = 'Warning';
-      versionDetails = 'No version specified. Auditing engine cannot verify baseline standards.';
-    } else if (matchedBp) {
-      const baseline = matchedBp.baselineSecureVersion;
-      const baselineNum = parseFloat(baseline.replace(/[^0-9.]/g, ''));
-      const inputNum = parseFloat(inputVer.replace(/[^0-9.]/g, ''));
-
-      if (!isNaN(baselineNum) && !isNaN(inputNum)) {
-        if (inputNum < baselineNum) {
-          versionStatus = 'Fail';
-          versionDetails = `Ingested version v${inputVer} is older than the recommended secure baseline v${baseline}. Potential known CVE exposures exist!`;
-        } else {
-          versionStatus = 'Compliant';
-          versionDetails = `Version v${inputVer} matches or exceeds secure baseline standards (v${baseline}).`;
-        }
-      } else {
-        versionDetails = `Assumed compatible with baseline standards (Recommended baseline: v${baseline}).`;
-      }
-    } else {
-      versionDetails = 'Unregistered custom software. Compliance baseline has not been defined in the Master Bible.';
-    }
-
-    let licenseStatus: 'Compliant' | 'Warning' | 'Fail' = 'Compliant';
-    let licenseDetails = '';
-
-    if (matchedBp) {
-      const allowed = matchedBp.allowedLicenses.map((l: string) => l.toLowerCase());
-      const disallowed = matchedBp.disallowedLicenses.map((l: string) => l.toLowerCase());
-      const queryLic = sandboxLicense.trim().toLowerCase();
-
-      if (disallowed.includes(queryLic)) {
-        licenseStatus = 'Fail';
-        licenseDetails = `License "${sandboxLicense}" is strictly prohibited for the enterprise by corporate policy. Refuse deployments.`;
-      } else if (allowed.length > 0 && !allowed.includes(queryLic)) {
-        licenseStatus = 'Warning';
-        licenseDetails = `License "${sandboxLicense}" is not explicitly greenlisted in the Master Bible for ${matchedBp.name}. Legal review recommended.`;
-      } else {
-        licenseStatus = 'Compliant';
-        licenseDetails = `License "${sandboxLicense}" matches greenlisted standards for this software class.`;
-      }
-    } else {
-      const queryLic = sandboxLicense.trim().toLowerCase();
-      if (['gpl-3.0', 'agpl-3.0', 'gpl-3.0-only', 'agpl-3.0-only', 'sspl-1.0'].includes(queryLic)) {
-        licenseStatus = 'Fail';
-        licenseDetails = `Copyleft license "${sandboxLicense}" detected. Deploying to commercial client clouds presents critical proprietary exposure risks.`;
-      } else {
-        licenseStatus = 'Compliant';
-        licenseDetails = `License "${sandboxLicense}" is typical of standard permissible open-source software libraries.`;
-      }
-    }
-
-    const complianceTarget = matchedBp ? matchedBp.complianceTarget : 'General NIST SP 800-53 Rev 5 / CIS Safeguards';
-    const safeguardPolicy = matchedBp ? matchedBp.safeguardPolicy : 'Verify cryptographic signature (SLSA/Cosign), restrict container capabilities, and verify dependency CVE maps prior to operational staging.';
-
-    let overallStatus: 'PASS' | 'WARN' | 'FAIL' = 'PASS';
-    if (versionStatus === 'Fail' || licenseStatus === 'Fail') {
-      overallStatus = 'FAIL';
-    } else if (versionStatus === 'Warning' || licenseStatus === 'Warning') {
-      overallStatus = 'WARN';
-    }
-
-    setSandboxReport({
-      productName: targetName,
-      version: inputVer || 'unknown',
-      license: sandboxLicense,
-      environment: sandboxEnv,
-      overallStatus,
-      versionStatus,
-      versionDetails,
-      licenseStatus,
-      licenseDetails,
-      complianceTarget,
-      safeguardPolicy,
-      timestamp: new Date().toISOString()
-    });
-  };
-
->>>>>>> Stashed changes
   return (
     <div className="space-y-6" id="msp-settings-view">
       {/* Page Header */}
