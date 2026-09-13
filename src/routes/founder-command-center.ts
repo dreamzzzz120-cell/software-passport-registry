@@ -79,17 +79,17 @@ export function createFounderCommandCenterRouter() {
     }
   });
 
-  // Platform-wide passport registry: every passport ever issued, across every
-  // tenant, with the tenant's Owner as the "holder". organizations/
-  // organization_memberships (migration 0049/0050) are NOT wired to tenant_id
-  // yet -- see 0050's own comment -- so the only authoritative link from a
-  // passport to a human is passports.tenant_id -> users.tenant_id, picking
-  // that tenant's earliest Owner-role user the same way ensureInitialSelfPassport
-  // does. A tenant with no Owner row yet (mid-signup) shows holder as null
-  // rather than fabricating one.
-  // rateLimiter is applied a second time here (already global via
-  // app.use('/api', rateLimiter) in server.ts) purely so CodeQL's per-route
-  // static analysis recognizes this authorized route as rate-limited.
+  // Platform-wide passport registry. Free Review is a system/intake tenant,
+  // not a customer tenant, so its generated passports must not inflate the
+  // platform registry or appear as customer-owned records. We retain those
+  // rows for the Free Review flow and evidence history; this endpoint simply
+  // excludes them from the customer-facing founder registry.
+  //
+  // A repository can also have multiple historical passports from repeated
+  // scans. The Founder registry is an inventory view, so show only the newest
+  // passport for each tenant + publisher + software name and expose the number
+  // of historical versions separately. The window functions run before the
+  // newest-row filter so versionCount represents the actual retained history.
   router.get('/founder/passports', requireAuth, requireRole('Owner'), requireFounder, rateLimiter, async (_req: AuthenticatedRequest, res, next) => {
     try {
       const result = await db.execute(sql`
@@ -103,9 +103,26 @@ export function createFounderCommandCenterRouter() {
           p.overall_score AS "overallScore",
           p.verification_status AS "verificationStatus",
           p.release_date AS "releaseDate",
+          p.version_count AS "versionCount",
           holder.email AS "holderEmail",
           holder.company_name AS "holderCompany"
-        FROM passports p
+        FROM (
+          SELECT ranked.*
+          FROM (
+            SELECT
+              p.*,
+              ROW_NUMBER() OVER (
+                PARTITION BY p.tenant_id, LOWER(p.name), LOWER(p.publisher)
+                ORDER BY p.release_date DESC NULLS LAST, p.id DESC
+              ) AS rn,
+              COUNT(*) OVER (
+                PARTITION BY p.tenant_id, LOWER(p.name), LOWER(p.publisher)
+              ) AS version_count
+            FROM passports p
+            WHERE p.tenant_id <> 'tenant-free-review-system'
+          ) ranked
+          WHERE ranked.rn = 1
+        ) p
         LEFT JOIN LATERAL (
           SELECT email, company_name
           FROM users
@@ -211,9 +228,6 @@ export function createFounderCommandCenterRouter() {
     if (Object.keys(parsed.data).length === 0) return res.status(400).json({ error: 'No fields to update' });
     try {
       const { title, category, status, notes, dueDate } = parsed.data;
-      // COALESCE against a sentinel-free partial update: only fields present
-      // in the parsed body override the existing column, matching the
-      // partial-PATCH semantics used elsewhere in this codebase.
       const result = await db.execute(sql`
         UPDATE founder_tasks SET
           title = COALESCE(${title ?? null}, title),
