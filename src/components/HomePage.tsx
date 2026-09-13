@@ -1,5 +1,4 @@
 import { ArrowRight } from 'lucide-react';
-import TrustField from './trust/TrustField';
 import LegalFooterLinks from './legal/LegalFooterLinks';
 import UniversalIntakeView from './UniversalIntakeView';
 
@@ -60,12 +59,17 @@ export default function HomePage({ onCreatePassport, onExploreTrustNetwork, onVi
           <LegalFooterLinks className="mt-8" />
         </div>
         <div className="hidden w-full flex-1 justify-center lg:flex">
-          <TrustField demo state="VERIFIED" centerLabel="PASSPORT" size={380} dimensions={[
-            { key: 'security', label: 'Security', value: 91 },
-            { key: 'compliance', label: 'Compliance', value: 84 },
-            { key: 'vendor', label: 'Vendor Rep.', value: 78 },
-            { key: 'confidence', label: 'Confidence', value: 88 },
-          ]} />
+          <div className="w-full max-w-md rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] p-7">
+            <div className="text-[11px] font-bold uppercase tracking-[.18em] text-[var(--spr-highlight)]">Live evidence only</div>
+            <h2 className="mt-3 text-2xl font-semibold text-[var(--spr-text)]">No software is being scored here.</h2>
+            <p className="mt-3 text-sm leading-6 text-[var(--spr-text-muted)]">This homepage does not invent a security, compliance, vendor, or confidence score. Run a Free Review and SPR will populate the result from the repository and evidence it actually observed.</p>
+            <div className="mt-6 grid grid-cols-2 gap-3 text-xs">
+              {['Repository identity', 'SBOM evidence', 'Vulnerability findings', 'Verification state'].map((item) => (
+                <div key={item} className="rounded border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-3 text-[var(--spr-text-muted)]">{item}<div className="mt-1 font-semibold text-[var(--spr-text)]">Not yet observed</div></div>
+              ))}
+            </div>
+            <button onClick={onExploreTrustNetwork} className="mt-6 inline-flex items-center gap-2 rounded-[3px] bg-[var(--spr-accent)] px-5 py-2.5 text-sm font-semibold text-white">Run a Free Review <ArrowRight className="h-4 w-4" /></button>
+          </div>
         </div>
       </section>
 
