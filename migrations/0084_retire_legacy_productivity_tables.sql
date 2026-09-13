@@ -16,10 +16,12 @@ CREATE TABLE IF NOT EXISTS contact_inquiries (
   name text NOT NULL,
   email text NOT NULL,
   company text,
-  topic text NOT NULL CHECK (topic IN ('product', 'security', 'compliance', 'partnership', 'msp_pilot', 'privacy', 'other')),
+  topic text NOT NULL CHECK (topic IN ('product', 'security', 'partnership', 'msp_pilot', 'privacy', 'other')),
   message text NOT NULL,
   ip_hash text NOT NULL,
   user_agent text,
+  -- Set only when the provider accepted the forwarding email; null means the
+  -- message is stored but nobody has been emailed about it yet.
   forwarded_at timestamp,
   forward_error text,
   created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -36,6 +38,8 @@ BEGIN
       USING (tenant_id = current_setting('app.tenant_id', true))
       WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
   END IF;
+  -- The retention worker purges old messages; same cross-tenant worker
+  -- policy 0048 applies to every other tenant-scoped table.
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'spr_worker_runtime')
      AND NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'contact_inquiries' AND policyname = 'spr_worker_cross_tenant') THEN
     CREATE POLICY spr_worker_cross_tenant ON contact_inquiries FOR ALL TO spr_worker_runtime
@@ -43,7 +47,12 @@ BEGIN
   END IF;
 END $$;
 
--- 3. Data Processing Agreement executions.
+-- 3. Data Processing Agreement executions. One row per acceptance; the
+-- newest row for a tenant is its current DPA. document_sha256 binds the row
+-- to the exact canonical wording accepted; signature is an HMAC over the
+-- record computed by the server with the document-signing key (see
+-- documentSigningKey() in src/routes/public-pages.ts) so the
+-- downloaded PDF can be verified against /api/public/dpa/verify.
 CREATE TABLE IF NOT EXISTS tenant_dpa_executions (
   id text PRIMARY KEY,
   tenant_id text NOT NULL,
