@@ -1,6 +1,7 @@
-import { useMemo, useState, type MouseEvent } from 'react';
+import { useMemo, useState } from 'react';
 import { CircleHelp, Filter, Maximize2, Search, Share2, X, ZoomIn, ZoomOut } from 'lucide-react';
 import type { Client, SoftwarePassport } from '../types';
+import { explicitComponentReference, persistedIdentity } from '../lib/trustGraphSecurity';
 
 type GraphAsset = { id: string; name?: string; hostName?: string; type?: string; version?: string };
 type GraphFinding = { id?: string; title?: string; control_id?: string; passport_id?: string; passportId?: string; asset_id?: string; client_id?: string; severity?: string; status?: string; description?: string };
@@ -14,10 +15,11 @@ const COLORS: Record<GraphKind, string> = { client: 'var(--spr-highlight)', pass
 const KIND_ORDER: GraphKind[] = ['client', 'passport', 'component', 'asset', 'evidence', 'finding', 'vulnerability'];
 const EDGE_RATIONALE: Record<string, string> = {
   owns: "Drawn from the passport's persisted clientId relationship.",
-  contains: "Drawn because this component is present in the passport's SBOM evidence.",
+  contains: "Drawn because this component is present in the passport's SBOM evidence collection.",
   supports: "Drawn because this evidence record is present in the passport's evidence collection.",
   'has finding': "Drawn because the finding explicitly references this passport, asset, or client by persisted ID.",
-  'has vulnerability': "Drawn because this vulnerability is present in the passport's vulnerability collection or has an explicit persisted component identity.",
+  'affected by': "Drawn only because the vulnerability contains an explicit persisted componentId/component_id that resolves to this component in the same passport.",
+  'has vulnerability': "Drawn because the vulnerability is explicitly present in the passport's vulnerability collection; no component identity was inferred.",
 };
 const short = (value: unknown, fallback: string) => { const text = String(value || fallback); return text.length > 23 ? `${text.slice(0, 21)}…` : text; };
 
@@ -32,62 +34,92 @@ export default function TrustGraphView({ clients = [], passports = [], assets = 
 
   const { nodes, edges } = useMemo(() => {
     const ns: GraphNode[] = [], es: GraphEdge[] = [];
+    const componentNodeByPersistedId = new Map<string, string>();
     const addNode = (node: GraphNode) => { if (!ns.some(n => n.id === node.id)) ns.push(node); };
     const addEdge = (source: string, target: string, label: string) => { if (source !== target && !es.some(e => e.source === source && e.target === target && e.label === label)) es.push({ source, target, label }); };
 
-    clients.forEach((c, i) => addNode({ id: `client:${c.id}`, label: short(c.name, 'Client'), kind: 'client', detail: `${c.domain || 'No domain'} · client record`, x: 170, y: 100 + (i % 6) * 85 }));
-    passports.forEach((p, i) => addNode({ id: `passport:${p.id}`, label: short(p.name, 'Passport'), kind: 'passport', detail: `v${p.version} · ${p.publisher || 'publisher unavailable'}`, x: 410, y: 140 + (i % 6) * 85 }));
-    assets.forEach((a, i) => addNode({ id: `asset:${a.id}`, label: short(a.name || a.hostName, 'Asset'), kind: 'asset', detail: `${a.type || 'asset'} · ${a.version || 'version unavailable'}`, x: 780, y: 80 + (i % 7) * 80 }));
+    clients.forEach((c, i) => {
+      const id = persistedIdentity(c.id);
+      if (!id) return;
+      addNode({ id: `client:${id}`, label: short(c.name, 'Client'), kind: 'client', detail: `${c.domain || 'No domain'} · client record`, x: 170, y: 100 + (i % 6) * 85 });
+    });
+    passports.forEach((p, i) => {
+      const id = persistedIdentity(p.id);
+      if (!id) return;
+      addNode({ id: `passport:${id}`, label: short(p.name, 'Passport'), kind: 'passport', detail: `v${p.version} · ${p.publisher || 'publisher unavailable'}`, x: 410, y: 140 + (i % 6) * 85 });
+    });
+    assets.forEach((a, i) => {
+      const id = persistedIdentity(a.id);
+      if (!id) return;
+      addNode({ id: `asset:${id}`, label: short(a.name || a.hostName, 'Asset'), kind: 'asset', detail: `${a.type || 'asset'} · ${a.version || 'version unavailable'}`, x: 780, y: 80 + (i % 7) * 80 });
+    });
 
     passports.forEach((p, pi) => {
-      const pid = `passport:${p.id}`;
-      const clientId = String((p as SoftwarePassport & { clientId?: string }).clientId || '');
-      if (clientId && clients.some(c => c.id === clientId)) addEdge(`client:${clientId}`, pid, 'owns');
+      const passportId = persistedIdentity(p.id);
+      if (!passportId) return;
+      const pid = `passport:${passportId}`;
+      const clientId = persistedIdentity((p as SoftwarePassport & { clientId?: string }).clientId);
+      if (clientId && clients.some(c => persistedIdentity(c.id) === clientId)) addEdge(`client:${clientId}`, pid, 'owns');
 
       // Publisher text is descriptive metadata. It is NOT a persisted Vendor FK.
       // Therefore this graph intentionally creates no Vendor node and no publishes edge.
 
       p.evidence.forEach((e: any, ei) => {
-        const id = `evidence:${p.id}:${String(e.id || ei)}`;
+        const evidenceId = persistedIdentity(e.id);
+        const id = evidenceId ? `evidence:${passportId}:${evidenceId}` : `evidence:${passportId}:index:${ei}`;
         addNode({ id, label: short(e.name, 'Evidence'), kind: 'evidence', detail: `${e.status || 'status unavailable'} · ${e.type || 'record'}`, meta: [e.hash && `hash ${e.hash}`, e.signer && `signer ${e.signer}`, e.timestamp && `observed ${e.timestamp}`].filter(Boolean).join(' · ') || undefined, x: 1040, y: 45 + ((pi * 3 + ei) % 9) * 60 });
         addEdge(pid, id, 'supports');
       });
 
       const components = Array.isArray(p.sbom) ? p.sbom : [];
+      const vulnerabilities = Array.isArray(p.vulnerabilities) ? p.vulnerabilities : [];
+      const explicitComponentRefs = new Set(vulnerabilities.map((v: any) => explicitComponentReference(v)).filter((id): id is string => Boolean(id)));
       const riskComponents = components.filter((c: any) => c.trustLevel !== 'Trusted');
-      riskComponents.forEach((c: any, ci) => {
-        const identity = c.purl || c.id || c.componentId;
-        const id = identity ? `component:${p.id}:${String(identity)}` : `component:${p.id}:index:${ci}`;
-        addNode({ id, label: short(c.name, 'Component'), kind: 'component', detail: `${c.dependencyType || 'dependency'} · ${c.trustLevel || 'trust level unavailable'}`, meta: c.purl, x: 610, y: 60 + ((pi * 4 + ci) % 8) * 70 });
+      const componentsToShow = components.filter((c: any) => {
+        const componentId = persistedIdentity(c.id) ?? persistedIdentity(c.componentId);
+        return c.trustLevel !== 'Trusted' || Boolean(componentId && explicitComponentRefs.has(componentId));
+      });
+
+      componentsToShow.forEach((c: any, ci) => {
+        const componentId = persistedIdentity(c.id) ?? persistedIdentity(c.componentId);
+        const purl = persistedIdentity(c.purl);
+        const identity = componentId ? `id:${componentId}` : purl ? `purl:${purl}` : `index:${ci}`;
+        const id = `component:${passportId}:${identity}`;
+        addNode({ id, label: short(c.name, 'Component'), kind: 'component', detail: `${c.dependencyType || 'dependency'} · ${c.trustLevel || 'trust level unavailable'}`, meta: purl, x: 610, y: 60 + ((pi * 4 + ci) % 8) * 70 });
+        if (componentId) componentNodeByPersistedId.set(`${passportId}:${componentId}`, id);
         addEdge(pid, id, 'contains');
       });
       if (components.length > riskComponents.length) {
         const node = ns.find(n => n.id === pid);
-        if (node) node.detail += ` · ${components.length - riskComponents.length} additional trusted component${components.length - riskComponents.length === 1 ? '' : 's'} not shown`;
+        if (node) node.detail += ` · ${components.length - riskComponents.length} additional trusted component${components.length - riskComponents.length === 1 ? '' : 's'} not shown unless explicitly vulnerability-referenced`;
       }
 
-      (p.vulnerabilities || []).forEach((v: any, vi) => {
-        const id = `vulnerability:${p.id}:${String(v.id || vi)}`;
+      vulnerabilities.forEach((v: any, vi) => {
+        const vulnerabilityId = persistedIdentity(v.id) ?? `index:${vi}`;
+        const id = `vulnerability:${passportId}:${vulnerabilityId}`;
         addNode({ id, label: short(v.title || v.component, 'Vulnerability'), kind: 'vulnerability', detail: `${v.severity || 'severity unavailable'} · ${v.status || 'status unavailable'}`, meta: [v.cvss != null && `CVSS ${v.cvss}`, v.fixedVersion && `fix ${v.fixedVersion}`, v.description].filter(Boolean).join(' · ') || undefined, x: 1270, y: 60 + (vi % 8) * 70 });
 
-        // NEVER match vulnerability.component to component.name. A matching
-        // name is not identity evidence. Only an explicit persisted component
-        // ID can create a component → vulnerability relationship.
-        const componentId = v.componentId || v.component_id;
-        if (componentId) {
-          const target = ns.find(n => n.kind === 'component' && (n.id === `component:${p.id}:${String(componentId)}`));
-          if (target) addEdge(target.id, id, 'has vulnerability'); else addEdge(pid, id, 'has vulnerability');
-        } else addEdge(pid, id, 'has vulnerability');
+        // A component → vulnerability edge is valid only when the vulnerability
+        // carries an explicit persisted component foreign key that resolves to a
+        // component in this same passport. Never join by name, PURL, version, or index.
+        const componentId = explicitComponentReference(v);
+        const componentNodeId = componentId ? componentNodeByPersistedId.get(`${passportId}:${componentId}`) : undefined;
+        if (componentNodeId) addEdge(componentNodeId, id, 'affected by');
+        else addEdge(pid, id, 'has vulnerability');
       });
     });
 
     findings.forEach((raw, i) => {
-      const f = raw as GraphFinding, id = `finding:${String(f.id || i)}`;
-      const linkedPassport = f.passport_id || f.passportId;
+      const f = raw as GraphFinding;
+      const findingId = persistedIdentity(f.id);
+      const id = findingId ? `finding:${findingId}` : `finding:index:${i}`;
+      const linkedPassport = persistedIdentity(f.passport_id) ?? persistedIdentity(f.passportId);
+      const linkedAsset = persistedIdentity(f.asset_id);
+      const linkedClient = persistedIdentity(f.client_id);
       addNode({ id, label: short(f.title || f.control_id, 'Finding'), kind: 'finding', detail: `${f.severity || 'severity unavailable'} · ${f.status || 'status unavailable'}`, meta: f.description, x: 930, y: 90 + (i % 9) * 65 });
-      if (linkedPassport && passports.some(p => p.id === linkedPassport)) addEdge(`passport:${linkedPassport}`, id, 'has finding');
-      else if (f.asset_id && assets.some(a => a.id === f.asset_id)) addEdge(`asset:${f.asset_id}`, id, 'has finding');
-      else if (f.client_id && clients.some(c => c.id === f.client_id)) addEdge(`client:${f.client_id}`, id, 'has finding');
+      if (linkedPassport && passports.some(p => persistedIdentity(p.id) === linkedPassport)) addEdge(`passport:${linkedPassport}`, id, 'has finding');
+      else if (linkedAsset && assets.some(a => persistedIdentity(a.id) === linkedAsset)) addEdge(`asset:${linkedAsset}`, id, 'has finding');
+      else if (linkedClient && clients.some(c => persistedIdentity(c.id) === linkedClient)) addEdge(`client:${linkedClient}`, id, 'has finding');
     });
     return { nodes: ns, edges: es };
   }, [assets, clients, findings, passports]);
@@ -106,7 +138,7 @@ export default function TrustGraphView({ clients = [], passports = [], assets = 
   const zoomBy = (factor: number) => setView(v => ({ ...v, k: Math.min(2.5, Math.max(0.5, v.k * factor)) }));
 
   return <section className="space-y-6" aria-labelledby="trust-graph-title">
-    <header className="spr-panel p-6"><div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[.06em] text-[#9cdcfe]"><Share2 className="h-4 w-4" /> Trust graph</div><h1 id="trust-graph-title" className="mt-2 text-3xl font-semibold tracking-tight">Observed relationships</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--spr-text-muted)]">Relationships are drawn only from explicit persisted relationships or evidence collections. Matching names or IDs alone never create a trust relationship. Click a node for its record, or click a relationship line for why it was drawn.</p></div><div className="flex gap-2 text-xs text-[var(--spr-text-muted)]"><span>{nodes.length} nodes</span><span>·</span><span>{edges.length} relationships</span></div></div>
+    <header className="spr-panel p-6"><div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[.06em] text-[#9cdcfe]"><Share2 className="h-4 w-4" /> Trust graph</div><h1 id="trust-graph-title" className="mt-2 text-3xl font-semibold tracking-tight">Observed relationships</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--spr-text-muted)]">Relationships are drawn only from explicit persisted relationships or authoritative evidence collections. Matching names, labels, PURLs, versions, or unrelated IDs never create a relationship. Click a node for its record, or click a relationship line for why it was drawn.</p></div><div className="flex gap-2 text-xs text-[var(--spr-text-muted)]"><span>{nodes.length} nodes</span><span>·</span><span>{edges.length} relationships</span></div></div>
       <div className="mt-5 flex flex-col gap-3 md:flex-row"><label className="relative min-w-0 flex-1"><Search size={16} className="absolute left-3 top-3 text-[var(--spr-text-muted)]" /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search loaded records…" className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] py-2.5 pl-9 pr-9 text-sm text-[var(--spr-text)] outline-none" />{query && <button onClick={() => setQuery('')} aria-label="Clear search" className="absolute right-2 top-2 p-1"><X size={15} /></button>}</label><label className="flex items-center gap-2 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-3"><Filter size={15} /><select value={kindFilter} onChange={e => setKindFilter(e.target.value as typeof kindFilter)} className="bg-transparent py-2.5 text-sm"><option value="all">All record types</option>{KIND_ORDER.map(k => <option key={k} value={k}>{k}</option>)}</select></label></div>
     </header>
     <div className="overflow-hidden spr-panel relative"><div className="absolute right-3 top-3 z-10 flex gap-1"><button onClick={() => zoomBy(1.2)} aria-label="Zoom in" className="grid h-7 w-7 place-items-center rounded-md border"><ZoomIn size={14} /></button><button onClick={() => zoomBy(1 / 1.2)} aria-label="Zoom out" className="grid h-7 w-7 place-items-center rounded-md border"><ZoomOut size={14} /></button><button onClick={() => setView({ x: 0, y: 0, k: 1 })} aria-label="Reset view" className="grid h-7 w-7 place-items-center rounded-md border"><Maximize2 size={13} /></button></div>
