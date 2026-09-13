@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { ArrowRight, CheckCircle2, FileArchive, Loader2, ShieldCheck, Upload } from 'lucide-react';
 import { Github } from 'lucide-react-base';
 import { apiFetch } from '../utils/apiClient';
+import { freeReviewResultPath } from './FreeReviewView';
 
 const MAX_FILES = 100;
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
@@ -76,7 +77,22 @@ export default function NewReviewIntake() {
       const response = await apiFetch('/api/free-review/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ owner: parts[0], repository: parts[1] }) });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body?.error || 'Could not start the repository review.');
-      setMessage(`Repository review started for ${parts[0]}/${parts[1]}.`);
+
+      // The repository review API already returns the durable, signed status
+      // credential used by the public Free Review result surface. Send the
+      // authenticated New Review workflow straight to that real result page
+      // instead of trapping the user on a generic "review started" message.
+      // The result page polls the worker's recorded progress and then renders
+      // the actual observed evidence, findings, SBOM/component data and
+      // verification outcome. Nothing here invents progress or a score.
+      if (typeof body?.statusUrl !== 'string' || typeof body?.passportId !== 'string') {
+        throw new Error('The review started, but SPR did not return a valid result link.');
+      }
+      const marker = '/status/';
+      const markerIndex = body.statusUrl.indexOf(marker);
+      const token = markerIndex >= 0 ? body.statusUrl.slice(markerIndex + marker.length) : '';
+      if (!token) throw new Error('The review started, but SPR did not return a valid status token.');
+      window.location.assign(freeReviewResultPath(body.passportId, decodeURIComponent(token)));
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not start the repository review.'); }
     finally { setBusy(false); }
   };

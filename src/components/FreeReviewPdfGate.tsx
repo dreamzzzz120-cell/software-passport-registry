@@ -4,15 +4,11 @@
  */
 
 import { useState, type FormEvent } from 'react';
-import { FileDown, Lock } from 'lucide-react';
+import { CheckCircle2, FileDown, Lock } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { apiFetch } from '../utils/apiClient';
 
-// The PDF is rendered here, in the browser, from the result the visitor can
-// already see on screen -- nothing the server withheld is added to it. The
-// gate exists to capture an email for a real result someone wanted to
-// keep, not to hide content behind a form.
 type Props = {
   passportId: string;
   statusUrl: string;
@@ -59,6 +55,33 @@ function buildPdf(result: any, repositoryLabel: string): jsPDF {
   return doc;
 }
 
+function buildInterpretation(result: any): { label: string; text: string; tone: 'positive' | 'neutral' | 'attention' }[] {
+  const rows: { label: string; text: string; tone: 'positive' | 'neutral' | 'attention' }[] = [];
+  const findings = result.findings;
+  const evidence = result.evidence;
+  const assessment = result.assessment;
+
+  if (findings?.total > 0) {
+    rows.push({ label: 'Risk observed', text: `${findings.total} finding${findings.total === 1 ? '' : 's'} were detected by the engines that ran. ${findings.elevated > 0 ? `${findings.elevated} are elevated (critical or high).` : 'No critical or high findings were reported.'}`, tone: findings.elevated > 0 ? 'attention' : 'neutral' });
+  } else if (findings) {
+    rows.push({ label: 'No findings observed', text: 'The completed engines reported no findings in the areas they examined. This is not a guarantee of safety.', tone: 'positive' });
+  }
+
+  if (evidence?.total > 0) {
+    rows.push({ label: 'Evidence collected', text: `${evidence.total} evidence item${evidence.total === 1 ? '' : 's'} were collected${evidence.verified > 0 ? `, including ${evidence.verified} cryptographically verified` : ', with no cryptographically verified items reported'}.`, tone: evidence.verified > 0 ? 'positive' : 'neutral' });
+  }
+
+  if (assessment) {
+    rows.push({ label: 'Trust coverage', text: `${assessment.observedAreas} of ${assessment.totalAreas} trust areas produced an observed result. Areas marked “Not observed” were not scored.`, tone: assessment.observedAreas === assessment.totalAreas ? 'positive' : 'neutral' });
+  }
+
+  if (result.sbom?.componentCount != null) {
+    rows.push({ label: 'Software inventory', text: `${result.sbom.componentCount} SBOM component${result.sbom.componentCount === 1 ? '' : 's'} were identified in the available software inventory.`, tone: 'positive' });
+  }
+
+  return rows;
+}
+
 export default function FreeReviewPdfGate({ passportId, statusUrl, result, repositoryLabel }: Props) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -67,8 +90,8 @@ export default function FreeReviewPdfGate({ passportId, statusUrl, result, repos
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [unlocked, setUnlocked] = useState(false);
-
   const token = statusUrl.split('/status/')[1] || '';
+  const interpretation = buildInterpretation(result);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -89,29 +112,50 @@ export default function FreeReviewPdfGate({ passportId, statusUrl, result, repos
   };
 
   return (
-    <div className="mt-4 rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface)] p-5" id="free-review-pdf-gate">
-      <div className="flex items-center gap-2 text-sm font-bold text-[var(--spr-text)]"><FileDown className="h-4 w-4" />Download this result as a PDF</div>
-      <p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">A one-page summary of exactly what is shown above, generated in your browser. Enter your email to download it.</p>
-      {unlocked ? (
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <p className="text-xs text-[var(--spr-green)]">Thanks — your download has started.</p>
-          <button onClick={() => buildPdf(result, repositoryLabel).save(`spr-free-review-${repositoryLabel.replace(/[^A-Za-z0-9._-]+/g, '-')}.pdf`)} className="rounded-lg border border-[var(--spr-border)] px-3 py-1.5 text-xs font-semibold text-[var(--spr-text)]">Download again</button>
-        </div>
-      ) : (
-        <form onSubmit={submit} className="mt-3 grid gap-2 sm:grid-cols-2">
-          <input id="lead-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" required minLength={2} maxLength={120} className="rounded-lg border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-sm text-[var(--spr-text)]" />
-          <input id="lead-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required maxLength={254} className="rounded-lg border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-sm text-[var(--spr-text)]" />
-          <input id="lead-company" value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Company (optional)" maxLength={160} className="rounded-lg border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-sm text-[var(--spr-text)] sm:col-span-2" />
-          <label className="flex items-start gap-2 text-[11px] leading-4 text-[var(--spr-text-muted)] sm:col-span-2">
-            <input id="lead-consent" type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} required className="mt-0.5" />
-            <span>{CONSENT_TEXT}</span>
-          </label>
-          {error && <p role="alert" className="text-xs text-[var(--spr-red)] sm:col-span-2">{error}</p>}
-          <button type="submit" disabled={busy || !consent || !name.trim() || !email.trim()} className="rounded-xl bg-[var(--spr-accent)] px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50 sm:col-span-2">
-            <Lock className="mr-2 inline h-3.5 w-3.5" />{busy ? 'Recording…' : 'Get the PDF'}
-          </button>
-        </form>
+    <>
+      {interpretation.length > 0 && (
+        <section className="mt-4 rounded-xl border border-[var(--spr-highlight)]/30 bg-[var(--spr-accent)]/5 p-5" aria-labelledby="free-review-interpretation">
+          <div className="text-xs font-semibold uppercase tracking-[.18em] text-[var(--spr-highlight)]">What this means</div>
+          <h2 id="free-review-interpretation" className="mt-1 text-lg font-semibold text-[var(--spr-text)]">The evidence, translated</h2>
+          <p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">These statements are derived only from the observed result above. SPR does not turn missing evidence into a positive claim.</p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {interpretation.map((item) => (
+              <div key={item.label} className="rounded-lg border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3">
+                <div className="flex items-center gap-2 text-sm font-semibold text-[var(--spr-text)]">
+                  <CheckCircle2 className={`h-4 w-4 ${item.tone === 'attention' ? 'text-[var(--spr-amber)]' : item.tone === 'positive' ? 'text-[var(--spr-green)]' : 'text-[var(--spr-highlight)]'}`} />
+                  {item.label}
+                </div>
+                <p className="mt-2 text-xs leading-5 text-[var(--spr-text-muted)]">{item.text}</p>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
-    </div>
+
+      <div className="mt-4 rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface)] p-5" id="free-review-pdf-gate">
+        <div className="flex items-center gap-2 text-sm font-bold text-[var(--spr-text)]"><FileDown className="h-4 w-4" />Download this result as a PDF</div>
+        <p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">A one-page summary of exactly what is shown above, generated in your browser. Enter your email to download it.</p>
+        {unlocked ? (
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <p className="text-xs text-[var(--spr-green)]">Thanks — your download has started.</p>
+            <button onClick={() => buildPdf(result, repositoryLabel).save(`spr-free-review-${repositoryLabel.replace(/[^A-Za-z0-9._-]+/g, '-')}.pdf`)} className="rounded-lg border border-[var(--spr-border)] px-3 py-1.5 text-xs font-semibold text-[var(--spr-text)]">Download again</button>
+          </div>
+        ) : (
+          <form onSubmit={submit} className="mt-3 grid gap-2 sm:grid-cols-2">
+            <input id="lead-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" required minLength={2} maxLength={120} className="rounded-lg border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-sm text-[var(--spr-text)]" />
+            <input id="lead-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required maxLength={254} className="rounded-lg border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-sm text-[var(--spr-text)]" />
+            <input id="lead-company" value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Company (optional)" maxLength={160} className="rounded-lg border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-sm text-[var(--spr-text)] sm:col-span-2" />
+            <label className="flex items-start gap-2 text-[11px] leading-4 text-[var(--spr-text-muted)] sm:col-span-2">
+              <input id="lead-consent" type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} required className="mt-0.5" />
+              <span>{CONSENT_TEXT}</span>
+            </label>
+            {error && <p role="alert" className="text-xs text-[var(--spr-red)] sm:col-span-2">{error}</p>}
+            <button type="submit" disabled={busy || !consent || !name.trim() || !email.trim()} className="rounded-xl bg-[var(--spr-accent)] px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50 sm:col-span-2">
+              <Lock className="mr-2 inline h-3.5 w-3.5" />{busy ? 'Recording…' : 'Get the PDF'}
+            </button>
+          </form>
+        )}
+      </div>
+    </>
   );
 }
