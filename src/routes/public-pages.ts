@@ -61,6 +61,9 @@ const executeSchema = z.object({
 
 const contactLimiter = rateLimit({ windowMs: 60 * 60 * 1000, limit: 10, standardHeaders: 'draft-7', legacyHeaders: false, validate: { trustProxy: false } });
 const verifyLimiter = rateLimit({ windowMs: 60 * 1000, limit: 30, standardHeaders: 'draft-7', legacyHeaders: false, validate: { trustProxy: false } });
+// Per-route ceiling on the authenticated endpoints, in addition to the shared
+// Redis-backed limiter applied to every /api route.
+const authedLimiter = rateLimit({ windowMs: 60 * 1000, limit: 60, standardHeaders: 'draft-7', legacyHeaders: false, validate: { trustProxy: false } });
 
 function id(prefix: string) { return `${prefix}_${crypto.randomUUID().replace(/-/g, '')}`; }
 function hashIp(req: { ip?: string; socket: { remoteAddress?: string } }) {
@@ -208,7 +211,7 @@ export function createPublicPagesRouter() {
     } catch (error) { return next(error); }
   });
 
-  router.get('/organization/dpa', requireAuth, rateLimiter, async (req: AuthenticatedRequest, res, next) => {
+  router.get('/organization/dpa', authedLimiter, requireAuth, rateLimiter, async (req: AuthenticatedRequest, res, next) => {
     try {
       const row = (await req.db!.execute(sql`SELECT ${EXECUTION_COLUMNS} FROM tenant_dpa_executions WHERE tenant_id = ${req.user!.tenantId} ORDER BY executed_at DESC LIMIT 1`) as any).rows?.[0];
       const current = { version: DPA_VERSION, effectiveDate: DPA_EFFECTIVE_DATE, sha256: dpaDocumentSha256() };
@@ -218,7 +221,7 @@ export function createPublicPagesRouter() {
     } catch (error) { return next(error); }
   });
 
-  router.post('/organization/dpa/execute', requireAuth, requireRole('Owner'), rateLimiter, async (req: AuthenticatedRequest, res, next) => {
+  router.post('/organization/dpa/execute', authedLimiter, requireAuth, requireRole('Owner'), rateLimiter, async (req: AuthenticatedRequest, res, next) => {
     try {
       const secret = documentSigningKey();
       if (!secret) return res.status(503).json({ error: 'DPA_SIGNING_NOT_CONFIGURED', message: 'No document-signing key is configured on this deployment, so an execution could not be signed. Nothing was recorded.' });
@@ -260,7 +263,7 @@ export function createPublicPagesRouter() {
     } catch (error) { return next(error); }
   });
 
-  router.get('/founder/contact-inquiries', requireAuth, requireRole('Owner'), requireFounder, rateLimiter, async (req: AuthenticatedRequest, res, next) => {
+  router.get('/founder/contact-inquiries', authedLimiter, requireAuth, requireRole('Owner'), requireFounder, rateLimiter, async (req: AuthenticatedRequest, res, next) => {
     try {
       const scopedDb = await attachTenantScope(FREE_REVIEW_TENANT_ID, res);
       const rows = (await scopedDb.execute(sql`

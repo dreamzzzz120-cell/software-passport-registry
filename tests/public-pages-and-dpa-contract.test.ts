@@ -66,7 +66,7 @@ describe('Data Processing Agreement execution and signing', () => {
 
   it('execution is Owner-only and refuses to run unsigned', () => {
     const routes = read('src/routes/public-pages.ts');
-    expect(routes).toContain("router.post('/organization/dpa/execute', requireAuth, requireRole('Owner'), rateLimiter");
+    expect(routes).toContain("router.post('/organization/dpa/execute', authedLimiter, requireAuth, requireRole('Owner'), rateLimiter");
     expect(routes).toContain("'DPA_SIGNING_NOT_CONFIGURED'");
   });
 });
