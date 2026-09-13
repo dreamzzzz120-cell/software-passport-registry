@@ -27,9 +27,10 @@ function findSilentEnvironmentGates(source: string): string[] {
 }
 
 function isExplicitlyDocumentedGate(file: string, source: string): boolean {
+  const normalized = source.replace(/\s+/g, ' ');
   return file.endsWith('tests/security/rls-tenant-isolation.test.ts')
-    && source.includes('otherwise the live DB cases are skipped rather than pretending local unit tests prove RLS behavior.')
-    && source.includes('process.env.APP_DATABASE_URL');
+    && normalized.includes('otherwise the live DB cases are skipped rather than pretending local unit tests prove RLS behavior.')
+    && normalized.includes('process.env.APP_DATABASE_URL');
 }
 
 describe('test suite execution invariants', () => {
