@@ -59,21 +59,20 @@ describe('TrustField never fabricates a dimension value', () => {
   });
 });
 
-describe('HomePage only shows the real 4 scoring-engine dimensions, not a fabricated 12', () => {
+describe('HomePage is evidence-first and does not render TrustField demo data', () => {
   const source = () => read('src/components/HomePage.tsx');
 
-  it('passes demo to TrustField, since no authenticated Passport data exists on a public page', () => {
+  it('does not mount TrustField or pass illustrative dimensions on the public homepage', () => {
     const s = source();
-    expect(s).toMatch(/<TrustField\s+demo/);
+    expect(s).not.toContain('<TrustField');
+    expect(s).not.toContain("key: 'security'");
+    expect(s).not.toContain("key: 'compliance'");
+    expect(s).not.toContain("key: 'vendor'");
+    expect(s).not.toContain("key: 'confidence'");
   });
 
-  it('lists exactly security, compliance, vendor reputation, and confidence -- the fields scoring-engine.ts actually computes', () => {
+  it('does not contain the retired fabricated trust dimensions', () => {
     const s = source();
-    expect(s).toContain("key: 'security'");
-    expect(s).toContain("key: 'compliance'");
-    expect(s).toContain("key: 'vendor'");
-    expect(s).toContain("key: 'confidence'");
-    // The other 8 labels from the mockup TrustOSView.tsx must not appear here.
     for (const fabricated of ['AI Governance', 'Resilience', 'Reputation', 'Transparency', 'Supply Chain', 'Provenance', 'Integrity', 'Reliability']) {
       expect(s).not.toContain(fabricated);
     }
