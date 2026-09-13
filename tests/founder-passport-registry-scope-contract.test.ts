@@ -16,7 +16,9 @@ describe('Founder passport registry scope contract', () => {
   });
 
   it('exposes historical version count without deleting historical passport rows', () => {
-    expect(source).toContain('COUNT(*) OVER (PARTITION BY tenant_id, LOWER(name), LOWER(publisher)) AS version_count');
+    expect(source).toContain('COUNT(*) OVER (');
+    expect(source).toContain('PARTITION BY p.tenant_id, LOWER(p.name), LOWER(p.publisher)');
+    expect(source).toContain(') AS version_count');
     expect(source).toContain('p.version_count AS "versionCount"');
   });
 });
