@@ -70,6 +70,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
   // Scanning Schedules State and backend persistence
   const [schedules, setSchedules] = useState<ScanSchedule[]>([]);
   const [loadingSchedules, setLoadingSchedules] = useState(false);
+  const [schedulesLoaded, setSchedulesLoaded] = useState(false);
   const [errorSchedules, setErrorSchedules] = useState('');
 
   const fetchSchedules = async () => {
@@ -78,7 +79,8 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
       const response = await apiFetch('/api/scans/schedules');
       if (response.ok) {
         const data = await response.json();
-        setSchedules(data);
+        setSchedules(Array.isArray(data) ? data : []);
+        setSchedulesLoaded(true);
       } else {
         setErrorSchedules('Failed to load scan schedules.');
       }
@@ -204,19 +206,20 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
 
   // Universal Scanner State Variables
   const [customInputName, setCustomInputName] = useState('');
-  const [chosenClientName, setChosenClientName] = useState(() => (clients && clients.length > 0 ? clients[0].name : ''));
+  // Never silently select the first client; this can surface a seeded/demo record as the operator's target.
+  const [chosenClientName, setChosenClientName] = useState('');
   const [selectedPassportId, setSelectedPassportId] = useState('');
 
   useEffect(() => {
-    if (clients && clients.length > 0 && !chosenClientName) {
-      setChosenClientName(clients[0].name);
+    if (chosenClientName && !(clients || []).some((client) => client.name === chosenClientName)) {
+      setChosenClientName('');
     }
   }, [clients, chosenClientName]);
 
-  // Set default passport ID
+  // A passport must be explicitly selected from the records returned by the API.
   useEffect(() => {
-    if (passports && passports.length > 0 && !selectedPassportId) {
-      setSelectedPassportId(passports[0].id);
+    if (selectedPassportId && !(passports || []).some((passport) => passport.id === selectedPassportId)) {
+      setSelectedPassportId('');
     }
   }, [passports, selectedPassportId]);
 
@@ -319,7 +322,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
     const matchedPassport = (passports || []).find(p => 
       targetLower.includes(p.name.toLowerCase()) || 
       p.name.toLowerCase().includes(targetLower)
-    ) || (passports && passports.find(p => p.id === selectedPassportId)) || (passports && passports[0]);
+    ) || (passports || []).find(p => p.id === selectedPassportId);
 
     if (!matchedPassport) {
       setScanLogs(l => [...l, `[ERROR] No active Software Passports found. Register a software passport first.`]);
@@ -484,7 +487,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
             <Calendar className="w-3.5 h-3.5" />
             <span>Automated Scanning Schedules</span>
             <span className="px-1.5 py-0.5 rounded-full text-[11px] font-bold font-mono bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)]">
-              {schedules.length}
+              {schedulesLoaded ? schedules.length : '—'}
             </span>
           </div>
         </button>
@@ -528,7 +531,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
                   </div>
                   <div>
                     <h3 className="text-xs font-bold text-[var(--spr-text)] uppercase tracking-wider font-mono">Universal Software Trust Agent Scanner</h3>
-                    <p className="text-[12px] text-[var(--spr-text-muted)] font-sans">Trigger the 8-engine AI Security pipeline and compile cryptographic evidence logs persistently in the database.</p>
+                    <p className="text-[12px] text-[var(--spr-text-muted)] font-sans">Trigger the configured software security analysis pipeline and persist its resulting evidence logs.</p>
                   </div>
                 </div>
 
@@ -542,6 +545,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
                         onChange={(e) => setSelectedPassportId(e.target.value)}
                         className="w-full px-3 py-2 bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] rounded-lg text-xs focus:ring-1 focus:ring-[var(--spr-highlight)] focus:outline-none transition-all font-sans font-bold text-[var(--spr-text-faint)]"
                       >
+                        <option value="" disabled>Select a software passport</option>
                         {(passports || []).map(p => (
                           <option key={p.id} value={p.id}>{p.name} (v{p.version}) • {p.publisher}</option>
                         ))}
@@ -556,13 +560,10 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
                         onChange={(e) => setChosenClientName(e.target.value)}
                         className="w-full px-3 py-2 bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] rounded-lg text-xs focus:ring-1 focus:ring-[var(--spr-highlight)] focus:outline-none transition-all font-sans font-semibold text-[var(--spr-text-faint)]"
                       >
-                        {clients && clients.length > 0 ? (
-                          clients.map(c => (
-                            <option key={c.id} value={c.name}>{c.name}</option>
-                          ))
-                        ) : (
-                          <option value="" disabled>No clients configured yet</option>
-                        )}
+                        <option value="" disabled>{clients && clients.length > 0 ? 'Select a client' : 'UNKNOWN — no client context observed'}</option>
+                        {(clients || []).map(c => (
+                          <option key={c.id} value={c.name}>{c.name}</option>
+                        ))}
                       </select>
                     </div>
                   </div>
@@ -617,7 +618,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
                   <div>
                     <div className="text-xs font-mono font-bold text-[var(--spr-text-muted)] uppercase">Active Pipelines</div>
                     <div className="text-lg font-bold text-[var(--spr-text)]">
-                      {schedules.filter(s => s.status === 'Active').length} / {schedules.length}
+                      {schedulesLoaded ? `${schedules.filter(s => s.status === 'Active').length} / ${schedules.length}` : 'UNKNOWN'}
                     </div>
                     <div className="text-[11px] text-[var(--spr-text-muted)]">Configured background scan schedules</div>
                   </div>
@@ -631,6 +632,8 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
                     <div className="text-xs font-mono font-bold text-[var(--spr-text-muted)] uppercase">Asset Coverage</div>
                     <div className="text-lg font-bold text-[var(--spr-text)]">
                       {(() => {
+                        if (!schedulesLoaded) return 'UNKNOWN';
+                        if (prodAssets.length === 0) return '0 / 0';
                         const uniqueProtected = new Set(schedules.filter(s => s.status === 'Active').map(s => s.assetHostName)).size;
                         return `${uniqueProtected} / ${prodAssets.length}`;
                       })()}
@@ -647,8 +650,10 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
                     <div className="text-xs font-mono font-bold text-[var(--spr-text-muted)] uppercase">Coverage Ratio</div>
                     <div className="text-lg font-bold text-[var(--spr-text)]">
                       {(() => {
+                        if (!schedulesLoaded) return 'UNKNOWN';
+                        if (prodAssets.length === 0) return '0%';
                         const uniqueProtected = new Set(schedules.filter(s => s.status === 'Active').map(s => s.assetHostName)).size;
-                        const pct = Math.round((uniqueProtected / prodAssets.length) * 100) || 0;
+                        const pct = Math.round((uniqueProtected / prodAssets.length) * 100);
                         return `${pct}%`;
                       })()}
                     </div>
