@@ -5,14 +5,14 @@ export type TrustGraphRelationship = 'owns' | 'contains' | 'supports' | 'has fin
  * authoritative collection membership. Names, labels, versions, PURLs, and
  * array positions are never relationship keys.
  */
-export function persistedIdentity(value: unknown): string | null {
-  if (typeof value !== 'string' && typeof value !== 'number') return null;
+export function persistedIdentity(value: unknown): string | undefined {
+  if (typeof value !== 'string' && typeof value !== 'number') return undefined;
   const id = String(value).trim();
-  return id || null;
+  return id || undefined;
 }
 
-export function explicitComponentReference(vulnerability: unknown): string | null {
-  if (!vulnerability || typeof vulnerability !== 'object') return null;
+export function explicitComponentReference(vulnerability: unknown): string | undefined {
+  if (!vulnerability || typeof vulnerability !== 'object') return undefined;
   const record = vulnerability as Record<string, unknown>;
   return persistedIdentity(record.componentId) ?? persistedIdentity(record.component_id);
 }
