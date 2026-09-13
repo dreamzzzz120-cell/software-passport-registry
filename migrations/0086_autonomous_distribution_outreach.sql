@@ -1,5 +1,8 @@
 BEGIN;
 
+ALTER TABLE distribution_jobs DROP CONSTRAINT IF EXISTS distribution_jobs_kind_check;
+ALTER TABLE distribution_jobs ADD CONSTRAINT distribution_jobs_kind_check CHECK (kind IN ('research_url','qualify_lead','prepare_outreach','send_outreach','followup_outreach'));
+
 CREATE TABLE IF NOT EXISTS distribution_contacts (
   id text PRIMARY KEY,
   tenant_id text NOT NULL DEFAULT 'tenant-free-review-system' CHECK (tenant_id = 'tenant-free-review-system'),
