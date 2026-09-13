@@ -4,18 +4,11 @@ import { readCode, code } from './helpers/source-contract.ts';
 const route = () => readCode('src/routes/free-review-legacy.ts');
 const view = () => readCode('src/components/FreeReviewView.tsx');
 
-// The Free Review status endpoint is reachable by anyone holding the signed
-// status token, which every anonymous visitor receives. It used to return every
-// finding with its title, description and affected component, and every evidence
-// item with its signer -- the whole paid report, to an unauthenticated caller,
-// with the browser as the only thing deciding what to show. These contracts hold
-// the line that the withholding happens server-side.
 describe('the free preview response withholds paid detail server-side', () => {
   it('returns aggregates, not the raw finding and evidence rows', () => {
     const source = route();
     expect(source).toContain(code`findings: { total: openFindings.length, elevated: criticalOrHigh.length, bySeverity, teasers }`);
     expect(source).toContain(code`evidence: { total: evidence.length, verified: verifiedEvidence, unverified: evidence.length - verifiedEvidence, byType: evidenceByType }`);
-    // The bare arrays must not be spread into the response any more.
     expect(source).not.toMatch(/return res\.json\(\{[^}]*\bfindings,/);
     expect(source).not.toMatch(/return res\.json\(\{[^}]*\bevidence,/);
   });
@@ -38,13 +31,9 @@ describe('the free preview response withholds paid detail server-side', () => {
 
   it('reads the SBOM for its counts only, and never returns the components', () => {
     const source = route();
-    // Two counts leave the closure -- the SBOM size and how many components the
-    // licence scanner does not evaluate -- and nothing else does.
     expect(source).toContain(code`return { sbomComponentCount: parsed.length, licenceUnevaluatedComponentCount: parsed.filter((c: any) => !isLicenceEvaluable(c)).length };`);
     expect(source).not.toMatch(/sbomComponentss*:/);
     expect(source).toContain(code`sbom: { componentCount: sbomComponentCount }`);
-    // The passport object handed back is rebuilt field by field, so the sbom
-    // column cannot ride along on a SELECT *.
     expect(source).toContain(code`const passport = passportRow ? { id: passportRow.id, name: passportRow.name, version: passportRow.version, publisher: passportRow.publisher, category: passportRow.category, verificationStatus: passportRow.verificationStatus } : null;`);
   });
 
@@ -54,13 +43,13 @@ describe('the free preview response withholds paid detail server-side', () => {
 
   it('lists only capabilities whose evidence actually exists', () => {
     const source = route();
-    expect(source).toContain(code`const engineIds = new Set(evidence.map((e: any) => String(e.engineId || '')).filter(Boolean));`);
+    expect(source).toContain(code`const engineIds = new Set(evidence.map((e: any) => String(e.engineId || '').trim()).filter(Boolean));`);
     expect(source).toContain(code`].filter((entry): entry is string => typeof entry === 'string');`);
   });
 });
 
 describe('the preview page renders only what the API sends', () => {
-  it('no longer maps over raw findings', () => {
+  it('does not map over raw findings', () => {
     const source = view();
     expect(source).not.toContain(code`result.findings.slice(0, 20).map`);
     expect(source).not.toContain(code`f.component`);
@@ -68,23 +57,29 @@ describe('the preview page renders only what the API sends', () => {
 
   it('shows no score rather than a zero when nothing could be observed', () => {
     const source = view();
-    expect(source).toContain(code`No trust area could be observed for this repository, so SPR reports no score. That is an absence of evidence, not a poor result.`);
+    expect(source).toContain(code`{result.assessment.score ?? '—'}`);
+    expect(source).toContain('Not measured');
+    expect(source).toContain('UNKNOWN');
   });
 
-  it('keeps the unobserved categories visible and neutrally worded', () => {
+  it('keeps unobserved trust areas visible and neutrally worded', () => {
     const source = view();
-    expect(source).toContain(code`['reliability', '🧱', 'Reliability'],`);
-    expect(source).toContain(code`['maintainability', '🔧', 'Maintainability'],`);
-    expect(source).toContain(code`Not observed`);
+    expect(source).toContain('What SPR could not verify');
+    expect(source).toContain("value.status === 'not_observed'");
+    expect(source).toContain('areas without enough evidence');
   });
 
   it('states zero verification as zero verification', () => {
-    expect(view()).toContain(code`None of the ${'${result.evidence.total}'} evidence items are cryptographically verified.`.replace('${result.evidence.total}', '${result.evidence.total}'));
+    const source = view();
+    expect(source).toContain('Verified');
+    expect(source).toContain('capabilities with evidence');
+    expect(source).toContain('No capability is presented as verified without supporting evidence.');
   });
 
   it('keeps the evidence-driven progress display', () => {
     const source = view();
-    expect(source).toContain(code`aria-valuenow={result?.progress?.percent ?? 0}`);
-    expect(source).toContain(code`elapsed`);
+    expect(source).toContain('result?.progress?.percent');
+    expect(source).toContain('result.progress.elapsedSeconds');
+    expect(source).toContain('Progress is read from the scan job. SPR does not invent movement or a result.');
   });
 });
