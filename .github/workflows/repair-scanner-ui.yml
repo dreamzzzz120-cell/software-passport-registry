@@ -1,0 +1,111 @@
+name: repair-scanner-ui
+
+on:
+  push:
+    branches:
+      - fix/scanner-ui-evidence-backed
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: "!contains(github.event.head_commit.message, '[scanner-ui-repair]')"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Repair evidence-backed scanner UI
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/components/ScansView.tsx')
+          s = p.read_text()
+
+          replacements = [
+              (
+                  "const [schedules, setSchedules] = useState<ScanSchedule[]>([]);\n  const [loadingSchedules, setLoadingSchedules] = useState(false);",
+                  "const [schedules, setSchedules] = useState<ScanSchedule[]>([]);\n  const [loadingSchedules, setLoadingSchedules] = useState(false);\n  const [schedulesLoaded, setSchedulesLoaded] = useState(false);",
+              ),
+              (
+                  "        setSchedules(data);\n      } else {",
+                  "        setSchedules(Array.isArray(data) ? data : []);\n        setSchedulesLoaded(true);\n      } else {",
+              ),
+              (
+                  "    } finally {\n      setLoadingSchedules(false);\n    }",
+                  "    } finally {\n      setLoadingSchedules(false);\n    }",
+              ),
+              (
+                  "  const [customInputName, setCustomInputName] = useState('');\n  const [chosenClientName, setChosenClientName] = useState(() => (clients && clients.length > 0 ? clients[0].name : ''));\n  const [selectedPassportId, setSelectedPassportId] = useState('');\n\n  useEffect(() => {\n    if (clients && clients.length > 0 && !chosenClientName) {\n      setChosenClientName(clients[0].name);\n    }\n  }, [clients, chosenClientName]);\n\n  // Set default passport ID\n  useEffect(() => {\n    if (passports && passports.length > 0 && !selectedPassportId) {\n      setSelectedPassportId(passports[0].id);\n    }\n  }, [passports, selectedPassportId]);",
+                  "const [customInputName, setCustomInputName] = useState('');\n  // Do not silently select the first client or passport. In production that can\n  // surface a seeded/demo tenant as if it were the operator's intended target.\n  // A target must be explicitly selected from the data returned by the API.\n  const [chosenClientName, setChosenClientName] = useState('');\n  const [selectedPassportId, setSelectedPassportId] = useState('');\n\n  useEffect(() => {\n    if (chosenClientName && !(clients || []).some((client) => client.name === chosenClientName)) {\n      setChosenClientName('');\n    }\n  }, [clients, chosenClientName]);\n\n  useEffect(() => {\n    if (selectedPassportId && !(passports || []).some((passport) => passport.id === selectedPassportId)) {\n      setSelectedPassportId('');\n    }\n  }, [passports, selectedPassportId]);",
+              ),
+              (
+                  "    const matchedPassport = (passports || []).find(p => \n      targetLower.includes(p.name.toLowerCase()) || \n      p.name.toLowerCase().includes(targetLower)\n    ) || (passports && passports.find(p => p.id === selectedPassportId)) || (passports && passports[0]);",
+                  "    const matchedPassport = (passports || []).find(p => \n      targetLower.includes(p.name.toLowerCase()) || \n      p.name.toLowerCase().includes(targetLower)\n    ) || (passports || []).find(p => p.id === selectedPassportId);",
+              ),
+              (
+                  "            <p className=\"text-[12px] text-[var(--spr-text-muted)] font-sans\">Trigger the 8-engine AI Security pipeline and compile cryptographic evidence logs persistently in the database.</p>",
+                  "            <p className=\"text-[12px] text-[var(--spr-text-muted)] font-sans\">Trigger the configured software security analysis pipeline and persist its resulting evidence logs.</p>",
+              ),
+              (
+                  "                        {(passports || []).map(p => (\n                        <option key={p.id} value={p.id}>{p.name} (v{p.version}) • {p.publisher}</option>\n                      ))}",
+                  "                        <option value=\"\" disabled>Select a software passport</option>\n                        {(passports || []).map(p => (\n                        <option key={p.id} value={p.id}>{p.name} (v{p.version}) • {p.publisher}</option>\n                      ))}",
+              ),
+              (
+                  "                        {clients && clients.length > 0 ? (\n                          clients.map(c => (\n                            <option key={c.id} value={c.name}>{c.name}</option>\n                          ))\n                        ) : (\n                          <option value=\"\" disabled>No clients configured yet</option>\n                        )}",
+                  "                        <option value=\"\" disabled>\n                          {clients && clients.length > 0 ? 'Select a client' : 'UNKNOWN — no client context observed'}\n                        </option>\n                        {(clients || []).map(c => (\n                          <option key={c.id} value={c.name}>{c.name}</option>\n                        ))}",
+              ),
+              (
+                  "                  <div className=\"px-4 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer ${",
+                  "                  <div className=\"px-4 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer ${",
+              ),
+              (
+                  "              {schedules.length}\n            </span>",
+                  "              {schedulesLoaded ? schedules.length : '—'}\n            </span>",
+              ),
+              (
+                  "                      {schedules.filter(s => s.status === 'Active').length} / {schedules.length}",
+                  "                      {schedulesLoaded ? `${schedules.filter(s => s.status === 'Active').length} / ${schedules.length}` : 'UNKNOWN'}",
+              ),
+              (
+                  "                        const uniqueProtected = new Set(schedules.filter(s => s.status === 'Active').map(s => s.assetHostName)).size;\n                        return `${uniqueProtected} / ${prodAssets.length}`;",
+                  "                        if (!schedulesLoaded || prodAssets.length === 0) return schedulesLoaded ? '0 / 0' : 'UNKNOWN';\n                        const uniqueProtected = new Set(schedules.filter(s => s.status === 'Active').map(s => s.assetHostName)).size;\n                        return `${uniqueProtected} / ${prodAssets.length}`;",
+              ),
+              (
+                  "                        const uniqueProtected = new Set(schedules.filter(s => s.status === 'Active').map(s => s.assetHostName)).size;\n                        const pct = Math.round((uniqueProtected / prodAssets.length) * 100) || 0;\n                        return `${pct}%`;",
+                  "                        if (!schedulesLoaded) return 'UNKNOWN';\n                        if (prodAssets.length === 0) return '0%';\n                        const uniqueProtected = new Set(schedules.filter(s => s.status === 'Active').map(s => s.assetHostName)).size;\n                        const pct = Math.round((uniqueProtected / prodAssets.length) * 100);\n                        return `${pct}%`;",
+              ),
+          ]
+
+          for old, new in replacements:
+              if old not in s:
+                  raise SystemExit(f'Expected source text not found for replacement: {old[:100]!r}')
+              s = s.replace(old, new, 1)
+
+          p.write_text(s)
+          PY
+
+      - name: Add regression coverage
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('tests/scans-view-contract.test.ts')
+          content = '''import { readFileSync } from 'node:fs';\n\nconst source = readFileSync('src/components/ScansView.tsx', 'utf8');\n\ndescribe('ScansView evidence-backed UI contract', () => {\n  it('does not silently select the first client or passport', () => {\n    expect(source).toContain("useState('')");\n    expect(source).toContain('Select a software passport');\n    expect(source).toContain('Select a client');\n    expect(source).not.toContain("clients[0].name");\n    expect(source).not.toContain('passports[0].id');\n  });\n\n  it('does not claim a fixed eight-engine scanner count', () => {\n    expect(source).not.toContain('8-engine AI Security pipeline');\n    expect(source).toContain('configured software security analysis pipeline');\n  });\n\n  it('does not show an unconfirmed zero while schedules are loading', () => {\n    expect(source).toContain('schedulesLoaded ? schedules.length : \'—\'');\n    expect(source).toContain("!schedulesLoaded ? 'UNKNOWN'");\n  });\n});\n'''
+          if not p.exists():
+              p.write_text(content)
+          else:
+              existing = p.read_text()
+              if content not in existing:
+                  p.write_text(existing + '\n' + content)
+          PY
+
+      - name: Commit repaired UI and remove one-time workflow
+        run: |
+          rm -f .github/workflows/repair-scanner-ui.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/ScansView.tsx tests/scans-view-contract.test.ts .github/workflows/repair-scanner-ui.yml
+          git diff --cached --check
+          git commit -m "fix: make scanner UI evidence-backed [scanner-ui-repair]"
+          git push
