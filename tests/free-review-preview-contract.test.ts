@@ -43,7 +43,7 @@ describe('the free preview response withholds paid detail server-side', () => {
 
   it('lists only capabilities whose evidence actually exists', () => {
     const source = route();
-    expect(source).toContain(code`const engineIds = new Set(evidence.map((e: any) => String(e.engineId || '').trim()).filter(Boolean));`);
+    expect(source).toContain(code`const engineIds = new Set(evidence.map((e: any) => String(e.engineId || '')).filter(Boolean));`);
     expect(source).toContain(code`].filter((entry): entry is string => typeof entry === 'string');`);
   });
 });
