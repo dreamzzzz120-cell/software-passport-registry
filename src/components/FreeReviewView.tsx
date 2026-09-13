@@ -85,7 +85,7 @@ export default function FreeReviewView({ onSignUp, initialResult }: FreeReviewVi
         if (response.ok) {
           const data = await response.json() as FreeReviewResultData;
           setResult(data);
-          if (['complete', 'partial', 'failed'].includes(data.scanStatus)) return;
+          if (['complete','partial','failed'].includes(data.scanStatus)) return;
           pollAttempt.current += 1;
         } else {
           pollAttempt.current += 1;
@@ -165,7 +165,7 @@ export default function FreeReviewView({ onSignUp, initialResult }: FreeReviewVi
         {statusUrl && result?.scanStatus === 'scanning' && (
           <div className="mx-auto mt-8 max-w-2xl rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6">
             <div className="flex items-center justify-between gap-3 text-sm"><span className="flex items-center gap-3"><Loader className="h-5 w-5 animate-spin" /> {result.progress?.latestMessage || 'SPR is processing the repository…'}</span><span className="tabular-nums text-xs text-[var(--spr-text-muted)]">{result.progress?.percent ?? 0}% · {formatElapsed(result.progress?.elapsedSeconds ?? 0)}</span></div>
-            <div className="mt-4 h-2 overflow-hidden rounded-full bg-[var(--spr-surface-deep)]"><div className="h-full rounded-full bg-[var(--spr-highlight)] transition-all duration-500" style={{ width: `${result.progress?.percent ?? 0}%` }} /></div>
+            <div className="mt-4 h-2 overflow-hidden rounded-full bg-[var(--spr-surface-deep)]" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={result.progress?.percent ?? 0}><div className="h-full rounded-full bg-[var(--spr-highlight)] transition-all duration-500" style={{ width: `${result.progress?.percent ?? 0}%` }} /></div>
             {result.progress?.steps?.length ? <ul className="mt-4 space-y-2">{result.progress.steps.map((step) => <li key={step.id} className="flex justify-between gap-3 text-xs text-[var(--spr-text-muted)]"><span className="flex gap-2">{step.status === 'Completed' ? <CheckCircle2 className="h-3.5 w-3.5 text-[var(--spr-green)]" /> : <Loader className="h-3.5 w-3.5" />}{step.label}</span><span>{step.status === 'Pending' ? 'Queued' : `${step.percent}%`}</span></li>)}</ul> : null}
           </div>
         )}
