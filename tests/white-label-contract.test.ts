@@ -150,3 +150,15 @@ describe('settings page carries no placeholder controls', () => {
     expect(settings).not.toContain('Enterprise SAML / SSO Integration');
   });
 });
+
+describe('founder self passport lookup', () => {
+  it('matches both repository passport name forms; production carries owner/repo', () => {
+    const auth = read('src/routes/auth.ts');
+    expect(auth).toContain('AND p.name IN (${SPR_SELF_REPOSITORY.name}, ${`${SPR_SELF_REPOSITORY.owner}/${SPR_SELF_REPOSITORY.name}`})');
+  });
+  it('treats 404 as "no scan yet" on the dashboard rather than an error banner', () => {
+    const view = read('src/components/FounderDashboardView.tsx');
+    expect(view).toContain('if (response.status === 404) {');
+    expect(view).not.toContain("if (!response.ok) throw new Error(`Self passport request failed (${response.status})`);");
+  });
+});

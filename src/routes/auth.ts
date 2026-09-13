@@ -601,7 +601,10 @@ export function createAuthRouter() {
         WHERE p.tenant_id = ${req.user!.tenantId}
           AND p.category = 'Repository'
           AND p.publisher = ${SPR_SELF_REPOSITORY.owner}
-          AND p.name = ${SPR_SELF_REPOSITORY.name}
+          -- Repository passports are named either "repo" (worker-created) or
+          -- "owner/repo" (seeded shell later filled by the worker); verified in
+          -- production that the SPR passport carries the owner/repo form.
+          AND p.name IN (${SPR_SELF_REPOSITORY.name}, ${`${SPR_SELF_REPOSITORY.owner}/${SPR_SELF_REPOSITORY.name}`})
         ORDER BY j.updated_at DESC
         LIMIT 1
       `);
