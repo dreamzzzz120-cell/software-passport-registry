@@ -84,7 +84,7 @@ describe('AI provider wiring', () => {
     const tail = routes.slice(routes.indexOf("router.post('/trust-council'"));
     for (const forbidden of ['INSERT INTO evidence_ledger', 'INSERT INTO trust_findings', 'UPDATE passports', 'UPDATE trust_findings']) expect(tail).not.toContain(forbidden);
     expect(tail).toContain('INSERT INTO trust_council_sessions');
-    expect(read('migrations/0087_trust_council_sessions.sql')).toContain('trust_council_sessions');
+    expect(read('migrations/0088_trust_council_sessions.sql')).toContain('trust_council_sessions');
   });
 
   it('the UI says when no provider is configured instead of pretending', () => {
