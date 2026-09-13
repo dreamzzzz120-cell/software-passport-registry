@@ -4,10 +4,8 @@
  */
 
 // Founder Command Center — connection health checks.
-// Each function returns a uniform status shape and NEVER throws: an
-// unreachable or unconfigured platform is reported as data, not a 500.
-// This is Owner+founder-allowlist-only visibility (see requireFounder in
-// src/middleware/security.ts) — it never touches tenant/customer data itself.
+// Never return secrets or upstream error bodies. External checks are bounded
+// by a timeout so one provider cannot hold the Founder page open indefinitely.
 
 import { config } from '../../../config.ts';
 
@@ -18,30 +16,45 @@ export type ConnectionStatus = {
   lastChecked: string;
 };
 
-function now() {
-  return new Date().toISOString();
+const CHECK_TIMEOUT_MS = 8_000;
+
+function now() { return new Date().toISOString(); }
+
+function safeErrorDetail(err: unknown): string {
+  if (err instanceof DOMException && err.name === 'AbortError') return 'health check timed out';
+  if (err instanceof Error && err.name === 'AbortError') return 'health check timed out';
+  return 'health check failed';
+}
+
+async function fetchWithTimeout(input: string | URL, init: RequestInit = {}): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), CHECK_TIMEOUT_MS);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // --- Railway ----------------------------------------------------------------
 export async function checkRailway(): Promise<ConnectionStatus> {
   const token = config.railway.apiToken;
   const projectId = config.railway.projectId;
-  if (!token || !projectId) {
-    return { name: 'Railway', status: 'not_configured', detail: 'RAILWAY_API_TOKEN or RAILWAY_PROJECT_ID not set', lastChecked: now() };
-  }
+  if (!token || !projectId) return { name: 'Railway', status: 'not_configured', detail: 'Railway connection is not configured', lastChecked: now() };
   try {
     const query = `query ($projectId: String!) { project(id: $projectId) { services { edges { node { id name } } } } }`;
-    const res = await fetch('https://backboard.railway.app/graphql/v2', {
+    const res = await fetchWithTimeout('https://backboard.railway.app/graphql/v2', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ query, variables: { projectId } }),
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) return { name: 'Railway', status: 'error', detail: `provider returned HTTP ${res.status}`, lastChecked: now() };
     const json: any = await res.json();
-    const count = json?.data?.project?.services?.edges?.length ?? 0;
+    if (json?.errors?.length || !json?.data?.project) return { name: 'Railway', status: 'error', detail: 'provider health check was unsuccessful', lastChecked: now() };
+    const count = Array.isArray(json.data.project.services?.edges) ? json.data.project.services.edges.length : 0;
     return { name: 'Railway', status: 'ok', detail: `${count} services reachable`, lastChecked: now() };
-  } catch (err: any) {
-    return { name: 'Railway', status: 'error', detail: err?.message ?? 'unknown error', lastChecked: now() };
+  } catch (err) {
+    return { name: 'Railway', status: 'error', detail: safeErrorDetail(err), lastChecked: now() };
   }
 }
 
@@ -49,72 +62,46 @@ export async function checkRailway(): Promise<ConnectionStatus> {
 export async function checkVercel(): Promise<ConnectionStatus> {
   const token = config.vercel.apiToken;
   const projectId = config.vercel.projectId;
-  if (!token || !projectId) {
-    return { name: 'Vercel', status: 'not_configured', detail: 'VERCEL_API_TOKEN or VERCEL_PROJECT_ID not set', lastChecked: now() };
-  }
+  if (!token || !projectId) return { name: 'Vercel', status: 'not_configured', detail: 'Vercel connection is not configured', lastChecked: now() };
   try {
-    const res = await fetch(`https://api.vercel.com/v6/deployments?projectId=${encodeURIComponent(projectId)}&limit=1`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const res = await fetchWithTimeout(`https://api.vercel.com/v6/deployments?projectId=${encodeURIComponent(projectId)}&limit=1`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) return { name: 'Vercel', status: 'error', detail: `provider returned HTTP ${res.status}`, lastChecked: now() };
     const json: any = await res.json();
     const latest = json?.deployments?.[0];
-    return {
-      name: 'Vercel',
-      status: latest?.readyState === 'READY' ? 'ok' : 'error',
-      detail: latest ? `latest deploy: ${latest.readyState}` : 'no deployments found',
-      lastChecked: now(),
-    };
-  } catch (err: any) {
-    return { name: 'Vercel', status: 'error', detail: err?.message ?? 'unknown error', lastChecked: now() };
+    return { name: 'Vercel', status: latest?.readyState === 'READY' ? 'ok' : 'error', detail: latest ? `latest deploy: ${String(latest.readyState).slice(0, 64)}` : 'no deployments found', lastChecked: now() };
+  } catch (err) {
+    return { name: 'Vercel', status: 'error', detail: safeErrorDetail(err), lastChecked: now() };
   }
 }
 
 // --- GitHub Actions (CI) --------------------------------------------------------
 export async function checkGithubCi(): Promise<ConnectionStatus> {
   const { token, owner, repo } = config.githubCi;
-  if (!token || !owner || !repo) {
-    return { name: 'GitHub CI', status: 'not_configured', detail: 'GITHUB_TOKEN/GITHUB_OWNER/GITHUB_REPO not set', lastChecked: now() };
-  }
+  if (!token || !owner || !repo) return { name: 'GitHub CI', status: 'not_configured', detail: 'GitHub CI connection is not configured', lastChecked: now() };
   try {
-    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/runs?per_page=1`, {
-      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const safeOwner = encodeURIComponent(owner);
+    const safeRepo = encodeURIComponent(repo);
+    const res = await fetchWithTimeout(`https://api.github.com/repos/${safeOwner}/${safeRepo}/actions/runs?per_page=1`, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' } });
+    if (!res.ok) return { name: 'GitHub CI', status: 'error', detail: `provider returned HTTP ${res.status}`, lastChecked: now() };
     const json: any = await res.json();
     const run = json?.workflow_runs?.[0];
-    return {
-      name: 'GitHub CI',
-      status: run?.conclusion === 'success' ? 'ok' : run ? 'error' : 'not_configured',
-      detail: run ? `latest run: ${run.conclusion ?? run.status} (${run.head_branch})` : 'no runs found',
-      lastChecked: now(),
-    };
-  } catch (err: any) {
-    return { name: 'GitHub CI', status: 'error', detail: err?.message ?? 'unknown error', lastChecked: now() };
+    return { name: 'GitHub CI', status: run?.conclusion === 'success' ? 'ok' : run ? 'error' : 'not_configured', detail: run ? `latest run: ${String(run.conclusion ?? run.status).slice(0, 64)}` : 'no workflow runs found', lastChecked: now() };
+  } catch (err) {
+    return { name: 'GitHub CI', status: 'error', detail: safeErrorDetail(err), lastChecked: now() };
   }
 }
 
-// --- Stripe ---------------------------------------------------------------
-// Mirrors the lazy-client pattern already used in src/routes/billing.ts —
-// throws BILLING_NOT_CONFIGURED if STRIPE_SECRET_KEY is unset, caught here.
+// --- Stripe -------------------------------------------------------------------
+// Exact counts are paged rather than silently capped at Stripe's first 100
+// records. MRR is normalized to a monthly value and discounts are applied.
 export async function checkStripeAndMrr(): Promise<{ connection: ConnectionStatus; customerCount: number; mrrCents: number }> {
-  if (!config.stripe.secretKey) {
-    return {
-      connection: { name: 'Stripe', status: 'not_configured', detail: 'STRIPE_SECRET_KEY not set', lastChecked: now() },
-      customerCount: 0,
-      mrrCents: 0,
-    };
-  }
+  if (!config.stripe.secretKey) return { connection: { name: 'Stripe', status: 'not_configured', detail: 'Stripe connection is not configured', lastChecked: now() }, customerCount: 0, mrrCents: 0 };
   try {
     const Stripe = (await import('stripe')).default;
     const stripe = new Stripe(config.stripe.secretKey);
-    const [customers, subs] = await Promise.all([
-      stripe.customers.list({ limit: 100 }),
-      stripe.subscriptions.list({ status: 'active', limit: 100, expand: ['data.discounts'] }),
-    ]);
-    // MRR is what Stripe will actually bill each month: list price, then the
-    // subscription's own discounts. Ignoring discounts reported $1,145 MRR on
-    // 2026-09-11 when every active subscription carried a 100% test coupon.
+    let customerCount = 0;
+    for await (const _customer of stripe.customers.list({ limit: 100 })) customerCount += 1;
+
     const applyDiscounts = (cents: number, discounts: unknown[]): number => {
       let value = cents;
       for (const d of discounts) {
@@ -125,38 +112,39 @@ export async function checkStripeAndMrr(): Promise<{ connection: ConnectionStatu
       }
       return Math.max(0, Math.round(value));
     };
-    const mrrCents = subs.data.reduce((sum, sub) => {
-      const itemTotal = sub.items.data.reduce((s, item) => {
+
+    let mrrCents = 0;
+    let activeSubscriptions = 0;
+    for await (const sub of stripe.subscriptions.list({ status: 'active', limit: 100, expand: ['data.discounts'] })) {
+      activeSubscriptions += 1;
+      const itemTotal = sub.items.data.reduce((sum, item) => {
         const amount = item.price?.unit_amount ?? 0;
         const interval = item.price?.recurring?.interval;
+        const intervalCount = item.price?.recurring?.interval_count ?? 1;
         const qty = item.quantity ?? 1;
-        const monthly = interval === 'year' ? amount / 12 : amount;
-        return s + monthly * qty;
+        const monthly = interval === 'year' ? amount / (12 * intervalCount) : interval === 'week' ? amount * 52 / (12 * intervalCount) : interval === 'day' ? amount * 365 / (12 * intervalCount) : amount / intervalCount;
+        return sum + monthly * qty;
       }, 0);
       const discounts = ((sub as any).discounts ?? []).filter((d: unknown) => d && typeof d === 'object');
-      return sum + applyDiscounts(itemTotal, discounts);
-    }, 0);
-    return {
-      connection: { name: 'Stripe', status: 'ok', detail: `${customers.data.length} customers, ${subs.data.length} active subs`, lastChecked: now() },
-      customerCount: customers.data.length,
-      mrrCents,
-    };
-  } catch (err: any) {
-    return {
-      connection: { name: 'Stripe', status: 'error', detail: err?.message ?? 'unknown error', lastChecked: now() },
-      customerCount: 0,
-      mrrCents: 0,
-    };
+      mrrCents += applyDiscounts(itemTotal, discounts);
+    }
+
+    return { connection: { name: 'Stripe', status: 'ok', detail: `${customerCount} customers, ${activeSubscriptions} active subs`, lastChecked: now() }, customerCount, mrrCents: Math.max(0, Math.round(mrrCents)) };
+  } catch (err) {
+    return { connection: { name: 'Stripe', status: 'error', detail: safeErrorDetail(err), lastChecked: now() }, customerCount: 0, mrrCents: 0 };
   }
 }
 
-// --- Firebase ---------------------------------------------------------------
+// --- Firebase -----------------------------------------------------------------
 export async function checkFirebase(): Promise<ConnectionStatus> {
   try {
     const { adminAuth } = await import('../../firebase-admin.ts');
-    await adminAuth.listUsers(1);
+    await Promise.race([
+      adminAuth.listUsers(1),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), CHECK_TIMEOUT_MS)),
+    ]);
     return { name: 'Firebase', status: 'ok', detail: 'Admin SDK reachable', lastChecked: now() };
-  } catch (err: any) {
-    return { name: 'Firebase', status: 'error', detail: err?.message ?? 'unknown error', lastChecked: now() };
+  } catch (err) {
+    return { name: 'Firebase', status: 'error', detail: safeErrorDetail(err), lastChecked: now() };
   }
 }
