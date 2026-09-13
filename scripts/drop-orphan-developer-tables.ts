@@ -10,9 +10,10 @@
  * rejects DROP TABLE inside migrations/ so that destructive changes get an
  * explicit, reviewed run. It refuses to drop a table that holds any row.
  *
- * Usage (against production, via the Railway CLI so the DB URL is injected):
- *   railway run --service spr-app-staging --environment production \
- *     npx tsx scripts/drop-orphan-developer-tables.ts
+ * Usage (inside the running app container, where the database hostname
+ * resolves; the script is bundled into dist/ by npm run build):
+ *   railway ssh --service spr-app-staging --environment production \
+ *     -- node dist/drop-orphan-developer-tables.cjs
  *
  * Pass --dry-run to report row counts without dropping anything.
  */
