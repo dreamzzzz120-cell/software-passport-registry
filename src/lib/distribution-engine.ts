@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import dns from 'node:dns/promises';
+import net from 'node:net';
 import type { Pool } from 'pg';
 
 export const DISTRIBUTION_TENANT_ID = 'tenant-free-review-system';
@@ -13,11 +15,27 @@ function assertPayload(payload: Record<string, unknown>) {
   if (Buffer.byteLength(encoded, 'utf8') > MAX_PAYLOAD_BYTES) throw new Error('DISTRIBUTION_PAYLOAD_TOO_LARGE');
 }
 
-function assertPublicResearchTarget(parsed: URL) {
+function isPrivateIp(address: string) {
+  const family = net.isIP(address);
+  if (family === 4) {
+    const [a, b] = address.split('.').map(Number);
+    return a === 10 || a === 127 || (a === 169 && b === 254) || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31);
+  }
+  if (family === 6) {
+    const normalized = address.toLowerCase();
+    return normalized === '::1' || normalized.startsWith('fc') || normalized.startsWith('fd') || normalized.startsWith('fe80:');
+  }
+  return true;
+}
+
+async function assertPublicResearchTarget(parsed: URL) {
   const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
-  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host === '::1') throw new Error('DISTRIBUTION_PRIVATE_TARGET_BLOCKED');
-  if (/^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) || /^169\.254\./.test(host) || /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)) throw new Error('DISTRIBUTION_PRIVATE_TARGET_BLOCKED');
-  if (host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80:')) throw new Error('DISTRIBUTION_PRIVATE_TARGET_BLOCKED');
+  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local')) throw new Error('DISTRIBUTION_PRIVATE_TARGET_BLOCKED');
+  if (net.isIP(host) && isPrivateIp(host)) throw new Error('DISTRIBUTION_PRIVATE_TARGET_BLOCKED');
+  if (!net.isIP(host)) {
+    const addresses = await dns.lookup(host, { all: true, verbatim: true });
+    if (!addresses.length || addresses.some(({ address }) => isPrivateIp(address))) throw new Error('DISTRIBUTION_PRIVATE_TARGET_BLOCKED');
+  }
 }
 
 export async function enqueueDistributionJob(pool: Pool, kind: DistributionJobKind, payload: Record<string, unknown>) {
@@ -27,10 +45,7 @@ export async function enqueueDistributionJob(pool: Pool, kind: DistributionJobKi
   try {
     await client.query('BEGIN');
     await client.query(`SELECT set_config('app.tenant_id', $1, true)`, [DISTRIBUTION_TENANT_ID]);
-    await client.query(
-      `INSERT INTO distribution_jobs (id, tenant_id, kind, payload) VALUES ($1, $2, $3, $4::jsonb)`,
-      [id, DISTRIBUTION_TENANT_ID, kind, JSON.stringify(payload)],
-    );
+    await client.query(`INSERT INTO distribution_jobs (id, tenant_id, kind, payload) VALUES ($1, $2, $3, $4::jsonb)`, [id, DISTRIBUTION_TENANT_ID, kind, JSON.stringify(payload)]);
     await client.query('COMMIT');
     return id;
   } catch (error) {
@@ -44,7 +59,7 @@ export async function enqueueDistributionJob(pool: Pool, kind: DistributionJobKi
 export async function enqueueResearchUrl(pool: Pool, url: string) {
   const parsed = new URL(url);
   if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('DISTRIBUTION_URL_SCHEME_NOT_ALLOWED');
-  assertPublicResearchTarget(parsed);
+  await assertPublicResearchTarget(parsed);
   return enqueueDistributionJob(pool, 'research_url', { url: parsed.toString() });
 }
 
@@ -86,15 +101,11 @@ function extractResearchSignals(url: URL, html: string) {
 export async function researchUrl(url: string) {
   const parsed = new URL(url);
   if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('DISTRIBUTION_URL_SCHEME_NOT_ALLOWED');
-  assertPublicResearchTarget(parsed);
+  await assertPublicResearchTarget(parsed);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const response = await fetch(parsed, {
-      signal: controller.signal,
-      redirect: 'manual',
-      headers: { 'user-agent': 'SPR-Distribution-Research/1.0 (+https://www.softwarepassportregistry.com)' },
-    });
+    const response = await fetch(parsed, { signal: controller.signal, redirect: 'manual', headers: { 'user-agent': 'SPR-Distribution-Research/1.0 (+https://www.softwarepassportregistry.com)' } });
     if (response.status >= 300 && response.status < 400) return { url: parsed.toString(), httpObserved: true, status: response.status, redirected: true, score: null, signals: null, observedAt: new Date().toISOString() };
     const html = await readBoundedBody(response);
     return { ...extractResearchSignals(parsed, html), status: response.status };
