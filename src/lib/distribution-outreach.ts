@@ -9,6 +9,17 @@ const DAILY_LIMIT = Math.max(1, Math.min(500, Number.parseInt(process.env.DISTRI
 const FOLLOWUP_DAYS = Math.max(1, Math.min(30, Number.parseInt(process.env.DISTRIBUTION_FOLLOWUP_DAYS ?? '5', 10) || 5));
 const MAX_FOLLOWUPS = Math.max(0, Math.min(3, Number.parseInt(process.env.DISTRIBUTION_MAX_FOLLOWUPS ?? '2', 10) || 2));
 
+// Outreach mail leaves from its own address (DISTRIBUTION_OUTREACH_FROM,
+// e.g. "Software Passport Registry <ceo@softwarepassportregistry.com>")
+// so that transactional mail (verification, reset, invites) keeps EMAIL_FROM
+// and replies to outreach reach the person who sent it. Falls back to
+// EMAIL_FROM when unset.
+export function outreachSender(): { from: string | undefined; replyTo: string | undefined } {
+  const from = process.env.DISTRIBUTION_OUTREACH_FROM?.trim() || undefined;
+  const replyTo = from ? (from.match(/<([^>]+)>/)?.[1] ?? from) : undefined;
+  return { from, replyTo };
+}
+
 export function autonomousOutreachEnabled() {
   return process.env.DISTRIBUTION_AUTONOMOUS_OUTREACH === 'true' && Boolean(process.env.RESEND_API_KEY?.trim()) && Boolean(process.env.EMAIL_FROM?.trim());
 }
@@ -109,7 +120,7 @@ export async function sendInitial(contactId: string) {
     const copy = makeCopy(String(contact.company ?? ''), evidence, false);
     const brand = SPR_DEFAULT_BRAND;
     const rendered = renderBrandedEmail(brand, { heading: copy.subject, intro: copy.intro, cta: copy.cta, outro: [`You can opt out at any time: ${unsubscribeUrl(contact.email)}`] });
-    const providerId = await sendBrandedEmail(contact.email, copy.subject, brand, { heading: copy.subject, intro: copy.intro, cta: copy.cta, outro: [`You can opt out at any time: ${unsubscribeUrl(contact.email)}`] });
+    const providerId = await sendBrandedEmail(contact.email, copy.subject, brand, { heading: copy.subject, intro: copy.intro, cta: copy.cta, outro: [`You can opt out at any time: ${unsubscribeUrl(contact.email)}`] }, outreachSender());
     const hash = crypto.createHash('sha256').update(rendered.text).digest('hex');
     const messageId = `dm_${crypto.randomUUID().replace(/-/g, '')}`;
     await client.query(`INSERT INTO distribution_messages (id,tenant_id,contact_id,kind,subject,provider_message_id,status,body_hash,sent_at) VALUES ($1,$2,$3,'initial',$4,$5,'sent',$6,CURRENT_TIMESTAMP)`, [messageId,DISTRIBUTION_TENANT_ID,contactId,copy.subject,providerId,hash]);
@@ -131,7 +142,7 @@ export async function sendDueFollowups() {
         if (await dailySendCount(client) >= DAILY_LIMIT) throw new Error('DISTRIBUTION_DAILY_SEND_LIMIT_REACHED');
         const copy = makeCopy(String(contact.company ?? ''), contact.evidence ?? {}, true);
         const brand = SPR_DEFAULT_BRAND;
-        const providerId = await sendBrandedEmail(contact.email, copy.subject, brand, { heading: copy.subject, intro: copy.intro, cta: copy.cta, outro: [`You can opt out at any time: ${unsubscribeUrl(contact.email)}`] });
+        const providerId = await sendBrandedEmail(contact.email, copy.subject, brand, { heading: copy.subject, intro: copy.intro, cta: copy.cta, outro: [`You can opt out at any time: ${unsubscribeUrl(contact.email)}`] }, outreachSender());
         const messageId = `dm_${crypto.randomUUID().replace(/-/g, '')}`;
         await client.query(`INSERT INTO distribution_messages (id,tenant_id,contact_id,kind,subject,provider_message_id,status,sent_at) VALUES ($1,$2,$3,'followup',$4,$5,'sent',CURRENT_TIMESTAMP)`, [messageId,DISTRIBUTION_TENANT_ID,contact.id,copy.subject,providerId]);
         const nextDays = FOLLOWUP_DAYS * (Number(contact.followup_count) + 1);

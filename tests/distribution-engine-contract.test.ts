@@ -18,3 +18,21 @@ describe('distribution engine contracts', () => {
     await expect(enqueueResearchUrl(pool, 'http://127.0.0.1:8080/health')).rejects.toThrow('DISTRIBUTION_PRIVATE_TARGET_BLOCKED');
   });
 });
+
+describe('outreach sender address', () => {
+  it('outreach mail uses DISTRIBUTION_OUTREACH_FROM with a matching Reply-To, and transactional mail keeps EMAIL_FROM', async () => {
+    const { outreachSender } = await import('../src/lib/distribution-outreach.ts');
+    const previous = process.env.DISTRIBUTION_OUTREACH_FROM;
+    process.env.DISTRIBUTION_OUTREACH_FROM = 'Software Passport Registry <ceo@softwarepassportregistry.com>';
+    try {
+      expect(outreachSender()).toEqual({ from: 'Software Passport Registry <ceo@softwarepassportregistry.com>', replyTo: 'ceo@softwarepassportregistry.com' });
+      delete process.env.DISTRIBUTION_OUTREACH_FROM;
+      expect(outreachSender()).toEqual({ from: undefined, replyTo: undefined });
+    } finally { if (previous === undefined) delete process.env.DISTRIBUTION_OUTREACH_FROM; else process.env.DISTRIBUTION_OUTREACH_FROM = previous; }
+    const fs = await import('node:fs');
+    const outreach = fs.readFileSync('src/lib/distribution-outreach.ts', 'utf8');
+    expect((outreach.match(/sendBrandedEmail\(/g) ?? []).length).toBe((outreach.match(/, outreachSender\(\)\)/g) ?? []).length);
+    const auth = fs.readFileSync('src/routes/auth.ts', 'utf8');
+    expect(auth).not.toContain('outreachSender');
+  });
+});
