@@ -55,13 +55,16 @@ const envSchema = z.object({
   SPR_OWNER_BOOTSTRAP_SECRET: optionalTrimmedString,
   SPR_OWNER_BOOTSTRAP_SECRET_SHA256: z.preprocess((value) => typeof value === 'string' ? (value.trim().toLowerCase() || undefined) : value, z.string().regex(/^[a-f0-9]{64}$/).optional()),
   SPR_PUBLIC_PASSPORT_SECRET: optionalTrimmedString,
+  // Signs DPA execution records so a downloaded agreement can be verified.
+  SPR_DOCUMENT_SIGNING_SECRET: optionalTrimmedString,
+  ANTHROPIC_API_KEY: optionalTrimmedString, ANTHROPIC_MODEL: optionalTrimmedString,
   SENTRY_DSN: optionalTrimmedUrl, REDIS_URL: optionalTrimmedString, RATE_LIMIT_FAIL_OPEN: optionalBooleanString, MONITORING_ENABLED_TENANT_IDS: optionalTrimmedString,
   // Founder Command Center — platform-operator-only page (distinct from the
   // per-tenant 'Owner' role: every paying customer has an Owner, but only the
   // emails listed here may see cross-platform connection health/MRR/tasks).
   FOUNDER_EMAILS: optionalTrimmedString,
   RAILWAY_API_TOKEN: optionalTrimmedString, RAILWAY_PROJECT_ID: optionalTrimmedString,
-  VERCEL_API_TOKEN: optionalTrimmedString, VERCEL_PROJECT_ID: optionalTrimmedString,
+  VERCEL_API_TOKEN: optionalTrimmedString, VERCEL_PROJECT_ID: optionalTrimmedString, VERCEL_TEAM_ID: optionalTrimmedString,
   GITHUB_TOKEN: optionalTrimmedString, GITHUB_OWNER: optionalTrimmedString, GITHUB_REPO: optionalTrimmedString,
 });
 
@@ -128,6 +131,8 @@ export const config = {
   ownerBootstrap: { initialOwnerEmail: parsedEnv.SPR_INITIAL_OWNER_EMAIL, secret: parsedEnv.SPR_OWNER_BOOTSTRAP_SECRET, secretSha256: parsedEnv.SPR_OWNER_BOOTSTRAP_SECRET_SHA256 },
   fulfilmentEmail: parsedEnv.SPR_FULFILMENT_EMAIL ?? 'contact@softwarepassportregistry.com',
   publicPassport: { secret: parsedEnv.SPR_PUBLIC_PASSPORT_SECRET },
+  documentSigning: { secret: parsedEnv.SPR_DOCUMENT_SIGNING_SECRET },
+  anthropic: { apiKey: parsedEnv.ANTHROPIC_API_KEY, model: parsedEnv.ANTHROPIC_MODEL ?? 'claude-sonnet-5' },
   sentry: { dsn: parsedEnv.SENTRY_DSN }, redis: { url: parsedEnv.REDIS_URL, failOpen: parsedEnv.NODE_ENV !== 'production' && parseBoolean(parsedEnv.RATE_LIMIT_FAIL_OPEN, false) }, monitoring: { enabledTenantIds: parseCsv(parsedEnv.MONITORING_ENABLED_TENANT_IDS) },
   founder: {
     // Lowercased on purpose: compared against the lowercased email on the
@@ -135,7 +140,7 @@ export const config = {
     emails: parseCsv(parsedEnv.FOUNDER_EMAILS).map((email) => email.toLowerCase()),
   },
   railway: { apiToken: parsedEnv.RAILWAY_API_TOKEN, projectId: parsedEnv.RAILWAY_PROJECT_ID },
-  vercel: { apiToken: parsedEnv.VERCEL_API_TOKEN, projectId: parsedEnv.VERCEL_PROJECT_ID },
+  vercel: { apiToken: parsedEnv.VERCEL_API_TOKEN, projectId: parsedEnv.VERCEL_PROJECT_ID, teamId: parsedEnv.VERCEL_TEAM_ID },
   githubCi: { token: parsedEnv.GITHUB_TOKEN, owner: parsedEnv.GITHUB_OWNER, repo: parsedEnv.GITHUB_REPO },
 };
 
@@ -182,5 +187,6 @@ export const configurationCatalog = [
   { name: 'STRIPE_PRICE_VERIFIED_SYSTEM_REPORT', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_DUE_DILIGENCE_REPORT', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_VENDOR_RISK_ASSESSMENT', category: 'featureSpecific', requiredInProduction: false },
   { name: 'STRIPE_PRICE_SBOM_ANALYSIS', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_PORTFOLIO_ASSESSMENT', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_AUDIT_EVIDENCE_PACKAGE', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_CUSTOM_ASSESSMENT', category: 'featureSpecific', requiredInProduction: false },
   { name: 'STRIPE_PRICE_CONTINUOUS_VERIFICATION', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_TRUST_BADGE', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_PUBLIC_PASSPORT', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_API', category: 'featureSpecific', requiredInProduction: false },
-  { name: 'GEMINI_API_KEY', category: 'featureSpecific', requiredInProduction: false }, { name: 'SENTRY_DSN', category: 'optional', requiredInProduction: false },
+  { name: 'GEMINI_API_KEY', category: 'featureSpecific', requiredInProduction: false }, { name: 'ANTHROPIC_API_KEY', category: 'featureSpecific', requiredInProduction: false }, { name: 'SENTRY_DSN', category: 'optional', requiredInProduction: false },
+  { name: 'SPR_DOCUMENT_SIGNING_SECRET', category: 'featureSpecific', requiredInProduction: false }, { name: 'VERCEL_API_TOKEN', category: 'featureSpecific', requiredInProduction: false }, { name: 'VERCEL_PROJECT_ID', category: 'featureSpecific', requiredInProduction: false }, { name: 'VERCEL_TEAM_ID', category: 'featureSpecific', requiredInProduction: false },
 ] as const;

@@ -123,3 +123,56 @@ export async function setUserCustomClaims(uid: string, claims: { workspaceId: st
     return { success: false, reason: err?.message || String(err) };
   }
 }
+
+/**
+ * Identity Platform project configuration: the list of hostnames Firebase
+ * Authentication will accept sign-in requests from. A white-label custom
+ * domain has to be on it or Google sign-in (and every OAuth redirect) on
+ * that hostname is refused with auth/unauthorized-domain.
+ *
+ * The Admin SDK exposes no method for authorizedDomains, so this calls the
+ * documented REST resource with the service account's own access token.
+ * Read-modify-write on the full list; callers hold the domain in the
+ * database first so a lost update cannot strand it.
+ */
+const identityConfigUrl = () => `https://identitytoolkit.googleapis.com/admin/v2/projects/${encodeURIComponent(adminOptions.projectId ?? '')}/config`;
+
+async function identityAccessToken(): Promise<string> {
+  const credentialObject = app.options.credential;
+  if (!credentialObject || !adminOptions.projectId) throw new Error('FIREBASE_ADMIN_NOT_CONFIGURED');
+  const token = await credentialObject.getAccessToken();
+  return token.access_token;
+}
+
+export async function getAuthorizedDomains(): Promise<string[]> {
+  const accessToken = await identityAccessToken();
+  const response = await fetch(identityConfigUrl(), { headers: { Authorization: `Bearer ${accessToken}` } });
+  const json: any = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(`IDENTITY_CONFIG_${response.status}:${json?.error?.message ?? 'request failed'}`);
+  return Array.isArray(json?.authorizedDomains) ? json.authorizedDomains.map(String) : [];
+}
+
+async function setAuthorizedDomains(domains: string[]): Promise<string[]> {
+  const accessToken = await identityAccessToken();
+  const response = await fetch(`${identityConfigUrl()}?updateMask=authorizedDomains`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ authorizedDomains: domains }),
+  });
+  const json: any = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(`IDENTITY_CONFIG_${response.status}:${json?.error?.message ?? 'request failed'}`);
+  return Array.isArray(json?.authorizedDomains) ? json.authorizedDomains.map(String) : domains;
+}
+
+export async function addAuthorizedDomain(hostname: string): Promise<void> {
+  const current = await getAuthorizedDomains();
+  if (current.some((d) => d.toLowerCase() === hostname.toLowerCase())) return;
+  await setAuthorizedDomains([...current, hostname.toLowerCase()]);
+}
+
+export async function removeAuthorizedDomain(hostname: string): Promise<void> {
+  const current = await getAuthorizedDomains();
+  const next = current.filter((d) => d.toLowerCase() !== hostname.toLowerCase());
+  if (next.length === current.length) return;
+  await setAuthorizedDomains(next);
+}

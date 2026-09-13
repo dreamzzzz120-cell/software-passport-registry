@@ -36,11 +36,12 @@ describe('Settings "Getting Started" guide stays honest about real gaps', () => 
     expect(source()).toContain('Custom domains</strong> — not implemented');
   });
 
-  it('still discloses branding does not yet reach the public passport/emails', () => {
-    // Branding now reaches the workspace shell, the PDF export and the public
-    // passport API; the remaining real gap is sign-in email, which the
-    // identity provider sends.
-    expect(source()).toContain('Branded sign-in emails</strong> — verification and reset emails are sent by the identity provider and are not branded');
+  it('no longer lists branded sign-in email as a gap, because the branded sender exists', () => {
+    // Verification, password-reset and invitation mail is rendered from the
+    // tenant theme by src/lib/branded-email.ts; the guide now says so and the
+    // old 'not branded' disclosure must not linger.
+    expect(source()).not.toContain('Branded sign-in emails</strong>');
+    expect(source()).toContain('verification, password-reset and invitation emails');
     expect(source()).not.toContain('not yet the public passport page itself');
   });
 });

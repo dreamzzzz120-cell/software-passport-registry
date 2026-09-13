@@ -9,6 +9,10 @@ export async function runRetentionWorkerLoop(): Promise<void> {
     // missing evidence_days value as zero days, which would delete every
     // active object for an otherwise valid tenant on the next worker pass.
     await pool.query(`UPDATE object_files o SET status='DELETED', deleted_at=CURRENT_TIMESTAMP WHERE o.status='ACTIVE' AND EXISTS (SELECT 1 FROM retention_policies r WHERE r.tenant_id=o.tenant_id AND o.created_at < CURRENT_TIMESTAMP - (r.evidence_days || ' days')::interval)`);
+    // Public contact-form messages are not tenant data: the /data-retention/
+    // page commits to deleting them after 12 months, and this is where that
+    // happens.
+    await pool.query(`DELETE FROM contact_inquiries WHERE created_at < CURRENT_TIMESTAMP - interval '365 days'`);
   } finally { await pool.end(); }
   await new Promise(resolve => setTimeout(resolve, Number(process.env.RETENTION_POLL_MS || 86400000)));
 }

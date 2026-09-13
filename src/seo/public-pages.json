@@ -62,7 +62,7 @@
     {
       "path": "/security/",
       "title": "Security — Software Passport Registry",
-      "description": "Review documented Software Passport Registry security architecture, tenant isolation controls, authentication boundaries and responsible security disclosures."
+      "description": "The security controls implemented in Software Passport Registry: tenant isolation, authentication boundaries, evidence integrity and responsible disclosure."
     },
     {
       "path": "/contact/",
@@ -88,6 +88,11 @@
       "path": "/privacy",
       "title": "Privacy Policy — Software Passport Registry",
       "description": "How Software Passport Registry collects and uses account, repository, evidence and log data, and how tenant and client data isolation is enforced."
+    },
+    {
+      "path": "/dpa",
+      "title": "Data Processing Agreement — Software Passport Registry",
+      "description": "The Data Processing Agreement under which Software Passport Registry processes personal data for customers, with its subprocessor annex and security measures."
     }
   ]
 }

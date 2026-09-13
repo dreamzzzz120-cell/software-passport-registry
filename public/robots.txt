@@ -21,6 +21,14 @@ Allow: /software
 Allow: /whitepaper
 Allow: /terms
 Allow: /privacy
+Allow: /dpa
+Allow: /about/
+Allow: /trust/
+Allow: /methodology/
+Allow: /security/
+Allow: /contact/
+Allow: /data-retention/
+Allow: /subprocessors/
 
 # Authenticated application. These render tenant-scoped customer data and
 # are behind auth; they must never appear in search results.

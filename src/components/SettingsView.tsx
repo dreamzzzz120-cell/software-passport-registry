@@ -13,6 +13,7 @@ import {
 import { auth } from '../lib/firebase';
 import { apiFetch } from '../utils/apiClient';
 import MfaSettingsPanel from './MfaSettingsPanel';
+import DataGovernancePanel from './DataGovernancePanel';
 
 interface SettingsViewProps {
   theme: 'light' | 'dark';
@@ -102,7 +103,10 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
         body: JSON.stringify({ email: inviteEmail, role: inviteRole, clientId: inviteRole === 'Client' ? inviteClientId : undefined })
       });
       if (res.ok) {
-        setTeamSuccess(`Successfully sent security invitation to ${inviteEmail}`);
+        const invited = await res.json().catch(() => ({} as { emailed?: boolean; inviteLink?: string | null; emailError?: string | null }));
+        if (invited.emailed === true) setTeamSuccess(`Invitation emailed to ${inviteEmail}.`);
+        else if (invited.inviteLink) setTeamSuccess(`${inviteEmail} was added, but the invitation email was not sent (${invited.emailError || 'no email provider'}). Share this link with them directly: ${invited.inviteLink}`);
+        else setTeamSuccess(`${inviteEmail} was added. No invitation link could be generated; they can use “Forgot password” on the sign-in page with this address.`);
         setInviteEmail('');
         setInviteClientId('');
         fetchProfileAndTeam();
@@ -314,7 +318,11 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
         method: 'POST',
       });
       if (res.ok) {
-        alert("Offboarding complete. Your tenant profile and isolated workspaces have been purged from storage nodes.");
+        const result = await res.json().catch(() => ({} as { identityAccountsRemoved?: number; identityAccountsNotRemoved?: string[] }));
+        const notRemoved: string[] = Array.isArray(result.identityAccountsNotRemoved) ? result.identityAccountsNotRemoved : [];
+        alert(notRemoved.length
+          ? `Workspace data purged. ${result.identityAccountsRemoved ?? 0} sign-in account(s) removed; these could not be removed and need manual deletion: ${notRemoved.join(', ')}.`
+          : `Workspace data purged and ${result.identityAccountsRemoved ?? 0} sign-in account(s) removed from the identity provider.`);
         localStorage.removeItem('msp_user');
         await auth.signOut().catch(() => {});
         window.location.reload();
@@ -652,6 +660,8 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
                 ))}
               </div>
             </div>
+
+            <DataGovernancePanel role={currentRole} />
 
             {/* Security Credentials settings */}
             <div className="spr-panel p-5 space-y-4">
@@ -1156,7 +1166,7 @@ function GettingStartedGuide() {
           <ol className="space-y-2.5 list-decimal list-inside leading-relaxed">
             {step('Open White-label from the left rail', 'Its own page, with a live preview rendered from your real passports.')}
             {step('Set identity, colours, typography, footer', 'Logo and favicon under 200 KB / 45 KB; every palette token for light and dark mode; font; corner radius; support email and URL.')}
-            {step('Save', 'Owner/Admin only — saved once for the whole tenant and applied to the workspace, PDF report exports and the public passport API (name, colour, product name, support URL).')}
+            {step('Save', 'Owner/Admin only — saved once for the whole tenant and applied to the workspace, PDF report exports, the public passport API (name, colour, product name, support URL), and the verification, password-reset and invitation emails sent to members of this workspace.')}
           </ol>
         </div>
 
@@ -1165,6 +1175,15 @@ function GettingStartedGuide() {
           <ol className="space-y-2.5 list-decimal list-inside leading-relaxed">
             {step('Reports → "White-label client report"', 'Your saved branding pre-fills automatically; you can still override it just for this export.')}
             {step('Pick the client and sections, Generate white-label PDF', 'Uses that client’s real, already-loaded inventory and scores — nothing is fabricated for the export.')}
+          </ol>
+        </div>
+
+        <div className="spr-panel p-5 space-y-3">
+          <h4 className="text-[11px] font-bold text-[var(--spr-text)] uppercase tracking-wide">Data Processing Agreement & retention</h4>
+          <ol className="space-y-2.5 list-decimal list-inside leading-relaxed">
+            {step('Read the DPA at /dpa', 'Public, versioned, and hashed: the page shows the SHA-256 of the exact wording.')}
+            {step('Owner executes it under Settings → Configurations', 'The execution record is signed by the server; download the PDF or open the verification link on any copy.')}
+            {step('Set a retention policy in the same panel', 'Until one is saved nothing is purged on a schedule; once saved, the retention worker enforces it.')}
           </ol>
         </div>
 
@@ -1192,7 +1211,6 @@ function GettingStartedGuide() {
           <h4 className="text-[11px] font-bold text-[var(--spr-amber)] uppercase tracking-wide flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> Not available yet</h4>
           <ul className="space-y-1.5 list-disc list-inside leading-relaxed">
             <li><strong className="text-[var(--spr-text)]">Custom domains</strong> — not implemented.</li>
-            <li><strong className="text-[var(--spr-text)]">Branded sign-in emails</strong> — verification and reset emails are sent by the identity provider and are not branded.</li>
           </ul>
         </div>
       </div>

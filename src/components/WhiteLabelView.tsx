@@ -411,7 +411,11 @@ export default function WhiteLabelView({ role, passports, branding, theme: activ
               </label>
               <div className="rounded-[var(--spr-radius)] border border-dashed border-[var(--spr-border)] p-3 text-[12px] text-[var(--spr-text-muted)]">
                 <p className="font-semibold text-[var(--spr-text)]">Not available</p>
-                <p className="mt-1">Custom domains (serving the workspace from your own hostname) are not implemented. Sign-in emails are sent by the identity provider and are not branded.</p>
+                <p className="mt-1">Custom domains (serving the workspace from your own hostname) are not implemented yet.</p>
+              </div>
+              <div className="rounded-[var(--spr-radius)] border border-[var(--spr-border)] p-3 text-[12px] text-[var(--spr-text-muted)]">
+                <p className="font-semibold text-[var(--spr-text)]">Branded email</p>
+                <p className="mt-1">Verification, password-reset and invitation emails to members of this workspace use the product name, brand colour, logo, support address and footer saved here, and are sent from SPR’s own mail domain with this workspace’s product name as the sender name.</p>
               </div>
             </div>
           )}
