@@ -1,0 +1,56 @@
+name: one-time evidence UI fix
+
+on:
+  push:
+    branches:
+      - fix/evidence-backed-ui-values
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Remove unsupported UI fallbacks
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/components/FreeReviewView.tsx')
+          s = p.read_text()
+          replacements = {
+              "{result.verifiedCapabilities?.length ?? 0}": "{result.verifiedCapabilities ? result.verifiedCapabilities.length : 'UNKNOWN'}",
+              "evidence items + {result.sbom?.componentCount ?? 0} SBOM components": "evidence items + {result.sbom?.componentCount ?? 'UNKNOWN'} SBOM components",
+              "{result.sbom?.componentCount ?? 'UNKNOWN'} components": "{result.sbom?.componentCount !== null && result.sbom?.componentCount !== undefined ? `${result.sbom.componentCount} components` : 'UNKNOWN — SBOM component count not observed'}",
+              "Exact timestamps in full Passport": "UNKNOWN — exact evidence timestamps are not exposed in the free preview",
+          }
+          for old, new in replacements.items():
+              if old not in s:
+                  raise SystemExit(f'missing expected text: {old}')
+              s = s.replace(old, new)
+          p.write_text(s)
+          PY
+      - name: Add regression coverage
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('tests/free-review-preview-contract.test.ts')
+          s = p.read_text()
+          anchor = "  it('states zero verification as zero verification', () => {"
+          insert = """  it('does not turn missing SBOM or capability data into fabricated zeroes', () => {\n    const source = view();\n    expect(source).not.toContain(code`result.verifiedCapabilities?.length ?? 0`);\n    expect(source).not.toContain(code`result.sbom?.componentCount ?? 0`);\n    expect(source).toContain('UNKNOWN — exact evidence timestamps are not exposed in the free preview');\n  });\n\n"""
+          if anchor not in s:
+              raise SystemExit('missing test insertion anchor')
+          s = s.replace(anchor, insert + anchor, 1)
+          p.write_text(s)
+          PY
+      - name: Commit changes and remove this workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/components/FreeReviewView.tsx tests/free-review-preview-contract.test.ts .github/workflows/one-time-evidence-ui-fix.yml
+          git rm .github/workflows/one-time-evidence-ui-fix.yml
+          git commit -m 'fix: keep Free Review UI evidence-backed' || exit 0
+          git push
