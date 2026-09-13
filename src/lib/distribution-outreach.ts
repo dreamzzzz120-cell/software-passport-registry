@@ -13,10 +13,10 @@ export function autonomousOutreachEnabled() {
   return process.env.DISTRIBUTION_AUTONOMOUS_OUTREACH === 'true' && Boolean(process.env.RESEND_API_KEY?.trim()) && Boolean(process.env.EMAIL_FROM?.trim());
 }
 
-function outreachAllowed(payload: Record<string, unknown>) {
+function outreachAllowed(basis: unknown) {
   if (!autonomousOutreachEnabled()) throw new Error('DISTRIBUTION_AUTONOMOUS_OUTREACH_DISABLED');
-  if (payload.outreachBasis !== 'consent' && payload.outreachBasis !== 'legitimate_interest') throw new Error('DISTRIBUTION_OUTREACH_BASIS_REQUIRED');
-  if (payload.outreachBasis === 'legitimate_interest' && process.env.DISTRIBUTION_LI_ATTESTED !== 'true') throw new Error('DISTRIBUTION_LI_ATTESTATION_REQUIRED');
+  if (basis !== 'consent' && basis !== 'legitimate_interest') throw new Error('DISTRIBUTION_OUTREACH_BASIS_REQUIRED');
+  if (basis === 'legitimate_interest' && process.env.DISTRIBUTION_LI_ATTESTED !== 'true') throw new Error('DISTRIBUTION_LI_ATTESTATION_REQUIRED');
 }
 
 export function outreachToken(email: string) {
@@ -84,14 +84,25 @@ export async function queueContact(email: string, company: string | null, source
   });
 }
 
+export async function ingestResearchResult(result: Record<string, unknown>, defaultBasis: string) {
+  const emails = Array.isArray(result.publicRoleEmails) ? result.publicRoleEmails.filter((v): v is string => typeof v === 'string') : [];
+  const company = typeof result.company === 'string' ? result.company : null;
+  const sourceUrl = typeof result.url === 'string' ? result.url : null;
+  if (!emails.length) return 0;
+  let queued = 0;
+  for (const email of emails) {
+    try { await queueContact(email, company, sourceUrl, result, defaultBasis, null); queued += 1; } catch (error) { console.error('[Distribution] contact ingestion failed:', error instanceof Error ? error.message : String(error)); }
+  }
+  return queued;
+}
+
 export async function sendInitial(contactId: string) {
-  outreachAllowed({ outreachBasis: 'legitimate_interest' });
   return withTenant(async (client) => {
-    if (await dailySendCount(client) >= DAILY_LIMIT) throw new Error('DISTRIBUTION_DAILY_SEND_LIMIT_REACHED');
-    const contactResult = await client.query(`SELECT id,email,company,evidence,status,outreach_basis,consent_evidence_url,last_contacted_at FROM distribution_contacts WHERE id=$1 AND tenant_id=$2 LIMIT 1`, [contactId,DISTRIBUTION_TENANT_ID]);
+    const contactResult = await client.query(`SELECT id,email,company,evidence,status,outreach_basis,consent_evidence_url FROM distribution_contacts WHERE id=$1 AND tenant_id=$2 LIMIT 1`, [contactId,DISTRIBUTION_TENANT_ID]);
     const contact = contactResult.rows?.[0];
     if (!contact || contact.status !== 'active') throw new Error('DISTRIBUTION_CONTACT_NOT_ACTIVE');
-    if (!contact.outreach_basis) throw new Error('DISTRIBUTION_OUTREACH_BASIS_REQUIRED');
+    outreachAllowed(contact.outreach_basis);
+    if (await dailySendCount(client) >= DAILY_LIMIT) throw new Error('DISTRIBUTION_DAILY_SEND_LIMIT_REACHED');
     const already = await client.query(`SELECT 1 FROM distribution_messages WHERE contact_id=$1 AND kind='initial' AND status='sent' LIMIT 1`, [contactId]);
     if (already.rows?.length) throw new Error('DISTRIBUTION_INITIAL_ALREADY_SENT');
     const evidence = contact.evidence && typeof contact.evidence === 'object' ? contact.evidence : {};
@@ -113,11 +124,11 @@ export async function sendDueFollowups() {
   const due = await db.execute(sql`SELECT c.id FROM distribution_contacts c WHERE c.tenant_id=${DISTRIBUTION_TENANT_ID} AND c.status='active' AND c.next_followup_at <= CURRENT_TIMESTAMP AND c.followup_count < ${MAX_FOLLOWUPS} ORDER BY c.next_followup_at ASC LIMIT 25`);
   for (const row of ((due as any).rows ?? [])) {
     try {
-      outreachAllowed({ outreachBasis: 'legitimate_interest' });
       await withTenant(async (client) => {
-        if (await dailySendCount(client) >= DAILY_LIMIT) throw new Error('DISTRIBUTION_DAILY_SEND_LIMIT_REACHED');
-        const result = await client.query(`SELECT id,email,company,evidence,followup_count FROM distribution_contacts WHERE id=$1 AND tenant_id=$2 AND status='active' LIMIT 1`, [row.id,DISTRIBUTION_TENANT_ID]);
+        const result = await client.query(`SELECT id,email,company,evidence,followup_count,outreach_basis FROM distribution_contacts WHERE id=$1 AND tenant_id=$2 AND status='active' LIMIT 1`, [row.id,DISTRIBUTION_TENANT_ID]);
         const contact = result.rows?.[0]; if (!contact) return;
+        outreachAllowed(contact.outreach_basis);
+        if (await dailySendCount(client) >= DAILY_LIMIT) throw new Error('DISTRIBUTION_DAILY_SEND_LIMIT_REACHED');
         const copy = makeCopy(String(contact.company ?? ''), contact.evidence ?? {}, true);
         const brand = SPR_DEFAULT_BRAND;
         const providerId = await sendBrandedEmail(contact.email, copy.subject, brand, { heading: copy.subject, intro: copy.intro, cta: copy.cta, outro: [`You can opt out at any time: ${unsubscribeUrl(contact.email)}`] });
@@ -130,4 +141,13 @@ export async function sendDueFollowups() {
     } catch (error) { console.error('[Distribution] follow-up failed:', error instanceof Error ? error.message : String(error)); }
   }
   return sent;
+}
+
+export async function unsubscribeContact(email: string, token: string) {
+  const expected = outreachToken(email);
+  if (!crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(token))) throw new Error('DISTRIBUTION_UNSUBSCRIBE_TOKEN_INVALID');
+  return withTenant(async (client) => {
+    const result = await client.query(`UPDATE distribution_contacts SET status='unsubscribed',next_followup_at=NULL,updated_at=CURRENT_TIMESTAMP WHERE tenant_id=$1 AND lower(email)=lower($2) RETURNING id`, [DISTRIBUTION_TENANT_ID,email.trim()]);
+    return result.rowCount > 0;
+  });
 }
