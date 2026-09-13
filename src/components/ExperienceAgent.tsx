@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { apiFetch } from '../utils/apiClient';
 
@@ -14,7 +15,11 @@ const QUICK_ACTIONS = [
   { label: 'Vendor risk', value: 'Show vendor risk' },
 ];
 
+const SAFE_NAV_PATHS = new Set(['/dashboard', '/clients', '/passports', '/vendors', '/monitoring', '/compliance', '/reports', '/billing', '/settings']);
+const SAFE_ACTION_ENDPOINTS = new Set(['/api/agent/v1/verify-software']);
+
 function navigate(path: string) {
+  if (!SAFE_NAV_PATHS.has(path)) return;
   window.history.pushState({}, '', path);
   window.dispatchEvent(new PopStateEvent('popstate'));
 }
@@ -23,10 +28,12 @@ export default function ExperienceAgent() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
+  const [signedIn, setSignedIn] = useState(Boolean(auth.currentUser));
   const [messages, setMessages] = useState<Message[]>([{ role: 'agent', text: 'I’m your SPR Agent. I only report information I can retrieve from your authorized SPR workspace. Factual answers include where the information came from.' }]);
   const inputRef = useRef<HTMLInputElement>(null);
-  const signedIn = Boolean(auth.currentUser);
   const canSubmit = useMemo(() => Boolean(input.trim()) && !busy && signedIn, [input, busy, signedIn]);
+
+  useEffect(() => onAuthStateChanged(auth, (user) => setSignedIn(Boolean(user))), []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -42,7 +49,7 @@ export default function ExperienceAgent() {
 
   async function submit(raw?: string) {
     const text = (raw ?? input).trim();
-    if (!text || busy) return;
+    if (!text || busy || !auth.currentUser) return;
     setInput(''); setMessages((current) => [...current, { role: 'user', text }]); setBusy(true);
     try {
       const response = await apiFetch('/api/agent/v1/command', { method: 'POST', body: JSON.stringify({ input: text, context: { path: window.location.pathname } }), timeout: 30_000 });
@@ -50,11 +57,13 @@ export default function ExperienceAgent() {
       if (!response.ok) throw new Error(typeof payload.reply === 'string' ? payload.reply : 'SPR Agent could not complete the request.');
       setMessages((current) => [...current, { role: 'agent', text: payload.reply || 'The request completed without a factual response.', data: payload.data, provenance: payload.provenance, actions: payload.actions }]);
       if (payload.path) { navigate(payload.path); setOpen(false); return; }
-      if (payload.action?.type === 'verify' && payload.action.endpoint && payload.action.payload) {
+      if (payload.action?.type === 'verify' && payload.action.endpoint && SAFE_ACTION_ENDPOINTS.has(payload.action.endpoint) && payload.action.payload) {
         const verify = await apiFetch(payload.action.endpoint, { method: 'POST', body: JSON.stringify(payload.action.payload), timeout: 30_000 });
         const result = await verify.json().catch(() => ({})) as AgentResult;
         const textResult = verify.status === 404 ? 'That software is UNKNOWN because no matching passport record was observed in your authorized workspace. No negative trust claim was made.' : verify.ok ? `I observed ${result.evidence?.count ?? 0} evidence record(s). I am not assigning a separate trust decision.` : 'Verification could not be completed. No factual claim was made.';
         setMessages((current) => [...current, { role: 'agent', text: textResult, result }]);
+      } else if (payload.action?.type) {
+        setMessages((current) => [...current, { role: 'agent', text: 'The requested action was not in the agent’s approved action allowlist. No action was executed and no factual claim was made.' }]);
       }
     } catch (error) {
       console.error('[SPR Agent] command failed', error);
