@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Activity, ArrowRight, Bot, CheckCircle2, Clock3, Copy, ShieldCheck, Sparkles } from 'lucide-react';
+import { apiFetch } from '../utils/apiClient';
 
 const tools = [
   ['verify_software', 'Verify a Software Passport and its current evidence-backed status.'],
@@ -27,6 +28,7 @@ export default function AgentTrustView() {
   const [copied, setCopied] = useState(false);
   const [mcpAvailable, setMcpAvailable] = useState<boolean | null>(null);
   const [distributionStatus, setDistributionStatus] = useState<Record<string, number> | null>(null);
+  const [outreach, setOutreach] = useState<{ enabled: boolean; verification: null | { fromAddress: string; toAddress: string; status: string; providerMessageId: string | null; error: string | null; sentAt: string } } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -36,10 +38,13 @@ export default function AgentTrustView() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/founder/distribution/status', { credentials: 'include' }).then(async response => {
+    // apiFetch attaches the Firebase bearer token; a bare fetch never
+    // authorised and the panel showed 'Not verified' for everyone.
+    apiFetch('/api/founder/distribution/status').then(async response => {
       if (!response.ok) return null;
       const data = await response.json().catch(() => null);
       if (!cancelled && data?.counts) setDistributionStatus(data.counts);
+      if (!cancelled && data) setOutreach({ enabled: data.autonomousOutreachEnabled === true, verification: data.senderVerification ?? null });
       return data;
     }).catch(() => null);
     return () => { cancelled = true; };
@@ -75,7 +80,7 @@ export default function AgentTrustView() {
 
     <section className="grid gap-4 md:grid-cols-3">
       <div className="spr-panel p-5"><div className="text-xs font-semibold uppercase tracking-[.18em] text-[var(--spr-text-muted)]">Trust transport</div><div className="mt-2 text-xl font-semibold">MCP / JSON-RPC</div><div className="mt-1 text-xs text-[var(--spr-text-muted)]">Read-only agent surface</div></div>
-      <div className="spr-panel p-5"><div className="text-xs font-semibold uppercase tracking-[.18em] text-[var(--spr-text-muted)]">Distribution jobs</div><div className="mt-2 text-xl font-semibold">{distributionStatus ? Object.values(distributionStatus).reduce((sum, value) => sum + value, 0) : 'Not verified'}</div><div className="mt-1 text-xs text-[var(--spr-text-muted)]">Only shown when the founder distribution endpoint authorizes this session.</div></div>
+      <div className="spr-panel p-5"><div className="text-xs font-semibold uppercase tracking-[.18em] text-[var(--spr-text-muted)]">Distribution jobs</div><div className="mt-2 text-xl font-semibold">{distributionStatus ? Object.values(distributionStatus).reduce((sum, value) => sum + value, 0) : 'Not verified'}</div><div className="mt-1 text-xs text-[var(--spr-text-muted)]">Only shown when the founder distribution endpoint authorizes this session.</div>{outreach && <div className="mt-2 border-t border-[var(--spr-border)] pt-2 text-xs text-[var(--spr-text-muted)]"><div>Autonomous outreach: <b className="text-[var(--spr-text)]">{outreach.enabled ? 'enabled' : 'disabled'}</b></div><div className="mt-1">Sender verification: {outreach.verification ? <>{outreach.verification.status === 'sent' ? <span className="text-[var(--spr-green)]">sent</span> : <span className="text-[var(--spr-red)]">failed</span>} from <code>{outreach.verification.fromAddress}</code> to <code>{outreach.verification.toAddress}</code> at {new Date(outreach.verification.sentAt).toLocaleString()}{outreach.verification.providerMessageId ? <> · provider id <code>{outreach.verification.providerMessageId}</code></> : null}{outreach.verification.error ? <> · {outreach.verification.error}</> : null}</> : 'none recorded'}</div></div>}</div>
       <div className="spr-panel p-5"><div className="text-xs font-semibold uppercase tracking-[.18em] text-[var(--spr-text-muted)]">Evidence policy</div><div className="mt-2 text-xl font-semibold">Evidence first</div><div className="mt-1 text-xs text-[var(--spr-text-muted)]">Unknown remains unknown.</div></div>
     </section>
 

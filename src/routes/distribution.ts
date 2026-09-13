@@ -70,7 +70,7 @@ export function createDistributionRouter() {
     catch (error) { return next(error); }
   });
   router.get('/founder/distribution/status', ...founderOnly, async (_req: AuthenticatedRequest, res, next) => {
-    try { const result = await db.execute(sql`SELECT status, COUNT(*)::int AS count FROM distribution_jobs WHERE tenant_id = ${DISTRIBUTION_TENANT_ID} GROUP BY status ORDER BY status`); const rows = (result as any).rows ?? []; const counts: Record<string, number> = {}; for (const row of rows) counts[String(row.status)] = Number(row.count); return res.json({ counts, autonomousOutreachEnabled: autonomousOutreachEnabled(), generatedAt: new Date().toISOString() }); }
+    try { const result = await db.execute(sql`SELECT status, COUNT(*)::int AS count FROM distribution_jobs WHERE tenant_id = ${DISTRIBUTION_TENANT_ID} GROUP BY status ORDER BY status`); const rows = (result as any).rows ?? []; const counts: Record<string, number> = {}; for (const row of rows) counts[String(row.status)] = Number(row.count); const verification = (await db.execute(sql`SELECT from_address AS "fromAddress", to_address AS "toAddress", status, provider_message_id AS "providerMessageId", error, sent_at AS "sentAt" FROM distribution_sender_verifications ORDER BY sent_at DESC LIMIT 1`) as any).rows?.[0] ?? null; return res.json({ counts, autonomousOutreachEnabled: autonomousOutreachEnabled(), senderVerification: verification, generatedAt: new Date().toISOString() }); }
     catch (error) { return next(error); }
   });
   router.get('/founder/distribution/opportunities', ...founderOnly, async (_req: AuthenticatedRequest, res, next) => {

@@ -31,8 +31,10 @@ function outreachAllowed(basis: unknown) {
 }
 
 export function outreachToken(email: string) {
-  const secret = process.env.PUBLIC_PASSPORT_SECRET?.trim();
-  if (!secret) throw new Error('PUBLIC_PASSPORT_SECRET_REQUIRED');
+  // SPR_PUBLIC_PASSPORT_SECRET is the variable the platform actually sets
+  // (src/config.ts); the unprefixed name is accepted for compatibility.
+  const secret = process.env.SPR_PUBLIC_PASSPORT_SECRET?.trim() || process.env.PUBLIC_PASSPORT_SECRET?.trim();
+  if (!secret) throw new Error('SPR_PUBLIC_PASSPORT_SECRET_REQUIRED');
   return crypto.createHmac('sha256', secret).update(`distribution-unsubscribe-v1:${email.trim().toLowerCase()}`).digest('hex').slice(0, 48);
 }
 
@@ -161,4 +163,44 @@ export async function unsubscribeContact(email: string, token: string) {
     const result = await client.query(`UPDATE distribution_contacts SET status='unsubscribed',next_followup_at=NULL,updated_at=CURRENT_TIMESTAMP WHERE tenant_id=$1 AND lower(email)=lower($2) RETURNING id`, [DISTRIBUTION_TENANT_ID,email.trim()]);
     return result.rowCount > 0;
   });
+}
+
+/**
+ * Sends one real message from the configured outreach address to the inbox
+ * named by DISTRIBUTION_OUTREACH_VERIFY_TO, through the same renderer and
+ * provider the outreach path uses, and records the provider's answer. Runs
+ * once per (from, to) pair: a redeploy does not re-send. Returns what
+ * happened so the caller can log it; never throws.
+ */
+export async function verifyOutreachSender(poolLike: { connect: () => Promise<{ query: (text: string, params?: unknown[]) => Promise<{ rows: any[] }>; release: () => void }> }): Promise<{ action: 'skipped' | 'sent' | 'failed'; reason?: string; providerMessageId?: string }> {
+  const to = process.env.DISTRIBUTION_OUTREACH_VERIFY_TO?.trim().toLowerCase();
+  const { from, replyTo } = outreachSender();
+  if (!to || !from) return { action: 'skipped', reason: to ? 'DISTRIBUTION_OUTREACH_FROM not set' : 'DISTRIBUTION_OUTREACH_VERIFY_TO not set' };
+  if (!autonomousOutreachEnabled()) return { action: 'skipped', reason: 'autonomous outreach disabled or email provider not configured' };
+  // Several worker consumers boot at once; a session advisory lock makes the
+  // check-then-send atomic across them so exactly one message goes out.
+  const pool = await poolLike.connect();
+  try {
+  const lock = await pool.query(`SELECT pg_try_advisory_lock(hashtext('spr-outreach-sender-verification')) AS locked`);
+  if (!lock.rows?.[0]?.locked) return { action: 'skipped', reason: 'another worker consumer is verifying' };
+  const existing = await pool.query(`SELECT id, sent_at FROM distribution_sender_verifications WHERE lower(from_address)=lower($1) AND lower(to_address)=$2 AND status='sent' LIMIT 1`, [from, to]);
+  if (existing.rows?.length) return { action: 'skipped', reason: `already verified ${new Date(existing.rows[0].sent_at).toISOString()}` };
+  const id = `sv_${crypto.randomUUID().replace(/-/g, '')}`;
+  try {
+    const providerMessageId = await sendBrandedEmail(to, 'SPR outreach sender verification', SPR_DEFAULT_BRAND, {
+      heading: 'Outreach sender verification',
+      intro: [`This message was sent by the SPR distribution worker to confirm that outreach mail leaves from ${replyTo} and that replies route back to it.`, 'Reply to this message to confirm the inbox receives mail. No prospect has been contacted.'],
+      outro: [`Sent ${new Date().toISOString()} by the production worker. You can opt out at any time: ${unsubscribeUrl(to)}`],
+    }, { from, replyTo });
+    await pool.query(`INSERT INTO distribution_sender_verifications (id, from_address, to_address, status, provider_message_id) VALUES ($1,$2,$3,'sent',$4)`, [id, from, to, providerMessageId]);
+    return { action: 'sent', providerMessageId };
+  } catch (error) {
+    const message = error instanceof Error ? error.message.slice(0, 500) : String(error);
+    await pool.query(`INSERT INTO distribution_sender_verifications (id, from_address, to_address, status, error) VALUES ($1,$2,$3,'failed',$4)`, [id, from, to, message]).catch(() => undefined);
+    return { action: 'failed', reason: message };
+  }
+  } finally {
+    await pool.query(`SELECT pg_advisory_unlock(hashtext('spr-outreach-sender-verification'))`).catch(() => undefined);
+    pool.release();
+  }
 }

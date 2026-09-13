@@ -31,7 +31,11 @@ describe('outreach sender address', () => {
     } finally { if (previous === undefined) delete process.env.DISTRIBUTION_OUTREACH_FROM; else process.env.DISTRIBUTION_OUTREACH_FROM = previous; }
     const fs = await import('node:fs');
     const outreach = fs.readFileSync('src/lib/distribution-outreach.ts', 'utf8');
-    expect((outreach.match(/sendBrandedEmail\(/g) ?? []).length).toBe((outreach.match(/, outreachSender\(\)\)/g) ?? []).length);
+    // Every outreach send passes the outreach sender: the two contact sends
+    // pass outreachSender() directly; the verification send spreads its fields.
+    const sendCalls = (outreach.match(/sendBrandedEmail\(/g) ?? []).length;
+    const withSender = (outreach.match(/, outreachSender\(\)\)/g) ?? []).length + (outreach.match(/\}, \{ from, replyTo \}\)/g) ?? []).length;
+    expect(sendCalls).toBe(withSender);
     const auth = fs.readFileSync('src/routes/auth.ts', 'utf8');
     expect(auth).not.toContain('outreachSender');
   });
