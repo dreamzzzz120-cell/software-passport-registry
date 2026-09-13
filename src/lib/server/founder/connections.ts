@@ -94,8 +94,10 @@ export async function checkGithubCi(): Promise<ConnectionStatus> {
 // --- Stripe -------------------------------------------------------------------
 // Exact counts are paged rather than silently capped at Stripe's first 100
 // records. MRR is normalized to a monthly value and discounts are applied.
-export async function checkStripeAndMrr(): Promise<{ connection: ConnectionStatus; customerCount: number; mrrCents: number }> {
-  if (!config.stripe.secretKey) return { connection: { name: 'Stripe', status: 'not_configured', detail: 'Stripe connection is not configured', lastChecked: now() }, customerCount: 0, mrrCents: 0 };
+// Failed/unavailable checks return null values so the Founder UI cannot turn a
+// provider failure into a false zero.
+export async function checkStripeAndMrr(): Promise<{ connection: ConnectionStatus; customerCount: number | null; mrrCents: number | null }> {
+  if (!config.stripe.secretKey) return { connection: { name: 'Stripe', status: 'not_configured', detail: 'Stripe connection is not configured', lastChecked: now() }, customerCount: null, mrrCents: null };
   try {
     const Stripe = (await import('stripe')).default;
     const stripe = new Stripe(config.stripe.secretKey);
@@ -131,7 +133,7 @@ export async function checkStripeAndMrr(): Promise<{ connection: ConnectionStatu
 
     return { connection: { name: 'Stripe', status: 'ok', detail: `${customerCount} customers, ${activeSubscriptions} active subs`, lastChecked: now() }, customerCount, mrrCents: Math.max(0, Math.round(mrrCents)) };
   } catch (err) {
-    return { connection: { name: 'Stripe', status: 'error', detail: safeErrorDetail(err), lastChecked: now() }, customerCount: 0, mrrCents: 0 };
+    return { connection: { name: 'Stripe', status: 'error', detail: safeErrorDetail(err), lastChecked: now() }, customerCount: null, mrrCents: null };
   }
 }
 
