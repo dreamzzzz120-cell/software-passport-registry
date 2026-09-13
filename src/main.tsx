@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
-import ExperienceAgent from './components/ExperienceAgent';
 import './index.css';
 import './styles/spr-shell.css';
 import './styles/command-center.css';
 import { installPageViewTracking } from './analytics';
+
+const ExperienceAgent = lazy(() => import('./components/ExperienceAgent'));
 
 const root = document.getElementById('root');
 
@@ -19,7 +20,9 @@ function SprApplication() {
   return (
     <>
       <App />
-      <ExperienceAgent />
+      <Suspense fallback={null}>
+        <ExperienceAgent />
+      </Suspense>
     </>
   );
 }
