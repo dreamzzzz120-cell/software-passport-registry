@@ -54,16 +54,36 @@ jobs:
             expected=$((expected + 1))
           done
           (( expected > 0 ))
-      - name: Reject destructive migration statements
+      - name: Reject destructive migration statements except explicitly reviewed retirement
         shell: bash
         run: |
           set -euo pipefail
+          approved='./migrations/0084_retire_legacy_productivity_tables.sql'
           matches=$(grep -RniE --include='*.sql' --exclude-dir=node_modules \
             -E '\bDROP[[:space:]]+(TABLE|SCHEMA|DATABASE)\b|\bTRUNCATE[[:space:]]+TABLE\b' . \
             | grep -vE ':[0-9]+:[[:space:]]*--' || true)
-          if [[ -n "$matches" ]]; then
+
+          if [[ -z "$matches" ]]; then
+            exit 0
+          fi
+
+          if [[ ! -f "$approved" ]] || ! grep -q '^-- SPR-APPROVED-DESTRUCTIVE-MIGRATION$' "$approved"; then
             printf '%s\n' "$matches"
-            echo 'Destructive migration detected. Production release requires explicit review.'
+            echo 'Destructive migration detected without the required reviewed migration marker.'
+            exit 1
+          fi
+
+          unexpected=$(printf '%s\n' "$matches" | grep -vE '^\./migrations/0084_retire_legacy_productivity_tables\.sql:[0-9]+:[[:space:]]*DROP TABLE IF EXISTS (work_sessions|snippets|tasks|projects|app_users);$' || true)
+          if [[ -n "$unexpected" ]]; then
+            printf '%s\n' "$unexpected"
+            echo 'Unexpected destructive migration detected outside the approved legacy-table retirement.'
+            exit 1
+          fi
+
+          approved_drop_count=$(grep -Ec '^[[:space:]]*DROP TABLE IF EXISTS (work_sessions|snippets|tasks|projects|app_users);$' "$approved" || true)
+          approved_destructive_count=$(grep -Ec '\bDROP[[:space:]]+(TABLE|SCHEMA|DATABASE)\b|\bTRUNCATE[[:space:]]+TABLE\b' "$approved" || true)
+          if [[ "$approved_drop_count" -ne 5 || "$approved_destructive_count" -ne 5 ]]; then
+            echo 'Approved destructive migration does not contain exactly the five reviewed table drops.'
             exit 1
           fi
       - name: Require authoritative integrity controls
