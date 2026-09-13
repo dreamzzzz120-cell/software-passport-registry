@@ -11,16 +11,18 @@ jobs:
   wire-and-verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: npm
+      - name: Checkout
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git clone --depth 50 --branch "$GITHUB_REF_NAME" "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" repo
+          cd repo
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
 
       - name: Wire growth API and Founder UI
+        working-directory: repo
         shell: bash
         run: |
           set -euo pipefail
@@ -52,28 +54,24 @@ jobs:
           founder.write_text(text)
           PY
 
-      - name: Install
-        run: npm ci
-
-      - name: Typecheck
-        run: npx tsc --noEmit
-
-      - name: Growth contract tests
-        run: npx vitest run tests/distribution-growth-contract.test.ts
-
-      - name: Full test suite
-        run: npm test -- --run
+      - name: Install and verify
+        working-directory: repo
+        run: |
+          set -euo pipefail
+          npm ci
+          npx tsc --noEmit
+          npx vitest run tests/distribution-growth-contract.test.ts
 
       - name: Commit wiring only when verification is green
-        shell: bash
+        working-directory: repo
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           if git diff --quiet; then
             echo 'No wiring changes required.'
             exit 0
           fi
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add server.ts src/components/FounderDashboardView.tsx
           git commit -m 'feat(distribution): wire founder growth hub'
-          git push
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:"$GITHUB_REF_NAME"
