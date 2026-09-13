@@ -46,19 +46,22 @@ export function createFounderCommandCenterRouter() {
 
       // Platform-wide counts. organizations = real customer accounts
       // (migration 0049); users includes every provisioned login across every
-      // tenant. Each wrapped independently so one query shape drifting doesn't
-      // take down the whole page.
-      let organizationCount = 0;
-      let userCount = 0;
+      // tenant. A failed query is NOT the same thing as a count of zero: keep
+      // unavailable values as null so the UI can render "Not verified" rather
+      // than confidently reporting a false zero.
+      let organizationCount: number | null = null;
+      let userCount: number | null = null;
       try {
         const orgResult = await db.execute(sql`SELECT COUNT(*)::int AS count FROM organizations`);
-        organizationCount = Number((orgResult as any).rows?.[0]?.count ?? 0);
+        const rawCount = (orgResult as any).rows?.[0]?.count;
+        if (rawCount !== undefined && rawCount !== null) organizationCount = Number(rawCount);
       } catch (err) {
         console.error('[FounderCommandCenter] organizations count failed:', err instanceof Error ? err.message : String(err));
       }
       try {
         const userResult = await db.execute(sql`SELECT COUNT(*)::int AS count FROM users`);
-        userCount = Number((userResult as any).rows?.[0]?.count ?? 0);
+        const rawCount = (userResult as any).rows?.[0]?.count;
+        if (rawCount !== undefined && rawCount !== null) userCount = Number(rawCount);
       } catch (err) {
         console.error('[FounderCommandCenter] users count failed:', err instanceof Error ? err.message : String(err));
       }
@@ -247,7 +250,7 @@ export function createFounderCommandCenterRouter() {
     }
   });
 
-  router.delete('/founder/tasks/:id', requireAuth, requireRole('Owner'), requireFounder, async (req: AuthenticatedRequest, res, next) => {
+  router.delete('/founder/tasks/:id', requireAuth, requireRole('Owner'), requireFounder, rateLimiter, async (req: AuthenticatedRequest, res, next) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid task id' });
     try {
