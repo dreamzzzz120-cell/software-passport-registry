@@ -43,7 +43,7 @@ export function createAgentApiRouter() {
       const db = req.db!;
       const tenantId = req.user!.tenantId;
       const q = parsed.data.query.toLowerCase();
-      const passport = (await db.execute(sql`SELECT id,name,overall_score,security_score,compliance_score,evidence,vulnerabilities,timeline FROM passports WHERE tenant_id=${tenantId} AND (LOWER(name)=${q} OR LOWER(id)=${q}) LIMIT 1`) as any).rows?.[0];
+      const passport = (await db.execute(sql`SELECT id,name FROM passports WHERE tenant_id=${tenantId} AND (LOWER(name)=${q} OR LOWER(id)=${q}) LIMIT 1`) as any).rows?.[0];
       if (!passport) return res.status(404).json({ status: 'UNKNOWN', reason: 'SOFTWARE_NOT_REGISTERED', query: parsed.data.query });
       return buildVerificationResponse(db, tenantId, passport, res, next);
     } catch (error) { return next(error); }
@@ -54,7 +54,7 @@ export function createAgentApiRouter() {
     if (!parsed.success) return res.status(400).json({ error: 'INVALID_PASSPORT_ID', details: parsed.error.flatten() });
     try {
       const db = req.db!;
-      const passport = (await db.execute(sql`SELECT id,name,overall_score,security_score,compliance_score,evidence,vulnerabilities,timeline FROM passports WHERE tenant_id=${req.user!.tenantId} AND id=${parsed.data.passportId} LIMIT 1`) as any).rows?.[0];
+      const passport = (await db.execute(sql`SELECT id,name FROM passports WHERE tenant_id=${req.user!.tenantId} AND id=${parsed.data.passportId} LIMIT 1`) as any).rows?.[0];
       if (!passport) return res.status(404).json({ status: 'UNKNOWN', reason: 'PASSPORT_NOT_FOUND', passportId: parsed.data.passportId });
       return buildVerificationResponse(db, req.user!.tenantId, passport, res, next);
     } catch (error) { return next(error); }
@@ -64,7 +64,7 @@ export function createAgentApiRouter() {
     try {
       const db = req.db!;
       const passportId = req.params.passportId;
-      const scope = (await db.execute(sql`SELECT id,name,overall_score,security_score,compliance_score,evidence,vulnerabilities,timeline FROM passports WHERE tenant_id=${req.user!.tenantId} AND id=${passportId} LIMIT 1`) as any).rows?.[0];
+      const scope = (await db.execute(sql`SELECT id,name FROM passports WHERE tenant_id=${req.user!.tenantId} AND id=${passportId} LIMIT 1`) as any).rows?.[0];
       if (!scope) return res.status(404).json({ status: 'UNKNOWN', reason: 'PASSPORT_NOT_FOUND', passportId });
       return buildVerificationResponse(db, req.user!.tenantId, scope, res, next);
     } catch (error) { return next(error); }
@@ -90,7 +90,6 @@ export function createAgentApiRouter() {
 }
 
 function navigationIntent(q: string): { path: string; reply: string } | null {
-  if (/what|which|show|tell|find|why|how|verify|check|assess|risk|priority/.test(q)) return null;
   const routes: Array<[RegExp, string, string]> = [[/command center|dashboard|home/, '/dashboard', 'Opening the Command Center.'], [/clients?|customer list|client management/, '/clients', 'Opening Clients.'], [/passports?|registry|software inventory/, '/passports', 'Opening Passports.'], [/vendors?|third.?party risk/, '/vendors', 'Opening Vendor Risk.'], [/monitoring|alerts?/, '/monitoring', 'Opening Monitoring.'], [/compliance|governance/, '/compliance', 'Opening Compliance.'], [/reports?/, '/reports', 'Opening Reports.'], [/billing|subscription|plan/, '/billing', 'Opening Billing.'], [/settings?/, '/settings', 'Opening Settings.']];
   for (const [pattern, path, reply] of routes) if (pattern.test(q)) return { path, reply };
   return null;
@@ -104,7 +103,7 @@ async function getRiskSummary(db: ScopedDb, tenantId: string) {
     db.execute(sql`SELECT COUNT(*) FILTER (WHERE LOWER(status) NOT IN ('resolved','closed'))::int AS active FROM alerts WHERE tenant_id=${tenantId}`),
   ]);
   const top = (await db.execute(sql`SELECT p.id AS passport_id, p.name, p.client_id, COUNT(f.id)::int AS open_findings, COUNT(f.id) FILTER (WHERE LOWER(f.severity) IN ('critical','high'))::int AS critical_high FROM passports p LEFT JOIN trust_findings f ON f.passport_id=p.id AND f.tenant_id=${tenantId} AND LOWER(f.status) NOT IN ('resolved','closed','verified') WHERE p.tenant_id=${tenantId} GROUP BY p.id,p.name,p.client_id ORDER BY critical_high DESC, open_findings DESC, p.name ASC LIMIT 10`) as any).rows || [];
-  const clientRows = (await db.execute(sql`SELECT id,name,risk_level,critical_risks_count,passport_count FROM clients WHERE tenant_id=${tenantId} ORDER BY critical_risks_count DESC, passport_count DESC, name ASC LIMIT 10`) as any).rows || [];
+  const clientRows = (await db.execute(sql`SELECT id,name FROM clients WHERE tenant_id=${tenantId} ORDER BY name ASC LIMIT 10`) as any).rows || [];
   const c = (clients as any).rows?.[0]?.count ?? 0;
   const p = (passports as any).rows?.[0]?.count ?? 0;
   const f = (findings as any).rows?.[0] ?? {};
@@ -121,8 +120,7 @@ async function buildVerificationResponse(db: ScopedDb, tenantId: string, passpor
     const openFindings = findings.filter((f: any) => !['resolved','closed','verified'].includes(String(f.status).toLowerCase()));
     const criticalOrHigh = openFindings.filter((f: any) => ['critical','high'].includes(String(f.severity).toLowerCase()));
     const completeness = latest?.completeness_basis_points == null ? null : Number(latest.completeness_basis_points) / 10000;
-    let status: 'VERIFIED' | 'INVESTIGATE' | 'AVOID' | 'UNKNOWN' = 'UNKNOWN';
-    if (latest && evidence.length > 0) status = criticalOrHigh.length > 0 ? 'AVOID' : openFindings.length > 0 ? 'INVESTIGATE' : 'VERIFIED';
+    const status: 'VERIFIED' | 'INVESTIGATE' | 'AVOID' | 'UNKNOWN' = !latest || evidence.length === 0 ? 'UNKNOWN' : criticalOrHigh.length > 0 ? 'AVOID' : openFindings.length > 0 ? 'INVESTIGATE' : 'VERIFIED';
     return res.json({ schemaVersion: 'spr-agent-v1', status, software: { passportId: passport.id, name: passport.name }, scores: { overall: null, security: null, compliance: null, status: 'not_authoritatively_scored' }, evidence: { count: evidence.length, completeness, latestObservationAt: latest?.generated_at ?? null, latestHash: latest?.canonical_payload_hash ?? null }, findings: { total: findings.length, open: openFindings.length, criticalOrHigh: criticalOrHigh.length, items: findings.slice(0, 50) }, verification: { observed: Boolean(latest), evidenceBacked: evidence.length > 0, generatedAt: latest?.generated_at ?? null }, sources: evidence.slice(0, 50).map((e: any) => ({ provider: e.provider, sourceUrl: e.source_url, observedAt: e.observed_at, verificationMethod: e.verification_method, evidenceHash: e.evidence_hash, limitation: e.limitation })), policy: { rule: 'SPR reports observed evidence only; UNKNOWN means insufficient evidence and is not a trust approval.' } });
   } catch (error) { return next(error); }
 }
