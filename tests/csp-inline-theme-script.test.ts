@@ -46,6 +46,19 @@ describe('inline theme script is allowed by hash, not by unsafe-inline', () => {
     expect(scriptSrc).toMatch(/"'sha256-[^"]+='"/);
   });
 
+  // Google sign-in (signInWithPopup) injects https://apis.google.com/js/api.js.
+  // vercel.json allowed it; server.ts did not, and on Railway every Google
+  // sign-in failed with auth/internal-error while the console showed the CSP
+  // block. Pin both configs to the same origin.
+  it('script-src allows the Firebase auth helper on both the Vercel and Express CSP', () => {
+    const vercelScriptSrc = read('vercel.json').match(/script-src[^;]*/)?.[0] ?? '';
+    expect(vercelScriptSrc).toContain('https://apis.google.com');
+    const server = read('server.ts');
+    expect(server).toContain("const FIREBASE_AUTH_SCRIPT_ORIGINS = ['https://apis.google.com'];");
+    const scriptSrc = server.match(/scriptSrc: \[[^\]]*\]/)?.[0] ?? '';
+    expect(scriptSrc).toContain('...FIREBASE_AUTH_SCRIPT_ORIGINS');
+  });
+
   it('an inline script still exists to be allowed', () => {
     expect(read('index.html')).toMatch(/<script>[\s\S]*data-theme[\s\S]*<\/script>/);
   });

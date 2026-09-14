@@ -63,11 +63,17 @@ if (config.sentry.dsn) Sentry.init({ dsn: config.sentry.dsn, environment: config
 const allowedOrigins = new Set(normalizeAllowedOrigins(config.allowedOrigins));
 const appOrigin = config.appUrl ? new URL(config.appUrl).origin : undefined;
 const FIREBASE_AUTH_ORIGINS = ['https://identitytoolkit.googleapis.com', 'https://securetoken.googleapis.com'];
+// signInWithPopup loads https://apis.google.com/js/api.js into the page to
+// drive the auth-handler iframe. vercel.json already allows it; this Express
+// CSP did not, so on the container deployment the browser blocked the script and every Google
+// sign-in ended in auth/internal-error (observed live 2026-09-14 19:40Z).
+// Email/password sign-in only talks to connect-src and was unaffected.
+const FIREBASE_AUTH_SCRIPT_ORIGINS = ['https://apis.google.com'];
 const supabaseOrigin = (() => { const raw = process.env.SUPABASE_URL?.trim(); if (!raw) return undefined; try { return new URL(raw).origin; } catch { console.error('[SPR] SUPABASE_URL is not a valid URL; intake uploads will be blocked by CSP.'); return undefined; } })();
 const connectSrc = ["'self'", ...(appOrigin ? [appOrigin] : []), ...FIREBASE_AUTH_ORIGINS, ...(supabaseOrigin ? [supabaseOrigin] : [])];
 const VERCEL_TEAM_PREVIEW_ORIGIN = /^https:\/\/[a-z0-9-]+-sprteam\.vercel\.app$/i;
 const corsOrigin = (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) => { if (!origin) return callback(null, true); try { const normalizedOrigin = new URL(origin).origin; if (allowedOrigins.has(normalizedOrigin)) return callback(null, true); if (VERCEL_TEAM_PREVIEW_ORIGIN.test(normalizedOrigin)) return callback(null, true); } catch (_) {} return callback(new Error('CORS origin denied')); };
-app.use(helmet({ contentSecurityPolicy: { useDefaults: false, directives: { defaultSrc: ["'self'"], baseUri: ["'self'"], objectSrc: ["'none'"], frameAncestors: ["'none'"], formAction: ["'self'"], scriptSrc: ["'self'", "'sha256-kWQT+628v4D1A4MJk9hTD6a0W1AdPlPKtzhPlYKIpZc='"], styleSrc: ["'self'", "'unsafe-inline'"], imgSrc: ["'self'", 'data:', 'blob:', 'https:'], fontSrc: ["'self'", 'data:', 'https:'], connectSrc, frameSrc: ["'self'", 'https:'], workerSrc: ["'self'", 'blob:'], manifestSrc: ["'self'"], upgradeInsecureRequests: [] } }, crossOriginEmbedderPolicy: false, frameguard: { action: 'deny' }, referrerPolicy: { policy: 'no-referrer' } }));
+app.use(helmet({ contentSecurityPolicy: { useDefaults: false, directives: { defaultSrc: ["'self'"], baseUri: ["'self'"], objectSrc: ["'none'"], frameAncestors: ["'none'"], formAction: ["'self'"], scriptSrc: ["'self'", ...FIREBASE_AUTH_SCRIPT_ORIGINS, "'sha256-kWQT+628v4D1A4MJk9hTD6a0W1AdPlPKtzhPlYKIpZc='"], styleSrc: ["'self'", "'unsafe-inline'"], imgSrc: ["'self'", 'data:', 'blob:', 'https:'], fontSrc: ["'self'", 'data:', 'https:'], connectSrc, frameSrc: ["'self'", 'https:'], workerSrc: ["'self'", 'blob:'], manifestSrc: ["'self'"], upgradeInsecureRequests: [] } }, crossOriginEmbedderPolicy: false, frameguard: { action: 'deny' }, referrerPolicy: { policy: 'no-referrer' } }));
 const PERMISSIONS_POLICY = ['accelerometer=()', 'autoplay=()', 'bluetooth=()', 'camera=()', 'display-capture=()', 'encrypted-media=()', 'geolocation=()', 'gyroscope=()', 'magnetometer=()', 'microphone=()', 'midi=()', 'usb=()', 'serial=()', 'xr-spatial-tracking=()', 'fullscreen=(self)', 'payment=(self)'].join(', ');
 app.use((_req, res, next) => { res.setHeader('Permissions-Policy', PERMISSIONS_POLICY); next(); });
 app.use('/badge', rateLimiter, createBadgeRouter());
