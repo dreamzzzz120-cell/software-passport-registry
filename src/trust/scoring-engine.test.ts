@@ -98,4 +98,32 @@ describe('calculateCanonicalScores', () => {
     expect(result.securityScore).toBe(0);
     expect(result.securityScore).toBeGreaterThanOrEqual(0);
   });
+
+  it('never returns NaN for an unknown severity or non-finite numeric input', () => {
+    const result = calculateCanonicalScores({
+      findings: [{ severity: 'informational', category: 'security', open: true, weightMultiplier: Number.NaN }],
+      evidence: {
+        totalUnits: Number.NaN,
+        knownUnits: Number.POSITIVE_INFINITY,
+        freshness: Number.NaN,
+        vendorPassCount: Number.NaN,
+        vendorFailCount: Number.POSITIVE_INFINITY,
+      },
+    });
+    expect(result.overallScore).toBeNull();
+    expect(result.securityScore).toBeNull();
+    expect(result.complianceScore).toBeNull();
+    expect(result.vendorReputationScore).toBeNull();
+    expect(result.evidenceCompleteness).toBeNull();
+    expect(result.verificationStatus).toBe('unverified');
+
+    const verified = calculateCanonicalScores({
+      findings: [{ severity: 'informational', category: 'security', open: true, weightMultiplier: Number.NaN }],
+      evidence: { totalUnits: 100, knownUnits: 100, freshness: Number.NaN },
+    });
+    expect(Number.isFinite(verified.overallScore!)).toBe(true);
+    expect(Number.isFinite(verified.securityScore!)).toBe(true);
+    expect(Number.isFinite(verified.complianceScore!)).toBe(true);
+    expect(Number.isFinite(verified.vendorReputationScore!)).toBe(true);
+  });
 });
