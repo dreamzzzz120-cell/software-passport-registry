@@ -36,10 +36,10 @@ describe('repository scans resolve the real default branch', () => {
     expect(worker).toContain("'REPOSITORY_ACCESS_DENIED'");
   });
 
-  it('keeps a failed scan diagnosable rather than silent', () => {
-    // A scan that fails must say so in the logs; it previously wrote only to
-    // agent_jobs.error, so production failures were invisible.
-    expect(worker).toContain("event: 'security_scan_failed'");
+  it('keeps a failed or policy-rejected scan diagnosable rather than silent', () => {
+    // Operational failures and deterministic policy rejections both need
+    // explicit structured log events; neither may be silent.
+    expect(worker).toMatch(/event: policyRejected \? 'security_scan_policy_rejected' : 'security_scan_failed'/);
     expect(worker).toContain('reason: safeFailureReason(code)');
   });
 
