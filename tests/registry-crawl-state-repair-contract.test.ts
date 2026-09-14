@@ -2,20 +2,20 @@ import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
 
-describe("Migration 0096: registry_crawl_state repair contract", () => {
+describe("Migration 0097: registry_crawl_state repair contract", () => {
   const migrationPath = path.join(
     __dirname,
-    "../migrations/0096_repair_registry_crawl_state_columns.sql"
+    "../migrations/0097_repair_registry_crawl_state_columns.sql"
   );
   const migration0091Path = path.join(
     __dirname,
-    "../migrations/0091_public_repository_agent_team.sql"
+    "../migrations/0091_distribution_sender_verifications.sql"
   );
 
   let migrationContent: string;
   let migration0091Content: string;
 
-  it("should read migration 0096", () => {
+  it("should read migration 0097", () => {
     migrationContent = fs.readFileSync(migrationPath, "utf-8");
     expect(migrationContent).toBeTruthy();
     expect(migrationContent.length).toBeGreaterThan(0);
@@ -46,7 +46,6 @@ describe("Migration 0096: registry_crawl_state repair contract", () => {
   });
 
   it("should be distinct from migration 0091", () => {
-    // Ensure 0091 and 0096 are separate files with different comments/context.
     expect(migration0091Content).toContain("registry_ingestion_items");
     expect(migrationContent).not.toContain("registry_ingestion_items");
     expect(migrationContent).toContain("Repair migration");
