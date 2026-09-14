@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 const route = readFileSync(resolve(process.cwd(), 'src/routes/public-api-v1.ts'), 'utf8');
 const agentRoute = readFileSync(resolve(process.cwd(), 'src/routes/agent-api.ts'), 'utf8');
-const migration = readFileSync(resolve(process.cwd(), 'migrations/0098_public_api_v1.sql'), 'utf8');
+const migration = readFileSync(resolve(process.cwd(), 'migrations/0099_public_api_v1.sql'), 'utf8');
 
 describe('public API v1 hardening invariants', () => {
   it('uses high-entropy live API keys with an exact accepted shape', () => {
@@ -27,6 +27,8 @@ describe('public API v1 hardening invariants', () => {
   it('keeps passport identity uniqueness tenant-scoped', () => {
     expect(migration).toContain('CREATE UNIQUE INDEX IF NOT EXISTS passports_api_identity_unique');
     expect(migration).toContain('ON passports (tenant_id, lower(name), version, lower(file_hash))');
+    // Scoped to API-minted rows: legacy passports in production collide on this identity.
+    expect(migration).toContain("WHERE id LIKE 'pass\\_%'");
   });
   it('checks client ownership inside the authenticated tenant before linking it', () => {
     expect(route).toContain('SELECT id FROM clients WHERE tenant_id=${req.user!.tenantId} AND id=${p.clientId}');
