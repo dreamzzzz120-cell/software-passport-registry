@@ -43,19 +43,12 @@ async function processSecurityJob(pool: Pool, job: any) {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), `spr-sec-${job.id}-`));
   try {
     const repoApi = `https://api.github.com/repos/${encodeURIComponent(source.repository_owner)}/${encodeURIComponent(source.repository_name)}`;
-    // This worker keeps its own acquisition path, so it needs the same GitHub
-    // credential and the same rate-limit classification as osv-worker. Without
-    // them it ran anonymously, was throttled on the shared Railway egress IP,
-    // and reported the throttle to the customer as "that repository is private"
-    // -- which is what still surfaced after the osv-worker fix, because this
-    // job's failure is the one that reaches failureReason.
     const tenantToken = await resolveTenantGitHubToken(pool, job.tenant_id);
     const headers = (extra: Record<string, string>) => tenantToken ? githubHeaders(extra, tenantToken) : githubHeaders(extra);
     const metadataResponse = await fetch(repoApi, { redirect: 'error', headers: headers({ accept: 'application/vnd.github+json', 'user-agent': 'spr-security-worker/1.0' }) });
     if (isRateLimited(metadataResponse)) throw new Error('REPOSITORY_RATE_LIMITED');
     if (!metadataResponse.ok) throw new Error(metadataResponse.status === 404 ? 'REPOSITORY_NOT_FOUND' : 'REPOSITORY_ACCESS_DENIED');
     const metadata: any = await metadataResponse.json();
-    // Private repositories are acquired only with the tenant's own credential.
     if (metadata.private && !tenantToken) throw new Error('REPOSITORY_PRIVATE_REQUIRES_CREDENTIAL');
     const defaultBranch = typeof metadata.default_branch === 'string' && metadata.default_branch.trim() ? metadata.default_branch.trim() : '';
     const requestedRef = source.requested_ref || defaultBranch || 'main';
@@ -97,43 +90,22 @@ async function processSecurityJob(pool: Pool, job: any) {
     await pool.query(`INSERT INTO evidence_items (id,tenant_id,asset_id,name,type,verified,status,signer,timestamp,hash,raw_content,engine_id) VALUES ($1,$2,$3,'Multi-engine repository security scan','Security Scan',0,'OBSERVED','SPR scanner',NOW(),$4,$5,'spr-security-orchestrator-v1') ON CONFLICT DO NOTHING`, [`ev-security-${job.id}-${evidenceHash.slice(0,24)}`, job.tenant_id, job.passport_id, `sha256:${evidenceHash}`, evidencePayload]);
     await pool.query(`INSERT INTO scans (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name) VALUES ($1,$2,$3,'Multi-engine repository security scan',$4,'Completed',0,$5,NOW(),$6) ON CONFLICT DO NOTHING`, [`scan-security-${job.id}-${commit.sha.slice(0,16)}`, job.tenant_id, `${source.repository_owner}/${source.repository_name}@${commit.sha.slice(0,12)}`, WORKER_ID, findings.length, source.repository_owner]);
     await pool.query(`UPDATE agent_jobs SET status='Completed',progress=100,result=$2,error=NULL,completed_at=NOW(),locked_at=NULL,locked_by=NULL,updated_at=NOW() WHERE id=$1 AND tenant_id=$3 AND status='Running' AND locked_by=$4`, [job.id, JSON.stringify({ engines: ['Syft','OSV','Secret','IaC/Config','License'], findings: findings.length, commitSha: commit.sha, evidenceHash: `sha256:${evidenceHash}` }), job.tenant_id, WORKER_ID]);
-    // The scan is complete and its evidence is recorded before this runs, and
-    // this cannot throw into the worker loop -- a PSA that is down, slow or
-    // misconfigured must never fail a scan that already succeeded. Findings it
-    // could not ticket keep psa_ticket_id null and are picked up next time.
     await produceConnectWiseTickets(pool, job);
   } finally { await rm(tempRoot, { recursive: true, force: true }); }
 }
 
-/**
- * Files ConnectWise tickets for the high-severity findings this scan produced,
- * for tenants that have connected ConnectWise. A tenant that has not is the
- * normal case and is skipped silently.
- */
 async function produceConnectWiseTickets(pool: Pool, job: any): Promise<void> {
   try {
-    const stored = await pool.query(
-      `SELECT encrypted_payload FROM integration_credentials WHERE tenant_id = $1 AND provider = 'connectwise' AND status = 'CONFIGURED' LIMIT 1`,
-      [job.tenant_id],
-    );
+    const stored = await pool.query(`SELECT encrypted_payload FROM integration_credentials WHERE tenant_id = $1 AND provider = 'connectwise' AND status = 'CONFIGURED' LIMIT 1`, [job.tenant_id]);
     const payload = stored.rows[0]?.encrypted_payload;
     if (!payload) return;
-
     const credentials = credentialsFrom(decryptCredentials(payload) as Record<string, unknown>);
     if (!credentials) {
       console.warn(`[SecurityScanner] ConnectWise credentials for tenant ${job.tenant_id} are incomplete; no tickets filed.`);
       return;
     }
-
-    const result = await onScanCompleted({
-      query: (text, params) => pool.query(text, params as any[]).then((r) => ({ rows: r.rows })),
-      tenantId: job.tenant_id,
-      jobId: job.id,
-      credentials,
-    });
-    if (result.produced > 0) {
-      console.info(`[SecurityScanner] Filed ${result.produced}/${result.attempted} ConnectWise tickets for job ${job.id}.`);
-    }
+    const result = await onScanCompleted({ query: (text, params) => pool.query(text, params as any[]).then((r) => ({ rows: r.rows })), tenantId: job.tenant_id, jobId: job.id, credentials });
+    if (result.produced > 0) console.info(`[SecurityScanner] Filed ${result.produced}/${result.attempted} ConnectWise tickets for job ${job.id}.`);
   } catch (error) {
     console.error('[SecurityScanner] ConnectWise ticket production failed:', error instanceof Error ? error.message : String(error));
   }
@@ -145,8 +117,9 @@ function safeFailureReason(raw: string): string {
 
 async function fail(pool: Pool, job: any, error: unknown) {
   const code = error instanceof Error ? error.message : 'SCAN_WORKER_ERROR';
-  const retry = Number(job.attempt_count) < Number(job.max_attempts);
-  console.error(JSON.stringify({ event: 'security_scan_failed', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, attempt: Number(job.attempt_count) + 1, maxAttempts: Number(job.max_attempts), willRetry: retry, reason: safeFailureReason(code) }));
+  const retry = code !== 'REPOSITORY_TOO_LARGE' && Number(job.attempt_count) < Number(job.max_attempts);
+  const policyRejected = code === 'REPOSITORY_TOO_LARGE';
+  console.error(JSON.stringify({ event: policyRejected ? 'security_scan_policy_rejected' : 'security_scan_failed', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, attempt: Number(job.attempt_count) + 1, maxAttempts: Number(job.max_attempts), willRetry: retry, reason: safeFailureReason(code) }));
   await pool.query(`UPDATE agent_jobs SET status=$2,progress=CASE WHEN $2='Failed' THEN 100 ELSE progress END,error=$3,next_attempt_at=CASE WHEN $2='Pending' THEN NOW()+INTERVAL '30 seconds' ELSE next_attempt_at END,locked_at=NULL,locked_by=NULL,completed_at=CASE WHEN $2='Failed' THEN NOW() ELSE completed_at END,updated_at=NOW() WHERE id=$1 AND tenant_id=$4 AND locked_by=$5`, [job.id, retry ? 'Pending' : 'Failed', code.slice(0,200), job.tenant_id, WORKER_ID]);
 }
 
