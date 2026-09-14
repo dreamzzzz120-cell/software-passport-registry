@@ -14,7 +14,7 @@ import { passports } from '../db/schema.ts';
 // numeric trust score. "No findings" is not evidence of a clean bill of health
 // unless there was enough evidence to justify the conclusion.
 
-export type CanonicalSeverity = 'critical' | 'high' | 'medium' | 'low' | 'informational';
+export type CanonicalSeverity = 'critical' | 'high' | 'medium' | 'low' | 'informational' | 'unknown';
 export type CanonicalFindingCategory = 'security' | 'compliance' | 'vendor';
 export type VerificationStatus = 'unverified' | 'partial' | 'verified';
 
@@ -56,7 +56,18 @@ export interface CanonicalScoreResult {
   verificationStatus: VerificationStatus;
 }
 
-const SEVERITY_WEIGHT: Record<CanonicalSeverity, number> = { informational: 0, low: 5, medium: 10, high: 20, critical: 35 };
+// 'unknown' deliberately has no weight. The OSV worker records a finding as
+// Unknown when the advisory carries neither a source severity nor a numeric
+// CVSS score (src/security/osv-severity.ts). Assigning it any number would be
+// an invented measurement, and looking it up as undefined turned the whole
+// score into NaN -- production 2026-09-14 18:07Z, every passport with one
+// such finding failed its score write with
+// 'invalid input syntax for type integer: "NaN"'.
+const SEVERITY_WEIGHT: Record<Exclude<CanonicalSeverity, 'unknown'>, number> = { informational: 0, low: 5, medium: 10, high: 20, critical: 35 };
+
+function severityWeight(severity: CanonicalSeverity): number | null {
+  return severity in SEVERITY_WEIGHT ? SEVERITY_WEIGHT[severity as keyof typeof SEVERITY_WEIGHT] : null;
+}
 const SIGNATURE_BONUS = 5;
 const INVALID_SIGNATURE_PENALTY = 15;
 const MISSING_SIGNATURE_PENALTY = 5;
@@ -97,6 +108,16 @@ export function calculateCanonicalScores(input: CanonicalScoreInput): CanonicalS
     return { overallScore: null, securityScore: null, complianceScore: null, vendorReputationScore: null, confidenceScore, evidenceCompleteness, verificationStatus: 'partial' };
   }
 
+  // An open finding whose severity could not be determined is unresolved
+  // evidence in exactly the sense the completeness threshold guards against:
+  // the vulnerability is real and open, but its impact is not measured. A
+  // numeric score that either ignored it or guessed a weight for it would be
+  // a settled-looking number built on an unmeasured input, so the score is
+  // withheld (partial) until the finding is resolved or its severity known.
+  if (input.findings.some((finding) => finding.open && severityWeight(finding.severity) === null)) {
+    return { overallScore: null, securityScore: null, complianceScore: null, vendorReputationScore: null, confidenceScore, evidenceCompleteness, verificationStatus: 'partial' };
+  }
+
   let securityScore = 100;
   let complianceScore = 100;
   const vendorPassCount = input.evidence.vendorPassCount ?? 0;
@@ -105,7 +126,7 @@ export function calculateCanonicalScores(input: CanonicalScoreInput): CanonicalS
 
   for (const finding of input.findings) {
     if (!finding.open) continue;
-    const weight = SEVERITY_WEIGHT[finding.severity] * (finding.weightMultiplier ?? 1);
+    const weight = (severityWeight(finding.severity) ?? 0) * (finding.weightMultiplier ?? 1);
     if (finding.category === 'security') securityScore -= weight;
     else if (finding.category === 'compliance') complianceScore -= weight;
     else vendorReputationScore -= weight;
@@ -122,6 +143,11 @@ export function calculateCanonicalScores(input: CanonicalScoreInput): CanonicalS
   complianceScore = clamp(complianceScore);
   vendorReputationScore = clamp(vendorReputationScore);
   const overallScore = clamp(securityScore * 0.4 + complianceScore * 0.4 + vendorReputationScore * 0.2);
+  // The columns these land in are integers; a non-finite value is a bug in
+  // this function, and it must fail here with a reason, not in the database.
+  for (const [name, value] of Object.entries({ securityScore, complianceScore, vendorReputationScore, overallScore, confidenceScore })) {
+    if (!Number.isFinite(value)) throw new Error(`SCORE_NOT_FINITE:${name}`);
+  }
 
   return { overallScore, securityScore, complianceScore, vendorReputationScore, confidenceScore, evidenceCompleteness, verificationStatus: 'verified' };
 }
