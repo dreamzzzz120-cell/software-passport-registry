@@ -21,18 +21,13 @@ export type VerificationStatus = 'unverified' | 'partial' | 'verified';
 export interface CanonicalFinding {
   severity: CanonicalSeverity;
   category: CanonicalFindingCategory;
-  /** true = still open and counts against the score; false = resolved/passed, no penalty. */
   open: boolean;
-  /** Multiplies this finding's severity weight for this dimension only. Defaults to 1. */
   weightMultiplier?: number;
 }
 
 export interface CanonicalEvidenceSummary {
-  /** Total evidence/observation units considered. */
   totalUnits: number;
-  /** Units actually resolved to PASS/FAIL rather than UNKNOWN/unavailable. */
   knownUnits: number;
-  /** 0..1 average freshness across known units. */
   freshness?: number;
   hasValidSignature?: boolean;
   hasInvalidSignature?: boolean;
@@ -62,50 +57,50 @@ const INVALID_SIGNATURE_PENALTY = 15;
 const MISSING_SIGNATURE_PENALTY = 5;
 const AUDIT_BONUS = 3;
 const MISSING_AUDIT_PENALTY = 8;
-
-// A passport needs at least this much of its evidence actually resolved
-// (not UNKNOWN) before a numeric score is a settled conclusion.
 export const VERIFIED_COMPLETENESS_THRESHOLD = 70;
 
+/** Never allow NaN/Infinity to cross the scoring boundary into Postgres. */
+function finiteOr(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
 function clamp(value: number): number {
-  return Math.max(0, Math.min(100, Math.round(value)));
+  const finite = finiteOr(value, 0);
+  return Math.max(0, Math.min(100, Math.round(finite)));
 }
 
 export function calculateCanonicalScores(input: CanonicalScoreInput): CanonicalScoreResult {
-  const totalUnits = Math.max(0, Math.round(input.evidence.totalUnits));
-  const knownUnits = Math.max(0, Math.min(totalUnits, Math.round(input.evidence.knownUnits)));
-  // No evidence is a distinct state from "0% of expected evidence is known".
+  const rawTotalUnits = finiteOr(input.evidence.totalUnits, 0);
+  const rawKnownUnits = finiteOr(input.evidence.knownUnits, 0);
+  const totalUnits = Math.max(0, Math.round(rawTotalUnits));
+  const knownUnits = Math.max(0, Math.min(totalUnits, Math.round(rawKnownUnits)));
   const evidenceCompleteness = totalUnits > 0 ? Math.round((knownUnits / totalUnits) * 100) : null;
 
-  // No evidence at all, or evidence exists but none has actually been
-  // resolved yet -- there is nothing legitimate to score.
   if (totalUnits === 0 || knownUnits === 0) {
     return { overallScore: null, securityScore: null, complianceScore: null, vendorReputationScore: null, confidenceScore: null, evidenceCompleteness, verificationStatus: 'unverified' };
   }
 
-  const freshness = Math.max(0, Math.min(1, input.evidence.freshness ?? 1));
-  const confidenceScore = Math.round((evidenceCompleteness ?? 0) * freshness);
+  const freshness = Math.max(0, Math.min(1, finiteOr(input.evidence.freshness, 1)));
+  const confidenceScore = clamp((evidenceCompleteness ?? 0) * freshness);
 
-  // Partial evidence remains useful for completeness/confidence and for the
-  // verification workflow, but it must never publish a settled numeric trust
-  // score. Otherwise a clean-looking subset could render as 95/100 or 100/100
-  // while 30%+ of the evidence universe is still unknown. The score becomes a
-  // numeric claim only once the verification completeness threshold is met.
-  // Explicitly handle null here as well as the threshold so TypeScript can
-  // prove that every later use of evidenceCompleteness is numeric.
   if (evidenceCompleteness === null || evidenceCompleteness < VERIFIED_COMPLETENESS_THRESHOLD) {
     return { overallScore: null, securityScore: null, complianceScore: null, vendorReputationScore: null, confidenceScore, evidenceCompleteness, verificationStatus: 'partial' };
   }
 
   let securityScore = 100;
   let complianceScore = 100;
-  const vendorPassCount = input.evidence.vendorPassCount ?? 0;
-  const vendorFailCount = input.evidence.vendorFailCount ?? 0;
+  const vendorPassCount = Math.max(0, Math.round(finiteOr(input.evidence.vendorPassCount, 0)));
+  const vendorFailCount = Math.max(0, Math.round(finiteOr(input.evidence.vendorFailCount, 0)));
   let vendorReputationScore = vendorPassCount > 0 || vendorFailCount > 0 ? 100 - vendorFailCount * 20 + vendorPassCount * 3 : 100;
 
   for (const finding of input.findings) {
     if (!finding.open) continue;
-    const weight = SEVERITY_WEIGHT[finding.severity] * (finding.weightMultiplier ?? 1);
+    // Unknown/unexpected severity is deliberately non-penalizing rather than
+    // becoming NaN. The finding remains present in evidence; it simply has no
+    // severity weight until a supported severity is observed.
+    const severityWeight = SEVERITY_WEIGHT[finding.severity] ?? 0;
+    const multiplier = finiteOr(finding.weightMultiplier, 1);
+    const weight = finiteOr(severityWeight * multiplier, 0);
     if (finding.category === 'security') securityScore -= weight;
     else if (finding.category === 'compliance') complianceScore -= weight;
     else vendorReputationScore -= weight;
