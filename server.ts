@@ -30,6 +30,7 @@ import { createTrustLoopRouter } from './src/routes/trust-loop.ts';
 import { createIntegrationMonitoringRouter } from './src/routes/integration-monitoring.ts';
 import { createPsaWebhookRouter } from './src/routes/psa-webhooks.ts';
 import { createAgentApiRouter } from './src/routes/agent-api.ts';
+import { createPublicApiV1Router } from './src/routes/public-api-v1.ts';
 import { createMspRouter } from './src/routes/msp.ts';
 import { createAiTrustRouter } from './src/routes/ai-trust.ts';
 import { createRemediationTasksRouter } from './src/routes/remediation-tasks.ts';
@@ -55,7 +56,6 @@ const requestBodyLimit = process.env.REQUEST_BODY_LIMIT || '2mb';
 const requestHeaderTimeoutMs = Number(process.env.REQUEST_HEADER_TIMEOUT_MS || 15_000);
 const requestTimeoutMs = Number(process.env.REQUEST_TIMEOUT_MS || 120_000);
 const keepAliveTimeoutMs = Number(process.env.KEEP_ALIVE_TIMEOUT_MS || 65_000);
-
 export function normalizeAllowedOrigins(origins: string[]): string[] { return [...new Set(origins.map(origin => new URL(origin).origin))].sort(); }
 if (config.trustProxy) app.set('trust proxy', 1);
 app.disable('x-powered-by');
@@ -108,24 +108,16 @@ const requireTrustMutationRole = (req: Request, res: Response, next: NextFunctio
 const requireClientTrustReadScope = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   if (req.user?.role !== 'Client' || !['GET', 'HEAD'].includes(req.method)) return next();
   const passportMatch = req.path.match(/^\/(?:ledger|reports)\/([^/]+)/);
-  if (passportMatch) {
-    const passportId = decodeURIComponent(passportMatch[1]);
-    const rows = (await req.db!.execute(sql`SELECT id FROM passports WHERE id=${passportId} AND tenant_id=${req.user.tenantId} AND client_id=${req.user.clientId} LIMIT 1`) as any).rows ?? [];
-    if (!rows.length) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
-    return next();
-  }
+  if (passportMatch) { const passportId = decodeURIComponent(passportMatch[1]); const rows = (await req.db!.execute(sql`SELECT id FROM passports WHERE id=${passportId} AND tenant_id=${req.user.tenantId} AND client_id=${req.user.clientId} LIMIT 1`) as any).rows ?? []; if (!rows.length) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' }); return next(); }
   if (req.path === '/monitoring' && typeof req.query.passportId !== 'string') return res.status(400).json({ error: 'PASSPORT_SCOPE_REQUIRED' });
-  if (req.path === '/monitoring' && typeof req.query.passportId === 'string') {
-    const passportId = req.query.passportId;
-    const rows = (await req.db!.execute(sql`SELECT id FROM passports WHERE id=${passportId} AND tenant_id=${req.user.tenantId} AND client_id=${req.user.clientId} LIMIT 1`) as any).rows ?? [];
-    if (!rows.length) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
-  }
+  if (req.path === '/monitoring' && typeof req.query.passportId === 'string') { const passportId = req.query.passportId; const rows = (await req.db!.execute(sql`SELECT id FROM passports WHERE id=${passportId} AND tenant_id=${req.user.tenantId} AND client_id=${req.user.clientId} LIMIT 1`) as any).rows ?? []; if (!rows.length) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' }); }
   return next();
 };
 app.use('/api/trust-loop', requireAuth, requireTrustMutationRole, requireClientTrustReadScope);
 app.use('/api/trust-loop', createTrustLoopRouter());
 app.use('/api/integration-monitoring', createIntegrationMonitoringRouter());
 app.use('/api/monitoring', createMonitoringRouter());
+app.use('/api/agent/v1', createPublicApiV1Router());
 app.use('/api/agent/v1', createAgentApiRouter());
 app.use('/api/msp', requireAuth, createMspRouter());
 app.use('/api/billing', createBillingRouter());
