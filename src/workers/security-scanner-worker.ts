@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, mkdir, readdir, rm } from 'node:fs/promises';
 import { Pool } from 'pg';
-import { downloadArchive, generateRepositorySbom, githubHeaders, isRateLimited, resolveTenantGitHubToken, runBounded, validateArchiveEntries } from './osv-worker.ts';
+import { downloadArchive, generateRepositorySbom, githubHeaders, isRateLimited, resolveTenantGitHubToken, rootErrorMessage, runBounded, validateArchiveEntries } from './osv-worker.ts';
 import { createWorkerPool, assertWorkerDatabase } from './worker-db.ts';
 import { runRealRepositoryScanners } from '../scanners/real-repository-scanners.ts';
 import { calculateAndStoreTrustScore } from '../utils/scanner.ts';
@@ -97,7 +97,7 @@ async function processSecurityJob(pool: Pool, job: any) {
       const score = await calculateAndStoreTrustScore(job.passport_id, job.tenant_id, { pool });
       console.info(JSON.stringify({ event: 'passport_scored', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, passportId: job.passport_id, verificationStatus: score.verificationStatus, overallScore: score.overallScore, evidenceCompleteness: score.evidenceCompleteness, evidenceCount: score.evidenceCount, findingsCount: score.findingsCount }));
     } catch (error) {
-      console.error(JSON.stringify({ event: 'passport_score_failed', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, passportId: job.passport_id, reason: error instanceof Error ? error.message.slice(0, 200) : String(error).slice(0, 200) }));
+      console.error(JSON.stringify({ event: 'passport_score_failed', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, passportId: job.passport_id, reason: safeFailureReason(rootErrorMessage(error)) }));
     }
     await produceConnectWiseTickets(pool, job);
   } finally { await rm(tempRoot, { recursive: true, force: true }); }
