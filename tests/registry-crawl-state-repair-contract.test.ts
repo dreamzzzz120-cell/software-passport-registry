@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
 
@@ -58,4 +58,3 @@ describe("Migration 0096: registry_crawl_state repair contract", () => {
     expect(migrationContent).toContain("GRANT");
   });
 });
-
