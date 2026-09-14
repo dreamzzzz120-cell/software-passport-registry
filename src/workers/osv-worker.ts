@@ -576,12 +576,26 @@ async function scorePassportAfterScan(pool: Pool, job: ClaimedJob, mark: (name: 
   } catch (error) {
     // The scan itself succeeded; a scoring failure is reported, not hidden
     // behind the scan's success and not allowed to fail the scan.
-    console.error(JSON.stringify({ event: 'passport_score_failed', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, passportId: job.passport_id, reason: safeFailureReason(error instanceof Error ? error.message : String(error)) }));
+    console.error(JSON.stringify({ event: 'passport_score_failed', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, passportId: job.passport_id, reason: safeFailureReason(rootErrorMessage(error)) }));
   }
 }
 
 function stage(job: ClaimedJob, name: string, extra?: Record<string, unknown>) {
   console.log(JSON.stringify({ event: 'scan_job_stage', workerId: WORKER_ID, jobId: job.id, jobType: job.job_type, tenantId: job.tenant_id, stage: name, ...extra }));
+}
+
+// Drizzle wraps a failed statement in DrizzleQueryError whose message is
+// "Failed query: <sql> params: <values>" and whose `cause` is the real
+// Postgres error. Logged through safeFailureReason's 200-char cap, the
+// message was all SQL text and the actual reason (a constraint, a timeout,
+// a lock) never reached the log. Walk to the innermost cause so the log
+// carries the observed database error, not the statement that triggered it.
+export function rootErrorMessage(error: unknown): string {
+  let current: unknown = error;
+  for (let depth = 0; depth < 8 && current instanceof Error && (current as { cause?: unknown }).cause instanceof Error; depth += 1) {
+    current = (current as { cause?: unknown }).cause;
+  }
+  return current instanceof Error ? current.message : String(current);
 }
 
 function safeFailureReason(raw: string): string {
