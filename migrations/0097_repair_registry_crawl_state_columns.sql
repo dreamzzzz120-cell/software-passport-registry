@@ -1,7 +1,7 @@
 BEGIN;
 
 -- Repair migration: ensure registry_crawl_state.strategy_index and query_index exist.
--- Migration 0091 attempted to add these columns with IF NOT EXISTS, but in some
+-- Migration 0092 attempted to add these columns with IF NOT EXISTS, but in some
 -- environments (notably production with schema drift) they were never applied.
 -- This idempotent repair ensures they exist before multi-strategy discovery work.
 
