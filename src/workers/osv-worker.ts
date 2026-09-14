@@ -573,9 +573,17 @@ function safeFailureReason(raw: string): string {
     .slice(0, 200);
 }
 
+// Same set migration 0100 enforces at the queue boundary. Applied here too so
+// the worker's own decision -- and therefore what it logs -- matches what the
+// database does: a deterministic condition (the repository has no supported
+// manifests, is over the size limit, produced an invalid SBOM) does not change
+// on retry, so it is terminal on the first attempt.
+const DETERMINISTIC_TERMINAL_ERRORS = new Set(['SBOM_INVALID','SBOM_EMPTY','SBOM_MALFORMED','NO_SUPPORTED_MANIFESTS','REPOSITORY_TOO_LARGE','REPOSITORY_FILE_LIMIT_EXCEEDED','REPOSITORY_PATH_INVALID']);
+
 async function failJob(pool: Pool, job: ClaimedJob, error: unknown) {
   const code = error instanceof Error ? error.message : 'SCAN_WORKER_ERROR';
-  const retry = job.attempt_count < job.max_attempts;
+  const terminal = DETERMINISTIC_TERMINAL_ERRORS.has(code);
+  const retry = !terminal && job.attempt_count < job.max_attempts;
   const next = retry ? Math.min(60 * Math.pow(2, Math.max(0, job.attempt_count - 1)), 3600) : 0;
   // This worker owns repository_scan, the job behind the Free Review's repository
   // half, and it previously failed in total silence: no console output, no Sentry.
@@ -590,6 +598,7 @@ async function failJob(pool: Pool, job: ClaimedJob, error: unknown) {
     attempt: job.attempt_count,
     maxAttempts: job.max_attempts,
     willRetry: retry,
+    terminal,
     retryInSeconds: next,
     reason: safeFailureReason(code),
   }));
