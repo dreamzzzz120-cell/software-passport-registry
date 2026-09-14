@@ -123,7 +123,11 @@ export async function calculateAndStoreTrustScore(assetId: string, tenantId: str
 
   const canonicalFindings: CanonicalFinding[] = [];
   for (const f of findings) {
-    const severity = (f.severity || 'Medium').toLowerCase() as CanonicalFinding['severity'];
+    // A finding with no recorded severity is of unknown severity. Defaulting it
+    // to Medium was a made-up measurement; 'unknown' is what was observed and
+    // the scoring engine withholds the numeric score while such a finding is
+    // open.
+    const severity = (f.severity || 'Unknown').toLowerCase() as CanonicalFinding['severity'];
     if (f.category === 'Vulnerability') {
       canonicalFindings.push({ severity, category: 'security', open: true });
     } else if (f.category === 'Compliance Gap' || f.category === 'Policy Violation') {

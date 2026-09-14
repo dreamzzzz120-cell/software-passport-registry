@@ -98,4 +98,51 @@ describe('calculateCanonicalScores', () => {
     expect(result.securityScore).toBe(0);
     expect(result.securityScore).toBeGreaterThanOrEqual(0);
   });
+
+  // Production 2026-09-14 18:07Z: every passport with one OSV finding the
+  // worker had recorded as severity 'Unknown' (no source severity, no CVSS
+  // score) failed its score write with
+  // 'invalid input syntax for type integer: "NaN"' -- the unknown severity
+  // looked up as undefined and poisoned every dimension.
+  it('withholds the numeric score while an open finding has unknown severity, instead of producing NaN', () => {
+    const fullEvidence = { totalUnits: 100, knownUnits: 100, hasValidSignature: true, hasAuditReport: true };
+    const result = calculateCanonicalScores({
+      findings: [
+        { severity: 'high', category: 'security', open: true },
+        { severity: 'unknown', category: 'security', open: true },
+      ],
+      evidence: fullEvidence,
+    });
+    expect(result.verificationStatus).toBe('partial');
+    expect(result.overallScore).toBeNull();
+    expect(result.securityScore).toBeNull();
+    expect(result.complianceScore).toBeNull();
+    expect(result.vendorReputationScore).toBeNull();
+    expect(result.evidenceCompleteness).toBe(100);
+    expect(result.confidenceScore).toBe(100);
+    for (const value of Object.values(result)) expect(Number.isNaN(value as number)).toBe(false);
+  });
+
+  it('a resolved unknown-severity finding no longer blocks the score', () => {
+    const fullEvidence = { totalUnits: 100, knownUnits: 100, hasValidSignature: true, hasAuditReport: true };
+    const result = calculateCanonicalScores({
+      findings: [{ severity: 'unknown', category: 'security', open: false }],
+      evidence: fullEvidence,
+    });
+    expect(result.verificationStatus).toBe('verified');
+    expect(result.securityScore).toBe(100);
+  });
+
+  it('never returns a non-finite score for any severity string the scanners can write', () => {
+    // src/security/osv-severity.ts NormalizedSeverity, lower-cased as src/utils/scanner.ts does.
+    for (const severity of ['critical', 'high', 'medium', 'low', 'unknown'] as const) {
+      const result = calculateCanonicalScores({
+        findings: [{ severity, category: 'security', open: true }],
+        evidence: { totalUnits: 100, knownUnits: 100 },
+      });
+      for (const [key, value] of Object.entries(result)) {
+        if (typeof value === 'number') expect(Number.isFinite(value), `${severity}.${key}`).toBe(true);
+      }
+    }
+  });
 });
