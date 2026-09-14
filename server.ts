@@ -65,7 +65,7 @@ const appOrigin = config.appUrl ? new URL(config.appUrl).origin : undefined;
 const FIREBASE_AUTH_ORIGINS = ['https://identitytoolkit.googleapis.com', 'https://securetoken.googleapis.com'];
 // signInWithPopup loads https://apis.google.com/js/api.js into the page to
 // drive the auth-handler iframe. vercel.json already allows it; this Express
-// CSP did not, so on Railway the browser blocked the script and every Google
+// CSP did not, so on the container deployment the browser blocked the script and every Google
 // sign-in ended in auth/internal-error (observed live 2026-09-14 19:40Z).
 // Email/password sign-in only talks to connect-src and was unaffected.
 const FIREBASE_AUTH_SCRIPT_ORIGINS = ['https://apis.google.com'];
