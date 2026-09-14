@@ -127,9 +127,9 @@ export function calculateCanonicalScores(input: CanonicalScoreInput): CanonicalS
 }
 
 /** Calculates and persists the canonical score. The only function that should ever write these passport score columns. */
-export async function calculateAndPersistPassportScore(tenantId: string, passportId: string, input: CanonicalScoreInput): Promise<CanonicalScoreResult> {
+export async function calculateAndPersistPassportScore(tenantId: string, passportId: string, input: CanonicalScoreInput, database: Pick<typeof db, 'update'> = db): Promise<CanonicalScoreResult> {
   const result = calculateCanonicalScores(input);
-  await db.update(passports)
+  await database.update(passports)
     .set({
       overallScore: result.overallScore,
       securityScore: result.securityScore,
