@@ -4,6 +4,10 @@
  */
 
 import { db } from '../db/index.ts';
+import * as schema from '../db/schema.ts';
+import { drizzle } from 'drizzle-orm/node-postgres';
+import type { Pool } from 'pg';
+import { appendAuditEntryViaPool } from '../security/audit-log.ts';
 import {
   auditTrail,
   evidenceItems,
@@ -94,8 +98,15 @@ async function logJobStep(jobId: string, agentId: string, message: string, level
  * only to normalize this pipeline's evidence_items/scan_findings rows into
  * the engine's shared input shape, not to calculate a score itself.
  */
-export async function calculateAndStoreTrustScore(assetId: string, tenantId: string) {
-  const findings = await db.select()
+// Workers pass their least-privilege pool (createWorkerPool) so the score is
+// read and written under spr_worker_runtime's RLS policy rather than the app
+// module's connection; the audit block then goes through the pool writer,
+// which shares the same hash chain.
+export type TrustScoreExecutor = { pool?: Pool };
+
+export async function calculateAndStoreTrustScore(assetId: string, tenantId: string, executor: TrustScoreExecutor = {}) {
+  const database = executor.pool ? drizzle(executor.pool, { schema }) : db;
+  const findings = await database.select()
     .from(scanFindings)
     .where(and(
       eq(scanFindings.assetId, assetId),
@@ -103,7 +114,7 @@ export async function calculateAndStoreTrustScore(assetId: string, tenantId: str
       eq(scanFindings.status, 'Open')
     ));
 
-  const evidenceList = await db.select()
+  const evidenceList = await database.select()
     .from(evidenceItems)
     .where(and(
       eq(evidenceItems.assetId, assetId),
@@ -120,6 +131,14 @@ export async function calculateAndStoreTrustScore(assetId: string, tenantId: str
     } else if (f.category === 'Signature Failure') {
       // Signature failures penalize security harder than compliance, and hit both dimensions.
       canonicalFindings.push({ severity, category: 'security', open: true, weightMultiplier: 1.2 });
+      canonicalFindings.push({ severity, category: 'compliance', open: true });
+    } else if (f.category === 'Secret' || f.category === 'Hardcoded Secret' || f.category === 'Configuration' || f.category === 'Insecure IaC Configuration') {
+      // Repository scanner categories (src/scanners/real-repository-scanners.ts).
+      // Unmapped, these were silently excluded from the score: a passport with
+      // a committed credential could score as if the finding did not exist.
+      // Same dimension trust-vector.ts uses for them.
+      canonicalFindings.push({ severity, category: 'security', open: true });
+    } else if (f.category === 'License') {
       canonicalFindings.push({ severity, category: 'compliance', open: true });
     }
     if (f.engineId === 'vendor-ai' && f.severity === 'Critical') {
@@ -138,20 +157,21 @@ export async function calculateAndStoreTrustScore(assetId: string, tenantId: str
   const result = await calculateAndPersistPassportScore(tenantId, assetId, {
     findings: canonicalFindings,
     evidence: { totalUnits: evidenceList.length, knownUnits, hasValidSignature, hasInvalidSignature, hasAuditReport, vendorPassCount, vendorFailCount },
-  });
+  }, database);
 
-  await addPostgresAuditLog(tenantId, 'TRUST_SCORE_CALCULATED', 'TrustScoreEngine', {
-    assetId,
-    ...result,
-    evidenceCount: evidenceList.length,
-    findingsCount: findings.length
-  });
+  const auditPayload = { assetId, ...result, evidenceCount: evidenceList.length, findingsCount: findings.length };
+  if (executor.pool) await appendAuditEntryViaPool(executor.pool, { tenantId, action: 'TRUST_SCORE_CALCULATED', actor: 'TrustScoreEngine', payload: auditPayload });
+  else await addPostgresAuditLog(tenantId, 'TRUST_SCORE_CALCULATED', 'TrustScoreEngine', auditPayload);
 
   return {
     overallScore: result.overallScore,
     securityScore: result.securityScore,
     complianceScore: result.complianceScore,
-    vendorScore: result.vendorReputationScore
+    vendorScore: result.vendorReputationScore,
+    verificationStatus: result.verificationStatus,
+    evidenceCompleteness: result.evidenceCompleteness,
+    evidenceCount: evidenceList.length,
+    findingsCount: findings.length,
   };
 }
 

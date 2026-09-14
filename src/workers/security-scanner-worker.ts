@@ -6,6 +6,7 @@ import { Pool } from 'pg';
 import { downloadArchive, generateRepositorySbom, githubHeaders, isRateLimited, resolveTenantGitHubToken, runBounded, validateArchiveEntries } from './osv-worker.ts';
 import { createWorkerPool, assertWorkerDatabase } from './worker-db.ts';
 import { runRealRepositoryScanners } from '../scanners/real-repository-scanners.ts';
+import { calculateAndStoreTrustScore } from '../utils/scanner.ts';
 import { scanFindingIdentity } from '../security/scan-finding-identity.ts';
 import { decryptCredentials } from '../integrations/credential-vault.ts';
 import { credentialsFrom, onScanCompleted } from '../integrations/connectwise/scan-completion-hook.ts';
@@ -90,6 +91,14 @@ async function processSecurityJob(pool: Pool, job: any) {
     await pool.query(`INSERT INTO evidence_items (id,tenant_id,asset_id,name,type,verified,status,signer,timestamp,hash,raw_content,engine_id) VALUES ($1,$2,$3,'Multi-engine repository security scan','Security Scan',0,'OBSERVED','SPR scanner',NOW(),$4,$5,'spr-security-orchestrator-v1') ON CONFLICT DO NOTHING`, [`ev-security-${job.id}-${evidenceHash.slice(0,24)}`, job.tenant_id, job.passport_id, `sha256:${evidenceHash}`, evidencePayload]);
     await pool.query(`INSERT INTO scans (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name) VALUES ($1,$2,$3,'Multi-engine repository security scan',$4,'Completed',0,$5,NOW(),$6) ON CONFLICT DO NOTHING`, [`scan-security-${job.id}-${commit.sha.slice(0,16)}`, job.tenant_id, `${source.repository_owner}/${source.repository_name}@${commit.sha.slice(0,12)}`, WORKER_ID, findings.length, source.repository_owner]);
     await pool.query(`UPDATE agent_jobs SET status='Completed',progress=100,result=$2,error=NULL,completed_at=NOW(),locked_at=NULL,locked_by=NULL,updated_at=NOW() WHERE id=$1 AND tenant_id=$3 AND status='Running' AND locked_by=$4`, [job.id, JSON.stringify({ engines: ['Syft','OSV','Secret','IaC/Config','License'], findings: findings.length, commitSha: commit.sha, evidenceHash: `sha256:${evidenceHash}` }), job.tenant_id, WORKER_ID]);
+    // Same reason as osv-worker.scorePassportAfterScan: the passport's score and
+    // verification_status are outcomes of this scan and were never recomputed.
+    try {
+      const score = await calculateAndStoreTrustScore(job.passport_id, job.tenant_id, { pool });
+      console.info(JSON.stringify({ event: 'passport_scored', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, passportId: job.passport_id, verificationStatus: score.verificationStatus, overallScore: score.overallScore, evidenceCompleteness: score.evidenceCompleteness, evidenceCount: score.evidenceCount, findingsCount: score.findingsCount }));
+    } catch (error) {
+      console.error(JSON.stringify({ event: 'passport_score_failed', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, passportId: job.passport_id, reason: error instanceof Error ? error.message.slice(0, 200) : String(error).slice(0, 200) }));
+    }
     await produceConnectWiseTickets(pool, job);
   } finally { await rm(tempRoot, { recursive: true, force: true }); }
 }

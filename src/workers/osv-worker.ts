@@ -5,6 +5,7 @@ import path from 'node:path';
 import { mkdtemp, mkdir, writeFile, readdir, lstat, rm, unlink } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { appendAuditEntryViaPool } from '../security/audit-log.ts';
+import { calculateAndStoreTrustScore } from '../utils/scanner.ts';
 import { Pool, PoolClient } from 'pg';
 import { assessOsvSeverity } from '../security/osv-severity.ts';
 import { componentIdentity, vulnerabilityIdentity } from '../security/osv-identity.ts';
@@ -540,6 +541,7 @@ async function processRepositoryJob(pool: Pool, job: ClaimedJob) {
     const findings = (await pool.query('SELECT title,component,status,detected_at FROM scan_findings WHERE job_id=$1 AND tenant_id=$2 ORDER BY id',[job.id,job.tenant_id])).rows;
     await pool.query('UPDATE repository_scan_sources SET final_findings_hash=$2 WHERE job_id=$1 AND tenant_id=$3',[job.id,sha256(JSON.stringify(findings)),job.tenant_id]);
     mark('findings_hash_persisted');
+    await scorePassportAfterScan(pool, job, mark);
   } catch (error: any) {
     await pool.query(`UPDATE repository_scan_sources SET scanner_ended_at=NOW(), scanner_exit_code=COALESCE(scanner_exit_code,-1), scanner_error_category=$2 WHERE job_id=$1 AND tenant_id=$3`,[job.id,String(error?.message || 'REPOSITORY_SCAN_FAILED').slice(0,100),job.tenant_id]);
     throw error;
@@ -561,6 +563,23 @@ async function processRepositoryJob(pool: Pool, job: ClaimedJob) {
 // exotic subprocess/socket state). Stage markers turn "silent, unknown stall"
 // into "the last stage this job reached was X", which is the only way to
 // locate a hang that static reading of the timeout code cannot rule out.
+// Until this call existed nothing re-scored a passport after its repository
+// scan: verification_status stayed 'unverified' and every score stayed NULL
+// no matter how much evidence the scan persisted, because the canonical scorer
+// was only invoked from the manual SLSA attestation upload. Scoring is an
+// outcome of the scan, so it is a stage of the scan, and its result is logged
+// as observed (status, completeness), never assumed.
+async function scorePassportAfterScan(pool: Pool, job: ClaimedJob, mark: (name: string, extra?: Record<string, unknown>) => void) {
+  try {
+    const score = await calculateAndStoreTrustScore(job.passport_id, job.tenant_id, { pool });
+    mark('trust_scored', { verificationStatus: score.verificationStatus, overallScore: score.overallScore, evidenceCompleteness: score.evidenceCompleteness, evidenceCount: score.evidenceCount, findingsCount: score.findingsCount });
+  } catch (error) {
+    // The scan itself succeeded; a scoring failure is reported, not hidden
+    // behind the scan's success and not allowed to fail the scan.
+    console.error(JSON.stringify({ event: 'passport_score_failed', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, passportId: job.passport_id, reason: safeFailureReason(error instanceof Error ? error.message : String(error)) }));
+  }
+}
+
 function stage(job: ClaimedJob, name: string, extra?: Record<string, unknown>) {
   console.log(JSON.stringify({ event: 'scan_job_stage', workerId: WORKER_ID, jobId: job.id, jobType: job.job_type, tenantId: job.tenant_id, stage: name, ...extra }));
 }
