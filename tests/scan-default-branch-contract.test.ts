@@ -62,7 +62,8 @@ describe('Free Review does not pin every scan to "main"', () => {
   });
 
   it('stores null rather than a guessed branch name', () => {
-    expect(route).toContain('const requestedRef = ref ?? null;');
+    const requestedRefContract = 'const requestedRef = ref ?? null;';
+    expect(route).toContain(requestedRefContract);
     expect(route).toContain('ref: requestedRef');
     const submit = read('src/routes/free-review-submit.ts');
     expect(submit).toContain('const requestedRef = input.ref ?? null;');
