@@ -10,6 +10,14 @@ interface LoginViewProps {
 
 const PRODUCTION_AUTH_REDIRECT = 'https://www.softwarepassportregistry.com/login';
 
+function getAuthRedirect() {
+  if (typeof window === 'undefined') return PRODUCTION_AUTH_REDIRECT;
+  const origin = window.location.origin;
+  // Use the live browser origin first. This prevents Google/Supabase from receiving
+  // a redirect URL for a different SPR deployment or domain.
+  return `${origin}/login`;
+}
+
 export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
   const [mode, setMode] = useState<'login' | 'signup' | 'reset'>('login');
   const [email, setEmail] = useState('');
@@ -46,7 +54,7 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
     event.preventDefault(); setBusy(true); setError(''); setNotice('');
     try {
       if (mode === 'reset') {
-        const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo: PRODUCTION_AUTH_REDIRECT });
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo: getAuthRedirect() });
         if (error) throw error;
         setNotice('Password reset instructions sent if that email has an account.'); return;
       }
@@ -67,7 +75,8 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
   const google = async () => {
     setBusy(true); setError('');
     try {
-      const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: PRODUCTION_AUTH_REDIRECT, skipBrowserRedirect: false } });
+      const redirectTo = getAuthRedirect();
+      const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo, skipBrowserRedirect: false } });
       if (error) throw error;
     } catch (e) { setError(e instanceof Error ? e.message : 'Google sign-in failed.'); setBusy(false); }
   };
