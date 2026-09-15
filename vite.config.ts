@@ -1,41 +1,26 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import { fileURLToPath, URL } from 'node:url';
 
 export default defineConfig(({ mode }) => {
   const fileEnv = loadEnv(mode, process.cwd(), '');
   const env = (name: string) => process.env[name] ?? fileEnv[name];
-  const firebaseEnv = {
-    apiKey: env('VITE_FIREBASE_API_KEY') ?? env('apiKey'),
-    authDomain: env('VITE_FIREBASE_AUTH_DOMAIN') ?? env('authDomain'),
-    projectId: env('VITE_FIREBASE_PROJECT_ID') ?? env('projectId'),
-    storageBucket: env('VITE_FIREBASE_STORAGE_BUCKET') ?? env('storageBucket'),
-    messagingSenderId: env('VITE_FIREBASE_MESSAGING_SENDER_ID') ?? env('messagingSenderId'),
-    appId: env('VITE_FIREBASE_APP_ID') ?? env('appId'),
-    measurementId: env('VITE_FIREBASE_MEASUREMENT_ID') ?? env('measurementId'),
-  };
-
-  if (env('SPR_REQUIRE_FIREBASE_CONFIG') === 'true') {
-    const required = { apiKey: 'VITE_FIREBASE_API_KEY', authDomain: 'VITE_FIREBASE_AUTH_DOMAIN', projectId: 'VITE_FIREBASE_PROJECT_ID', appId: 'VITE_FIREBASE_APP_ID' } as const;
-    const absent = (Object.keys(required) as Array<keyof typeof required>).filter((key) => !firebaseEnv[key]);
-    if (absent.length) {
-      throw new Error(
-        `Refusing to build a deployable bundle without Firebase browser configuration. Missing: ${absent
-          .map((key) => required[key])
-          .join(', ')}. Pass them as Docker build args; without them the shipped app renders but sign-in is disabled.`,
-      );
-    }
+  const supabaseUrl = env('VITE_SUPABASE_URL');
+  const supabaseKey = env('VITE_SUPABASE_PUBLISHABLE_KEY');
+  if (env('SPR_REQUIRE_SUPABASE_CONFIG') === 'true' && (!supabaseUrl || !supabaseKey)) {
+    throw new Error('Refusing to build a deployable bundle without Supabase browser configuration. Missing VITE_SUPABASE_URL and/or VITE_SUPABASE_PUBLISHABLE_KEY.');
   }
 
   return {
+    resolve: {
+      alias: {
+        'firebase/auth': fileURLToPath(new URL('./src/lib/supabase-auth.ts', import.meta.url)),
+      },
+    },
     define: {
-      'import.meta.env.VITE_FIREBASE_API_KEY': JSON.stringify(firebaseEnv.apiKey ?? ''),
-      'import.meta.env.VITE_FIREBASE_AUTH_DOMAIN': JSON.stringify(firebaseEnv.authDomain ?? ''),
-      'import.meta.env.VITE_FIREBASE_PROJECT_ID': JSON.stringify(firebaseEnv.projectId ?? ''),
-      'import.meta.env.VITE_FIREBASE_STORAGE_BUCKET': JSON.stringify(firebaseEnv.storageBucket ?? ''),
-      'import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID': JSON.stringify(firebaseEnv.messagingSenderId ?? ''),
-      'import.meta.env.VITE_FIREBASE_APP_ID': JSON.stringify(firebaseEnv.appId ?? ''),
-      'import.meta.env.VITE_FIREBASE_MEASUREMENT_ID': JSON.stringify(firebaseEnv.measurementId ?? ''),
+      'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(supabaseUrl ?? ''),
+      'import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY': JSON.stringify(supabaseKey ?? ''),
     },
     plugins: [react(), tailwindcss()],
     server: {
@@ -47,12 +32,8 @@ export default defineConfig(({ mode }) => {
       chunkSizeWarningLimit: 1000,
       rollupOptions: {
         output: {
-          // Keep the browser graph limited to actual client dependencies. Database,
-          // queue, and ORM packages are server infrastructure and must never be
-          // intentionally grouped into a client chunk.
           manualChunks: {
             react: ['react', 'react-dom'],
-            firebase: ['firebase/app', 'firebase/auth'],
             charts: ['d3', 'recharts'],
             documents: ['jspdf', 'jspdf-autotable', 'html2canvas'],
             ui: ['lucide-react', 'motion'],
