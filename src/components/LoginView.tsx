@@ -8,6 +8,8 @@ interface LoginViewProps {
   brand?: { productName: string; logoDataUrl: string | null } | null;
 }
 
+const PRODUCTION_AUTH_REDIRECT = 'https://www.softwarepassportregistry.com/login';
+
 export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
   const [mode, setMode] = useState<'login' | 'signup' | 'reset'>('login');
   const [email, setEmail] = useState('');
@@ -44,7 +46,7 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
     event.preventDefault(); setBusy(true); setError(''); setNotice('');
     try {
       if (mode === 'reset') {
-        const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo: `${window.location.origin}/login` });
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo: PRODUCTION_AUTH_REDIRECT });
         if (error) throw error;
         setNotice('Password reset instructions sent if that email has an account.'); return;
       }
@@ -65,7 +67,7 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
   const google = async () => {
     setBusy(true); setError('');
     try {
-      const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: `${window.location.origin}/login` } });
+      const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: PRODUCTION_AUTH_REDIRECT, skipBrowserRedirect: false } });
       if (error) throw error;
     } catch (e) { setError(e instanceof Error ? e.message : 'Google sign-in failed.'); setBusy(false); }
   };
