@@ -84,7 +84,7 @@ export const adminAuth = {
 
   async generateEmailVerificationLink(email: string) {
     requireAdminKey();
-    const { data, error } = await supabaseAdmin.auth.admin.generateLink({ type: 'signup', email });
+    const { data, error } = await supabaseAdmin.auth.admin.generateLink({ type: 'magiclink', email });
     if (error || !data.properties?.action_link) throw error || new Error('Unable to generate email verification link');
     return data.properties.action_link;
   },
@@ -104,6 +104,8 @@ export const adminAuth = {
     if (error) throw error;
     return undefined;
   },
+
+  async setCustomUserClaims(_uid: string, _claims: Record<string, unknown>) { return undefined; },
 };
 
 export async function setUserCustomClaims(_uid: string, _claims: Record<string, unknown>) { return undefined; }
