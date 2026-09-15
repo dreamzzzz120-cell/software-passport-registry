@@ -1,0 +1,3 @@
+[allowlist]
+description = "Historical Supabase publishable key false positive; publishable client keys are not secrets"
+commits = ["7e2b5db8d8799edaa8c6a9d4d6602668ce53a4bb"]
