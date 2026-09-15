@@ -1,4 +1,4 @@
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, ExternalLink } from 'lucide-react';
 import LegalFooterLinks from './legal/LegalFooterLinks';
 import UniversalIntakeView from './UniversalIntakeView';
 
@@ -53,8 +53,10 @@ export default function HomePage({ onCreatePassport, onExploreTrustNetwork, onVi
           <p className="mt-6 max-w-xl text-base leading-7 text-[var(--spr-text-muted)]">SPR turns repositories, applications, dependencies and vendors into evidence-backed Software Passports — so buyers, security teams and operators can see what was observed, what was verified, and what remains unknown.</p>
           <div className="mt-8 flex flex-wrap gap-3">
             <button onClick={onExploreTrustNetwork} className="inline-flex items-center gap-2 rounded-[3px] bg-[var(--spr-accent)] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[var(--spr-accent-hover)]">Run a Free Review <ArrowRight className="h-4 w-4" /></button>
+            <a href="/software" className="inline-flex items-center gap-2 rounded-[3px] border border-[var(--spr-highlight)]/50 bg-[var(--spr-surface-sunken)] px-6 py-3 text-sm font-semibold text-[var(--spr-text)] transition-colors hover:bg-[var(--spr-surface-hover)]" aria-label="Open the public Software Passport Registry">Explore the Software Registry <ExternalLink className="h-4 w-4" /></a>
             <button onClick={onCreatePassport} className="rounded-[3px] border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-6 py-3 text-sm font-semibold text-[#cccccc] transition-colors hover:bg-[var(--spr-surface-hover)]">Sign in</button>
           </div>
+          <p className="mt-3 text-xs text-[var(--spr-text-muted)]">Public registry: observed repositories only. No invented scores or placeholder records.</p>
           <LegalFooterLinks className="mt-8" />
         </div>
         <div className="hidden w-full flex-1 justify-center lg:flex">
@@ -67,7 +69,10 @@ export default function HomePage({ onCreatePassport, onExploreTrustNetwork, onVi
                 <div key={item} className="rounded border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-3 text-[var(--spr-text-muted)]">{item}<div className="mt-1 font-semibold text-[var(--spr-text)]">Not yet observed</div></div>
               ))}
             </div>
-            <button onClick={onExploreTrustNetwork} className="mt-6 inline-flex items-center gap-2 rounded-[3px] bg-[var(--spr-accent)] px-5 py-2.5 text-sm font-semibold text-white">Run a Free Review <ArrowRight className="h-4 w-4" /></button>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <button onClick={onExploreTrustNetwork} className="inline-flex items-center gap-2 rounded-[3px] bg-[var(--spr-accent)] px-5 py-2.5 text-sm font-semibold text-white">Run a Free Review <ArrowRight className="h-4 w-4" /></button>
+              <a href="/software" className="inline-flex items-center gap-2 rounded-[3px] border border-[var(--spr-border)] px-5 py-2.5 text-sm font-semibold text-[var(--spr-text)]">Open Registry <ExternalLink className="h-4 w-4" /></a>
+            </div>
           </div>
         </div>
       </section>
@@ -84,7 +89,7 @@ export default function HomePage({ onCreatePassport, onExploreTrustNetwork, onVi
       <section className="border-t border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-6 py-20"><div className="mx-auto max-w-5xl"><h2 className="text-2xl font-semibold text-[var(--spr-text)] md:text-3xl">See the evidence.</h2><p className="mt-4 max-w-3xl text-sm leading-7 text-[var(--spr-text-muted)]">SPR keeps observations, evidence, independent sources, verification, trust state and the decision separate. Repeated observations of one source are not independent corroboration, and missing evidence stays visible.</p><div className="mt-9 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6"><div className="text-[12px] font-bold uppercase tracking-[.18em] text-[var(--spr-amber)]">A state most products hide</div><h3 className="mt-2 text-xl font-semibold text-[var(--spr-text)]">UNKNOWN is a real answer.</h3><p className="mt-3 max-w-3xl text-sm leading-7 text-[var(--spr-text-muted)]">UNKNOWN does not mean safe, and it does not mean unsafe. It means available evidence is insufficient to make that determination. SPR does not invent certainty it has not observed.</p><button onClick={onExploreTrustNetwork} className="mt-6 inline-flex items-center gap-2 rounded-[3px] bg-[var(--spr-accent)] px-5 py-2.5 text-sm font-semibold text-white">Run a Free Review <ArrowRight className="h-4 w-4" /></button></div></div></section>
       <section className="border-t border-[var(--spr-border)] px-6 py-20"><div className="mx-auto max-w-5xl"><h2 className="text-2xl font-semibold text-[var(--spr-text)] md:text-3xl">What you get</h2><div className="mt-8 grid gap-5 md:grid-cols-2">{OUTPUTS.map(item => <div key={item.title} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5"><h3 className="text-sm font-semibold text-[var(--spr-text)]">{item.title}</h3><p className="mt-1.5 text-xs leading-5 text-[var(--spr-text-muted)]">{item.body}</p></div>)}</div></div></section>
       <section className="border-t border-[var(--spr-border)] px-6 py-20"><div className="mx-auto max-w-5xl"><div className="grid gap-6 md:grid-cols-5">{INFRASTRUCTURE_STEPS.map(step => <div key={step.n} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5"><div className="font-mono text-xs font-bold text-[var(--spr-highlight)]">{step.n}</div><h3 className="mt-2 text-sm font-semibold text-[var(--spr-text)]">{step.title}</h3><p className="mt-2 text-xs leading-5 text-[var(--spr-text-muted)]">{step.description}</p></div>)}</div><div className="mt-10 text-center"><div className="inline-block rounded-md border border-[var(--spr-highlight)]/40 bg-[var(--spr-accent-soft)]/15 px-6 py-3 text-sm font-bold uppercase tracking-[.15em] text-[var(--spr-highlight)]">Software Passport</div></div></div></section>
-      <section className="border-t border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-6 py-16 text-center"><div className="mx-auto max-w-2xl"><div className="text-[11px] font-bold uppercase tracking-[.22em] text-[var(--spr-highlight)]">Software Trust Infrastructure</div><p className="mt-3 text-lg font-semibold text-[var(--spr-text)]">The trust layer for the software ecosystem.</p><p className="mt-2 text-sm leading-6 text-[var(--spr-text-muted)]">Persistent software identity. Verifiable evidence. Explainable trust. Continuous observation.</p></div></section>
+      <section className="border-t border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-6 py-16 text-center"><div className="mx-auto max-w-2xl"><div className="text-[11px] font-bold uppercase tracking-[.22em] text-[var(--spr-highlight)]">Software Trust Infrastructure</div><p className="mt-3 text-lg font-semibold text-[var(--spr-text)]">The trust layer for the software ecosystem.</p><p className="mt-2 text-sm leading-6 text-[var(--spr-text-muted)]">Persistent software identity. Verifiable evidence. Explainable trust. Continuous observation.</p><a href="/software" className="mt-6 inline-flex items-center gap-2 rounded-[3px] border border-[var(--spr-border)] px-5 py-2.5 text-sm font-semibold text-[var(--spr-text)]">Browse the public Software Registry <ExternalLink className="h-4 w-4" /></a></div></section>
     </div>
   );
 }
