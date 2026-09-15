@@ -1,178 +1,46 @@
 /**
- * @license
- * SPDX-License-Identifier: Apache-2.0
+ * Legacy compatibility name retained while SPR moves authentication to Supabase.
+ * No Firebase SDK or Firebase credentials are used here.
+ *
+ * Existing routes call adminAuth.verifyIdToken(). We keep that narrow interface
+ * so the migration can be deployed without rewriting every route at once.
  */
+import { createClient } from '@supabase/supabase-js';
 
-import { initializeApp, getApps, getApp, cert, applicationDefault, ServiceAccount } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
-import { config } from '../config.ts';
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://kfpjjyrwzupiyhzjpbqo.supabase.co';
+const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_YXrFQ2Qr8M-CEYKZLIsbqQ_weZK--PR';
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
 
-function parseServiceAccount(raw: string): ServiceAccount {
-  let candidate = raw.trim().replace(/^\uFEFF/, '');
-
-  // Accept a raw JSON object, a JSON-encoded string containing that object,
-  // or an env value with harmless wrapper text around the JSON object.
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      const parsed = JSON.parse(candidate) as unknown;
-      if (typeof parsed === 'string') {
-        candidate = parsed.trim().replace(/^\uFEFF/, '');
-        continue;
-      }
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        throw new Error('Service account value is not a JSON object');
-      }
-
-      const value = parsed as Record<string, unknown>;
-      const projectId = value.projectId ?? value.project_id;
-      const clientEmail = value.clientEmail ?? value.client_email;
-      const privateKey = value.privateKey ?? value.private_key;
-
-      const normalized: ServiceAccount = {
-        projectId: typeof projectId === 'string' ? projectId.trim() : '',
-        clientEmail: typeof clientEmail === 'string' ? clientEmail.trim() : '',
-        privateKey: typeof privateKey === 'string' ? privateKey.replace(/\\n/g, '\n') : '',
-      };
-
-      return normalized;
-    } catch (error) {
-      // If the value contains wrapper text, isolate the outermost JSON object.
-      const start = candidate.indexOf('{');
-      const end = candidate.lastIndexOf('}');
-      if (start >= 0 && end > start && (start !== 0 || end !== candidate.length - 1)) {
-        candidate = candidate.slice(start, end + 1).trim();
-        continue;
-      }
-      if (error instanceof Error && error.message !== 'Unexpected end of JSON input') throw error;
-      throw new Error('Service account value is not valid JSON');
+export const adminAuth = {
+  async verifyIdToken(token: string) {
+    const { data, error } = await supabase.auth.getUser(token);
+    if (error || !data.user) {
+      const err = new Error('Invalid or expired Supabase access token') as Error & { code?: string };
+      err.code = 'auth/invalid-id-token';
+      throw err;
     }
-  }
+    return {
+      uid: data.user.id,
+      email: data.user.email ?? undefined,
+      email_verified: Boolean(data.user.email_confirmed_at),
+      user_metadata: data.user.user_metadata ?? {},
+      app_metadata: data.user.app_metadata ?? {},
+      aud: 'authenticated',
+    };
+  },
+};
 
-  throw new Error('Service account value could not be normalized');
-}
-
-function parseBase64ServiceAccount(raw: string): ServiceAccount {
-  const decoded = Buffer.from(raw.trim(), 'base64').toString('utf8');
-  return parseServiceAccount(decoded);
-}
-
-function validateServiceAccount(payload: ServiceAccount) {
-  if (!payload.projectId || !payload.clientEmail || !payload.privateKey) {
-    throw new Error('Service account is missing required fields');
-  }
-  if (config.firebase.projectId && payload.projectId !== config.firebase.projectId) {
-    throw new Error('Service account project does not match FIREBASE_PROJECT_ID');
-  }
-}
-
-function loadAdminCredential() {
-  if (config.firebase.serviceAccountKeyB64) {
-    try {
-      const payload = parseBase64ServiceAccount(config.firebase.serviceAccountKeyB64);
-      validateServiceAccount(payload);
-      console.info('[Firebase Admin] Using FIREBASE_SERVICE_ACCOUNT_KEY_B64');
-      return cert(payload);
-    } catch (error) {
-      console.error('[Firebase Admin] Invalid FIREBASE_SERVICE_ACCOUNT_KEY_B64:', error instanceof Error ? error.message : 'invalid credential');
-      return undefined;
-    }
-  }
-
-  if (config.firebase.serviceAccountKey) {
-    try {
-      const payload = parseServiceAccount(config.firebase.serviceAccountKey);
-      validateServiceAccount(payload);
-      console.info('[Firebase Admin] Using FIREBASE_SERVICE_ACCOUNT_KEY');
-      return cert(payload);
-    } catch (error) {
-      console.error('[Firebase Admin] Invalid FIREBASE_SERVICE_ACCOUNT_KEY:', error instanceof Error ? error.message : 'invalid credential');
-      return undefined;
-    }
-  }
-
-  if (config.firebase.googleApplicationCredentials) return applicationDefault();
-
-  if (config.isProduction) {
-    console.error('[Firebase Admin] Firebase Admin credentials are not configured; auth requests will fail until credentials are supplied.');
-  }
+// Supabase stores authorization in its database/RLS model. SPR's backend also
+// re-reads role and tenant from its users table on every authenticated request,
+// so Firebase-style custom claims are intentionally not required.
+export async function setUserCustomClaims(_uid: string, _claims: Record<string, unknown>) {
   return undefined;
 }
 
-const adminOptions: { projectId?: string; credential?: ReturnType<typeof cert> | ReturnType<typeof applicationDefault> } = {};
-const credential = loadAdminCredential();
-if (credential) adminOptions.credential = credential;
-if (config.firebase.projectId) adminOptions.projectId = config.firebase.projectId;
-
-const app = getApps().length === 0 ? initializeApp(adminOptions) : getApp();
-export const adminAuth = getAuth(app);
-
-export async function setUserCustomClaims(uid: string, claims: { workspaceId: string; role: string; clientId?: string | null }): Promise<{ success: boolean; reason?: string }> {
-  try {
-    // clientId is included for consistency with the actual authorization
-    // source (the users.client_id column, read fresh on every request by
-    // requireAuth) -- this app never authorizes from JWT claims alone.
-    const expectedClaims = { workspaceId: claims.workspaceId, tenantId: claims.workspaceId, role: claims.role, clientId: claims.clientId ?? null };
-    await adminAuth.setCustomUserClaims(uid, expectedClaims);
-    const updatedUser = await adminAuth.getUser(uid);
-    const actualClaims = updatedUser.customClaims || {};
-    if (actualClaims.workspaceId !== expectedClaims.workspaceId || actualClaims.tenantId !== expectedClaims.tenantId || actualClaims.role !== expectedClaims.role) {
-      return { success: false, reason: 'Firebase custom-claim read-back did not match the requested assignment' };
-    }
-    return { success: true };
-  } catch (err: any) {
-    return { success: false, reason: err?.message || String(err) };
-  }
+export async function ensureFirebaseAuthorizedDomain(_domain: string) {
+  return undefined;
 }
 
-/**
- * Identity Platform project configuration: the list of hostnames Firebase
- * Authentication will accept sign-in requests from. A white-label custom
- * domain has to be on it or Google sign-in (and every OAuth redirect) on
- * that hostname is refused with auth/unauthorized-domain.
- *
- * The Admin SDK exposes no method for authorizedDomains, so this calls the
- * documented REST resource with the service account's own access token.
- * Read-modify-write on the full list; callers hold the domain in the
- * database first so a lost update cannot strand it.
- */
-const identityConfigUrl = () => `https://identitytoolkit.googleapis.com/admin/v2/projects/${encodeURIComponent(adminOptions.projectId ?? '')}/config`;
-
-async function identityAccessToken(): Promise<string> {
-  const credentialObject = app.options.credential;
-  if (!credentialObject || !adminOptions.projectId) throw new Error('FIREBASE_ADMIN_NOT_CONFIGURED');
-  const token = await credentialObject.getAccessToken();
-  return token.access_token;
-}
-
-export async function getAuthorizedDomains(): Promise<string[]> {
-  const accessToken = await identityAccessToken();
-  const response = await fetch(identityConfigUrl(), { headers: { Authorization: `Bearer ${accessToken}` } });
-  const json: any = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(`IDENTITY_CONFIG_${response.status}:${json?.error?.message ?? 'request failed'}`);
-  return Array.isArray(json?.authorizedDomains) ? json.authorizedDomains.map(String) : [];
-}
-
-async function setAuthorizedDomains(domains: string[]): Promise<string[]> {
-  const accessToken = await identityAccessToken();
-  const response = await fetch(`${identityConfigUrl()}?updateMask=authorizedDomains`, {
-    method: 'PATCH',
-    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ authorizedDomains: domains }),
-  });
-  const json: any = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(`IDENTITY_CONFIG_${response.status}:${json?.error?.message ?? 'request failed'}`);
-  return Array.isArray(json?.authorizedDomains) ? json.authorizedDomains.map(String) : domains;
-}
-
-export async function addAuthorizedDomain(hostname: string): Promise<void> {
-  const current = await getAuthorizedDomains();
-  if (current.some((d) => d.toLowerCase() === hostname.toLowerCase())) return;
-  await setAuthorizedDomains([...current, hostname.toLowerCase()]);
-}
-
-export async function removeAuthorizedDomain(hostname: string): Promise<void> {
-  const current = await getAuthorizedDomains();
-  const next = current.filter((d) => d.toLowerCase() !== hostname.toLowerCase());
-  if (next.length === current.length) return;
-  await setAuthorizedDomains(next);
+export async function removeFirebaseAuthorizedDomain(_domain: string) {
+  return undefined;
 }
