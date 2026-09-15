@@ -1,39 +1,12 @@
-/**
- * SPR Supabase browser client.
- *
- * Configuration is supplied by the deployment environment. A missing key must
- * not crash the application during module initialization; callers receive a
- * clear configuration error instead.
- */
+/** SPR Supabase browser client. Publishable keys are safe for browser use. Environment variables override the connected production project. */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-
-const url = import.meta.env.VITE_SUPABASE_URL || '';
-const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
-
+const url = import.meta.env.VITE_SUPABASE_URL || 'https://kfpjjyrwzupiyhzjpbqo.supabase.co';
+const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_YXrFQ2Qr8M-CEYKZLIsbqQ_weZK--PR';
 export const supabaseConfigured = Boolean(url && key);
-
 let client: SupabaseClient | null = null;
-
 function getClient(): SupabaseClient {
-  if (!supabaseConfigured) {
-    throw new Error('Supabase browser authentication is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in the deployment environment.');
-  }
-  if (!client) {
-    client = createClient(url, key, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true,
-      },
-    });
-  }
+  if (!supabaseConfigured) throw new Error('Supabase browser authentication is not configured.');
+  if (!client) client = createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
   return client;
 }
-
-// Lazy proxy keeps the existing `supabase.auth.*` call sites while ensuring
-// test/build environments without browser credentials can still load modules.
-export const supabase = new Proxy({} as SupabaseClient, {
-  get(_target, property, receiver) {
-    return Reflect.get(getClient(), property, receiver);
-  },
-});
+export const supabase = new Proxy({} as SupabaseClient, { get(_target, property, receiver) { return Reflect.get(getClient(), property, receiver); } });
