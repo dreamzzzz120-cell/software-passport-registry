@@ -1,225 +1,131 @@
 import React, { useEffect, useState } from 'react';
-import { createUserWithEmailAndPassword, onAuthStateChanged, reload, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithPopup, signInWithRedirect, signOut, type User } from 'firebase/auth';
-import { AlertCircle, ArrowRight, CheckCircle2, Eye, EyeOff, Loader, ShieldCheck, Upload, KeyRound } from 'lucide-react';
-import { auth, googleAuthProvider, firebaseConfigured } from '../lib/firebase';
-import { consumeAuthNotice, notProvisionedMessage } from '../lib/authNotice';
-import { beginSignupTransition, endSignupTransition } from '../lib/signupTransition';
+import { AlertCircle, ArrowRight, CheckCircle2, Eye, EyeOff, Loader, ShieldCheck } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 import { apiFetch } from '../utils/apiClient';
-import { getTotpResolver, resolveTotpSignIn } from '../lib/mfa';
 
-interface LoginViewProps { onLoginSuccess: (user: { uid: string; email: string | null; displayName: string; token: string; emailVerified: boolean; onboarded: 0 }) => void; brand?: { productName: string; logoDataUrl: string | null } | null; }
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+interface LoginViewProps {
+  onLoginSuccess: (user: { uid: string; email: string | null; displayName: string; token: string; emailVerified: boolean; onboarded: 0 }) => void;
+  brand?: { productName: string; logoDataUrl: string | null } | null;
+}
 
-// Transient network hiccups are the most common reason sendEmailVerification
-// throws even though the account is fine -- one short-delay retry recovers
-// most of them without user action. Quota/abuse errors (too-many-requests)
-// are deliberately NOT retried: retrying those just digs the quota hole
-// deeper and delays the honest error the user needs to see.
-const sendVerificationWithRetry = async (user: User) => {
-  // Server first. It sends from our own domain via the email provider, where
-  // a failure is recorded; Firebase's built-in sender reports nothing, so a
-  // spam-filtered message is indistinguishable from a delivered one. The
-  // endpoint needs only a valid ID token -- not a provisioned SPR user row --
-  // which is what makes it usable here, on the signup path, where no such row
-  // exists yet. If no provider is configured it reports that and sends
-  // nothing, and we fall through to Firebase exactly as before.
-  try {
-    const response = await apiFetch('/api/auth/send-verification', { method: 'POST' });
-    if (response.ok) {
-      const data = await response.json().catch(() => null);
-      if (data?.sent === true) return;
-    }
-  } catch {
-    /* fall through to the Firebase sender */
-  }
-  try {
-    await sendEmailVerification(user);
-  } catch (err: any) {
-    if (err?.code === 'auth/too-many-requests') throw err;
-    await sleep(1500);
-    await sendEmailVerification(user);
-  }
-};
+export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
+  const [mode, setMode] = useState<'login' | 'signup' | 'reset'>('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const productName = brand?.productName || 'Software Passport Registry';
 
-const RESEND_COOLDOWN_MS = 30_000;
-const STAGED_KEY = 'spr-universal-intake-v1';
-const authMessage = (error: any, fallback: string) => {
-  switch (error?.code) {
-    case 'auth/invalid-credential': case 'auth/user-not-found': case 'auth/wrong-password': return 'The email or password is incorrect.';
-    case 'auth/email-already-in-use': return 'An account already exists for this email. Sign in instead.';
-    case 'auth/invalid-email': return 'Enter a valid email address.';
-    case 'auth/weak-password': return 'Choose a stronger password with at least 6 characters.';
-    case 'auth/too-many-requests': return 'Too many attempts. Please wait a few minutes and try again.';
-    case 'auth/unauthorized-domain': return `This site is not authorized for Firebase sign-in (${window.location.hostname}). Add this domain in Firebase Authentication → Settings → Authorized domains.`;
-    case 'auth/operation-not-allowed': return 'Google sign-in is not enabled in Firebase Authentication.';
-    case 'auth/popup-blocked': return 'Your browser blocked the Google sign-in window. We will retry with a redirect.';
-    case 'auth/popup-closed-by-user': case 'auth/cancelled-popup-request': return '';
-    case 'auth/account-exists-with-different-credential': return 'This email already uses a different sign-in method.';
-    case 'auth/network-request-failed': return 'Authentication could not reach Firebase. Check your connection and try again.';
-    case 'auth/web-storage-unsupported': return 'Browser storage is unavailable. Enable cookies/site data for this site and try again.';
-    case 'auth/argument-error': return 'Firebase authentication is not initialized correctly for this deployment. Check the Vercel VITE_FIREBASE_* production variables and redeploy.';
-    default: return error?.message ? `${fallback} (${error.code || 'unknown-error'})` : fallback;
-  }
-};
-
-export default function LoginView({ onLoginSuccess, brand = null }: LoginViewProps) {
-  const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false); const [googleLoading, setGoogleLoading] = useState(false); const [error, setError] = useState(''); const [notice, setNotice] = useState('');
-  const [resendCooldownUntil, setResendCooldownUntil] = useState(0);
-  const [resendCooldownTick, setResendCooldownTick] = useState(0);
-  const [stagedCount, setStagedCount] = useState(0); const [stagedRepo, setStagedRepo] = useState('');
-  const [mfaResolver, setMfaResolver] = useState<ReturnType<typeof getTotpResolver>>(null);
-  const [mfaCode, setMfaCode] = useState('');
-  const [mfaLoading, setMfaLoading] = useState(false);
-
-  useEffect(() => {
-    const refreshStaged = () => { try { const raw = sessionStorage.getItem(STAGED_KEY); if (!raw) return; const data = JSON.parse(raw); setStagedCount(Array.isArray(data?.items) ? data.items.length : 0); setStagedRepo(typeof data?.repo === 'string' ? data.repo : ''); } catch { setStagedCount(0); setStagedRepo(''); } };
-    refreshStaged(); window.addEventListener('storage', refreshStaged); return () => window.removeEventListener('storage', refreshStaged);
-  }, []);
-
-  const claimIntake = async () => {
-    try {
-      const raw = sessionStorage.getItem(STAGED_KEY); if (!raw) return;
-      const data = JSON.parse(raw); if (typeof data?.sessionId !== 'string') return;
-      const response = await apiFetch('/api/intake/claim', { method: 'POST', body: JSON.stringify({ sessionId: data.sessionId }) });
-      if (response.ok) { sessionStorage.removeItem(STAGED_KEY); setStagedCount(0); setStagedRepo(''); setNotice('Your intake has been claimed into your SPR workspace.'); }
-      else if (response.status !== 410 && response.status !== 404) { const body = await response.json().catch(() => null); console.warn('[SPR] Intake claim did not complete:', body?.error || response.status); }
-    } catch (err) { console.warn('[SPR] Intake claim unavailable:', err); }
-  };
-
-  const complete = async (user: User) => {
-    if (!auth) throw new Error('Firebase authentication is not initialized.'); await reload(user);
-    if (!user.emailVerified) {
-      try {
-        await sendVerificationWithRetry(user);
-        setNotice('Verify your email before entering SPR. We sent a fresh verification email. Then sign in again.');
-      } catch (err: any) {
-        // Previously swallowed silently and claimed success either way --
-        // a customer whose resend genuinely failed had no way to know.
-        setError(`We couldn't send a verification email right now (${err?.code || 'unknown error'}). Please try "Resend verification" in a few minutes.`);
-      }
-      await signOut(auth);
+  const finishSession = async (session: { access_token: string; user: any }) => {
+    const user = session.user;
+    const token = session.access_token;
+    if (!user?.id || !token) throw new Error('Supabase returned an invalid session.');
+    const emailVerified = Boolean(user.email_confirmed_at);
+    if (!emailVerified) {
+      setNotice('Check your email and confirm your account before signing in.');
+      await supabase.auth.signOut();
       return;
     }
-    const token = await user.getIdToken(true);
-    await claimIntake();
-    onLoginSuccess({ uid: user.uid, email: user.email, displayName: user.displayName || user.email?.split('@')[0] || 'User', token, emailVerified: true, onboarded: 0 });
-  };
 
-  const handleMfaRequired = (err: unknown) => {
-    const resolver = getTotpResolver(err);
-    if (!resolver) return false;
-    if (!resolver.hints.some((hint) => hint.factorId === 'totp')) {
-      setError('Your account requires a second factor that this login screen cannot process. Contact your workspace administrator.');
-      return true;
+    // Provision the SPR tenant on first verified sign-in. The backend verifies
+    // the Supabase token before creating or returning the workspace.
+    const response = await fetch('/api/auth/workspace', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    });
+    if (!response.ok && response.status !== 409) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body?.error || 'Your account could not be provisioned.');
     }
-    setMfaResolver(resolver);
-    setMfaCode('');
-    setError('');
-    setNotice('Enter the 6-digit code from your authenticator app.');
-    return true;
-  };
 
-  const submitMfa = async () => {
-    if (!mfaResolver || mfaLoading) return;
-    setMfaLoading(true); setError('');
-    try {
-      const hint = mfaResolver.hints.find((item) => item.factorId === 'totp');
-      if (!hint) throw new Error('No TOTP factor is available for this account.');
-      const result = await resolveTotpSignIn(mfaResolver, hint.uid, mfaCode);
-      setMfaResolver(null); setMfaCode(''); setNotice('Second factor verified.');
-      await complete(result.user);
-    } catch (err: any) {
-      setError(err?.code === 'auth/invalid-verification-code' ? 'That authenticator code is invalid or expired. Enter the current 6-digit code.' : authMessage(err, 'Second-factor verification failed.'));
-    } finally { setMfaLoading(false); }
+    onLoginSuccess({
+      uid: user.id,
+      email: user.email ?? null,
+      displayName: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+      token,
+      emailVerified: true,
+      onboarded: 0,
+    });
   };
 
   useEffect(() => {
-    const pendingNotice = consumeAuthNotice(); if (pendingNotice) setError(pendingNotice);
-    if (!auth) { setNotice('Authentication is temporarily unavailable. The frontend loaded, but Firebase browser configuration is missing from this deployment.'); return; }
-    const unsubscribe = onAuthStateChanged(auth, currentUser => { if (!currentUser || currentUser.emailVerified) return; setNotice('Verify your email before entering the protected workspace.'); });
-    const onProvisioningFailure = (event: Event) => { const email = (event as CustomEvent<{ email?: string | null }>).detail?.email ?? null; setError(notProvisionedMessage(email)); setNotice('Authentication succeeded; workspace authorization is still required.'); };
-    window.addEventListener('auth-provisioning-failed', onProvisioningFailure); return () => { unsubscribe(); window.removeEventListener('auth-provisioning-failed', onProvisioningFailure); };
+    let mounted = true;
+    supabase.auth.getSession().then(async ({ data, error: sessionError }) => {
+      if (!mounted || sessionError || !data.session) return;
+      try { await finishSession(data.session); } catch (e) { if (mounted) setError(e instanceof Error ? e.message : 'Unable to restore your session.'); }
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!mounted || !session) return;
+      try { await finishSession(session); } catch (e) { if (mounted) setError(e instanceof Error ? e.message : 'Authentication failed.'); }
+    });
+    return () => { mounted = false; listener.subscription.unsubscribe(); };
   }, []);
 
-  const submit = async (event: React.FormEvent) => { event.preventDefault(); if (loading || googleLoading || mfaLoading) return; if (!auth || !firebaseConfigured) { setError('Firebase browser configuration is missing. Add the VITE_FIREBASE_* Production variables in Vercel and redeploy.'); return; } setLoading(true); setError(''); setNotice(''); try { const result = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password); await complete(result.user); } catch (err: any) { if (!handleMfaRequired(err)) { const message = authMessage(err, 'Sign-in failed.'); if (message) setError(message); } } finally { setLoading(false); } };
-  const register = async () => {
-    if (loading || googleLoading || mfaLoading) return;
-    if (!auth || !firebaseConfigured) { setError('Firebase browser configuration is missing. Add the VITE_FIREBASE_* Production variables in Vercel and redeploy.'); return; }
-    setLoading(true); setError(''); setNotice(''); beginSignupTransition();
-    let created: User | null = null;
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setBusy(true); setError(''); setNotice('');
     try {
-      // Account creation and the verification-email send are two independent
-      // Firebase calls. Previously both lived in one try/catch, so a
-      // successfully-created account whose verification email failed to send
-      // (rate limits, transient errors) was reported as "Account creation
-      // failed" -- a lie. The customer believed nothing happened, had no idea
-      // to use "Resend verification", and a retry just hit
-      // auth/email-already-in-use with no path forward.
-      const result = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
-      created = result.user;
-    } catch (err: any) {
-      setError(authMessage(err, 'Account creation failed.'));
-      endSignupTransition(); setLoading(false); return;
-    }
-    try {
-      await sendVerificationWithRetry(created);
-      await signOut(auth);
-      setNotice('Account created. Check your email, verify it, then sign in. Your secure intake remains available for 24 hours.');
-    } catch (err: any) {
-      // Account creation genuinely succeeded here -- do not sign the user
-      // out, so auth.currentUser (and therefore the "Resend verification"
-      // button, which reads auth?.currentUser) still works immediately.
-      setError(`Your account was created, but we couldn't send the verification email (${err?.code || 'unknown error'}). Click "Resend verification" below to try again.`);
-    } finally {
-      endSignupTransition(); setLoading(false);
-    }
+      if (mode === 'reset') {
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/login` });
+        if (resetError) throw resetError;
+        setNotice('Password reset instructions sent if that email has an account.');
+        return;
+      }
+      if (mode === 'signup') {
+        if (password.length < 8) throw new Error('Password must be at least 8 characters.');
+        const { data, error: signupError } = await supabase.auth.signUp({
+          email: email.trim().toLowerCase(),
+          password,
+          options: { data: { full_name: email.trim().split('@')[0] }, emailRedirectTo: `${window.location.origin}/login` },
+        });
+        if (signupError) throw signupError;
+        if (data.session) await finishSession(data.session);
+        else setNotice('Account created. Check your email to verify it, then sign in.');
+        return;
+      }
+      const { data, error: loginError } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+      if (loginError) throw loginError;
+      if (!data.session) throw new Error('Login succeeded but no session was returned.');
+      await finishSession(data.session);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Authentication failed.');
+    } finally { setBusy(false); }
   };
-  const google = async () => { if (loading || googleLoading || mfaLoading) return; if (!auth || !firebaseConfigured) { setError('Firebase browser configuration is missing. Add the VITE_FIREBASE_* Production variables in Vercel and redeploy.'); return; } setGoogleLoading(true); setError(''); setNotice('Opening secure Google sign-in…'); try { const result = await signInWithPopup(auth, googleAuthProvider); await complete(result.user); } catch (err: any) { if (handleMfaRequired(err)) { setGoogleLoading(false); return; } if (['auth/popup-blocked','auth/operation-not-supported-in-this-environment'].includes(err?.code)) { try { await signInWithRedirect(auth, googleAuthProvider); return; } catch (redirectError: any) { const message = authMessage(redirectError, 'Google sign-in failed.'); if (message) setError(message); else setNotice(''); setGoogleLoading(false); return; } } const message = authMessage(err, 'Google sign-in failed.'); if (message) setError(message); else setNotice(''); setGoogleLoading(false); } };
-  const reset = async () => { if (!email.trim()) { setError('Enter your email first.'); return; } if (!auth || !firebaseConfigured) { setError('Firebase browser configuration is missing.'); return; } setLoading(true); setError(''); setNotice(''); try { const target = email.trim().toLowerCase(); let viaProvider = false; try { const response = await apiFetch('/api/auth/send-password-reset', { method: 'POST', body: JSON.stringify({ email: target }) }); const data = response.ok ? await response.json().catch(() => null) : null; viaProvider = data?.accepted === true; } catch { viaProvider = false; } if (!viaProvider) await sendPasswordResetEmail(auth, target); setNotice(viaProvider ? 'If an account exists for that address, a password reset email is on its way.' : 'Password reset email sent.'); } catch (err: any) { setError(authMessage(err, 'Could not send the reset email.')); } finally { setLoading(false); } };
-  // Cooldown exists to protect the Firebase per-account email-send quota --
-  // spamming this button is the single easiest way to trigger the same
-  // auth/too-many-requests failure that made verification emails silently
-  // never arrive in the first place. It re-arms even on a failed send: a
-  // failure still consumed part of that quota.
-  const resendCooldownRemaining = Math.max(0, Math.ceil((resendCooldownUntil - Date.now()) / 1000));
-  useEffect(() => {
-    if (resendCooldownRemaining <= 0) return;
-    const timer = setInterval(() => setResendCooldownTick(t => t + 1), 1000);
-    return () => clearInterval(timer);
-  }, [resendCooldownRemaining > 0]);
-  const resendVerification = async () => {
-    const currentUser = auth?.currentUser;
-    if (!currentUser || currentUser.emailVerified || resendCooldownRemaining > 0) return;
-    setLoading(true); setError(''); setNotice('');
+
+  const google = async () => {
+    setBusy(true); setError('');
     try {
-      // sendVerificationWithRetry now tries the server itself, so every route
-      // that sends a verification link -- signup, sign-in while unverified,
-      // and this button -- goes through one path.
-      await sendVerificationWithRetry(currentUser);
-      setNotice('A fresh verification email has been sent.');
-    } catch (err: any) {
-      setError(authMessage(err, 'Could not resend the verification email.'));
-    } finally {
-      setResendCooldownUntil(Date.now() + RESEND_COOLDOWN_MS);
-      setLoading(false);
-    }
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: `${window.location.origin}/login` } });
+      if (oauthError) throw oauthError;
+    } catch (e) { setError(e instanceof Error ? e.message : 'Google sign-in failed.'); setBusy(false); }
   };
-  const busy = loading || googleLoading || mfaLoading;
 
-  if (mfaResolver) return <div className="min-h-screen flex items-center justify-center bg-[var(--spr-surface)] p-6 text-[var(--spr-text)]"><div className="w-full max-w-md space-y-5 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-7 shadow-2xl"><div className="text-center"><div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-[var(--spr-highlight)]/40 bg-[var(--spr-accent-soft)]"><KeyRound className="h-8 w-8 text-[var(--spr-highlight)]" /></div><h1 className="mt-5 text-2xl font-semibold">Verify your identity</h1><p className="mt-2 text-sm text-[var(--spr-text-muted)]">Open your authenticator app and enter the current 6-digit code.</p></div><label className="block text-sm font-semibold">Authenticator code<input autoFocus inputMode="numeric" autoComplete="one-time-code" maxLength={6} pattern="[0-9]{6}" value={mfaCode} onChange={e => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))} className="mt-2 w-full rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-4 py-4 text-center text-2xl tracking-[.45em] text-[var(--spr-text)] outline-none focus:border-[var(--spr-highlight)]/40" /></label>{error && <div role="alert" className="rounded-xl border border-red-400/20 bg-red-400/10 p-3 text-sm text-red-200"><AlertCircle className="mr-2 inline h-4 w-4" />{error}</div>}<button type="button" disabled={mfaLoading || mfaCode.length !== 6} onClick={submitMfa} className="w-full rounded-xl bg-[var(--spr-accent)] px-4 py-3.5 font-bold text-white disabled:opacity-50">{mfaLoading ? <Loader className="mx-auto h-5 w-5 animate-spin" /> : <>Verify and continue <ArrowRight className="ml-1 inline h-4 w-4" /></>}</button><button type="button" disabled={mfaLoading} onClick={() => { setMfaResolver(null); setMfaCode(''); setError(''); setNotice(''); }} className="w-full rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-4 py-3 text-sm font-semibold">Cancel sign-in</button></div></div>;
+  const title = mode === 'login' ? 'Sign in' : mode === 'signup' ? 'Create your SPR account' : 'Reset your password';
 
-  return <div className="min-h-screen flex items-center justify-center bg-[var(--spr-surface)] p-6 text-[var(--spr-text)]"><form onSubmit={submit} className="w-full max-w-md space-y-5 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-7 shadow-2xl" noValidate>
-    <div className="text-center">{brand ? (brand.logoDataUrl ? <img src={brand.logoDataUrl} alt={brand.productName} className="mx-auto h-20 w-auto object-contain" /> : null) : <img src="/brand/spr-logo.jpg" alt="Software Passport Registry" className="mx-auto h-28 w-auto drop-shadow-[0_4px_20px_rgba(0,0,0,0.35)]" />}<h1 className="mt-5 text-3xl font-semibold">{brand ? `Sign in to ${brand.productName}` : 'Sign in to SPR'}</h1><p className="mt-2 text-sm text-[var(--spr-text-muted)]">Use your work email or continue with Google.</p></div>
-    {stagedCount > 0 || stagedRepo ? <div className="rounded-xl border border-[var(--spr-highlight)]/30 bg-[var(--spr-accent-soft)]/10 p-4"><div className="flex gap-3"><Upload className="h-5 w-5 shrink-0 text-[var(--spr-highlight)]" /><div><div className="text-sm font-semibold">Your intake is waiting</div><p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">{stagedCount > 0 ? `${stagedCount} file(s)` : 'No files'}{stagedRepo ? ` + repository ${stagedRepo}` : ''} is secured in quarantine. Sign in to claim it.</p></div></div></div> : null}
-    {error && <div role="alert" className="rounded-xl border border-red-400/20 bg-red-400/10 p-3 text-sm text-red-200"><AlertCircle className="mr-2 inline h-4 w-4" />{error}</div>}
-    {notice && <div role="status" className="rounded-xl border border-[var(--spr-highlight)]/40 bg-[var(--spr-accent-soft)] p-3 text-sm text-cyan-100"><CheckCircle2 className="mr-2 inline h-4 w-4" />{notice}</div>}
-    <label className="block text-sm font-semibold">Email<input className="mt-2 w-full rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-4 py-3 text-[var(--spr-text)] outline-none focus:border-[var(--spr-highlight)]/40" type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} required /></label>
-    <label className="block text-sm font-semibold">Password<span className="relative mt-2 block"><input className="w-full rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-4 py-3 pr-12 text-[var(--spr-text)] outline-none focus:border-[var(--spr-highlight)]/40" type={showPassword ? 'text' : 'password'} autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} minLength={6} required /><button type="button" onClick={() => setShowPassword(v => !v)} aria-label={showPassword ? 'Hide password' : 'Show password'} className="absolute inset-y-0 right-0 px-4 text-[var(--spr-text-muted)]">{showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button></span></label>
-    <button type="submit" disabled={busy} className="w-full rounded-xl bg-[var(--spr-accent)] px-4 py-3.5 font-bold text-white disabled:opacity-50">{loading ? <Loader className="mx-auto h-5 w-5 animate-spin" /> : <>Sign in <ArrowRight className="ml-1 inline h-4 w-4" /></>}</button>
-    <button type="button" disabled={busy} onClick={register} className="w-full rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] px-4 py-3 font-semibold"><ShieldCheck className="mr-2 inline h-4 w-4" />Create account</button>
-    <button type="button" disabled={busy} onClick={google} className="w-full rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-4 py-3 font-semibold">{googleLoading ? <Loader className="mx-auto h-5 w-5 animate-spin" /> : 'Continue with Google'}</button>
-    <div className="flex justify-between text-xs"><button type="button" disabled={busy} onClick={reset} className="text-[var(--spr-highlight)]">Forgot password?</button><button type="button" disabled={busy || resendCooldownRemaining > 0} onClick={resendVerification} className="text-[var(--spr-text-muted)]">{resendCooldownRemaining > 0 ? `Resend verification (${resendCooldownRemaining}s)` : 'Resend verification'}</button></div>
-    <div className="flex justify-center gap-4 border-t border-[var(--spr-border)] pt-4 text-[11px] text-[var(--spr-text-faint)]"><a href="/terms">Terms of Service</a><a href="/privacy">Privacy Policy</a></div>
-  </form></div>;
+  return (
+    <main className="min-h-screen flex items-center justify-center px-6 py-12 bg-background text-foreground">
+      <section className="w-full max-w-md rounded-2xl border border-border bg-card p-7 shadow-xl">
+        <div className="mb-7 flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-primary-foreground"><ShieldCheck size={24} /></div>
+          <div><h1 className="text-xl font-semibold">{productName}</h1><p className="text-sm text-muted-foreground">Verify software before you trust it.</p></div>
+        </div>
+        <h2 className="mb-5 text-2xl font-semibold">{title}</h2>
+        {error && <div className="mb-4 flex gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm"><AlertCircle size={18} className="shrink-0" />{error}</div>}
+        {notice && <div className="mb-4 flex gap-2 rounded-lg border border-primary/30 bg-primary/10 p-3 text-sm"><CheckCircle2 size={18} className="shrink-0" />{notice}</div>}
+        {mode !== 'reset' && <button type="button" onClick={google} disabled={busy} className="mb-4 flex w-full items-center justify-center gap-2 rounded-lg border border-border px-4 py-3 font-medium hover:bg-muted disabled:opacity-50">Continue with Google</button>}
+        {mode !== 'reset' && <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground"><span className="h-px flex-1 bg-border" />OR<span className="h-px flex-1 bg-border" /></div>}
+        <form onSubmit={submit} className="space-y-4">
+          <label className="block text-sm font-medium">Email<input value={email} onChange={e => setEmail(e.target.value)} type="email" required autoComplete="email" className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-3 outline-none focus:ring-2 focus:ring-primary" /></label>
+          {mode !== 'reset' && <label className="block text-sm font-medium">Password<div className="relative mt-1"><input value={password} onChange={e => setPassword(e.target.value)} type={showPassword ? 'text' : 'password'} required minLength={8} autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} className="w-full rounded-lg border border-border bg-background px-3 py-3 pr-11 outline-none focus:ring-2 focus:ring-primary" /><button type="button" onClick={() => setShowPassword(v => !v)} className="absolute right-3 top-3 text-muted-foreground"><EyeOff size={18} /></button></div></label>}
+          <button disabled={busy} className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 font-semibold text-primary-foreground disabled:opacity-50">{busy ? <Loader className="animate-spin" size={18} /> : <ArrowRight size={18} />}{mode === 'login' ? 'Sign in' : mode === 'signup' ? 'Create account' : 'Send reset email'}</button>
+        </form>
+        <div className="mt-5 flex flex-wrap justify-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+          {mode === 'login' && <><button onClick={() => setMode('signup')} className="hover:text-foreground">Create account</button><button onClick={() => setMode('reset')} className="hover:text-foreground">Forgot password?</button></>}
+          {mode !== 'login' && <button onClick={() => { setMode('login'); setError(''); setNotice(''); }} className="hover:text-foreground">Back to sign in</button>}
+        </div>
+      </section>
+    </main>
+  );
 }
