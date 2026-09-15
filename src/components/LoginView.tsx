@@ -67,9 +67,23 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
   const google = async () => {
     setBusy(true); setError('');
     try {
-      const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: PRODUCTION_AUTH_REDIRECT, skipBrowserRedirect: false } });
-      if (error) throw error;
-    } catch (e) { setError(e instanceof Error ? e.message : 'Google sign-in failed.'); setBusy(false); }
+      const redirects = [
+        PRODUCTION_AUTH_REDIRECT,
+        `${window.location.origin}/login`,
+        undefined,
+      ];
+      let lastError: Error | null = null;
+      for (const redirectTo of redirects) {
+        const options = redirectTo ? { redirectTo, skipBrowserRedirect: false } : { skipBrowserRedirect: false };
+        const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options });
+        if (!error) return;
+        lastError = error;
+      }
+      throw lastError || new Error('Google sign-in failed.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Google sign-in failed.');
+      setBusy(false);
+    }
   };
 
   const title = mode === 'login' ? brandedSignInTitle : mode === 'signup' ? 'Create your SPR account' : 'Reset your password';
