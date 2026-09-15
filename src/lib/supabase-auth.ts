@@ -1,96 +1,25 @@
-import { createClient, type AuthChangeEvent, type Session, type User as SupabaseUser } from '@supabase/supabase-js';
+import { createClient, type AuthChangeEvent, type User as SupabaseUser } from '@supabase/supabase-js';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
-
+const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined) || 'https://kfpjjyrwzupiyhzjpbqo.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined) || 'sb_publishable_YXrFQ2Qr8M-CEYKZLIsbqQ_weZK--PR';
 export const supabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY);
-const client = createClient(SUPABASE_URL || 'https://invalid.supabase.local', SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_missing', { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
-export const supabase = client;
+export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
 
-export interface User {
-  uid: string;
-  email: string | null;
-  displayName: string;
-  emailVerified: boolean;
-  getIdToken: (forceRefresh?: boolean) => Promise<string>;
-  reload: () => Promise<void>;
-}
-
+export interface User { uid: string; email: string | null; displayName: string; emailVerified: boolean; getIdToken: (forceRefresh?: boolean) => Promise<string>; reload: () => Promise<void>; }
 function mapUser(user: SupabaseUser): User {
-  return {
-    uid: user.id,
-    email: user.email ?? null,
-    displayName: String(user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User'),
-    emailVerified: Boolean(user.email_confirmed_at),
-    getIdToken: async (forceRefresh = false) => {
-      if (forceRefresh) await supabase.auth.refreshSession();
-      const { data, error } = await supabase.auth.getSession();
-      if (error || !data.session?.access_token) throw error || new Error('No active authentication session.');
-      return data.session.access_token;
-    },
-    reload: async () => { await supabase.auth.getUser(); },
-  };
+  return { uid: user.id, email: user.email ?? null, displayName: String(user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User'), emailVerified: Boolean(user.email_confirmed_at), getIdToken: async (forceRefresh = false) => { if (forceRefresh) await supabase.auth.refreshSession(); const { data, error } = await supabase.auth.getSession(); if (error || !data.session?.access_token) throw error || new Error('No active authentication session.'); return data.session.access_token; }, reload: async () => { await supabase.auth.getUser(); } };
 }
-
 let currentUser: User | null = null;
 let initialized = false;
 void supabase.auth.getSession().then(({ data }) => { currentUser = data.session?.user ? mapUser(data.session.user) : null; initialized = true; }).catch(() => { initialized = true; });
-
-export const auth = {
-  get currentUser() { return currentUser; },
-  get initialized() { return initialized; },
-  async getIdToken(forceRefresh = false) { return currentUser?.getIdToken(forceRefresh) || ''; },
-  async signOut() { const { error } = await supabase.auth.signOut(); if (error) throw error; },
-};
-
-export function onAuthStateChanged(_auth: typeof auth, callback: (user: User | null) => void) {
-  let active = true;
-  void supabase.auth.getSession().then(({ data }) => { if (active) callback(data.session?.user ? mapUser(data.session.user) : null); });
-  const { data } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session) => { currentUser = session?.user ? mapUser(session.user) : null; if (active) callback(currentUser); });
-  return () => { active = false; data.subscription.unsubscribe(); };
-}
-
-export async function getRedirectResult(_auth: typeof auth) {
-  const { data, error } = await supabase.auth.getSession();
-  if (error) throw error;
-  return data.session?.user ? { user: mapUser(data.session.user) } : null;
-}
-
+export const auth = { get currentUser() { return currentUser; }, get initialized() { return initialized; }, async getIdToken(forceRefresh = false) { return currentUser?.getIdToken(forceRefresh) || ''; }, async signOut() { const { error } = await supabase.auth.signOut(); if (error) throw error; } };
+export function onAuthStateChanged(_auth: typeof auth, callback: (user: User | null) => void) { let active = true; void supabase.auth.getSession().then(({ data }) => { if (active) callback(data.session?.user ? mapUser(data.session.user) : null); }); const { data } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session) => { currentUser = session?.user ? mapUser(session.user) : null; if (active) callback(currentUser); }); return () => { active = false; data.subscription.unsubscribe(); }; }
+export async function getRedirectResult(_auth: typeof auth) { const { data, error } = await supabase.auth.getSession(); if (error) throw error; return data.session?.user ? { user: mapUser(data.session.user) } : null; }
 function authError(code: string, message: string) { return Object.assign(new Error(message), { code }); }
-
-export async function signInWithEmailAndPassword(_auth: typeof auth, email: string, password: string) {
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) {
-    const message = error.message.toLowerCase();
-    if (message.includes('email not confirmed')) throw authError('auth/email-not-verified', 'Email not confirmed');
-    if (message.includes('invalid login credentials')) throw authError('auth/invalid-credential', error.message);
-    throw authError('auth/network-request-failed', error.message);
-  }
-  if (!data.user) throw authError('auth/invalid-credential', 'Authentication did not return a user.');
-  currentUser = mapUser(data.user);
-  return { user: currentUser };
-}
-
-export async function createUserWithEmailAndPassword(_auth: typeof auth, email: string, password: string) {
-  const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: `${window.location.origin}/login` } });
-  if (error) {
-    if (error.message.toLowerCase().includes('already registered')) throw authError('auth/email-already-in-use', error.message);
-    if (error.message.toLowerCase().includes('password')) throw authError('auth/weak-password', error.message);
-    throw authError('auth/network-request-failed', error.message);
-  }
-  if (!data.user) throw authError('auth/invalid-credential', 'Account creation did not return a user.');
-  currentUser = data.session ? mapUser(data.user) : null;
-  return { user: mapUser(data.user) };
-}
-
+export async function signInWithEmailAndPassword(_auth: typeof auth, email: string, password: string) { const { data, error } = await supabase.auth.signInWithPassword({ email, password }); if (error) { const message = error.message.toLowerCase(); if (message.includes('email not confirmed')) throw authError('auth/email-not-verified', 'Email not confirmed'); if (message.includes('invalid login credentials')) throw authError('auth/invalid-credential', error.message); throw authError('auth/network-request-failed', error.message); } if (!data.user) throw authError('auth/invalid-credential', 'Authentication did not return a user.'); currentUser = mapUser(data.user); return { user: currentUser }; }
+export async function createUserWithEmailAndPassword(_auth: typeof auth, email: string, password: string) { const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: `${window.location.origin}/login` } }); if (error) { if (error.message.toLowerCase().includes('already registered')) throw authError('auth/email-already-in-use', error.message); if (error.message.toLowerCase().includes('password')) throw authError('auth/weak-password', error.message); throw authError('auth/network-request-failed', error.message); } if (!data.user) throw authError('auth/invalid-credential', 'Account creation did not return a user.'); currentUser = data.session ? mapUser(data.user) : null; return { user: mapUser(data.user) }; }
 export async function reload(user: User) { const { data, error } = await supabase.auth.getUser(); if (error) throw error; if (data.user?.id === user.uid) Object.assign(user, mapUser(data.user)); }
-
-export async function sendEmailVerification(user: User) {
-  if (!user.email) throw authError('auth/missing-email', 'The authenticated account has no email address.');
-  const { error } = await supabase.auth.resend({ type: 'signup', email: user.email, options: { emailRedirectTo: `${window.location.origin}/login` } });
-  if (error) throw authError('auth/network-request-failed', error.message);
-}
-
+export async function sendEmailVerification(user: User) { if (!user.email) throw authError('auth/missing-email', 'The account has no email address.'); const { error } = await supabase.auth.resend({ type: 'signup', email: user.email, options: { emailRedirectTo: `${window.location.origin}/login` } }); if (error) throw authError('auth/network-request-failed', error.message); }
 export async function sendPasswordResetEmail(_auth: typeof auth, email: string) { const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/login` }); if (error) throw authError('auth/network-request-failed', error.message); }
 export async function signOut(_auth: typeof auth) { await auth.signOut(); }
 export async function signInWithOAuth(provider: 'google' | 'github' = 'google') { const { error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo: `${window.location.origin}/login` } }); if (error) throw error; }
