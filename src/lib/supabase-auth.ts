@@ -1,6 +1,12 @@
 import { createClient, type AuthChangeEvent, type User as SupabaseUser } from '@supabase/supabase-js';
-const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined) || 'https://gezmtnleoyrudxztegoj.supabase.co';
-const SUPABASE_PUBLISHABLE_KEY = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined) || 'sb_publishable_MaRll_oRAt1JrrqLrd8M_g_DpFyhdkG';
+
+// Keep the compatibility auth adapter on the same verified production Supabase
+// project as the primary browser client. Vercel VITE_SUPABASE_* values are not
+// allowed to silently switch App.tsx onto a stale project and immediately log
+// the user back out after LoginView authenticates successfully.
+const SUPABASE_URL = 'https://gezmtnleoyrudxztegoj.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_MaRll_oRAt1JrrqLrd8M_g_DpFyhdkG';
+
 export const supabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY);
 export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
 export type User = any;
