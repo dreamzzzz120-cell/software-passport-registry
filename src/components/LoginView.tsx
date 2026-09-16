@@ -12,10 +12,28 @@ const PRODUCTION_AUTH_REDIRECT = 'https://www.softwarepassportregistry.com/login
 
 function getAuthRedirect() {
   if (typeof window === 'undefined') return PRODUCTION_AUTH_REDIRECT;
-  const origin = window.location.origin;
-  // Use the live browser origin first. This prevents Google/Supabase from receiving
-  // a redirect URL for a different SPR deployment or domain.
-  return `${origin}/login`;
+  return `${window.location.origin}/login`;
+}
+
+/**
+ * A Supabase session is authentication, not yet SPR authorization. The server
+ * provisions the workspace on first authenticated access. Do that here, with
+ * the exact access token that was just returned, before handing control back
+ * to App. This closes the race where App's auth-state listener could start its
+ * protected-data load before workspace provisioning finished.
+ */
+async function ensureWorkspace(accessToken: string, emailVerified: boolean): Promise<void> {
+  if (!emailVerified) return;
+  const headers = { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' };
+  const me = await fetch('/api/user/me', { headers });
+  if (me.ok) return;
+  if (me.status !== 403) return;
+
+  const provision = await fetch('/api/auth/workspace', { method: 'POST', headers, body: '{}' });
+  if (!provision.ok) {
+    const body = await provision.json().catch(() => null);
+    throw new Error(String(body?.error || 'Your account was authenticated, but SPR could not provision its workspace yet.'));
+  }
 }
 
 export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
@@ -32,7 +50,14 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
     const user = session.user;
     const token = session.access_token;
     if (!user?.id || !token) throw new Error('Supabase returned an invalid session.');
-    onLoginSuccess({ uid: user.id, email: user.email ?? null, displayName: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User', token, emailVerified: true, onboarded: 0 });
+    const emailVerified = Boolean(user.email_confirmed_at);
+    if (!emailVerified) {
+      setNotice('Check your email and confirm your account before signing in.');
+      await supabase.auth.signOut();
+      return;
+    }
+    await ensureWorkspace(token, emailVerified);
+    onLoginSuccess({ uid: user.id, email: user.email ?? null, displayName: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User', token, emailVerified, onboarded: 0 });
   };
 
   useEffect(() => {
@@ -60,9 +85,9 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
       }
       if (mode === 'signup') {
         if (password.length < 8) throw new Error('Password must be at least 8 characters.');
-        const { data, error } = await supabase.auth.signUp({ email: email.trim().toLowerCase(), password, options: { data: { full_name: email.trim().split('@')[0] } } });
+        const { data, error } = await supabase.auth.signUp({ email: email.trim().toLowerCase(), password, options: { data: { full_name: email.trim().split('@')[0] }, emailRedirectTo: getAuthRedirect() } });
         if (error) throw error;
-        if (data.session) await finishSession(data.session); else setNotice('Account created. You can sign in now.');
+        if (data.session) await finishSession(data.session); else setNotice('Account created. Check your email to verify it, then sign in.');
         return;
       }
       const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
@@ -75,8 +100,7 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
   const google = async () => {
     setBusy(true); setError('');
     try {
-      const redirectTo = getAuthRedirect();
-      const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo, skipBrowserRedirect: false } });
+      const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: getAuthRedirect() } });
       if (error) throw error;
     } catch (e) { setError(e instanceof Error ? e.message : 'Google sign-in failed.'); setBusy(false); }
   };
