@@ -15,20 +15,6 @@ function getAuthRedirect() {
   return `${window.location.origin}/login`;
 }
 
-async function ensureWorkspace(accessToken: string, emailVerified: boolean): Promise<void> {
-  if (!emailVerified) return;
-  const headers = { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' };
-  const me = await fetch('/api/user/me', { headers });
-  if (me.ok) return;
-  if (me.status !== 403) return;
-
-  const provision = await fetch('/api/auth/workspace', { method: 'POST', headers, body: '{}' });
-  if (!provision.ok) {
-    const body = await provision.json().catch(() => null);
-    throw new Error(String(body?.error || 'Your account was authenticated, but SPR could not provision its workspace yet.'));
-  }
-}
-
 export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
   const [mode, setMode] = useState<'login' | 'signup' | 'reset'>('login');
   const [email, setEmail] = useState('');
@@ -43,14 +29,7 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
     const user = session.user;
     const token = session.access_token;
     if (!user?.id || !token) throw new Error('Supabase returned an invalid session.');
-    const emailVerified = Boolean(user.email_confirmed_at);
-    if (!emailVerified) {
-      setNotice('Check your email and confirm your account before signing in.');
-      await supabase.auth.signOut();
-      return;
-    }
-    await ensureWorkspace(token, emailVerified);
-    onLoginSuccess({ uid: user.id, email: user.email ?? null, displayName: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User', token, emailVerified, onboarded: 0 });
+    onLoginSuccess({ uid: user.id, email: user.email ?? null, displayName: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User', token, emailVerified: Boolean(user.email_confirmed_at), onboarded: 0 });
   };
 
   useEffect(() => {
