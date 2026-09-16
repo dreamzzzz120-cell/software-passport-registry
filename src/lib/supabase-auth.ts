@@ -1,5 +1,5 @@
 import { createClient, type AuthChangeEvent, type User as SupabaseUser } from '@supabase/supabase-js';
-const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined) || 'https://kfpjjyrwzupiyhzjpbqo.supabase.co';
+const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined) || 'https://gezmtnleoyrudxztegoj.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined) || 'sb_publishable_YXrFQ2Qr8M-CEYKZLIsbqQ_weZK--PR';
 export const supabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY);
 export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
@@ -31,3 +31,5 @@ export const TotpMultiFactorGenerator = { FACTOR_ID: 'totp', generateSecret: asy
 export function multiFactor(_user: User): any { return { enrolledFactors: [], getSession: async () => { throw new Error('Authenticator enrollment is being migrated to Supabase MFA.'); }, enroll: async () => { throw new Error('Authenticator enrollment is being migrated to Supabase MFA.'); }, unenroll: async () => { throw new Error('Authenticator removal is being migrated to Supabase MFA.'); } }; }
 export async function reauthenticateWithCredential(user: User, credential: { email: string; password: string }) { return signInWithEmailAndPassword(auth, credential.email, credential.password); }
 export function getMultiFactorResolver(): any { return null; }
+
+
