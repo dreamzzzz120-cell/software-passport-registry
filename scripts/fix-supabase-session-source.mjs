@@ -3,6 +3,13 @@ import { readFile, writeFile } from 'node:fs/promises';
 const path = 'src/App.tsx';
 let source = await readFile(path, 'utf8');
 
+// Vercel builds start from a clean checkout, while local builds may run more
+// than once against the same working tree. Do not rewrite an already-patched
+// source file on subsequent builds.
+if (source.includes("import { supabase } from './lib/supabase';") && source.includes('type AppAuthUser =')) {
+  process.exit(0);
+}
+
 source = source.replace(
   "import { getRedirectResult, onAuthStateChanged, signOut, type User } from 'firebase/auth';",
   "import { supabase } from './lib/supabase';"
