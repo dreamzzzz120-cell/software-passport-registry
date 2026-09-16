@@ -54,6 +54,10 @@ export const apiFetch = async (input: RequestInfo | URL, init?: FetchOptions): P
     const sessionResult = await supabase.auth.getSession();
     const token = sessionResult.data.session?.access_token;
     if (token) headers.set('Authorization', `Bearer ${token}`);
+    else if (auth.currentUser) {
+      const fallbackToken = await auth.currentUser.getIdToken(false);
+      if (fallbackToken) headers.set('Authorization', `Bearer ${fallbackToken}`);
+    }
   } catch (err) {
     console.error('[API Client Supabase Session Retrieval Error]:', err);
   }
