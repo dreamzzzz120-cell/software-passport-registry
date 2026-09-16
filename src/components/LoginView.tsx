@@ -100,8 +100,19 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
   const google = async () => {
     setBusy(true); setError('');
     try {
-      const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: getAuthRedirect() } });
-      if (error) throw error;
+      const redirects = [
+        PRODUCTION_AUTH_REDIRECT,
+        `${window.location.origin}/login`,
+        undefined,
+      ];
+      let lastError: Error | null = null;
+      for (const redirectTo of redirects) {
+        const options = redirectTo ? { redirectTo, skipBrowserRedirect: false } : { skipBrowserRedirect: false };
+        const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options });
+        if (!error) return;
+        lastError = error;
+      }
+      throw lastError || new Error('Google sign-in failed.');
     } catch (e) { setError(e instanceof Error ? e.message : 'Google sign-in failed.'); setBusy(false); }
   };
 
