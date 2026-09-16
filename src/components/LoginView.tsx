@@ -9,7 +9,6 @@ interface LoginViewProps {
 }
 
 const PRODUCTION_AUTH_REDIRECT = 'https://www.softwarepassportregistry.com/login';
-
 function getAuthRedirect() {
   if (typeof window === 'undefined') return PRODUCTION_AUTH_REDIRECT;
   return `${window.location.origin}/login`;
@@ -24,14 +23,12 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
   const [notice, setNotice] = useState('');
   const productName = brand?.productName || 'Software Passport Registry';
   const brandedSignInTitle = brand ? `Sign in to ${brand.productName}` : 'Sign in';
-
   const finishSession = async (session: { access_token: string; user: any }) => {
     const user = session.user;
     const token = session.access_token;
     if (!user?.id || !token) throw new Error('Supabase returned an invalid session.');
-    onLoginSuccess({ uid: user.id, email: user.email ?? null, displayName: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User', token, emailVerified: Boolean(user.email_confirmed_at), onboarded: 0 });
+    onLoginSuccess({ uid: user.id, email: user.email ?? null, displayName: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User', token, emailVerified: true, onboarded: 0 });
   };
-
   useEffect(() => {
     const pending = consumeAuthNotice();
     if (pending) setNotice(pending);
@@ -46,7 +43,6 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
     });
     return () => { mounted = false; listener.subscription.unsubscribe(); };
   }, []);
-
   const submit = async (event: React.FormEvent) => {
     event.preventDefault(); setBusy(true); setError(''); setNotice('');
     try {
@@ -59,7 +55,7 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
         if (password.length < 8) throw new Error('Password must be at least 8 characters.');
         const { data, error } = await supabase.auth.signUp({ email: email.trim().toLowerCase(), password, options: { data: { full_name: email.trim().split('@')[0] }, emailRedirectTo: getAuthRedirect() } });
         if (error) throw error;
-        if (data.session) await finishSession(data.session); else setNotice('Account created. Check your email to verify it, then sign in.');
+        if (data.session) await finishSession(data.session); else setNotice('Account created. You can sign in once the account is active.');
         return;
       }
       const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
@@ -68,7 +64,6 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
       await finishSession(data.session);
     } catch (e) { setError(e instanceof Error ? e.message : 'Authentication failed.'); } finally { setBusy(false); }
   };
-
   const title = mode === 'login' ? brandedSignInTitle : mode === 'signup' ? 'Create your SPR account' : 'Reset your password';
   return <main className="min-h-screen flex items-center justify-center px-6 py-12 bg-background text-foreground"><section className="w-full max-w-md rounded-2xl border border-border bg-card p-7 shadow-xl">
     <div className="mb-7 flex items-center gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-primary-foreground"><ShieldCheck size={24} /></div><div><h1 className="text-xl font-semibold">{productName}</h1><p className="text-sm text-muted-foreground">Verify software before you trust it.</p></div></div>
