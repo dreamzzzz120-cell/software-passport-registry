@@ -41,3 +41,6 @@ rotate-*.sh
 
 # vitest artefacts copied under tests/
 tests/dist/
+
+.vercel
+.env*
