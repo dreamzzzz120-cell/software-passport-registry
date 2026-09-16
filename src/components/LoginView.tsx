@@ -29,7 +29,7 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
     const user = session.user;
     const token = session.access_token;
     if (!user?.id || !token) throw new Error('Supabase returned an invalid session.');
-    onLoginSuccess({ uid: user.id, email: user.email ?? null, displayName: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User', token, emailVerified: Boolean(user.email_confirmed_at), onboarded: 0 });
+    onLoginSuccess({ uid: user.id, email: user.email ?? null, displayName: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User', token, emailVerified: true, onboarded: 0 });
   };
 
   useEffect(() => {
@@ -59,7 +59,7 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
         if (password.length < 8) throw new Error('Password must be at least 8 characters.');
         const { data, error } = await supabase.auth.signUp({ email: email.trim().toLowerCase(), password, options: { data: { full_name: email.trim().split('@')[0] }, emailRedirectTo: getAuthRedirect() } });
         if (error) throw error;
-        if (data.session) await finishSession(data.session); else setNotice('Account created. Check your email to verify it, then sign in.');
+        if (data.session) await finishSession(data.session); else setNotice('Account created. You can sign in once the account is active.');
         return;
       }
       const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
