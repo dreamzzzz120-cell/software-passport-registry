@@ -12,10 +12,16 @@ const PRODUCTION_AUTH_REDIRECT = 'https://www.softwarepassportregistry.com/login
 
 function getAuthRedirect() {
   if (typeof window === 'undefined') return PRODUCTION_AUTH_REDIRECT;
-  const origin = window.location.origin;
-  // Use the live browser origin first. This prevents Google/Supabase from receiving
-  // a redirect URL for a different SPR deployment or domain.
-  return `${origin}/login`;
+  return `${window.location.origin}/login`;
+}
+
+function friendlyAuthError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error || 'Authentication failed.');
+  const lower = message.toLowerCase();
+  if (lower.includes('email not confirmed')) return 'Please verify your email address, then sign in again.';
+  if (lower.includes('invalid login credentials')) return 'Email or password is incorrect.';
+  if (lower.includes('user already registered')) return 'An account already exists for this email. Sign in instead.';
+  return message;
 }
 
 export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
@@ -32,7 +38,14 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
     const user = session.user;
     const token = session.access_token;
     if (!user?.id || !token) throw new Error('Supabase returned an invalid session.');
-    onLoginSuccess({ uid: user.id, email: user.email ?? null, displayName: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User', token, emailVerified: true, onboarded: 0 });
+    onLoginSuccess({
+      uid: user.id,
+      email: user.email ?? null,
+      displayName: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+      token,
+      emailVerified: Boolean(user.email_confirmed_at),
+      onboarded: 0,
+    });
   };
 
   useEffect(() => {
@@ -41,11 +54,11 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
     let mounted = true;
     supabase.auth.getSession().then(async ({ data }) => {
       if (!mounted || !data.session) return;
-      try { await finishSession(data.session); } catch (e) { if (mounted) setError(e instanceof Error ? e.message : 'Unable to restore your session.'); }
+      try { await finishSession(data.session); } catch (e) { if (mounted) setError(friendlyAuthError(e)); }
     });
     const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (!mounted || !session) return;
-      try { await finishSession(session); } catch (e) { if (mounted) setError(e instanceof Error ? e.message : 'Authentication failed.'); }
+      try { await finishSession(session); } catch (e) { if (mounted) setError(friendlyAuthError(e)); }
     });
     return () => { mounted = false; listener.subscription.unsubscribe(); };
   }, []);
@@ -53,32 +66,42 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
   const submit = async (event: React.FormEvent) => {
     event.preventDefault(); setBusy(true); setError(''); setNotice('');
     try {
+      const normalizedEmail = email.trim().toLowerCase();
       if (mode === 'reset') {
-        const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo: getAuthRedirect() });
+        const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, { redirectTo: getAuthRedirect() });
         if (error) throw error;
         setNotice('Password reset instructions sent if that email has an account.'); return;
       }
       if (mode === 'signup') {
         if (password.length < 8) throw new Error('Password must be at least 8 characters.');
-        const { data, error } = await supabase.auth.signUp({ email: email.trim().toLowerCase(), password, options: { data: { full_name: email.trim().split('@')[0] } } });
+        const { data, error } = await supabase.auth.signUp({
+          email: normalizedEmail,
+          password,
+          options: { data: { full_name: normalizedEmail.split('@')[0] }, emailRedirectTo: getAuthRedirect() },
+        });
         if (error) throw error;
-        if (data.session) await finishSession(data.session); else setNotice('Account created. You can sign in now.');
+        if (data.session) {
+          await finishSession(data.session);
+        } else {
+          setNotice('Account created. Check your email to verify the account, then sign in.');
+        }
         return;
       }
-      const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+      const { data, error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
       if (error) throw error;
       if (!data.session) throw new Error('Login succeeded but no session was returned.');
       await finishSession(data.session);
-    } catch (e) { setError(e instanceof Error ? e.message : 'Authentication failed.'); } finally { setBusy(false); }
+    } catch (e) {
+      setError(friendlyAuthError(e));
+    } finally { setBusy(false); }
   };
 
   const google = async () => {
-    setBusy(true); setError('');
+    setBusy(true); setError(''); setNotice('');
     try {
-      const redirectTo = getAuthRedirect();
-      const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo, skipBrowserRedirect: false } });
+      const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: getAuthRedirect(), skipBrowserRedirect: false } });
       if (error) throw error;
-    } catch (e) { setError(e instanceof Error ? e.message : 'Google sign-in failed.'); setBusy(false); }
+    } catch (e) { setError(friendlyAuthError(e)); setBusy(false); }
   };
 
   const title = mode === 'login' ? brandedSignInTitle : mode === 'signup' ? 'Create your SPR account' : 'Reset your password';
