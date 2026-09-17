@@ -81,7 +81,7 @@ export default function IntakeReviewWorkspace({ sessionId, createdAt, repo, onSt
   const allUploaded = items.length > 0 && items.every(item => ['UPLOADED', 'QUEUED'].includes(item.status.toUpperCase()));
   const analysisState = items.some(item => ['FAILED', 'ERROR'].includes(item.status.toUpperCase())) ? 'Attention required' : allUploaded ? 'Queued / awaiting analysis' : 'Pending intake completion';
 
-  const summaryCards: Array<[string, string, React.ComponentType<{ className?: string }>] > = [
+  const summaryCards: Array<[string, string, React.ComponentType<{ className?: string }>]> = [
     ['Review ID', shortId(sessionId), Fingerprint],
     ['Evidence files', String(items.length), FileText],
     ['Package size', formatBytes(totalSize), PackageCheck],
@@ -97,7 +97,7 @@ export default function IntakeReviewWorkspace({ sessionId, createdAt, repo, onSt
     {error && <div role="alert" className="mb-5 rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4 text-sm text-[var(--spr-text-muted)]">{error}</div>}
 
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      {summaryCards.map(([label, value, Icon]) => <div key={label} className="rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><Icon className="h-4 w-4 text-[var(--spr-highlight)]/><div className="mt-4 text-[10px] font-bold uppercase tracking-[.16em] text-[var(--spr-text-faint)]">{label}</div><div className="mt-1 break-all text-sm font-semibold">{value}</div></div>)}
+      {summaryCards.map(([label, value, Icon]) => <div key={label} className="rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><Icon className="h-4 w-4 text-[var(--spr-highlight)]"/><div className="mt-4 text-[10px] font-bold uppercase tracking-[.16em] text-[var(--spr-text-faint)]">{label}</div><div className="mt-1 break-all text-sm font-semibold">{value}</div></div>)}
     </div>
 
     <div className="mt-5 grid gap-5 lg:grid-cols-[1.15fr_.85fr]">
