@@ -397,11 +397,16 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
       const job = await response.json();
       const jobId = job.id;
 
-      // Start periodic real-evidence state polling
+      // Poll only the exact job that was created for this scan. Do not select
+      // `/api/scans[0]`: that can attach an unrelated tenant-scoped scan
+      // record to this job when another scan completed more recently.
       let pollInFlight = false;
+      let pollAttempts = 0;
+      const maxPollAttempts = 240; // 6 minutes at 1.5s intervals
       const interval = setInterval(async () => {
         if (pollInFlight) return;
         pollInFlight = true;
+        pollAttempts += 1;
         try {
           const [jobRes, logsRes] = await Promise.all([
             apiFetch(`/api/agent-jobs/${jobId}`),
@@ -414,24 +419,29 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
 
             if (currentJob) {
               setScanProgress(currentJob.progress || 0);
-              setScanLogs(logsList.map((l: any) => `[${l.level.toUpperCase()}] ${l.message}`));
+              setScanLogs(logsList.map((l: any) => `[${String(l.level || 'INFO').toUpperCase()}] ${l.message}`));
 
-              if (currentJob.status === 'Success' || currentJob.status === 'Completed' || currentJob.status === 'Failed') {
+              const terminal = ['Success', 'Completed', 'Failed'].includes(currentJob.status);
+              if (terminal) {
                 clearInterval(interval);
                 setIsScanning(false);
-                setScanCompleted(true);
+                setScanCompleted(currentJob.status !== 'Failed');
 
-                // Fetch latest scans list from backend and trigger state update
-                const refreshScansRes = await apiFetch('/api/scans');
-                if (refreshScansRes.ok) {
-                  const updatedScans = await refreshScansRes.json();
-                  const compiledScan = updatedScans[0];
-                  if (compiledScan) {
-                    onTriggerNewScan(compiledScan);
-                  }
+                // The job endpoint is authoritative for this run. Refresh the
+                // parent data instead of guessing which scan row belongs to it.
+                window.dispatchEvent(new CustomEvent('refresh-data'));
+                if (currentJob.status === 'Failed') {
+                  setScanLogs(l => [...l, `[ERROR] Scan job failed after ${currentJob.attemptCount ?? 0}/${currentJob.maxAttempts ?? 0} attempts.`]);
                 }
               }
             }
+          }
+
+          if (pollAttempts >= maxPollAttempts) {
+            clearInterval(interval);
+            setIsScanning(false);
+            setScanCompleted(false);
+            setScanLogs(l => [...l, '[ERROR] Scan status polling timed out. The backend job remains authoritative; refresh the page to inspect its current state.']);
           }
         } catch (pollErr) {
           console.error('Error polling agent job progress:', pollErr);
