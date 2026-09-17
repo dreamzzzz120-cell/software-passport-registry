@@ -1,201 +1,138 @@
-import TrustVectorPanel from './TrustVectorPanel';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle2, FileCheck2, Search, ShieldCheck, TriangleAlert } from 'lucide-react';
-import { apiFetch } from '../utils/apiClient';
-import SoftwareLineageTracker from './SoftwareLineageTracker';
-import SoftwareSectorsPanel from './SoftwareSectorsPanel';
-import TrustRoom from './trust/TrustRoom';
+import React, { useMemo, useState } from 'react';
+import { ArrowRight, CheckCircle2, Clock3, FileCheck2, Search, ShieldAlert, Users } from 'lucide-react';
+import type { Client, SoftwarePassport } from '../types';
 import type { VerificationDecisionState } from './trust/TrustStateBadge';
 import type { VerificationDecisionDetail } from './design/CommandCenter';
-import type { Client, SoftwarePassport, VerificationStatus } from '../types';
 
-// A score is never shown without its verification state -- unverified means
-// no evidence was ever resolved (not a trust score of 0), partial means some
-// evidence exists but not enough to call the conclusion settled, verified
-// means enough evidence was resolved to trust the number as-is.
-function verificationBadge(status: VerificationStatus): { label: string; className: string; textClassName: string } {
-  if (status === 'verified') return { label: 'Verified', className: 'border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-green)]', textClassName: 'text-[var(--spr-green)]' };
-  if (status === 'partial') return { label: 'Partially Verified', className: 'border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-amber)]', textClassName: 'text-[var(--spr-amber)]' };
-  return { label: 'Unverified', className: 'border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-text-muted)]', textClassName: 'text-[var(--spr-text-muted)]' };
-}
-
-interface PassportsViewProps {
+interface Props {
   passports: SoftwarePassport[];
-  selectedPassportId: string | null;
-  /** Authoritative decisions by passport id, from App's batch retrieval. */
-  verificationDecisions?: Record<string, VerificationDecisionState>;
-  /** Full authoritative decision objects, keyed by passport id. */
-  verificationDetails?: Record<string, VerificationDecisionDetail>;
-  setSelectedPassportId: (id: string | null) => void;
-  searchQuery: string;
-  onUpdatePassport?: (updatedPassport: SoftwarePassport) => void;
-  onNavigateTab?: (tab: string, itemId?: string) => void;
   clients?: Client[];
-  assets?: any[];
-  role?: string;
+  selectedPassportId: string | null;
+  setSelectedPassportId: (id: string | null) => void;
+  verificationDecisions?: Record<string, VerificationDecisionState>;
+  verificationDetails?: Record<string, VerificationDecisionDetail>;
+  onNavigateTab?: (tab: string, itemId?: string) => void;
 }
 
-export default function PassportsView({ passports, selectedPassportId, setSelectedPassportId, searchQuery, onNavigateTab, onUpdatePassport, clients = [], assets = [], role = 'Viewer', verificationDecisions, verificationDetails }: PassportsViewProps) {
-  // Matches backend gating exactly: POST /api/agent-jobs requires
-  // Owner/Admin/Operator (scans.ts); POST /api/trust-loop/remediations
-  // additionally allows Technician (server.ts requireTrustMutationRole).
-  const canRunAudit = ['Owner', 'Admin', 'Operator'].includes(role);
-  const canCreateRemediation = ['Owner', 'Admin', 'Operator', 'Technician'].includes(role);
-  const [tab, setTab] = useState<'catalog' | 'lineage' | 'sectors'>('catalog');
-  const [category, setCategory] = useState('all');
-  const [localQuery, setLocalQuery] = useState('');
-  const [auditText, setAuditText] = useState<string | null>(null);
-  const [auditBusy, setAuditBusy] = useState(false);
-  const [auditJob, setAuditJob] = useState<{ id: string; status: string; progress: number; result?: any } | null>(null);
-  const [auditLogs, setAuditLogs] = useState<{ id: number; level: string; message: string }[]>([]);
-  const auditPollRef = useRef<number | undefined>(undefined);
-  const [remediationBusy, setRemediationBusy] = useState<string | null>(null);
+type State = 'Verified' | 'Partial' | 'Unverified' | 'Evidence gap';
 
+function decisionState(passport: SoftwarePassport, decisions: Record<string, VerificationDecisionState>): State {
+  const decision = decisions[passport.id];
+  if (decision === 'verified') return 'Verified';
+  if (decision === 'partial') return 'Partial';
+  if ((passport.evidence?.length || 0) === 0) return 'Evidence gap';
+  return 'Unverified';
+}
+
+function stateClass(state: State) {
+  if (state === 'Verified') return 'text-[var(--spr-green)]';
+  if (state === 'Partial') return 'text-[var(--spr-amber)]';
+  if (state === 'Evidence gap') return 'text-[var(--spr-red)]';
+  return 'text-[var(--spr-text-muted)]';
+}
+
+function freshness(passport: SoftwarePassport): string {
+  const raw = (passport as any).lastVerifiedAt || (passport as any).updatedAt || (passport as any).updated_at || (passport as any).createdAt || (passport as any).created_at;
+  if (!raw) return 'Unknown';
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return 'Unknown';
+  const days = Math.floor((Date.now() - date.getTime()) / 86400000);
+  if (days <= 0) return 'Today';
+  if (days === 1) return '1 day';
+  return `${days} days`;
+}
+
+export default function PassportsCommandWorkspace({
+  passports,
+  clients = [],
+  selectedPassportId,
+  setSelectedPassportId,
+  verificationDecisions = {},
+  verificationDetails = {},
+  onNavigateTab,
+}: Props) {
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<'all' | 'attention' | 'verified' | 'gaps'>('all');
   const selected = useMemo(() => passports.find((p) => p.id === selectedPassportId) ?? null, [passports, selectedPassportId]);
-  const categories = useMemo(() => Array.from(new Set(passports.map((p) => p.category).filter(Boolean))), [passports]);
-  const filtered = useMemo(() => passports.filter((p) => {
-    const query = (localQuery || searchQuery).trim().toLowerCase();
-    const text = `${p.name ?? ''} ${p.publisher ?? ''} ${p.category ?? ''}`.toLowerCase();
-    return (!query || text.includes(query)) && (category === 'all' || p.category === category);
-  }), [passports, searchQuery, localQuery, category]);
-  const evidenceCount = passports.filter((passport) => passport.evidence?.length > 0).length;
-  const findingCount = passports.reduce((total, passport) => total + (passport.vulnerabilities?.length || 0), 0);
 
-  const stopAuditPolling = () => {
-    if (auditPollRef.current !== undefined) { window.clearInterval(auditPollRef.current); auditPollRef.current = undefined; }
-  };
+  const rows = useMemo(() => passports.filter((passport) => {
+    const state = decisionState(passport, verificationDecisions);
+    const text = `${passport.name || ''} ${passport.publisher || ''} ${passport.version || ''} ${passport.category || ''}`.toLowerCase();
+    const matchesQuery = !query.trim() || text.includes(query.trim().toLowerCase());
+    const matchesFilter = filter === 'all' || (filter === 'attention' && state !== 'Verified') || (filter === 'verified' && state === 'Verified') || (filter === 'gaps' && state === 'Evidence gap');
+    return matchesQuery && matchesFilter;
+  }), [passports, query, filter, verificationDecisions]);
 
-  // Job status/logs come from the same GET /api/agent-jobs/:id and
-  // /api/agent-jobs/:id/logs endpoints the background scanner writes to as
-  // it works, so this reflects real progress rather than a static
-  // "queued" message that never updates.
-  const pollAuditJob = async (jobId: string) => {
-    try {
-      const [jobResponse, logsResponse] = await Promise.all([
-        apiFetch(`/api/agent-jobs/${encodeURIComponent(jobId)}`),
-        apiFetch(`/api/agent-jobs/${encodeURIComponent(jobId)}/logs`),
-      ]);
-      if (jobResponse.ok) {
-        const job = await jobResponse.json();
-        setAuditJob(job);
-        if (!['Pending', 'Running'].includes(job.status)) stopAuditPolling();
-      }
-      if (logsResponse.ok) setAuditLogs(await logsResponse.json());
-    } catch {
-      // A single dropped poll isn't a job failure -- the interval keeps running.
-    }
-  };
-
-  useEffect(() => stopAuditPolling, []);
-
-  const runAudit = async () => {
-    if (!selected) return;
-    stopAuditPolling();
-    setAuditBusy(true); setAuditText(null); setAuditJob(null); setAuditLogs([]);
-    try {
-      const response = await apiFetch('/api/agent-jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ passportId: selected.id, agentId: 'comprehensive_scanner', jobType: 'osv_manifest_scan' }) });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) { setAuditText(data.error?.message || data.error || 'Not verified: audit request was rejected.'); return; }
-      const jobId = String(data.id ?? '');
-      if (!jobId) { setAuditText('Not verified: audit request did not return a job id.'); return; }
-      await pollAuditJob(jobId);
-      auditPollRef.current = window.setInterval(() => void pollAuditJob(jobId), 2000);
-    } catch {
-      setAuditText('Not verified: audit request failed.');
-    } finally { setAuditBusy(false); }
-  };
-
-  const createRemediation = async (vulnerability: any) => {
-    if (!selected) return;
-    const findingId = String(vulnerability.findingId ?? vulnerability.id ?? '');
-    if (!findingId) return;
-    setRemediationBusy(findingId);
-    try {
-      const response = await apiFetch('/api/trust-loop/remediations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          findingId,
-          title: `Remediation: ${String(vulnerability.title || findingId)}`,
-          description: String(vulnerability.remediation || vulnerability.description || 'Remediation requested from the Passport workflow.'),
-          priority: String(vulnerability.severity || 'HIGH').toUpperCase(),
-        }),
-      });
-      if (!response.ok) {
-        setAuditText('Remediation was not persisted: the vulnerability does not map to a server-side trust finding.');
-      } else {
-        setAuditText('Remediation persisted to the Trust Loop. Refresh the Passport to read the server-backed state.');
-      }
-    } catch {
-      setAuditText('Not verified: remediation persistence request failed.');
-    } finally { setRemediationBusy(null); }
-  };
+  const verified = passports.filter((p) => decisionState(p, verificationDecisions) === 'Verified').length;
+  const attention = passports.filter((p) => decisionState(p, verificationDecisions) !== 'Verified').length;
+  const evidenceGaps = passports.filter((p) => decisionState(p, verificationDecisions) === 'Evidence gap').length;
+  const evidenceCoverage = passports.length ? Math.round((passports.filter((p) => (p.evidence?.length || 0) > 0).length / passports.length) * 100) : 0;
+  const selectedClients = selected ? clients.filter((client) => String((client as any).id) === String((selected as any).clientId) || (client.softwareInventory || []).some((item: any) => String(item.passportId) === String(selected.id))) : [];
+  const selectedDecision = selected ? verificationDetails[selected.id] : undefined;
 
   return (
     <section className="space-y-6">
       <header className="spr-panel p-6 md:p-8">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div><div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--spr-amber)]"><ShieldCheck className="h-4 w-4" /> Evidence-first registry</div><h1 className="mt-3 text-3xl font-semibold tracking-tight text-[var(--spr-text)]">Software passport catalog</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--spr-text-muted)]">Observed software identities, evidence, findings, lineage and server-backed trust workflows. Missing evidence stays unverified.</p></div>
-          <button onClick={() => void runAudit()} disabled={!canRunAudit || !selected || auditBusy} title={!canRunAudit ? `Your ${role} role cannot run audits.` : undefined} className="spr-btn spr-btn-primary disabled:cursor-not-allowed disabled:opacity-50">{auditBusy ? 'Auditing…' : 'Run live audit'}</button>
-        </div>
-        <div className="mt-7 grid gap-3 sm:grid-cols-3"><PassportMetric icon={<FileCheck2 />} label="Passport records" value={passports.length} /><PassportMetric icon={<CheckCircle2 />} label="With evidence" value={evidenceCount} /><PassportMetric icon={<TriangleAlert />} label="Recorded findings" value={findingCount} /></div>
-        {auditText && <div className="mt-5 spr-panel-alt p-4 text-sm leading-6 text-[var(--spr-text)] whitespace-pre-wrap">{auditText}</div>}
-        {auditJob && (
-          <div className="mt-5 spr-panel-alt p-4">
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-sm font-semibold text-[var(--spr-text)]">Live audit: {auditJob.status}{['Pending', 'Running'].includes(auditJob.status) ? '…' : ''}</span>
-              <span className="text-xs text-[var(--spr-text-muted)]">{auditJob.progress ?? 0}%</span>
-            </div>
-            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--spr-surface-sunken)]">
-              <div className="h-full rounded-full bg-[var(--spr-accent)] transition-all" style={{ width: `${Math.max(0, Math.min(100, auditJob.progress ?? 0))}%` }} />
-            </div>
-            {auditLogs.length > 0 && (
-              <ul className="mt-4 max-h-40 space-y-1 overflow-y-auto font-mono text-[11px] leading-5 text-[var(--spr-text-muted)]">
-                {auditLogs.map((log) => <li key={log.id}><span className="text-[var(--spr-text-faint)]">[{log.level}]</span> {log.message}</li>)}
-              </ul>
-            )}
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--spr-amber)]"><FileCheck2 className="h-4 w-4" /> Passport operations</div>
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight text-[var(--spr-text)]">Passport command center</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--spr-text-muted)]">Manage software trust records by verification state, evidence posture, client relationships and freshness. Evidence gaps remain visible instead of being converted into a reassuring score.</p>
           </div>
-        )}
+          <button onClick={() => onNavigateTab?.('/scans')} className="spr-btn spr-btn-primary">Run or review scans <ArrowRight className="h-4 w-4" /></button>
+        </div>
+        <div className="mt-7 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <Metric icon={<FileCheck2 />} label="Passports" value={passports.length} />
+          <Metric icon={<CheckCircle2 />} label="Verified" value={verified} />
+          <Metric icon={<ShieldAlert />} label="Needs attention" value={attention} />
+          <Metric icon={<ShieldAlert />} label="Evidence gaps" value={evidenceGaps} />
+          <Metric icon={<Clock3 />} label="Evidence coverage" value={`${evidenceCoverage}%`} />
+        </div>
       </header>
 
-      <div className="flex flex-wrap items-center gap-2">
-        {(['catalog', 'lineage', 'sectors'] as const).map((item) => <button key={item} onClick={() => setTab(item)} className={`rounded-md border px-3 py-2 text-xs font-semibold ${tab === item ? 'border-[var(--spr-border)] bg-[var(--spr-accent-soft)] text-white' : 'border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-text-muted)]'}`}>{item === 'catalog' ? 'Catalog' : item === 'lineage' ? 'Lineage' : 'Sectors'}</button>)}
-        {tab === 'catalog' && <><label className="flex min-w-56 items-center gap-2 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2"><Search className="h-4 w-4 text-[var(--spr-text-faint)]" /><input value={localQuery} onChange={(event) => setLocalQuery(event.target.value)} placeholder="Search name, publisher, category" aria-label="Search passports" className="min-w-0 flex-1 bg-transparent text-xs text-[var(--spr-text)] outline-none placeholder:text-[var(--spr-text-faint)]" /></label><select value={category} onChange={(e) => setCategory(e.target.value)} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]"><option value="all">All categories</option>{categories.map((item) => <option key={String(item)} value={String(item)}>{String(item)}</option>)}</select></>}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-wrap gap-2">
+          {([['all', 'All'], ['attention', 'Needs attention'], ['verified', 'Verified'], ['gaps', 'Evidence gaps']] as const).map(([key, label]) => (
+            <button key={key} onClick={() => setFilter(key)} className={`rounded-md border px-3 py-2 text-xs font-semibold ${filter === key ? 'border-[var(--spr-border)] bg-[var(--spr-accent-soft)] text-white' : 'border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-text-muted)]'}`}>{label}</button>
+          ))}
+        </div>
+        <label className="flex min-w-64 items-center gap-2 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2"><Search className="h-4 w-4 text-[var(--spr-text-faint)]" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search passports" aria-label="Search passports" className="min-w-0 flex-1 bg-transparent text-xs text-[var(--spr-text)] outline-none placeholder:text-[var(--spr-text-faint)]" /></label>
       </div>
 
-      {tab === 'lineage' ? <SoftwareLineageTracker passports={passports} clients={clients} assets={assets} onUpdatePassport={onUpdatePassport} /> : tab === 'sectors' ? <SoftwareSectorsPanel passports={passports} onFilterCategory={(value) => { setCategory(value); setTab('catalog'); }} onNavigateTab={onNavigateTab} setSelectedPassportId={setSelectedPassportId} /> : <>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {filtered.map((passport) => { const badge = verificationBadge(passport.verificationStatus); return <button key={passport.id} onClick={() => setSelectedPassportId(passport.id)} className={`rounded-md border p-5 text-left transition ${selectedPassportId === passport.id ? 'border-[var(--spr-border)] bg-[var(--spr-accent-soft)]' : 'border-[var(--spr-border)] bg-[var(--spr-surface-alt)] hover:bg-[var(--spr-surface-sunken)]'}`}><div className="flex items-start justify-between gap-3"><span className="grid h-9 w-9 place-items-center rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)]"><FileCheck2 className="h-4 w-4 text-[var(--spr-highlight)]" /></span><span className={`rounded-full border px-2 py-1 text-[12px] font-semibold ${badge.className}`}>{badge.label}</span></div><div className="mt-4 text-sm font-semibold text-[var(--spr-text)]">{passport.name || 'Unnamed software'}</div><div className="mt-1 truncate text-xs text-[var(--spr-text-muted)]">{passport.version || 'Version not observed'} · {passport.publisher || 'Publisher not observed'}</div><div className="mt-4 grid grid-cols-2 gap-2 text-[11px]"><span className="rounded border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2 py-2 text-[var(--spr-text-muted)]">Overall <strong className="float-right text-[var(--spr-text)]">{passport.overallScore ?? '—'}</strong></span><span className="rounded border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2 py-2 text-[var(--spr-text-muted)]">Evidence <strong className="float-right text-[var(--spr-text)]">{passport.evidenceCompleteness == null ? '—' : `${passport.evidenceCompleteness}%`}</strong></span></div></button>; })}
-          {filtered.length === 0 && <div className="rounded-md border border-dashed border-[var(--spr-border)] p-12 text-center md:col-span-2 xl:col-span-3"><FileCheck2 className="mx-auto h-8 w-8 text-[var(--spr-text-faint)]" /><p className="mt-3 text-sm font-semibold text-[var(--spr-text)]">No passport records match this view.</p><p className="mt-1 text-xs text-[var(--spr-text-faint)]">Adjust the search or category filter.</p></div>}
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="overflow-hidden rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)]">
+          <div className="grid grid-cols-[minmax(180px,1.4fr)_120px_110px_110px_100px_110px] gap-3 border-b border-[var(--spr-border)] px-4 py-3 text-[10px] font-semibold uppercase tracking-[.08em] text-[var(--spr-text-faint)]">
+            <span>Software</span><span>Clients</span><span>Passport</span><span>Evidence</span><span>Findings</span><span>Freshness</span>
+          </div>
+          {rows.map((passport) => {
+            const state = decisionState(passport, verificationDecisions);
+            const linkedClients = clients.filter((client) => String((client as any).id) === String((passport as any).clientId) || (client.softwareInventory || []).some((item: any) => String(item.passportId) === String(passport.id))).length;
+            return <button key={passport.id} onClick={() => setSelectedPassportId(passport.id)} className={`grid w-full grid-cols-[minmax(180px,1.4fr)_120px_110px_110px_100px_110px] gap-3 border-b border-[var(--spr-border)] px-4 py-4 text-left last:border-b-0 hover:bg-[var(--spr-surface-sunken)] ${selectedPassportId === passport.id ? 'bg-[var(--spr-accent-soft)]' : ''}`}>
+              <span className="min-w-0"><strong className="block truncate text-sm text-[var(--spr-text)]">{passport.name || 'Unnamed software'}</strong><span className="mt-1 block truncate text-[11px] text-[var(--spr-text-muted)]">{passport.publisher || 'Publisher not observed'} · {passport.version || 'Version not observed'}</span></span>
+              <span className="text-xs text-[var(--spr-text-muted)]">{linkedClients}</span>
+              <span className={`text-xs font-semibold ${stateClass(state)}`}>{state}</span>
+              <span className="text-xs text-[var(--spr-text-muted)]">{passport.evidence?.length || 0}</span>
+              <span className="text-xs text-[var(--spr-text-muted)]">{passport.vulnerabilities?.length || 0}</span>
+              <span className="text-xs text-[var(--spr-text-muted)]">{freshness(passport)}</span>
+            </button>;
+          })}
+          {rows.length === 0 && <div className="p-12 text-center"><FileCheck2 className="mx-auto h-8 w-8 text-[var(--spr-text-faint)]" /><p className="mt-3 text-sm font-semibold text-[var(--spr-text)]">No passports match this view.</p></div>}
         </div>
 
-        {selected && (
-          <TrustRoom
-            passport={selected}
-            verificationDecision={verificationDecisions?.[selected.id]}
-            verificationExplanation={verificationDetails?.[selected.id]?.decision?.explanation}
-            verificationPolicyVersion={verificationDetails?.[selected.id]?.decision?.policyVersion}
-            verificationReasonCodes={verificationDetails?.[selected.id]?.decision?.reasonCodes}
-            verificationTargetIdentity={verificationDetails?.[selected.id]?.decision?.targetIdentity}
-            verificationCounts={verificationDetails?.[selected.id]?.counts}
-            client={clients.find((c) => (c.softwareInventory || []).some((item) => item.passportId === selected.id))}
-            canRunAudit={canRunAudit}
-            auditBusy={auditBusy}
-            onRunAudit={() => void runAudit()}
-            canCreateRemediation={canCreateRemediation}
-            remediationBusy={remediationBusy}
-            onCreateRemediation={(v) => void createRemediation(v)}
-            onNavigateTab={(target, itemId) => onNavigateTab?.(target, itemId)}
-            onViewLineage={() => setTab('lineage')}
-            canSharePassport={['Owner', 'Admin', 'Operator'].includes(role)}
-          />
-        )}
-        {selected && <TrustVectorPanel passportId={selected.id} />}
-      </>}
+        <aside className="spr-panel p-5">
+          {!selected ? <div className="grid min-h-80 place-items-center text-center"><div><FileCheck2 className="mx-auto h-8 w-8 text-[var(--spr-text-faint)]" /><p className="mt-3 text-sm font-semibold text-[var(--spr-text)]">Select a passport</p><p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">The operating panel will show trust posture, evidence, clients and next actions.</p></div></div> : <>
+            <div className="flex items-start justify-between gap-3"><div><div className="text-[10px] font-semibold uppercase tracking-[.08em] text-[var(--spr-text-faint)]">Selected software</div><h2 className="mt-2 text-xl font-semibold text-[var(--spr-text)]">{selected.name || 'Unnamed software'}</h2><p className="mt-1 text-xs text-[var(--spr-text-muted)]">{selected.publisher || 'Publisher not observed'} · {selected.version || 'Version not observed'}</p></div><span className={`text-xs font-semibold ${stateClass(decisionState(selected, verificationDecisions))}`}>{decisionState(selected, verificationDecisions)}</span></div>
+            <div className="mt-5 grid grid-cols-2 gap-2 text-xs"><Detail label="Evidence" value={String(selected.evidence?.length || 0)} /><Detail label="Findings" value={String(selected.vulnerabilities?.length || 0)} /><Detail label="Freshness" value={freshness(selected)} /><Detail label="Policy" value={selectedDecision?.decision?.policyVersion || '—'} /></div>
+            <div className="mt-5 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] p-4"><div className="flex items-center gap-2 text-xs font-semibold text-[var(--spr-text)]"><Users className="h-4 w-4" /> Linked clients</div>{selectedClients.length ? <ul className="mt-3 space-y-2">{selectedClients.map((client) => <li key={client.id} className="text-xs text-[var(--spr-text-muted)]">{client.name}</li>)}</ul> : <p className="mt-2 text-xs text-[var(--spr-text-faint)]">No client relationship is currently observed.</p>}</div>
+            <div className="mt-5 space-y-2"><Action label="Open full Passport workflow" onClick={() => onNavigateTab?.('/registry', selected.id)} /><Action label="View evidence" onClick={() => onNavigateTab?.('/evidence-explorer', selected.id)} /><Action label="Open monitoring" onClick={() => onNavigateTab?.('/monitoring', selected.id)} /><Action label="View linked clients" onClick={() => onNavigateTab?.('/clients', selectedClients[0]?.id)} /></div>
+            <p className="mt-4 text-[11px] leading-5 text-[var(--spr-text-faint)]">Observed evidence and authoritative verification are separate. A missing decision is not treated as verification.</p>
+          </>}
+        </aside>
+      </div>
     </section>
   );
 }
 
-function PassportMetric({ icon, label, value }: { icon: React.ReactNode; label: string; value: number }) {
-  return <div className="spr-panel-alt p-4"><div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--spr-text-faint)]"><span className="h-4 w-4 text-[var(--spr-highlight)]">{icon}</span>{label}</div><div className="mt-3 text-2xl font-semibold text-[var(--spr-text)]">{value}</div></div>;
-}
+function Metric({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) { return <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] p-4"><div className="flex items-center gap-2 text-[var(--spr-text-faint)]">{icon}<span className="text-[11px]">{label}</span></div><div className="mt-2 text-2xl font-semibold text-[var(--spr-text)]">{value}</div></div>; }
+function Detail({ label, value }: { label: string; value: string }) { return <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] p-3"><div className="text-[10px] uppercase tracking-[.06em] text-[var(--spr-text-faint)]">{label}</div><div className="mt-1 text-sm font-semibold text-[var(--spr-text)]">{value}</div></div>; }
+function Action({ label, onClick }: { label: string; onClick: () => void }) { return <button onClick={onClick} className="flex w-full items-center justify-between rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-3 text-xs font-semibold text-[var(--spr-text)] hover:bg-[var(--spr-surface-alt)]"><span>{label}</span><ArrowRight className="h-4 w-4 text-[var(--spr-text-faint)]" /></button>; }
