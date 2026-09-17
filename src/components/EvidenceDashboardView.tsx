@@ -34,8 +34,15 @@ export default function EvidenceDashboardView({ clients, alerts, scans, passport
   ].slice(0, 6), [activeAlerts, findings]);
 
   return <div className="space-y-6 pb-10">
-    {clients.length === 0 && <PilotOnboardingChecklist clientsCount={clients.length} passportsCount={passports.length} scansCount={scans.length} onOpenQuickAction={onOpenQuickAction} onNavigateTab={onNavigateTab} />}
-
+    {clients.length === 0 && (
+      <PilotOnboardingChecklist
+        clientsCount={clients.length}
+        passportsCount={passports.length}
+        scansCount={scans.length}
+        onOpenQuickAction={onOpenQuickAction}
+        onNavigateTab={onNavigateTab}
+      />
+    )}
     <section className="spr-panel p-6 md:p-9"><div className="grid gap-8 xl:grid-cols-[1.35fr_.65fr] xl:items-end"><div>
       <div className="mb-4 flex flex-wrap gap-2 text-[11px] font-bold uppercase tracking-[.2em] text-[var(--spr-highlight)]"><span className="rounded-sm border border-[var(--spr-border)] bg-[var(--spr-accent-soft)] px-3 py-1.5">SPR Overview</span><span className="rounded-sm border border-[var(--spr-border)] px-3 py-1.5 text-[var(--spr-text-faint)]">Evidence-first</span></div>
       <h1 className="max-w-4xl text-4xl font-semibold tracking-[-.045em] md:text-6xl">Your software trust system, at a glance.</h1>

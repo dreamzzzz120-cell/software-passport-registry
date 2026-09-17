@@ -82,6 +82,11 @@ export default function TrustGraphView({ clients = [], passports = [], assets = 
       }
       assets.forEach((asset) => { if (asset.clientId && asset.clientId === clientId && clientId) addEdge(`client:${clientId}`, `asset:${asset.id}`, 'owns'); });
 
+      // Never infer Passport → Asset from matching names or IDs. An apparent
+      // match is not evidence of identity or ownership. Asset relationships
+      // are rendered only when an authoritative persisted FK is supplied by
+      // the graph data model; this component currently has no such field.
+
       const evidence = Array.isArray(passport.evidence) ? passport.evidence : [];
       evidence.slice(0, MAX_EVIDENCE_PER_PASSPORT).forEach((item: any, evidenceIndex) => {
         const id = `evidence:${passport.id}:${String(item.id || evidenceIndex)}`;
@@ -92,11 +97,28 @@ export default function TrustGraphView({ clients = [], passports = [], assets = 
       const components = Array.isArray(passport.sbom) ? passport.sbom : [];
       const vulnerableNames = new Set((passport.vulnerabilities || []).map((item: any) => item.component));
       const riskComponents = components.filter((item: any) => item.trustLevel !== 'Trusted' || vulnerableNames.has(item.name));
-      riskComponents.slice(0, MAX_COMPONENTS_PER_PASSPORT).forEach((component: any, componentIndex) => {
+      // Rendering every SBOM component would overwhelm the graph for large
+      // manifests, so only components that are flagged or tied to a known
+      // vulnerability get their own node — the rest are summarized in the
+      // passport's own detail text rather than fabricated as "safe" nodes.
+      const shownComponents = riskComponents.slice(0, MAX_COMPONENTS_PER_PASSPORT);
+      shownComponents.forEach((component: any, componentIndex) => {
         const id = `component:${passport.id}:${slug(component.name || String(componentIndex))}`;
         addNode({ id, label: short(component.name, 'Component'), kind: 'component', detail: `${safeText(component.dependencyType, 'dependency')} · ${safeText(component.trustLevel, 'trust level unavailable')}`, meta: component.purl ? String(component.purl) : undefined, x: 650, y: 50 + ((passportIndex * 3 + componentIndex) % 9) * 72 });
         addEdge(passportId, id, 'contains');
       });
+      const trustedHidden = components.length - riskComponents.length;
+      const riskHidden = riskComponents.length - shownComponents.length;
+      if (trustedHidden > 0 || riskHidden > 0) {
+        const passportNode = graphNodes.find((node) => node.id === passportId);
+        if (passportNode) {
+          const notes = [
+            trustedHidden > 0 && `${trustedHidden} additional trusted component${trustedHidden === 1 ? '' : 's'} not shown`,
+            riskHidden > 0 && `${riskHidden} further flagged component${riskHidden === 1 ? '' : 's'} not shown`,
+          ].filter(Boolean);
+          passportNode.detail = `${passportNode.detail} · ${notes.join(' · ')}`;
+        }
+      }
 
       (passport.vulnerabilities || []).slice(0, MAX_VULNERABILITIES_PER_PASSPORT).forEach((vuln: any, vulnIndex) => {
         const id = `vulnerability:${passport.id}:${String(vuln.id || vulnIndex)}`;

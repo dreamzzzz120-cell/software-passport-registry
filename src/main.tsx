@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import ExperienceAgent from './components/ExperienceAgent';
+import SoftwareWorkspaceView from './components/SoftwareWorkspaceView';
 import './index.css';
 import './styles/spr-shell.css';
 import './styles/command-center.css';
@@ -14,6 +15,8 @@ if (!root) throw new Error('SPR bootstrap failed: #root element is missing from 
 installPageViewTracking();
 
 function SprApplication() {
+  const path = window.location.pathname.replace(/\/+$/, '') || '/';
+  if (path === '/software/workspace') return <SoftwareWorkspaceView />;
   return (<><App /><ExperienceAgent /></>);
 }
 
