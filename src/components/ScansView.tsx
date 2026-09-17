@@ -141,6 +141,13 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
   };
 
   const handleDeleteSchedule = async (id: string) => {
+    if (!canManageSchedules) return;
+    const schedule = schedules.find(s => s.id === id);
+    if (!schedule) return;
+    const confirmed = window.confirm(
+      `Delete the automated scan schedule for "${schedule.assetHostName}"? This stops future scheduled runs and cannot be undone.`,
+    );
+    if (!confirmed) return;
     try {
       const response = await apiFetch(`/api/scans/schedules/${id}`, {
         method: 'DELETE'
