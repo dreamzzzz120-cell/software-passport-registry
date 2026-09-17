@@ -30,6 +30,10 @@
       "destination": "https://spr-app-staging-production.up.railway.app/software"
     },
     {
+      "source": "/software/workspace",
+      "destination": "/index.html"
+    },
+    {
       "source": "/software/:path*",
       "destination": "https://spr-app-staging-production.up.railway.app/software/:path*"
     },
