@@ -65,11 +65,6 @@
       "description": "The security controls implemented in Software Passport Registry: tenant isolation, authentication boundaries, evidence integrity and responsible disclosure."
     },
     {
-      "path": "/security-center/",
-      "title": "Security Center — Software Passport Registry",
-      "description": "Review Software Passport Registry's public security center, including documented controls, product boundaries, infrastructure and responsible disclosure information."
-    },
-    {
       "path": "/contact/",
       "title": "Contact Software Passport Registry",
       "description": "Contact Software Passport Registry for product questions, security reports, partnership discussions, MSP pilots and other business inquiries."
