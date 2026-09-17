@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Radar, Upload, Clock, CheckCircle2, AlertCircle, FileCode, Sliders, Play, Calendar, Shield, ShieldCheck, Plus, Trash2, Pause, TrendingUp, Activity, Info } from 'lucide-react';
+import { Radar, Upload, Clock, CheckCircle2, AlertCircle, FileCode, Sliders, Play, Calendar, Shield, ShieldCheck, Plus, Trash2, Pause, TrendingUp, Activity, Info, RefreshCw, ChevronRight } from 'lucide-react';
 import { Scan, Client } from '../types';
 import { apiFetch } from '../utils/apiClient';
 import NewReviewIntake from './NewReviewIntake';
@@ -63,6 +63,47 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
       return isoString;
     }
   };
+
+  // Durable Failure History: this reads the authoritative agent job ledger rather than
+  // reconstructing status from the transient scanner console.
+  const [jobHistory, setJobHistory] = useState<any[]>([]);
+  const [loadingJobHistory, setLoadingJobHistory] = useState(false);
+  const [jobHistoryError, setJobHistoryError] = useState('');
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [jobLogs, setJobLogs] = useState<any[]>([]);
+  const [loadingJobLogs, setLoadingJobLogs] = useState(false);
+
+  const fetchJobHistory = async () => {
+    setLoadingJobHistory(true);
+    setJobHistoryError('');
+    try {
+      const response = await apiFetch('/api/agent-jobs');
+      if (!response.ok) throw new Error('Unable to load scan history.');
+      const data = await response.json();
+      setJobHistory(Array.isArray(data) ? data : []);
+    } catch (error) {
+      setJobHistoryError(error instanceof Error ? error.message : 'Unable to load scan history.');
+    } finally {
+      setLoadingJobHistory(false);
+    }
+  };
+
+  const fetchJobLogs = async (jobId: string) => {
+    setSelectedJobId(jobId);
+    setLoadingJobLogs(true);
+    try {
+      const response = await apiFetch('/api/agent-jobs/' + encodeURIComponent(jobId) + '/logs');
+      if (!response.ok) throw new Error('Unable to load job timeline.');
+      const data = await response.json();
+      setJobLogs(Array.isArray(data) ? data : []);
+    } catch {
+      setJobLogs([]);
+    } finally {
+      setLoadingJobLogs(false);
+    }
+  };
+
+  useEffect(() => { fetchJobHistory(); }, []);
 
   // Sub-tab Navigation: 'scanner' | 'schedules'
   const [activeSubTab, setActiveSubTab] = useState<'scanner' | 'schedules'>('scanner');
@@ -493,6 +534,43 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
           </button>
         )}
       </div>
+
+      {/* Durable Agent Job / Failure History */}
+      <section className="bg-[var(--spr-surface-sunken)] rounded-xl border border-[var(--spr-border)] shadow-sm overflow-hidden" id="scan-failure-history">
+        <div className="px-5 py-4 border-b border-[var(--spr-border)] flex items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[var(--spr-text)]"><Activity className="w-4 h-4" /> Failure History & Run Ledger</div>
+            <p className="mt-1 text-[11px] text-[var(--spr-text-muted)]">Authoritative background-job state, attempts, failures, and worker timeline.</p>
+          </div>
+          <button type="button" onClick={fetchJobHistory} disabled={loadingJobHistory} className="px-2.5 py-1.5 rounded-lg border border-[var(--spr-border)] text-[11px] font-bold flex items-center gap-1.5 hover:bg-[var(--spr-accent-soft)] disabled:opacity-50">
+            <RefreshCw className={loadingJobHistory ? 'w-3.5 h-3.5 animate-spin' : 'w-3.5 h-3.5'} /> Refresh
+          </button>
+        </div>
+        {jobHistoryError ? <div className="px-5 py-3 text-xs text-[var(--spr-red)] border-b border-[var(--spr-border)]">{jobHistoryError}</div> : null}
+        {loadingJobHistory && jobHistory.length === 0 ? <div className="px-5 py-6 text-xs text-[var(--spr-text-muted)]">Loading authoritative run history…</div> : null}
+        {!loadingJobHistory && !jobHistoryError && jobHistory.length === 0 ? <div className="px-5 py-6 text-xs text-[var(--spr-text-muted)]">No background scan jobs recorded for this tenant.</div> : null}
+        {jobHistory.length > 0 ? <div className="divide-y divide-[var(--spr-border)]">
+          {jobHistory.slice(0, 10).map((job) => {
+            const failed = String(job.status).toLowerCase() === 'failed';
+            const retryable = failed && Number(job.attemptCount ?? 0) < Number(job.maxAttempts ?? 0);
+            const stateLabel = failed ? (retryable ? 'Retryable failure' : 'Permanent / exhausted') : String(job.status || 'Unknown');
+            return <button type="button" key={job.id} onClick={() => fetchJobLogs(job.id)} className="w-full text-left px-5 py-3 hover:bg-[var(--spr-accent-soft)] transition-colors">
+              <div className="flex items-center gap-3">
+                <span className="w-2 h-2 rounded-full shrink-0 ${failed ? 'bg-[var(--spr-red)]' : String(job.status).toLowerCase().includes('running') ? 'bg-[var(--spr-amber)]' : 'bg-[var(--spr-highlight)]'}" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-[var(--spr-text)]"><span>{stateLabel}</span><span className="font-mono text-[10px] text-[var(--spr-text-muted)]">{job.jobType}</span></div>
+                  <div className="mt-1 text-[11px] text-[var(--spr-text-muted)]">{job.error || (job.result ? 'Completed with persisted result.' : 'No terminal message recorded.')}</div>
+                  <div className="mt-1 text-[10px] font-mono text-[var(--spr-text-muted)]">Attempt {job.attemptCount ?? 0}/{job.maxAttempts ?? 0} · {job.progress ?? 0}% · {formatRunTime(job.updatedAt || job.createdAt)}</div>
+                </div><ChevronRight className="w-4 h-4 text-[var(--spr-text-muted)]" />
+              </div>
+            </button>;
+          })}
+        </div> : null}
+        {selectedJobId ? <div className="border-t border-[var(--spr-border)] px-5 py-4 bg-[var(--spr-surface)]">
+          <div className="flex items-center justify-between"><div className="text-[11px] font-bold uppercase tracking-wider">Worker timeline</div><button type="button" onClick={() => setSelectedJobId(null)} className="text-[11px] text-[var(--spr-text-muted)]">Close</button></div>
+          {loadingJobLogs ? <div className="mt-3 text-xs text-[var(--spr-text-muted)]">Loading job events…</div> : jobLogs.length === 0 ? <div className="mt-3 text-xs text-[var(--spr-text-muted)]">No worker events recorded.</div> : <div className="mt-3 space-y-2 max-h-64 overflow-auto">{jobLogs.map((log) => <div key={log.id} className="flex gap-3 text-[11px]"><span className="font-mono text-[var(--spr-text-muted)] shrink-0">{formatRunTime(log.timestamp)}</span><span className="font-bold uppercase">{String(log.level || 'info')}</span><span className="text-[var(--spr-text-faint)]">{log.message}</span></div>)}</div>}
+        </div> : null}
+      </section>
 
       {/* Tab Switcher */}
       <div className="flex border-b border-[var(--spr-border)] gap-1" id="scans-view-tabs">
