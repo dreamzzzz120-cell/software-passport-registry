@@ -81,6 +81,13 @@ export default function IntakeReviewWorkspace({ sessionId, createdAt, repo, onSt
   const allUploaded = items.length > 0 && items.every(item => ['UPLOADED', 'QUEUED'].includes(item.status.toUpperCase()));
   const analysisState = items.some(item => ['FAILED', 'ERROR'].includes(item.status.toUpperCase())) ? 'Attention required' : allUploaded ? 'Queued / awaiting analysis' : 'Pending intake completion';
 
+  const summaryCards: Array<[string, string, React.ComponentType<{ className?: string }>] > = [
+    ['Review ID', shortId(sessionId), Fingerprint],
+    ['Evidence files', String(items.length), FileText],
+    ['Package size', formatBytes(totalSize), PackageCheck],
+    ['Live state', loading ? 'Refreshing…' : analysisState, Loader],
+  ];
+
   return <div className="min-h-screen bg-[var(--spr-surface)] px-5 py-10 text-[var(--spr-text)]"><div className="mx-auto max-w-7xl">
     <div className="mb-8 flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
       <div><div className="inline-flex items-center gap-2 rounded-full border border-[var(--spr-highlight)]/30 bg-[var(--spr-accent-soft)]/20 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[.18em] text-[var(--spr-highlight)]"><Sparkles className="h-3.5 w-3.5"/> SPR Evidence Review</div><h1 className="mt-4 text-3xl font-semibold tracking-tight md:text-5xl">Review the evidence package.</h1><p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--spr-text-muted)]">This workspace separates what SPR has actually observed from what still requires analysis or verification. Status refreshes from the intake session every five seconds.</p></div>
@@ -90,12 +97,7 @@ export default function IntakeReviewWorkspace({ sessionId, createdAt, repo, onSt
     {error && <div role="alert" className="mb-5 rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4 text-sm text-[var(--spr-text-muted)]">{error}</div>}
 
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      {[
-        ['Review ID', shortId(sessionId), Fingerprint],
-        ['Evidence files', String(items.length), FileText],
-        ['Package size', formatBytes(totalSize), PackageCheck],
-        ['Live state', loading ? 'Refreshing…' : analysisState, Loader],
-      ].map(([label, value, Icon]) => <div key={String(label)} className="rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><Icon className="h-4 w-4 text-[var(--spr-highlight)]"/><div className="mt-4 text-[10px] font-bold uppercase tracking-[.16em] text-[var(--spr-text-faint)]">{label}</div><div className="mt-1 break-all text-sm font-semibold">{value}</div></div>)}
+      {summaryCards.map(([label, value, Icon]) => <div key={label} className="rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><Icon className="h-4 w-4 text-[var(--spr-highlight)]/><div className="mt-4 text-[10px] font-bold uppercase tracking-[.16em] text-[var(--spr-text-faint)]">{label}</div><div className="mt-1 break-all text-sm font-semibold">{value}</div></div>)}
     </div>
 
     <div className="mt-5 grid gap-5 lg:grid-cols-[1.15fr_.85fr]">
