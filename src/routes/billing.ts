@@ -363,7 +363,7 @@ export function createBillingRouter() {
         // for the $149 plan) and settle in that currency.
         adaptive_pricing: { enabled: false },
         payment_method_collection: 'if_required',
-        success_url: `${config.appUrl}/billing?addon=success&addon=${encodeURIComponent(parsed.data.addon)}`,
+        success_url: `${config.appUrl}/billing?addon=success&product=${encodeURIComponent(parsed.data.addon)}`,
         cancel_url: `${config.appUrl}/billing?addon=cancelled`,
         client_reference_id: tenantId,
         subscription_data: { metadata: { tenantId, addon: parsed.data.addon } },
@@ -404,6 +404,10 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
   }
 
   try {
+    // Serialize deliveries for the same Stripe event ID. Without this lock,
+    // two concurrent redeliveries can both observe processed_at IS NULL and
+    // both execute the business logic before either marks the event processed.
+    await db.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`stripe_webhook:${event.id}`}))`);
     const inserted = await db.execute(sql`
       INSERT INTO billing_webhook_events (id, event_type, processing_attempts, last_error)
       VALUES (${event.id}, ${event.type}, 1, NULL)
