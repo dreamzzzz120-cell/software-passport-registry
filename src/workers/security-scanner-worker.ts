@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, mkdir, readdir, rm } from 'node:fs/promises';
 import { Pool } from 'pg';
-import { downloadArchive, generateRepositorySbom, githubHeaders, isRateLimited, resolveTenantGitHubToken, rootErrorMessage, runBounded, validateArchiveEntries } from './osv-worker.ts';
+import { downloadArchive, fetchGitHubApi, generateRepositorySbom, githubHeaders, isRateLimited, resolveTenantGitHubToken, rootErrorMessage, runBounded, validateArchiveEntries } from './osv-worker.ts';
 import { createWorkerPool, assertWorkerDatabase } from './worker-db.ts';
 import { runRealRepositoryScanners } from '../scanners/real-repository-scanners.ts';
 import { calculateAndStoreTrustScore } from '../utils/scanner.ts';
@@ -46,14 +46,18 @@ async function processSecurityJob(pool: Pool, job: any) {
     const repoApi = `https://api.github.com/repos/${encodeURIComponent(source.repository_owner)}/${encodeURIComponent(source.repository_name)}`;
     const tenantToken = await resolveTenantGitHubToken(pool, job.tenant_id);
     const headers = (extra: Record<string, string>) => tenantToken ? githubHeaders(extra, tenantToken) : githubHeaders(extra);
-    const metadataResponse = await fetch(repoApi, { redirect: 'error', headers: headers({ accept: 'application/vnd.github+json', 'user-agent': 'spr-security-worker/1.0' }) });
+    const metadataResponse = await fetchGitHubApi(repoApi, { headers: headers({ accept: 'application/vnd.github+json', 'user-agent': 'spr-security-worker/1.0' }) });
     if (isRateLimited(metadataResponse)) throw new Error('REPOSITORY_RATE_LIMITED');
     if (!metadataResponse.ok) throw new Error(metadataResponse.status === 404 ? 'REPOSITORY_NOT_FOUND' : 'REPOSITORY_ACCESS_DENIED');
     const metadata: any = await metadataResponse.json();
     if (metadata.private && !tenantToken) throw new Error('REPOSITORY_PRIVATE_REQUIRES_CREDENTIAL');
     const defaultBranch = typeof metadata.default_branch === 'string' && metadata.default_branch.trim() ? metadata.default_branch.trim() : '';
     const requestedRef = source.requested_ref || defaultBranch || 'main';
-    const commitResponse = await fetch(`${repoApi}/commits/${encodeURIComponent(requestedRef)}`, { redirect: 'error', headers: headers({ accept: 'application/vnd.github+json', 'user-agent': 'spr-security-worker/1.0' }) });
+    // Renamed/transferred repositories: use the canonical name GitHub reports.
+    const canonicalOwner = typeof metadata.owner?.login === 'string' && metadata.owner.login ? metadata.owner.login : source.repository_owner;
+    const canonicalName = typeof metadata.name === 'string' && metadata.name ? metadata.name : source.repository_name;
+    const canonicalRepoApi = `https://api.github.com/repos/${encodeURIComponent(canonicalOwner)}/${encodeURIComponent(canonicalName)}`;
+    const commitResponse = await fetchGitHubApi(`${canonicalRepoApi}/commits/${encodeURIComponent(requestedRef)}`, { headers: headers({ accept: 'application/vnd.github+json', 'user-agent': 'spr-security-worker/1.0' }) });
     if (isRateLimited(commitResponse)) throw new Error('REPOSITORY_RATE_LIMITED');
     if (!commitResponse.ok) throw new Error('REPOSITORY_REF_NOT_FOUND');
     const commit: any = await commitResponse.json();
@@ -62,7 +66,7 @@ async function processSecurityJob(pool: Pool, job: any) {
     const archivePath = path.join(tempRoot, 'repository.zip');
     const extractPath = path.join(tempRoot, 'extracted');
     await mkdir(extractPath);
-    await downloadArchive(`https://codeload.github.com/${encodeURIComponent(source.repository_owner)}/${encodeURIComponent(source.repository_name)}/zip/${commit.sha}`, archivePath, { maxBytes: MAX_ARCHIVE_BYTES, ...(tenantToken ? { token: tenantToken } : {}) });
+    await downloadArchive(`https://codeload.github.com/${encodeURIComponent(canonicalOwner)}/${encodeURIComponent(canonicalName)}/zip/${commit.sha}`, archivePath, { maxBytes: MAX_ARCHIVE_BYTES, ...(tenantToken ? { token: tenantToken } : {}) });
     const archiveExecutable = process.platform === 'win32' ? 'tar.exe' : 'unzip';
     const listing = await runBounded(archiveExecutable, process.platform === 'win32' ? ['-tf', archivePath] : ['-Z1', archivePath], 30_000, 10 * 1024 * 1024);
     if (listing.code !== 0) throw new Error('REPOSITORY_ACQUISITION_FAILED');

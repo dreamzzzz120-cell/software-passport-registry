@@ -26,7 +26,7 @@ describe('repository scans resolve the real default branch', () => {
     // The ref must be computed after metadata is available, not before it.
     expect(refIdx).toBeGreaterThan(metadataIdx);
     // Exactly two GitHub API calls: repository metadata, then the commit.
-    expect([...worker.matchAll(/await fetch\(/g)]).toHaveLength(2);
+    expect([...worker.matchAll(/await (?:fetch|fetchGitHubApi)\(/g)]).toHaveLength(2);
   });
 
   it('still distinguishes a missing repository from a missing ref', () => {

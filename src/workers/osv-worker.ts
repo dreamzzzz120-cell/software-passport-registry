@@ -332,6 +332,25 @@ const ignoredDirectories = new Set(['.git','node_modules','vendor','build','dist
 
 function sha256(value: string | Buffer) { return crypto.createHash('sha256').update(value).digest('hex'); }
 
+// GitHub answers the repos API with a 301 to /repositories/<id> when a
+// repository has been renamed or transferred. With redirect:'error' that
+// surfaces as an opaque "fetch failed" and the job burns every retry on a
+// deterministic condition. Follow exactly one redirect, and only when it
+// stays on the GitHub API origin, so the outbound allowlist still holds.
+const GITHUB_REDIRECT_STATUSES = new Set([301, 302, 307, 308]);
+export async function fetchGitHubApi(url: string | URL, init: { headers: Record<string, string>; signal?: AbortSignal }): Promise<Response> {
+  const parsed = new URL(url);
+  if (parsed.origin !== GITHUB_API_ORIGIN || parsed.protocol !== 'https:' || parsed.username || parsed.password) throw new Error('OUTBOUND_URL_BLOCKED');
+  const first = await fetch(parsed, { redirect: 'manual', headers: init.headers, signal: init.signal });
+  if (!GITHUB_REDIRECT_STATUSES.has(first.status)) return first;
+  const location = first.headers.get('location');
+  await first.body?.cancel().catch(() => undefined);
+  if (!location) throw new Error('REPOSITORY_ACCESS_DENIED');
+  const target = new URL(location, parsed);
+  if (target.origin !== GITHUB_API_ORIGIN || target.protocol !== 'https:' || target.username || target.password) throw new Error('OUTBOUND_URL_BLOCKED');
+  return fetch(target, { redirect: 'error', headers: init.headers, signal: init.signal });
+}
+
 async function fetchJson(url: string, notFoundCode: string, token: string = githubToken()) {
   const parsed = new URL(url);
   const origin = parsed.origin;
@@ -339,7 +358,7 @@ async function fetchJson(url: string, notFoundCode: string, token: string = gith
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), ACQUISITION_TIMEOUT_MS);
   try {
-    const response = await fetch(parsed, { redirect: 'error', headers: githubHeaders({ accept: 'application/vnd.github+json' }, token), signal: controller.signal });
+    const response = await fetchGitHubApi(parsed, { headers: githubHeaders({ accept: 'application/vnd.github+json' }, token), signal: controller.signal });
     if (response.status === 404 || response.status === 422) throw new Error(notFoundCode);
     if (isRateLimited(response)) throw new Error('REPOSITORY_RATE_LIMITED');
     if (response.status === 403) throw new Error('REPOSITORY_ACCESS_DENIED');
@@ -491,13 +510,19 @@ async function processRepositoryJob(pool: Pool, job: ClaimedJob) {
     // A private repository is acquired only with the tenant's own credential.
     if (metadata?.private && !tenantToken) throw new Error('REPOSITORY_PRIVATE_REQUIRES_CREDENTIAL');
     const requestedRef = source.requested_ref || metadata?.default_branch; if (!requestedRef) throw new Error('REPOSITORY_REF_NOT_FOUND');
-    const commitSha = suppliedImmutableSha ? requestedRef.toLowerCase() : (await fetchJson(`${repoUrl}/commits/${encodeURIComponent(requestedRef)}`, 'REPOSITORY_REF_NOT_FOUND', gitHubToken))?.sha;
+    // A renamed/transferred repository reports its current name in the
+    // metadata; use that for the commit lookup and archive download so the
+    // acquisition matches what GitHub actually serves.
+    const canonicalOwner = typeof metadata?.owner?.login === 'string' && metadata.owner.login ? metadata.owner.login : source.repository_owner;
+    const canonicalName = typeof metadata?.name === 'string' && metadata.name ? metadata.name : source.repository_name;
+    const canonicalRepoUrl = `${GITHUB_API_ORIGIN}/repos/${encodeURIComponent(canonicalOwner)}/${encodeURIComponent(canonicalName)}`;
+    const commitSha = suppliedImmutableSha ? requestedRef.toLowerCase() : (await fetchJson(`${canonicalRepoUrl}/commits/${encodeURIComponent(requestedRef)}`, 'REPOSITORY_REF_NOT_FOUND', gitHubToken))?.sha;
     if (typeof commitSha !== 'string' || !/^[a-f0-9]{40}$/i.test(commitSha)) throw new Error('REPOSITORY_REF_NOT_FOUND');
     mark('commit_resolved');
     const descriptor = { provider:'github', owner:source.repository_owner, repository:source.repository_name, requestedRef, resolvedCommitSha:commitSha, subdirectory:source.repository_subdirectory, defaultBranch:metadata?.default_branch || null, visibility:metadata?.visibility || 'public', connectionId:source.connection_id, tenantId:job.tenant_id };
     const archivePath = path.join(tempRoot,'repository.zip'); const extractPath = path.join(tempRoot,'extracted'); const archiveExecutable = process.platform === 'win32' ? 'tar.exe' : 'unzip';
     await mkdir(extractPath);
-    await downloadArchive(`${GITHUB_CODELOAD_ORIGIN}/${encodeURIComponent(source.repository_owner)}/${encodeURIComponent(source.repository_name)}/zip/${commitSha}`, archivePath, { token: gitHubToken });
+    await downloadArchive(`${GITHUB_CODELOAD_ORIGIN}/${encodeURIComponent(canonicalOwner)}/${encodeURIComponent(canonicalName)}/zip/${commitSha}`, archivePath, { token: gitHubToken });
     mark('archive_downloaded');
     const listing = await runBounded(archiveExecutable, process.platform === 'win32' ? ['-tf',archivePath] : ['-Z1',archivePath], ACQUISITION_TIMEOUT_MS, 10 * 1024 * 1024);
     if (listing.code !== 0) throw new Error('REPOSITORY_ACQUISITION_FAILED');
