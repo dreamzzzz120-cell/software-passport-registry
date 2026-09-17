@@ -7,10 +7,12 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (relative: string) => fs.readFileSync(path.join(root, relative), 'utf8');
 
 describe('SPR trust graph honesty contracts', () => {
-  it('derives vendor nodes from real passport.publisher data instead of an unimplemented vendors table', () => {
+  it('treats passport.publisher as descriptive metadata rather than a synthetic vendor relationship', () => {
     const graph = read('src/components/TrustGraphView.tsx');
-    expect(graph).toContain("passport.publisher");
-    expect(graph).toContain("kind: 'vendor'");
+    expect(graph).toContain('passport.publisher');
+    expect(graph).toContain('Publisher text is descriptive metadata');
+    expect(graph).not.toContain("kind: 'vendor'");
+    expect(graph).not.toContain("'publishes'");
     expect(graph).not.toContain('EMPTY_VENDORS');
   });
 
@@ -24,13 +26,12 @@ describe('SPR trust graph honesty contracts', () => {
     const graph = read('src/components/TrustGraphView.tsx');
     expect(graph).not.toContain("'represents'");
     expect(graph).not.toContain('matchingAsset');
-    expect(graph).toContain('Never infer Passport → Asset from matching names or IDs');
+    expect(graph).toContain('Matching names, labels, PURLs, versions, or unrelated IDs never create a relationship');
   });
 
   it('gives every supported edge kind a real rationale instead of a generic placeholder', () => {
     const graph = read('src/components/TrustGraphView.tsx');
     expect(graph).toContain('EDGE_RATIONALE');
-    expect(graph).toContain('publishes:');
     expect(graph).toContain('owns:');
     expect(graph).toContain('contains:');
     expect(graph).toContain('supports:');
@@ -42,6 +43,6 @@ describe('SPR trust graph honesty contracts', () => {
   it('makes relationship lines clickable and keeps node vs. edge selection mutually exclusive', () => {
     const graph = read('src/components/TrustGraphView.tsx');
     expect(graph).toContain('const selectNode = (id: string) => { setSelectedId(id); setSelectedEdgeKey(null); };');
-    expect(graph).toContain('const selectEdge = (edge: GraphEdge) => { setSelectedEdgeKey(');
+    expect(graph).toContain('const selectEdge = (e: GraphEdge) => { setSelectedEdgeKey(');
   });
 });
