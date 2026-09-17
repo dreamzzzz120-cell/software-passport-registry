@@ -438,6 +438,13 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
           await appendAuditEntry(db, { tenantId, action: 'billing.subscription.activated', actor: 'stripe-webhook', payload: { plan, stripeEventId: event.id, stripeSubscriptionId: String(session.subscription), stripeCustomerId: customerId ?? null } });
         } else if (tenantId && session.mode === 'payment') {
           const productId = session.metadata?.product ?? null;
+          // A first purchase may create the tenant's Stripe customer. Persist
+          // that customer immediately so every later purchase/add-on/portal
+          // operation uses the same billing identity.
+          const purchaseCustomerId = typeof session.customer === 'string' ? session.customer : session.customer?.id;
+          if (purchaseCustomerId) {
+            await db.execute(sql`UPDATE tenant_subscriptions SET stripe_customer_id = COALESCE(stripe_customer_id, ${purchaseCustomerId}), updated_at = CURRENT_TIMESTAMP WHERE tenant_id = ${tenantId}`);
+          }
           await appendAuditEntry(db, { tenantId, action: 'billing.purchase.completed', actor: 'stripe-webhook', payload: { product: productId, stripeEventId: event.id, checkoutSessionId: session.id } });
 
           // A one-time product is a deliverable somebody has to produce. Until
@@ -484,6 +491,10 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
           // payment, so it missed the one-time branch. Only billing.addon.initiated
           // was ever recorded, which cannot distinguish an add-on somebody
           // bought from one they abandoned at the Stripe page.
+          const addonCustomerId = typeof session.customer === 'string' ? session.customer : session.customer?.id;
+          if (addonCustomerId) {
+            await db.execute(sql`UPDATE tenant_subscriptions SET stripe_customer_id = COALESCE(stripe_customer_id, ${addonCustomerId}), updated_at = CURRENT_TIMESTAMP WHERE tenant_id = ${tenantId}`);
+          }
           if (typeof session.subscription === 'string' && ADDON_CONFIG[session.metadata.addon as AddonId]) {
             await db.execute(sql`INSERT INTO tenant_addons (stripe_subscription_id, tenant_id, addon, status) VALUES (${session.subscription}, ${tenantId}, ${session.metadata.addon}, 'active') ON CONFLICT (stripe_subscription_id) DO UPDATE SET status = 'active', updated_at = CURRENT_TIMESTAMP`);
           }
