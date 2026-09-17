@@ -306,9 +306,15 @@ export function createBillingRouter() {
       if (!priceId) return res.status(503).json({ error: 'This product is not yet available for checkout.' });
       const tenantId = req.user!.tenantId;
       const stripe = stripeClient();
+      // Reuse the tenant's canonical Stripe customer when one already exists.
+      // This keeps one billing identity across subscriptions, add-ons, invoices,
+      // receipts and the Customer Portal instead of creating a second customer
+      // for every one-time purchase.
+      const existingBilling = (await req.db!.execute(sql`SELECT stripe_customer_id AS "stripeCustomerId" FROM tenant_subscriptions WHERE tenant_id = ${tenantId} LIMIT 1`) as any).rows?.[0];
+      const customerId: string | undefined = existingBilling?.stripeCustomerId;
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
-        customer_email: req.user!.email,
+        ...(customerId ? { customer: customerId } : { customer_email: req.user!.email }),
         line_items: [{ price: priceId, quantity: 1 }],
         // Buyers can enter a Stripe promotion code on the hosted page.
         allow_promotion_codes: true,
