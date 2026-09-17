@@ -42,6 +42,16 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
   const [scanLogs, setScanLogs] = useState<string[]>([]);
   const [scanCompleted, setScanCompleted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const scanPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (scanPollRef.current) {
+        clearInterval(scanPollRef.current);
+        scanPollRef.current = null;
+      }
+    };
+  }, []);
 
   const formatRunTime = (isoString: string | null) => {
     if (!isoString) return 'Never';
@@ -403,7 +413,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
       let pollInFlight = false;
       let pollAttempts = 0;
       const maxPollAttempts = 240; // 6 minutes at 1.5s intervals
-      const interval = setInterval(async () => {
+      scanPollRef.current = setInterval(async () => {
         if (pollInFlight) return;
         pollInFlight = true;
         pollAttempts += 1;
@@ -423,7 +433,8 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
 
               const terminal = ['Success', 'Completed', 'Failed'].includes(currentJob.status);
               if (terminal) {
-                clearInterval(interval);
+                clearInterval(scanPollRef.current!);
+                scanPollRef.current = null;
                 setIsScanning(false);
                 setScanCompleted(currentJob.status !== 'Failed');
 
@@ -438,7 +449,8 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
           }
 
           if (pollAttempts >= maxPollAttempts) {
-            clearInterval(interval);
+            clearInterval(scanPollRef.current!);
+            scanPollRef.current = null;
             setIsScanning(false);
             setScanCompleted(false);
             setScanLogs(l => [...l, '[ERROR] Scan status polling timed out. The backend job remains authoritative; refresh the page to inspect its current state.']);
