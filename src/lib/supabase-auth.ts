@@ -1,13 +1,12 @@
-import { createClient, type AuthChangeEvent, type User as SupabaseUser } from '@supabase/supabase-js';
+import type { AuthChangeEvent, User as SupabaseUser } from '@supabase/supabase-js';
+import { supabase, supabaseConfigured } from './supabase';
 
-// Keep the compatibility auth adapter on the same verified production Supabase
-// project as the primary browser client. Vercel VITE_SUPABASE_* values are not
-// allowed to silently switch App.tsx onto a stale project and immediately log
-// the user back out after LoginView authenticates successfully.
-const SUPABASE_URL = 'https://gezmtnleoyrudxztegoj.supabase.co';
-const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_MaRll_oRAt1JrrqLrd8M_g_DpFyhdkG';
-export const supabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY);
-export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+// This compatibility auth adapter (the `firebase/auth` alias target, see
+// vite.config.ts) shares the single browser client from ./supabase rather than
+// constructing its own. Two GoTrueClient instances on the same storage key
+// ("Multiple GoTrueClient instances detected") is undefined behaviour for
+// session refresh, and the project/key pinning lives in ./supabase already.
+export { supabase, supabaseConfigured };
 export type User = any;
 function mapUser(user: SupabaseUser): User { return { uid: user.id, email: user.email ?? null, displayName: String(user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User'), emailVerified: Boolean(user.email_confirmed_at), getIdToken: async (forceRefresh = false) => { if (forceRefresh) await supabase.auth.refreshSession(); const { data, error } = await supabase.auth.getSession(); if (error || !data.session?.access_token) throw error || new Error('No active authentication session.'); return data.session.access_token; }, reload: async () => { await supabase.auth.getUser(); } }; }
 let currentUser: User | null = null;
