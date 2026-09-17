@@ -109,8 +109,12 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
 
   const handleCreateSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
-    const asset = prodAssets.find(a => a.id === newScheduleAssetId) || prodAssets[0];
-    if (!asset) return;
+    if (!canManageSchedules) return;
+    const asset = prodAssets.find(a => String(a.id) === String(newScheduleAssetId));
+    if (!asset) {
+      setErrorSchedules('Select a valid production asset before creating a schedule.');
+      return;
+    }
 
     const payload = {
       assetId: asset.id,
@@ -163,6 +167,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
   };
 
   const handleToggleScheduleStatus = async (id: string) => {
+    if (!canManageSchedules) return;
     const schedule = schedules.find(s => s.id === id);
     if (!schedule) return;
     const nextStatus = schedule.status === 'Active' ? 'Paused' : 'Active';
