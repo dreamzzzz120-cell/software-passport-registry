@@ -16,12 +16,12 @@
       this shell is what the SPA catch-all rewrite serves for every unlisted
       route, so a fixed canonical would point them all at the homepage.
 
-      Per-route metadata is not missing — it is generated. At build time
+      Per-route metadata is not missing; it is generated. At build time
       scripts/prerender-public-routes.mjs writes one static HTML file per
       public route (src/seo/public-pages.json) with that route's own title,
       description, canonical, Open Graph and Twitter tags, and its own WebPage
       node in the JSON-LD graph. Vercel resolves those static files before the
-      catch-all rewrite, so /pricing and /msp serve their own <head> to search
+      catch-all rewrite, so /pricing and /msp serve their own head to search
       and social crawlers, which never execute the JavaScript bundle.
 
       Consequence for edits: the tags below are the substitution targets. The
