@@ -522,13 +522,21 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
           if (tenantId) await appendAuditEntry(db, { tenantId, action: 'billing.addon.status_changed', actor: 'stripe-webhook', payload: { addon, status: subscription.status, stripeEventId: event.id, stripeSubscriptionId: subscription.id } });
           break;
         }
-        const plan = subscription.metadata?.plan as PlanId | undefined;
+        // Never trust stale Checkout metadata for the current plan: the
+        // Customer Portal can change the subscription price without changing
+        // the original session metadata. Resolve the authoritative plan from
+        // the Stripe subscription item's Price ID, then persist that plan.
+        const currentPriceId = subscription.items.data[0]?.price?.id;
+        const resolvedPlan = PLAN_IDS.find((id) => planPriceId(id) === currentPriceId);
+        const metadataPlan = subscription.metadata?.plan as PlanId | undefined;
+        const plan = resolvedPlan ?? (metadataPlan && PLAN_CONFIG[metadataPlan] ? metadataPlan : undefined);
         const updated = tenantId && plan && PLAN_CONFIG[plan]
-          ? (await db.execute(sql`UPDATE tenant_subscriptions SET status = ${subscription.status}, current_period_end = ${periodEnd}, updated_at = CURRENT_TIMESTAMP WHERE tenant_id = ${tenantId} RETURNING tenant_id`) as any).rows?.[0]
-          // No plan in the metadata: fall back to the subscription id, which
-          // matches the plan row and nothing else.
+          ? (await db.execute(sql`UPDATE tenant_subscriptions SET stripe_subscription_id = ${subscription.id}, plan = ${plan}, client_limit = ${PLAN_CLIENT_LIMITS[plan]}, status = ${subscription.status}, current_period_end = ${periodEnd}, updated_at = CURRENT_TIMESTAMP WHERE tenant_id = ${tenantId} RETURNING tenant_id`) as any).rows?.[0]
+          // No usable plan metadata: fall back to the subscription id, which
+          // matches the plan row and nothing else. This preserves status
+          // changes even if a malformed third-party subscription event arrives.
           : (await db.execute(sql`UPDATE tenant_subscriptions SET status = ${subscription.status}, current_period_end = ${periodEnd}, updated_at = CURRENT_TIMESTAMP WHERE stripe_subscription_id = ${subscription.id} RETURNING tenant_id`) as any).rows?.[0];
-        if (updated?.tenant_id) await appendAuditEntry(db, { tenantId: updated.tenant_id, action: 'billing.subscription.status_changed', actor: 'stripe-webhook', payload: { status: subscription.status, stripeEventId: event.id } });
+        if (updated?.tenant_id) await appendAuditEntry(db, { tenantId: updated.tenant_id, action: 'billing.subscription.status_changed', actor: 'stripe-webhook', payload: { status: subscription.status, plan: plan ?? null, priceId: currentPriceId ?? null, stripeEventId: event.id, stripeSubscriptionId: subscription.id } });
         break;
       }
       case 'customer.subscription.deleted': {
@@ -543,8 +551,13 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
         const invoiceSubscription = invoice.parent?.subscription_details?.subscription;
         if (invoiceSubscription) {
           const subscriptionId = typeof invoiceSubscription === 'string' ? invoiceSubscription : invoiceSubscription.id;
-          const pastDue = (await db.execute(sql`UPDATE tenant_subscriptions SET status = 'past_due', updated_at = CURRENT_TIMESTAMP WHERE stripe_subscription_id = ${subscriptionId} RETURNING tenant_id`) as any).rows?.[0];
-          if (pastDue?.tenant_id) await appendAuditEntry(db, { tenantId: pastDue.tenant_id, action: 'billing.payment.failed', actor: 'stripe-webhook', payload: { stripeEventId: event.id } });
+          // Add-on subscriptions must never poison the tenant's primary plan
+          // status. Update the add-on record when the failed invoice belongs
+          // to one, otherwise update the primary plan by its Stripe id.
+          const addonFailed = (await db.execute(sql`UPDATE tenant_addons SET status = 'past_due', updated_at = CURRENT_TIMESTAMP WHERE stripe_subscription_id = ${subscriptionId} RETURNING tenant_id, addon`) as any).rows?.[0];
+          const pastDue = addonFailed ? null : (await db.execute(sql`UPDATE tenant_subscriptions SET status = 'past_due', updated_at = CURRENT_TIMESTAMP WHERE stripe_subscription_id = ${subscriptionId} RETURNING tenant_id`) as any).rows?.[0];
+          const affectedTenantId = addonFailed?.tenant_id ?? pastDue?.tenant_id;
+          if (affectedTenantId) await appendAuditEntry(db, { tenantId: affectedTenantId, action: 'billing.payment.failed', actor: 'stripe-webhook', payload: { stripeEventId: event.id, stripeSubscriptionId: subscriptionId, addon: addonFailed?.addon ?? null } });
         }
         break;
       }
