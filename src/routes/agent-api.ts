@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { createHash } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { requireAuth, AuthenticatedRequest } from '../middleware/security.ts';
@@ -93,6 +94,49 @@ export function createAgentApiRouter() {
       const latest = (await db.execute(sql`SELECT generated_at,completeness_basis_points FROM trust_observations WHERE tenant_id=${tenantId} AND passport_id=${passport.id} ORDER BY observation_version DESC LIMIT 1`) as any).rows?.[0];
       const result = evaluateVendorRisk({ passport: { id: passport.id, name: passport.name }, findings: findings.map((finding: any) => ({ id: String(finding.id), severity: String(finding.severity || 'unknown'), status: String(finding.status || 'unknown'), title: String(finding.title || 'Untitled finding'), updatedAt: finding.updated_at ? new Date(finding.updated_at).toISOString() : null })), evidence: evidence.map((item: any) => ({ id: String(item.id), provider: item.provider == null ? null : String(item.provider), observedAt: item.observed_at ? new Date(item.observed_at).toISOString() : null, verificationMethod: item.verification_method == null ? null : String(item.verification_method), status: item.status == null ? null : String(item.status), limitation: item.limitation == null ? null : String(item.limitation) })), latestObservationAt: latest?.generated_at ? new Date(latest.generated_at).toISOString() : null, completeness: latest?.completeness_basis_points == null ? null : Number(latest.completeness_basis_points) / 10000, evaluatedAt: Date.now(), staleAfterDays: parsed.data.staleAfterDays });
       return res.json({ ...result, provenance: { kind: 'tenant_scoped_database_records', passportId: passport.id, findingIds: findings.map((f: any) => String(f.id)), evidenceIds: evidence.map((e: any) => String(e.id)), latestObservationAt: latest?.generated_at ?? null } });
+    } catch (error) { return next(error); }
+  });
+
+  router.post('/verify-claim', async (req: AuthenticatedRequest, res, next) => {
+    const claimSchema = z.object({ passport: z.string().trim().min(1).max(512), claim: z.string().trim().min(1).max(2000) }).strict();
+    const parsed = claimSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'INVALID_CLAIM_REQUEST', details: parsed.error.flatten() });
+    try {
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const { passport: passportRef, claim } = parsed.data;
+      const passport = (await db.execute(sql`SELECT id,name FROM passports WHERE tenant_id=${tenantId} AND (LOWER(id)=${passportRef.toLowerCase()} OR LOWER(name)=${passportRef.toLowerCase()}) LIMIT 1`) as any).rows?.[0];
+      if (!passport) return res.status(404).json({ status: 'UNVERIFIED', reason: 'PASSPORT_NOT_FOUND', claimHash: `sha256:${createHash('sha256').update(claim.normalize('NFKC'), 'utf8').digest('hex')}`, provenance: { kind: 'tenant_scoped_database_lookup', table: 'passports', fields: ['id', 'name'], matched: false } });
+      const evidenceCount = (await db.execute(sql`SELECT COUNT(*)::int AS count FROM evidence_items WHERE tenant_id=${tenantId} AND asset_id=${passport.id}`) as any).rows?.[0]?.count ?? 0;
+      const openFindings = (await db.execute(sql`SELECT COUNT(*)::int AS count FROM scan_findings WHERE tenant_id=${tenantId} AND asset_id=${passport.id} AND lower(status) NOT IN ('resolved','closed','verified')`) as any).rows?.[0]?.count ?? 0;
+      const claimHash = `sha256:${createHash('sha256').update(claim.normalize('NFKC'), 'utf8').digest('hex')}`;
+      const hasEvidence = evidenceCount > 0;
+      const hasOpenFindings = openFindings > 0;
+      const claimLower = claim.toLowerCase();
+      const securityKeywords = ['security', 'vulnerab', 'cve', 'exploit', 'breach', 'malware', 'backdoor', 'risk'];
+      const complianceKeywords = ['compliance', 'audit', 'certif', 'soc', 'iso', 'gdpr', 'hipaa', 'pci'];
+      const isSecurityClaim = securityKeywords.some(kw => claimLower.includes(kw));
+      const isComplianceClaim = complianceKeywords.some(kw => claimLower.includes(kw));
+      let status: string;
+      let reason: string;
+      if (!hasEvidence) {
+        status = 'UNVERIFIED';
+        reason = 'No observed evidence exists for this passport. SPR does not infer a claim from absent evidence.';
+      } else if (isSecurityClaim && hasOpenFindings) {
+        status = 'CONTRADICTED';
+        reason = `Observed evidence shows ${openFindings} open finding(s) for this passport. A security claim is contradicted by open findings.`;
+      } else if (isSecurityClaim && !hasOpenFindings) {
+        status = 'VERIFIED';
+        reason = `Security evidence observed: ${evidenceCount} evidence item(s), 0 open findings. The claim is supported by current observations.`;
+      } else if (isComplianceClaim) {
+        status = 'UNVERIFIED';
+        reason = 'Compliance evidence is observed but not inferred. SPR maps evidence to controls only through the compliance workflow, not from a natural-language claim.';
+      } else {
+        status = 'UNVERIFIED';
+        reason = 'SPR cannot verify this claim from observed evidence. The claim does not map to a specific evidence category SPR evaluates.';
+      }
+      const statusValue = status;
+      return res.json({ status, reason, claimHash, passportId: passport.id, passportName: passport.name, evidenceCount, openFindings, provenance: { kind: 'tenant_scoped_evidence_evaluation', passportId: passport.id, evidenceCount, openFindings } });
     } catch (error) { return next(error); }
   });
 

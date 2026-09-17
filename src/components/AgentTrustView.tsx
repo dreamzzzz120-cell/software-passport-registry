@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Activity, AlertCircle, ArrowRight, Bot, CheckCircle2, Clock3, Copy, FileText, Loader, Monitor, ShieldCheck, Sparkles } from 'lucide-react';
+import { Activity, AlertCircle, ArrowRight, Bot, CheckCircle2, Clock3, Copy, FileText, Loader, Monitor, ShieldCheck, Sparkles, XCircle } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
 
 const tools = [
@@ -110,6 +110,9 @@ export default function AgentTrustView() {
   const [distributionStatus, setDistributionStatus] = useState<Record<string, number> | null>(null);
   const [outreach, setOutreach] = useState<{ enabled: boolean; verification: null | { fromAddress: string; toAddress: string; status: string; providerMessageId: string | null; error: string | null; sentAt: string } } | null>(null);
   const [agentStates, setAgentStates] = useState<Record<string, { state: AgentState; result: AgentResult | null; input: string }>>({});
+  const [claimVerifying, setClaimVerifying] = useState(false);
+  const [claimResult, setClaimResult] = useState<{ status: string; reason: string } | null>(null);
+  const [claimError, setClaimError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -154,6 +157,31 @@ export default function AgentTrustView() {
   const setAgentInput = (name: string, value: string) => {
     setAgentStates(prev => ({ ...prev, [name]: { state: 'idle', result: prev[name]?.result ?? null, input: value } }));
   };
+
+  const verifyClaim = async () => {
+    if (!claim.trim() || !passport.trim()) return;
+    setClaimVerifying(true); setClaimError(null); setClaimResult(null);
+    try {
+      const response = await apiFetch('/api/agent/v1/verify-claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ passport: passport.trim(), claim: claim.trim() }),
+      });
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => null);
+        throw new Error(String(errBody?.error || errBody?.message || `HTTP ${response.status}`));
+      }
+      const data = await response.json();
+      setClaimResult({ status: String(data?.status || 'UNVERIFIED'), reason: String(data?.reason || 'No reason returned.') });
+    } catch (err) {
+      setClaimError(err instanceof Error ? err.message : 'Verification request failed.');
+    } finally {
+      setClaimVerifying(false);
+    }
+  };
+
+  const claimStatusColor = claimResult?.status === 'VERIFIED' ? 'text-[var(--spr-green)]' : claimResult?.status === 'CONTRADICTED' ? 'text-[var(--spr-red)]' : 'text-[var(--spr-amber)]';
+  const ClaimIcon = claimResult?.status === 'VERIFIED' ? CheckCircle2 : claimResult?.status === 'CONTRADICTED' ? XCircle : AlertCircle;
 
   const renderAgentResult = (agent: AgentDef, state: { state: AgentState; result: AgentResult | null }) => {
     if (state.state === 'loading') return <div className="mt-4 flex items-center gap-2 text-sm text-[var(--spr-text-muted)]"><Loader className="h-4 w-4 animate-spin" /> Running…</div>;
@@ -209,7 +237,7 @@ export default function AgentTrustView() {
 
     <section className="grid gap-5 lg:grid-cols-2">
       <div className="spr-panel p-5"><div className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-[var(--spr-green)]" /><h2 className="text-lg font-semibold">Verify a Passport</h2></div><p className="mt-1 text-sm text-[var(--spr-text-muted)]">Prepare a machine-readable verification request for an external agent.</p><input value={passport} onChange={e => setPassport(e.target.value.slice(0, 512))} placeholder="Signed Passport token or URL" className="mt-4 w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-sm outline-none focus:border-[var(--spr-highlight)]" /><pre className="mt-4 max-h-64 overflow-auto rounded-md bg-[var(--spr-surface-sunken)] p-4 text-xs text-[var(--spr-text)]">{example}</pre><button onClick={() => void copy(example)} className="spr-btn spr-btn-primary mt-3 inline-flex items-center gap-2"><ArrowRight className="h-4 w-4" />{copied ? 'Copied' : 'Copy verification request'}</button></div>
-      <div className="spr-panel p-5"><div className="flex items-center gap-2"><Bot className="h-5 w-5 text-[var(--spr-highlight)]" /><h2 className="text-lg font-semibold">Verify a claim</h2></div><p className="mt-1 text-sm text-[var(--spr-text-muted)]">SPR deliberately returns UNVERIFIED when observed evidence does not support the claim.</p><input value={claim} onChange={e => setClaim(e.target.value.slice(0, 2000))} placeholder="Example: this software has current security evidence" className="mt-4 w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-sm outline-none focus:border-[var(--spr-highlight)]" /><div className="mt-4 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4 text-sm text-[var(--spr-amber)]">Claim: {claim || 'Enter a claim to prepare an agent verification request.'}</div></div>
+      <div className="spr-panel p-5"><div className="flex items-center gap-2"><Bot className="h-5 w-5 text-[var(--spr-highlight)]" /><h2 className="text-lg font-semibold">Verify a claim</h2></div><p className="mt-1 text-sm text-[var(--spr-text-muted)]">SPR deliberately returns UNVERIFIED when observed evidence does not support the claim. Enter a signed passport above and a claim to verify it.</p><input value={claim} onChange={e => { setClaim(e.target.value.slice(0, 2000)); setClaimResult(null); setClaimError(null); }} placeholder="Example: this software has current security evidence" className="mt-4 w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-sm outline-none focus:border-[var(--spr-highlight)]" /><div className="mt-4 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4 text-sm text-[var(--spr-amber)]">Claim: {claim || 'Enter a claim to verify against SPR evidence.'}</div>{claimError && <div className="mt-3 flex items-start gap-2 rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 p-3 text-xs text-[var(--spr-red)]"><AlertCircle className="h-4 w-4 mt-0.5 shrink-0" /><div>{claimError}</div></div>}{claimResult && <div className={`mt-3 flex items-start gap-2 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] p-4 text-sm ${claimStatusColor}`}><ClaimIcon className="h-4 w-4 mt-0.5 shrink-0" /><div><div className="font-bold">{claimResult.status}</div><div className="mt-1 text-xs text-[var(--spr-text-muted)]">{claimResult.reason}</div></div></div>}<button onClick={() => void verifyClaim()} disabled={claimVerifying || !claim.trim() || !passport.trim()} className="spr-btn spr-btn-primary mt-4 inline-flex items-center gap-2">{claimVerifying ? <Loader className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}{claimVerifying ? 'Verifying…' : 'Verify claim against SPR evidence'}</button>{!passport.trim() && <p className="mt-2 text-xs text-[var(--spr-text-faint)]">Enter a signed passport in the Verify a Passport panel above to enable claim verification.</p>}</div>
     </section>
 
     <section className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5 text-sm text-[var(--spr-text-muted)]"><strong className="text-[var(--spr-text)]">Architecture:</strong> Agent → SPR evidence → authoritative verification → action. The agent layer is an extension of SPR, not a second trust database.</section>
