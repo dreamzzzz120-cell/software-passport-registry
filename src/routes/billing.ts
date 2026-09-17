@@ -342,13 +342,18 @@ export function createBillingRouter() {
       if (!priceId) return res.status(503).json({ error: 'This add-on is not yet available for checkout.' });
       const tenantId = req.user!.tenantId;
       const stripe = stripeClient();
+      // Add-ons belong to the same billing customer as the tenant's main plan.
+      // If the tenant has no customer yet, Checkout creates one and the
+      // checkout.session.completed webhook persists it for future purchases.
+      const existingBilling = (await req.db!.execute(sql`SELECT stripe_customer_id AS "stripeCustomerId" FROM tenant_subscriptions WHERE tenant_id = ${tenantId} LIMIT 1`) as any).rows?.[0];
+      const customerId: string | undefined = existingBilling?.stripeCustomerId;
       // One active subscription per add-on per tenant; a second checkout would
       // create a second live Stripe subscription for the same thing.
       const activeAddon = (await req.db!.execute(sql`SELECT stripe_subscription_id FROM tenant_addons WHERE tenant_id = ${tenantId} AND addon = ${parsed.data.addon} AND status IN ('active', 'trialing', 'past_due') LIMIT 1`) as any).rows?.[0];
       if (activeAddon) return res.status(409).json({ error: 'ADDON_ALREADY_ACTIVE', code: 'ADDON_ALREADY_ACTIVE', addon: parsed.data.addon, billingPath: '/billing', message: `${ADDON_CONFIG[parsed.data.addon].label} is already active on this workspace. Manage it from Manage billing.` });
       const session = await stripe.checkout.sessions.create({
         mode: 'subscription',
-        customer_email: req.user!.email,
+        ...(customerId ? { customer: customerId } : { customer_email: req.user!.email }),
         line_items: [{ price: priceId, quantity: 1 }],
         // Buyers can enter a Stripe promotion code on the hosted page; a code that
         // brings the total to zero must not demand a card for a $0 subscription.
