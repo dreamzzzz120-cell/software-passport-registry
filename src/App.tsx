@@ -15,7 +15,6 @@ import AITrustCenterView from './components/AITrustCenterView';
 import CoverageView from './components/CoverageView';
 import AssetsView from './components/AssetsView';
 import PassportsView from './components/PassportsView';
-import PassportsCommandWorkspace from './components/PassportsCommandWorkspace';
 import ScansView from './components/ScansView';
 import AlertsView from './components/AlertsView';
 import ClientsView from './components/ClientsView';
@@ -64,26 +63,131 @@ import { EXTENSIONS } from './workflows/extensionRegistry';
 // Center nav (PublicTrustCenterView), so that was reachable by clicking.
 // Listing all four keeps them public whether or not a static page exists.
 const PUBLIC_PATHS = new Set(['/','/login','/free-review','/pricing','/msp','/terms','/privacy','/dpa','/passport/demo','/trust/','/about/','/methodology/','/security/','/security-center/','/contact/','/data-retention/','/subprocessors/']);
+
+// /dpa/verify/<executionId>/<signature>: public signature check for an
+// executed Data Processing Agreement. The signature is the only credential.
 const DPA_VERIFY_PATH = /^\/dpa\/verify\/(dpa_[0-9a-f]{32})\/([0-9a-f]{64})\/?$/;
+
+// A completed Free Review result is addressable at
+//   /free-review/result/<passportId>/<token>
+// so it survives navigation and refresh, and can be reopened from a copied
+// link. The token is the same HMAC-signed, two-hour status token the API
+// already issues; it stays an opaque credential and is validated only
+// server-side by verifyFreeReviewStatusToken.
+//
+// Deliberately a narrow pattern rather than whitelisting /free-review/*:
+// only this exact three-segment shape is public. Anything else under
+// /free-review still falls through to the authenticated guard.
 const FREE_REVIEW_RESULT_PATH = /^\/free-review\/result\/([^/]+)\/([^/]+)\/?$/;
-function parseFreeReviewResultPath(path: string): { passportId: string; token: string } | null { const match = FREE_REVIEW_RESULT_PATH.exec(path); if (!match) return null; try { return { passportId: decodeURIComponent(match[1]), token: decodeURIComponent(match[2]) }; } catch { return null; } }
+
+function parseFreeReviewResultPath(path: string): { passportId: string; token: string } | null {
+  const match = FREE_REVIEW_RESULT_PATH.exec(path);
+  if (!match) return null;
+  try {
+    return { passportId: decodeURIComponent(match[1]), token: decodeURIComponent(match[2]) };
+  } catch {
+    return null;
+  }
+}
+
+// Hostnames SPR itself is served from. Anything else is a candidate
+// white-label custom domain (see src/routes/custom-domains.ts).
 const SPR_OWN_HOST_SUFFIXES = ['softwarepassportregistry.com', 'vercel.app', 'railway.app', 'localhost', '127.0.0.1'];
-function isSprOwnHost(host: string): boolean { return SPR_OWN_HOST_SUFFIXES.some((suffix) => host === suffix || host.endsWith(`.${suffix}`)); }
-function isPublicPath(path: string): boolean { return PUBLIC_PATHS.has(path) || FREE_REVIEW_RESULT_PATH.test(path) || DPA_VERIFY_PATH.test(path); }
+function isSprOwnHost(host: string): boolean {
+  return SPR_OWN_HOST_SUFFIXES.some((suffix) => host === suffix || host.endsWith(`.${suffix}`));
+}
+
+function isPublicPath(path: string): boolean {
+  return PUBLIC_PATHS.has(path) || FREE_REVIEW_RESULT_PATH.test(path) || DPA_VERIFY_PATH.test(path);
+}
 const EMPTY_CLIENTS: Client[] = [];
 const EMPTY_PASSPORTS: SoftwarePassport[] = [];
 const EMPTY_VENDORS: Vendor[] = [];
 const EMPTY_INTEGRATIONS: Integration[] = [];
 const EMPTY_SCANS: Scan[] = [];
 const EMPTY_ALERTS: Alert[] = [];
-function deriveAlertStatus(remediationStatus: string | null | undefined, findingStatus: string | null | undefined): Alert['status'] { switch (remediationStatus) { case 'IN_PROGRESS': case 'READY_FOR_VERIFICATION': return 'Acknowledged'; case 'BLOCKED': return 'Snoozed'; case 'VERIFIED': case 'CLOSED': return 'Resolved'; case 'CANCELLED': return 'Cancelled'; case 'OPEN': return 'Active'; default: return String(findingStatus || '').toLowerCase() === 'resolved' ? 'Resolved' : 'Active'; } }
-function navigate(path: string) { window.history.pushState({}, '', path); window.dispatchEvent(new PopStateEvent('popstate')); }
+
+// An alert's real workflow state lives on its most recent remediation work
+// item (trust_remediation_work_items.status), not on the finding row itself —
+// a finding can exist with no remediation ever created for it yet.
+function deriveAlertStatus(remediationStatus: string | null | undefined, findingStatus: string | null | undefined): Alert['status'] {
+  switch (remediationStatus) {
+    case 'IN_PROGRESS': case 'READY_FOR_VERIFICATION': return 'Acknowledged';
+    case 'BLOCKED': return 'Snoozed';
+    case 'VERIFIED': case 'CLOSED': return 'Resolved';
+    case 'CANCELLED': return 'Cancelled';
+    case 'OPEN': return 'Active';
+    default: return String(findingStatus || '').toLowerCase() === 'resolved' ? 'Resolved' : 'Active';
+  }
+}
+
+function navigate(path: string) {
+  window.history.pushState({}, '', path);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+}
+
+// Where to send someone after they sign in.
+//
+// Sign-in used to land everyone on /dashboard, which meant a visitor who had
+// just watched SPR scan their repository and pressed "Claim your Passport"
+// arrived at a bare login form and then a generic dashboard, with the scan they
+// came for silently dropped. The result already has a durable, shareable
+// address, so the CTA carries it as ?next= and login returns them to it.
+//
+// The parameter is attacker-supplied, so it is validated as a same-origin path
+// and nothing else. A value that is absolute, protocol-relative ("//evil.test"),
+// backslash-prefixed, or otherwise not a plain in-app path is discarded in
+// favour of the dashboard -- an open redirect out of a login screen is a
+// phishing primitive, and this one would be handed out to anyone who can get a
+// prospect to click a Free Review link.
 export const DEFAULT_POST_LOGIN_PATH = '/dashboard';
-export function safeReturnPath(raw: string | null | undefined): string { if (!raw) return DEFAULT_POST_LOGIN_PATH; let candidate = raw; try { candidate = decodeURIComponent(raw); } catch { return DEFAULT_POST_LOGIN_PATH; } if (!/^\/(?!\/)/.test(candidate)) return DEFAULT_POST_LOGIN_PATH; if (candidate.startsWith('/\\')) return DEFAULT_POST_LOGIN_PATH; if (/[\x00-\x1f]/.test(candidate)) return DEFAULT_POST_LOGIN_PATH; if (candidate === '/login' || candidate.startsWith('/login?')) return DEFAULT_POST_LOGIN_PATH; return candidate; }
-function returnPathFromLocation(): string { try { return safeReturnPath(new URLSearchParams(window.location.search).get('next')); } catch { return DEFAULT_POST_LOGIN_PATH; } }
-function usePath() { const [path, setPath] = useState(() => window.location.pathname || '/'); useEffect(() => { const update = () => setPath(window.location.pathname || '/'); window.addEventListener('popstate', update); return () => window.removeEventListener('popstate', update); }, []); return path; }
-function AuthLoading() { return <div className="grid min-h-screen place-items-center bg-[var(--spr-surface)] text-[var(--spr-text)]"><div className="text-center"><img src="/brand/spr-icon.png" alt="SPR" className="mx-auto h-20 w-20 rounded-md border border-[var(--spr-border)] object-contain" /><div className="mt-4 text-xs font-semibold uppercase tracking-[.15em] text-[var(--spr-text-muted)]">Securing workspace</div><div className="mt-1 text-sm text-[var(--spr-text-faint)]">Checking authenticated session…</div></div></div>; }
-function WorkflowBoundary({ title, description, extensionId, onNavigate }: { title: string; description: string; extensionId?: string; onNavigate: (path: string) => void }) { const extension = extensionId ? EXTENSIONS.find((item) => item.id === extensionId) : undefined; return <section className="spr-panel p-6 md:p-8"><div className="text-[12px] font-semibold uppercase tracking-[.15em] text-[var(--spr-text-faint)]">Workflow boundary</div><h1 className="mt-2 text-2xl font-semibold tracking-tight text-[var(--spr-text)]">{title}</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--spr-text-muted)]">{description}</p>{extension && <button onClick={() => onNavigate(extension.entryPath)} className="spr-btn spr-btn-primary mt-5">Open {extension.name} →</button>}</section>; }
+
+export function safeReturnPath(raw: string | null | undefined): string {
+  if (!raw) return DEFAULT_POST_LOGIN_PATH;
+  let candidate = raw;
+  try {
+    candidate = decodeURIComponent(raw);
+  } catch {
+    return DEFAULT_POST_LOGIN_PATH;
+  }
+  // Must be a single-slash-prefixed path. Rejects "https://evil.test",
+  // "//evil.test", "/\evil.test" and anything carrying a scheme or authority.
+  if (!/^\/(?!\/)/.test(candidate)) return DEFAULT_POST_LOGIN_PATH;
+  if (candidate.startsWith('/\\')) return DEFAULT_POST_LOGIN_PATH;
+  if (/[\x00-\x1f]/.test(candidate)) return DEFAULT_POST_LOGIN_PATH;
+  // Sending someone back to /login after logging in is a loop, not a return.
+  if (candidate === '/login' || candidate.startsWith('/login?')) return DEFAULT_POST_LOGIN_PATH;
+  return candidate;
+}
+
+/** The ?next= destination on the current URL, already validated. */
+function returnPathFromLocation(): string {
+  try {
+    return safeReturnPath(new URLSearchParams(window.location.search).get('next'));
+  } catch {
+    return DEFAULT_POST_LOGIN_PATH;
+  }
+}
+
+function usePath() {
+  const [path, setPath] = useState(() => window.location.pathname || '/');
+  useEffect(() => {
+    const update = () => setPath(window.location.pathname || '/');
+    window.addEventListener('popstate', update);
+    return () => window.removeEventListener('popstate', update);
+  }, []);
+  return path;
+}
+
+function AuthLoading() {
+  return <div className="grid min-h-screen place-items-center bg-[var(--spr-surface)] text-[var(--spr-text)]"><div className="text-center"><img src="/brand/spr-icon.png" alt="SPR" className="mx-auto h-20 w-20 rounded-md border border-[var(--spr-border)] object-contain" /><div className="mt-4 text-xs font-semibold uppercase tracking-[.15em] text-[var(--spr-text-muted)]">Securing workspace</div><div className="mt-1 text-sm text-[var(--spr-text-faint)]">Checking authenticated session…</div></div></div>;
+}
+
+
+function WorkflowBoundary({ title, description, extensionId, onNavigate }: { title: string; description: string; extensionId?: string; onNavigate: (path: string) => void }) {
+  const extension = extensionId ? EXTENSIONS.find((item) => item.id === extensionId) : undefined;
+  return <section className="spr-panel p-6 md:p-8"><div className="text-[12px] font-semibold uppercase tracking-[.15em] text-[var(--spr-text-faint)]">Workflow boundary</div><h1 className="mt-2 text-2xl font-semibold tracking-tight text-[var(--spr-text)]">{title}</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--spr-text-muted)]">{description}</p>{extension && <button onClick={() => onNavigate(extension.entryPath)} className="spr-btn spr-btn-primary mt-5">Open {extension.name} →</button>}</section>;
+}
 
 export default function App() {
   const path = usePath();
@@ -91,10 +195,19 @@ export default function App() {
   const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState('Viewer');
+  // Platform-operator identity, from the server's FOUNDER_EMAILS allowlist.
+  // Never inferred from `role`: Owner is per-tenant and every customer has one.
   const [isFounder, setIsFounder] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState('');
   const [selectedPassportId, setSelectedPassportId] = useState<string | null>(null);
   const [assets, setAssets] = useState<any[]>([]);
+  // Trust Network read its data straight out of state that starts empty, with no
+  // notion of "still loading" and no else-branch on any failed response. An
+  // existing customer therefore saw "Build your trust network -- add your first
+  // client" on first paint, and saw exactly the same screen if the API failed:
+  // the page asserted the customer had no clients when it simply did not know
+  // yet. Status is tracked here, where the fetch lives, rather than being
+  // inferred downstream from an empty array.
   const [dataStatus, setDataStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [reloadKey, setReloadKey] = useState(0);
   const [clients, setClients] = useState<Client[]>(EMPTY_CLIENTS);
@@ -104,72 +217,326 @@ export default function App() {
   const [findings, setFindings] = useState<unknown[]>([]);
   const [scans, setScans] = useState<Scan[]>(EMPTY_SCANS);
   const [integrations, setIntegrations] = useState<Integration[]>(EMPTY_INTEGRATIONS);
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => { if (typeof window === 'undefined') return 'dark'; const saved = window.localStorage.getItem('spr-theme'); return saved === 'light' || saved === 'dark' ? saved : 'dark'; });
-  useEffect(() => { document.documentElement.setAttribute('data-theme', theme); window.localStorage.setItem('spr-theme', theme); }, [theme]);
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof window === 'undefined') return 'dark';
+    const saved = window.localStorage.getItem('spr-theme');
+    return saved === 'light' || saved === 'dark' ? saved : 'dark';
+  });
+  // Applies the chosen theme to the document root (so every CSS var-based
+  // surface repaints) and persists it, so the toggle in Settings survives
+  // a refresh and applies before React even mounts on the next load.
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    window.localStorage.setItem('spr-theme', theme);
+  }, [theme]);
+  // Tenant white-label branding (GET /api/organization/branding). `branding`
+  // is what is saved; `brandingPreview` is an unsaved draft the White-label
+  // page pushes in while "Preview live in app" is on. The effective one is
+  // written onto the document root as CSS custom properties, so every
+  // surface repaints without any component knowing about branding.
   const [branding, setBranding] = useState<TenantBranding>(EMPTY_BRANDING);
   const [brandingPreview, setBrandingPreview] = useState<TenantBranding | null>(null);
+  // White-label custom domain: when the app is loaded on a hostname that is
+  // not SPR's own, the tenant that owns that hostname supplies the baseline
+  // branding -- sign-in page included -- until (and unless) a signed-in
+  // user's own workspace branding replaces it. Read once per page load from
+  // GET /api/public/branding/by-host; a 404 means the host is not an active
+  // custom domain and SPR defaults stay.
   const [hostBranding, setHostBranding] = useState<TenantBranding | null>(null);
-  useEffect(() => { const host = window.location.hostname.toLowerCase(); if (isSprOwnHost(host)) return; let cancelled = false; apiFetch(`/api/public/branding/by-host?host=${encodeURIComponent(host)}`).then(async (response) => { if (!response.ok || cancelled) return; const data = await response.json().catch(() => null); if (!cancelled && data?.branding) setHostBranding(parseBrandingResponse(data.branding)); }).catch(() => undefined); return () => { cancelled = true; }; }, []);
+  useEffect(() => {
+    const host = window.location.hostname.toLowerCase();
+    if (isSprOwnHost(host)) return;
+    let cancelled = false;
+    apiFetch(`/api/public/branding/by-host?host=${encodeURIComponent(host)}`).then(async (response) => {
+      if (!response.ok || cancelled) return;
+      const data = await response.json().catch(() => null);
+      if (!cancelled && data?.branding) setHostBranding(parseBrandingResponse(data.branding));
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
   const effectiveBranding = brandingPreview ?? (branding !== EMPTY_BRANDING ? branding : (hostBranding ?? branding));
   const hostBrand = hostBranding ? { productName: hostBranding.theme.productName?.trim() || hostBranding.companyName?.trim() || DEFAULT_PRODUCT_NAME, logoDataUrl: hostBranding.logoDataUrl } : null;
   useEffect(() => { applyBrandingTheme(effectiveBranding.theme, theme); }, [effectiveBranding, theme]);
-  useEffect(() => { if (!user) { setBranding(EMPTY_BRANDING); setBrandingPreview(null); applyBrandingTheme(hostBranding?.theme ?? null, theme); } }, [user, hostBranding, theme]);
-  const onBrandingPreview = useCallback((draft: TenantBranding | null) => setBrandingPreview(draft), []);
-  const [verificationDecisions, setVerificationDecisions] = useState<Record<string, VerificationDecisionState>>({});
-  const [verificationDetails, setVerificationDetails] = useState<Record<string, VerificationDecisionDetail>>({});
   useEffect(() => {
-    let mounted = true; let redirectSettled = false; let observedUser: User | null = null;
-    const timeoutId = window.setTimeout(() => { if (mounted) setAuthReady(true); }, 10_000);
-    const applyUser = (candidate: User | null) => { if (candidate && isSignupTransitionActive()) return; setUser(candidate); };
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => { if (!mounted) return; observedUser = currentUser; if (!redirectSettled) return; applyUser(currentUser); setAuthReady(true); window.clearTimeout(timeoutId); }, () => { if (mounted) { setAuthReady(true); window.clearTimeout(timeoutId); } });
-    void getRedirectResult(auth).then((result) => { redirectSettled = true; if (mounted) applyUser(result?.user || observedUser); if (mounted) setAuthReady(true); window.clearTimeout(timeoutId); }).catch((error) => { redirectSettled = true; console.error('[Firebase redirect sign-in error]', error); if (mounted) applyUser(observedUser); if (mounted) setAuthReady(true); window.clearTimeout(timeoutId); });
-    return () => { mounted = false; window.clearTimeout(timeoutId); unsubscribe(); };
+    // Sign-out returns the document to SPR defaults; a tenant's palette must
+    // not bleed onto the public pages or the next person's sign-in.
+    if (!user) { setBranding(EMPTY_BRANDING); setBrandingPreview(null); applyBrandingTheme(hostBranding?.theme ?? null, theme); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+  const onBrandingPreview = useCallback((draft: TenantBranding | null) => setBrandingPreview(draft), []);
+  // Authoritative verification decisions for every visible passport, fetched
+  // once via the batch endpoint. Surfaces consume this map instead of the
+  // legacy verification_status column, and no surface issues a per-passport
+  // verification request.
+  const [verificationDecisions, setVerificationDecisions] = useState<Record<string, VerificationDecisionState>>({});
+  // Full authoritative decision objects, keyed by passport id, so presentation
+  // surfaces can render the explanation, reason codes and counts verbatim.
+  const [verificationDetails, setVerificationDetails] = useState<Record<string, VerificationDecisionDetail>>({});
+
+  useEffect(() => {
+    let mounted = true;
+    let redirectSettled = false;
+    let observedUser: User | null = null;
+    const timeoutId = window.setTimeout(() => {
+      if (mounted) setAuthReady(true);
+    }, 10_000);
+    // Firebase auto-signs-in a newly created account before SPR has
+    // provisioned or verified it. That transient session must not be
+    // treated as a completed SPR login, or it unmounts LoginView mid-signup
+    // and triggers an authenticated data load that correctly 403s - which
+    // is what made a successful signup render as a provisioning failure.
+    const applyUser = (candidate: User | null) => {
+      if (candidate && isSignupTransitionActive()) return;
+      setUser(candidate);
+    };
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      if (!mounted) return;
+      observedUser = currentUser;
+      if (!redirectSettled) return;
+      applyUser(currentUser);
+      setAuthReady(true);
+      window.clearTimeout(timeoutId);
+    }, () => {
+      if (mounted) {
+        setAuthReady(true);
+        window.clearTimeout(timeoutId);
+      }
+    });
+    void getRedirectResult(auth).then((result) => {
+      redirectSettled = true;
+      if (mounted) applyUser(result?.user || observedUser);
+      if (mounted) setAuthReady(true);
+      window.clearTimeout(timeoutId);
+    }).catch((error) => {
+      redirectSettled = true;
+      console.error('[Firebase redirect sign-in error]', error);
+      if (mounted) applyUser(observedUser);
+      if (mounted) setAuthReady(true);
+      window.clearTimeout(timeoutId);
+    });
+    return () => {
+      mounted = false;
+      window.clearTimeout(timeoutId);
+      unsubscribe();
+    };
   }, []);
   useEffect(() => { if (authReady && !user && !isPublicPath(path)) navigate('/login'); }, [authReady, user, path]);
+
   useEffect(() => {
-    if (!user) return; let cancelled = false;
+    if (!user) return;
+    let cancelled = false;
     const load = async () => {
+      // Ensure a verified identity has a workspace BEFORE the batch load runs.
+      //
+      // This is the only choke point that catches every way a session can
+      // begin. LoginView.complete() covers the email/password and Google-popup
+      // paths, but onAuthStateChanged fires the moment Firebase restores or
+      // completes a sign-in -- including the Google *redirect* path and a page
+      // reload on an existing session -- and this effect then starts loading
+      // against an account that may not be provisioned yet. Doing it here
+      // covers all of them.
+      //
+      // beginSignupTransition() suppresses apiClient's 403-on-/api/user/me
+      // auto-sign-out for the duration. Without it that handler fires first
+      // and signs the user out mid-provision: production showed a burst of
+      // 403s at 09:51:38 followed by a successful workspace POST at 09:51:40 --
+      // the workspace was created, but the user had already been bounced to
+      // /login with a stale "not a member of any workspace" notice.
       beginSignupTransition();
-      try { const probe = await apiFetch('/api/user/me'); if (probe.status === 403 && auth.currentUser?.emailVerified) { const provisioned = await apiFetch('/api/auth/workspace', { method: 'POST' }); if (provisioned.ok) await auth.currentUser.getIdToken(true); } } catch { } finally { endSignupTransition(); }
+      try {
+        const probe = await apiFetch('/api/user/me');
+        if (probe.status === 403 && auth.currentUser?.emailVerified) {
+          const provisioned = await apiFetch('/api/auth/workspace', { method: 'POST' });
+          // Claims are stale immediately after provisioning; refresh so the
+          // batch load below authenticates against the new workspace.
+          if (provisioned.ok) await auth.currentUser.getIdToken(true);
+        }
+      } catch {
+        // A failed probe is not fatal: the batch load below reports the real
+        // outcome through the existing 401/403 handling.
+      } finally {
+        endSignupTransition();
+      }
+
       if (!cancelled) setDataStatus('loading');
-      const responses = await Promise.all([apiFetch('/api/user/me'), apiFetch('/api/scans'), apiFetch('/api/trust-loop/findings'), apiFetch('/api/user/passports'), apiFetch('/api/user/clients'), apiFetch('/api/integrations'), apiFetch('/api/vendors')]);
-      if (responses.some((response) => response.status === 401)) { setUser(null); setAuthNotice('Your session could not be verified. Please sign in again.'); await signOut(auth); navigate('/login'); return; }
+      const responses = await Promise.all([
+        apiFetch('/api/user/me'), apiFetch('/api/scans'), apiFetch('/api/trust-loop/findings'), apiFetch('/api/user/passports'), apiFetch('/api/user/clients'), apiFetch('/api/integrations'), apiFetch('/api/vendors'),
+      ]);
+      if (responses.some((response) => response.status === 401)) {
+        setUser(null);
+        setAuthNotice('Your session could not be verified. Please sign in again.');
+        await signOut(auth);
+        navigate('/login');
+        return;
+      }
       const [me, scansResponse, findingsResponse, passportsResponse, clientsResponse, integrationsResponse, vendorsResponse] = responses;
       if (me.ok) { const data = await me.json().catch(() => null); if (!cancelled) { setRole(String(data?.role || 'Viewer')); setIsFounder(data?.isFounder === true); } }
       if (scansResponse.ok) { const data = await scansResponse.json().catch(() => []); if (!cancelled && Array.isArray(data)) setScans(data); }
       if (findingsResponse.ok) { const data = await findingsResponse.json().catch(() => []); const rows = Array.isArray(data) ? data : data?.findings; if (!cancelled && Array.isArray(rows)) { setFindings(rows); setAlerts(rows.map((row: any) => ({ id: String(row.id), title: String(row.title || row.control_id || 'Trust finding'), severity: String(row.severity || 'Low').replace(/^./, (s: string) => s.toUpperCase()), category: 'Trust finding', clientName: String(row.client_id || 'Tenant'), description: String(row.description || 'Evidence-backed finding'), timestamp: String(row.updated_at || ''), status: deriveAlertStatus(row.remediation_status, row.status), remediationId: row.remediation_id ? String(row.remediation_id) : null, ownerDisplay: row.remediation_owner_display || null, slaDueAt: row.remediation_sla_due_at || null })) as Alert[]); } }
       if (passportsResponse.ok) { const data = await passportsResponse.json().catch(() => []); const rows = Array.isArray(data) ? data : data?.passports; if (!cancelled && Array.isArray(rows)) { const normalized = rows.map((row: any) => ({ ...row, id: String(row.id), name: String(row.name || 'Unnamed software'), version: String(row.version || 'unknown'), publisher: String(row.publisher || 'unknown'), clientId: row.clientId ? String(row.clientId) : undefined, evidence: Array.isArray(row.evidence) ? row.evidence : [], vulnerabilities: Array.isArray(row.vulnerabilities) ? row.vulnerabilities : [], timeline: toJsonArrayColumn(row.timeline), sbom: toJsonArrayColumn(row.sbom), scores: null, scoreStatus: row.scoreStatus || 'not_authoritatively_scored' })) as SoftwarePassport[]; setPassports(normalized); setAssets(normalized.map((passport: any) => ({ id: passport.id, name: passport.name, hostName: passport.name, type: passport.category || 'software', clientId: passport.clientId, clientName: String(passport.clientId || 'Unobserved'), environment: String(passport.environment || 'Unobserved'), version: passport.version }))); } }
+      // normalizeClientRecord is applied server-side too; repeating it here is
+      // deliberate and idempotent. It guards against a legacy row, a cached
+      // response predating the server fix, or any other route that returns a
+      // client, so a raw JSON-string column can never reach a component that
+      // calls .some()/.map() on it.
       if (clientsResponse.ok) { const data = await clientsResponse.json().catch(() => []); const rows = Array.isArray(data) ? data : data?.clients; if (!cancelled && Array.isArray(rows)) setClients(rows.map((row: any) => normalizeClientRecord({ ...row, id: String(row.id), name: String(row.name || row.company_name || 'Unnamed client') })) as Client[]); }
       if (integrationsResponse.ok) { const data = await integrationsResponse.json().catch(() => []); if (!cancelled && Array.isArray(data)) setIntegrations(data); }
-      if (vendorsResponse.ok) { const data = await vendorsResponse.json().catch(() => []); if (!cancelled && Array.isArray(data)) setVendors(data as Vendor[]); } else if (!cancelled) setVendors(EMPTY_VENDORS);
-      try { const brandingResponse = await apiFetch('/api/organization/branding'); if (brandingResponse.ok) { const parsed = parseBrandingResponse(await brandingResponse.json().catch(() => null)); if (!cancelled) { setBranding(parsed); if ((parsed.theme.defaultMode === 'light' || parsed.theme.defaultMode === 'dark') && !window.localStorage.getItem('spr-theme-choice')) setTheme(parsed.theme.defaultMode); } } } catch { }
-      try { const verificationResponse = await apiFetch('/api/user/verification'); if (verificationResponse.ok) { const data = await verificationResponse.json().catch(() => null); if (!cancelled && Array.isArray(data?.decisions)) { const map: Record<string, VerificationDecisionState> = {}; for (const entry of data.decisions) { if (entry?.passportId && entry?.decision?.state) map[String(entry.passportId)] = entry.decision.state; } setVerificationDecisions(map); const details: Record<string, VerificationDecisionDetail> = {}; for (const entry of data.decisions) { if (entry?.passportId) details[String(entry.passportId)] = entry; } setVerificationDetails(details); } } } catch { if (!cancelled) { setVerificationDecisions({}); setVerificationDetails({}); } }
+      if (vendorsResponse.ok) { const data = await vendorsResponse.json().catch(() => []); if (!cancelled && Array.isArray(data)) setVendors(data as Vendor[]); } else if (!cancelled) { setVendors(EMPTY_VENDORS); }
+      try {
+        const brandingResponse = await apiFetch('/api/organization/branding');
+        if (brandingResponse.ok) {
+          const parsed = parseBrandingResponse(await brandingResponse.json().catch(() => null));
+          if (!cancelled) {
+            setBranding(parsed);
+            // A workspace default appearance applies only until this viewer
+            // has made their own choice in Settings.
+            if ((parsed.theme.defaultMode === 'light' || parsed.theme.defaultMode === 'dark') && !window.localStorage.getItem('spr-theme-choice')) setTheme(parsed.theme.defaultMode);
+          }
+        }
+      } catch {
+        // Branding is cosmetic; a failed fetch leaves SPR defaults in place.
+      }
+      // One batch call for every visible passport's authoritative decision.
+      // A failure leaves the map empty, which renders UNINITIALIZED - it is
+      // never converted into a verified or otherwise reassuring state.
+      try {
+        const verificationResponse = await apiFetch('/api/user/verification');
+        if (verificationResponse.ok) {
+          const data = await verificationResponse.json().catch(() => null);
+          if (!cancelled && Array.isArray(data?.decisions)) {
+            const map: Record<string, VerificationDecisionState> = {};
+            for (const entry of data.decisions) { if (entry?.passportId && entry?.decision?.state) map[String(entry.passportId)] = entry.decision.state; }
+            setVerificationDecisions(map);
+            const details: Record<string, VerificationDecisionDetail> = {};
+            for (const entry of data.decisions) { if (entry?.passportId) details[String(entry.passportId)] = entry; }
+            setVerificationDetails(details);
+          }
+        }
+      } catch { if (!cancelled) { setVerificationDecisions({}); setVerificationDetails({}); } }
+
+      // Trust Network's two load-bearing collections. If either could not be
+      // read, the page must say so rather than render an empty estate as fact.
       if (!cancelled) setDataStatus(clientsResponse.ok && passportsResponse.ok ? 'ready' : 'error');
     };
-    void load().catch((error) => { console.warn('[SPR command center load]', error); if (!cancelled) setDataStatus('error'); });
+    void load().catch((error) => {
+      console.warn('[SPR command center load]', error);
+      if (!cancelled) setDataStatus('error');
+    });
     return () => { cancelled = true; };
   }, [user, reloadKey]);
-  useEffect(() => { const refresh = () => { if (user) window.location.reload(); }; window.addEventListener('refresh-data', refresh); return () => window.removeEventListener('refresh-data', refresh); }, [user]);
+
+  useEffect(() => {
+    const refresh = () => { if (user) window.location.reload(); };
+    window.addEventListener('refresh-data', refresh);
+    return () => window.removeEventListener('refresh-data', refresh);
+  }, [user]);
+
   const onNavigateTab = (target: string, itemId?: string) => navigate(itemId ? `${target.startsWith('/') ? target : `/${target}`}/${encodeURIComponent(itemId)}` : target.startsWith('/') ? target : `/${target}`);
   const quickAction = (action: 'add-client' | 'register-passport' | 'scan-sbom') => navigate(action === 'add-client' ? '/clients' : action === 'register-passport' ? '/passports' : '/scans');
+
   const performAlertAction = async (alert: Alert, action: 'acknowledge' | 'assign' | 'resolve' | 'escalate' | 'snooze' | 'reopen', assigneeDisplay?: string) => {
     let remediationId = alert.remediationId;
-    if (!remediationId) { const created = await apiFetch('/api/trust-loop/remediations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ findingId: alert.id, title: alert.title, description: alert.description, priority: alert.severity.toUpperCase() }) }); if (!created.ok) return; const createdBody = await created.json().catch(() => null); remediationId = createdBody?.id ? String(createdBody.id) : undefined; if (!remediationId) return; }
-    const patchBody: Record<string, unknown> = { acknowledge: { status: 'IN_PROGRESS' }, resolve: { status: 'CLOSED' }, snooze: { status: 'BLOCKED' }, reopen: { status: 'OPEN' }, escalate: { status: 'IN_PROGRESS', slaDueAt: new Date(Date.now() + 4 * 3600 * 1000).toISOString() }, assign: { status: 'IN_PROGRESS', ownerDisplay: assigneeDisplay || '' } }[action];
-    const response = await apiFetch(`/api/trust-loop/remediations/${encodeURIComponent(remediationId)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patchBody) });
+    if (!remediationId) {
+      const created = await apiFetch('/api/trust-loop/remediations', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ findingId: alert.id, title: alert.title, description: alert.description, priority: alert.severity.toUpperCase() }),
+      });
+      if (!created.ok) return;
+      const createdBody = await created.json().catch(() => null);
+      remediationId = createdBody?.id ? String(createdBody.id) : undefined;
+      if (!remediationId) return;
+    }
+    const patchBody: Record<string, unknown> = {
+      acknowledge: { status: 'IN_PROGRESS' },
+      resolve: { status: 'CLOSED' },
+      snooze: { status: 'BLOCKED' },
+      reopen: { status: 'OPEN' },
+      escalate: { status: 'IN_PROGRESS', slaDueAt: new Date(Date.now() + 4 * 3600 * 1000).toISOString() },
+      assign: { status: 'IN_PROGRESS', ownerDisplay: assigneeDisplay || '' },
+    }[action];
+    const response = await apiFetch(`/api/trust-loop/remediations/${encodeURIComponent(remediationId)}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patchBody),
+    });
     if (!response.ok) return;
     const updated = await response.json().catch(() => null);
-    setAlerts((current) => current.map((item) => item.id === alert.id ? { ...item, remediationId, status: deriveAlertStatus(updated?.status ?? String(patchBody.status), null), ownerDisplay: updated?.owner_display ?? (patchBody.ownerDisplay as string | undefined) ?? item.ownerDisplay, slaDueAt: updated?.sla_due_at ?? item.slaDueAt } : item));
+    setAlerts((current) => current.map((item) => item.id === alert.id ? {
+      ...item,
+      remediationId,
+      status: deriveAlertStatus(updated?.status ?? String(patchBody.status), null),
+      ownerDisplay: updated?.owner_display ?? (patchBody.ownerDisplay as string | undefined) ?? item.ownerDisplay,
+      slaDueAt: updated?.sla_due_at ?? (patchBody.slaDueAt as string | undefined) ?? item.slaDueAt,
+    } : item));
   };
-  const signOutUser = useCallback(async () => { await signOut(auth); setUser(null); navigate('/login'); }, []);
-  const selectedExtension = path.startsWith('/extensions/') ? path.split('/')[2] : null;
-  const freeReviewReturnPath = freeReviewResult ? `/free-review/result/${encodeURIComponent(freeReviewResult.passportId)}/${encodeURIComponent(freeReviewResult.token)}` : '/free-review';
-  const freeReviewSignUpTarget = user ? '/billing' : `/login?next=${encodeURIComponent(freeReviewReturnPath)}`;
+  const selectedExtension = useMemo(() => { const match = path.match(/^\/extensions\/([^/]+)/); return match ? decodeURIComponent(match[1]) : null; }, [path]);
+  const signOutUser = async () => { await signOut(auth); navigate('/login'); };
+
+  if (!authReady) return <AuthLoading />;
+  // On a tenant's own hostname the root is that tenant's portal, not SPR's
+  // marketing site: signed-out visitors get the branded sign-in page.
+  if (path === '/' && hostBrand && !user) return <LoginView onLoginSuccess={() => navigate(returnPathFromLocation())} brand={hostBrand} />;
+  if (path === '/') return <HomePage onCreatePassport={() => navigate('/login')} onExploreTrustNetwork={() => navigate('/free-review')} onViewSamplePassport={() => navigate('/passport/demo')} />;
+  if (path === '/login') return <LoginView onLoginSuccess={() => navigate(returnPathFromLocation())} brand={hostBrand} />;
+  // Public legal documents -- always reachable regardless of auth state,
+  // since /terms has no existing authenticated route to preserve. /privacy
+  // is intentionally only handled here for signed-out visitors: the existing
+  // authenticated '/privacy' route (below, in the CommandCenter switch) is
+  // the unrelated internal Privacy Governance tool and must not be replaced.
+  if (path === '/terms') return <TermsView />;
+  if (path === '/dpa') return <DpaView />;
+  {
+    const dpaVerify = path.match(DPA_VERIFY_PATH);
+    if (dpaVerify) return <DpaView verify={{ executionId: dpaVerify[1], signature: dpaVerify[2] }} />;
+  }
+  if (!user && path === '/privacy') return <PrivacyPolicyView />;
+  // Public trust center. Always reachable regardless of auth state -- these
+  // are the exact paths LegalFooterLinks has linked to from every public
+  // page all along (/trust/, /about/, /methodology/), which had no matching
+  // route until now. /security-center/ (not /security/) deliberately avoids
+  // colliding with the authenticated internal '/security' route below.
+  if (path === '/trust/') return <PublicTrustCenterView section="trust" onNavigate={navigate} />;
+  if (path === '/about/') return <PublicTrustCenterView section="about" onNavigate={navigate} />;
+  if (path === '/methodology/') return <PublicTrustCenterView section="methodology" onNavigate={navigate} />;
+  // /security/ is the canonical public security page (it is what the sitemap
+  // lists); /security-center/ stays as an alias for links already in the wild.
+  if (path === '/security/' || path === '/security-center/') return <PublicTrustCenterView section="security" onNavigate={navigate} />;
+  if (path === '/contact/') return <PublicTrustCenterView section="contact" onNavigate={navigate} />;
+  if (path === '/data-retention/') return <PublicTrustCenterView section="data-retention" onNavigate={navigate} />;
+  if (path === '/subprocessors/') return <PublicTrustCenterView section="subprocessors" onNavigate={navigate} />;
+  // Static sample Passport. Reads no database and no tenant - see
+  // DemoPassport.tsx. Public by design and explicitly labelled DEMO.
+  if (path === '/passport/demo') return <DemoPassport onRunFreeReview={() => navigate('/free-review')} onHome={() => navigate('/')} />;
+  // The Free Review is public, and stays public even for a visitor who happens
+  // to have a Firebase session in this browser. Gating it on `!user` meant that
+  // Firebase silently restoring a saved session -- which needs no deliberate
+  // sign-in and can happen on a page the visitor opened precisely because it
+  // promises "no account required" -- dropped them into the authenticated
+  // Command Center around the free report instead. Nobody asked to be signed
+  // in; they asked for a free scan. Handled here alongside /terms and
+  // /passport/demo, which are public in the same unconditional way.
+  //
+  // Nothing about the scan itself was ever tied to the account: the API writes
+  // into the dedicated Free Review tenant and rate-limits on a hashed IP, never
+  // on an identity. This is purely about which shell the page renders in.
+  // "Claim your Passport" used to drop the scan: signed-out visitors landed on a
+  // bare /login and then a generic /dashboard, with no trace of the repository
+  // they had just watched SPR scan, and signed-in ones were sent to /passports,
+  // which is not where anyone can actually buy anything.
+  //
+  // A completed review already has a durable address, so it is carried through
+  // sign-in as ?next= and the visitor comes back to their own result. Signed-in
+  // users go to /billing, which is the only screen that can start checkout.
+  const freeReviewReturnPath = freeReviewResult
+    ? `/free-review/result/${encodeURIComponent(freeReviewResult.passportId)}/${encodeURIComponent(freeReviewResult.token)}`
+    : '/free-review';
+  const freeReviewSignUpTarget = user
+    ? '/billing'
+    : `/login?next=${encodeURIComponent(freeReviewReturnPath)}`;
   if (path === '/free-review') return <FreeReviewView onSignUp={() => navigate(freeReviewSignUpTarget)} />;
   if (freeReviewResult) return <FreeReviewView onSignUp={() => navigate(freeReviewSignUpTarget)} initialResult={freeReviewResult} />;
   if (!user && path === '/pricing') return <MspPricingView isAuthenticated={false} onPrimaryAction={() => navigate('/login')} />;
   if (!user && path === '/msp') return <MspLandingView onEnter={() => navigate('/login')} onViewPricing={() => navigate('/pricing')} />;
   if (!user) return <AuthLoading />;
+
   let view: ReactNode;
   if (selectedExtension) view = <ExtensionWorkflow id={selectedExtension} onNavigate={navigate} />;
   else switch (path) {
@@ -177,8 +544,7 @@ export default function App() {
     case '/coverage': view = <CoverageView clients={clients} scans={scans} passports={passports} onNavigateTab={onNavigateTab} />; break;
     case '/evidence-explorer': view = <EvidenceExplorerView passports={passports} />; break;
     case '/assets': view = <AssetsView clients={clients} searchQuery="" assets={assets} />; break;
-    case '/passports': view = <PassportsCommandWorkspace verificationDecisions={verificationDecisions} verificationDetails={verificationDetails} passports={passports} selectedPassportId={selectedPassportId} setSelectedPassportId={setSelectedPassportId} clients={clients} onNavigateTab={onNavigateTab} />; break;
-    case '/registry': view = <PassportsView verificationDecisions={verificationDecisions} verificationDetails={verificationDetails} passports={passports} selectedPassportId={selectedPassportId} setSelectedPassportId={setSelectedPassportId} searchQuery="" clients={clients} assets={assets} role={role} onNavigateTab={onNavigateTab} onUpdatePassport={(passport) => setPassports((current) => current.map((item) => item.id === passport.id ? passport : item))} />; break;
+    case '/passports': case '/registry': view = <PassportsView verificationDecisions={verificationDecisions} verificationDetails={verificationDetails} passports={passports} selectedPassportId={selectedPassportId} setSelectedPassportId={setSelectedPassportId} searchQuery="" clients={clients} assets={assets} role={role} onNavigateTab={onNavigateTab} onUpdatePassport={(passport) => setPassports((current) => current.map((item) => item.id === passport.id ? passport : item))} />; break;
     case '/scans': view = <ScansView scans={scans} clients={clients} assets={assets} passports={passports} role={role} onTriggerNewScan={(scan) => setScans((current) => [scan, ...current.filter((item) => item.id !== scan.id)].slice(0, 100))} />; break;
     case '/alerts': view = <AlertsView alerts={alerts} onAlertAction={performAlertAction} role={role} />; break;
     case '/reports': view = <ReportsView clients={clients} passports={passports} scans={scans} alerts={alerts} findings={findings} role={role} />; break;
@@ -194,11 +560,17 @@ export default function App() {
     case '/security': view = <SecurityCenterView clients={clients} passports={passports} />; break;
     case '/compliance': view = <ComplianceView clients={clients} role={role} />; break;
     case '/msp': view = <MSPCommandCenter clients={clients} alerts={alerts} passports={passports} role={role} onSelectClient={setSelectedClientId} onSelectPassport={setSelectedPassportId} onNavigate={navigate} verificationDecisions={verificationDecisions} dataStatus={dataStatus} onRetry={() => setReloadKey((n) => n + 1)} />; break;
+    // Guided wrapper around the existing Universal Intake endpoints. It adds no
     case '/agent-trust': view = <AgentTrustView />; break;
     case '/ai-trust-center': view = <AITrustCenterView role={role} passports={passports} />; break;
     case '/enterprise-readiness': view = <EnterpriseReadinessView clients={clients} />; break;
     case '/investor': view = <InvestorHomeView passports={passports} clients={clients} alerts={alerts} onShowTelemetry={() => navigate('/scans')} onNavigateTab={onNavigateTab} />; break;
-    case '/founder': view = isFounder ? <FounderDashboardView userRole={role} /> : <WorkflowBoundary title="Workflow" description="This authenticated capability is explicitly routed through the Command Center. Choose its owning workflow from the left rail." onNavigate={navigate} />; break;
+    // Hiding the tile is not enough: the path is still typeable. A non-founder
+    // who navigates here gets the ordinary dashboard, not the founder shell.
+    case '/founder': view = isFounder
+      ? <FounderDashboardView userRole={role} />
+      : <WorkflowBoundary title="Workflow" description="This authenticated capability is explicitly routed through the Command Center. Choose its owning workflow from the left rail." onNavigate={navigate} />;
+      break;
     case '/billing': view = <BillingView />; break;
     case '/pricing': view = <MspPricingView isAuthenticated={true} onPrimaryAction={() => navigate('/billing')} />; break;
     case '/settings': view = <SettingsView theme={theme} onToggleTheme={() => { window.localStorage.setItem('spr-theme-choice', '1'); setTheme((current) => current === 'dark' ? 'light' : 'dark'); }} />; break;
@@ -206,7 +578,16 @@ export default function App() {
     case '/team': view = <TeamView role={role} />; break;
     case '/audit-log': view = <AuditLogView />; break;
     case '/extensions': view = <ExtensionMarketplace onNavigateTab={onNavigateTab} role={role} />; break;
+    // No '/free-review' case: it is answered above, before the authenticated
+    // shell, for signed-in and signed-out visitors alike. Rendering it in here
+    // was what wrapped the free report in the Command Center and made opening a
+    // public page look like being signed into an account.
     default: view = <WorkflowBoundary title="Workflow" description="This authenticated capability is explicitly routed through the Command Center. Choose its owning workflow from the left rail." onNavigate={navigate} />;
   }
-  return <CommandCenter path={path} userEmail={user.email} role={role} isFounder={isFounder} branding={effectiveBranding} onNavigate={navigate} onSignOut={() => void signOutUser()}><ViewErrorBoundary routeKey={path}>{view}</ViewErrorBoundary></CommandCenter>;
+
+  return (
+    <CommandCenter path={path} userEmail={user.email} role={role} isFounder={isFounder} branding={effectiveBranding} onNavigate={navigate} onSignOut={() => void signOutUser()}>
+      <ViewErrorBoundary routeKey={path}>{view}</ViewErrorBoundary>
+    </CommandCenter>
+  );
 }
