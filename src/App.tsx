@@ -51,6 +51,7 @@ import PrivacyPolicyView from './components/legal/PrivacyPolicyView';
 import DpaView from './components/legal/DpaView';
 import ReportsView from './components/ReportsView';
 import TrustGraphView from './components/TrustGraphView';
+import WorkspaceOperatingShell from './components/WorkspaceOperatingShell';
 import type { VerificationDecisionState } from './components/trust/TrustStateBadge';
 import type { VerificationDecisionDetail } from './components/design/CommandCenter';
 import { EXTENSIONS } from './workflows/extensionRegistry';
@@ -585,9 +586,11 @@ export default function App() {
     default: view = <WorkflowBoundary title="Workflow" description="This authenticated capability is explicitly routed through the Command Center. Choose its owning workflow from the left rail." onNavigate={navigate} />;
   }
 
+  const workspaceStage = path === '/assets' ? 'software' : path === '/passports' || path === '/registry' ? 'passports' : path === '/evidence-explorer' ? 'evidence' : path === '/monitoring' ? 'monitoring' : path === '/reports' ? 'reports' : null;
+
   return (
     <CommandCenter path={path} userEmail={user.email} role={role} isFounder={isFounder} branding={effectiveBranding} onNavigate={navigate} onSignOut={() => void signOutUser()}>
-      <ViewErrorBoundary routeKey={path}>{view}</ViewErrorBoundary>
+      {workspaceStage ? <WorkspaceOperatingShell stage={workspaceStage} onNavigate={navigate}><ViewErrorBoundary routeKey={path}>{view}</ViewErrorBoundary></WorkspaceOperatingShell> : <ViewErrorBoundary routeKey={path}>{view}</ViewErrorBoundary>}
     </CommandCenter>
   );
 }
