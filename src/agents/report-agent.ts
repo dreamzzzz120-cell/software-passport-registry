@@ -20,5 +20,5 @@ export function buildAgentReport(input: ReportInput): ReportResult {
   if (input.monitoringMaterialChanges && input.monitoringMaterialChanges > 0) actions.push('Review material changes before relying on the previous assessment.');
   if (!actions.length) actions.push('Continue evidence-backed monitoring and re-evaluate when material evidence changes.');
   sections.push({ title: 'Recommended Actions', source: 'RECOMMENDED_ACTION', facts: actions });
-  return { agent: 'report', schemaVersion: 'spr-report-agent-v1', passport: input.passport, sections, policy: { rule: 'Reports separate observed facts, derived agent results, unknowns, gaps, and recommendations. The report agent does not invent evidence, compliance, financial impact, or trust.', evaluatedAt: new Date(input.evaluatedAt).toISOString() } };
+  return { agent: 'report', schemaVersion: 'spr-report-agent-v1', passport: input.passport, sections, policy: { rule: 'Reports separate observed facts, derived agent results, unknowns, gaps, and recommendations. The report agent does not invent evidence, provenance, compliance, financial impact, or trust.', evaluatedAt: new Date(input.evaluatedAt).toISOString() } };
 }
