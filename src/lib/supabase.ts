@@ -10,19 +10,9 @@ const key = 'sb_publishable_MaRll_oRAt1JrrqLrd8M_g_DpFyhdkG';
 
 export const supabaseConfigured = Boolean(url && key);
 let client: SupabaseClient | null = null;
-
 function getClient(): SupabaseClient {
   if (!supabaseConfigured) throw new Error('Supabase browser authentication is not configured.');
-  if (!client) {
-    client = createClient(url, key, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
-    });
-  }
+  if (!client) client = createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
   return client;
 }
-
-export const supabase = new Proxy({} as SupabaseClient, {
-  get(_target, property, receiver) {
-    return Reflect.get(getClient(), property, receiver);
-  },
-});
+export const supabase = new Proxy({} as SupabaseClient, { get(_target, property, receiver) { return Reflect.get(getClient(), property, receiver); } });

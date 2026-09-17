@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Activity, ArrowRight, Bot, CheckCircle2, Clock3, Copy, ShieldCheck, Sparkles } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Activity, AlertCircle, ArrowRight, Bot, CheckCircle2, Clock3, Copy, FileText, Loader, Monitor, ShieldCheck, Sparkles } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
 
 const tools = [
@@ -12,15 +12,95 @@ const tools = [
   ['verify_claim', 'Check a claim and return VERIFIED, CONTRADICTED, or UNVERIFIED.'],
 ] as const;
 
-const agents = [
-  { name: 'Trust Agent', status: 'LIVE', description: 'Answers software-trust questions from observed SPR evidence.', action: 'Verify software', icon: ShieldCheck },
-  { name: 'Distribution Agent', status: 'LIVE', description: 'Discovers and researches potential MSP opportunities using evidence-first workflows.', action: 'Open distribution', icon: Activity },
-  { name: 'Vendor Risk Agent', status: 'LIVE', description: 'Turns vendor evidence, findings, freshness and completeness into a deterministic operational review.', action: 'Run vendor risk review', icon: ShieldCheck },
-  { name: 'Compliance Agent', status: 'NEXT', description: 'Will map observed evidence to supported controls and surface evidence gaps without inventing compliance.', action: 'Planned', icon: CheckCircle2 },
-  { name: 'Monitoring Agent', status: 'NEXT', description: 'Will continuously watch passports and evidence for material changes and prepare alerts.', action: 'Planned', icon: Activity },
-  { name: 'Report Agent', status: 'NEXT', description: 'Will turn verified evidence and findings into customer-ready reports.', action: 'Planned', icon: Copy },
-  { name: 'Revenue Agent', status: 'NEXT', description: 'Will identify observable service opportunities an MSP can package and sell to clients.', action: 'Planned', icon: Sparkles },
-] as const;
+type AgentStatus = 'LIVE' | 'NEXT';
+type AgentState = 'idle' | 'loading' | 'done' | 'error';
+
+interface AgentResult { status: string; [key: string]: unknown; }
+
+interface AgentDef {
+  name: string;
+  status: AgentStatus;
+  description: string;
+  action: string;
+  icon: typeof ShieldCheck;
+  endpoint: string;
+  method?: 'GET' | 'POST';
+  body?: (input: string) => Record<string, unknown>;
+  inputPlaceholder?: string;
+  inputLabel?: string;
+}
+
+const agents: AgentDef[] = [
+  {
+    name: 'Trust Agent',
+    status: 'LIVE',
+    description: 'Answers software-trust questions from observed SPR evidence.',
+    action: 'Verify software',
+    icon: ShieldCheck,
+    endpoint: '/api/agent/v1/verify-software',
+    method: 'POST',
+    body: (input) => ({ query: input }),
+    inputPlaceholder: 'Enter a software name or passport ID',
+    inputLabel: 'Software name or passport ID',
+  },
+  {
+    name: 'Distribution Agent',
+    status: 'LIVE',
+    description: 'Discovers and researches potential MSP opportunities using evidence-first workflows.',
+    action: 'Open distribution',
+    icon: Activity,
+    endpoint: '/api/founder/distribution/status',
+    method: 'GET',
+  },
+  {
+    name: 'Vendor Risk Agent',
+    status: 'LIVE',
+    description: 'Turns vendor evidence, findings, freshness and completeness into a deterministic operational review.',
+    action: 'Run vendor risk review',
+    icon: ShieldCheck,
+    endpoint: '/api/agent/v1/vendor-risk',
+    method: 'POST',
+    body: (input) => ({ passportId: input, staleAfterDays: 30 }),
+    inputPlaceholder: 'Enter a passport ID',
+    inputLabel: 'Passport ID',
+  },
+  {
+    name: 'Compliance Agent',
+    status: 'LIVE',
+    description: 'Maps observed evidence to supported controls and surfaces evidence gaps without inventing compliance.',
+    action: 'View compliance schedules',
+    icon: CheckCircle2,
+    endpoint: '/api/compliance/schedules',
+    method: 'GET',
+  },
+  {
+    name: 'Monitoring Agent',
+    status: 'LIVE',
+    description: 'Continuously watches passports and evidence for material changes and prepares alerts.',
+    action: 'View monitoring configs',
+    icon: Monitor,
+    endpoint: '/api/monitoring/monitoring-configurations',
+    method: 'GET',
+  },
+  {
+    name: 'Report Agent',
+    status: 'LIVE',
+    description: 'Turns verified evidence and findings into customer-ready reports.',
+    action: 'View report schedules',
+    icon: FileText,
+    endpoint: '/api/report-schedules',
+    method: 'GET',
+  },
+  {
+    name: 'Revenue Agent',
+    status: 'LIVE',
+    description: 'Identifies observable service opportunities an MSP can package and sell to clients.',
+    action: 'View savings report',
+    icon: Sparkles,
+    endpoint: '/api/savings/report',
+    method: 'GET',
+  },
+];
 
 export default function AgentTrustView() {
   const [passport, setPassport] = useState('');
@@ -29,6 +109,7 @@ export default function AgentTrustView() {
   const [mcpAvailable, setMcpAvailable] = useState<boolean | null>(null);
   const [distributionStatus, setDistributionStatus] = useState<Record<string, number> | null>(null);
   const [outreach, setOutreach] = useState<{ enabled: boolean; verification: null | { fromAddress: string; toAddress: string; status: string; providerMessageId: string | null; error: string | null; sentAt: string } } | null>(null);
+  const [agentStates, setAgentStates] = useState<Record<string, { state: AgentState; result: AgentResult | null; input: string }>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -38,8 +119,6 @@ export default function AgentTrustView() {
 
   useEffect(() => {
     let cancelled = false;
-    // apiFetch attaches the Firebase bearer token; a bare fetch never
-    // authorised and the panel showed 'Not verified' for everyone.
     apiFetch('/api/founder/distribution/status').then(async response => {
       if (!response.ok) return null;
       const data = await response.json().catch(() => null);
@@ -53,6 +132,35 @@ export default function AgentTrustView() {
   const endpoint = useMemo(() => `${window.location.origin}/mcp`, []);
   const example = useMemo(() => JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'verify_software', arguments: { passport: passport || 'YOUR_SIGNED_PASSPORT' } } }, null, 2), [passport]);
   const copy = async (value: string) => { await navigator.clipboard.writeText(value); setCopied(true); window.setTimeout(() => setCopied(false), 1500); };
+
+  const runAgent = useCallback(async (agent: AgentDef) => {
+    const current = agentStates[agent.name];
+    const inputVal = current?.input ?? '';
+    setAgentStates(prev => ({ ...prev, [agent.name]: { state: 'loading', result: prev[agent.name]?.result ?? null, input: inputVal } }));
+    try {
+      const opts: RequestInit = agent.method === 'POST' ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(agent.body ? agent.body(inputVal) : {}) } : {};
+      const response = await apiFetch(agent.endpoint, opts);
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => null);
+        throw new Error(errBody?.error || errBody?.message || `HTTP ${response.status}`);
+      }
+      const data = await response.json();
+      setAgentStates(prev => ({ ...prev, [agent.name]: { state: 'done', result: data, input: inputVal } }));
+    } catch (err) {
+      setAgentStates(prev => ({ ...prev, [agent.name]: { state: 'error', result: { status: 'error', message: err instanceof Error ? err.message : 'Request failed' }, input: inputVal } }));
+    }
+  }, [agentStates]);
+
+  const setAgentInput = (name: string, value: string) => {
+    setAgentStates(prev => ({ ...prev, [name]: { state: 'idle', result: prev[name]?.result ?? null, input: value } }));
+  };
+
+  const renderAgentResult = (agent: AgentDef, state: { state: AgentState; result: AgentResult | null }) => {
+    if (state.state === 'loading') return <div className="mt-4 flex items-center gap-2 text-sm text-[var(--spr-text-muted)]"><Loader className="h-4 w-4 animate-spin" /> Running…</div>;
+    if (state.state === 'error') return <div className="mt-4 flex items-start gap-2 rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 p-3 text-xs text-[var(--spr-red)]"><AlertCircle className="h-4 w-4 mt-0.5 shrink-0" /><div>{String(state.result?.message || 'Request failed')}</div></div>;
+    if (state.state === 'done' && state.result) return <div className="mt-4 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] p-3"><div className="mb-2 flex items-center gap-2 text-xs font-semibold text-[var(--spr-green)]"><CheckCircle2 className="h-3.5 w-3.5" /> Result</div><pre className="max-h-64 overflow-auto text-xs text-[var(--spr-text)]">{JSON.stringify(state.result, null, 2)}</pre></div>;
+    return null;
+  };
 
   return <div className="mx-auto max-w-7xl space-y-8">
     <section className="spr-panel overflow-hidden p-6 md:p-8">
@@ -68,13 +176,26 @@ export default function AgentTrustView() {
     </section>
 
     <section>
-      <div className="mb-4 flex items-end justify-between gap-4"><div><h2 className="text-xl font-semibold">Agent workforce</h2><p className="mt-1 text-sm text-[var(--spr-text-muted)]">One SPR evidence layer. Specialized workers on top.</p></div><div className="text-xs text-[var(--spr-text-faint)]">Live means backed by current repository functionality; Next means intentionally not presented as active yet.</div></div>
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {agents.map(({ name, status, description, action, icon: Icon }) => <article key={name} className="spr-panel p-5">
-          <div className="flex items-start justify-between gap-3"><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-2"><Icon className="h-5 w-5" /></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-bold tracking-[.16em] ${status === 'LIVE' ? 'bg-[var(--spr-green)]/15 text-[var(--spr-green)]' : 'bg-[var(--spr-surface-alt)] text-[var(--spr-text-faint)]'}`}>{status}</span></div>
-          <h3 className="mt-5 font-semibold">{name}</h3><p className="mt-2 min-h-12 text-sm leading-5 text-[var(--spr-text-muted)]">{description}</p>
-          <div className="mt-5 flex items-center gap-2 text-xs font-semibold text-[var(--spr-text-faint)]">{status === 'LIVE' ? <CheckCircle2 className="h-4 w-4 text-[var(--spr-green)]" /> : <Clock3 className="h-4 w-4" />}{action}</div>
-        </article>)}
+      <div className="mb-4 flex items-end justify-between gap-4"><div><h2 className="text-xl font-semibold">Agent workforce</h2><p className="mt-1 text-sm text-[var(--spr-text-muted)]">One SPR evidence layer. Specialized workers on top.</p></div><div className="text-xs text-[var(--spr-text-faint)]">Every agent runs against live SPR evidence — no mock data, no inferred results.</div></div>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {agents.map((agent) => {
+          const Icon = agent.icon;
+          const agentState = agentStates[agent.name] ?? { state: 'idle' as AgentState, result: null, input: '' };
+          const needsInput = agent.method === 'POST' && agent.body;
+          return <article key={agent.name} className="spr-panel flex flex-col p-5">
+            <div className="flex items-start justify-between gap-3"><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-2"><Icon className="h-5 w-5" /></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-bold tracking-[.16em] ${agent.status === 'LIVE' ? 'bg-[var(--spr-green)]/15 text-[var(--spr-green)]' : 'bg-[var(--spr-surface-alt)] text-[var(--spr-text-faint)]'}`}>{agent.status}</span></div>
+            <h3 className="mt-5 font-semibold">{agent.name}</h3>
+            <p className="mt-2 min-h-10 text-sm leading-5 text-[var(--spr-text-muted)]">{agent.description}</p>
+            {needsInput && <div className="mt-4"><label className="block text-xs font-medium text-[var(--spr-text-muted)]">{agent.inputLabel || 'Input'}</label><input value={agentState.input} onChange={e => setAgentInput(agent.name, e.target.value.slice(0, 500))} placeholder={agent.inputPlaceholder || 'Enter value'} className="mt-1 w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-sm outline-none focus:border-[var(--spr-highlight)]" /></div>}
+            {renderAgentResult(agent, agentState)}
+            <div className="mt-auto pt-5">
+              <button onClick={() => void runAgent(agent)} disabled={agentState.state === 'loading' || (needsInput && !agentState.input.trim())} className="spr-btn spr-btn-primary inline-flex w-full items-center justify-center gap-2 text-sm">
+                {agentState.state === 'loading' ? <Loader className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+                {agent.action}
+              </button>
+            </div>
+          </article>;
+        })}
       </div>
     </section>
 
