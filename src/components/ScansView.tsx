@@ -315,14 +315,19 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
     setScanProgress(0);
     setScanLogs([`[INFO] Locating software trust record for "${targetName}"...`]);
 
-    const targetLower = targetName.toLowerCase();
-    const matchedPassport = (passports || []).find(p => 
-      targetLower.includes(p.name.toLowerCase()) || 
-      p.name.toLowerCase().includes(targetLower)
-    ) || (passports && passports.find(p => p.id === selectedPassportId)) || (passports && passports[0]);
+    // Never guess the tenant asset/passport from free-form text. A scan is
+    // evidence-bearing and must attach to the exact passport the operator chose.
+    // Falling back to a fuzzy name match (or the first passport) could attach
+    // evidence to the wrong software record.
+    const matchedPassport = (passports || []).find(
+      p => String(p.id) === String(selectedPassportId),
+    );
 
     if (!matchedPassport) {
-      setScanLogs(l => [...l, `[ERROR] No active Software Passports found. Register a software passport first.`]);
+      setScanLogs(l => [
+        ...l,
+        `[ERROR] Select an exact Software Passport before starting a scan. No evidence was submitted.`,
+      ]);
       setIsScanning(false);
       return;
     }
