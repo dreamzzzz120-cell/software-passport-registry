@@ -27,6 +27,26 @@ async function sha256(file: File): Promise<string> {
   return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+/**
+ * Supabase signed-upload URLs accept a multipart FormData body. Sending a raw
+ * File with an explicit application/* Content-Type causes a browser CORS
+ * preflight on the cross-origin storage request and can surface only as the
+ * unhelpful `TypeError: Failed to fetch` in the UI. FormData lets the browser
+ * set the multipart boundary itself and mirrors storage-js's
+ * uploadToSignedUrl implementation.
+ */
+async function uploadToSignedUrl(signedUrl: string, file: File): Promise<Response> {
+  const body = new FormData();
+  body.append('cacheControl', '3600');
+  body.append('', file);
+  try {
+    return await fetch(signedUrl, { method: 'PUT', body, credentials: 'omit' });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Storage upload could not reach the secure upload endpoint: ${message}`);
+  }
+}
+
 export default function UniversalIntakeView({ onContinue }: { onContinue?: () => void }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
@@ -74,11 +94,19 @@ export default function UniversalIntakeView({ onContinue }: { onContinue?: () =>
         const urlResponse = await apiFetch('/api/intake/upload-url', { method: 'POST', body: JSON.stringify({ sessionId: sid, file: { name: item.name, size: item.size, contentType: item.type, kind: item.kind } }) });
         const urlData = await urlResponse.json();
         if (!urlResponse.ok) throw new Error(urlData?.error || `Could not prepare ${item.name}.`);
-        const put = await fetch(urlData.signedUrl, { method: 'PUT', headers: { 'Content-Type': item.type }, body: item.file });
-        if (!put.ok) throw new Error(`Upload failed for ${item.name}.`);
+        const put = await uploadToSignedUrl(urlData.signedUrl, item.file);
+        if (!put.ok) {
+          let detail = '';
+          try { detail = (await put.text()).trim().slice(0, 300); } catch {}
+          throw new Error(`Upload failed for ${item.name} (HTTP ${put.status}${detail ? `: ${detail}` : ''}).`);
+        }
         const hash = await sha256(item.file);
         const complete = await apiFetch('/api/intake/complete', { method: 'POST', body: JSON.stringify({ sessionId: sid, itemId: urlData.itemId, sha256: hash }) });
-        if (!complete.ok) throw new Error(`SPR could not finalize ${item.name}.`);
+        if (!complete.ok) {
+          let detail = '';
+          try { const data = await complete.json(); detail = data?.error || ''; } catch {}
+          throw new Error(detail || `SPR could not finalize ${item.name}.`);
+        }
         uploaded.push({ name: item.name, itemId: urlData.itemId, size: item.size, kind: item.kind });
         setItems(prev => prev.map(x => x === item ? { ...x, uploaded: true, itemId: urlData.itemId } : x));
       }
