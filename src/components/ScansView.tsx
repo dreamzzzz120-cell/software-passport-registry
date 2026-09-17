@@ -552,7 +552,9 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
         {jobHistory.length > 0 ? <div className="divide-y divide-[var(--spr-border)]">
           {jobHistory.slice(0, 10).map((job) => {
             const failed = String(job.status).toLowerCase() === 'failed';
-            const retryable = failed && Number(job.attemptCount ?? 0) < Number(job.maxAttempts ?? 0);
+            const attemptCount = Number(job.attemptCount ?? job.attempt_count ?? 0);
+            const maxAttempts = Number(job.maxAttempts ?? job.max_attempts ?? 0);
+            const retryable = failed && attemptCount < maxAttempts;
             const stateLabel = failed ? (retryable ? 'Retryable failure' : 'Permanent / exhausted') : String(job.status || 'Unknown');
             return <button type="button" key={job.id} onClick={() => fetchJobLogs(job.id)} className="w-full text-left px-5 py-3 hover:bg-[var(--spr-accent-soft)] transition-colors">
               <div className="flex items-center gap-3">
@@ -560,7 +562,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-[var(--spr-text)]"><span>{stateLabel}</span><span className="font-mono text-[10px] text-[var(--spr-text-muted)]">{job.jobType}</span></div>
                   <div className="mt-1 text-[11px] text-[var(--spr-text-muted)]">{job.error || (job.result ? 'Completed with persisted result.' : 'No terminal message recorded.')}</div>
-                  <div className="mt-1 text-[10px] font-mono text-[var(--spr-text-muted)]">Attempt {job.attemptCount ?? 0}/{job.maxAttempts ?? 0} · {job.progress ?? 0}% · {formatRunTime(job.updatedAt || job.createdAt)}</div>
+                  <div className="mt-1 text-[10px] font-mono text-[var(--spr-text-muted)]">Attempt {attemptCount}/{maxAttempts} · {job.progress ?? 0}% · {formatRunTime(job.updatedAt || job.updated_at || job.createdAt || job.created_at)}</div>
                 </div><ChevronRight className="w-4 h-4 text-[var(--spr-text-muted)]" />
               </div>
             </button>;
@@ -898,3 +900,257 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
                                 <h4 className="font-bold text-[var(--spr-text)] text-xs font-mono tracking-tight flex items-center gap-1.5">
                                   <Shield className="w-3.5 h-3.5 text-[var(--spr-highlight)] shrink-0" />
                                   <span className="truncate max-w-[160px]" title={schedule.assetHostName}>
+                                    {schedule.assetHostName}
+                                  </span>
+                                </h4>
+                                <p className="text-[12px] text-[var(--spr-text-muted)] font-sans">
+                                  Client: <strong className="text-[var(--spr-text-faint)]">{schedule.clientName}</strong>
+                                </p>
+                              </div>
+                              <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold uppercase font-mono ${
+                                isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-[var(--spr-surface-sunken)] text-[var(--spr-text-faint)]'
+                              }`}>
+                                {schedule.status}
+                              </span>
+                            </div>
+
+                            <div className="p-2.5 bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)]/70 rounded-lg space-y-1.5 text-xs">
+                              <div className="flex justify-between items-center text-[12px]">
+                                <span className="text-[var(--spr-text-muted)] font-mono">Scanning Policy:</span>
+                                <span className="font-bold text-[var(--spr-text-faint)] font-mono">{schedule.scanType}</span>
+                              </div>
+                              <div className="flex justify-between items-center text-[12px]">
+                                <span className="text-[var(--spr-text-muted)] font-mono">Interval:</span>
+                                <span className="font-semibold text-[var(--spr-highlight)] font-mono">{schedule.frequency}</span>
+                              </div>
+                            </div>
+
+                            <div className="flex justify-between items-center text-[12px] text-[var(--spr-text-muted)] font-mono border-t border-dashed border-[var(--spr-border)] pt-2.5">
+                              <div className="flex items-center gap-1">
+                                <Clock className="w-3 h-3 text-[var(--spr-text-muted)]" />
+                                <span>Last run: <strong className="text-[var(--spr-text-faint)]">{formatRunTime(schedule.lastRunAt)}</strong></span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Calendar className="w-3 h-3 text-[var(--spr-text-muted)]" />
+                                <span>Next: <strong className="text-[var(--spr-text-faint)]">{formatRunTime(schedule.nextRunAt)}</strong></span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex gap-2 pt-3 border-t border-[var(--spr-border)] mt-2">
+                            {/* Run Now Trigger */}
+                            <button
+                              onClick={() => handleRunScheduleNow(schedule)}
+                              disabled={!canManageSchedules || !isActive}
+                              className={`flex-1 py-1.5 px-3 rounded-lg text-[12px] font-bold text-[var(--spr-text)] transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                                canManageSchedules && isActive ? 'bg-[var(--spr-accent-soft)] hover:bg-[var(--spr-accent-soft)] shadow-sm' : 'bg-[var(--spr-border)] text-[var(--spr-text-muted)] cursor-not-allowed'
+                              }`}
+                              title={!canManageSchedules ? `Your ${role} role cannot run schedules.` : 'Trigger scanning routine immediately on this production target'}
+                            >
+                              <Play className="w-3 h-3" />
+                              <span>Run Now</span>
+                            </button>
+
+                            {/* Pause/Resume Toggle */}
+                            <button
+                              onClick={() => handleToggleScheduleStatus(schedule.id)}
+                              disabled={!canManageSchedules}
+                              className="px-3 py-1.5 border border-[var(--spr-border)] text-[var(--spr-text-faint)] rounded-lg hover:bg-[var(--spr-surface-sunken)] transition-all text-[12px] font-semibold cursor-pointer flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-50"
+                              title={!canManageSchedules ? `Your ${role} role cannot change schedules.` : isActive ? 'Pause automated recurrences' : 'Resume automated recurrences'}
+                            >
+                              {isActive ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                              <span>{isActive ? 'Pause' : 'Activate'}</span>
+                            </button>
+
+                            {/* Delete */}
+                            <button
+                              onClick={() => handleDeleteSchedule(schedule.id)}
+                              disabled={!canManageSchedules}
+                              className="p-1.5 border border-[var(--spr-border)] hover:border-[var(--spr-red)]/40 text-[var(--spr-text-muted)] hover:text-[var(--spr-red)] rounded-lg hover:bg-[var(--spr-red)]/15 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                              title={!canManageSchedules ? `Your ${role} role cannot delete schedules.` : 'Delete this schedule pipeline'}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Scanner Console / Progress indicator */}
+          {(isScanning || scanCompleted) && (
+            <div className="bg-[var(--spr-surface)] rounded-xl p-5 border border-[var(--spr-border)] shadow-md font-mono text-xs text-[var(--spr-text)]">
+              <div className="flex justify-between items-center pb-3 border-b border-[var(--spr-border)]/80 mb-4">
+                <span className="text-[var(--spr-text-muted)] font-bold text-[12px] uppercase">Compilation Terminal Console</span>
+                <span className="text-[var(--spr-highlight)] text-[12px] font-bold">PROVENANCE PORT v1.0</span>
+              </div>
+
+              {/* Progress Bar */}
+              {isScanning && (
+                <div className="space-y-1.5 mb-4">
+                  <div className="flex justify-between text-[12px] text-[var(--spr-text-muted)]">
+                    <span>Attesting SBOM payload integrity...</span>
+                    <span>{scanProgress}%</span>
+                  </div>
+                  <div className="w-full bg-[var(--spr-surface-sunken)] h-1.5 rounded-full overflow-hidden">
+                    <div className="bg-[var(--spr-accent-soft)] h-full transition-all duration-100" style={{ width: `${scanProgress}%` }}></div>
+                  </div>
+                </div>
+              )}
+
+              {/* Console logs */}
+              <div className="space-y-1.5 max-h-[180px] overflow-y-auto pr-1">
+                {scanLogs.map((log, index) => (
+                  <p
+                    key={index}
+                    className={
+                      log.includes('[SUCCESS]') ? 'text-emerald-400 font-semibold' :
+                      log.includes('[INFO]') ? 'text-[var(--spr-text)]' : 'text-[var(--spr-text-muted)]'
+                    }
+                  >
+                    {log}
+                  </p>
+                ))}
+              </div>
+
+              {scanCompleted && (
+                <div className="mt-5 pt-3 border-t border-[var(--spr-border)]/80 flex items-center justify-between text-emerald-400 font-bold">
+                  <span className="flex items-center gap-1">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span>Dossier compiled successfully!</span>
+                  </span>
+                  <button
+                    onClick={() => {
+                      setIsScanning(false);
+                      setScanCompleted(false);
+                      setScanProgress(0);
+                    }}
+                    className="bg-[var(--spr-accent-soft)] text-[var(--spr-text)] font-sans font-semibold text-[12px] uppercase px-3 py-1.5 rounded cursor-pointer hover:bg-[var(--spr-accent-soft)] transition-all"
+                  >
+                    Clear Console
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Right Column: Scan History List */}
+        <div className="bg-[var(--spr-surface-sunken)] rounded-xl border border-[var(--spr-border)] p-5 shadow-sm flex flex-col h-[520px]">
+          <div className="flex items-center justify-between mb-4 pb-2 border-b border-[var(--spr-border)]">
+            <div>
+              <h3 className="text-xs font-bold text-[var(--spr-text)] font-display">MSP Global Scan Logs</h3>
+              <p className="text-[11px] text-[var(--spr-text-muted)] font-sans mt-0.5">Audit trail of system attestations</p>
+            </div>
+            {unclassifiedScans.length > 0 && (
+              <button
+                type="button"
+                onClick={handleToggleSelectAllUnclassified}
+                className={`px-2 py-1 rounded text-[11px] font-bold font-mono border transition-all cursor-pointer ${
+                  allUnclassifiedSelected
+                    ? 'bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200'
+                    : 'bg-[var(--spr-surface-sunken)] text-[var(--spr-text-faint)] border-[var(--spr-border)] hover:bg-[var(--spr-surface-sunken)]'
+                }`}
+              >
+                {allUnclassifiedSelected ? 'Deselect All Unclassified' : 'Select All Unclassified'}
+              </button>
+            )}
+          </div>
+
+          <div className="flex-1 space-y-3.5 overflow-y-auto pr-1">
+            {scans.length === 0 && (
+              <div className="rounded-lg border border-dashed border-[var(--spr-border)] px-4 py-10 text-center">
+                <p className="text-xs font-semibold text-[var(--spr-text-muted)]">No scans recorded yet</p>
+                <p className="mt-1 text-[12px] text-[var(--spr-text-muted)]">Scan logs will appear here once a scan or scheduled run completes.</p>
+              </div>
+            )}
+            {scans.map((s) => {
+              const isUnclassified = s.scanType === 'Unclassified Attestation';
+              const isSelected = selectedScanIds.includes(s.id);
+              return (
+                <div
+                  key={s.id}
+                  className={`p-3 bg-[var(--spr-surface-sunken)] border rounded-lg text-xs flex gap-3 items-center transition-all ${
+                    isSelected ? 'border-[var(--spr-highlight)]/40 bg-[var(--spr-accent-soft)]' : 'border-[var(--spr-border)]'
+                  }`}
+                >
+                  {isUnclassified && (
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleSelectScan(s.id)}
+                      className="h-3.5 w-3.5 rounded border-[var(--spr-border)] text-[var(--spr-highlight)] focus:ring-[var(--spr-highlight)] cursor-pointer shrink-0"
+                    />
+                  )}
+                  <div className="flex-1 min-w-0 flex justify-between gap-2 items-start">
+                    <div className="min-w-0">
+                      <h4 className="font-bold text-[var(--spr-text-faint)] leading-snug truncate" title={s.targetName}>
+                        {s.targetName}
+                      </h4>
+                      <p className="text-[11px] text-[var(--spr-text-muted)] font-mono mt-0.5 truncate">
+                        Type: <span className={isUnclassified ? "text-amber-600 font-bold" : "text-[var(--spr-text-muted)] font-medium"}>{s.scanType}</span> • Owner: {s.clientName}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className={`inline-block px-1.5 py-0.5 rounded text-[11px] font-bold font-mono ${s.status === 'Success' ? 'bg-emerald-100 text-emerald-800' : 'bg-[var(--spr-red)]/15 text-[var(--spr-red)]'}`}>
+                        {s.status}
+                      </span>
+                      <p className="text-[11px] font-mono text-[var(--spr-text-muted)] mt-1">{s.durationMs}ms</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Batch-tag action footer */}
+          {selectedScanIds.length > 0 && (
+            <div className="mt-4 pt-3 border-t border-[var(--spr-border)] bg-[var(--spr-accent-soft)] p-3 rounded-lg border border-[var(--spr-highlight)]/40 space-y-2 shrink-0">
+              <div className="flex items-center justify-between">
+                <span className="text-[12px] font-bold text-[var(--spr-highlight)] uppercase font-mono tracking-wider">
+                  Batch Tag {selectedScanIds.length} {selectedScanIds.length === 1 ? 'Record' : 'Records'} Selected
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedScanIds([])}
+                  className="text-[11px] text-[var(--spr-text-muted)] hover:text-[var(--spr-text)] underline cursor-pointer font-sans"
+                >
+                  Clear Selection
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Custom Category name..."
+                  value={batchCategory}
+                  onChange={(e) => setBatchCategory(e.target.value)}
+                  className="flex-1 px-2.5 py-1.5 bg-[var(--spr-surface-sunken)] border border-[var(--spr-border)] rounded text-xs focus:ring-1 focus:ring-[var(--spr-highlight)] focus:outline-none font-sans font-medium text-[var(--spr-text-faint)]"
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleApplyBatchTag()}
+                  disabled={!batchCategory.trim() || batchTagging}
+                  className={`px-3 py-1.5 rounded text-xs font-bold text-[var(--spr-text)] transition-all cursor-pointer shrink-0 ${
+                    batchCategory.trim() && !batchTagging
+                      ? 'bg-[var(--spr-accent-soft)] hover:bg-[var(--spr-accent-soft)] shadow-sm'
+                      : 'bg-[var(--spr-border)] cursor-not-allowed'
+                  }`}
+                >
+                  {batchTagging ? 'Applying…' : 'Apply & Sync'}
+                </button>
+              </div>
+              {batchTagError && <p role="alert" className="text-[11px] text-[var(--spr-red)] font-sans leading-tight">{batchTagError}</p>}
+              <p className="text-[11px] text-[var(--spr-text-muted)] font-sans leading-tight">
+                This relabels the selected scan records with the category you enter. It does not change Assets or Passport records.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
