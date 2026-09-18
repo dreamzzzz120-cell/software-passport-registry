@@ -43,5 +43,11 @@ export function createWorkerPool(): Pool {
 }
 
 export async function assertWorkerDatabase(pool: Pool): Promise<void> {
-  await pool.query('SELECT 1');
+  // Records which database role the worker actually runs as and whether the
+  // connection is TLS, so "the worker uses the least-privileged role over
+  // TLS" is an observable fact in the deploy log rather than an assumption
+  // about which URL was configured.
+  const row = (await pool.query('SELECT current_user AS role, (SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()) AS tls')).rows[0] as { role?: string; tls?: boolean | null } | undefined;
+  const role = row?.role ?? null;
+  console.log(JSON.stringify({ event: 'worker_database_verified', role, leastPrivilege: role === 'spr_worker_runtime', tls: row?.tls ?? null }));
 }
