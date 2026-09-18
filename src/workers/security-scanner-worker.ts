@@ -93,8 +93,42 @@ async function recordFileLedger(pool: Pool, job: any, scanRoot: string, _reposit
   // Keep the ledger independently addressable at MSP client scope. The scan remains
   // the root event even if passport derivation/update later fails.
   await pool.query(`UPDATE scan_file_ledger SET client_id=(SELECT client_id FROM passports WHERE id=$1 AND tenant_id=$2 LIMIT 1) WHERE scan_id=$3 AND tenant_id=$2`, [job.passport_id, job.tenant_id, job.scan_id]);
-  return { files: files.length, bytes: totalBytes };
+  let archiveMembers = 0;
+  for (const full of files) {
+    const relative = path.relative(scanRoot, full).split(path.sep).join('/');
+    if (/\.zip$/i.test(relative)) {
+      const archiveId = `file-${sha256(job.scan_id+'|'+relative).slice(0,48)}`;
+      archiveMembers += await recordZipMembers(pool, job, full, relative, archiveId, scannerVersion);
+    }
+  }
+  await pool.query(`UPDATE scan_file_ledger SET client_id=(SELECT client_id FROM passports WHERE id=$1 AND tenant_id=$2 LIMIT 1) WHERE scan_id=$3 AND tenant_id=$2`, [job.passport_id, job.tenant_id, job.scan_id]);
+  return { files: files.length, bytes: totalBytes, archiveMembers };
 }
+async function recordZipMembers(pool: Pool, job: any, archiveFullPath: string, archiveRelativePath: string, archiveLedgerId: string, scannerVersion: string) {
+  if (!job.scan_id || !/\.zip$/i.test(archiveFullPath)) return 0;
+  const listing = await runBounded('unzip', ['-Z1', archiveFullPath], 30_000, 10 * 1024 * 1024);
+  if (listing.code !== 0) return 0;
+  const members = [...new Set(listing.stdout.toString('utf8').split(/\r?\n/).map(v => v.trim()).filter(v => v && !v.endsWith('/')))].slice(0, 50_000);
+  validateArchiveEntries(members);
+  let recorded = 0;
+  for (const member of members) {
+    const safeMember = member.replaceAll('\\', '/').replace(/^\/+/, '');
+    const memberPath = `${archiveRelativePath}::${safeMember}`;
+    const classification = fileClassification(safeMember);
+    const nestedArchive = classification.category === 'archive';
+    const reason = nestedArchive ? 'NESTED_ARCHIVE_CONTENT_NOT_EXPANDED' : 'ARCHIVE_MEMBER_NOT_EXTRACTED';
+    await pool.query(`INSERT INTO scan_file_ledger
+      (id,scan_id,tenant_id,client_id,software_identity,parent_archive_id,path,filename,size_bytes,sha256,detected_type,category,inspection_status,analysis_status,scanner_tool,scanner_version,error_reason,disposition_status,failure_stage,classification_method,is_archive,archive_depth,applicable_to_analysis,evidence_status)
+      VALUES ($1,$2,$3,NULL,$4,$5,$6,$7,NULL,NULL,'archive-member',$8,'partial','not_analyzed','security-scanner-v1',$9,$10,'PARTIAL','archive_inventory',$11,$12,1,'none')
+      ON CONFLICT (scan_id,path) DO UPDATE SET parent_archive_id=EXCLUDED.parent_archive_id,category=EXCLUDED.category,inspection_status=EXCLUDED.inspection_status,analysis_status=EXCLUDED.analysis_status,error_reason=EXCLUDED.error_reason,disposition_status=EXCLUDED.disposition_status,failure_stage=EXCLUDED.failure_stage,is_archive=EXCLUDED.is_archive,archive_depth=EXCLUDED.archive_depth`, [
+        `file-${sha256(job.scan_id+'|'+memberPath).slice(0,48)}`, job.scan_id, job.tenant_id, job.passport_id, archiveLedgerId, memberPath, path.basename(safeMember),
+        classification.category, scannerVersion, reason, classification.method, nestedArchive,
+      ]);
+    recorded++;
+  }
+  return recorded;
+}
+
 const JOB_LEASE_MS = 10 * 60 * 1000;
 
 async function recoverStaleJobs(pool: Pool) {
