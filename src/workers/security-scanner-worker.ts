@@ -18,17 +18,17 @@ function fileClassification(filePath: string): { category: string; method: strin
   const name = path.basename(filePath).toLowerCase();
   const p = filePath.toLowerCase();
   if (/\\.(zip|tar|tgz|tar\\.gz|tar\\.bz2|tar\\.xz)$/.test(name)) return { category: 'archive', method: 'extension' };
-  if (/(^|\\/)(package-lock\\.json|npm-shrinkwrap\\.json|yarn\\.lock|pnpm-lock\\.yaml|poetry\\.lock|composer\\.lock|gemfile\\.lock|cargo\\.lock|go\\.sum)$/.test(p)) return { category: 'lockfile', method: 'filename' };
-  if (/(^|\\/)(package\\.json|requirements(?:\\.txt)?|pyproject\\.toml|poetry\\.toml|cargo\\.toml|go\\.mod|pom\\.xml|composer\\.json|gemfile)$/.test(p)) return { category: 'dependency manifest', method: 'filename' };
+  if (/(^|[\\/])(package-lock\\.json|npm-shrinkwrap\\.json|yarn\\.lock|pnpm-lock\\.yaml|poetry\\.lock|composer\\.lock|gemfile\\.lock|cargo\\.lock|go\\.sum)$/.test(p)) return { category: 'lockfile', method: 'filename' };
+  if (/(^|[\\/])(package\\.json|requirements(?:\\.txt)?|pyproject\\.toml|poetry\\.toml|cargo\\.toml|go\\.mod|pom\\.xml|composer\\.json|gemfile)$/.test(p)) return { category: 'dependency manifest', method: 'filename' };
   if (/sbom|cyclonedx|spdx/.test(name)) return { category: 'sbom', method: 'filename' };
-  if (/(^|\\/)(\\.github\\/|jenkinsfile|azure-pipelines|bitbucket-pipelines|gitlab-ci)/.test(p)) return { category: 'ci/cd', method: 'path' };
+  if (/(^|[\\/])(\\.github\\/|jenkinsfile|azure-pipelines|bitbucket-pipelines|gitlab-ci)/.test(p)) return { category: 'ci/cd', method: 'path' };
   if (/terraform|\\.tf$|\\.tfvars$|dockerfile|kustomization|helm/.test(p)) return { category: 'infrastructure', method: 'filename' };
   if (/\\.(js|jsx|ts|tsx|py|rb|go|rs|java|kt|kts|cs|php|c|cc|cpp|h|hpp|swift|scala|sh|bash|zsh|ps1|sql)$/.test(name)) return { category: /test|spec/.test(name) ? 'test' : 'source code', method: 'extension' };
   if (/\\.(ya?ml|json|toml|ini|conf|cfg|env|properties|xml)$/.test(name)) return { category: 'configuration', method: 'extension' };
   if (/\\.(exe|dll|so|dylib|bin|elf|class|jar|war)$/.test(name)) return { category: 'binary', method: 'extension' };
   if (/\\.(deb|rpm|apk|msi|whl|gem|nupkg)$/.test(name)) return { category: 'package', method: 'extension' };
   if (/\\.(md|txt|rst|adoc|pdf|docx?)$/.test(name)) return { category: 'documentation', method: 'extension' };
-  if (/(^|\\/)(license|copying|notice)(\\.|$)/.test(name)) return { category: 'license', method: 'filename' };
+  if (/(^|[\\/])(license|copying|notice)(\\.|$)/.test(name)) return { category: 'license', method: 'filename' };
   return { category: 'unknown', method: 'no-confident-match' };
 }
 
