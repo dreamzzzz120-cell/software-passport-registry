@@ -27,9 +27,20 @@ export async function enqueueFreeReview(
   const existingConnection = (await scopedDb.execute(sql`SELECT id FROM repository_connections WHERE tenant_id=${FREE_REVIEW_TENANT_ID} AND provider='github' AND access_mode='public' AND status='Active' ORDER BY created_at ASC LIMIT 1`) as any).rows?.[0];
   const connectionId = existingConnection?.id || id('repo');
   if (!existingConnection) await scopedDb.execute(sql`INSERT INTO repository_connections (id,tenant_id,provider,installation_id,label,access_mode,status) VALUES (${connectionId},${FREE_REVIEW_TENANT_ID},'github','public-github','Free Review public GitHub acquisition','public','Active')`);
+  const scanId = id('scan');
   const repositoryJobId = id('job');
   const securityJobId = id('job');
-  await scopedDb.execute(sql`INSERT INTO agent_jobs (id,tenant_id,agent_id,passport_id,job_type,status,progress,next_attempt_at,created_at,updated_at) VALUES (${repositoryJobId},${FREE_REVIEW_TENANT_ID},'repository-scanner',${passportId},'repository_scan','Pending',0,NOW(),NOW(),NOW()),(${securityJobId},${FREE_REVIEW_TENANT_ID},'security-scanner',${passportId},'repository_security_scan','Pending',0,NOW(),NOW(),NOW())`);
+  // The scan is the durable root event. Both acquisition/security jobs point
+  // at the same scan so every downstream file, finding and evidence record has
+  // one immutable lineage root.
+  await scopedDb.execute(sql`INSERT INTO scans
+    (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name,software_identity,source,declared_scope,job_id,worker_job_id,coverage_state,error_state,error_code)
+    VALUES (${scanId},${FREE_REVIEW_TENANT_ID},${owner + '/' + repository},'repository','free-review','Pending',0,NULL,NOW()::text,'Free Review',${owner + '/' + repository},'github','repository',${repositoryJobId},${securityJobId},'unknown',NULL,NULL)`);
+  await scopedDb.execute(sql`INSERT INTO agent_jobs
+    (id,tenant_id,agent_id,passport_id,job_type,status,progress,next_attempt_at,created_at,updated_at,scan_id)
+    VALUES
+      (${repositoryJobId},${FREE_REVIEW_TENANT_ID},'repository-scanner',${passportId},'repository_scan','Pending',0,NOW(),NOW(),NOW(),${scanId}),
+      (${securityJobId},${FREE_REVIEW_TENANT_ID},'security-scanner',${passportId},'repository_security_scan','Pending',0,NOW(),NOW(),NOW(),${scanId})`);
   await scopedDb.execute(sql`INSERT INTO repository_scan_sources (id,job_id,tenant_id,connection_id,provider,repository_owner,repository_name,requested_ref,repository_subdirectory,created_at) VALUES (${id('source')},${repositoryJobId},${FREE_REVIEW_TENANT_ID},${connectionId},'github',${owner},${repository},${requestedRef},'',NOW())`);
   await scopedDb.execute(sql`INSERT INTO repository_scan_sources (id,job_id,tenant_id,connection_id,provider,repository_owner,repository_name,requested_ref,repository_subdirectory,created_at) VALUES (${id('source')},${securityJobId},${FREE_REVIEW_TENANT_ID},${connectionId},'github',${owner},${repository},${requestedRef},'',NOW())`);
   await scopedDb.execute(sql`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES (${repositoryJobId},'repository-scanner','Queued Free Review GitHub acquisition + Syft SBOM + OSV dependency scan.','Info'),(${securityJobId},'security-scanner','Queued Free Review secret, IaC/configuration, license and OSV scan.','Info')`);
