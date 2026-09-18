@@ -66,6 +66,17 @@ export function createScansRouter() {
     } catch (error) { return next(error); }
   });
 
+  router.get('/scans/:scanId/file-ledger', async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const db = req.db!;
+      const scan = (await db.execute(sql`SELECT id, target_name AS "targetName", status, coverage_state AS "coverageState", error_state AS "errorState", error_code AS "errorCode", software_identity AS "softwareIdentity", source, declared_scope AS "declaredScope", created_at AS "createdAt", started_at AS "startedAt", completed_at AS "completedAt", scanner_name AS "scannerName", scanner_version AS "scannerVersion" FROM scans WHERE id=${req.params.scanId} AND tenant_id=${req.user!.tenantId} AND (${req.user!.role} <> 'Client' OR EXISTS (SELECT 1 FROM passports p WHERE p.id=scans.software_identity AND p.tenant_id=scans.tenant_id AND p.client_id=${req.user!.clientId ?? ''})) LIMIT 1`)).rows?.[0] as any;
+      if (!scan) return res.status(404).json({ error: 'Scan not found' });
+      const summary = (await db.execute(sql`SELECT COUNT(*)::int AS "knownFiles", COALESCE(SUM(size_bytes),0)::bigint AS "totalBytes", COUNT(*) FILTER (WHERE inspection_status='inspected')::int AS "inspectedFiles", COUNT(*) FILTER (WHERE analysis_status='analyzed')::int AS "analyzedFiles", COUNT(*) FILTER (WHERE analysis_status='not_analyzed')::int AS "notAnalyzedFiles", COUNT(*) FILTER (WHERE error_reason IS NOT NULL)::int AS "errorFiles" FROM scan_file_ledger WHERE scan_id=${req.params.scanId} AND tenant_id=${req.user!.tenantId}`)).rows?.[0] as any;
+      const files = (await db.execute(sql`SELECT id, parent_archive_id AS "parentArchiveId", path, filename, size_bytes AS "sizeBytes", sha256, detected_type AS "detectedType", category, discovered_at AS "discoveredAt", inspection_status AS "inspectionStatus", analysis_status AS "analysisStatus", scanner_tool AS "scannerTool", scanner_version AS "scannerVersion", error_reason AS "errorReason", component_refs AS "componentRefs", finding_refs AS "findingRefs", evidence_refs AS "evidenceRefs" FROM scan_file_ledger WHERE scan_id=${req.params.scanId} AND tenant_id=${req.user!.tenantId} ORDER BY path ASC LIMIT 50000`)).rows || [];
+      return res.json({ scan, coverage: { ...summary, inventoryComplete: Number(summary?.knownFiles ?? 0) > 0 && Number(summary?.errorFiles ?? 0) === 0, analysisComplete: Number(summary?.knownFiles ?? 0) > 0 && Number(summary?.notAnalyzedFiles ?? 0) === 0 }, files });
+    } catch (error) { return next(error); }
+  });
+
   router.post('/scans', requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
     try {
       const parsed = scanSchema.safeParse(req.body);
