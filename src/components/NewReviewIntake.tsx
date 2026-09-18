@@ -2,7 +2,6 @@ import { useRef, useState } from 'react';
 import { ArrowRight, CheckCircle2, FileArchive, Loader2, ShieldCheck, Upload } from 'lucide-react';
 import { Github } from 'lucide-react-base';
 import { apiFetch } from '../utils/apiClient';
-import { freeReviewResultPath } from './FreeReviewView';
 
 const MAX_FILES = 100;
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
@@ -22,7 +21,7 @@ async function digest(file: File) {
   return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-export default function NewReviewIntake() {
+export default function NewReviewIntake({ clientId = null }: { clientId?: string | null } = {}) {
   const [mode, setMode] = useState<'repository' | 'files'>('repository');
   const [repository, setRepository] = useState('');
   const [files, setFiles] = useState<File[]>([]);
@@ -74,25 +73,16 @@ export default function NewReviewIntake() {
       if (parts.length !== 2 || !parts.every((part) => /^[A-Za-z0-9_.-]{1,100}$/.test(part))) {
         throw new Error('Use owner/repository, for example acme/my-app.');
       }
-      const response = await apiFetch('/api/free-review/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ owner: parts[0], repository: parts[1] }) });
+      // Authenticated submissions go through the workspace's own scan ledger,
+      // not the anonymous Free Review tenant: the passport and every scan row
+      // belong to THIS workspace, appear in its scan history and are visible
+      // to its clients. (They used to be queued under the Free Review system
+      // tenant, so the customer's own workspace never saw them.)
+      const response = await apiFetch('/api/scans/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source: 'github', owner: parts[0], repository: parts[1], ...(clientId ? { clientId } : {}) }) });
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body?.error || 'Could not start the repository review.');
-
-      // The repository review API already returns the durable, signed status
-      // credential used by the public Free Review result surface. Send the
-      // authenticated New Review workflow straight to that real result page
-      // instead of trapping the user on a generic "review started" message.
-      // The result page polls the worker's recorded progress and then renders
-      // the actual observed evidence, findings, SBOM/component data and
-      // verification outcome. Nothing here invents progress or a score.
-      if (typeof body?.statusUrl !== 'string' || typeof body?.passportId !== 'string') {
-        throw new Error('The review started, but SPR did not return a valid result link.');
-      }
-      const marker = '/status/';
-      const markerIndex = body.statusUrl.indexOf(marker);
-      const token = markerIndex >= 0 ? body.statusUrl.slice(markerIndex + marker.length) : '';
-      if (!token) throw new Error('The review started, but SPR did not return a valid status token.');
-      window.location.assign(freeReviewResultPath(body.passportId, decodeURIComponent(token)));
+      if (!response.ok) throw new Error(body?.error?.message || body?.error || 'Could not start the repository scan.');
+      if (typeof body?.scanRunId !== 'string') throw new Error('The scan was accepted, but SPR did not return a scan id.');
+      window.location.assign(`/scans?run=${encodeURIComponent(body.scanRunId)}`);
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not start the repository review.'); }
     finally { setBusy(false); }
   };
@@ -121,7 +111,14 @@ export default function NewReviewIntake() {
       }
       const claim = await apiFetch('/api/intake/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: session.sessionId }) });
       if (!claim.ok) { const body = await claim.json().catch(() => ({})); throw new Error(body?.error || 'Files uploaded but could not attach them to this workspace.'); }
-      setFiles([]); setMessage('Upload complete. SHA-256 was recorded and the files are queued for SPR analysis.');
+      // A claimed session is not a scan. The scan is created here, with a
+      // stable id, and the page moves to its ledger entry -- the message never
+      // claims analysis that has not been queued.
+      const submit = await apiFetch('/api/scans/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source: 'upload', sessionId: session.sessionId, ...(clientId ? { clientId } : {}) }) });
+      const submitted = await submit.json().catch(() => ({}));
+      if (!submit.ok || typeof submitted?.scanRunId !== 'string') throw new Error(submitted?.error?.message || submitted?.error || 'Files were uploaded and hashed, but the scan could not be queued.');
+      setFiles([]); setMessage(`Upload complete. ${files.length} file(s) recorded with SHA-256 and queued as scan ${submitted.scanRunId}.`);
+      window.location.assign(`/scans?run=${encodeURIComponent(submitted.scanRunId)}`);
     } catch (e) { setError(e instanceof Error ? e.message : 'Upload failed.'); }
     finally { setBusy(false); }
   };

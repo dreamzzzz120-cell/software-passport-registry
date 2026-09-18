@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { sql } from 'drizzle-orm';
 import { appendAuditEntry } from '../security/audit-log.ts';
 import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/security.ts';
+import { enqueueRepositoryScan, enqueueSbomScan } from '../scanners/scan-submission.ts';
 
 const repositorySchema = z.object({
   passportId: z.string().min(1).max(200),
@@ -61,7 +62,7 @@ export function createScansRouter() {
   router.get('/scans', async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
-      const result = await db.execute(sql`SELECT s.id, s.target_name AS "targetName", s.scan_type AS "scanType", s.triggered_by AS "triggeredBy", s.status, s.duration_ms AS "durationMs", s.findings_count AS "findingsCount", s.timestamp, s.client_name AS "clientName" FROM scans s WHERE s.tenant_id=${req.user!.tenantId} AND (${req.user!.role} <> 'Client' OR EXISTS (SELECT 1 FROM passports p WHERE p.tenant_id=s.tenant_id AND p.client_id=${req.user!.clientId ?? ''} AND (p.id=s.target_name OR LOWER(p.name)=LOWER(s.target_name)))) ORDER BY s.timestamp DESC LIMIT 100`);
+      const result = await db.execute(sql`SELECT s.id, s.target_name AS "targetName", s.scan_type AS "scanType", s.triggered_by AS "triggeredBy", s.status, s.duration_ms AS "durationMs", s.findings_count AS "findingsCount", s.timestamp, s.client_name AS "clientName", s.scan_run_id AS "scanRunId", s.passport_id AS "passportId", s.client_id AS "clientId", s.failure_code AS "failureCode" FROM scans s WHERE s.tenant_id=${req.user!.tenantId} AND (${req.user!.role} <> 'Client' OR EXISTS (SELECT 1 FROM passports p WHERE p.tenant_id=s.tenant_id AND p.client_id=${req.user!.clientId ?? ''} AND (p.id=s.target_name OR LOWER(p.name)=LOWER(s.target_name)))) ORDER BY s.timestamp DESC LIMIT 100`);
       return res.json((result as any).rows || []);
     } catch (error) { return next(error); }
   });
@@ -74,17 +75,17 @@ export function createScansRouter() {
       const { targetName, scanType, clientName } = parsed.data;
       const timestamp = new Date().toISOString();
       const scanId = id('scan');
-      const passport = (await db.execute(sql`SELECT id FROM passports WHERE tenant_id=${req.user!.tenantId} AND (LOWER(name)=LOWER(${targetName}) OR id=${targetName}) LIMIT 1`)).rows?.[0] as any;
+      const passport = (await db.execute(sql`SELECT id, client_id FROM passports WHERE tenant_id=${req.user!.tenantId} AND (LOWER(name)=LOWER(${targetName}) OR id=${targetName}) LIMIT 1`)).rows?.[0] as any;
       if (!passport) {
         await db.execute(sql`INSERT INTO scans (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name) VALUES (${scanId},${req.user!.tenantId},${targetName},${scanType},${req.user!.uid},'Failed',0,NULL,${timestamp},${clientName})`);
         return res.status(202).json({ id: scanId, targetName, scanType, triggeredBy: req.user!.uid, status: 'Failed', durationMs: 0, findingsCount: null, timestamp, clientName, error: 'No matching Software Passport exists for this scan target.' });
       }
-      const jobId = id('job');
-      await db.execute(sql`INSERT INTO scans (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name) VALUES (${scanId},${req.user!.tenantId},${targetName},${scanType},${req.user!.uid},'Scanning',0,NULL,${timestamp},${clientName})`);
-      await db.execute(sql`INSERT INTO agent_jobs (id,tenant_id,agent_id,passport_id,job_type,status,progress,next_attempt_at,created_at,updated_at) VALUES (${jobId},${req.user!.tenantId},'comprehensive_scanner',${passport.id},'osv_manifest_scan','Pending',0,NOW(),NOW(),NOW())`);
-      await db.execute(sql`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES (${jobId},'comprehensive_scanner','Queued real OSV dependency vulnerability scan against the persisted SBOM.','Info')`);
-      await appendAuditEntry(db, { tenantId: req.user!.tenantId, action: 'scan.queued', actor: req.user!.uid, payload: { scanId, jobId, targetName, scanType, clientName, passportId: passport.id } });
-      return res.status(202).json({ id: scanId, jobId, targetName, scanType, triggeredBy: req.user!.uid, status: 'Scanning', durationMs: 0, findingsCount: null, timestamp, clientName });
+      // Queued through the scan ledger so the row created here is the row the
+      // worker completes (it used to stay 'Scanning' forever while the worker
+      // inserted a second, unlinked row).
+      const submitted = await enqueueSbomScan(db, { tenantId: req.user!.tenantId, clientId: passport.client_id ?? null, passportId: passport.id, triggeredBy: req.user!.uid, targetName, clientName, scanType });
+      await appendAuditEntry(db, { tenantId: req.user!.tenantId, action: 'scan.queued', actor: req.user!.uid, payload: { scanId: submitted.scanId, scanRunId: submitted.scanRunId, jobId: submitted.jobId, targetName, scanType, clientName, passportId: passport.id } });
+      return res.status(202).json({ id: submitted.scanId, jobId: submitted.jobId, scanRunId: submitted.scanRunId, targetName, scanType, triggeredBy: req.user!.uid, status: 'Queued', durationMs: 0, findingsCount: null, timestamp, clientName });
     } catch (error) { return next(error); }
   });
 
@@ -152,18 +153,17 @@ export function createScansRouter() {
       const schedule = (await db.execute(sql`SELECT id, asset_id AS "assetId", asset_host_name AS "assetHostName", asset_type AS "assetType", client_name AS "clientName", frequency, scan_type AS "scanType", status, last_run_at AS "lastRunAt", next_run_at AS "nextRunAt", created_at AS "createdAt" FROM scan_schedules WHERE id=${req.params.id} AND tenant_id=${req.user!.tenantId} LIMIT 1`)).rows?.[0] as any;
       if (!schedule) return res.status(404).json({ error: 'Scan schedule not found' });
       if (schedule.status !== 'Active') return res.status(409).json({ error: 'Scan schedule is paused' });
-      const passport = (await db.execute(sql`SELECT id FROM passports WHERE tenant_id=${req.user!.tenantId} AND (id=${schedule.assetId} OR LOWER(name)=LOWER(${schedule.assetHostName})) LIMIT 1`)).rows?.[0] as any;
+      const passport = (await db.execute(sql`SELECT id, client_id FROM passports WHERE tenant_id=${req.user!.tenantId} AND (id=${schedule.assetId} OR LOWER(name)=LOWER(${schedule.assetHostName})) LIMIT 1`)).rows?.[0] as any;
       if (!passport) return res.status(422).json({ error: 'No matching Software Passport exists for this scheduled target.', queued: false });
       const now = new Date();
       const next = nextRunAt(schedule.frequency, now);
-      const scanId = id('scan');
-      const jobId = id('job');
-      await db.execute(sql`INSERT INTO scans (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name) VALUES (${scanId},${req.user!.tenantId},${schedule.assetHostName},${schedule.scanType},${req.user!.uid},'Scanning',0,NULL,${now.toISOString()},${schedule.clientName})`);
-      await db.execute(sql`INSERT INTO agent_jobs (id,tenant_id,agent_id,passport_id,job_type,status,progress,next_attempt_at,created_at,updated_at) VALUES (${jobId},${req.user!.tenantId},'comprehensive_scanner',${passport.id},'osv_manifest_scan','Pending',0,NOW(),NOW(),NOW())`);
+      const submitted = await enqueueSbomScan(db, { tenantId: req.user!.tenantId, clientId: passport.client_id ?? null, passportId: passport.id, triggeredBy: req.user!.uid, targetName: schedule.assetHostName, clientName: schedule.clientName, scanType: schedule.scanType });
+      const scanId = submitted.scanId;
+      const jobId = submitted.jobId;
       await db.execute(sql`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES (${jobId},'comprehensive_scanner',${'Scheduled OSV dependency scan dispatched for ' + schedule.assetHostName},'Info')`);
       const updated = (await db.execute(sql`UPDATE scan_schedules SET last_run_at=${now.toISOString()}, next_run_at=${next} WHERE id=${req.params.id} AND tenant_id=${req.user!.tenantId} RETURNING id, asset_id AS "assetId", asset_host_name AS "assetHostName", asset_type AS "assetType", client_name AS "clientName", frequency, scan_type AS "scanType", status, last_run_at AS "lastRunAt", next_run_at AS "nextRunAt", created_at AS "createdAt"`)).rows?.[0];
       await appendAuditEntry(db, { tenantId: req.user!.tenantId, action: 'scan.queued', actor: req.user!.uid, payload: { scanId, jobId, passportId: passport.id, scheduleId: req.params.id, scanType: schedule.scanType } });
-      return res.status(202).json({ success: true, scanId, jobId, queued: true, schedule: updated });
+      return res.status(202).json({ success: true, scanId, jobId, scanRunId: submitted.scanRunId, queued: true, schedule: updated });
     } catch (error) { return next(error); }
   });
 
@@ -249,19 +249,11 @@ export function createScansRouter() {
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
       const db = req.db!;
       const { passportId, owner, repository, ref, subdirectory } = parsed.data;
-      const passport = (await db.execute(sql`SELECT id FROM passports WHERE id=${passportId} AND tenant_id=${req.user!.tenantId} LIMIT 1`)).rows?.[0] as any;
+      const passport = (await db.execute(sql`SELECT p.id, p.name, p.client_id, c.name AS client_name FROM passports p LEFT JOIN clients c ON c.id = p.client_id AND c.tenant_id = p.tenant_id WHERE p.id=${passportId} AND p.tenant_id=${req.user!.tenantId} LIMIT 1`)).rows?.[0] as any;
       if (!passport) return res.status(404).json({ error: 'Passport not found' });
-      const existingConnection = (await db.execute(sql`SELECT id FROM repository_connections WHERE tenant_id=${req.user!.tenantId} AND provider='github' AND access_mode='public' AND status='Active' ORDER BY created_at ASC LIMIT 1`)).rows?.[0] as any;
-      const connectionId = existingConnection?.id || id('repo');
-      if (!existingConnection) await db.execute(sql`INSERT INTO repository_connections (id,tenant_id,provider,installation_id,label,access_mode,status) VALUES (${connectionId},${req.user!.tenantId},'github','public-github','Public GitHub acquisition','public','Active')`);
-      const repositoryJobId = id('job');
-      const securityJobId = id('job');
-      await db.execute(sql`INSERT INTO agent_jobs (id,tenant_id,agent_id,passport_id,job_type,status,progress,next_attempt_at,created_at,updated_at) VALUES (${repositoryJobId},${req.user!.tenantId},'repository-scanner',${passportId},'repository_scan','Pending',0,NOW(),NOW(),NOW()),(${securityJobId},${req.user!.tenantId},'security-scanner',${passportId},'repository_security_scan','Pending',0,NOW(),NOW(),NOW())`);
-      await db.execute(sql`INSERT INTO repository_scan_sources (id,job_id,tenant_id,connection_id,provider,repository_owner,repository_name,requested_ref,repository_subdirectory,created_at) VALUES (${id('source')},${repositoryJobId},${req.user!.tenantId},${connectionId},'github',${owner},${repository},${ref},${subdirectory},NOW())`);
-      await db.execute(sql`INSERT INTO repository_scan_sources (id,job_id,tenant_id,connection_id,provider,repository_owner,repository_name,requested_ref,repository_subdirectory,created_at) VALUES (${id('source')},${securityJobId},${req.user!.tenantId},${connectionId},'github',${owner},${repository},${ref},${subdirectory},NOW())`);
-      await db.execute(sql`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES (${repositoryJobId},'repository-scanner','Queued real GitHub acquisition + pinned Syft SBOM + OSV dependency scan.','Info'),(${securityJobId},'security-scanner','Queued real secret, IaC/configuration, license, Syft and OSV scan.','Info')`);
-      await appendAuditEntry(db, { tenantId: req.user!.tenantId, action: 'scan.queued', actor: req.user!.uid, payload: { repositoryJobId, securityJobId, passportId, owner, repository, ref } });
-      return res.status(202).json({ repositoryJobId, securityJobId, status: 'Pending', engines: ['Syft','OSV','Secret','IaC/Config','License'] });
+      const submitted = await enqueueRepositoryScan(db, { tenantId: req.user!.tenantId, clientId: passport.client_id ?? null, passportId: passport.id, owner, repository, ref, subdirectory, triggeredBy: req.user!.uid, targetName: passport.name, clientName: passport.client_name ?? 'Unassigned' });
+      await appendAuditEntry(db, { tenantId: req.user!.tenantId, action: 'scan.queued', actor: req.user!.uid, payload: { scanRunId: submitted.scanRunId, scanId: submitted.scanId, repositoryJobId: submitted.repositoryJobId, securityJobId: submitted.securityJobId, passportId, owner, repository, ref } });
+      return res.status(202).json({ scanRunId: submitted.scanRunId, scanId: submitted.scanId, repositoryJobId: submitted.repositoryJobId, securityJobId: submitted.securityJobId, status: 'Pending', engines: ['Syft','OSV','Secret','IaC/Config','License'], location: `/scans?run=${encodeURIComponent(submitted.scanRunId)}` });
     } catch (error) { return next(error); }
   });
 

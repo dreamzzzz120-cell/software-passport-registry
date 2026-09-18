@@ -25,6 +25,7 @@ import { createTrustVectorRouter } from './src/routes/trust-vector.ts';
 import { createBadgeRouter } from './src/routes/badge.ts';
 import { createFreeReviewRouter } from './src/routes/free-review.ts';
 import { createScansRouter } from './src/routes/scans.ts';
+import { createScanLedgerRouter } from './src/routes/scan-ledger.ts';
 import { createComplianceRouter } from './src/routes/compliance.ts';
 import { createTrustLoopRouter } from './src/routes/trust-loop.ts';
 import { createIntegrationMonitoringRouter } from './src/routes/integration-monitoring.ts';
@@ -139,6 +140,7 @@ app.use('/api/remediation-tasks', requireAuth, createRemediationTasksRouter());
 app.use('/api/report-schedules', requireAuth, createReportSchedulesRouter());
 const mcpBearer = process.env.SPR_MCP_BEARER_TOKEN;
 if (mcpBearer) { const mcpTransport = createMcpTransport({ expectedBearer: mcpBearer, executeTool: async (tool, args) => executePublicMcpTool(tool, args) }); app.post('/mcp', async (req, res) => { const response = await mcpTransport(new Request(`${config.appUrl || 'https://localhost'}/mcp`, { method: 'POST', headers: req.headers as Record<string, string>, body: JSON.stringify(req.body) })); res.status(response.status); response.headers.forEach((value, key) => res.setHeader(key, value)); res.send(Buffer.from(await response.arrayBuffer())); }); }
+app.use('/api', createScanLedgerRouter());
 app.use('/api', createScansRouter());
 app.use('/api/compliance', createComplianceRouter());
 const distDir = path.join(process.cwd(), 'dist');

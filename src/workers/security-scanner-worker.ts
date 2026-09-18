@@ -10,6 +10,8 @@ import { calculateAndStoreTrustScore } from '../utils/scanner.ts';
 import { scanFindingIdentity } from '../security/scan-finding-identity.ts';
 import { decryptCredentials } from '../integrations/credential-vault.ts';
 import { credentialsFrom, onScanCompleted } from '../integrations/connectwise/scan-completion-hook.ts';
+import { applySecurityEngineOutcomes, buildRepositoryInventory, makeArchiveLister, type RepositoryInventory } from '../scanners/repository-inventory.ts';
+import { markScanRunRunning, persistInventory, pinScanCommit, recomputeCoverage, settleScanRun, type LedgerContext } from '../scanners/scan-ledger.ts';
 
 const WORKER_ID = `${os.hostname()}:${process.pid}:security`;
 const MAX_ARCHIVE_BYTES = 50 * 1024 * 1024;
@@ -24,7 +26,7 @@ async function claimJob(pool: Pool) {
   try {
     await client.query('BEGIN');
     await client.query(`UPDATE agent_jobs SET status=CASE WHEN attempt_count < max_attempts THEN 'Pending' ELSE 'Failed' END, error=CASE WHEN attempt_count < max_attempts THEN NULL ELSE 'SECURITY_SCAN_LEASE_EXPIRED' END, next_attempt_at=CASE WHEN attempt_count < max_attempts THEN NOW() ELSE next_attempt_at END, locked_at=NULL, locked_by=NULL, updated_at=NOW(), completed_at=CASE WHEN attempt_count >= max_attempts THEN NOW() ELSE completed_at END WHERE job_type='repository_security_scan' AND status='Running' AND locked_at < NOW() - ($1 * INTERVAL '1 millisecond')`, [JOB_LEASE_MS]);
-    const result = await client.query(`SELECT id, tenant_id, passport_id, attempt_count, max_attempts FROM agent_jobs WHERE status='Pending' AND job_type='repository_security_scan' AND (next_attempt_at IS NULL OR next_attempt_at <= NOW()) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1`);
+    const result = await client.query(`SELECT id, tenant_id, passport_id, attempt_count, max_attempts, scan_run_id FROM agent_jobs WHERE status='Pending' AND job_type='repository_security_scan' AND (next_attempt_at IS NULL OR next_attempt_at <= NOW()) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1`);
     const job = result.rows[0];
     if (!job) { await client.query('COMMIT'); return null; }
     await client.query(`UPDATE agent_jobs SET status='Running', progress=5, attempt_count=attempt_count+1, locked_at=NOW(), locked_by=$2, updated_at=NOW() WHERE id=$1 AND tenant_id=$3`, [job.id, WORKER_ID, job.tenant_id]);
@@ -41,6 +43,11 @@ async function processSecurityJob(pool: Pool, job: any) {
   const connection = (await pool.query(`SELECT id FROM repository_connections WHERE id=$1 AND tenant_id=$2 AND provider='github' AND access_mode='public' AND status='Active'`, [source.connection_id, job.tenant_id])).rows[0];
   if (!connection) throw new Error('REPOSITORY_CONNECTION_NOT_FOUND');
 
+  const run = job.scan_run_id ? (await pool.query('SELECT id, client_id, resolved_commit_sha FROM scan_runs WHERE id = $1 AND tenant_id = $2', [job.scan_run_id, job.tenant_id])).rows[0] ?? null : null;
+  const ledger: LedgerContext | null = run ? { tenantId: job.tenant_id, scanRunId: run.id, passportId: job.passport_id, clientId: run.client_id ?? null } : null;
+  if (ledger) await markScanRunRunning(pool, job.tenant_id, ledger.scanRunId);
+  const pinnedSha: string | null = run?.resolved_commit_sha ? String(run.resolved_commit_sha) : null;
+  let inventory: RepositoryInventory | null = null;
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), `spr-sec-${job.id}-`));
   try {
     const repoApi = `https://api.github.com/repos/${encodeURIComponent(source.repository_owner)}/${encodeURIComponent(source.repository_name)}`;
@@ -52,7 +59,8 @@ async function processSecurityJob(pool: Pool, job: any) {
     const metadata: any = await metadataResponse.json();
     if (metadata.private && !tenantToken) throw new Error('REPOSITORY_PRIVATE_REQUIRES_CREDENTIAL');
     const defaultBranch = typeof metadata.default_branch === 'string' && metadata.default_branch.trim() ? metadata.default_branch.trim() : '';
-    const requestedRef = source.requested_ref || defaultBranch || 'main';
+    // A commit the other half of this scan already pinned is authoritative.
+    const requestedRef = pinnedSha || source.requested_ref || defaultBranch || 'main';
     // Renamed/transferred repositories: use the canonical name GitHub reports.
     const canonicalOwner = typeof metadata.owner?.login === 'string' && metadata.owner.login ? metadata.owner.login : source.repository_owner;
     const canonicalName = typeof metadata.name === 'string' && metadata.name ? metadata.name : source.repository_name;
@@ -62,6 +70,7 @@ async function processSecurityJob(pool: Pool, job: any) {
     if (!commitResponse.ok) throw new Error('REPOSITORY_REF_NOT_FOUND');
     const commit: any = await commitResponse.json();
     if (typeof commit.sha !== 'string' || !/^[a-f0-9]{40}$/i.test(commit.sha)) throw new Error('REPOSITORY_REF_NOT_FOUND');
+    if (ledger) commit.sha = await pinScanCommit(pool, job.tenant_id, ledger.scanRunId, commit.sha);
 
     const archivePath = path.join(tempRoot, 'repository.zip');
     const extractPath = path.join(tempRoot, 'extracted');
@@ -70,7 +79,8 @@ async function processSecurityJob(pool: Pool, job: any) {
     const archiveExecutable = process.platform === 'win32' ? 'tar.exe' : 'unzip';
     const listing = await runBounded(archiveExecutable, process.platform === 'win32' ? ['-tf', archivePath] : ['-Z1', archivePath], 30_000, 10 * 1024 * 1024);
     if (listing.code !== 0) throw new Error('REPOSITORY_ACQUISITION_FAILED');
-    validateArchiveEntries(listing.stdout.toString('utf8').split(/\r?\n/).filter(Boolean));
+    const listedEntries = listing.stdout.toString('utf8').split(/\r?\n/).filter(Boolean);
+    validateArchiveEntries(listedEntries);
     const extraction = await runBounded(archiveExecutable, process.platform === 'win32' ? ['-xf', archivePath, '-C', extractPath] : ['-q', archivePath, '-d', extractPath], 30_000);
     if (extraction.code !== 0) throw new Error('REPOSITORY_ACQUISITION_FAILED');
     const roots = await readdir(extractPath, { withFileTypes: true });
@@ -79,6 +89,14 @@ async function processSecurityJob(pool: Pool, job: any) {
     const repositoryRoot = path.join(extractPath, archiveRoot.name);
     const scanRoot = source.repository_subdirectory ? path.resolve(repositoryRoot, source.repository_subdirectory) : repositoryRoot;
     if (!scanRoot.startsWith(path.resolve(repositoryRoot) + path.sep) && scanRoot !== path.resolve(repositoryRoot)) throw new Error('REPOSITORY_PATH_INVALID');
+    // Every listed entry is accounted for before any engine runs, so a failure
+    // further down still leaves a complete inventory of what was acquired.
+    if (ledger) {
+      inventory = await buildRepositoryInventory({ listing: listedEntries, repositoryRoot, subdirectory: source.repository_subdirectory || '', archiveLister: makeArchiveLister(runBounded) });
+      await persistInventory(pool, ledger, inventory.entries);
+      await recomputeCoverage(pool, ledger, { inventoryComplete: !inventory.truncated, limitations: inventory.limitations });
+      console.info(JSON.stringify({ event: 'scan_inventory_persisted', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, scanRunId: ledger.scanRunId, files: inventory.entries.length, truncated: inventory.truncated }));
+    }
 
     await pool.query(`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES ($1,$2,$3,'Info')`, [job.id, 'security-scanner', `Acquired GitHub commit ${commit.sha}`]);
     await pool.query(`UPDATE agent_jobs SET progress=25,updated_at=NOW() WHERE id=$1 AND tenant_id=$2`, [job.id, job.tenant_id]);
@@ -86,14 +104,26 @@ async function processSecurityJob(pool: Pool, job: any) {
     await pool.query(`UPDATE agent_jobs SET progress=55,updated_at=NOW() WHERE id=$1 AND tenant_id=$2`, [job.id, job.tenant_id]);
     const scanned = await runRealRepositoryScanners(scanRoot, generated.document);
     const findings = scanned.findings;
+    const persistedFindings: Array<{ id: string; filePath: string | null }> = [];
     for (const finding of findings) {
       const findingKey = sha256(scanFindingIdentity({ tenantId: job.tenant_id, passportId: job.passport_id, engineId: finding.engineId, category: finding.category, title: finding.title, component: finding.component }));
-      await pool.query(`INSERT INTO scan_findings (id,tenant_id,asset_id,job_id,severity,category,title,description,component,status,detected_at,engine_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'Open',NOW(),$10) ON CONFLICT DO NOTHING`, [`finding-${findingKey}`, job.tenant_id, job.passport_id, job.id, finding.severity, finding.category, finding.title, finding.description, finding.component || null, finding.engineId]);
+      const findingId = `finding-${findingKey}`;
+      await pool.query(`INSERT INTO scan_findings (id,tenant_id,asset_id,job_id,severity,category,title,description,component,status,detected_at,engine_id,file_path,scan_run_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'Open',NOW(),$10,$11,$12) ON CONFLICT (id) DO UPDATE SET file_path = COALESCE(scan_findings.file_path, EXCLUDED.file_path), scan_run_id = COALESCE(scan_findings.scan_run_id, EXCLUDED.scan_run_id)`, [findingId, job.tenant_id, job.passport_id, job.id, finding.severity, finding.category, finding.title, finding.description, finding.component || null, finding.engineId, finding.filePath ?? null, job.scan_run_id ?? null]);
+      persistedFindings.push({ id: findingId, filePath: finding.filePath ?? null });
     }
     const evidencePayload = JSON.stringify({ repository: `${source.repository_owner}/${source.repository_name}`, requestedRef, resolvedCommitSha: commit.sha, engines: ['Syft','OSV','spr-secret-scanner-v1','spr-iac-config-scanner-v1','spr-license-scanner-v1'], findingCount: findings.length, limitations: ['OSV results are provider observations, not cryptographic verification.','Secret/config rules are deterministic pattern scanners and can produce false positives/negatives.'] });
     const evidenceHash = sha256(evidencePayload);
-    await pool.query(`INSERT INTO evidence_items (id,tenant_id,asset_id,name,type,verified,status,signer,timestamp,hash,raw_content,engine_id) VALUES ($1,$2,$3,'Multi-engine repository security scan','Security Scan',0,'OBSERVED','SPR scanner',NOW(),$4,$5,'spr-security-orchestrator-v1') ON CONFLICT DO NOTHING`, [`ev-security-${job.id}-${evidenceHash.slice(0,24)}`, job.tenant_id, job.passport_id, `sha256:${evidenceHash}`, evidencePayload]);
-    await pool.query(`INSERT INTO scans (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name) VALUES ($1,$2,$3,'Multi-engine repository security scan',$4,'Completed',0,$5,NOW(),$6) ON CONFLICT DO NOTHING`, [`scan-security-${job.id}-${commit.sha.slice(0,16)}`, job.tenant_id, `${source.repository_owner}/${source.repository_name}@${commit.sha.slice(0,12)}`, WORKER_ID, findings.length, source.repository_owner]);
+    const evidenceId = `ev-security-${job.id}-${evidenceHash.slice(0,24)}`;
+    await pool.query(`INSERT INTO evidence_items (id,tenant_id,asset_id,name,type,verified,status,signer,timestamp,hash,raw_content,engine_id,scan_run_id) VALUES ($1,$2,$3,'Multi-engine repository security scan','Security Scan',0,'OBSERVED','SPR scanner',NOW(),$4,$5,'spr-security-orchestrator-v1',$6) ON CONFLICT DO NOTHING`, [evidenceId, job.tenant_id, job.passport_id, `sha256:${evidenceHash}`, evidencePayload, job.scan_run_id ?? null]);
+    if (ledger && inventory) {
+      applySecurityEngineOutcomes(inventory, { inspectionReports: scanned.inspectionReports, cycloneDx: generated.document, syftVersion: '1.49.0', findings: persistedFindings, evidenceId });
+      await persistInventory(pool, ledger, inventory.entries);
+      const coverage = await recomputeCoverage(pool, ledger, { inventoryComplete: !inventory.truncated, limitations: inventory.limitations });
+      console.info(JSON.stringify({ event: 'scan_coverage_computed', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, scanRunId: ledger.scanRunId, filesDiscovered: coverage.filesDiscovered, filesInspected: coverage.filesInspected, filesUnsupported: coverage.filesUnsupported, filesSkipped: coverage.filesSkipped, filesFailed: coverage.filesFailed, filesInaccessible: coverage.filesInaccessible, filesUnknown: coverage.filesUnknown }));
+    }
+    // A scan queued through the ledger already owns a scans row, which
+    // settleScanRun completes; only legacy jobs insert their own summary row.
+    if (!job.scan_run_id) await pool.query(`INSERT INTO scans (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name) VALUES ($1,$2,$3,'Multi-engine repository security scan',$4,'Completed',0,$5,NOW(),$6) ON CONFLICT DO NOTHING`, [`scan-security-${job.id}-${commit.sha.slice(0,16)}`, job.tenant_id, `${source.repository_owner}/${source.repository_name}@${commit.sha.slice(0,12)}`, WORKER_ID, findings.length, source.repository_owner]);
     await pool.query(`UPDATE agent_jobs SET status='Completed',progress=100,result=$2,error=NULL,completed_at=NOW(),locked_at=NULL,locked_by=NULL,updated_at=NOW() WHERE id=$1 AND tenant_id=$3 AND status='Running' AND locked_by=$4`, [job.id, JSON.stringify({ engines: ['Syft','OSV','Secret','IaC/Config','License'], findings: findings.length, commitSha: commit.sha, evidenceHash: `sha256:${evidenceHash}` }), job.tenant_id, WORKER_ID]);
     // Same reason as osv-worker.scorePassportAfterScan: the passport's score and
     // verification_status are outcomes of this scan and were never recomputed.
@@ -139,6 +169,10 @@ export async function runSecurityScannerOnce(pool: Pool) {
   const job = await claimJob(pool);
   if (!job) return false;
   try { await processSecurityJob(pool, job); } catch (error) { await fail(pool, job, error); }
+  if (job.scan_run_id) {
+    try { const status = await settleScanRun(pool, job.tenant_id, job.scan_run_id); console.log(JSON.stringify({ event: 'scan_run_settled', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, scanRunId: job.scan_run_id, status })); }
+    catch (error) { console.error(JSON.stringify({ event: 'scan_run_settle_failed', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, scanRunId: job.scan_run_id, reason: safeFailureReason(rootErrorMessage(error)) })); }
+  }
   return true;
 }
 

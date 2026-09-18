@@ -20,6 +20,8 @@ import { normalizeCycloneDxComponentNames } from '../security/component-path-nor
 // explicit spr_worker_cross_tenant policy on every tenant-scoped table, which
 // is what the job queue needs and what BYPASSRLS used to provide.
 import { createWorkerPool } from './worker-db.ts';
+import { applyRepositoryEngineOutcomes, buildRepositoryInventory, makeArchiveLister, type RepositoryInventory } from '../scanners/repository-inventory.ts';
+import { markScanRunRunning, persistInventory, pinScanCommit, recomputeCoverage, recordPassportAssociation, settleScanRun, type LedgerContext } from '../scanners/scan-ledger.ts';
 
 type ClaimedJob = {
   id: string;
@@ -28,6 +30,7 @@ type ClaimedJob = {
   attempt_count: number;
   max_attempts: number;
   job_type: string;
+  scan_run_id: string | null;
 };
 
 type SbomComponent = { name?: string; version?: string; ecosystem?: string };
@@ -41,7 +44,7 @@ const MAX_EXTRACTED_BYTES = 200 * 1024 * 1024;
 const MAX_FILE_COUNT = 50_000;
 const ACQUISITION_TIMEOUT_MS = 30_000;
 const SBOM_TIMEOUT_MS = 120_000;
-const SYFT_VERSION = '1.49.0';
+export const SYFT_VERSION = '1.49.0';
 const GITHUB_API_ORIGIN = 'https://api.github.com';
 const GITHUB_CODELOAD_ORIGIN = 'https://codeload.github.com';
 // Free Review acquisition used to call GitHub with no credential at all, which
@@ -82,7 +85,7 @@ async function claimJob(pool: Pool): Promise<ClaimedJob | null> {
   try {
     await client.query('BEGIN');
     const result = await client.query<ClaimedJob>(`
-      SELECT id, tenant_id, passport_id, attempt_count, max_attempts, job_type
+      SELECT id, tenant_id, passport_id, attempt_count, max_attempts, job_type, scan_run_id
       FROM agent_jobs
       WHERE job_type IN ('osv_manifest_scan', 'repository_scan')
         AND (
@@ -106,7 +109,7 @@ async function claimJob(pool: Pool): Promise<ClaimedJob | null> {
           attempt_count = attempt_count + 1,
           locked_at = NOW(), locked_by = $2, updated_at = NOW()
       WHERE id = $1
-      RETURNING id, tenant_id, passport_id, attempt_count, max_attempts, job_type
+      RETURNING id, tenant_id, passport_id, attempt_count, max_attempts, job_type, scan_run_id
     `, [job.id, WORKER_ID]);
     await client.query('COMMIT');
     return updated.rows[0] || null;
@@ -187,10 +190,10 @@ async function persistProviderResult(client: PoolClient, job: ClaimedJob, compon
   const digest = `sha256:${sha256(persistedPayload)}`;
   await client.query(`
     INSERT INTO evidence_items
-      (id, tenant_id, asset_id, name, type, verified, status, signer, timestamp, hash, raw_content, engine_id, verification_failure_reason)
-    VALUES ($1, $2, $3, $4, 'Security Scan', 0, 'OBSERVED', 'api.osv.dev', $5, $6, $7, 'osv-worker', NULL)
+      (id, tenant_id, asset_id, name, type, verified, status, signer, timestamp, hash, raw_content, engine_id, verification_failure_reason, scan_run_id)
+    VALUES ($1, $2, $3, $4, 'Security Scan', 0, 'OBSERVED', 'api.osv.dev', $5, $6, $7, 'osv-worker', NULL, $8)
     ON CONFLICT (id) DO NOTHING
-  `, [evidenceId, job.tenant_id, job.passport_id, `OSV response for ${component.name}@${component.version}`, receivedAt, digest, persistedPayload]);
+  `, [evidenceId, job.tenant_id, job.passport_id, `OSV response for ${component.name}@${component.version}`, receivedAt, digest, persistedPayload, job.scan_run_id]);
 
   const vulnerabilities = Array.isArray((providerResponse as any)?.vulns) ? (providerResponse as any).vulns : [];
   for (const vulnerability of vulnerabilities) {
@@ -201,24 +204,30 @@ async function persistProviderResult(client: PoolClient, job: ClaimedJob, compon
     const provenance = JSON.stringify({ source: 'api.osv.dev', vulnerabilityId, rationale: assessment.rationale, sourceSeverities: assessment.sourceSeverities, cvssScores: assessment.cvssScores, cvssVectors: assessment.cvssVectors });
     await client.query(`
       INSERT INTO scan_findings
-        (id, tenant_id, asset_id, job_id, severity, category, title, description, component, status, detected_at, engine_id)
-      VALUES ($1, $2, $3, $4, $5, 'Vulnerability', $6, $7, $8, 'Open', $9, 'osv-worker')
-      ON CONFLICT (id) DO NOTHING
+        (id, tenant_id, asset_id, job_id, severity, category, title, description, component, status, detected_at, engine_id, scan_run_id)
+      VALUES ($1, $2, $3, $4, $5, 'Vulnerability', $6, $7, $8, 'Open', $9, 'osv-worker', $10)
+      ON CONFLICT (id) DO UPDATE SET scan_run_id = COALESCE(scan_findings.scan_run_id, EXCLUDED.scan_run_id)
     `, [
       deterministicId('finding-osv', vulnKey), job.tenant_id, job.passport_id, job.id,
       assessment.severity, vulnerabilityId,
       `${vulnerability?.summary || aliases.join(', ') || 'OSV returned a vulnerability record.'} Severity provenance: ${provenance}`,
-      `${component.name}@${component.version}`, receivedAt,
+      `${component.name}@${component.version}`, receivedAt, job.scan_run_id,
     ]);
   }
   return vulnerabilities.length;
 }
 
-async function processJob(pool: Pool, job: ClaimedJob) {
-  const passport = (await pool.query('SELECT name, version, sbom FROM passports WHERE id = $1 AND tenant_id = $2', [job.passport_id, job.tenant_id])).rows[0];
+export async function processJob(pool: Pool, job: ClaimedJob, componentOverride?: SbomComponent[]) {
+  if (job.scan_run_id) await markScanRunRunning(pool, job.tenant_id, job.scan_run_id);
+  // A repository job whose passport could not be written passes the SBOM it
+  // generated directly; the passport row is not required for OSV evidence.
+  const passport = componentOverride
+    ? ((await pool.query('SELECT name, version, sbom FROM passports WHERE id = $1 AND tenant_id = $2', [job.passport_id, job.tenant_id])).rows[0] ?? { name: job.passport_id, version: 'unknown', sbom: '[]' })
+    : (await pool.query('SELECT name, version, sbom FROM passports WHERE id = $1 AND tenant_id = $2', [job.passport_id, job.tenant_id])).rows[0];
   if (!passport) throw new Error('PASSPORT_NOT_FOUND');
   let parsed: unknown;
-  try { parsed = JSON.parse(passport.sbom || '[]'); } catch { throw new Error('SBOM_MALFORMED'); }
+  if (componentOverride) parsed = componentOverride;
+  else { try { parsed = JSON.parse(passport.sbom || '[]'); } catch { throw new Error('SBOM_MALFORMED'); } }
   if (!Array.isArray(parsed)) throw new Error('SBOM_MALFORMED');
   const seenComponents = new Set<string>();
   const components = (parsed as SbomComponent[]).filter((component): component is Required<Pick<SbomComponent, 'name' | 'version'>> & SbomComponent => {
@@ -314,8 +323,11 @@ async function processJob(pool: Pool, job: ClaimedJob) {
       `sha256:${sha256(evidencePayload)}`,
       evidencePayload,
     ]);
+    if (job.scan_run_id) await pool.query('UPDATE evidence_items SET scan_run_id = $3 WHERE id = $1 AND tenant_id = $2 AND scan_run_id IS NULL', [deterministicId('ev-sbom-empty', `${job.id}|${job.tenant_id}|${job.passport_id}`), job.tenant_id, job.scan_run_id]);
   }
-  await pool.query(`
+  // A scan queued through the ledger already owns a scans row, which
+  // settleScanRun completes; only legacy jobs insert their own summary row.
+  if (!job.scan_run_id) await pool.query(`
     INSERT INTO scans (id, tenant_id, target_name, scan_type, triggered_by, status, duration_ms, findings_count, timestamp, client_name)
     VALUES ($1, $2, $3, 'OSV manifest component query', $4, 'Completed', 0, $5, $6, $7)
     ON CONFLICT (id) DO NOTHING
@@ -462,7 +474,7 @@ export async function inspectTree(root: string) {
   if (manifests.length === 0) throw new Error('NO_SUPPORTED_MANIFESTS'); return manifests;
 }
 
-async function locateSyft() {
+export async function locateSyft() {
   if (process.env.SYFT_PATH) return process.env.SYFT_PATH;
   if (process.platform !== 'win32') return 'syft';
   return path.join(process.env.LOCALAPPDATA || '', 'Microsoft','WinGet','Packages','Anchore.Syft_Microsoft.Winget.Source_8wekyb3d8bbwe','syft.exe');
@@ -491,6 +503,11 @@ async function processRepositoryJob(pool: Pool, job: ClaimedJob) {
   if (!source) throw new Error('REPOSITORY_CONNECTION_NOT_FOUND');
   const connection = (await pool.query(`SELECT id FROM repository_connections WHERE id = $1 AND tenant_id = $2 AND provider = 'github' AND access_mode = 'public' AND status = 'Active'`, [source.connection_id, job.tenant_id])).rows[0];
   if (!connection) throw new Error('REPOSITORY_CONNECTION_NOT_FOUND');
+  // The scan ledger row this job belongs to. Legacy jobs queued before the
+  // ledger existed have none and run exactly as before.
+  const run = job.scan_run_id ? (await pool.query('SELECT id, client_id, resolved_commit_sha FROM scan_runs WHERE id = $1 AND tenant_id = $2', [job.scan_run_id, job.tenant_id])).rows[0] ?? null : null;
+  const ledger: LedgerContext | null = run ? { tenantId: job.tenant_id, scanRunId: run.id, passportId: job.passport_id, clientId: run.client_id ?? null } : null;
+  if (ledger) await markScanRunRunning(pool, job.tenant_id, ledger.scanRunId);
 
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), `spr-repo-${job.id}-`));
   let cleanupSucceeded = false; const scannerStartedAt = new Date();
@@ -500,30 +517,35 @@ async function processRepositoryJob(pool: Pool, job: ClaimedJob) {
   let lastStage = 'acquisition_started';
   const heartbeatStartedAt = Date.now();
   const heartbeat = setInterval(() => {
-    console.log(JSON.stringify({ event: 'scan_job_heartbeat', workerId: WORKER_ID, jobId: job.id, jobType: job.job_type, tenantId: job.tenant_id, lastStage, elapsedMs: Date.now() - heartbeatStartedAt }));
+    console.log(JSON.stringify({ event: 'scan_job_heartbeat', workerId: WORKER_ID, jobId: job.id, jobType: job.job_type, tenantId: job.tenant_id, scanRunId: ledger?.scanRunId ?? null, lastStage, elapsedMs: Date.now() - heartbeatStartedAt }));
   }, 15_000);
   const mark = (name: string, extra?: Record<string, unknown>) => { lastStage = name; stage(job, name, extra); };
+  let inventory: RepositoryInventory | null = null;
   try {
     mark('acquisition_started');
     const repoUrl = `${GITHUB_API_ORIGIN}/repos/${encodeURIComponent(source.repository_owner)}/${encodeURIComponent(source.repository_name)}`;
-    const suppliedImmutableSha = typeof source.requested_ref === 'string' && /^[a-f0-9]{40}$/i.test(source.requested_ref);
+    // A commit another job of this scan already pinned is authoritative: both
+    // halves of a scan must describe the same tree.
+    const pinnedSha: string | null = run?.resolved_commit_sha ? String(run.resolved_commit_sha) : null;
+    const suppliedImmutableSha = pinnedSha !== null || (typeof source.requested_ref === 'string' && /^[a-f0-9]{40}$/i.test(source.requested_ref));
     const tenantToken = await resolveTenantGitHubToken(pool, job.tenant_id);
     const gitHubToken = tenantToken ?? githubToken();
-    const metadata = suppliedImmutableSha ? null : await fetchJson(repoUrl, 'REPOSITORY_NOT_FOUND', gitHubToken);
+    const metadata = (!pinnedSha && suppliedImmutableSha) ? null : await fetchJson(repoUrl, 'REPOSITORY_NOT_FOUND', gitHubToken);
     mark('metadata_fetched', { hasMetadata: !!metadata, credential: tenantToken ? 'tenant' : 'server' });
     // A private repository is acquired only with the tenant's own credential.
     if (metadata?.private && !tenantToken) throw new Error('REPOSITORY_PRIVATE_REQUIRES_CREDENTIAL');
-    const requestedRef = source.requested_ref || metadata?.default_branch; if (!requestedRef) throw new Error('REPOSITORY_REF_NOT_FOUND');
+    const requestedRef = pinnedSha ?? source.requested_ref ?? metadata?.default_branch; if (!requestedRef) throw new Error('REPOSITORY_REF_NOT_FOUND');
     // A renamed/transferred repository reports its current name in the
     // metadata; use that for the commit lookup and archive download so the
     // acquisition matches what GitHub actually serves.
     const canonicalOwner = typeof metadata?.owner?.login === 'string' && metadata.owner.login ? metadata.owner.login : source.repository_owner;
     const canonicalName = typeof metadata?.name === 'string' && metadata.name ? metadata.name : source.repository_name;
     const canonicalRepoUrl = `${GITHUB_API_ORIGIN}/repos/${encodeURIComponent(canonicalOwner)}/${encodeURIComponent(canonicalName)}`;
-    const commitSha = suppliedImmutableSha ? requestedRef.toLowerCase() : (await fetchJson(`${canonicalRepoUrl}/commits/${encodeURIComponent(requestedRef)}`, 'REPOSITORY_REF_NOT_FOUND', gitHubToken))?.sha;
+    let commitSha: string = suppliedImmutableSha ? requestedRef.toLowerCase() : (await fetchJson(`${canonicalRepoUrl}/commits/${encodeURIComponent(requestedRef)}`, 'REPOSITORY_REF_NOT_FOUND', gitHubToken))?.sha;
     if (typeof commitSha !== 'string' || !/^[a-f0-9]{40}$/i.test(commitSha)) throw new Error('REPOSITORY_REF_NOT_FOUND');
-    mark('commit_resolved');
-    const descriptor = { provider:'github', owner:source.repository_owner, repository:source.repository_name, requestedRef, resolvedCommitSha:commitSha, subdirectory:source.repository_subdirectory, defaultBranch:metadata?.default_branch || null, visibility:metadata?.visibility || 'public', connectionId:source.connection_id, tenantId:job.tenant_id };
+    if (ledger) commitSha = await pinScanCommit(pool, job.tenant_id, ledger.scanRunId, commitSha);
+    mark('commit_resolved', { pinned: Boolean(pinnedSha) });
+    const descriptor = { provider:'github', owner:source.repository_owner, repository:source.repository_name, requestedRef: source.requested_ref ?? metadata?.default_branch ?? requestedRef, resolvedCommitSha:commitSha, subdirectory:source.repository_subdirectory, defaultBranch:metadata?.default_branch || null, visibility:metadata?.visibility || 'public', connectionId:source.connection_id, tenantId:job.tenant_id };
     const archivePath = path.join(tempRoot,'repository.zip'); const extractPath = path.join(tempRoot,'extracted'); const archiveExecutable = process.platform === 'win32' ? 'tar.exe' : 'unzip';
     await mkdir(extractPath);
     await downloadArchive(`${GITHUB_CODELOAD_ORIGIN}/${encodeURIComponent(canonicalOwner)}/${encodeURIComponent(canonicalName)}/zip/${commitSha}`, archivePath, { token: gitHubToken });
@@ -539,6 +561,15 @@ async function processRepositoryJob(pool: Pool, job: ClaimedJob) {
     const repositoryRoot = path.join(extractPath,archiveRoot.name); const scanRoot = source.repository_subdirectory ? path.resolve(repositoryRoot,source.repository_subdirectory) : repositoryRoot;
     if (!scanRoot.startsWith(path.resolve(repositoryRoot) + path.sep) && scanRoot !== path.resolve(repositoryRoot)) throw new Error('REPOSITORY_PATH_INVALID');
     const scanRootStat = await lstat(scanRoot).catch(() => null); if (!scanRootStat?.isDirectory()) throw new Error('REPOSITORY_PATH_INVALID');
+    // Every listed entry becomes an inventory row NOW, before any engine runs
+    // and before inspectTree removes symlinks, so a later failure in this job
+    // still leaves every file accounted for.
+    if (ledger) {
+      inventory = await buildRepositoryInventory({ listing: entries, repositoryRoot, subdirectory: source.repository_subdirectory || '', archiveLister: makeArchiveLister(runBounded) });
+      await persistInventory(pool, ledger, inventory.entries);
+      await recomputeCoverage(pool, ledger, { inventoryComplete: !inventory.truncated, limitations: inventory.limitations });
+      mark('inventory_persisted', { files: inventory.entries.length, truncated: inventory.truncated });
+    }
     const manifests = await inspectTree(scanRoot); mark('manifest_inspected', { manifestCount: manifests.length });
     const syftPath = await locateSyft(); mark('syft_located');
     const generated = await generateRepositorySbom(scanRoot,syftPath); const scannerEndedAt = new Date();
@@ -548,29 +579,55 @@ async function processRepositoryJob(pool: Pool, job: ClaimedJob) {
     const sbomEvidencePayload = JSON.stringify({format:'CycloneDX JSON',componentCount:components.length,rawSbomHash,normalizedComponentsHash:componentsHash});
     await pool.query(`UPDATE repository_scan_sources SET resolved_commit_sha=$2, default_branch=$3, visibility=$4, acquired_at=$5, source_descriptor_hash=$6, manifest_paths=$7, manifest_inventory_hash=$8, raw_sbom_hash=$9, sbom_document=$10, normalized_components=$11, normalized_components_hash=$12, scanner_name='Syft', scanner_version=$13, scanner_mode='directory CycloneDX JSON', scanner_started_at=$14, scanner_ended_at=$15, scanner_exit_code=0, scanner_error_category=NULL WHERE job_id=$1 AND tenant_id=$16`, [job.id,commitSha,descriptor.defaultBranch,descriptor.visibility,acquiredAt,sourceHash,JSON.stringify(manifests),manifestHash,rawSbomHash,JSON.stringify(sbom),JSON.stringify(components),componentsHash,SYFT_VERSION,scannerStartedAt,scannerEndedAt,job.tenant_id]);
     mark('sbom_persisted');
+    const repoEvidenceId = deterministicId('ev-repo',`${job.id}|${sourceHash}`); const manifestEvidenceId = deterministicId('ev-manifest',`${job.id}|${manifestHash}`); const sbomEvidenceId = deterministicId('ev-sbom',`${job.id}|${rawSbomHash}|${componentsHash}`);
+    // Evidence is persisted BEFORE the passport is touched: the scan's record
+    // of what it observed must not depend on passport generation succeeding.
+    await pool.query(`INSERT INTO evidence_items (id,tenant_id,asset_id,name,type,verified,signer,timestamp,hash,raw_content,engine_id,scan_run_id) VALUES ($1,$2,$3,'Repository source descriptor','Attestation',0,'github.com',$4,$5,$6,'repository-worker',$13),($7,$2,$3,'Manifest inventory','Build Log',0,'repository-worker',$4,$8,$9,'repository-worker',$13),($10,$2,$3,'Syft CycloneDX SBOM summary','Build Log',0,'Syft 1.49.0',$4,$11,$12,'repository-worker',$13) ON CONFLICT (id) DO NOTHING`, [repoEvidenceId,job.tenant_id,job.passport_id,acquiredAt.toISOString(),`sha256:${sourceHash}`,JSON.stringify(descriptor),manifestEvidenceId,`sha256:${manifestHash}`,JSON.stringify(manifests),sbomEvidenceId,`sha256:${sha256(sbomEvidencePayload)}`,sbomEvidencePayload,ledger?.scanRunId ?? null]);
+    mark('evidence_persisted');
+    await appendAuditEntryViaPool(pool, { tenantId: job.tenant_id, action: 'evidence.created', actor: 'repository-worker', payload: { passportId: job.passport_id, jobId: job.id, scanRunId: ledger?.scanRunId ?? null, evidenceIds: [repoEvidenceId, manifestEvidenceId, sbomEvidenceId] } });
+    if (ledger && inventory) {
+      applyRepositoryEngineOutcomes(inventory, { manifests, manifestEvidenceId, cycloneDx: sbom, syftVersion: SYFT_VERSION, sbomEvidenceId });
+      await persistInventory(pool, ledger, inventory.entries);
+      await recomputeCoverage(pool, ledger, { inventoryComplete: !inventory.truncated, limitations: inventory.limitations });
+      mark('inventory_engine_outcomes_persisted', { analyzed: inventory.entries.filter((e) => e.analysisStatus === 'analyzed').length });
+    }
     // Trust assessment is explicitly pending at this point (SBOM generated,
     // nothing scored yet) -- scores are NULL/'unverified', not a fabricated
     // 0, which would render as "confirmed untrustworthy" rather than "not
     // yet evaluated". The canonical scorer (src/trust/scoring-engine.ts)
     // is the only place that ever assigns a real, non-null score.
-    await pool.query(`INSERT INTO passports (id,tenant_id,name,version,publisher,category,overall_score,security_score,compliance_score,vendor_reputation_score,verification_status,release_date,file_hash,license_type,ai_summary,sbom,evidence,vulnerabilities,timeline) VALUES ($1,$2,$3,$4,$5,'Repository',NULL,NULL,NULL,NULL,'unverified',$6,$7,'Unknown',$8,$9,'[]','[]','[]') ON CONFLICT (id) DO UPDATE SET version=EXCLUDED.version,file_hash=EXCLUDED.file_hash,sbom=EXCLUDED.sbom,release_date=EXCLUDED.release_date,ai_summary=EXCLUDED.ai_summary,overall_score=NULL,security_score=NULL,compliance_score=NULL,vendor_reputation_score=NULL,verification_status='unverified' WHERE passports.tenant_id=$2`, [job.passport_id,job.tenant_id,source.repository_name,commitSha,source.repository_owner,acquiredAt.toISOString().slice(0,10),sourceHash,'Repository acquired and SBOM generated. Trust assessment remains pending.',JSON.stringify(osvComponents)]);
-    mark('passport_upserted');
-    // Section 20 of the MSP acceptance spec requires Passport publication to
-    // be audited. This was a real gap -- zero appendAuditEntry calls existed
-    // anywhere for passport events despite the hash-chained audit_trail
-    // ledger already existing and working for every other event type.
-    await appendAuditEntryViaPool(pool, { tenantId: job.tenant_id, action: 'passport.published', actor: 'repository-worker', payload: { passportId: job.passport_id, jobId: job.id, name: source.repository_name, version: commitSha, sourceHash } });
-    const repoEvidenceId = deterministicId('ev-repo',`${job.id}|${sourceHash}`); const manifestEvidenceId = deterministicId('ev-manifest',`${job.id}|${manifestHash}`); const sbomEvidenceId = deterministicId('ev-sbom',`${job.id}|${rawSbomHash}|${componentsHash}`);
-    await pool.query(`INSERT INTO evidence_items (id,tenant_id,asset_id,name,type,verified,signer,timestamp,hash,raw_content,engine_id) VALUES ($1,$2,$3,'Repository source descriptor','Attestation',0,'github.com',$4,$5,$6,'repository-worker'),($7,$2,$3,'Manifest inventory','Build Log',0,'repository-worker',$4,$8,$9,'repository-worker'),($10,$2,$3,'Syft CycloneDX SBOM summary','Build Log',0,'Syft 1.49.0',$4,$11,$12,'repository-worker') ON CONFLICT (id) DO NOTHING`, [repoEvidenceId,job.tenant_id,job.passport_id,acquiredAt.toISOString(),`sha256:${sourceHash}`,JSON.stringify(descriptor),manifestEvidenceId,`sha256:${manifestHash}`,JSON.stringify(manifests),sbomEvidenceId,`sha256:${sha256(sbomEvidencePayload)}`,sbomEvidencePayload]);
-    mark('evidence_persisted');
-    await appendAuditEntryViaPool(pool, { tenantId: job.tenant_id, action: 'evidence.created', actor: 'repository-worker', payload: { passportId: job.passport_id, jobId: job.id, evidenceIds: [repoEvidenceId, manifestEvidenceId, sbomEvidenceId] } });
+    //
+    // A passport failure is recorded on the scan ledger and does NOT fail the
+    // scan: the inventory, evidence and (below) OSV findings are the scan's
+    // output and stay queryable; the association is retried through
+    // POST /api/scans/runs/:id/associate-passport.
+    let passportAssociated = false;
+    try {
+      await pool.query(`INSERT INTO passports (id,tenant_id,name,version,publisher,category,overall_score,security_score,compliance_score,vendor_reputation_score,verification_status,release_date,file_hash,license_type,ai_summary,sbom,evidence,vulnerabilities,timeline) VALUES ($1,$2,$3,$4,$5,'Repository',NULL,NULL,NULL,NULL,'unverified',$6,$7,'Unknown',$8,$9,'[]','[]','[]') ON CONFLICT (id) DO UPDATE SET version=EXCLUDED.version,file_hash=EXCLUDED.file_hash,sbom=EXCLUDED.sbom,release_date=EXCLUDED.release_date,ai_summary=EXCLUDED.ai_summary,overall_score=NULL,security_score=NULL,compliance_score=NULL,vendor_reputation_score=NULL,verification_status='unverified' WHERE passports.tenant_id=$2`, [job.passport_id,job.tenant_id,source.repository_name,commitSha,source.repository_owner,acquiredAt.toISOString().slice(0,10),sourceHash,'Repository acquired and SBOM generated. Trust assessment remains pending.',JSON.stringify(osvComponents)]);
+      passportAssociated = true;
+      mark('passport_upserted');
+      // Section 20 of the MSP acceptance spec requires Passport publication to
+      // be audited. This was a real gap -- zero appendAuditEntry calls existed
+      // anywhere for passport events despite the hash-chained audit_trail
+      // ledger already existing and working for every other event type.
+      await appendAuditEntryViaPool(pool, { tenantId: job.tenant_id, action: 'passport.published', actor: 'repository-worker', payload: { passportId: job.passport_id, jobId: job.id, scanRunId: ledger?.scanRunId ?? null, name: source.repository_name, version: commitSha, sourceHash } });
+      if (ledger) await recordPassportAssociation(pool, job.tenant_id, ledger.scanRunId, { ok: true });
+    } catch (error) {
+      const reason = safeFailureReason(rootErrorMessage(error));
+      console.error(JSON.stringify({ event: 'passport_upsert_failed', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, passportId: job.passport_id, scanRunId: ledger?.scanRunId ?? null, reason }));
+      if (ledger) await recordPassportAssociation(pool, job.tenant_id, ledger.scanRunId, { ok: false, failure: reason });
+      else throw error;
+    }
     mark('osv_query_started', { componentCount: osvComponents.length });
-    await processJob(pool,job);
+    // OSV reads the passport SBOM; when the passport could not be written the
+    // components this job generated are queried directly so the dependency
+    // evidence is still produced and persisted against the scan.
+    await processJob(pool,job, passportAssociated ? undefined : osvComponents);
     mark('osv_query_completed');
     const findings = (await pool.query('SELECT title,component,status,detected_at FROM scan_findings WHERE job_id=$1 AND tenant_id=$2 ORDER BY id',[job.id,job.tenant_id])).rows;
     await pool.query('UPDATE repository_scan_sources SET final_findings_hash=$2 WHERE job_id=$1 AND tenant_id=$3',[job.id,sha256(JSON.stringify(findings)),job.tenant_id]);
     mark('findings_hash_persisted');
-    await scorePassportAfterScan(pool, job, mark);
+    if (passportAssociated) await scorePassportAfterScan(pool, job, mark);
   } catch (error: any) {
     await pool.query(`UPDATE repository_scan_sources SET scanner_ended_at=NOW(), scanner_exit_code=COALESCE(scanner_exit_code,-1), scanner_error_category=$2 WHERE job_id=$1 AND tenant_id=$3`,[job.id,String(error?.message || 'REPOSITORY_SCAN_FAILED').slice(0,100),job.tenant_id]);
     throw error;
@@ -627,7 +684,7 @@ export function rootErrorMessage(error: unknown): string {
   return current instanceof Error ? current.message : String(current);
 }
 
-function safeFailureReason(raw: string): string {
+export function safeFailureReason(raw: string): string {
   return raw
     .replace(/gh[pousr]_[A-Za-z0-9]{10,}/g, '[REDACTED_TOKEN]')
     .replace(/(authorization|bearer|token|key|secret)[=: ]+\S+/gi, '$1 [REDACTED]')
@@ -671,6 +728,12 @@ export async function runWorkerOnce(pool: Pool) {
   const job = await claimJob(pool); if (!job) return false;
   try { if (job.job_type === 'repository_scan') await processRepositoryJob(pool,job); else await processJob(pool,job); }
   catch (error) { await failJob(pool,job,error); }
+  // The ledger's status is derived from the jobs' recorded states every time
+  // one settles, so a run is never left 'running' by a job that finished.
+  if (job.scan_run_id) {
+    try { const status = await settleScanRun(pool, job.tenant_id, job.scan_run_id); console.log(JSON.stringify({ event: 'scan_run_settled', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, scanRunId: job.scan_run_id, status })); }
+    catch (error) { console.error(JSON.stringify({ event: 'scan_run_settle_failed', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, scanRunId: job.scan_run_id, reason: safeFailureReason(rootErrorMessage(error)) })); }
+  }
   return true;
 }
 
