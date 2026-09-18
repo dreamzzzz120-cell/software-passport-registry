@@ -10,29 +10,74 @@ export type ScannerFinding = {
   title: string;
   description: string;
   component?: string;
+  /** Repository-relative path of the file the finding was observed in, when it was observed in a file. */
+  filePath?: string;
 };
+
+export type ContentInspectionReport =
+  | { path: string; outcome: 'inspected'; tool: { name: string; version: string; action: string } }
+  | { path: string; outcome: 'unsupported' | 'skipped' | 'failed'; tool: { name: string; version: string; action: string }; reasonCode: string; reasonDetail?: string };
+
+export type FileOffer = { absolutePath: string; relativePath: string; size: number };
 
 const MAX_FILES = 50_000;
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 100 * 1024 * 1024;
-const TEXT_EXTENSIONS = new Set(['.ts','.tsx','.js','.jsx','.mjs','.cjs','.json','.yaml','.yml','.toml','.ini','.cfg','.conf','.env','.tf','.tfvars','.xml','.properties','.py','.go','.rs','.java','.kt','.rb','.php','.cs','.sh','.sql','.md']);
+// Every type the content engines read. Anything else is recorded as
+// unsupported for content inspection -- accounted for, never read.
+const TEXT_EXTENSIONS = new Set(['.ts','.tsx','.js','.jsx','.mjs','.cjs','.mts','.cts','.json','.yaml','.yml','.toml','.ini','.cfg','.conf','.env','.tf','.tfvars','.hcl','.xml','.properties','.py','.go','.rs','.java','.kt','.kts','.rb','.php','.cs','.sh','.bash','.zsh','.ps1','.bat','.cmd','.sql','.md','.mdx','.txt','.html','.htm','.css','.scss','.less','.vue','.svelte','.astro','.gradle','.groovy','.scala','.swift','.m','.mm','.dart','.lua','.pl','.ex','.exs','.erl','.hs','.clj','.r','.jl','.graphql','.gql','.proto','.lock','.csv','.plist','.bicep','.pem','.crt','.cer','.key']);
+const TEXT_FILENAMES = new Set(['dockerfile', 'containerfile', 'makefile', 'procfile', 'jenkinsfile', 'gemfile', 'podfile', 'justfile', 'rakefile', 'vagrantfile', 'brewfile', 'pipfile', 'cabal.project', 'license', 'licence', 'notice', 'readme', 'codeowners']);
 const IGNORED = new Set(['.git','node_modules','vendor','dist','build','coverage','.cache','.venv','venv','target']);
+const CONTENT_ENGINE_VERSION = '1';
+const inventoryTool = { name: 'spr-content-scanner', version: CONTENT_ENGINE_VERSION, action: 'content' };
 
 function digest(value: string) {
   return createHash('sha256').update(value, 'utf8').digest('hex');
 }
 
-async function collectFiles(root: string) {
-  const files: string[] = [];
+/** True when a file's name says the content engines read it. The single policy the inventory and the scanners share. */
+export function isContentInspectable(relativePath: string): boolean {
+  const base = path.posix.basename(relativePath.replaceAll('\\', '/')).toLowerCase();
+  if (TEXT_FILENAMES.has(base) || base.startsWith('dockerfile.') || base.endsWith('.dockerfile')) return true;
+  if (base.startsWith('.') && !base.slice(1).includes('.')) return true; // dotfiles such as .npmrc, .gitignore, .env
+  return TEXT_EXTENSIONS.has(path.posix.extname(base));
+}
+
+export function contentUnsupportedReason(relativePath: string): string | null {
+  return isContentInspectable(relativePath) ? null : 'NOT_A_CONTENT_INSPECTED_TYPE';
+}
+
+/**
+ * Enumerates the files the content engines will read and reports, per file,
+ * why any file was NOT offered: ignored directory, unsupported type, over the
+ * size limit, symlink. The reports are what make "not inspected" explicit in
+ * the inventory instead of implicit in a filter.
+ */
+export async function collectFiles(root: string): Promise<{ files: FileOffer[]; reports: ContentInspectionReport[] }> {
+  const files: FileOffer[] = [];
+  const reports: ContentInspectionReport[] = [];
   let totalBytes = 0;
   let fileCount = 0;
+  const relative = (full: string) => path.relative(root, full).replaceAll('\\', '/');
+  async function skipTree(dir: string, reasonCode: string, reasonDetail: string) {
+    // Every file under a skipped directory is still reported individually so
+    // the inventory can say, for each one, that it was skipped and why.
+    let entries;
+    try { entries = await readdir(dir, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isSymbolicLink()) { reports.push({ path: relative(full), outcome: 'skipped', tool: inventoryTool, reasonCode, reasonDetail }); continue; }
+      if (entry.isDirectory()) await skipTree(full, reasonCode, reasonDetail);
+      else if (entry.isFile()) reports.push({ path: relative(full), outcome: 'skipped', tool: inventoryTool, reasonCode, reasonDetail });
+    }
+  }
   async function walk(dir: string) {
     for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
       // Never follow a symlink (it could leave the tree); skip it rather than
       // failing the review -- the repository worker removes them as well.
-      if (entry.isSymbolicLink()) continue;
-      if (entry.isDirectory() && IGNORED.has(entry.name)) continue;
-      const full = path.join(dir, entry.name);
+      if (entry.isSymbolicLink()) { reports.push({ path: relative(full), outcome: 'skipped', tool: inventoryTool, reasonCode: 'SYMLINK_NOT_FOLLOWED', reasonDetail: 'Symbolic links are never followed by the content engines.' }); continue; }
+      if (entry.isDirectory() && IGNORED.has(entry.name)) { await skipTree(full, 'IGNORED_DIRECTORY', `Files under ${entry.name}/ (vendored, generated or build output) are not read by the content engines.`); continue; }
       if (entry.isDirectory()) await walk(full);
       else if (entry.isFile()) {
         // A plain counter, not files.length: incrementing an array's own
@@ -43,12 +88,15 @@ async function collectFiles(root: string) {
         const size = (await stat(full)).size;
         totalBytes += size;
         if (totalBytes > MAX_TOTAL_BYTES) throw new Error('REPOSITORY_TOO_LARGE');
-        if (size <= MAX_FILE_BYTES && TEXT_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) files.push(full);
+        const rel = relative(full);
+        if (!isContentInspectable(rel)) { reports.push({ path: rel, outcome: 'unsupported', tool: inventoryTool, reasonCode: 'NOT_A_CONTENT_INSPECTED_TYPE', reasonDetail: 'The content engines do not read this file type.' }); continue; }
+        if (size > MAX_FILE_BYTES) { reports.push({ path: rel, outcome: 'skipped', tool: inventoryTool, reasonCode: 'FILE_TOO_LARGE', reasonDetail: `Files over ${MAX_FILE_BYTES} bytes are not read by the content engines.` }); continue; }
+        files.push({ absolutePath: full, relativePath: rel, size });
       }
     }
   }
   await walk(root);
-  return files;
+  return { files, reports };
 }
 
 // Test/spec sources and CI workflow files routinely embed literal strings
@@ -99,12 +147,16 @@ const secretRules: SecretRule[] = [
   { pattern: /(?:password|passwd|secret|api[_-]?key)\s*[:=]\s*["']([^"']{12,})["']/i, title: 'Hard-coded credential assignment', severity: 'high', skipTestAndCiFiles: true, captureValue: true },
 ];
 
-export async function scanSecrets(root: string): Promise<ScannerFinding[]> {
+export async function scanSecrets(root: string, offered?: FileOffer[], reports?: ContentInspectionReport[]): Promise<ScannerFinding[]> {
   const findings: ScannerFinding[] = [];
-  for (const file of await collectFiles(root)) {
-    const text = await readFile(file, 'utf8').catch(() => '');
-    if (!text || text.length > MAX_FILE_BYTES) continue;
-    const relativePath = path.relative(root, file).replaceAll('\\', '/');
+  const files = offered ?? (await collectFiles(root)).files;
+  const tool = { name: 'spr-secret-scanner-v1', version: CONTENT_ENGINE_VERSION, action: 'content' };
+  for (const { absolutePath: file, relativePath } of files) {
+    let text: string;
+    try { text = await readFile(file, 'utf8'); }
+    catch (error) { reports?.push({ path: relativePath, outcome: 'failed', tool, reasonCode: 'READ_FAILED', reasonDetail: error instanceof Error ? error.message.slice(0, 200) : 'read failed' }); continue; }
+    if (text.length > MAX_FILE_BYTES) { reports?.push({ path: relativePath, outcome: 'skipped', tool, reasonCode: 'FILE_TOO_LARGE' }); continue; }
+    reports?.push({ path: relativePath, outcome: 'inspected', tool });
     const isTestOrCi = isTestOrCiFile(relativePath);
     for (const { pattern, title, severity, skipTestAndCiFiles, captureValue } of secretRules) {
       if (skipTestAndCiFiles && isTestOrCi) continue;
@@ -112,7 +164,7 @@ export async function scanSecrets(root: string): Promise<ScannerFinding[]> {
         ? Array.from(text.matchAll(new RegExp(pattern, pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g'))).some((m) => m[1] !== undefined && isPlausibleSecretValue(m[1]))
         : pattern.test(text);
       if (matched) {
-        findings.push({ engineId: 'spr-secret-scanner-v1', severity, category: 'Secret', title, description: `A credential pattern was observed in ${relativePath}. The matched secret value is intentionally not persisted.` });
+        findings.push({ engineId: 'spr-secret-scanner-v1', severity, category: 'Secret', title, description: `A credential pattern was observed in ${relativePath}. The matched secret value is intentionally not persisted.`, filePath: relativePath });
       }
     }
   }
@@ -135,23 +187,26 @@ const configRules: ConfigRule[] = [
   { pattern: /api[_-]?key\s*[:=]\s*["']([^$<{][^"']*)["']/i, title: 'Static API key-like configuration', severity: 'high', captureValue: true },
 ];
 
-export async function scanConfiguration(root: string): Promise<ScannerFinding[]> {
+export async function scanConfiguration(root: string, offered?: FileOffer[], reports?: ContentInspectionReport[]): Promise<ScannerFinding[]> {
   const findings: ScannerFinding[] = [];
-  for (const file of await collectFiles(root)) {
-    const relativePath = path.relative(root, file).replaceAll('\\', '/');
+  const files = offered ?? (await collectFiles(root)).files;
+  const tool = { name: 'spr-iac-config-scanner-v1', version: CONTENT_ENGINE_VERSION, action: 'content' };
+  for (const { absolutePath: file, relativePath } of files) {
     // Every configRules pattern targets deployed/deployable configuration
     // (containers, IaC, live config wiring). A test file can only ever embed
     // a fixture string exercising this same scanner -- never real
     // configuration -- so config scanning skips test/CI paths entirely
     // rather than per-rule.
-    if (isTestOrCiFile(relativePath)) continue;
-    const text = await readFile(file, 'utf8').catch(() => '');
-    if (!text) continue;
+    if (isTestOrCiFile(relativePath)) { reports?.push({ path: relativePath, outcome: 'skipped', tool, reasonCode: 'TEST_OR_CI_FILE', reasonDetail: 'Configuration rules do not run over test fixtures or CI workflow files.' }); continue; }
+    let text: string;
+    try { text = await readFile(file, 'utf8'); }
+    catch (error) { reports?.push({ path: relativePath, outcome: 'failed', tool, reasonCode: 'READ_FAILED', reasonDetail: error instanceof Error ? error.message.slice(0, 200) : 'read failed' }); continue; }
+    reports?.push({ path: relativePath, outcome: 'inspected', tool });
     for (const { pattern, title, severity, captureValue } of configRules) {
       const matched = captureValue
         ? Array.from(text.matchAll(new RegExp(pattern, pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g'))).some((m) => m[1] !== undefined && isPlausibleSecretValue(m[1]))
         : pattern.test(text);
-      if (matched) findings.push({ engineId: 'spr-iac-config-scanner-v1', severity, category: 'Configuration', title, description: `A concrete configuration pattern was observed in ${relativePath}.` });
+      if (matched) findings.push({ engineId: 'spr-iac-config-scanner-v1', severity, category: 'Configuration', title, description: `A concrete configuration pattern was observed in ${relativePath}.`, filePath: relativePath });
     }
   }
   return findings;
@@ -189,6 +244,17 @@ export function isLicenceEvaluable(component: { purl?: string | null; version?: 
 
 export const LICENCE_SCOPE_NOTE = 'Licence coverage is measured over versioned package components. GitHub Actions referenced from CI workflows (pkg:github/ components) and the repository manifest files that Syft records as file components are not evaluated for licence: a workflow reference carries no licence metadata, and a manifest file is the scanned software itself, not a dependency.';
 
+/** The first `syft:location:N:path` a component carries, as a scan-root-relative POSIX path. */
+export function componentLocation(component: any): string | null {
+  const properties = Array.isArray(component?.properties) ? component.properties : [];
+  for (const property of properties) {
+    if (typeof property?.name === 'string' && /^syft:location:\d+:path$/.test(property.name) && typeof property.value === 'string') {
+      return property.value.replaceAll('\\', '/').replace(/^\/+/, '');
+    }
+  }
+  return null;
+}
+
 export function scanLicenses(cycloneDx: any, scanRoot?: string): ScannerFinding[] {
   const findings: ScannerFinding[] = [];
   const components = Array.isArray(cycloneDx?.components) ? cycloneDx.components : [];
@@ -197,7 +263,8 @@ export function scanLicenses(cycloneDx: any, scanRoot?: string): ScannerFinding[
     const licenses = Array.isArray(component?.licenses) ? component.licenses : [];
     if (licenses.length === 0) {
       const name = normalizeComponentName(component?.name, scanRoot);
-      findings.push({ engineId: 'spr-license-scanner-v1', severity: 'medium', category: 'License', title: 'License not observed', description: `No license declaration was present in the generated SBOM for ${name}.`, component: name });
+      const location = componentLocation(component);
+      findings.push({ engineId: 'spr-license-scanner-v1', severity: 'medium', category: 'License', title: 'License not observed', description: `No license declaration was present in the generated SBOM for ${name}.`, component: name, ...(location ? { filePath: location } : {}) });
     }
   }
   return findings;
@@ -208,7 +275,17 @@ export function scannerEvidenceHash(findings: ScannerFinding[]) {
 }
 
 export async function runRealRepositoryScanners(root: string, cycloneDx: any) {
-  const [secrets, configuration] = await Promise.all([scanSecrets(root), scanConfiguration(root)]);
+  const { files, reports } = await collectFiles(root);
+  const secretReports: ContentInspectionReport[] = [];
+  const configReports: ContentInspectionReport[] = [];
+  const [secrets, configuration] = await Promise.all([scanSecrets(root, files, secretReports), scanConfiguration(root, files, configReports)]);
   const licenses = scanLicenses(cycloneDx, root);
-  return { findings: [...secrets, ...configuration, ...licenses], engines: ['spr-secret-scanner-v1','spr-iac-config-scanner-v1','spr-license-scanner-v1'] };
+  return {
+    findings: [...secrets, ...configuration, ...licenses],
+    engines: ['spr-secret-scanner-v1','spr-iac-config-scanner-v1','spr-license-scanner-v1'],
+    // What each engine did with each file it was offered, plus why the rest
+    // were not offered. Consumed by the file inventory; never inferred there.
+    inspectionReports: [...reports, ...secretReports, ...configReports],
+    filesOffered: files.length,
+  };
 }

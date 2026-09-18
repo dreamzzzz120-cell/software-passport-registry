@@ -8,6 +8,7 @@ import { Radar, Upload, Clock, CheckCircle2, AlertCircle, FileCode, Sliders, Pla
 import { Scan, Client } from '../types';
 import { apiFetch } from '../utils/apiClient';
 import NewReviewIntake from './NewReviewIntake';
+import ScanLedgerPanel from './ScanLedgerPanel';
 
 export interface ScanSchedule {
   id: string;
@@ -33,6 +34,9 @@ interface ScansViewProps {
 }
 
 export default function ScansView({ scans, onTriggerNewScan, clients, assets, passports, role = 'Viewer' }: ScansViewProps) {
+  // ?run=<scan_id> opens that scan in the ledger (the submission flow and
+  // notification links land here), so a scan always has a persistent address.
+  const initialRunId = useMemo(() => { try { return new URLSearchParams(window.location.search).get('run'); } catch { return null; } }, []);
   // Matches server.ts /api/scans/schedules* and /api/agent-jobs backend
   // gating: requireRole(['Owner','Admin','Operator']).
   const canManageSchedules = ['Owner', 'Admin', 'Operator'].includes(role);
@@ -513,6 +517,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
   return (
     <div className="space-y-6" id="msp-scans-uploader">
       <NewReviewIntake />
+      <ScanLedgerPanel initialRunId={initialRunId} />
       {/* Page Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
@@ -1096,7 +1101,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
                       </p>
                     </div>
                     <div className="text-right shrink-0">
-                      <span className={`inline-block px-1.5 py-0.5 rounded text-[11px] font-bold font-mono ${s.status === 'Success' ? 'bg-emerald-100 text-emerald-800' : 'bg-[var(--spr-red)]/15 text-[var(--spr-red)]'}`}>
+                      <span className={`inline-block px-1.5 py-0.5 rounded text-[11px] font-bold font-mono ${s.status === 'Success' || s.status === 'Completed' ? 'bg-emerald-100 text-emerald-800' : s.status === 'Queued' || s.status === 'Scanning' || s.status === 'Partial' ? 'bg-amber-100 text-amber-800' : 'bg-[var(--spr-red)]/15 text-[var(--spr-red)]'}`}>
                         {s.status}
                       </span>
                       <p className="text-[11px] font-mono text-[var(--spr-text-muted)] mt-1">{s.durationMs}ms</p>

@@ -17,7 +17,10 @@ describe('a passport is re-scored when its scans complete', () => {
   const scanner = read('src/utils/scanner.ts');
 
   it('the repository-scan worker scores the passport after persisting findings, under its own pool', () => {
-    expect(osv).toContain("mark('findings_hash_persisted');\n    await scorePassportAfterScan(pool, job, mark);");
+    // Scoring runs only when the passport row was actually written: a scan
+    // whose passport association failed keeps its evidence and findings but
+    // must not score a passport that does not carry them.
+    expect(osv).toContain("mark('findings_hash_persisted');\n    if (passportAssociated) await scorePassportAfterScan(pool, job, mark);");
     expect(osv).toContain('calculateAndStoreTrustScore(job.passport_id, job.tenant_id, { pool })');
     expect(osv).toContain("mark('trust_scored'");
     expect(osv).toContain("event: 'passport_score_failed'");

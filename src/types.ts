@@ -5,7 +5,7 @@
 
 export type Severity = 'Critical' | 'High' | 'Medium' | 'Low';
 export type RiskLevel = 'Critical' | 'High' | 'Medium' | 'Low' | 'Safe' | 'Unknown';
-export type ScanStatus = 'Success' | 'Completed' | 'Failed' | 'Scanning' | 'scan target not yet instrumented';
+export type ScanStatus = 'Success' | 'Completed' | 'Partial' | 'Failed' | 'Queued' | 'Scanning' | 'scan target not yet instrumented';
 export type AlertStatus = 'Active' | 'Acknowledged' | 'Snoozed' | 'Resolved' | 'Cancelled';
 
 export interface SoftwareComponent { name: string; version: string; license: string; purl: string; depth: number; dependencyType: 'Direct' | 'Transitive'; trustLevel: 'Trusted' | 'Review Required' | 'Blocked'; }

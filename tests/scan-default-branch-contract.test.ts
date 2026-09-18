@@ -66,9 +66,12 @@ describe('Free Review does not pin every scan to "main"', () => {
     expect(route).toContain('ref: requestedRef');
     const submit = read('src/routes/free-review-submit.ts');
     expect(submit).toContain('const requestedRef = input.ref ?? null;');
-    expect(submit).toContain('${requestedRef}');
-    // The raw optional value must never reach the insert.
-    expect(submit).not.toContain(",${ref},''");
+    expect(submit).toContain('ref: requestedRef');
+    // The raw optional value must never reach the insert, which now lives in
+    // the shared scan-ledger enqueue and binds exactly what it was given.
+    const submission = read('src/scanners/scan-submission.ts');
+    expect(submission).toContain('${input.ref}');
+    expect(submission).not.toContain("'main'");
   });
 
   it('still lets a caller pin an explicit ref', () => {

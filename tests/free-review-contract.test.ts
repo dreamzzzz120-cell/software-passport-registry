@@ -31,9 +31,16 @@ describe('Free Review contracts', () => {
     const freeReview = read('src/routes/free-review-submit.ts');
     expect(read('src/routes/free-review-legacy.ts')).toContain('enqueueFreeReview(scopedDb, { owner, repository, ref: requestedRef, ipHash })');
     expect(freeReview).not.toMatch(/INSERT INTO passports/);
-    expect(freeReview).toContain("INSERT INTO agent_jobs");
-    expect(freeReview).toContain("'repository_scan'");
-    expect(freeReview).toContain("'repository_security_scan'");
+    // The rows themselves are written by the shared scan-ledger enqueue, so a
+    // Free Review and an authenticated scan are the same jobs and the same
+    // inventory; the Free Review path only chooses the tenant and passport id.
+    expect(freeReview).toContain('enqueueRepositoryScan(scopedDb, {');
+    expect(freeReview).toContain('tenantId: FREE_REVIEW_TENANT_ID');
+    const submission = read('src/scanners/scan-submission.ts');
+    expect(submission).not.toMatch(/INSERT INTO passports/);
+    expect(submission).toContain("INSERT INTO agent_jobs");
+    expect(submission).toContain("'repository_scan'");
+    expect(submission).toContain("'repository_security_scan'");
   });
 
   it('scopes every query to the fixed system tenant, not a caller-supplied tenant', () => {
