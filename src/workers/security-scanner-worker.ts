@@ -90,6 +90,9 @@ async function recordFileLedger(pool: Pool, job: any, scanRoot: string, _reposit
       ],
     );
   }
+  // Keep the ledger independently addressable at MSP client scope. The scan remains
+  // the root event even if passport derivation/update later fails.
+  await pool.query(`UPDATE scan_file_ledger SET client_id=(SELECT client_id FROM passports WHERE id=$1 AND tenant_id=$2 LIMIT 1) WHERE scan_id=$3 AND tenant_id=$2`, [job.passport_id, job.tenant_id, job.scan_id]);
   return { files: files.length, bytes: totalBytes };
 }
 const JOB_LEASE_MS = 10 * 60 * 1000;
