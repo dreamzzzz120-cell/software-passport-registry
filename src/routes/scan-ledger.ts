@@ -43,6 +43,9 @@ const submitSchema = z.discriminatedUnion('source', [
 ]);
 
 const listSchema = z.object({ passportId: optionalId, clientId: optionalId, status: z.enum(['Queued', 'Scanning', 'Completed', 'Partial', 'Failed']).optional(), sourceKind: z.enum(['github', 'upload', 'sbom']).optional(), q: z.string().max(200).optional(), page, limit });
+// Array filters use Drizzle's `IN ${array}` idiom and are omitted when empty:
+// `= ANY(${array})` binds the array as a scalar and `IN ()` is a syntax error
+// (both observed live on 2026-09-18).
 const filesSchema = z.object({
   disposition: z.string().regex(/^[a-z_]+(,[a-z_]+)*$/).optional(),
   category: z.string().regex(/^[a-z_]+(,[a-z_]+)*$/).optional(),
@@ -220,8 +223,8 @@ export function createScanLedgerRouter() {
       const like = f.q ? `%${f.q.replace(/[%_\\]/g, (m) => `\\${m}`)}%` : null;
       const offset = (f.page - 1) * f.limit;
       const where = sql`i.scan_id = ${run.id} AND i.tenant_id = ${req.user!.tenantId}
-        AND (${dispositions.length === 0} OR i.disposition = ANY(${dispositions}::text[]))
-        AND (${categories.length === 0} OR i.category = ANY(${categories}::text[]))
+        ${dispositions.length ? sql`AND i.disposition IN ${dispositions}` : sql``}
+        ${categories.length ? sql`AND i.category IN ${categories}` : sql``}
         AND (${f.inspection ?? null}::text IS NULL OR i.inspection_status = ${f.inspection ?? null})
         AND (${f.analysis ?? null}::text IS NULL OR i.analysis_status = ${f.analysis ?? null})
         AND (${f.withFindings ?? null}::text IS NULL OR (jsonb_array_length(i.related_finding_ids) > 0) = ${f.withFindings === 'true'})
@@ -248,7 +251,7 @@ export function createScanLedgerRouter() {
       const f = parsed.data; const severities = csv(f.severity).map((s) => s.toLowerCase());
       const offset = (f.page - 1) * f.limit;
       const where = sql`f.scan_id = ${run.id} AND f.tenant_id = ${req.user!.tenantId}
-        AND (${severities.length === 0} OR LOWER(f.severity) = ANY(${severities}::text[]))
+        ${severities.length ? sql`AND LOWER(f.severity) IN ${severities}` : sql``}
         AND (${f.status ?? null}::text IS NULL OR LOWER(f.status) = LOWER(${f.status ?? null}))
         AND (${f.category ?? null}::text IS NULL OR f.category = ${f.category ?? null})
         AND (${f.engine ?? null}::text IS NULL OR f.engine_id = ${f.engine ?? null})

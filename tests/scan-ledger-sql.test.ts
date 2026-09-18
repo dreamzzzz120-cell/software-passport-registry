@@ -197,3 +197,27 @@ describe('route SQL references only columns that exist on scans', () => {
     expect(missing).toEqual([]);
   });
 });
+
+describe('ledger file/finding filters compile to valid SQL through Drizzle', () => {
+  // Observed live 2026-09-18 19:01Z: GET /api/scans/runs/:id/files -> 500
+  // "syntax error at or near )" because an empty JS array inside ANY(...)
+  // rendered as `ANY(()::text[])`. The route now uses `IN ${array}` and omits
+  // the clause when the array is empty; this executes both shapes for real.
+  it('empty and non-empty array filters both execute', async () => {
+    const { drizzle } = await import('drizzle-orm/pglite');
+    const { sql } = await import('drizzle-orm');
+    const d = drizzle(pg);
+    for (const dispositions of [[] as string[], ['inspected', 'analyzed']]) {
+      for (const categories of [[] as string[], ['lockfile']]) {
+        const where = sql`i.scan_id = ${'scan_1'} AND i.tenant_id = ${TENANT}
+          ${dispositions.length ? sql`AND i.disposition IN ${dispositions}` : sql``}
+          ${categories.length ? sql`AND i.category IN ${categories}` : sql``}
+          AND (${null}::text IS NULL OR i.inspection_status = ${null})`;
+        const result: any = await d.execute(sql`SELECT COUNT(*)::int AS count FROM scan_file_inventory i WHERE ${where}`);
+        expect(Number(result.rows[0].count)).toBeGreaterThanOrEqual(0);
+      }
+    }
+    const withRows: any = await d.execute(sql`SELECT COUNT(*)::int AS count FROM scan_file_inventory i WHERE i.scan_id = ${'scan_1'} AND i.tenant_id = ${TENANT} ${sql`AND i.disposition IN ${['analyzed']}`}`);
+    expect(Number(withRows.rows[0].count)).toBe(1);
+  });
+});
