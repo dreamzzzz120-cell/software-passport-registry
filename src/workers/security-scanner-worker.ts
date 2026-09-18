@@ -76,7 +76,7 @@ async function recordFileLedger(pool: Pool, job: any, scanRoot: string, _reposit
     await pool.query(
       `INSERT INTO scan_file_ledger
         (id,scan_id,tenant_id,client_id,software_identity,parent_archive_id,path,filename,size_bytes,sha256,detected_type,category,inspection_status,analysis_status,scanner_tool,scanner_version,error_reason,disposition_status,failure_stage,classification_method,is_archive,archive_depth,applicable_to_analysis,evidence_status)
-       VALUES ($1,$2,$3,NULL,$4,NULL,$5,$6,$7,$8,$9,$10,$11,'not_analyzed',$12,$13,$14,$15,$16,$17,$18,$19,$20,'none')
+       VALUES ($1,$2,$3,NULL,$4,NULL,$5,$6,$7,$8,$9,$10,$11,'not_analyzed',$12,$13,$14,$15,$16,$17,$18,$19,'none')
        ON CONFLICT (scan_id,path) DO UPDATE SET
          size_bytes=EXCLUDED.size_bytes,sha256=EXCLUDED.sha256,detected_type=EXCLUDED.detected_type,category=EXCLUDED.category,
          inspection_status=EXCLUDED.inspection_status,scanner_tool=EXCLUDED.scanner_tool,scanner_version=EXCLUDED.scanner_version,
