@@ -137,13 +137,15 @@ describe('scan run lifecycle', () => {
     expect(scan.coverage_state).toBe('inventory_complete');
     expect(Number(scan.duration_ms)).toBeGreaterThanOrEqual(0);
     await db.query(`UPDATE agent_jobs SET status='Completed', error=NULL WHERE id='job_b'`);
-    expect(await settleScanRun(db, TENANT, 'scan_1')).toBe('Completed');
-    expect((await db.query(`SELECT status, error_code FROM scans WHERE id='scan_1'`)).rows[0]).toMatchObject({ status: 'Completed', error_code: null });
+    // Both jobs are complete, but the durable inventory still contains a real
+    // failed file, so the customer-facing run remains Partial.
+    expect(await settleScanRun(db, TENANT, 'scan_1')).toBe('Partial');
+    expect((await db.query(`SELECT status, error_code FROM scans WHERE id='scan_1'`)).rows[0]).toMatchObject({ status: 'Partial', error_code: null });
   });
   it('records a passport association failure on the run without touching the scan', async () => {
     await recordPassportAssociation(db, TENANT, 'scan_1', { ok: false, failure: 'permission denied for table passports' });
     const run = (await db.query(`SELECT status, passport_status, passport_failure FROM scans WHERE id='scan_1'`)).rows[0];
-    expect(run.status).toBe('Completed');
+    expect(run.status).toBe('Partial');
     expect(run.passport_status).toBe('failed');
     expect(run.passport_failure).toBe('permission denied for table passports');
     expect(Number((await db.query(`SELECT COUNT(*)::int AS c FROM scan_file_inventory WHERE scan_id='scan_1'`)).rows[0].c)).toBe(5);
