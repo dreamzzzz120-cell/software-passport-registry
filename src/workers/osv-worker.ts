@@ -469,9 +469,13 @@ async function locateSyft() {
 }
 
 export function normalizeCycloneDx(document: any) {
-  if (!document || document.bomFormat !== 'CycloneDX' || !Array.isArray(document.components)) throw new Error('SBOM_INVALID');
+  if (!document || document.bomFormat !== 'CycloneDX') throw new Error('SBOM_INVALID');
+  // Syft's CycloneDX encoder omits the "components" key entirely when it
+  // resolved nothing (a package.json with no lockfile, for example). That is
+  // an EMPTY SBOM, not a malformed one; only a present non-array is invalid.
+  if (document.components !== undefined && !Array.isArray(document.components)) throw new Error('SBOM_INVALID');
   const unique = new Map<string, { name: string; version?: string; ecosystem?: string; purl?: string }>();
-  for (const component of document.components) {
+  for (const component of document.components ?? []) {
     if (typeof component?.name !== 'string' || component.name.trim().length === 0) throw new Error('SBOM_INVALID');
     const purl = typeof component.purl === 'string' ? component.purl : undefined;
     const version = typeof component.version === 'string' && component.version.length > 0 ? component.version : undefined;

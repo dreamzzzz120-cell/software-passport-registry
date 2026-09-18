@@ -122,6 +122,11 @@ export function createLegacyFreeReviewRouter() {
         REPOSITORY_ACQUISITION_FAILED: 'The repository could not be downloaded for scanning.',
         REPOSITORY_PATH_INVALID: 'The requested path inside that repository is not valid.',
         REPOSITORY_CONNECTION_NOT_FOUND: 'This review is no longer available. Start a new Free Review.',
+        // Deterministic, terminal on the first attempt: the repository was read
+        // but yielded nothing SPR can assess. Say so, rather than the generic
+        // "could not be completed" that reads like an outage on our side.
+        NO_SUPPORTED_MANIFESTS: 'That repository was read, but it contains no dependency manifest SPR supports (for example package.json, requirements.txt, go.mod). No evidence was collected.',
+        SBOM_EMPTY: 'That repository was read, but no versioned dependency components could be identified -- usually because it has no lockfile. No evidence was collected, so nothing was assessed.',
       };
       const rawReason = jobs.find((j: any) => j.status === 'Failed' && j.error)?.error;
       // Only reported once the review has actually settled. Returning a reason
