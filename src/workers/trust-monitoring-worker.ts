@@ -22,6 +22,36 @@ async function scheduleDue(p:Pool){
   const now=new Date().toISOString();
   const due=await p.query(`SELECT id,tenant_id,client_id,asset_id,passport_id,collector_id,subject_type,subject_identifier,credential_reference_id,schedule_seconds FROM monitoring_configurations WHERE enabled=1 AND next_scheduled_at::timestamptz <= CURRENT_TIMESTAMP ORDER BY next_scheduled_at::timestamptz FOR UPDATE SKIP LOCKED LIMIT 50`);
   for(const cfg of due.rows){
+    // Never enqueue GitHub repository/dependency/release monitoring without a
+    // tenant-scoped credential that actually contains the token shape the
+    // collector requires. A stale/invalid configuration is disabled rather
+    // than creating a retry storm. Never fall back to the worker's global
+    // GITHUB_TOKEN: that would cross tenant boundaries.
+    if(['repository','dependency','release'].includes(cfg.collector_id)){
+      if(!cfg.credential_reference_id){
+        await p.query(`UPDATE monitoring_configurations SET enabled=0,updated_at=$2,last_status='disabled_missing_credential' WHERE id=$1 AND tenant_id=$3`,[cfg.id,now,cfg.tenant_id]);
+        console.warn(`[TrustMonitoring] disabled monitoring configuration ${cfg.id}: missing credential reference`);
+        continue;
+      }
+      try{
+        const credentialRow=await p.query(`SELECT encrypted_payload FROM credential_references WHERE id=$1 AND tenant_id=$2 AND state='active' LIMIT 1`,[cfg.credential_reference_id,cfg.tenant_id]);
+        if(!credentialRow.rows[0]){
+          await p.query(`UPDATE monitoring_configurations SET enabled=0,updated_at=$2,last_status='disabled_missing_credential' WHERE id=$1 AND tenant_id=$3`,[cfg.id,now,cfg.tenant_id]);
+          console.warn(`[TrustMonitoring] disabled monitoring configuration ${cfg.id}: credential reference unavailable`);
+          continue;
+        }
+        const credential=decryptCredentials(credentialRow.rows[0].encrypted_payload) as Record<string,string>;
+        if(!credential.accessToken && !credential.token){
+          await p.query(`UPDATE monitoring_configurations SET enabled=0,updated_at=$2,last_status='disabled_invalid_credential' WHERE id=$1 AND tenant_id=$3`,[cfg.id,now,cfg.tenant_id]);
+          console.warn(`[TrustMonitoring] disabled monitoring configuration ${cfg.id}: credential has no access token`);
+          continue;
+        }
+      }catch(error:any){
+        await p.query(`UPDATE monitoring_configurations SET enabled=0,updated_at=$2,last_status='disabled_invalid_credential' WHERE id=$1 AND tenant_id=$3`,[cfg.id,now,cfg.tenant_id]);
+        console.warn(`[TrustMonitoring] disabled monitoring configuration ${cfg.id}: credential validation failed`);
+        continue;
+      }
+    }
     const window=new Date().toISOString().slice(0,16);
     const key=`${cfg.id}:${window}`;
     await p.query(`INSERT INTO collector_jobs (id,tenant_id,client_id,asset_id,passport_id,monitoring_configuration_id,collector_id,collector_version,subject_type,subject_identifier,schedule_source,observation_window,idempotency_key,state,attempt_number,maximum_attempts,created_at,next_attempt_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'monitoring',$11,$12,'queued',0,3,$13,$13) ON CONFLICT (idempotency_key) DO NOTHING`,[id('collector-job'),cfg.tenant_id,cfg.client_id,cfg.asset_id,cfg.passport_id,cfg.id,cfg.collector_id,'deep-v2',cfg.subject_type,cfg.subject_identifier,window,key,now]);
