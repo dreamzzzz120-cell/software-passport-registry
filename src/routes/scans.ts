@@ -242,7 +242,7 @@ export function createScansRouter() {
   router.get('/agent-jobs/:id', async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
-      const result = await db.execute(sql`SELECT j.id, j.scan_id AS "scanId", j.agent_id AS "agentId", j.passport_id AS "passportId", j.job_type AS "jobType", j.status, j.progress, j.result, j.error, j.attempt_count AS "attemptCount", j.max_attempts AS "maxAttempts", j.completed_at AS "completedAt", j.created_at AS "createdAt", j.updated_at AS "updatedAt" FROM agent_jobs j JOIN passports p ON p.id=j.passport_id AND p.tenant_id=j.tenant_id WHERE j.id=${req.params.id} AND j.tenant_id=${req.user!.tenantId} AND (${req.user!.role} <> 'Client' OR p.client_id=${req.user!.clientId ?? ''}) LIMIT 1`);
+      const result = await db.execute(sql`SELECT j.id, j.scan_id AS "scanId", j.agent_id AS "agentId", j.passport_id AS "passportId", j.job_type AS "jobType", j.status, j.progress, j.result, j.error, j.attempt_count AS "attemptCount", j.max_attempts AS "maxAttempts", j.completed_at AS "completedAt", j.created_at AS "createdAt", j.updated_at AS "updatedAt" FROM agent_jobs j WHERE j.id=${req.params.id} AND j.tenant_id=${req.user!.tenantId} AND (${req.user!.role} <> 'Client' OR EXISTS (SELECT 1 FROM passports p WHERE p.id=j.passport_id AND p.tenant_id=j.tenant_id AND p.client_id=${req.user!.clientId ?? ''})) LIMIT 1`);
       const row = (result as any).rows?.[0];
       if (!row) return res.status(404).json({ error: 'Agent job not found' });
       return res.json(row);
@@ -252,7 +252,7 @@ export function createScansRouter() {
   router.get('/agent-jobs/:id/logs', async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
-      const result = await db.execute(sql`SELECT l.id, l.agent_id, l.message, l.level, l.timestamp FROM agent_logs l JOIN agent_jobs j ON j.id=l.job_id AND j.tenant_id=${req.user!.tenantId} LEFT JOIN passports p ON p.id=j.passport_id AND p.tenant_id=j.tenant_id WHERE l.job_id=${req.params.id} AND (${req.user!.role} <> 'Client' OR p.client_id=${req.user!.clientId ?? ''}) ORDER BY l.timestamp ASC, l.id ASC`);
+      const result = await db.execute(sql`SELECT l.id, l.agent_id, l.message, l.level, l.timestamp FROM agent_logs l JOIN agent_jobs j ON j.id=l.job_id AND j.tenant_id=${req.user!.tenantId} WHERE l.job_id=${req.params.id} AND (${req.user!.role} <> 'Client' OR EXISTS (SELECT 1 FROM passports p WHERE p.id=j.passport_id AND p.tenant_id=j.tenant_id AND p.client_id=${req.user!.clientId ?? ''})) ORDER BY l.timestamp ASC, l.id ASC`);
       return res.json((result as any).rows || []);
     } catch (error) { return next(error); }
   });
