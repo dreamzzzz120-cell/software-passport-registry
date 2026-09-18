@@ -526,7 +526,7 @@ async function persistRepositoryFileLedger(pool: Pool, job: ClaimedJob, root: st
       : 'unknown';
     const method = category === 'unknown' ? 'no-confident-match' : 'filename-or-extension';
     bytes += stat.size;
-    let disposition = 'INSPECTED'; let inspection = 'inspected'; let error: string | null = null; let hash: string | null = null;
+    let disposition = 'INVENTORIED'; let inspection = 'inventoried'; let error: string | null = null; let hash: string | null = null;
     if (stat.isSymbolicLink()) { disposition='INACCESSIBLE'; inspection='inaccessible'; error='SYMLINK_NOT_FOLLOWED'; }
     else if (stat.size === 0) { disposition='SKIPPED'; inspection='skipped'; error='EMPTY_FILE'; }
     else if (stat.size > MAX_FILE_BYTES) { disposition='PARTIAL'; inspection='partial'; error='FILE_TOO_LARGE_FOR_CONTENT_INSPECTION'; }
