@@ -185,7 +185,7 @@ async function processSecurityJob(pool: Pool, job: any) {
       if (job.scan_id) {
         await pool.query(`UPDATE scans SET coverage_state='complete_passport_update_failed', error_state='passport_update_failed', error_code='PASSPORT_SCORE_PERSIST_FAILED', completed_at=COALESCE(completed_at,NOW()) WHERE id=$1 AND tenant_id=$2`, [job.scan_id, job.tenant_id]).catch(() => undefined);
       }
-      console.error(JSON.stringify({ event: 'passport_score_failed', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, passportId: job.passport_id, scanId: job.scan_id, reason }));
+      console.error(JSON.stringify({ event: 'passport_score_failed', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, passportId: job.passport_id, scanId: job.scan_id, reason: safeFailureReason(rootErrorMessage(error)) }));
     }
     await produceConnectWiseTickets(pool, job);
   } finally { await rm(tempRoot, { recursive: true, force: true }); }
