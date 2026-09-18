@@ -13,7 +13,7 @@ import { ANALYSIS_RANK, computeCoverage, DISPOSITION_RANK, INSPECTION_RANK, type
 
 export interface Queryable { query: (text: string, values?: unknown[]) => Promise<{ rows: any[]; rowCount?: number | null }> }
 
-export interface LedgerContext { tenantId: string; scanId: string; passportId: string; clientId: string | null }
+export interface LedgerContext { tenantId: string; scanId: string; passportId: string | null; clientId: string | null }
 
 const DISPOSITION_ORDER = Object.entries(DISPOSITION_RANK).sort((a, b) => a[1] - b[1]).map(([name]) => name);
 const INSPECTION_ORDER = Object.entries(INSPECTION_RANK).sort((a, b) => a[1] - b[1]).map(([name]) => name);
