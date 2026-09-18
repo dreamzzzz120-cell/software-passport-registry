@@ -492,6 +492,53 @@ export function normalizeCycloneDx(document: any) {
   if (components.length === 0) throw new Error('SBOM_EMPTY'); return components;
 }
 
+async function persistRepositoryFileLedger(pool: Pool, job: ClaimedJob, root: string) {
+  if (!job.scan_id) return { files: 0, bytes: 0 };
+  const MAX_FILES = 50_000;
+  const MAX_FILE_BYTES = 25 * 1024 * 1024;
+  const files: string[] = [];
+  async function walk(dir: string): Promise<void> {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isSymbolicLink()) { files.push(full); continue; }
+      if (entry.isDirectory()) { await walk(full); continue; }
+      if (entry.isFile()) {
+        files.push(full);
+        if (files.length > MAX_FILES) throw new Error('REPOSITORY_FILE_LIMIT_EXCEEDED');
+      }
+    }
+  }
+  await walk(root);
+  let bytes = 0;
+  for (const full of files) {
+    const stat = await lstat(full);
+    const relative = path.relative(root, full).split(path.sep).join('/');
+    const name = path.basename(relative).toLowerCase();
+    const category = /\\.(zip|tar|tgz|tar\\.gz|tar\\.bz2|tar\\.xz)$/.test(name) ? 'archive'
+      : /(^|\\/)(package-lock\\.json|yarn\\.lock|pnpm-lock\\.yaml|cargo\\.lock|poetry\\.lock|composer\\.lock|go\\.sum)$/.test(relative.toLowerCase()) ? 'lockfile'
+      : /(^|\\/)(package\\.json|requirements(?:\\.txt)?|pyproject\\.toml|go\\.mod|pom\\.xml|composer\\.json|gemfile)$/.test(relative.toLowerCase()) ? 'dependency manifest'
+      : /\\.(js|jsx|ts|tsx|py|rb|go|rs|java|kt|cs|php|c|cc|cpp|h|hpp|swift|scala|sh|bash|zsh)$/.test(name) ? 'source code'
+      : /\\.(ya?ml|json|toml|ini|conf|cfg|env|properties|xml)$/.test(name) ? 'configuration'
+      : /\\.(md|txt|rst|adoc|pdf|docx?)$/.test(name) ? 'documentation'
+      : /(^|\\/)(license|copying|notice)(\\.|$)/.test(name) ? 'license'
+      : 'unknown';
+    const method = category === 'unknown' ? 'no-confident-match' : 'filename-or-extension';
+    bytes += stat.size;
+    let disposition = 'INSPECTED'; let inspection = 'inspected'; let error: string | null = null; let hash: string | null = null;
+    if (stat.isSymbolicLink()) { disposition='INACCESSIBLE'; inspection='inaccessible'; error='SYMLINK_NOT_FOLLOWED'; }
+    else if (stat.size === 0) { disposition='SKIPPED'; inspection='skipped'; error='EMPTY_FILE'; }
+    else if (stat.size > MAX_FILE_BYTES) { disposition='PARTIAL'; inspection='partial'; error='FILE_TOO_LARGE_FOR_CONTENT_INSPECTION'; }
+    else { try { hash = sha256(await readFile(full)); } catch { disposition='INACCESSIBLE'; inspection='inaccessible'; error='FILE_READ_FAILED'; } }
+    const id = `file-${sha256(job.scan_id+'|'+relative).slice(0,48)}`;
+    await pool.query(`INSERT INTO scan_file_ledger
+      (id,scan_id,tenant_id,client_id,software_identity,parent_archive_id,path,filename,size_bytes,sha256,detected_type,category,inspection_status,analysis_status,scanner_tool,scanner_version,error_reason,disposition_status,failure_stage,classification_method,is_archive,archive_depth,applicable_to_analysis,evidence_status)
+      VALUES ($1,$2,$3,NULL,$4,NULL,$5,$6,$7,$8,'filesystem',$9,$10,'not_analyzed','repository-worker',$11,$12,$13,$14,$15,$16,0,$17,'none')
+      ON CONFLICT (scan_id,path) DO UPDATE SET size_bytes=EXCLUDED.size_bytes,sha256=EXCLUDED.sha256,category=EXCLUDED.category,inspection_status=EXCLUDED.inspection_status,scanner_tool=EXCLUDED.scanner_tool,scanner_version=EXCLUDED.scanner_version,error_reason=EXCLUDED.error_reason,disposition_status=EXCLUDED.disposition_status,failure_stage=EXCLUDED.failure_stage,classification_method=EXCLUDED.classification_method,is_archive=EXCLUDED.is_archive,applicable_to_analysis=EXCLUDED.applicable_to_analysis`,
+      [id,job.scan_id,job.tenant_id,job.passport_id,relative,path.basename(full),stat.size,hash,category,inspection,'repository-worker',SYFT_VERSION,error,disposition,error?'inventory':'',method,category==='archive',category!=='unknown']);
+  }
+  return { files: files.length, bytes };
+}
+
 async function processRepositoryJob(pool: Pool, job: ClaimedJob) {
   const source = (await pool.query('SELECT * FROM repository_scan_sources WHERE job_id = $1 AND tenant_id = $2', [job.id, job.tenant_id])).rows[0];
   if (!source) throw new Error('REPOSITORY_CONNECTION_NOT_FOUND');
@@ -545,6 +592,8 @@ async function processRepositoryJob(pool: Pool, job: ClaimedJob) {
     const repositoryRoot = path.join(extractPath,archiveRoot.name); const scanRoot = source.repository_subdirectory ? path.resolve(repositoryRoot,source.repository_subdirectory) : repositoryRoot;
     if (!scanRoot.startsWith(path.resolve(repositoryRoot) + path.sep) && scanRoot !== path.resolve(repositoryRoot)) throw new Error('REPOSITORY_PATH_INVALID');
     const scanRootStat = await lstat(scanRoot).catch(() => null); if (!scanRootStat?.isDirectory()) throw new Error('REPOSITORY_PATH_INVALID');
+    const fileLedger = await persistRepositoryFileLedger(pool, job, scanRoot);
+    mark('file_inventory_persisted', { fileCount: fileLedger.files, totalBytes: fileLedger.bytes });
     const manifests = await inspectTree(scanRoot); mark('manifest_inspected', { manifestCount: manifests.length });
     const syftPath = await locateSyft(); mark('syft_located');
     const generated = await generateRepositorySbom(scanRoot,syftPath); const scannerEndedAt = new Date();
