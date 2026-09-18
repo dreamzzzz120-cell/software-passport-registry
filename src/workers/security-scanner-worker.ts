@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, mkdir, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, rm, readFile, lstat } from 'node:fs/promises';
 import { Pool } from 'pg';
 import { downloadArchive, fetchGitHubApi, generateRepositorySbom, githubHeaders, isRateLimited, resolveTenantGitHubToken, rootErrorMessage, runBounded, validateArchiveEntries } from './osv-worker.ts';
 import { createWorkerPool, assertWorkerDatabase } from './worker-db.ts';
@@ -13,6 +13,51 @@ import { credentialsFrom, onScanCompleted } from '../integrations/connectwise/sc
 
 const WORKER_ID = `${os.hostname()}:${process.pid}:security`;
 const MAX_ARCHIVE_BYTES = 50 * 1024 * 1024;
+
+function fileCategory(filePath: string): string {
+  const name = path.basename(filePath).toLowerCase();
+  if (/^(package(-lock)?|yarn\.lock|pnpm-lock|requirements|pyproject|poetry|cargo|go\.mod|go\.sum|pom\.xml|composer|gemfile)/.test(name)) return 'manifest';
+  if (/\.(ya?ml|json|toml|ini|conf|cfg|env|properties|xml)$/.test(name)) return 'config';
+  if (/\.(md|txt|rst|adoc|pdf)$/.test(name)) return 'documentation';
+  if (/\.(js|jsx|ts|tsx|py|rb|go|rs|java|kt|cs|php|c|cc|cpp|h|hpp|swift|scala|sh|bash|zsh)$/.test(name)) return 'source';
+  if (/\.(png|jpe?g|gif|webp|ico|svg|woff2?|ttf|eot)$/.test(name)) return 'asset';
+  return 'unknown';
+}
+
+async function recordFileLedger(pool: Pool, job: any, scanRoot: string, repositoryRoot: string, scannerVersion: string) {
+  if (!job.scan_id) return { files: 0, bytes: 0 };
+  const files: string[] = [];
+  async function walk(dir: string) {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) { await walk(full); continue; }
+      if (!entry.isFile()) continue;
+      files.push(full);
+      if (files.length > 50_000) throw new Error('REPOSITORY_FILE_LIMIT_EXCEEDED');
+    }
+  }
+  await walk(scanRoot);
+  let totalBytes = 0;
+  for (const full of files) {
+    const stat = await lstat(full);
+    const relative = path.relative(scanRoot, full).split(path.sep).join('/');
+    const buffer = await readFile(full);
+    const hash = sha256(buffer);
+    totalBytes += stat.size;
+    await pool.query(
+      `INSERT INTO scan_file_ledger
+        (id, scan_id, tenant_id, client_id, software_identity, parent_archive_id, path, filename, size_bytes, sha256, detected_type, category, inspection_status, analysis_status, scanner_tool, scanner_version)
+       VALUES ($1,$2,$3,NULL,$4,NULL,$5,$6,$7,$8,$9,$10,'inspected','not_analyzed','spr-file-inventory-v1',$11)
+       ON CONFLICT (scan_id,path) DO UPDATE SET size_bytes=EXCLUDED.size_bytes, sha256=EXCLUDED.sha256, detected_type=EXCLUDED.detected_type, category=EXCLUDED.category, inspection_status='inspected', scanner_tool=EXCLUDED.scanner_tool, scanner_version=EXCLUDED.scanner_version`,
+      [
+        `file-${sha256(job.scan_id+'|'+relative).slice(0,48)}`, job.scan_id, job.tenant_id,
+        job.passport_id, relative, path.basename(full), stat.size, hash,
+        'application/octet-stream', fileCategory(relative), scannerVersion,
+      ],
+    );
+  }
+  return { files: files.length, bytes: totalBytes };
+}
 const JOB_LEASE_MS = 10 * 60 * 1000;
 
 async function recoverStaleJobs(pool: Pool) {
@@ -24,7 +69,7 @@ async function claimJob(pool: Pool) {
   try {
     await client.query('BEGIN');
     await client.query(`UPDATE agent_jobs SET status=CASE WHEN attempt_count < max_attempts THEN 'Pending' ELSE 'Failed' END, error=CASE WHEN attempt_count < max_attempts THEN NULL ELSE 'SECURITY_SCAN_LEASE_EXPIRED' END, next_attempt_at=CASE WHEN attempt_count < max_attempts THEN NOW() ELSE next_attempt_at END, locked_at=NULL, locked_by=NULL, updated_at=NOW(), completed_at=CASE WHEN attempt_count >= max_attempts THEN NOW() ELSE completed_at END WHERE job_type='repository_security_scan' AND status='Running' AND locked_at < NOW() - ($1 * INTERVAL '1 millisecond')`, [JOB_LEASE_MS]);
-    const result = await client.query(`SELECT id, tenant_id, passport_id, attempt_count, max_attempts FROM agent_jobs WHERE status='Pending' AND job_type='repository_security_scan' AND (next_attempt_at IS NULL OR next_attempt_at <= NOW()) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1`);
+    const result = await client.query(`SELECT id, tenant_id, passport_id, scan_id, attempt_count, max_attempts FROM agent_jobs WHERE status='Pending' AND job_type='repository_security_scan' AND (next_attempt_at IS NULL OR next_attempt_at <= NOW()) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1`);
     const job = result.rows[0];
     if (!job) { await client.query('COMMIT'); return null; }
     await client.query(`UPDATE agent_jobs SET status='Running', progress=5, attempt_count=attempt_count+1, locked_at=NOW(), locked_by=$2, updated_at=NOW() WHERE id=$1 AND tenant_id=$3`, [job.id, WORKER_ID, job.tenant_id]);
@@ -80,7 +125,8 @@ async function processSecurityJob(pool: Pool, job: any) {
     const scanRoot = source.repository_subdirectory ? path.resolve(repositoryRoot, source.repository_subdirectory) : repositoryRoot;
     if (!scanRoot.startsWith(path.resolve(repositoryRoot) + path.sep) && scanRoot !== path.resolve(repositoryRoot)) throw new Error('REPOSITORY_PATH_INVALID');
 
-    await pool.query(`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES ($1,$2,$3,'Info')`, [job.id, 'security-scanner', `Acquired GitHub commit ${commit.sha}`]);
+    const inventory = await recordFileLedger(pool, job, scanRoot, repositoryRoot, 'security-scanner-v1');
+    await pool.query(`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES ($1,$2,$3,'Info')`, [job.id, 'security-scanner', `Acquired GitHub commit ${commit.sha}; inventoried ${inventory.files} files (${inventory.bytes} bytes).`]);
     await pool.query(`UPDATE agent_jobs SET progress=25,updated_at=NOW() WHERE id=$1 AND tenant_id=$2`, [job.id, job.tenant_id]);
     const generated = await generateRepositorySbom(scanRoot, process.env.SYFT_PATH || 'syft');
     await pool.query(`UPDATE agent_jobs SET progress=55,updated_at=NOW() WHERE id=$1 AND tenant_id=$2`, [job.id, job.tenant_id]);
@@ -93,7 +139,7 @@ async function processSecurityJob(pool: Pool, job: any) {
     const evidencePayload = JSON.stringify({ repository: `${source.repository_owner}/${source.repository_name}`, requestedRef, resolvedCommitSha: commit.sha, engines: ['Syft','OSV','spr-secret-scanner-v1','spr-iac-config-scanner-v1','spr-license-scanner-v1'], findingCount: findings.length, limitations: ['OSV results are provider observations, not cryptographic verification.','Secret/config rules are deterministic pattern scanners and can produce false positives/negatives.'] });
     const evidenceHash = sha256(evidencePayload);
     await pool.query(`INSERT INTO evidence_items (id,tenant_id,asset_id,name,type,verified,status,signer,timestamp,hash,raw_content,engine_id) VALUES ($1,$2,$3,'Multi-engine repository security scan','Security Scan',0,'OBSERVED','SPR scanner',NOW(),$4,$5,'spr-security-orchestrator-v1') ON CONFLICT DO NOTHING`, [`ev-security-${job.id}-${evidenceHash.slice(0,24)}`, job.tenant_id, job.passport_id, `sha256:${evidenceHash}`, evidencePayload]);
-    await pool.query(`INSERT INTO scans (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name) VALUES ($1,$2,$3,'Multi-engine repository security scan',$4,'Completed',0,$5,NOW(),$6) ON CONFLICT DO NOTHING`, [`scan-security-${job.id}-${commit.sha.slice(0,16)}`, job.tenant_id, `${source.repository_owner}/${source.repository_name}@${commit.sha.slice(0,12)}`, WORKER_ID, findings.length, source.repository_owner]);
+    if (job.scan_id) await pool.query(`UPDATE scans SET target_name=$2, status='Completed', completed_at=NOW(), duration_ms=GREATEST(0, EXTRACT(EPOCH FROM (NOW()-created_at))::integer*1000), findings_count=$3, scanner_name='spr-security-orchestrator-v1', scanner_version=$4, coverage_state='inventory_complete_analysis_partial', error_state=NULL, error_code=NULL WHERE id=$1 AND tenant_id=$5`, [job.scan_id, `${source.repository_owner}/${source.repository_name}@${commit.sha.slice(0,12)}`, findings.length, 'security-scanner-v1', job.tenant_id]);
     await pool.query(`UPDATE agent_jobs SET status='Completed',progress=100,result=$2,error=NULL,completed_at=NOW(),locked_at=NULL,locked_by=NULL,updated_at=NOW() WHERE id=$1 AND tenant_id=$3 AND status='Running' AND locked_by=$4`, [job.id, JSON.stringify({ engines: ['Syft','OSV','Secret','IaC/Config','License'], findings: findings.length, commitSha: commit.sha, evidenceHash: `sha256:${evidenceHash}` }), job.tenant_id, WORKER_ID]);
     // Same reason as osv-worker.scorePassportAfterScan: the passport's score and
     // verification_status are outcomes of this scan and were never recomputed.
