@@ -177,3 +177,23 @@ describe('migration 0108: every tenant table carries the worker cross-tenant pol
     expect(rows.filter((r: any) => !r.tenant_policy).map((r: any) => r.table_name)).toEqual([]);
   });
 });
+
+describe('route SQL references only columns that exist on scans', () => {
+  // Production 2026-09-18 18:49Z: GET /api/scans returned 500 for every tenant
+  // ("column s.scan_id does not exist") after a mechanical rename. Every
+  // `s.<column>` the scans routes select must be a real column of `scans`.
+  it('GET /api/scans and the ledger list select real scans columns', async () => {
+    const source = fs.readFileSync(path.resolve(__dirname, '..', 'src/routes/scans.ts'), 'utf8') + fs.readFileSync(path.resolve(__dirname, '..', 'src/routes/scan-ledger.ts'), 'utf8');
+    // Only the SELECT lists that read FROM scans (aliased s or r); other tables
+    // reuse the same aliases elsewhere in these files.
+    const referenced = new Set<string>();
+    for (const m of source.matchAll(/SELECT([\s\S]*?)FROM scans (s|r)\b/g)) {
+      const alias = m[2];
+      for (const col of m[1].matchAll(new RegExp('\\b' + alias + '\\.([a-z_]+)\\b', 'g'))) referenced.add(col[1]);
+    }
+    const columns = new Set((await db.query(`SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='scans'`)).rows.map((r: any) => r.column_name));
+    expect(referenced.size).toBeGreaterThan(10);
+    const missing = [...referenced].filter((c) => !columns.has(c));
+    expect(missing).toEqual([]);
+  });
+});
