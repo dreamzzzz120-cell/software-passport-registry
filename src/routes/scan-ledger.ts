@@ -44,7 +44,7 @@ const submitSchema = z.discriminatedUnion('source', [
 
 const listSchema = z.object({ passportId: optionalId, clientId: optionalId, status: z.enum(['Queued', 'Scanning', 'Completed', 'Partial', 'Failed']).optional(), sourceKind: z.enum(['github', 'upload', 'sbom']).optional(), q: z.string().max(200).optional(), page, limit });
 // Array filters use Drizzle's `IN ${array}` idiom and are omitted when empty:
-// `= ANY(${array})` binds the array as a scalar and `IN ()` is a syntax error
+// the ANY(array) form binds the array as a scalar and an empty IN list is a syntax error
 // (both observed live on 2026-09-18).
 const filesSchema = z.object({
   disposition: z.string().regex(/^[a-z_]+(,[a-z_]+)*$/).optional(),
