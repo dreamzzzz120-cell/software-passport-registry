@@ -115,6 +115,7 @@ BEGIN
   ) THEN
     CREATE POLICY spr_tenant_isolation
       ON public.scan_file_ledger
+      FOR ALL TO spr_app_runtime
       USING (tenant_id = current_setting('app.tenant_id', true))
       WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
   END IF;
