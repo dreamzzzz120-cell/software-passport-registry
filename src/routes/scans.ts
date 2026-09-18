@@ -71,9 +71,61 @@ export function createScansRouter() {
       const db = req.db!;
       const scan = (await db.execute(sql`SELECT id, target_name AS "targetName", status, coverage_state AS "coverageState", error_state AS "errorState", error_code AS "errorCode", software_identity AS "softwareIdentity", source, declared_scope AS "declaredScope", created_at AS "createdAt", started_at AS "startedAt", completed_at AS "completedAt", scanner_name AS "scannerName", scanner_version AS "scannerVersion" FROM scans WHERE id=${req.params.scanId} AND tenant_id=${req.user!.tenantId} AND (${req.user!.role} <> 'Client' OR EXISTS (SELECT 1 FROM passports p WHERE p.id=scans.software_identity AND p.tenant_id=scans.tenant_id AND p.client_id=${req.user!.clientId ?? ''})) LIMIT 1`)).rows?.[0] as any;
       if (!scan) return res.status(404).json({ error: 'Scan not found' });
-      const summary = (await db.execute(sql`SELECT COUNT(*)::int AS "knownFiles", COALESCE(SUM(size_bytes),0)::bigint AS "totalBytes", COUNT(*) FILTER (WHERE inspection_status='inspected')::int AS "inspectedFiles", COUNT(*) FILTER (WHERE analysis_status='analyzed')::int AS "analyzedFiles", COUNT(*) FILTER (WHERE analysis_status='not_analyzed')::int AS "notAnalyzedFiles", COUNT(*) FILTER (WHERE error_reason IS NOT NULL)::int AS "errorFiles" FROM scan_file_ledger WHERE scan_id=${req.params.scanId} AND tenant_id=${req.user!.tenantId}`)).rows?.[0] as any;
-      const files = (await db.execute(sql`SELECT id, parent_archive_id AS "parentArchiveId", path, filename, size_bytes AS "sizeBytes", sha256, detected_type AS "detectedType", category, discovered_at AS "discoveredAt", inspection_status AS "inspectionStatus", analysis_status AS "analysisStatus", scanner_tool AS "scannerTool", scanner_version AS "scannerVersion", error_reason AS "errorReason", component_refs AS "componentRefs", finding_refs AS "findingRefs", evidence_refs AS "evidenceRefs" FROM scan_file_ledger WHERE scan_id=${req.params.scanId} AND tenant_id=${req.user!.tenantId} ORDER BY path ASC LIMIT 50000`)).rows || [];
-      return res.json({ scan, coverage: { ...summary, inventoryComplete: Number(summary?.knownFiles ?? 0) > 0 && Number(summary?.errorFiles ?? 0) === 0, analysisComplete: Number(summary?.knownFiles ?? 0) > 0 && Number(summary?.notAnalyzedFiles ?? 0) === 0 }, files });
+
+      const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0,200) : '';
+      const category = typeof req.query.category === 'string' ? req.query.category.trim().slice(0,100) : '';
+      const inspection = typeof req.query.inspectionStatus === 'string' ? req.query.inspectionStatus.trim().slice(0,50) : '';
+      const finding = req.query.finding === 'true' ? true : req.query.finding === 'false' ? false : null;
+      const evidence = req.query.evidence === 'true' ? true : req.query.evidence === 'false' ? false : null;
+      const page = Math.max(1, Number(req.query.page || 1) || 1);
+      const pageSize = Math.min(200, Math.max(1, Number(req.query.pageSize || 50) || 50));
+      const sortMap: Record<string,string> = { path:'path ASC', size:'size_bytes DESC NULLS LAST', category:'category ASC, path ASC', inspection:'inspection_status ASC, path ASC', discovered:'discovered_at DESC, path ASC' };
+      const order = sortMap[String(req.query.sort || 'path')] || sortMap.path;
+      const offset = (page - 1) * pageSize;
+
+      const conditions = [
+        sql`scan_id=${req.params.scanId}`,
+        sql`tenant_id=${req.user!.tenantId}`,
+        q ? sql`(path ILIKE ${'%' + q + '%'} OR filename ILIKE ${'%' + q + '%'})` : sql`TRUE`,
+        category ? sql`category=${category}` : sql`TRUE`,
+        inspection ? sql`inspection_status=${inspection}` : sql`TRUE`,
+        finding === null ? sql`TRUE` : finding ? sql`jsonb_array_length(COALESCE(finding_refs::jsonb,'[]'::jsonb)) > 0` : sql`jsonb_array_length(COALESCE(finding_refs::jsonb,'[]'::jsonb)) = 0`,
+        evidence === null ? sql`TRUE` : evidence ? sql`jsonb_array_length(COALESCE(evidence_refs::jsonb,'[]'::jsonb)) > 0` : sql`jsonb_array_length(COALESCE(evidence_refs::jsonb,'[]'::jsonb)) = 0`,
+      ];
+      const where = sql.join(conditions, sql` AND `);
+      const summary = (await db.execute(sql`SELECT
+        COUNT(*)::int AS "knownFiles",
+        COALESCE(SUM(size_bytes),0)::bigint AS "totalBytes",
+        COUNT(*) FILTER (WHERE inspection_status='inspected')::int AS "inspectedFiles",
+        COUNT(*) FILTER (WHERE inspection_status='partial')::int AS "partialFiles",
+        COUNT(*) FILTER (WHERE analysis_status='analyzed')::int AS "analyzedFiles",
+        COUNT(*) FILTER (WHERE applicable_to_analysis=true)::int AS "analysisApplicableFiles",
+        COUNT(*) FILTER (WHERE error_reason IS NOT NULL)::int AS "errorFiles",
+        COUNT(*) FILTER (WHERE disposition_status IN ('FAILED','INACCESSIBLE','UNSUPPORTED','SKIPPED','PARTIAL'))::int AS "nonSuccessFiles",
+        COUNT(*) FILTER (WHERE jsonb_array_length(COALESCE(evidence_refs::jsonb,'[]'::jsonb)) > 0)::int AS "filesWithEvidence",
+        COUNT(*) FILTER (WHERE is_archive=true)::int AS "archiveFiles"
+      FROM scan_file_ledger WHERE ${sql.join([sql`scan_id=${req.params.scanId}`,sql`tenant_id=${req.user!.tenantId}`],sql` AND `)}`)).rows?.[0] as any;
+      const total = (await db.execute(sql`SELECT COUNT(*)::int AS total FROM scan_file_ledger WHERE ${where}`)).rows?.[0]?.total ?? 0;
+      const files = (await db.execute(sql`SELECT id,parent_archive_id AS "parentArchiveId",path,filename,size_bytes AS "sizeBytes",sha256,detected_type AS "detectedType",category,discovered_at AS "discoveredAt",inspection_status AS "inspectionStatus",analysis_status AS "analysisStatus",disposition_status AS "dispositionStatus",failure_stage AS "failureStage",classification_method AS "classificationMethod",applicable_to_analysis AS "applicableToAnalysis",evidence_status AS "evidenceStatus",scanner_tool AS "scannerTool",scanner_version AS "scannerVersion",error_reason AS "errorReason",component_refs AS "componentRefs",finding_refs AS "findingRefs",evidence_refs AS "evidenceRefs" FROM scan_file_ledger WHERE ${where} ORDER BY ${sql.raw(order)} LIMIT ${pageSize} OFFSET ${offset}`)).rows || [];
+
+      const evidenceCount = (await db.execute(sql`SELECT COUNT(*)::int AS count FROM evidence_items WHERE tenant_id=${req.user!.tenantId} AND scan_id=${req.params.scanId}`)).rows?.[0]?.count ?? 0;
+      const applicable = Number(summary?.analysisApplicableFiles ?? 0);
+      const inspected = Number(summary?.inspectedFiles ?? 0);
+      const analyzed = Number(summary?.analyzedFiles ?? 0);
+      const known = Number(summary?.knownFiles ?? 0);
+      return res.json({
+        scan,
+        coverage: {
+          inventory: { accounted: known, expected: null, percentage: null, state: 'unknown_until_discovery_total_persisted' },
+          inspection: { inspected, applicable: known, percentage: known ? Number(((inspected / known) * 100).toFixed(2)) : 0 },
+          analysis: { analyzed, applicable, percentage: applicable ? Number(((analyzed / applicable) * 100).toFixed(2)) : null },
+          evidence: { records: Number(evidenceCount), filesWithEvidence: Number(summary?.filesWithEvidence ?? 0) },
+          failures: Number(summary?.nonSuccessFiles ?? 0),
+          archives: Number(summary?.archiveFiles ?? 0),
+        },
+        pagination: { page, pageSize, total: Number(total), totalPages: Math.ceil(Number(total) / pageSize) },
+        files,
+      });
     } catch (error) { return next(error); }
   });
 
