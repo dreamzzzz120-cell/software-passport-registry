@@ -61,7 +61,7 @@ export function createScansRouter() {
   router.get('/scans', async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
-      const result = await db.execute(sql`SELECT s.id, s.target_name AS "targetName", s.scan_type AS "scanType", s.triggered_by AS "triggeredBy", s.status, s.duration_ms AS "durationMs", s.findings_count AS "findingsCount", s.timestamp, s.client_name AS "clientName" FROM scans s WHERE s.tenant_id=${req.user!.tenantId} AND (${req.user!.role} <> 'Client' OR EXISTS (SELECT 1 FROM passports p WHERE p.tenant_id=s.tenant_id AND p.client_id=${req.user!.clientId ?? ''} AND (p.id=s.target_name OR LOWER(p.name)=LOWER(s.target_name)))) ORDER BY s.timestamp DESC LIMIT 100`);
+      const result = await db.execute(sql`SELECT s.id, s.target_name AS "targetName", s.scan_type AS "scanType", s.triggered_by AS "triggeredBy", s.status, s.duration_ms AS "durationMs", s.findings_count AS "findingsCount", s.timestamp, s.client_name AS "clientName", s.software_identity AS "softwareIdentity", s.source, s.declared_scope AS "declaredScope", s.created_at AS "createdAt", s.started_at AS "startedAt", s.completed_at AS "completedAt", s.job_id AS "jobId", s.worker_job_id AS "workerJobId", s.scanner_name AS "scannerName", s.scanner_version AS "scannerVersion", s.coverage_state AS "coverageState", s.error_state AS "errorState", s.error_code AS "errorCode" FROM scans s WHERE s.tenant_id=${req.user!.tenantId} AND (${req.user!.role} <> 'Client' OR EXISTS (SELECT 1 FROM passports p WHERE p.tenant_id=s.tenant_id AND p.client_id=${req.user!.clientId ?? ''} AND (p.id=s.target_name OR LOWER(p.name)=LOWER(s.target_name)))) ORDER BY s.timestamp DESC LIMIT 100`);
       return res.json((result as any).rows || []);
     } catch (error) { return next(error); }
   });
@@ -80,8 +80,9 @@ export function createScansRouter() {
         return res.status(202).json({ id: scanId, targetName, scanType, triggeredBy: req.user!.uid, status: 'Failed', durationMs: 0, findingsCount: null, timestamp, clientName, error: 'No matching Software Passport exists for this scan target.' });
       }
       const jobId = id('job');
-      await db.execute(sql`INSERT INTO scans (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name) VALUES (${scanId},${req.user!.tenantId},${targetName},${scanType},${req.user!.uid},'Scanning',0,NULL,${timestamp},${clientName})`);
-      await db.execute(sql`INSERT INTO agent_jobs (id,tenant_id,agent_id,passport_id,job_type,status,progress,next_attempt_at,created_at,updated_at) VALUES (${jobId},${req.user!.tenantId},'comprehensive_scanner',${passport.id},'osv_manifest_scan','Pending',0,NOW(),NOW(),NOW())`);
+      await db.execute(sql`INSERT INTO scans (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name,software_identity,source,declared_scope,created_at,started_at,coverage_state) VALUES (${scanId},${req.user!.tenantId},${targetName},${scanType},${req.user!.uid},'Scanning',0,NULL,${timestamp},${clientName},${passport.id},'msp_scan','passport:'+${passport.id},${timestamp},${timestamp},'queued')`);
+      await db.execute(sql`INSERT INTO agent_jobs (id,tenant_id,agent_id,passport_id,scan_id,job_type,status,progress,next_attempt_at,created_at,updated_at) VALUES (${jobId},${req.user!.tenantId},'comprehensive_scanner',${passport.id},${scanId},'osv_manifest_scan','Pending',0,NOW(),NOW(),NOW())`);
+      await db.execute(sql`UPDATE scans SET job_id=${jobId}, worker_job_id=${jobId} WHERE id=${scanId} AND tenant_id=${req.user!.tenantId}`);
       await db.execute(sql`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES (${jobId},'comprehensive_scanner','Queued real OSV dependency vulnerability scan against the persisted SBOM.','Info')`);
       await appendAuditEntry(db, { tenantId: req.user!.tenantId, action: 'scan.queued', actor: req.user!.uid, payload: { scanId, jobId, targetName, scanType, clientName, passportId: passport.id } });
       return res.status(202).json({ id: scanId, jobId, targetName, scanType, triggeredBy: req.user!.uid, status: 'Scanning', durationMs: 0, findingsCount: null, timestamp, clientName });
@@ -158,8 +159,8 @@ export function createScansRouter() {
       const next = nextRunAt(schedule.frequency, now);
       const scanId = id('scan');
       const jobId = id('job');
-      await db.execute(sql`INSERT INTO scans (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name) VALUES (${scanId},${req.user!.tenantId},${schedule.assetHostName},${schedule.scanType},${req.user!.uid},'Scanning',0,NULL,${now.toISOString()},${schedule.clientName})`);
-      await db.execute(sql`INSERT INTO agent_jobs (id,tenant_id,agent_id,passport_id,job_type,status,progress,next_attempt_at,created_at,updated_at) VALUES (${jobId},${req.user!.tenantId},'comprehensive_scanner',${passport.id},'osv_manifest_scan','Pending',0,NOW(),NOW(),NOW())`);
+      await db.execute(sql`INSERT INTO scans (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name,software_identity,source,declared_scope,created_at,started_at,coverage_state) VALUES (${scanId},${req.user!.tenantId},${schedule.assetHostName},${schedule.scanType},${req.user!.uid},'Scanning',0,NULL,${now.toISOString()},${schedule.clientName},${passport.id},'scheduled_scan','passport:'+${passport.id},${now.toISOString()},${now.toISOString()},'queued')`);
+      await db.execute(sql`INSERT INTO agent_jobs (id,tenant_id,agent_id,passport_id,scan_id,job_type,status,progress,next_attempt_at,created_at,updated_at) VALUES (${jobId},${req.user!.tenantId},'comprehensive_scanner',${passport.id},${scanId},'osv_manifest_scan','Pending',0,NOW(),NOW(),NOW())`);
       await db.execute(sql`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES (${jobId},'comprehensive_scanner',${'Scheduled OSV dependency scan dispatched for ' + schedule.assetHostName},'Info')`);
       const updated = (await db.execute(sql`UPDATE scan_schedules SET last_run_at=${now.toISOString()}, next_run_at=${next} WHERE id=${req.params.id} AND tenant_id=${req.user!.tenantId} RETURNING id, asset_id AS "assetId", asset_host_name AS "assetHostName", asset_type AS "assetType", client_name AS "clientName", frequency, scan_type AS "scanType", status, last_run_at AS "lastRunAt", next_run_at AS "nextRunAt", created_at AS "createdAt"`)).rows?.[0];
       await appendAuditEntry(db, { tenantId: req.user!.tenantId, action: 'scan.queued', actor: req.user!.uid, payload: { scanId, jobId, passportId: passport.id, scheduleId: req.params.id, scanType: schedule.scanType } });
@@ -170,7 +171,7 @@ export function createScansRouter() {
   router.get('/agent-jobs', async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
-      const result = await db.execute(sql`SELECT j.id, j.agent_id, j.passport_id, j.job_type, CASE WHEN j.status='Completed' THEN 'Success' ELSE j.status END AS status, j.status AS db_status, j.progress, j.result, j.error, j.attempt_count, j.max_attempts, j.completed_at, j.created_at, j.updated_at FROM agent_jobs j JOIN passports p ON p.id=j.passport_id AND p.tenant_id=j.tenant_id WHERE j.tenant_id=${req.user!.tenantId} AND (${req.user!.role} <> 'Client' OR p.client_id=${req.user!.clientId ?? ''}) ORDER BY j.created_at DESC LIMIT 100`);
+      const result = await db.execute(sql`SELECT j.id, j.scan_id AS "scanId", j.agent_id, j.passport_id, j.job_type, CASE WHEN j.status='Completed' THEN 'Success' ELSE j.status END AS status, j.status AS db_status, j.progress, j.result, j.error, j.attempt_count, j.max_attempts, j.completed_at, j.created_at, j.updated_at FROM agent_jobs j LEFT JOIN passports p ON p.id=j.passport_id AND p.tenant_id=j.tenant_id WHERE j.tenant_id=${req.user!.tenantId} AND (${req.user!.role} <> 'Client' OR p.client_id=${req.user!.clientId ?? ''}) ORDER BY j.created_at DESC LIMIT 100`);
       return res.json((result as any).rows || []);
     } catch (error) { return next(error); }
   });
@@ -178,7 +179,7 @@ export function createScansRouter() {
   router.get('/agent-jobs/:id', async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
-      const result = await db.execute(sql`SELECT j.id, j.agent_id AS "agentId", j.passport_id AS "passportId", j.job_type AS "jobType", j.status, j.progress, j.result, j.error, j.attempt_count AS "attemptCount", j.max_attempts AS "maxAttempts", j.completed_at AS "completedAt", j.created_at AS "createdAt", j.updated_at AS "updatedAt" FROM agent_jobs j JOIN passports p ON p.id=j.passport_id AND p.tenant_id=j.tenant_id WHERE j.id=${req.params.id} AND j.tenant_id=${req.user!.tenantId} AND (${req.user!.role} <> 'Client' OR p.client_id=${req.user!.clientId ?? ''}) LIMIT 1`);
+      const result = await db.execute(sql`SELECT j.id, j.scan_id AS "scanId", j.agent_id AS "agentId", j.passport_id AS "passportId", j.job_type AS "jobType", j.status, j.progress, j.result, j.error, j.attempt_count AS "attemptCount", j.max_attempts AS "maxAttempts", j.completed_at AS "completedAt", j.created_at AS "createdAt", j.updated_at AS "updatedAt" FROM agent_jobs j JOIN passports p ON p.id=j.passport_id AND p.tenant_id=j.tenant_id WHERE j.id=${req.params.id} AND j.tenant_id=${req.user!.tenantId} AND (${req.user!.role} <> 'Client' OR p.client_id=${req.user!.clientId ?? ''}) LIMIT 1`);
       const row = (result as any).rows?.[0];
       if (!row) return res.status(404).json({ error: 'Agent job not found' });
       return res.json(row);
@@ -188,7 +189,7 @@ export function createScansRouter() {
   router.get('/agent-jobs/:id/logs', async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
-      const result = await db.execute(sql`SELECT l.id, l.agent_id, l.message, l.level, l.timestamp FROM agent_logs l JOIN agent_jobs j ON j.id=l.job_id AND j.tenant_id=${req.user!.tenantId} JOIN passports p ON p.id=j.passport_id AND p.tenant_id=j.tenant_id WHERE l.job_id=${req.params.id} AND (${req.user!.role} <> 'Client' OR p.client_id=${req.user!.clientId ?? ''}) ORDER BY l.timestamp ASC, l.id ASC`);
+      const result = await db.execute(sql`SELECT l.id, l.agent_id, l.message, l.level, l.timestamp FROM agent_logs l JOIN agent_jobs j ON j.id=l.job_id AND j.tenant_id=${req.user!.tenantId} LEFT JOIN passports p ON p.id=j.passport_id AND p.tenant_id=j.tenant_id WHERE l.job_id=${req.params.id} AND (${req.user!.role} <> 'Client' OR p.client_id=${req.user!.clientId ?? ''}) ORDER BY l.timestamp ASC, l.id ASC`);
       return res.json((result as any).rows || []);
     } catch (error) { return next(error); }
   });
@@ -256,12 +257,14 @@ export function createScansRouter() {
       if (!existingConnection) await db.execute(sql`INSERT INTO repository_connections (id,tenant_id,provider,installation_id,label,access_mode,status) VALUES (${connectionId},${req.user!.tenantId},'github','public-github','Public GitHub acquisition','public','Active')`);
       const repositoryJobId = id('job');
       const securityJobId = id('job');
-      await db.execute(sql`INSERT INTO agent_jobs (id,tenant_id,agent_id,passport_id,job_type,status,progress,next_attempt_at,created_at,updated_at) VALUES (${repositoryJobId},${req.user!.tenantId},'repository-scanner',${passportId},'repository_scan','Pending',0,NOW(),NOW(),NOW()),(${securityJobId},${req.user!.tenantId},'security-scanner',${passportId},'repository_security_scan','Pending',0,NOW(),NOW(),NOW())`);
+      const scanId = id('scan');
+      await db.execute(sql`INSERT INTO scans (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name,software_identity,source,declared_scope,created_at,started_at,coverage_state,job_id,worker_job_id) VALUES (${scanId},${req.user!.tenantId},${owner+'/'+repository},'Repository Security Scan',${req.user!.uid},'Scanning',0,NULL,NOW(),${owner},${passportId},'github',${owner+'/'+repository+'@'+ref},NOW(),NOW(),'queued',${repositoryJobId},${securityJobId})`);
+      await db.execute(sql`INSERT INTO agent_jobs (id,tenant_id,agent_id,passport_id,scan_id,job_type,status,progress,next_attempt_at,created_at,updated_at) VALUES (${repositoryJobId},${req.user!.tenantId},'repository-scanner',${passportId},${scanId},'repository_scan','Pending',0,NOW(),NOW(),NOW()),(${securityJobId},${req.user!.tenantId},'security-scanner',${passportId},${scanId},'repository_security_scan','Pending',0,NOW(),NOW(),NOW())`);
       await db.execute(sql`INSERT INTO repository_scan_sources (id,job_id,tenant_id,connection_id,provider,repository_owner,repository_name,requested_ref,repository_subdirectory,created_at) VALUES (${id('source')},${repositoryJobId},${req.user!.tenantId},${connectionId},'github',${owner},${repository},${ref},${subdirectory},NOW())`);
       await db.execute(sql`INSERT INTO repository_scan_sources (id,job_id,tenant_id,connection_id,provider,repository_owner,repository_name,requested_ref,repository_subdirectory,created_at) VALUES (${id('source')},${securityJobId},${req.user!.tenantId},${connectionId},'github',${owner},${repository},${ref},${subdirectory},NOW())`);
       await db.execute(sql`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES (${repositoryJobId},'repository-scanner','Queued real GitHub acquisition + pinned Syft SBOM + OSV dependency scan.','Info'),(${securityJobId},'security-scanner','Queued real secret, IaC/configuration, license, Syft and OSV scan.','Info')`);
-      await appendAuditEntry(db, { tenantId: req.user!.tenantId, action: 'scan.queued', actor: req.user!.uid, payload: { repositoryJobId, securityJobId, passportId, owner, repository, ref } });
-      return res.status(202).json({ repositoryJobId, securityJobId, status: 'Pending', engines: ['Syft','OSV','Secret','IaC/Config','License'] });
+      await appendAuditEntry(db, { tenantId: req.user!.tenantId, action: 'scan.queued', actor: req.user!.uid, payload: { scanId, repositoryJobId, securityJobId, passportId, owner, repository, ref } });
+      return res.status(202).json({ scanId, repositoryJobId, securityJobId, status: 'Pending', engines: ['Syft','OSV','Secret','IaC/Config','License'] });
     } catch (error) { return next(error); }
   });
 
