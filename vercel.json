@@ -6,6 +6,11 @@
       "source": "/assets",
       "destination": "/",
       "permanent": false
+    },
+    {
+      "source": "/software/",
+      "destination": "/software",
+      "permanent": true
     }
   ],
   "rewrites": [
@@ -44,6 +49,10 @@
     {
       "source": "/roi",
       "destination": "https://spr-app-staging-production.up.railway.app/roi"
+    },
+    {
+      "source": "/mcp",
+      "destination": "https://spr-app-staging-production.up.railway.app/mcp"
     },
     {
       "source": "/(.*)",
