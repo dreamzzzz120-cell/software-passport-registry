@@ -62,7 +62,7 @@ export function createScansRouter() {
   router.get('/scans', async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
-      const result = await db.execute(sql`SELECT s.id, s.target_name AS "targetName", s.scan_type AS "scanType", s.triggered_by AS "triggeredBy", s.status, s.duration_ms AS "durationMs", s.findings_count AS "findingsCount", s.timestamp, s.client_name AS "clientName", s.scan_id AS "scanId", s.passport_id AS "passportId", s.client_id AS "clientId", s.failure_code AS "failureCode" FROM scans s WHERE s.tenant_id=${req.user!.tenantId} AND (${req.user!.role} <> 'Client' OR EXISTS (SELECT 1 FROM passports p WHERE p.tenant_id=s.tenant_id AND p.client_id=${req.user!.clientId ?? ''} AND (p.id=s.target_name OR LOWER(p.name)=LOWER(s.target_name)))) ORDER BY s.timestamp DESC LIMIT 100`);
+      const result = await db.execute(sql`SELECT s.id, s.target_name AS "targetName", s.scan_type AS "scanType", s.triggered_by AS "triggeredBy", s.status, s.duration_ms AS "durationMs", s.findings_count AS "findingsCount", s.timestamp, s.client_name AS "clientName", s.id AS "scanId", s.passport_id AS "passportId", s.client_id AS "clientId", s.error_code AS "failureCode", s.coverage_state AS "coverageState" FROM scans s WHERE s.tenant_id=${req.user!.tenantId} AND (${req.user!.role} <> 'Client' OR EXISTS (SELECT 1 FROM passports p WHERE p.tenant_id=s.tenant_id AND p.client_id=${req.user!.clientId ?? ''} AND (p.id=s.target_name OR LOWER(p.name)=LOWER(s.target_name)))) ORDER BY s.timestamp DESC LIMIT 100`);
       return res.json((result as any).rows || []);
     } catch (error) { return next(error); }
   });
