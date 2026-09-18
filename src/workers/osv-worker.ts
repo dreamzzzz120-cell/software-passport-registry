@@ -304,13 +304,15 @@ async function processJob(pool: Pool, job: ClaimedJob) {
     });
     await pool.query(`
       INSERT INTO evidence_items
-        (id, tenant_id, asset_id, name, type, verified, status, signer, timestamp, hash, raw_content, engine_id, verification_failure_reason)
-      VALUES ($1, $2, $3, 'SBOM scan assessment', 'Security Scan', 0, 'OBSERVED', 'spr-worker', $4, $5, $6, 'osv-worker', 'SBOM_EMPTY')
+        (id, tenant_id, asset_id, scan_id, job_id, name, type, verified, status, signer, timestamp, hash, raw_content, engine_id, verification_failure_reason)
+      VALUES ($1, $2, $3, $4, $5, 'SBOM scan assessment', 'Security Scan', 0, 'OBSERVED', 'spr-worker', $6, $7, $8, 'osv-worker', 'SBOM_EMPTY')
       ON CONFLICT (id) DO NOTHING
     `, [
       deterministicId('ev-sbom-empty', `${job.id}|${job.tenant_id}|${job.passport_id}`),
       job.tenant_id,
       job.passport_id,
+      job.scan_id,
+      job.id,
       completedAt,
       `sha256:${sha256(evidencePayload)}`,
       evidencePayload,
