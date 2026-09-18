@@ -515,12 +515,12 @@ async function persistRepositoryFileLedger(pool: Pool, job: ClaimedJob, root: st
     const relative = path.relative(root, full).split(path.sep).join('/');
     const name = path.basename(relative).toLowerCase();
     const category = /\\.(zip|tar|tgz|tar\\.gz|tar\\.bz2|tar\\.xz)$/.test(name) ? 'archive'
-      : /(^|\\/)(package-lock\\.json|yarn\\.lock|pnpm-lock\\.yaml|cargo\\.lock|poetry\\.lock|composer\\.lock|go\\.sum)$/.test(relative.toLowerCase()) ? 'lockfile'
-      : /(^|\\/)(package\\.json|requirements(?:\\.txt)?|pyproject\\.toml|go\\.mod|pom\\.xml|composer\\.json|gemfile)$/.test(relative.toLowerCase()) ? 'dependency manifest'
+      : /(^|[\\/])(package-lock\\.json|yarn\\.lock|pnpm-lock\\.yaml|cargo\\.lock|poetry\\.lock|composer\\.lock|go\\.sum)$/.test(relative.toLowerCase()) ? 'lockfile'
+      : /(^|[\\/])(package\\.json|requirements(?:\\.txt)?|pyproject\\.toml|go\\.mod|pom\\.xml|composer\\.json|gemfile)$/.test(relative.toLowerCase()) ? 'dependency manifest'
       : /\\.(js|jsx|ts|tsx|py|rb|go|rs|java|kt|cs|php|c|cc|cpp|h|hpp|swift|scala|sh|bash|zsh)$/.test(name) ? 'source code'
       : /\\.(ya?ml|json|toml|ini|conf|cfg|env|properties|xml)$/.test(name) ? 'configuration'
       : /\\.(md|txt|rst|adoc|pdf|docx?)$/.test(name) ? 'documentation'
-      : /(^|\\/)(license|copying|notice)(\\.|$)/.test(name) ? 'license'
+      : /(^|[\\/])(license|copying|notice)(\\.|$)/.test(name) ? 'license'
       : 'unknown';
     const method = category === 'unknown' ? 'no-confident-match' : 'filename-or-extension';
     bytes += stat.size;
