@@ -2,7 +2,7 @@ import { decryptCredentials } from '../integrations/credential-vault.ts';
 import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, mkdir, writeFile, readdir, lstat, rm, unlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readdir, lstat, rm, unlink, readFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { appendAuditEntryViaPool } from '../security/audit-log.ts';
 import { calculateAndStoreTrustScore } from '../utils/scanner.ts';
