@@ -14,26 +14,40 @@ import { credentialsFrom, onScanCompleted } from '../integrations/connectwise/sc
 const WORKER_ID = `${os.hostname()}:${process.pid}:security`;
 const MAX_ARCHIVE_BYTES = 50 * 1024 * 1024;
 
-function fileCategory(filePath: string): string {
+function fileClassification(filePath: string): { category: string; method: string } {
   const name = path.basename(filePath).toLowerCase();
-  if (/^(package(-lock)?|yarn\.lock|pnpm-lock|requirements|pyproject|poetry|cargo|go\.mod|go\.sum|pom\.xml|composer|gemfile)/.test(name)) return 'manifest';
-  if (/\.(ya?ml|json|toml|ini|conf|cfg|env|properties|xml)$/.test(name)) return 'config';
-  if (/\.(md|txt|rst|adoc|pdf)$/.test(name)) return 'documentation';
-  if (/\.(js|jsx|ts|tsx|py|rb|go|rs|java|kt|cs|php|c|cc|cpp|h|hpp|swift|scala|sh|bash|zsh)$/.test(name)) return 'source';
-  if (/\.(png|jpe?g|gif|webp|ico|svg|woff2?|ttf|eot)$/.test(name)) return 'asset';
-  return 'unknown';
+  const p = filePath.toLowerCase();
+  if (/\\.(zip|tar|tgz|tar\\.gz|tar\\.bz2|tar\\.xz)$/.test(name)) return { category: 'archive', method: 'extension' };
+  if (/(^|\\/)(package-lock\\.json|npm-shrinkwrap\\.json|yarn\\.lock|pnpm-lock\\.yaml|poetry\\.lock|composer\\.lock|gemfile\\.lock|cargo\\.lock|go\\.sum)$/.test(p)) return { category: 'lockfile', method: 'filename' };
+  if (/(^|\\/)(package\\.json|requirements(?:\\.txt)?|pyproject\\.toml|poetry\\.toml|cargo\\.toml|go\\.mod|pom\\.xml|composer\\.json|gemfile)$/.test(p)) return { category: 'dependency manifest', method: 'filename' };
+  if (/sbom|cyclonedx|spdx/.test(name)) return { category: 'sbom', method: 'filename' };
+  if (/(^|\\/)(\\.github\\/|jenkinsfile|azure-pipelines|bitbucket-pipelines|gitlab-ci)/.test(p)) return { category: 'ci/cd', method: 'path' };
+  if (/terraform|\\.tf$|\\.tfvars$|dockerfile|kustomization|helm/.test(p)) return { category: 'infrastructure', method: 'filename' };
+  if (/\\.(js|jsx|ts|tsx|py|rb|go|rs|java|kt|kts|cs|php|c|cc|cpp|h|hpp|swift|scala|sh|bash|zsh|ps1|sql)$/.test(name)) return { category: /test|spec/.test(name) ? 'test' : 'source code', method: 'extension' };
+  if (/\\.(ya?ml|json|toml|ini|conf|cfg|env|properties|xml)$/.test(name)) return { category: 'configuration', method: 'extension' };
+  if (/\\.(exe|dll|so|dylib|bin|elf|class|jar|war)$/.test(name)) return { category: 'binary', method: 'extension' };
+  if (/\\.(deb|rpm|apk|msi|whl|gem|nupkg)$/.test(name)) return { category: 'package', method: 'extension' };
+  if (/\\.(md|txt|rst|adoc|pdf|docx?)$/.test(name)) return { category: 'documentation', method: 'extension' };
+  if (/(^|\\/)(license|copying|notice)(\\.|$)/.test(name)) return { category: 'license', method: 'filename' };
+  return { category: 'unknown', method: 'no-confident-match' };
 }
 
-async function recordFileLedger(pool: Pool, job: any, scanRoot: string, repositoryRoot: string, scannerVersion: string) {
+async function recordFileLedger(pool: Pool, job: any, scanRoot: string, _repositoryRoot: string, scannerVersion: string) {
   if (!job.scan_id) return { files: 0, bytes: 0 };
+  const MAX_FILES = 50_000;
+  const MAX_FILE_BYTES = 25 * 1024 * 1024;
   const files: string[] = [];
   async function walk(dir: string) {
     for (const entry of await readdir(dir, { withFileTypes: true })) {
       const full = path.join(dir, entry.name);
+      if (entry.isSymbolicLink()) {
+        files.push(full);
+        continue;
+      }
       if (entry.isDirectory()) { await walk(full); continue; }
       if (!entry.isFile()) continue;
       files.push(full);
-      if (files.length > 50_000) throw new Error('REPOSITORY_FILE_LIMIT_EXCEEDED');
+      if (files.length > MAX_FILES) throw new Error('REPOSITORY_FILE_LIMIT_EXCEEDED');
     }
   }
   await walk(scanRoot);
@@ -41,18 +55,38 @@ async function recordFileLedger(pool: Pool, job: any, scanRoot: string, reposito
   for (const full of files) {
     const stat = await lstat(full);
     const relative = path.relative(scanRoot, full).split(path.sep).join('/');
-    const buffer = await readFile(full);
-    const hash = sha256(buffer);
+    const classification = fileClassification(relative);
+    const isSymlink = stat.isSymbolicLink();
     totalBytes += stat.size;
+    let hash: string | null = null;
+    let disposition = 'INSPECTED';
+    let inspection = 'inspected';
+    let failure: string | null = null;
+    let applicable = classification.category !== 'unknown';
+    if (isSymlink) {
+      disposition = 'INACCESSIBLE'; inspection = 'inaccessible'; failure = 'SYMLINK_NOT_FOLLOWED'; applicable = false;
+    } else if (stat.size === 0) {
+      disposition = 'SKIPPED'; inspection = 'skipped'; failure = 'EMPTY_FILE'; applicable = false;
+    } else if (stat.size > MAX_FILE_BYTES) {
+      disposition = 'PARTIAL'; inspection = 'partial'; failure = 'FILE_TOO_LARGE_FOR_CONTENT_INSPECTION';
+    } else {
+      try { hash = sha256(await readFile(full)); }
+      catch { disposition = 'INACCESSIBLE'; inspection = 'inaccessible'; failure = 'FILE_READ_FAILED'; applicable = false; }
+    }
     await pool.query(
       `INSERT INTO scan_file_ledger
-        (id, scan_id, tenant_id, client_id, software_identity, parent_archive_id, path, filename, size_bytes, sha256, detected_type, category, inspection_status, analysis_status, scanner_tool, scanner_version)
-       VALUES ($1,$2,$3,NULL,$4,NULL,$5,$6,$7,$8,$9,$10,'inspected','not_analyzed','spr-file-inventory-v1',$11)
-       ON CONFLICT (scan_id,path) DO UPDATE SET size_bytes=EXCLUDED.size_bytes, sha256=EXCLUDED.sha256, detected_type=EXCLUDED.detected_type, category=EXCLUDED.category, inspection_status='inspected', scanner_tool=EXCLUDED.scanner_tool, scanner_version=EXCLUDED.scanner_version`,
+        (id,scan_id,tenant_id,client_id,software_identity,parent_archive_id,path,filename,size_bytes,sha256,detected_type,category,inspection_status,analysis_status,scanner_tool,scanner_version,error_reason,disposition_status,failure_stage,classification_method,is_archive,archive_depth,applicable_to_analysis,evidence_status)
+       VALUES ($1,$2,$3,NULL,$4,NULL,$5,$6,$7,$8,$9,$10,$11,'not_analyzed',$12,$13,$14,$15,$16,$17,$18,$19,$20,'none')
+       ON CONFLICT (scan_id,path) DO UPDATE SET
+         size_bytes=EXCLUDED.size_bytes,sha256=EXCLUDED.sha256,detected_type=EXCLUDED.detected_type,category=EXCLUDED.category,
+         inspection_status=EXCLUDED.inspection_status,scanner_tool=EXCLUDED.scanner_tool,scanner_version=EXCLUDED.scanner_version,
+         error_reason=EXCLUDED.error_reason,disposition_status=EXCLUDED.disposition_status,failure_stage=EXCLUDED.failure_stage,
+         classification_method=EXCLUDED.classification_method,is_archive=EXCLUDED.is_archive,applicable_to_analysis=EXCLUDED.applicable_to_analysis`,
       [
         `file-${sha256(job.scan_id+'|'+relative).slice(0,48)}`, job.scan_id, job.tenant_id,
-        job.passport_id, relative, path.basename(full), stat.size, hash,
-        'application/octet-stream', fileCategory(relative), scannerVersion,
+        job.passport_id, relative, path.basename(full), stat.size, hash, 'filesystem',
+        classification.category, inspection, scannerVersion, failure, disposition,
+        failure ? 'inventory' : '', classification.method, classification.category === 'archive', 0, applicable,
       ],
     );
   }
