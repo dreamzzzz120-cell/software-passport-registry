@@ -188,10 +188,10 @@ async function persistProviderResult(client: PoolClient, job: ClaimedJob, compon
   const digest = `sha256:${sha256(persistedPayload)}`;
   await client.query(`
     INSERT INTO evidence_items
-      (id, tenant_id, asset_id, name, type, verified, status, signer, timestamp, hash, raw_content, engine_id, verification_failure_reason)
-    VALUES ($1, $2, $3, $4, 'Security Scan', 0, 'OBSERVED', 'api.osv.dev', $5, $6, $7, 'osv-worker', NULL)
+      (id, tenant_id, asset_id, scan_id, job_id, name, type, verified, status, signer, timestamp, hash, raw_content, engine_id, verification_failure_reason)
+    VALUES ($1, $2, $3, $4, $5, $6, 'Security Scan', 0, 'OBSERVED', 'api.osv.dev', $7, $8, $9, 'osv-worker', NULL)
     ON CONFLICT (id) DO NOTHING
-  `, [evidenceId, job.tenant_id, job.passport_id, `OSV response for ${component.name}@${component.version}`, receivedAt, digest, persistedPayload]);
+  `, [evidenceId, job.tenant_id, job.passport_id, job.scan_id, job.id, `OSV response for ${component.name}@${component.version}`, receivedAt, digest, persistedPayload]);
 
   const vulnerabilities = Array.isArray((providerResponse as any)?.vulns) ? (providerResponse as any).vulns : [];
   for (const vulnerability of vulnerabilities) {
