@@ -176,7 +176,23 @@ export async function settleScanRun(db: Queryable, tenantId: string, scanId: str
   else status = 'Failed';
   const failureCode = failed.map((j) => j.error).filter(Boolean)[0] ?? null;
   const terminal = open.length === 0;
-  const coverage = (await db.query(`SELECT inventory_complete FROM scan_coverage WHERE scan_id = $1 AND tenant_id = $2`, [scanId, tenantId])).rows[0];
+  // Job completion is not equivalent to truthful scan completion. A scanner job
+  // can finish after producing a persisted partial/failed inventory. Settlement
+  // must therefore consult the durable coverage record before ever returning
+  // Completed.
+  const coverage = (await db.query(`SELECT inventory_complete, files_failed, files_inaccessible, files_partially_inspected, files_unknown, limitations FROM scan_coverage WHERE scan_id = $1 AND tenant_id = $2`, [scanId, tenantId])).rows[0];
+  const coverageHasFailure = coverage && (
+    Number(coverage.files_failed ?? 0) > 0 ||
+    Number(coverage.files_inaccessible ?? 0) > 0
+  );
+  const coverageIsPartial = coverage && (
+    Number(coverage.files_partially_inspected ?? 0) > 0 ||
+    Number(coverage.files_unknown ?? 0) > 0 ||
+    Number(coverage.inventory_complete) !== 1
+  );
+  if (terminal && failed.length === 0 && (coverageHasFailure || coverageIsPartial)) {
+    status = 'Partial';
+  }
   const current = (await db.query(`SELECT source, started_at, created_at, completed_at FROM scans WHERE id = $1 AND tenant_id = $2`, [scanId, tenantId])).rows[0];
   const coverageState = coverage ? (Number(coverage.inventory_complete) === 1 ? 'inventory_complete' : 'inventory_truncated') : current?.source === 'sbom' ? 'no_inventory' : terminal ? 'no_inventory' : 'unknown';
   const findings = terminal ? Number((await db.query(`SELECT COUNT(*)::int AS findings FROM scan_findings WHERE tenant_id = $1 AND scan_id = $2`, [tenantId, scanId])).rows[0]?.findings ?? 0) : null;
