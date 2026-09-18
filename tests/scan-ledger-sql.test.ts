@@ -162,3 +162,18 @@ describe('scan run lifecycle', () => {
     expect((await db.query(`SELECT status, next_attempt_at FROM agent_jobs WHERE id='job_d'`)).rows[0]).toMatchObject({ status: 'Failed', next_attempt_at: null });
   });
 });
+
+describe('migration 0108: every tenant table carries the worker cross-tenant policy', () => {
+  it('leaves no tenant_id table without spr_worker_cross_tenant and spr_tenant_isolation', async () => {
+    const rows = (await db.query(`
+      SELECT c.table_name,
+             EXISTS (SELECT 1 FROM pg_policies p WHERE p.schemaname='public' AND p.tablename=c.table_name AND p.policyname='spr_worker_cross_tenant') AS worker_policy,
+             EXISTS (SELECT 1 FROM pg_policies p WHERE p.schemaname='public' AND p.tablename=c.table_name AND p.policyname='spr_tenant_isolation') AS tenant_policy
+      FROM information_schema.columns c
+      JOIN information_schema.tables t ON t.table_schema=c.table_schema AND t.table_name=c.table_name
+      WHERE c.table_schema='public' AND c.column_name='tenant_id' AND t.table_type='BASE TABLE' ORDER BY c.table_name`)).rows;
+    expect(rows.length).toBeGreaterThan(50);
+    expect(rows.filter((r: any) => !r.worker_policy).map((r: any) => r.table_name)).toEqual([]);
+    expect(rows.filter((r: any) => !r.tenant_policy).map((r: any) => r.table_name)).toEqual([]);
+  });
+});
