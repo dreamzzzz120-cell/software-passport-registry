@@ -316,9 +316,16 @@ async function processJob(pool: Pool, job: ClaimedJob) {
       evidencePayload,
     ]);
   }
-  await pool.query(`
-    UPDATE scans SET status='Completed', findings_count=$2, completed_at=$3, duration_ms=GREATEST(0, EXTRACT(EPOCH FROM ($3::timestamp - created_at))::integer*1000), coverage_state='complete', scanner_name='osv-worker', scanner_version=$4, error_state=NULL, error_code=NULL WHERE id=$1 AND tenant_id=$5
-  if (job.scan_id) await pool.query(`UPDATE scans SET status='Completed', completed_at=COALESCE(completed_at,NOW()), coverage_state=CASE WHEN coverage_state='unknown' THEN 'partial' ELSE coverage_state END WHERE id=$1 AND tenant_id=$2`, [job.scan_id, job.tenant_id]);
+  if (job.scan_id) {
+    await pool.query(
+      `UPDATE scans SET status='Completed', findings_count=$2, completed_at=$3,
+       duration_ms=GREATEST(0, EXTRACT(EPOCH FROM ($3::timestamp - created_at))::integer*1000),
+       coverage_state='complete', scanner_name='osv-worker', scanner_version=$4,
+       error_state=NULL, error_code=NULL
+       WHERE id=$1 AND tenant_id=$5`,
+      [job.scan_id, findingCount, completedAt, SYFT_VERSION, job.tenant_id],
+    );
+  }
   await pool.query(`
     UPDATE agent_jobs
     SET status = 'Completed', progress = 100, result = $2, error = NULL, completed_at = NOW(), locked_at = NULL, locked_by = NULL, updated_at = NOW()
