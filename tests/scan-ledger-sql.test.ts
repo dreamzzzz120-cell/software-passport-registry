@@ -156,5 +156,9 @@ describe('scan run lifecycle', () => {
     await db.query(`INSERT INTO agent_jobs (id,tenant_id,agent_id,passport_id,job_type,status,progress,scan_id) VALUES ('job_c',$1,'repository-scanner','pass_1','repository_scan','Running',0,'scan_1')`, [TENANT]);
     await db.query(`UPDATE agent_jobs SET status='Pending', error='NO_SUPPORTED_MANIFESTS' WHERE id='job_c'`);
     expect((await db.query(`SELECT status FROM agent_jobs WHERE id='job_c'`)).rows[0].status).toBe('Failed');
+    // 0107: a private or nonexistent repository is terminal on the first attempt.
+    await db.query(`INSERT INTO agent_jobs (id,tenant_id,agent_id,passport_id,job_type,status,progress,scan_id) VALUES ('job_d',$1,'repository-scanner','pass_1','repository_scan','Running',0,'scan_1')`, [TENANT]);
+    await db.query(`UPDATE agent_jobs SET status='Pending', error='REPOSITORY_PRIVATE_REQUIRES_CREDENTIAL' WHERE id='job_d'`);
+    expect((await db.query(`SELECT status, next_attempt_at FROM agent_jobs WHERE id='job_d'`)).rows[0]).toMatchObject({ status: 'Failed', next_attempt_at: null });
   });
 });

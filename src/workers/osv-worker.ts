@@ -697,7 +697,7 @@ export function safeFailureReason(raw: string): string {
 // database does: a deterministic condition (the repository has no supported
 // manifests, is over the size limit, produced an invalid SBOM) does not change
 // on retry, so it is terminal on the first attempt.
-const DETERMINISTIC_TERMINAL_ERRORS = new Set(['SBOM_INVALID','SBOM_EMPTY','SBOM_MALFORMED','NO_SUPPORTED_MANIFESTS','REPOSITORY_TOO_LARGE','REPOSITORY_FILE_LIMIT_EXCEEDED','REPOSITORY_PATH_INVALID']);
+const DETERMINISTIC_TERMINAL_ERRORS = new Set(['SBOM_INVALID','SBOM_EMPTY','SBOM_MALFORMED','NO_SUPPORTED_MANIFESTS','REPOSITORY_TOO_LARGE','REPOSITORY_FILE_LIMIT_EXCEEDED','REPOSITORY_PATH_INVALID','REPOSITORY_PRIVATE_REQUIRES_CREDENTIAL','REPOSITORY_NOT_FOUND']);
 
 async function failJob(pool: Pool, job: ClaimedJob, error: unknown) {
   const code = error instanceof Error ? error.message : 'SCAN_WORKER_ERROR';
