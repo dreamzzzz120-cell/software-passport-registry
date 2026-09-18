@@ -28,6 +28,7 @@ type ClaimedJob = {
   attempt_count: number;
   max_attempts: number;
   job_type: string;
+  scan_id: string | null;
 };
 
 type SbomComponent = { name?: string; version?: string; ecosystem?: string };
@@ -82,7 +83,7 @@ async function claimJob(pool: Pool): Promise<ClaimedJob | null> {
   try {
     await client.query('BEGIN');
     const result = await client.query<ClaimedJob>(`
-      SELECT id, tenant_id, passport_id, attempt_count, max_attempts, job_type
+      SELECT id, tenant_id, passport_id, attempt_count, max_attempts, job_type, scan_id
       FROM agent_jobs
       WHERE job_type IN ('osv_manifest_scan', 'repository_scan')
         AND (
@@ -106,7 +107,7 @@ async function claimJob(pool: Pool): Promise<ClaimedJob | null> {
           attempt_count = attempt_count + 1,
           locked_at = NOW(), locked_by = $2, updated_at = NOW()
       WHERE id = $1
-      RETURNING id, tenant_id, passport_id, attempt_count, max_attempts, job_type
+      RETURNING id, tenant_id, passport_id, attempt_count, max_attempts, job_type, scan_id
     `, [job.id, WORKER_ID]);
     await client.query('COMMIT');
     return updated.rows[0] || null;
@@ -316,10 +317,8 @@ async function processJob(pool: Pool, job: ClaimedJob) {
     ]);
   }
   await pool.query(`
-    INSERT INTO scans (id, tenant_id, target_name, scan_type, triggered_by, status, duration_ms, findings_count, timestamp, client_name)
-    VALUES ($1, $2, $3, 'OSV manifest component query', $4, 'Completed', 0, $5, $6, $7)
-    ON CONFLICT (id) DO NOTHING
-  `, [deterministicId('scan-osv', `${job.id}|${job.tenant_id}`), job.tenant_id, `${passport.name} ${passport.version}`, WORKER_ID, findingCount, completedAt, 'Persisted passport SBOM']);
+    UPDATE scans SET status='Completed', findings_count=$2, completed_at=$3, duration_ms=GREATEST(0, EXTRACT(EPOCH FROM ($3::timestamp - created_at))::integer*1000), coverage_state='complete', scanner_name='osv-worker', scanner_version=$4, error_state=NULL, error_code=NULL WHERE id=$1 AND tenant_id=$5
+  if (job.scan_id) await pool.query(`UPDATE scans SET status='Completed', completed_at=COALESCE(completed_at,NOW()), coverage_state=CASE WHEN coverage_state='unknown' THEN 'partial' ELSE coverage_state END WHERE id=$1 AND tenant_id=$2`, [job.scan_id, job.tenant_id]);
   await pool.query(`
     UPDATE agent_jobs
     SET status = 'Completed', progress = 100, result = $2, error = NULL, completed_at = NOW(), locked_at = NULL, locked_by = NULL, updated_at = NOW()
