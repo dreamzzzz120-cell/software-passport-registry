@@ -12,14 +12,12 @@ COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts --no-audit --no-fund
 ARG SOURCE_REV=railway-worker-hardening-20260819-v2
 RUN test "$SOURCE_REV" = "railway-worker-hardening-20260819-v2"
-ARG VITE_FIREBASE_API_KEY
-ARG VITE_FIREBASE_AUTH_DOMAIN
-ARG VITE_FIREBASE_PROJECT_ID
-ARG VITE_FIREBASE_APP_ID
-ENV VITE_FIREBASE_API_KEY=$VITE_FIREBASE_API_KEY \
-    VITE_FIREBASE_AUTH_DOMAIN=$VITE_FIREBASE_AUTH_DOMAIN \
-    VITE_FIREBASE_PROJECT_ID=$VITE_FIREBASE_PROJECT_ID \
-    VITE_FIREBASE_APP_ID=$VITE_FIREBASE_APP_ID
+# The worker never serves the SPA, but `npm run build` builds the client bundle
+# alongside worker.cjs. Pass the Supabase browser values through so that bundle
+# is built the same way as the app image's; see Dockerfile for why they are ARGs.
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_PUBLISHABLE_KEY
+ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL     VITE_SUPABASE_PUBLISHABLE_KEY=$VITE_SUPABASE_PUBLISHABLE_KEY
 COPY . ./
 RUN npm run typecheck && npm run build
 RUN npm prune --omit=dev --no-audit --no-fund

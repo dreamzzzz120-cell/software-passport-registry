@@ -11,7 +11,10 @@ export type User = any;
 function mapUser(user: SupabaseUser): User { return { uid: user.id, email: user.email ?? null, displayName: String(user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User'), emailVerified: Boolean(user.email_confirmed_at), getIdToken: async (forceRefresh = false) => { if (forceRefresh) await supabase.auth.refreshSession(); const { data, error } = await supabase.auth.getSession(); if (error || !data.session?.access_token) throw error || new Error('No active authentication session.'); return data.session.access_token; }, reload: async () => { await supabase.auth.getUser(); } }; }
 let currentUser: User | null = null;
 let initialized = false;
-void supabase.auth.getSession().then(({ data }) => { currentUser = data.session?.user ? mapUser(data.session.user) : null; initialized = true; }).catch(() => { initialized = true; });
+// Importing this module must not throw when the bundle was built without
+// Supabase configuration; every auth call still fails loudly through getClient.
+if (supabaseConfigured) void supabase.auth.getSession().then(({ data }) => { currentUser = data.session?.user ? mapUser(data.session.user) : null; initialized = true; }).catch(() => { initialized = true; });
+else initialized = true;
 export const auth: any = { get currentUser() { return currentUser; }, get initialized() { return initialized; }, async getIdToken(forceRefresh = false) { return currentUser?.getIdToken(forceRefresh) || ''; }, async signOut() { const { error } = await supabase.auth.signOut(); if (error) throw error; } };
 export function onAuthStateChanged(_auth: any, callback: (user: User | null) => void) { let active = true; void supabase.auth.getSession().then(({ data }) => { if (active) callback(data.session?.user ? mapUser(data.session.user) : null); }); const { data } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session) => { currentUser = session?.user ? mapUser(session.user) : null; if (active) callback(currentUser); }); return () => { active = false; data.subscription.unsubscribe(); }; }
 export async function getRedirectResult(_auth: any) { const { data, error } = await supabase.auth.getSession(); if (error) throw error; return data.session?.user ? { user: mapUser(data.session.user) } : null; }
