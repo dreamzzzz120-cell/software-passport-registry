@@ -33,7 +33,23 @@ export function createWorkerPool(): Pool {
   // Prefers the least-privileged spr_worker_runtime role (migration 0020) when
   // an operator has provisioned WORKER_DATABASE_URL; otherwise falls back to
   // the owner connection, matching appPool's fallback in src/db/index.ts.
-  const connectionString = (process.env.WORKER_DATABASE_URL || process.env.DATABASE_URL)?.trim();
+  const rawConnectionString = (process.env.WORKER_DATABASE_URL || process.env.DATABASE_URL)?.trim();
+  // Strip sslmode from the connection URL so pg cannot override the explicit
+  // ssl object built above from SQL_SSL/SQL_SSL_CA. pg 8.23 treats sslmode=
+  // in the URL as taking precedence over the ssl option, setting self.ssl to
+  // the string "require" instead of an object, which causes Connection.upgradeToSSL
+  // to crash with "Cannot use 'in' operator to search for 'key' in require".
+  // See src/db/index.ts for the same documented constraint on DATABASE_URL.
+  let connectionString = rawConnectionString;
+  if (rawConnectionString) {
+    try {
+      const url = new URL(rawConnectionString);
+      url.searchParams.delete('sslmode');
+      connectionString = url.toString();
+    } catch {
+      // Not a parseable URL (e.g. a keyword=value DSN); leave it unchanged.
+    }
+  }
   const pool = connectionString
     ? new Pool({ connectionString, ...base })
     : new Pool({ host: process.env.SQL_HOST, user: process.env.SQL_USER, password: process.env.SQL_PASSWORD, database: process.env.SQL_DB_NAME, ...base });
