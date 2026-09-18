@@ -153,7 +153,7 @@ function safeFailureReason(raw: string): string {
   return raw.replace(/gh[pousr]_[A-Za-z0-9]{10,}/g, '[REDACTED_TOKEN]').replace(/(authorization|bearer|token|key|secret)[=: ]+\S+/gi, '$1 [REDACTED]').replace(/https?:\/\/[^@\s]*@/g, 'https://[REDACTED]@').slice(0, 200);
 }
 
-const DETERMINISTIC_TERMINAL_ERRORS = new Set(['SBOM_INVALID','SBOM_EMPTY','SBOM_MALFORMED','NO_SUPPORTED_MANIFESTS','REPOSITORY_TOO_LARGE','REPOSITORY_FILE_LIMIT_EXCEEDED','REPOSITORY_PATH_INVALID']);
+const DETERMINISTIC_TERMINAL_ERRORS = new Set(['SBOM_INVALID','SBOM_EMPTY','SBOM_MALFORMED','NO_SUPPORTED_MANIFESTS','REPOSITORY_TOO_LARGE','REPOSITORY_FILE_LIMIT_EXCEEDED','REPOSITORY_PATH_INVALID','REPOSITORY_PRIVATE_REQUIRES_CREDENTIAL','REPOSITORY_NOT_FOUND']);
 
 async function fail(pool: Pool, job: any, error: unknown) {
   const code = error instanceof Error ? error.message : 'SCAN_WORKER_ERROR';

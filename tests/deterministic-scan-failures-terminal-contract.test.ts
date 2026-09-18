@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 const root = path.resolve(__dirname, '..');
 const read = (file: string) => fs.readFileSync(path.join(root, file), 'utf8');
 
-const EXPECTED = ['SBOM_INVALID', 'SBOM_EMPTY', 'SBOM_MALFORMED', 'NO_SUPPORTED_MANIFESTS', 'REPOSITORY_TOO_LARGE', 'REPOSITORY_FILE_LIMIT_EXCEEDED', 'REPOSITORY_PATH_INVALID'];
+const EXPECTED = ['SBOM_INVALID', 'SBOM_EMPTY', 'SBOM_MALFORMED', 'NO_SUPPORTED_MANIFESTS', 'REPOSITORY_TOO_LARGE', 'REPOSITORY_FILE_LIMIT_EXCEEDED', 'REPOSITORY_PATH_INVALID', 'REPOSITORY_PRIVATE_REQUIRES_CREDENTIAL', 'REPOSITORY_NOT_FOUND'];
 
 function setFrom(source: string, file: string): string[] {
   const m = source.match(/DETERMINISTIC_TERMINAL_ERRORS\s*=\s*new Set\(\[([^\]]+)\]\)/);
@@ -23,9 +23,12 @@ function setFrom(source: string, file: string): string[] {
 describe('deterministic scan failures are terminal everywhere', () => {
   const osv = read('src/workers/osv-worker.ts');
   const security = read('src/workers/security-scanner-worker.ts');
-  const migration = read('migrations/0100_deterministic_scan_failures_terminal.sql');
+  // 0107 supersedes the 0100 function body with the extended set.
+  const migration = read('migrations/0107_deterministic_repository_access_failures_terminal.sql');
+  // The trigger itself was created by 0100 and is unchanged; 0107 only replaces the function body.
+  const triggerMigration = read('migrations/0100_deterministic_scan_failures_terminal.sql');
 
-  it('the OSV worker, the security scanner and migration 0100 name the same error codes', () => {
+  it('the OSV worker, the security scanner and migration 0107 name the same error codes', () => {
     const expected = [...EXPECTED].sort();
     expect(setFrom(osv, 'osv-worker')).toEqual(expected);
     expect(setFrom(security, 'security-scanner-worker')).toEqual(expected);
@@ -45,6 +48,6 @@ describe('deterministic scan failures are terminal everywhere', () => {
     expect(migration).toContain("IF NEW.status = 'Pending'");
     expect(migration).toContain("NEW.status := 'Failed';");
     expect(migration).toContain('NEW.next_attempt_at := NULL;');
-    expect(migration).toMatch(/CREATE TRIGGER agent_jobs_deterministic_scan_failure_terminal\s+BEFORE UPDATE OF status, error ON agent_jobs/);
+    expect(triggerMigration).toMatch(/CREATE TRIGGER agent_jobs_deterministic_scan_failure_terminal\s+BEFORE UPDATE OF status, error ON agent_jobs/);
   });
 });
