@@ -104,6 +104,22 @@ BEGIN
   END IF;
 END $$;
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.scan_file_ledger TO spr_worker_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.scan_file_ledger TO spr_app_runtime, spr_worker_runtime;
+
+DO $
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname='public' AND tablename='scan_file_ledger'
+      AND policyname='spr_tenant_isolation'
+  ) THEN
+    CREATE POLICY spr_tenant_isolation
+      ON public.scan_file_ledger
+      USING (tenant_id = current_setting('app.tenant_id', true))
+      WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+  END IF;
+END $;
+
+ALTER TABLE public.scan_file_ledger FORCE ROW LEVEL SECURITY;
 
 COMMIT;
