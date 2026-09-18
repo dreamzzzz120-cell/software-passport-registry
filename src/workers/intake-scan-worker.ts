@@ -51,7 +51,7 @@ async function claimJob(pool: Pool) {
   try {
     await client.query('BEGIN');
     await client.query(`UPDATE agent_jobs SET status=CASE WHEN attempt_count < max_attempts THEN 'Pending' ELSE 'Failed' END, error=CASE WHEN attempt_count < max_attempts THEN NULL ELSE 'INTAKE_SCAN_LEASE_EXPIRED' END, next_attempt_at=CASE WHEN attempt_count < max_attempts THEN NOW() ELSE next_attempt_at END, locked_at=NULL, locked_by=NULL, updated_at=NOW(), completed_at=CASE WHEN attempt_count >= max_attempts THEN NOW() ELSE completed_at END WHERE job_type='intake_scan' AND status='Running' AND locked_at IS NOT NULL AND locked_at < NOW() - INTERVAL '15 minutes'`);
-    const result = await client.query(`SELECT id, tenant_id, passport_id, attempt_count, max_attempts, scan_run_id, job_type FROM agent_jobs WHERE status='Pending' AND job_type='intake_scan' AND (next_attempt_at IS NULL OR next_attempt_at <= NOW()) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1`);
+    const result = await client.query(`SELECT id, tenant_id, passport_id, attempt_count, max_attempts, scan_id, job_type FROM agent_jobs WHERE status='Pending' AND job_type='intake_scan' AND (next_attempt_at IS NULL OR next_attempt_at <= NOW()) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1`);
     const job = result.rows[0];
     if (!job) { await client.query('COMMIT'); return null; }
     await client.query(`UPDATE agent_jobs SET status='Running', progress=5, attempt_count=attempt_count+1, locked_at=NOW(), locked_by=$2, updated_at=NOW() WHERE id=$1 AND tenant_id=$3`, [job.id, WORKER_ID, job.tenant_id]);
@@ -129,14 +129,14 @@ async function walkCount(root: string): Promise<{ files: number; bytes: number; 
 async function processIntakeJob(pool: Pool, job: any) {
   const source = (await pool.query('SELECT * FROM intake_scan_sources WHERE job_id=$1 AND tenant_id=$2', [job.id, job.tenant_id])).rows[0];
   if (!source) throw new Error('INTAKE_SOURCE_NOT_FOUND');
-  const run = (await pool.query('SELECT id, client_id FROM scan_runs WHERE id=$1 AND tenant_id=$2', [source.scan_run_id, job.tenant_id])).rows[0];
+  const run = (await pool.query('SELECT id, client_id FROM scans WHERE id=$1 AND tenant_id=$2', [source.scan_id, job.tenant_id])).rows[0];
   if (!run) throw new Error('SCAN_RUN_NOT_FOUND');
-  const ledger: LedgerContext = { tenantId: job.tenant_id, scanRunId: run.id, passportId: job.passport_id, clientId: run.client_id ?? null };
-  await markScanRunRunning(pool, job.tenant_id, ledger.scanRunId);
+  const ledger: LedgerContext = { tenantId: job.tenant_id, scanId: run.id, passportId: job.passport_id, clientId: run.client_id ?? null };
+  await markScanRunRunning(pool, job.tenant_id, ledger.scanId);
   const items = (await pool.query(`SELECT id, name, size, content_type, kind, storage_bucket, storage_path, sha256, status FROM intake_items WHERE session_id=$1 AND tenant_id=$2 AND status IN ('QUEUED','PROCESSING','UPLOADED','COMPLETED','COMPLETED_WITH_WARNINGS','FAILED') ORDER BY created_at ASC`, [source.session_id, job.tenant_id])).rows;
   if (items.length === 0) throw new Error('INTAKE_SESSION_EMPTY');
   await pool.query(`UPDATE intake_items SET status='PROCESSING' WHERE session_id=$1 AND tenant_id=$2 AND status IN ('QUEUED','UPLOADED')`, [source.session_id, job.tenant_id]);
-  const log = (event: string, extra: Record<string, unknown> = {}) => console.log(JSON.stringify({ event, workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, scanRunId: ledger.scanRunId, passportId: job.passport_id, ...extra }));
+  const log = (event: string, extra: Record<string, unknown> = {}) => console.log(JSON.stringify({ event, workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, scanId: ledger.scanId, passportId: job.passport_id, ...extra }));
 
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), `spr-intake-${job.id}-`));
   const scanRoot = path.join(tempRoot, 'scan');
@@ -250,28 +250,28 @@ async function processIntakeJob(pool: Pool, job: any) {
     const acquiredAt = new Date();
     const itemHashes = items.map((i) => i.sha256 || '').sort();
     const uploadHash = sha256(JSON.stringify(itemHashes));
-    const descriptor = { source: 'upload', sessionId: source.session_id, itemCount: items.length, itemSha256: itemHashes, scanRunId: ledger.scanRunId };
+    const descriptor = { source: 'upload', sessionId: source.session_id, itemCount: items.length, itemSha256: itemHashes, scanId: ledger.scanId };
     const descriptorHash = sha256(JSON.stringify(descriptor));
     const uploadEvidenceId = deterministicId('ev-upload', `${job.id}|${descriptorHash}`);
     const sbomEvidenceId = cycloneDx ? deterministicId('ev-sbom', `${job.id}|${sha256(JSON.stringify(cycloneDx))}`) : null;
-    await pool.query(`INSERT INTO evidence_items (id,tenant_id,asset_id,name,type,verified,status,signer,timestamp,hash,raw_content,engine_id,scan_run_id) VALUES ($1,$2,$3,'Uploaded file set descriptor','Attestation',0,'OBSERVED','spr-intake',$4,$5,$6,'intake-scanner',$7) ON CONFLICT (id) DO NOTHING`, [uploadEvidenceId, job.tenant_id, job.passport_id, acquiredAt.toISOString(), `sha256:${descriptorHash}`, JSON.stringify(descriptor), ledger.scanRunId]);
+    await pool.query(`INSERT INTO evidence_items (id,tenant_id,asset_id,name,type,verified,status,signer,timestamp,hash,raw_content,engine_id,scan_id) VALUES ($1,$2,$3,'Uploaded file set descriptor','Attestation',0,'OBSERVED','spr-intake',$4,$5,$6,'intake-scanner',$7) ON CONFLICT (id) DO NOTHING`, [uploadEvidenceId, job.tenant_id, job.passport_id, acquiredAt.toISOString(), `sha256:${descriptorHash}`, JSON.stringify(descriptor), ledger.scanId]);
     if (cycloneDx && sbomEvidenceId) {
       const payload = JSON.stringify({ format: 'CycloneDX JSON', componentCount: components.length, generator: `Syft ${SYFT_VERSION}` });
-      await pool.query(`INSERT INTO evidence_items (id,tenant_id,asset_id,name,type,verified,status,signer,timestamp,hash,raw_content,engine_id,scan_run_id) VALUES ($1,$2,$3,'Syft CycloneDX SBOM summary','Build Log',0,'OBSERVED',$8,$4,$5,$6,'intake-scanner',$7) ON CONFLICT (id) DO NOTHING`, [sbomEvidenceId, job.tenant_id, job.passport_id, acquiredAt.toISOString(), `sha256:${sha256(payload)}`, payload, ledger.scanRunId, `Syft ${SYFT_VERSION}`]);
+      await pool.query(`INSERT INTO evidence_items (id,tenant_id,asset_id,name,type,verified,status,signer,timestamp,hash,raw_content,engine_id,scan_id) VALUES ($1,$2,$3,'Syft CycloneDX SBOM summary','Build Log',0,'OBSERVED',$8,$4,$5,$6,'intake-scanner',$7) ON CONFLICT (id) DO NOTHING`, [sbomEvidenceId, job.tenant_id, job.passport_id, acquiredAt.toISOString(), `sha256:${sha256(payload)}`, payload, ledger.scanId, `Syft ${SYFT_VERSION}`]);
     }
     let passportAssociated = false;
     try {
       await pool.query(`INSERT INTO passports (id,tenant_id,client_id,name,version,publisher,category,overall_score,security_score,compliance_score,vendor_reputation_score,verification_status,release_date,file_hash,license_type,ai_summary,sbom,evidence,vulnerabilities,timeline) VALUES ($1,$2,$3,$4,$5,'Uploaded','Upload',NULL,NULL,NULL,NULL,'unverified',$6,$7,'Unknown',$8,$9,'[]','[]','[]') ON CONFLICT (id) DO UPDATE SET version=EXCLUDED.version,file_hash=EXCLUDED.file_hash,sbom=EXCLUDED.sbom,release_date=EXCLUDED.release_date,ai_summary=EXCLUDED.ai_summary,overall_score=NULL,security_score=NULL,compliance_score=NULL,vendor_reputation_score=NULL,verification_status='unverified' WHERE passports.tenant_id=$2`,
         [job.passport_id, job.tenant_id, ledger.clientId, `Upload ${acquiredAt.toISOString().slice(0, 10)}`, `upload-${uploadHash.slice(0, 12)}`, acquiredAt.toISOString().slice(0, 10), uploadHash, cycloneDx ? 'Uploaded files acquired and SBOM generated. Trust assessment remains pending.' : 'Uploaded files acquired; no versioned dependency components were found. Trust assessment remains pending.', JSON.stringify(osvComponents)]);
       passportAssociated = true;
-      await recordPassportAssociation(pool, job.tenant_id, ledger.scanRunId, { ok: true });
-      await appendAuditEntryViaPool(pool, { tenantId: job.tenant_id, action: 'passport.published', actor: 'intake-scanner', payload: { passportId: job.passport_id, jobId: job.id, scanRunId: ledger.scanRunId, version: `upload-${uploadHash.slice(0, 12)}` } });
+      await recordPassportAssociation(pool, job.tenant_id, ledger.scanId, { ok: true });
+      await appendAuditEntryViaPool(pool, { tenantId: job.tenant_id, action: 'passport.published', actor: 'intake-scanner', payload: { passportId: job.passport_id, jobId: job.id, scanId: ledger.scanId, version: `upload-${uploadHash.slice(0, 12)}` } });
     } catch (error) {
       const reason = safeFailureReason(rootErrorMessage(error));
-      console.error(JSON.stringify({ event: 'passport_upsert_failed', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, passportId: job.passport_id, scanRunId: ledger.scanRunId, reason }));
-      await recordPassportAssociation(pool, job.tenant_id, ledger.scanRunId, { ok: false, failure: reason });
+      console.error(JSON.stringify({ event: 'passport_upsert_failed', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, passportId: job.passport_id, scanId: ledger.scanId, reason }));
+      await recordPassportAssociation(pool, job.tenant_id, ledger.scanId, { ok: false, failure: reason });
     }
-    if (osvComponents.length > 0) await processJob(pool, { id: job.id, tenant_id: job.tenant_id, passport_id: job.passport_id, attempt_count: job.attempt_count, max_attempts: job.max_attempts, job_type: 'intake_scan', scan_run_id: ledger.scanRunId }, osvComponents);
+    if (osvComponents.length > 0) await processJob(pool, { id: job.id, tenant_id: job.tenant_id, passport_id: job.passport_id, attempt_count: job.attempt_count, max_attempts: job.max_attempts, job_type: 'intake_scan', scan_id: ledger.scanId }, osvComponents);
     await pool.query(`UPDATE agent_jobs SET progress=80, updated_at=NOW() WHERE id=$1 AND tenant_id=$2`, [job.id, job.tenant_id]);
 
     // 3. Content engines over the extracted tree.
@@ -279,12 +279,12 @@ async function processIntakeJob(pool: Pool, job: any) {
     const persistedFindings: Array<{ id: string; filePath: string | null }> = [];
     for (const finding of scanned.findings) {
       const findingId = `finding-${sha256(scanFindingIdentity({ tenantId: job.tenant_id, passportId: job.passport_id, engineId: finding.engineId, category: finding.category, title: finding.title, component: finding.component }))}`;
-      await pool.query(`INSERT INTO scan_findings (id,tenant_id,asset_id,job_id,severity,category,title,description,component,status,detected_at,engine_id,file_path,scan_run_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'Open',NOW(),$10,$11,$12) ON CONFLICT (id) DO UPDATE SET file_path = COALESCE(scan_findings.file_path, EXCLUDED.file_path), scan_run_id = COALESCE(scan_findings.scan_run_id, EXCLUDED.scan_run_id)`, [findingId, job.tenant_id, job.passport_id, job.id, finding.severity, finding.category, finding.title, finding.description, finding.component || null, finding.engineId, finding.filePath ?? null, ledger.scanRunId]);
+      await pool.query(`INSERT INTO scan_findings (id,tenant_id,asset_id,job_id,severity,category,title,description,component,status,detected_at,engine_id,file_path,scan_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'Open',NOW(),$10,$11,$12) ON CONFLICT (id) DO UPDATE SET file_path = COALESCE(scan_findings.file_path, EXCLUDED.file_path), scan_id = COALESCE(scan_findings.scan_id, EXCLUDED.scan_id)`, [findingId, job.tenant_id, job.passport_id, job.id, finding.severity, finding.category, finding.title, finding.description, finding.component || null, finding.engineId, finding.filePath ?? null, ledger.scanId]);
       persistedFindings.push({ id: findingId, filePath: finding.filePath ?? null });
     }
     const securityPayload = JSON.stringify({ source: 'upload', sessionId: source.session_id, engines: ['Syft', 'OSV', 'spr-secret-scanner-v1', 'spr-iac-config-scanner-v1', 'spr-license-scanner-v1'], findingCount: scanned.findings.length, filesOffered: scanned.filesOffered, limitations: ['OSV results are provider observations, not cryptographic verification.', 'Secret/config rules are deterministic pattern scanners and can produce false positives/negatives.', ...limitations] });
     const securityEvidenceId = `ev-security-${job.id}-${sha256(securityPayload).slice(0, 24)}`;
-    await pool.query(`INSERT INTO evidence_items (id,tenant_id,asset_id,name,type,verified,status,signer,timestamp,hash,raw_content,engine_id,scan_run_id) VALUES ($1,$2,$3,'Multi-engine uploaded-file security scan','Security Scan',0,'OBSERVED','SPR scanner',NOW(),$4,$5,'spr-security-orchestrator-v1',$6) ON CONFLICT DO NOTHING`, [securityEvidenceId, job.tenant_id, job.passport_id, `sha256:${sha256(securityPayload)}`, securityPayload, ledger.scanRunId]);
+    await pool.query(`INSERT INTO evidence_items (id,tenant_id,asset_id,name,type,verified,status,signer,timestamp,hash,raw_content,engine_id,scan_id) VALUES ($1,$2,$3,'Multi-engine uploaded-file security scan','Security Scan',0,'OBSERVED','SPR scanner',NOW(),$4,$5,'spr-security-orchestrator-v1',$6) ON CONFLICT DO NOTHING`, [securityEvidenceId, job.tenant_id, job.passport_id, `sha256:${sha256(securityPayload)}`, securityPayload, ledger.scanId]);
 
     // 4. Every engine's outcome onto the inventory, then the final accounting.
     applyContentInspection(entries, scanned.inspectionReports);
@@ -313,13 +313,13 @@ async function processIntakeJob(pool: Pool, job: any) {
       try {
         const score = await calculateAndStoreTrustScore(job.passport_id, job.tenant_id, { pool });
         log('passport_scored', { verificationStatus: score.verificationStatus, overallScore: score.overallScore, evidenceCount: score.evidenceCount, findingsCount: score.findingsCount });
-      } catch (error) { console.error(JSON.stringify({ event: 'passport_score_failed', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, passportId: job.passport_id, scanRunId: ledger.scanRunId, reason: safeFailureReason(rootErrorMessage(error)) })); }
+      } catch (error) { console.error(JSON.stringify({ event: 'passport_score_failed', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, passportId: job.passport_id, scanId: ledger.scanId, reason: safeFailureReason(rootErrorMessage(error)) })); }
     }
   } catch (error: any) {
     // Whatever was inventoried before the failure stays persisted; the
     // failure is recorded on the source and the job, never by deleting rows.
     if (entries.length > 0) {
-      try { await persistInventory(pool, ledger, entries); await recomputeCoverage(pool, ledger, { inventoryComplete: false, limitations: [`SCAN_FAILED: ${safeFailureReason(rootErrorMessage(error))}`] }); } catch (persistError) { console.error(JSON.stringify({ event: 'intake_inventory_persist_failed', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, scanRunId: ledger.scanRunId, reason: safeFailureReason(rootErrorMessage(persistError)) })); }
+      try { await persistInventory(pool, ledger, entries); await recomputeCoverage(pool, ledger, { inventoryComplete: false, limitations: [`SCAN_FAILED: ${safeFailureReason(rootErrorMessage(error))}`] }); } catch (persistError) { console.error(JSON.stringify({ event: 'intake_inventory_persist_failed', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, scanId: ledger.scanId, reason: safeFailureReason(rootErrorMessage(persistError)) })); }
     }
     await pool.query(`UPDATE intake_scan_sources SET scanner_error_category=$2 WHERE job_id=$1 AND tenant_id=$3`, [job.id, String(error?.message || 'INTAKE_SCAN_FAILED').slice(0, 100), job.tenant_id]);
     throw error;
@@ -338,7 +338,7 @@ async function fail(pool: Pool, job: any, error: unknown) {
   const terminal = DETERMINISTIC_TERMINAL.has(code);
   const retry = !terminal && attempt < Number(job.max_attempts);
   const next = retry ? Math.min(60 * Math.pow(2, Math.max(0, attempt - 1)), 3600) : 0;
-  console.error(JSON.stringify({ event: 'intake_scan_failed', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, scanRunId: job.scan_run_id, attempt, maxAttempts: Number(job.max_attempts), willRetry: retry, terminal, reason: safeFailureReason(code) }));
+  console.error(JSON.stringify({ event: 'intake_scan_failed', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, scanId: job.scan_id, attempt, maxAttempts: Number(job.max_attempts), willRetry: retry, terminal, reason: safeFailureReason(code) }));
   await pool.query(`UPDATE agent_jobs SET status=$2,progress=CASE WHEN $2='Failed' THEN 100 ELSE progress END,error=$3,next_attempt_at=CASE WHEN $2='Pending' THEN NOW()+($4 * INTERVAL '1 second') ELSE next_attempt_at END,locked_at=NULL,locked_by=NULL,completed_at=CASE WHEN $2='Failed' THEN NOW() ELSE completed_at END,updated_at=NOW() WHERE id=$1 AND tenant_id=$5 AND locked_by=$6`, [job.id, retry ? 'Pending' : 'Failed', code.slice(0, 200), next, job.tenant_id, WORKER_ID]);
   if (!retry) {
     const source = (await pool.query('SELECT session_id FROM intake_scan_sources WHERE job_id=$1 AND tenant_id=$2', [job.id, job.tenant_id])).rows[0];
@@ -350,9 +350,9 @@ export async function runIntakeScannerOnce(pool: Pool) {
   const job = await claimJob(pool);
   if (!job) return false;
   try { await processIntakeJob(pool, job); } catch (error) { await fail(pool, job, error); }
-  if (job.scan_run_id) {
-    try { const status = await settleScanRun(pool, job.tenant_id, job.scan_run_id); console.log(JSON.stringify({ event: 'scan_run_settled', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, scanRunId: job.scan_run_id, status })); }
-    catch (error) { console.error(JSON.stringify({ event: 'scan_run_settle_failed', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, scanRunId: job.scan_run_id, reason: safeFailureReason(rootErrorMessage(error)) })); }
+  if (job.scan_id) {
+    try { const status = await settleScanRun(pool, job.tenant_id, job.scan_id); console.log(JSON.stringify({ event: 'scan_run_settled', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, scanId: job.scan_id, status })); }
+    catch (error) { console.error(JSON.stringify({ event: 'scan_run_settle_failed', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, scanId: job.scan_id, reason: safeFailureReason(rootErrorMessage(error)) })); }
   }
   return true;
 }

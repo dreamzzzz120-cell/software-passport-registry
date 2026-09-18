@@ -34,7 +34,7 @@ interface ScansViewProps {
 }
 
 export default function ScansView({ scans, onTriggerNewScan, clients, assets, passports, role = 'Viewer' }: ScansViewProps) {
-  // ?run=<scan_run_id> opens that scan in the ledger (the submission flow and
+  // ?run=<scan_id> opens that scan in the ledger (the submission flow and
   // notification links land here), so a scan always has a persistent address.
   const initialRunId = useMemo(() => { try { return new URLSearchParams(window.location.search).get('run'); } catch { return null; } }, []);
   // Matches server.ts /api/scans/schedules* and /api/agent-jobs backend

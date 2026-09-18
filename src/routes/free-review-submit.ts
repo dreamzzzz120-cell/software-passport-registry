@@ -20,7 +20,7 @@ function id(prefix: string) { return `${prefix}_${crypto.randomUUID().replace(/-
 export async function enqueueFreeReview(
   scopedDb: ScopedDb,
   input: { owner: string; repository: string; ref?: string | null; ipHash: string },
-): Promise<{ passportId: string; repositoryJobId: string; securityJobId: string; scanRunId: string }> {
+): Promise<{ passportId: string; repositoryJobId: string; securityJobId: string; scanId: string }> {
   const { owner, repository, ipHash } = input;
   // null, not 'main': the worker resolves the repository's real default branch.
   const requestedRef = input.ref ?? null;
@@ -33,5 +33,5 @@ export async function enqueueFreeReview(
     connectionLabel: 'Free Review public GitHub acquisition',
   });
   await scopedDb.execute(sql`INSERT INTO free_review_submissions (id,tenant_id,passport_id,repository_owner,repository_name,ip_hash,status) VALUES (${id('freereview')},${FREE_REVIEW_TENANT_ID},${passportId},${owner},${repository},${ipHash},'Pending')`);
-  return { passportId, repositoryJobId: submitted.repositoryJobId, securityJobId: submitted.securityJobId, scanRunId: submitted.scanRunId };
+  return { passportId, repositoryJobId: submitted.repositoryJobId, securityJobId: submitted.securityJobId, scanId: submitted.scanId };
 }

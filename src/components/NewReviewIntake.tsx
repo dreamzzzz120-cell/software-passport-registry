@@ -81,8 +81,8 @@ export default function NewReviewIntake({ clientId = null }: { clientId?: string
       const response = await apiFetch('/api/scans/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source: 'github', owner: parts[0], repository: parts[1], ...(clientId ? { clientId } : {}) }) });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body?.error?.message || body?.error || 'Could not start the repository scan.');
-      if (typeof body?.scanRunId !== 'string') throw new Error('The scan was accepted, but SPR did not return a scan id.');
-      window.location.assign(`/scans?run=${encodeURIComponent(body.scanRunId)}`);
+      if (typeof body?.scanId !== 'string') throw new Error('The scan was accepted, but SPR did not return a scan id.');
+      window.location.assign(`/scans?run=${encodeURIComponent(body.scanId)}`);
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not start the repository review.'); }
     finally { setBusy(false); }
   };
@@ -116,9 +116,9 @@ export default function NewReviewIntake({ clientId = null }: { clientId?: string
       // claims analysis that has not been queued.
       const submit = await apiFetch('/api/scans/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source: 'upload', sessionId: session.sessionId, ...(clientId ? { clientId } : {}) }) });
       const submitted = await submit.json().catch(() => ({}));
-      if (!submit.ok || typeof submitted?.scanRunId !== 'string') throw new Error(submitted?.error?.message || submitted?.error || 'Files were uploaded and hashed, but the scan could not be queued.');
-      setFiles([]); setMessage(`Upload complete. ${files.length} file(s) recorded with SHA-256 and queued as scan ${submitted.scanRunId}.`);
-      window.location.assign(`/scans?run=${encodeURIComponent(submitted.scanRunId)}`);
+      if (!submit.ok || typeof submitted?.scanId !== 'string') throw new Error(submitted?.error?.message || submitted?.error || 'Files were uploaded and hashed, but the scan could not be queued.');
+      setFiles([]); setMessage(`Upload complete. ${files.length} file(s) recorded with SHA-256 and queued as scan ${submitted.scanId}.`);
+      window.location.assign(`/scans?run=${encodeURIComponent(submitted.scanId)}`);
     } catch (e) { setError(e instanceof Error ? e.message : 'Upload failed.'); }
     finally { setBusy(false); }
   };

@@ -42,7 +42,7 @@ const submitSchema = z.discriminatedUnion('source', [
   }).strict(),
 ]);
 
-const listSchema = z.object({ passportId: optionalId, clientId: optionalId, status: z.enum(['queued', 'running', 'completed', 'partial', 'failed']).optional(), sourceKind: z.enum(['github', 'upload', 'sbom']).optional(), q: z.string().max(200).optional(), page, limit });
+const listSchema = z.object({ passportId: optionalId, clientId: optionalId, status: z.enum(['Queued', 'Scanning', 'Completed', 'Partial', 'Failed']).optional(), sourceKind: z.enum(['github', 'upload', 'sbom']).optional(), q: z.string().max(200).optional(), page, limit });
 const filesSchema = z.object({
   disposition: z.string().regex(/^[a-z_]+(,[a-z_]+)*$/).optional(),
   category: z.string().regex(/^[a-z_]+(,[a-z_]+)*$/).optional(),
@@ -79,11 +79,11 @@ export function createScanLedgerRouter() {
   async function loadRun(req: AuthenticatedRequest, runId: string) {
     const clientScope = req.user!.role === 'Client' ? req.user!.clientId ?? '' : null;
     const result = await req.db!.execute(sql`
-      SELECT r.id, r.tenant_id AS "tenantId", r.client_id AS "clientId", r.passport_id AS "passportId", r.source_kind AS "sourceKind", r.source_ref AS "sourceRef", r.resolved_commit_sha AS "resolvedCommitSha",
-             r.status, r.repository_job_id AS "repositoryJobId", r.security_job_id AS "securityJobId", r.intake_job_id AS "intakeJobId", r.intake_session_id AS "intakeSessionId", r.triggered_by AS "triggeredBy",
-             r.failure_code AS "failureCode", r.passport_status AS "passportStatus", r.passport_failure AS "passportFailure", r.created_at AS "createdAt", r.started_at AS "startedAt", r.completed_at AS "completedAt", r.updated_at AS "updatedAt",
+      SELECT r.id, r.tenant_id AS "tenantId", r.client_id AS "clientId", r.passport_id AS "passportId", r.source AS "sourceKind", r.source_ref AS "sourceRef", r.resolved_commit_sha AS "resolvedCommitSha",
+             r.status, r.job_id AS "repositoryJobId", r.worker_job_id AS "securityJobId", r.intake_job_id AS "intakeJobId", r.intake_session_id AS "intakeSessionId", r.triggered_by AS "triggeredBy",
+             r.error_code AS "failureCode", r.error_state AS "errorState", r.coverage_state AS "coverageState", r.target_name AS "targetName", r.scan_type AS "scanType", r.passport_status AS "passportStatus", r.passport_failure AS "passportFailure", r.created_at AS "createdAt", r.started_at AS "startedAt", r.completed_at AS "completedAt", r.updated_at AS "updatedAt",
              p.name AS "passportName", p.version AS "passportVersion", p.verification_status AS "passportVerificationStatus", p.client_id AS "passportClientId", c.name AS "clientName"
-      FROM scan_runs r
+      FROM scans r
       LEFT JOIN passports p ON p.id = r.passport_id AND p.tenant_id = r.tenant_id
       LEFT JOIN clients c ON c.id = COALESCE(r.client_id, p.client_id) AND c.tenant_id = r.tenant_id
       WHERE r.id = ${runId} AND r.tenant_id = ${req.user!.tenantId}
@@ -132,8 +132,8 @@ export function createScanLedgerRouter() {
         }
         const target = passport!;
         const submitted = await enqueueRepositoryScan(scoped, { tenantId, clientId, passportId: target.id, owner: input.owner, repository: input.repository, ref: input.ref ?? null, subdirectory: input.subdirectory, triggeredBy: req.user!.uid, targetName: target.name, clientName });
-        await appendAuditEntry(scoped, { tenantId, action: 'scan.queued', actor: req.user!.uid, payload: { scanRunId: submitted.scanRunId, scanId: submitted.scanId, passportId: target.id, clientId, source: 'github', owner: input.owner, repository: input.repository, ref: input.ref ?? null } });
-        return res.status(202).json({ scanRunId: submitted.scanRunId, scanId: submitted.scanId, passportId: target.id, clientId, status: 'queued', jobs: { repository: submitted.repositoryJobId, security: submitted.securityJobId }, location: `/scans?run=${encodeURIComponent(submitted.scanRunId)}` });
+        await appendAuditEntry(scoped, { tenantId, action: 'scan.queued', actor: req.user!.uid, payload: { scanId: submitted.scanId, passportId: target.id, clientId, source: 'github', owner: input.owner, repository: input.repository, ref: input.ref ?? null } });
+        return res.status(202).json({ scanId: submitted.scanId, passportId: target.id, clientId, status: 'Queued', jobs: { repository: submitted.repositoryJobId, security: submitted.securityJobId }, location: `/scans?run=${encodeURIComponent(submitted.scanId)}` });
       }
       // Upload: the intake session must be claimed by this tenant and hold at
       // least one uploaded item. Items are consumed by the intake scanner.
@@ -150,8 +150,8 @@ export function createScanLedgerRouter() {
       const submitted = await enqueueUploadScan(scoped, { tenantId, clientId, passportId: passport.id, sessionId: session.id, itemCount: items.length, triggeredBy: req.user!.uid, targetName: passport.name, clientName });
       await ownerDb.execute(sql`UPDATE intake_items SET status='QUEUED' WHERE session_id=${session.id} AND tenant_id=${tenantId} AND status='UPLOADED'`);
       await ownerDb.execute(sql`UPDATE intake_sessions SET status='CLAIMED' WHERE id=${session.id} AND tenant_id=${tenantId}`);
-      await appendAuditEntry(scoped, { tenantId, action: 'scan.queued', actor: req.user!.uid, payload: { scanRunId: submitted.scanRunId, scanId: submitted.scanId, passportId: passport.id, clientId, source: 'upload', sessionId: session.id, itemCount: items.length } });
-      return res.status(202).json({ scanRunId: submitted.scanRunId, scanId: submitted.scanId, passportId: passport.id, clientId, status: 'queued', jobs: { intake: submitted.intakeJobId }, location: `/scans?run=${encodeURIComponent(submitted.scanRunId)}` });
+      await appendAuditEntry(scoped, { tenantId, action: 'scan.queued', actor: req.user!.uid, payload: { scanId: submitted.scanId, passportId: passport.id, clientId, source: 'upload', sessionId: session.id, itemCount: items.length } });
+      return res.status(202).json({ scanId: submitted.scanId, passportId: passport.id, clientId, status: 'Queued', jobs: { intake: submitted.intakeJobId }, location: `/scans?run=${encodeURIComponent(submitted.scanId)}` });
     } catch (error) { return next(error); }
   });
 
@@ -163,26 +163,26 @@ export function createScanLedgerRouter() {
       const clientScope = req.user!.role === 'Client' ? req.user!.clientId ?? '' : null;
       const offset = (parsed.data.page - 1) * parsed.data.limit;
       const like = q ? `%${q.replace(/[%_\\]/g, (m) => `\\${m}`)}%` : null;
-      const where = sql`r.tenant_id = ${req.user!.tenantId}
+      const where = sql`r.tenant_id = ${req.user!.tenantId} AND r.passport_id IS NOT NULL
         AND (${clientScope}::text IS NULL OR COALESCE(r.client_id, p.client_id) = ${clientScope})
         AND (${passportId ?? null}::text IS NULL OR r.passport_id = ${passportId ?? null})
         AND (${clientId ?? null}::text IS NULL OR COALESCE(r.client_id, p.client_id) = ${clientId ?? null})
         AND (${status ?? null}::text IS NULL OR r.status = ${status ?? null})
-        AND (${sourceKind ?? null}::text IS NULL OR r.source_kind = ${sourceKind ?? null})
+        AND (${sourceKind ?? null}::text IS NULL OR r.source = ${sourceKind ?? null})
         AND (${like}::text IS NULL OR r.source_ref ILIKE ${like} OR p.name ILIKE ${like} OR r.id ILIKE ${like})`;
-      const total = Number(rows(await req.db!.execute(sql`SELECT COUNT(*)::int AS count FROM scan_runs r LEFT JOIN passports p ON p.id = r.passport_id AND p.tenant_id = r.tenant_id WHERE ${where}`))[0]?.count ?? 0);
+      const total = Number(rows(await req.db!.execute(sql`SELECT COUNT(*)::int AS count FROM scans r LEFT JOIN passports p ON p.id = r.passport_id AND p.tenant_id = r.tenant_id WHERE ${where}`))[0]?.count ?? 0);
       const items = rows(await req.db!.execute(sql`
-        SELECT r.id, r.client_id AS "clientId", r.passport_id AS "passportId", r.source_kind AS "sourceKind", r.source_ref AS "sourceRef", r.resolved_commit_sha AS "resolvedCommitSha", r.status, r.failure_code AS "failureCode",
+        SELECT r.id, r.client_id AS "clientId", r.passport_id AS "passportId", r.source AS "sourceKind", r.source_ref AS "sourceRef", r.resolved_commit_sha AS "resolvedCommitSha", r.status, r.error_code AS "failureCode", r.error_state AS "errorState", r.coverage_state AS "coverageState", r.target_name AS "targetName", r.scan_type AS "scanType",
                r.passport_status AS "passportStatus", r.triggered_by AS "triggeredBy", r.created_at AS "createdAt", r.started_at AS "startedAt", r.completed_at AS "completedAt",
                p.name AS "passportName", p.verification_status AS "passportVerificationStatus", c.name AS "clientName",
                cov.files_discovered AS "filesDiscovered", cov.files_inspected AS "filesInspected", cov.files_analyzed AS "filesAnalyzed", cov.files_unsupported AS "filesUnsupported", cov.files_skipped AS "filesSkipped", cov.files_failed AS "filesFailed", cov.files_inaccessible AS "filesInaccessible", cov.files_unknown AS "filesUnknown",
                cov.accounting_coverage_pct AS "accountingCoveragePct", cov.inspection_coverage_pct AS "inspectionCoveragePct", cov.analysis_coverage_pct AS "analysisCoveragePct", cov.evidence_coverage_pct AS "evidenceCoveragePct",
-               (SELECT COUNT(*)::int FROM scan_findings f WHERE f.scan_run_id = r.id AND f.tenant_id = r.tenant_id) AS "findingsCount",
-               (SELECT COUNT(*)::int FROM evidence_items e WHERE e.scan_run_id = r.id AND e.tenant_id = r.tenant_id) AS "evidenceCount"
-        FROM scan_runs r
+               (SELECT COUNT(*)::int FROM scan_findings f WHERE f.scan_id = r.id AND f.tenant_id = r.tenant_id) AS "findingsCount",
+               (SELECT COUNT(*)::int FROM evidence_items e WHERE e.scan_id = r.id AND e.tenant_id = r.tenant_id) AS "evidenceCount"
+        FROM scans r
         LEFT JOIN passports p ON p.id = r.passport_id AND p.tenant_id = r.tenant_id
         LEFT JOIN clients c ON c.id = COALESCE(r.client_id, p.client_id) AND c.tenant_id = r.tenant_id
-        LEFT JOIN scan_coverage cov ON cov.scan_run_id = r.id AND cov.tenant_id = r.tenant_id
+        LEFT JOIN scan_coverage cov ON cov.scan_id = r.id AND cov.tenant_id = r.tenant_id
         WHERE ${where}
         ORDER BY r.created_at DESC LIMIT ${parsed.data.limit} OFFSET ${offset}`));
       return res.json({ items, page: parsed.data.page, limit: parsed.data.limit, total });
@@ -196,15 +196,15 @@ export function createScanLedgerRouter() {
     try {
       const run = await loadRun(req, String(req.params.id));
       if (!run) return res.status(404).json({ error: 'SCAN_RUN_NOT_FOUND' });
-      const jobs = rows(await req.db!.execute(sql`SELECT id, agent_id AS "agentId", job_type AS "jobType", status, progress, error, attempt_count AS "attemptCount", max_attempts AS "maxAttempts", created_at AS "createdAt", updated_at AS "updatedAt", completed_at AS "completedAt", locked_at AS "lockedAt" FROM agent_jobs WHERE scan_run_id=${run.id} AND tenant_id=${req.user!.tenantId} ORDER BY created_at ASC`));
-      const coverage = rows(await req.db!.execute(sql`SELECT files_discovered AS "filesDiscovered", files_accounted_for AS "filesAccountedFor", files_inspected AS "filesInspected", files_partially_inspected AS "filesPartiallyInspected", files_analyzed AS "filesAnalyzed", files_unsupported AS "filesUnsupported", files_skipped AS "filesSkipped", files_failed AS "filesFailed", files_inaccessible AS "filesInaccessible", files_unknown AS "filesUnknown", files_with_findings AS "filesWithFindings", files_without_findings AS "filesWithoutFindings", files_with_evidence AS "filesWithEvidence", archives_discovered AS "archivesDiscovered", archives_enumerated AS "archivesEnumerated", archives_unreadable AS "archivesUnreadable", inspection_applicable AS "inspectionApplicable", analysis_applicable AS "analysisApplicable", accounting_coverage_pct AS "accountingCoveragePct", inspection_coverage_pct AS "inspectionCoveragePct", analysis_coverage_pct AS "analysisCoveragePct", evidence_coverage_pct AS "evidenceCoveragePct", inventory_complete = 1 AS "inventoryComplete", limitations, computed_at AS "computedAt" FROM scan_coverage WHERE scan_run_id=${run.id} AND tenant_id=${req.user!.tenantId} LIMIT 1`))[0] ?? null;
-      const dispositionBreakdown = rows(await req.db!.execute(sql`SELECT disposition, COUNT(*)::int AS count FROM scan_file_inventory WHERE scan_run_id=${run.id} AND tenant_id=${req.user!.tenantId} GROUP BY disposition ORDER BY count DESC`));
-      const categoryBreakdown = rows(await req.db!.execute(sql`SELECT category, COUNT(*)::int AS count, COUNT(*) FILTER (WHERE inspection_status='inspected')::int AS inspected, COUNT(*) FILTER (WHERE analysis_status='analyzed')::int AS analyzed FROM scan_file_inventory WHERE scan_run_id=${run.id} AND tenant_id=${req.user!.tenantId} GROUP BY category ORDER BY count DESC`));
-      const reasonBreakdown = rows(await req.db!.execute(sql`SELECT disposition, reason_code AS "reasonCode", COUNT(*)::int AS count FROM scan_file_inventory WHERE scan_run_id=${run.id} AND tenant_id=${req.user!.tenantId} AND reason_code IS NOT NULL AND disposition IN ('unsupported','skipped','failed','inaccessible','unknown','inventoried','partially_inspected') GROUP BY disposition, reason_code ORDER BY count DESC LIMIT 100`));
-      const findingSummary = rows(await req.db!.execute(sql`SELECT LOWER(severity) AS severity, COUNT(*)::int AS count FROM scan_findings WHERE scan_run_id=${run.id} AND tenant_id=${req.user!.tenantId} GROUP BY LOWER(severity)`));
-      const evidenceSummary = rows(await req.db!.execute(sql`SELECT type, engine_id AS "engineId", COUNT(*)::int AS count FROM evidence_items WHERE scan_run_id=${run.id} AND tenant_id=${req.user!.tenantId} GROUP BY type, engine_id ORDER BY count DESC`));
-      const logs = rows(await req.db!.execute(sql`SELECT l.job_id AS "jobId", l.agent_id AS "agentId", l.message, l.level, l.timestamp FROM agent_logs l JOIN agent_jobs j ON j.id = l.job_id AND j.tenant_id=${req.user!.tenantId} WHERE j.scan_run_id=${run.id} ORDER BY l.timestamp DESC, l.id DESC LIMIT 50`));
-      const previous = rows(await req.db!.execute(sql`SELECT id, created_at AS "createdAt", status FROM scan_runs WHERE tenant_id=${req.user!.tenantId} AND passport_id=${run.passportId} AND id <> ${run.id} AND created_at < ${run.createdAt} AND status IN ('completed','partial') ORDER BY created_at DESC LIMIT 1`))[0] ?? null;
+      const jobs = rows(await req.db!.execute(sql`SELECT id, agent_id AS "agentId", job_type AS "jobType", status, progress, error, attempt_count AS "attemptCount", max_attempts AS "maxAttempts", created_at AS "createdAt", updated_at AS "updatedAt", completed_at AS "completedAt", locked_at AS "lockedAt" FROM agent_jobs WHERE scan_id=${run.id} AND tenant_id=${req.user!.tenantId} ORDER BY created_at ASC`));
+      const coverage = rows(await req.db!.execute(sql`SELECT files_discovered AS "filesDiscovered", files_accounted_for AS "filesAccountedFor", files_inspected AS "filesInspected", files_partially_inspected AS "filesPartiallyInspected", files_analyzed AS "filesAnalyzed", files_unsupported AS "filesUnsupported", files_skipped AS "filesSkipped", files_failed AS "filesFailed", files_inaccessible AS "filesInaccessible", files_unknown AS "filesUnknown", files_with_findings AS "filesWithFindings", files_without_findings AS "filesWithoutFindings", files_with_evidence AS "filesWithEvidence", archives_discovered AS "archivesDiscovered", archives_enumerated AS "archivesEnumerated", archives_unreadable AS "archivesUnreadable", inspection_applicable AS "inspectionApplicable", analysis_applicable AS "analysisApplicable", accounting_coverage_pct AS "accountingCoveragePct", inspection_coverage_pct AS "inspectionCoveragePct", analysis_coverage_pct AS "analysisCoveragePct", evidence_coverage_pct AS "evidenceCoveragePct", inventory_complete = 1 AS "inventoryComplete", limitations, computed_at AS "computedAt" FROM scan_coverage WHERE scan_id=${run.id} AND tenant_id=${req.user!.tenantId} LIMIT 1`))[0] ?? null;
+      const dispositionBreakdown = rows(await req.db!.execute(sql`SELECT disposition, COUNT(*)::int AS count FROM scan_file_inventory WHERE scan_id=${run.id} AND tenant_id=${req.user!.tenantId} GROUP BY disposition ORDER BY count DESC`));
+      const categoryBreakdown = rows(await req.db!.execute(sql`SELECT category, COUNT(*)::int AS count, COUNT(*) FILTER (WHERE inspection_status='inspected')::int AS inspected, COUNT(*) FILTER (WHERE analysis_status='analyzed')::int AS analyzed FROM scan_file_inventory WHERE scan_id=${run.id} AND tenant_id=${req.user!.tenantId} GROUP BY category ORDER BY count DESC`));
+      const reasonBreakdown = rows(await req.db!.execute(sql`SELECT disposition, reason_code AS "reasonCode", COUNT(*)::int AS count FROM scan_file_inventory WHERE scan_id=${run.id} AND tenant_id=${req.user!.tenantId} AND reason_code IS NOT NULL AND disposition IN ('unsupported','skipped','failed','inaccessible','unknown','inventoried','partially_inspected') GROUP BY disposition, reason_code ORDER BY count DESC LIMIT 100`));
+      const findingSummary = rows(await req.db!.execute(sql`SELECT LOWER(severity) AS severity, COUNT(*)::int AS count FROM scan_findings WHERE scan_id=${run.id} AND tenant_id=${req.user!.tenantId} GROUP BY LOWER(severity)`));
+      const evidenceSummary = rows(await req.db!.execute(sql`SELECT type, engine_id AS "engineId", COUNT(*)::int AS count FROM evidence_items WHERE scan_id=${run.id} AND tenant_id=${req.user!.tenantId} GROUP BY type, engine_id ORDER BY count DESC`));
+      const logs = rows(await req.db!.execute(sql`SELECT l.job_id AS "jobId", l.agent_id AS "agentId", l.message, l.level, l.timestamp FROM agent_logs l JOIN agent_jobs j ON j.id = l.job_id AND j.tenant_id=${req.user!.tenantId} WHERE j.scan_id=${run.id} ORDER BY l.timestamp DESC, l.id DESC LIMIT 50`));
+      const previous = rows(await req.db!.execute(sql`SELECT id, created_at AS "createdAt", status FROM scans WHERE tenant_id=${req.user!.tenantId} AND passport_id=${run.passportId} AND id <> ${run.id} AND created_at < (SELECT created_at FROM scans WHERE id = ${run.id}) AND status IN ('Completed','Partial') ORDER BY created_at DESC LIMIT 1`))[0] ?? null;
       return res.json({ run, jobs, coverage, coverageDefinitions: COVERAGE_DEFINITIONS, breakdown: { byDisposition: dispositionBreakdown, byCategory: categoryBreakdown, byReason: reasonBreakdown }, findings: { bySeverity: findingSummary, total: findingSummary.reduce((t: number, r: any) => t + Number(r.count), 0) }, evidence: { byTypeAndEngine: evidenceSummary, total: evidenceSummary.reduce((t: number, r: any) => t + Number(r.count), 0) }, logs, previousRun: previous });
     } catch (error) { return next(error); }
   });
@@ -219,7 +219,7 @@ export function createScanLedgerRouter() {
       const dispositions = csv(f.disposition); const categories = csv(f.category);
       const like = f.q ? `%${f.q.replace(/[%_\\]/g, (m) => `\\${m}`)}%` : null;
       const offset = (f.page - 1) * f.limit;
-      const where = sql`i.scan_run_id = ${run.id} AND i.tenant_id = ${req.user!.tenantId}
+      const where = sql`i.scan_id = ${run.id} AND i.tenant_id = ${req.user!.tenantId}
         AND (${dispositions.length === 0} OR i.disposition = ANY(${dispositions}::text[]))
         AND (${categories.length === 0} OR i.category = ANY(${categories}::text[]))
         AND (${f.inspection ?? null}::text IS NULL OR i.inspection_status = ${f.inspection ?? null})
@@ -235,7 +235,7 @@ export function createScanLedgerRouter() {
                i.discovered_at AS "discoveredAt", i.disposition, i.inspection_status AS "inspectionStatus", i.analysis_status AS "analysisStatus", i.inspection_level AS "inspectionLevel", i.tools, i.reason_code AS "reasonCode", i.reason_detail AS "reasonDetail", i.notes,
                i.related_components AS "relatedComponents", i.related_finding_ids AS "relatedFindingIds", i.related_evidence_ids AS "relatedEvidenceIds", i.updated_at AS "updatedAt"
         FROM scan_file_inventory i WHERE ${where} ORDER BY i.sequence ASC LIMIT ${f.limit} OFFSET ${offset}`));
-      return res.json({ items, page: f.page, limit: f.limit, total, scanRunId: run.id });
+      return res.json({ items, page: f.page, limit: f.limit, total, scanId: run.id });
     } catch (error) { return next(error); }
   });
 
@@ -247,7 +247,7 @@ export function createScanLedgerRouter() {
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
       const f = parsed.data; const severities = csv(f.severity).map((s) => s.toLowerCase());
       const offset = (f.page - 1) * f.limit;
-      const where = sql`f.scan_run_id = ${run.id} AND f.tenant_id = ${req.user!.tenantId}
+      const where = sql`f.scan_id = ${run.id} AND f.tenant_id = ${req.user!.tenantId}
         AND (${severities.length === 0} OR LOWER(f.severity) = ANY(${severities}::text[]))
         AND (${f.status ?? null}::text IS NULL OR LOWER(f.status) = LOWER(${f.status ?? null}))
         AND (${f.category ?? null}::text IS NULL OR f.category = ${f.category ?? null})
@@ -256,11 +256,11 @@ export function createScanLedgerRouter() {
       const total = Number(rows(await req.db!.execute(sql`SELECT COUNT(*)::int AS count FROM scan_findings f WHERE ${where}`))[0]?.count ?? 0);
       const items = rows(await req.db!.execute(sql`
         SELECT f.id, f.severity, f.category, f.title, f.description, f.component, f.fixed_version AS "fixedVersion", f.status, f.detected_at AS "detectedAt", f.engine_id AS "engineId", f.file_path AS "filePath", f.job_id AS "jobId", f.vex_status AS "vexStatus", f.reachability, f.state, f.updated_at AS "updatedAt",
-               (SELECT i.id FROM scan_file_inventory i WHERE i.scan_run_id = f.scan_run_id AND i.tenant_id = f.tenant_id AND i.path = f.file_path ORDER BY i.sequence LIMIT 1) AS "fileId"
+               (SELECT i.id FROM scan_file_inventory i WHERE i.scan_id = f.scan_id AND i.tenant_id = f.tenant_id AND i.path = f.file_path ORDER BY i.sequence LIMIT 1) AS "fileId"
         FROM scan_findings f WHERE ${where}
         ORDER BY CASE LOWER(f.severity) WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END, f.detected_at DESC LIMIT ${f.limit} OFFSET ${offset}`));
       // Lineage for each finding: FILE -> SCAN -> SOFTWARE -> CLIENT -> TENANT, all from persisted rows.
-      return res.json({ items, page: f.page, limit: f.limit, total, lineage: { scanRunId: run.id, passportId: run.passportId, clientId: run.clientId ?? run.passportClientId ?? null, tenantId: run.tenantId } });
+      return res.json({ items, page: f.page, limit: f.limit, total, lineage: { scanId: run.id, passportId: run.passportId, clientId: run.clientId ?? run.passportClientId ?? null, tenantId: run.tenantId } });
     } catch (error) { return next(error); }
   });
 
@@ -271,15 +271,15 @@ export function createScanLedgerRouter() {
       const parsed = pagedSchema.safeParse(req.query);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
       const offset = (parsed.data.page - 1) * parsed.data.limit;
-      const total = Number(rows(await req.db!.execute(sql`SELECT COUNT(*)::int AS count FROM evidence_items WHERE scan_run_id=${run.id} AND tenant_id=${req.user!.tenantId}`))[0]?.count ?? 0);
+      const total = Number(rows(await req.db!.execute(sql`SELECT COUNT(*)::int AS count FROM evidence_items WHERE scan_id=${run.id} AND tenant_id=${req.user!.tenantId}`))[0]?.count ?? 0);
       // raw_content is the provider payload (OSV responses, descriptors); its
       // length and hash are returned, the payload itself is not, so a list of
       // thousands of evidence rows stays small and no SBOM contents leave here.
       const items = rows(await req.db!.execute(sql`
         SELECT e.id, e.name, e.type, e.verified = 1 AS verified, e.status, e.signer, e.timestamp, e.hash, e.engine_id AS "engineId", e.verification_failure_reason AS "verificationFailureReason", length(e.raw_content) AS "rawContentBytes",
-               (SELECT COUNT(*)::int FROM scan_file_inventory i WHERE i.scan_run_id = e.scan_run_id AND i.tenant_id = e.tenant_id AND i.related_evidence_ids ? e.id) AS "relatedFileCount"
-        FROM evidence_items e WHERE e.scan_run_id=${run.id} AND e.tenant_id=${req.user!.tenantId} ORDER BY e.timestamp DESC, e.id LIMIT ${parsed.data.limit} OFFSET ${offset}`));
-      return res.json({ items, page: parsed.data.page, limit: parsed.data.limit, total, lineage: { scanRunId: run.id, passportId: run.passportId, clientId: run.clientId ?? run.passportClientId ?? null, tenantId: run.tenantId } });
+               (SELECT COUNT(*)::int FROM scan_file_inventory i WHERE i.scan_id = e.scan_id AND i.tenant_id = e.tenant_id AND i.related_evidence_ids ? e.id) AS "relatedFileCount"
+        FROM evidence_items e WHERE e.scan_id=${run.id} AND e.tenant_id=${req.user!.tenantId} ORDER BY e.timestamp DESC, e.id LIMIT ${parsed.data.limit} OFFSET ${offset}`));
+      return res.json({ items, page: parsed.data.page, limit: parsed.data.limit, total, lineage: { scanId: run.id, passportId: run.passportId, clientId: run.clientId ?? run.passportClientId ?? null, tenantId: run.tenantId } });
     } catch (error) { return next(error); }
   });
 
@@ -293,24 +293,24 @@ export function createScanLedgerRouter() {
     try {
       const run = await loadRun(req, String(req.params.id));
       if (!run) return res.status(404).json({ error: 'SCAN_RUN_NOT_FOUND' });
-      const previous = rows(await req.db!.execute(sql`SELECT id, created_at AS "createdAt", status, resolved_commit_sha AS "resolvedCommitSha", source_ref AS "sourceRef" FROM scan_runs WHERE tenant_id=${req.user!.tenantId} AND passport_id=${run.passportId} AND id <> ${run.id} AND created_at < ${run.createdAt} AND status IN ('completed','partial') ORDER BY created_at DESC LIMIT 1`))[0] ?? null;
-      if (!previous) return res.json({ scanRunId: run.id, previousRunId: null, comparable: false, reason: 'NO_PREVIOUS_SETTLED_SCAN', files: null, dependencies: null, findings: null, coverage: null });
+      const previous = rows(await req.db!.execute(sql`SELECT id, created_at AS "createdAt", status, resolved_commit_sha AS "resolvedCommitSha", source_ref AS "sourceRef" FROM scans WHERE tenant_id=${req.user!.tenantId} AND passport_id=${run.passportId} AND id <> ${run.id} AND created_at < (SELECT created_at FROM scans WHERE id = ${run.id}) AND status IN ('Completed','Partial') ORDER BY created_at DESC LIMIT 1`))[0] ?? null;
+      if (!previous) return res.json({ scanId: run.id, previousRunId: null, comparable: false, reason: 'NO_PREVIOUS_SETTLED_SCAN', files: null, dependencies: null, findings: null, coverage: null });
       const tenantId = req.user!.tenantId;
       const fileDiff = rows(await req.db!.execute(sql`
-        WITH cur AS (SELECT path, sha256, disposition FROM scan_file_inventory WHERE scan_run_id=${run.id} AND tenant_id=${tenantId} AND source <> 'nested-archive'),
-             prev AS (SELECT path, sha256, disposition FROM scan_file_inventory WHERE scan_run_id=${previous.id} AND tenant_id=${tenantId} AND source <> 'nested-archive')
+        WITH cur AS (SELECT path, sha256, disposition FROM scan_file_inventory WHERE scan_id=${run.id} AND tenant_id=${tenantId} AND source <> 'nested-archive'),
+             prev AS (SELECT path, sha256, disposition FROM scan_file_inventory WHERE scan_id=${previous.id} AND tenant_id=${tenantId} AND source <> 'nested-archive')
         SELECT
           (SELECT COUNT(DISTINCT path)::int FROM cur WHERE path NOT IN (SELECT path FROM prev)) AS added,
           (SELECT COUNT(DISTINCT path)::int FROM prev WHERE path NOT IN (SELECT path FROM cur)) AS removed,
           (SELECT COUNT(DISTINCT c.path)::int FROM cur c JOIN prev p ON p.path = c.path WHERE c.sha256 IS NOT NULL AND p.sha256 IS NOT NULL AND c.sha256 <> p.sha256) AS modified,
           (SELECT COUNT(DISTINCT c.path)::int FROM cur c JOIN prev p ON p.path = c.path WHERE c.sha256 IS NULL OR p.sha256 IS NULL) AS "hashUnavailable",
           (SELECT COUNT(DISTINCT c.path)::int FROM cur c JOIN prev p ON p.path = c.path WHERE c.sha256 IS NOT NULL AND c.sha256 = p.sha256) AS unchanged`))[0];
-      const addedFiles = rows(await req.db!.execute(sql`SELECT DISTINCT path FROM scan_file_inventory WHERE scan_run_id=${run.id} AND tenant_id=${tenantId} AND source <> 'nested-archive' AND path NOT IN (SELECT path FROM scan_file_inventory WHERE scan_run_id=${previous.id} AND tenant_id=${tenantId}) ORDER BY path LIMIT 200`)).map((r: any) => r.path);
-      const removedFiles = rows(await req.db!.execute(sql`SELECT DISTINCT path FROM scan_file_inventory WHERE scan_run_id=${previous.id} AND tenant_id=${tenantId} AND source <> 'nested-archive' AND path NOT IN (SELECT path FROM scan_file_inventory WHERE scan_run_id=${run.id} AND tenant_id=${tenantId}) ORDER BY path LIMIT 200`)).map((r: any) => r.path);
-      const modifiedFiles = rows(await req.db!.execute(sql`SELECT DISTINCT c.path FROM scan_file_inventory c JOIN scan_file_inventory p ON p.path = c.path AND p.scan_run_id=${previous.id} AND p.tenant_id=${tenantId} WHERE c.scan_run_id=${run.id} AND c.tenant_id=${tenantId} AND c.sha256 IS NOT NULL AND p.sha256 IS NOT NULL AND c.sha256 <> p.sha256 ORDER BY c.path LIMIT 200`)).map((r: any) => r.path);
+      const addedFiles = rows(await req.db!.execute(sql`SELECT DISTINCT path FROM scan_file_inventory WHERE scan_id=${run.id} AND tenant_id=${tenantId} AND source <> 'nested-archive' AND path NOT IN (SELECT path FROM scan_file_inventory WHERE scan_id=${previous.id} AND tenant_id=${tenantId}) ORDER BY path LIMIT 200`)).map((r: any) => r.path);
+      const removedFiles = rows(await req.db!.execute(sql`SELECT DISTINCT path FROM scan_file_inventory WHERE scan_id=${previous.id} AND tenant_id=${tenantId} AND source <> 'nested-archive' AND path NOT IN (SELECT path FROM scan_file_inventory WHERE scan_id=${run.id} AND tenant_id=${tenantId}) ORDER BY path LIMIT 200`)).map((r: any) => r.path);
+      const modifiedFiles = rows(await req.db!.execute(sql`SELECT DISTINCT c.path FROM scan_file_inventory c JOIN scan_file_inventory p ON p.path = c.path AND p.scan_id=${previous.id} AND p.tenant_id=${tenantId} WHERE c.scan_id=${run.id} AND c.tenant_id=${tenantId} AND c.sha256 IS NOT NULL AND p.sha256 IS NOT NULL AND c.sha256 <> p.sha256 ORDER BY c.path LIMIT 200`)).map((r: any) => r.path);
       // Dependencies: the normalized component lists persisted by each run's repository job.
       const componentsFor = async (runId: string): Promise<Set<string> | null> => {
-        const row = rows(await req.db!.execute(sql`SELECT s.normalized_components AS components FROM repository_scan_sources s JOIN agent_jobs j ON j.id = s.job_id AND j.tenant_id = s.tenant_id WHERE j.scan_run_id=${runId} AND j.tenant_id=${tenantId} AND j.job_type='repository_scan' AND s.normalized_components_hash IS NOT NULL LIMIT 1`))[0];
+        const row = rows(await req.db!.execute(sql`SELECT s.normalized_components AS components FROM repository_scan_sources s JOIN agent_jobs j ON j.id = s.job_id AND j.tenant_id = s.tenant_id WHERE j.scan_id=${runId} AND j.tenant_id=${tenantId} AND j.job_type='repository_scan' AND s.normalized_components_hash IS NOT NULL LIMIT 1`))[0];
         if (!row) return null;
         try { const parsed = JSON.parse(row.components); return new Set((Array.isArray(parsed) ? parsed : []).map((c: any) => `${c.purl || c.name}@${c.version || ''}`)); } catch { return null; }
       };
@@ -319,20 +319,20 @@ export function createScanLedgerRouter() {
         ? { comparable: true, added: [...curComponents].filter((c) => !prevComponents.has(c)).sort().slice(0, 500), removed: [...prevComponents].filter((c) => !curComponents.has(c)).sort().slice(0, 500), currentTotal: curComponents.size, previousTotal: prevComponents.size }
         : { comparable: false, reason: 'SBOM_NOT_PERSISTED_FOR_BOTH_SCANS' };
       const findingDiff = rows(await req.db!.execute(sql`
-        WITH cur AS (SELECT id, severity, title, status FROM scan_findings WHERE scan_run_id=${run.id} AND tenant_id=${tenantId}),
-             prev AS (SELECT id, severity, title, status FROM scan_findings WHERE scan_run_id=${previous.id} AND tenant_id=${tenantId})
+        WITH cur AS (SELECT id, severity, title, status FROM scan_findings WHERE scan_id=${run.id} AND tenant_id=${tenantId}),
+             prev AS (SELECT id, severity, title, status FROM scan_findings WHERE scan_id=${previous.id} AND tenant_id=${tenantId})
         SELECT (SELECT COUNT(*)::int FROM cur WHERE id NOT IN (SELECT id FROM prev)) AS opened,
                (SELECT COUNT(*)::int FROM prev WHERE id NOT IN (SELECT id FROM cur)) AS "notObservedAgain",
                (SELECT COUNT(*)::int FROM cur c JOIN prev p ON p.id = c.id WHERE c.status <> p.status OR c.severity <> p.severity) AS changed,
                (SELECT COUNT(*)::int FROM cur c JOIN prev p ON p.id = c.id) AS carried`))[0];
-      const openedFindings = rows(await req.db!.execute(sql`SELECT id, severity, category, title, file_path AS "filePath", component FROM scan_findings WHERE scan_run_id=${run.id} AND tenant_id=${tenantId} AND id NOT IN (SELECT id FROM scan_findings WHERE scan_run_id=${previous.id} AND tenant_id=${tenantId}) ORDER BY detected_at DESC LIMIT 200`));
-      const notObservedFindings = rows(await req.db!.execute(sql`SELECT id, severity, category, title, file_path AS "filePath", component, status FROM scan_findings WHERE scan_run_id=${previous.id} AND tenant_id=${tenantId} AND id NOT IN (SELECT id FROM scan_findings WHERE scan_run_id=${run.id} AND tenant_id=${tenantId}) ORDER BY detected_at DESC LIMIT 200`));
-      const coverageRows = rows(await req.db!.execute(sql`SELECT scan_run_id AS "scanRunId", files_discovered AS "filesDiscovered", files_inspected AS "filesInspected", files_analyzed AS "filesAnalyzed", inspection_coverage_pct AS "inspectionCoveragePct", analysis_coverage_pct AS "analysisCoveragePct", evidence_coverage_pct AS "evidenceCoveragePct" FROM scan_coverage WHERE tenant_id=${tenantId} AND scan_run_id IN (${run.id}, ${previous.id})`));
-      const evidenceCounts = rows(await req.db!.execute(sql`SELECT scan_run_id AS "scanRunId", COUNT(*)::int AS count FROM evidence_items WHERE tenant_id=${tenantId} AND scan_run_id IN (${run.id}, ${previous.id}) GROUP BY scan_run_id`));
-      const cov = (idValue: string) => coverageRows.find((r: any) => r.scanRunId === idValue) ?? null;
-      const ev = (idValue: string) => Number(evidenceCounts.find((r: any) => r.scanRunId === idValue)?.count ?? 0);
+      const openedFindings = rows(await req.db!.execute(sql`SELECT id, severity, category, title, file_path AS "filePath", component FROM scan_findings WHERE scan_id=${run.id} AND tenant_id=${tenantId} AND id NOT IN (SELECT id FROM scan_findings WHERE scan_id=${previous.id} AND tenant_id=${tenantId}) ORDER BY detected_at DESC LIMIT 200`));
+      const notObservedFindings = rows(await req.db!.execute(sql`SELECT id, severity, category, title, file_path AS "filePath", component, status FROM scan_findings WHERE scan_id=${previous.id} AND tenant_id=${tenantId} AND id NOT IN (SELECT id FROM scan_findings WHERE scan_id=${run.id} AND tenant_id=${tenantId}) ORDER BY detected_at DESC LIMIT 200`));
+      const coverageRows = rows(await req.db!.execute(sql`SELECT scan_id AS "scanId", files_discovered AS "filesDiscovered", files_inspected AS "filesInspected", files_analyzed AS "filesAnalyzed", inspection_coverage_pct AS "inspectionCoveragePct", analysis_coverage_pct AS "analysisCoveragePct", evidence_coverage_pct AS "evidenceCoveragePct" FROM scan_coverage WHERE tenant_id=${tenantId} AND scan_id IN (${run.id}, ${previous.id})`));
+      const evidenceCounts = rows(await req.db!.execute(sql`SELECT scan_id AS "scanId", COUNT(*)::int AS count FROM evidence_items WHERE tenant_id=${tenantId} AND scan_id IN (${run.id}, ${previous.id}) GROUP BY scan_id`));
+      const cov = (idValue: string) => coverageRows.find((r: any) => r.scanId === idValue) ?? null;
+      const ev = (idValue: string) => Number(evidenceCounts.find((r: any) => r.scanId === idValue)?.count ?? 0);
       return res.json({
-        scanRunId: run.id, previousRunId: previous.id, comparable: true,
+        scanId: run.id, previousRunId: previous.id, comparable: true,
         previous: { id: previous.id, createdAt: previous.createdAt, status: previous.status, resolvedCommitSha: previous.resolvedCommitSha, sourceRef: previous.sourceRef },
         current: { id: run.id, createdAt: run.createdAt, status: run.status, resolvedCommitSha: run.resolvedCommitSha, sourceRef: run.sourceRef },
         files: { ...fileDiff, addedPaths: addedFiles, removedPaths: removedFiles, modifiedPaths: modifiedFiles, rule: 'A file is "modified" only when both scans hashed it and the hashes differ; files without a hash on either side are counted separately as hashUnavailable.' },
@@ -354,9 +354,9 @@ export function createScanLedgerRouter() {
     try {
       const run = await loadRun(req, String(req.params.id));
       if (!run) return res.status(404).json({ error: 'SCAN_RUN_NOT_FOUND' });
-      if (run.passportStatus === 'associated') return res.json({ scanRunId: run.id, passportId: run.passportId, passportStatus: 'associated', changed: false });
+      if (run.passportStatus === 'associated') return res.json({ scanId: run.id, passportId: run.passportId, passportStatus: 'associated', changed: false });
       const tenantId = req.user!.tenantId;
-      const source = rows(await req.db!.execute(sql`SELECT s.repository_owner AS owner, s.repository_name AS repository, s.resolved_commit_sha AS "commitSha", s.source_descriptor_hash AS "sourceHash", s.normalized_components AS components, s.acquired_at AS "acquiredAt" FROM repository_scan_sources s JOIN agent_jobs j ON j.id = s.job_id AND j.tenant_id = s.tenant_id WHERE j.scan_run_id=${run.id} AND j.tenant_id=${tenantId} AND j.job_type='repository_scan' AND s.normalized_components_hash IS NOT NULL LIMIT 1`))[0];
+      const source = rows(await req.db!.execute(sql`SELECT s.repository_owner AS owner, s.repository_name AS repository, s.resolved_commit_sha AS "commitSha", s.source_descriptor_hash AS "sourceHash", s.normalized_components AS components, s.acquired_at AS "acquiredAt" FROM repository_scan_sources s JOIN agent_jobs j ON j.id = s.job_id AND j.tenant_id = s.tenant_id WHERE j.scan_id=${run.id} AND j.tenant_id=${tenantId} AND j.job_type='repository_scan' AND s.normalized_components_hash IS NOT NULL LIMIT 1`))[0];
       if (!source) return res.status(409).json({ error: 'NO_PERSISTED_SBOM_FOR_SCAN', message: 'The scan has no persisted SBOM to associate; re-run the scan.' });
       let components: unknown[] = [];
       try { components = JSON.parse(source.components); } catch { components = []; }
@@ -365,9 +365,9 @@ export function createScanLedgerRouter() {
       // req.db is already one transaction for the request (tenant-scope), so
       // both statements commit or roll back together.
       await req.db!.execute(sql`INSERT INTO passports (id,tenant_id,client_id,name,version,publisher,category,overall_score,security_score,compliance_score,vendor_reputation_score,verification_status,release_date,file_hash,license_type,ai_summary,sbom,evidence,vulnerabilities,timeline) VALUES (${run.passportId},${tenantId},${run.clientId ?? null},${source.repository},${source.commitSha},${source.owner},'Repository',NULL,NULL,NULL,NULL,'unverified',${releaseDate},${source.sourceHash},'Unknown','Repository acquired and SBOM generated. Trust assessment remains pending.',${JSON.stringify(versioned)},'[]','[]','[]') ON CONFLICT (id) DO UPDATE SET version=EXCLUDED.version,file_hash=EXCLUDED.file_hash,sbom=EXCLUDED.sbom,release_date=EXCLUDED.release_date,ai_summary=EXCLUDED.ai_summary,overall_score=NULL,security_score=NULL,compliance_score=NULL,vendor_reputation_score=NULL,verification_status='unverified' WHERE passports.tenant_id=${tenantId}`);
-      await req.db!.execute(sql`UPDATE scan_runs SET passport_status='associated', passport_failure=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=${run.id} AND tenant_id=${tenantId}`);
-      await appendAuditEntry(req.db!, { tenantId, action: 'passport.published', actor: req.user!.uid, payload: { passportId: run.passportId, scanRunId: run.id, recovery: true, version: source.commitSha } });
-      return res.json({ scanRunId: run.id, passportId: run.passportId, passportStatus: 'associated', changed: true });
+      await req.db!.execute(sql`UPDATE scans SET passport_status='associated', passport_failure=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=${run.id} AND tenant_id=${tenantId}`);
+      await appendAuditEntry(req.db!, { tenantId, action: 'passport.published', actor: req.user!.uid, payload: { passportId: run.passportId, scanId: run.id, recovery: true, version: source.commitSha } });
+      return res.json({ scanId: run.id, passportId: run.passportId, passportStatus: 'associated', changed: true });
     } catch (error) { return next(error); }
   });
 

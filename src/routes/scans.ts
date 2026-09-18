@@ -62,7 +62,7 @@ export function createScansRouter() {
   router.get('/scans', async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
-      const result = await db.execute(sql`SELECT s.id, s.target_name AS "targetName", s.scan_type AS "scanType", s.triggered_by AS "triggeredBy", s.status, s.duration_ms AS "durationMs", s.findings_count AS "findingsCount", s.timestamp, s.client_name AS "clientName", s.scan_run_id AS "scanRunId", s.passport_id AS "passportId", s.client_id AS "clientId", s.failure_code AS "failureCode" FROM scans s WHERE s.tenant_id=${req.user!.tenantId} AND (${req.user!.role} <> 'Client' OR EXISTS (SELECT 1 FROM passports p WHERE p.tenant_id=s.tenant_id AND p.client_id=${req.user!.clientId ?? ''} AND (p.id=s.target_name OR LOWER(p.name)=LOWER(s.target_name)))) ORDER BY s.timestamp DESC LIMIT 100`);
+      const result = await db.execute(sql`SELECT s.id, s.target_name AS "targetName", s.scan_type AS "scanType", s.triggered_by AS "triggeredBy", s.status, s.duration_ms AS "durationMs", s.findings_count AS "findingsCount", s.timestamp, s.client_name AS "clientName", s.scan_id AS "scanId", s.passport_id AS "passportId", s.client_id AS "clientId", s.failure_code AS "failureCode" FROM scans s WHERE s.tenant_id=${req.user!.tenantId} AND (${req.user!.role} <> 'Client' OR EXISTS (SELECT 1 FROM passports p WHERE p.tenant_id=s.tenant_id AND p.client_id=${req.user!.clientId ?? ''} AND (p.id=s.target_name OR LOWER(p.name)=LOWER(s.target_name)))) ORDER BY s.timestamp DESC LIMIT 100`);
       return res.json((result as any).rows || []);
     } catch (error) { return next(error); }
   });
@@ -84,8 +84,8 @@ export function createScansRouter() {
       // worker completes (it used to stay 'Scanning' forever while the worker
       // inserted a second, unlinked row).
       const submitted = await enqueueSbomScan(db, { tenantId: req.user!.tenantId, clientId: passport.client_id ?? null, passportId: passport.id, triggeredBy: req.user!.uid, targetName, clientName, scanType });
-      await appendAuditEntry(db, { tenantId: req.user!.tenantId, action: 'scan.queued', actor: req.user!.uid, payload: { scanId: submitted.scanId, scanRunId: submitted.scanRunId, jobId: submitted.jobId, targetName, scanType, clientName, passportId: passport.id } });
-      return res.status(202).json({ id: submitted.scanId, jobId: submitted.jobId, scanRunId: submitted.scanRunId, targetName, scanType, triggeredBy: req.user!.uid, status: 'Queued', durationMs: 0, findingsCount: null, timestamp, clientName });
+      await appendAuditEntry(db, { tenantId: req.user!.tenantId, action: 'scan.queued', actor: req.user!.uid, payload: { scanId: submitted.scanId, jobId: submitted.jobId, targetName, scanType, clientName, passportId: passport.id } });
+      return res.status(202).json({ id: submitted.scanId, jobId: submitted.jobId, targetName, scanType, triggeredBy: req.user!.uid, status: 'Queued', durationMs: 0, findingsCount: null, timestamp, clientName });
     } catch (error) { return next(error); }
   });
 
@@ -163,7 +163,7 @@ export function createScansRouter() {
       await db.execute(sql`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES (${jobId},'comprehensive_scanner',${'Scheduled OSV dependency scan dispatched for ' + schedule.assetHostName},'Info')`);
       const updated = (await db.execute(sql`UPDATE scan_schedules SET last_run_at=${now.toISOString()}, next_run_at=${next} WHERE id=${req.params.id} AND tenant_id=${req.user!.tenantId} RETURNING id, asset_id AS "assetId", asset_host_name AS "assetHostName", asset_type AS "assetType", client_name AS "clientName", frequency, scan_type AS "scanType", status, last_run_at AS "lastRunAt", next_run_at AS "nextRunAt", created_at AS "createdAt"`)).rows?.[0];
       await appendAuditEntry(db, { tenantId: req.user!.tenantId, action: 'scan.queued', actor: req.user!.uid, payload: { scanId, jobId, passportId: passport.id, scheduleId: req.params.id, scanType: schedule.scanType } });
-      return res.status(202).json({ success: true, scanId, jobId, scanRunId: submitted.scanRunId, queued: true, schedule: updated });
+      return res.status(202).json({ success: true, scanId, jobId, queued: true, schedule: updated });
     } catch (error) { return next(error); }
   });
 
@@ -252,8 +252,8 @@ export function createScansRouter() {
       const passport = (await db.execute(sql`SELECT p.id, p.name, p.client_id, c.name AS client_name FROM passports p LEFT JOIN clients c ON c.id = p.client_id AND c.tenant_id = p.tenant_id WHERE p.id=${passportId} AND p.tenant_id=${req.user!.tenantId} LIMIT 1`)).rows?.[0] as any;
       if (!passport) return res.status(404).json({ error: 'Passport not found' });
       const submitted = await enqueueRepositoryScan(db, { tenantId: req.user!.tenantId, clientId: passport.client_id ?? null, passportId: passport.id, owner, repository, ref, subdirectory, triggeredBy: req.user!.uid, targetName: passport.name, clientName: passport.client_name ?? 'Unassigned' });
-      await appendAuditEntry(db, { tenantId: req.user!.tenantId, action: 'scan.queued', actor: req.user!.uid, payload: { scanRunId: submitted.scanRunId, scanId: submitted.scanId, repositoryJobId: submitted.repositoryJobId, securityJobId: submitted.securityJobId, passportId, owner, repository, ref } });
-      return res.status(202).json({ scanRunId: submitted.scanRunId, scanId: submitted.scanId, repositoryJobId: submitted.repositoryJobId, securityJobId: submitted.securityJobId, status: 'Pending', engines: ['Syft','OSV','Secret','IaC/Config','License'], location: `/scans?run=${encodeURIComponent(submitted.scanRunId)}` });
+      await appendAuditEntry(db, { tenantId: req.user!.tenantId, action: 'scan.queued', actor: req.user!.uid, payload: { scanId: submitted.scanId, repositoryJobId: submitted.repositoryJobId, securityJobId: submitted.securityJobId, passportId, owner, repository, ref } });
+      return res.status(202).json({ scanId: submitted.scanId, repositoryJobId: submitted.repositoryJobId, securityJobId: submitted.securityJobId, status: 'Pending', engines: ['Syft','OSV','Secret','IaC/Config','License'], location: `/scans?run=${encodeURIComponent(submitted.scanId)}` });
     } catch (error) { return next(error); }
   });
 

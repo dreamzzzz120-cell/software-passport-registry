@@ -1,102 +1,77 @@
 BEGIN;
 
--- Zero-file-loss scan infrastructure.
+-- Zero-file-loss scan infrastructure, built on the durable scan root that
+-- 0102 introduced (scans.id is the stable id every job, finding and evidence
+-- record points at through scan_id).
 --
--- Before this migration a scan left no per-file record anywhere. The
--- repository worker enumerated the acquired archive, kept the manifest paths
--- and threw the rest of the listing away; the content scanners read text files
--- under 2 MB outside a fixed set of ignored directories and never said which
--- files they did not read. A customer could not answer "what did SPR actually
--- inspect?" or "what could SPR not inspect?" -- the honest answer was that the
--- system did not know.
+-- Before 0102 a scan left no per-file record anywhere; 0102/0103 added
+-- scan_file_ledger, written by the security worker as one row per file path
+-- with a single disposition. That table cannot express what this migration
+-- needs and is superseded (left in place, no longer written):
 --
--- Three tables close that gap:
+--   * UNIQUE (scan_id, path) collapses duplicate path occurrences, which the
+--     ledger must preserve;
+--   * one writer overwrote the other's verdict -- the repository job's
+--     catalog result and the security job's content result for the same file
+--     need to MERGE, not race;
+--   * the discovery source was the extracted tree, not the archive listing,
+--     so an entry that failed to extract was never recorded at all.
 --
---   scan_runs             the scan ledger. One row per submitted scan, keyed by
---                         a stable id assigned BEFORE any processing begins and
---                         carrying the tenant, client and software identity the
---                         scan belongs to. It outlives passport generation: a
---                         passport failure is recorded on this row, never by
---                         deleting it.
---   scan_file_inventory   one row per known file per scan, with an explicit
---                         disposition, inspection status and analysis status.
---                         Duplicate path occurrences are preserved (sequence),
---                         nested archive children carry their parent's file id,
---                         and every row names the tool that touched it or the
---                         reason nothing did.
---   scan_coverage         the per-scan accounting: discovered / accounted for /
---                         inspected / partial / analyzed / unsupported /
---                         skipped / failed / inaccessible / with findings /
---                         without findings, plus four SEPARATE coverage ratios.
---                         They are never collapsed into one percentage.
---
--- The legacy `scans` table stays the customer-facing list; it gains a link to
--- the ledger so a row created at submission is the row the worker completes,
--- instead of the worker inserting a second, unrelated row and the first one
--- reading "Scanning" forever (observed in production before this migration).
+-- scan_file_inventory keeps one row per discovered file per scan, keyed by
+-- discovery sequence, with an explicit disposition, inspection status and
+-- analysis status, the tool that produced each, the reason nothing did, and
+-- links to the components, findings and evidence that reference the file.
+-- scan_coverage stores the accounting per scan: discovered / accounted for /
+-- inspected / partial / analyzed / unsupported / skipped / failed /
+-- inaccessible / with findings / without findings, plus four SEPARATE
+-- coverage ratios with their denominators. They are never collapsed into one
+-- percentage.
 
-CREATE TABLE IF NOT EXISTS scan_runs (
-  id text PRIMARY KEY,
-  tenant_id text NOT NULL,
-  client_id text,
-  passport_id text NOT NULL,
-  -- 'github' (public or tenant-credentialed repository) or 'upload' (universal
-  -- intake session) or 'sbom' (an OSV query over a passport's persisted SBOM,
-  -- which has no file inventory). Nothing else is accepted by the workers.
-  source_kind text NOT NULL CHECK (source_kind IN ('github', 'upload', 'sbom')),
-  -- Human-readable source reference: "owner/repository@ref" or the intake
-  -- session id. Never a server path.
-  source_ref text NOT NULL,
+-- The scan root gains what the ledger needs to answer "which software, which
+-- client, which commit, did the passport update succeed?".
+ALTER TABLE public.scans
+  ADD COLUMN IF NOT EXISTS passport_id text,
+  ADD COLUMN IF NOT EXISTS client_id text,
+  -- Human-readable source reference: "owner/repository@ref[:subdir]" or
+  -- "intake:<session id>" or "passport:<id>". Never a server path.
+  ADD COLUMN IF NOT EXISTS source_ref text,
   -- The exact commit both halves of a repository scan examine. The first job
-  -- to resolve the ref pins it here; the second reads it back rather than
-  -- resolving again, so a push between the two jobs cannot make them describe
-  -- different trees under one scan id.
-  resolved_commit_sha text CHECK (resolved_commit_sha IS NULL OR resolved_commit_sha ~ '^[a-f0-9]{40}$'),
-  status text NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'running', 'completed', 'partial', 'failed')),
-  repository_job_id text,
-  security_job_id text,
-  intake_job_id text,
-  intake_session_id text,
-  triggered_by text NOT NULL,
-  failure_code text,
+  -- to resolve the ref pins it; the second reads it back rather than resolving
+  -- again, so a push between the two jobs cannot make them describe different
+  -- trees under one scan id.
+  ADD COLUMN IF NOT EXISTS resolved_commit_sha text,
+  ADD COLUMN IF NOT EXISTS intake_job_id text,
+  ADD COLUMN IF NOT EXISTS intake_session_id text,
   -- Passport association outcome, recorded separately from the scan outcome:
-  -- a scan whose evidence persisted but whose passport upsert or scoring failed
-  -- is 'failed' HERE and still 'completed' as a scan.
-  passport_status text NOT NULL DEFAULT 'pending' CHECK (passport_status IN ('pending', 'associated', 'failed')),
-  passport_failure text,
-  created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  started_at timestamptz,
-  completed_at timestamptz,
-  updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX IF NOT EXISTS idx_scan_runs_tenant_created ON scan_runs(tenant_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_scan_runs_tenant_passport ON scan_runs(tenant_id, passport_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_scan_runs_tenant_client ON scan_runs(tenant_id, client_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_scan_runs_tenant_status ON scan_runs(tenant_id, status);
+  -- a scan whose evidence persisted but whose passport upsert failed is
+  -- 'failed' HERE and still 'Completed' as a scan.
+  ADD COLUMN IF NOT EXISTS passport_status text NOT NULL DEFAULT 'pending',
+  ADD COLUMN IF NOT EXISTS passport_failure text,
+  ADD COLUMN IF NOT EXISTS updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP;
 
-ALTER TABLE agent_jobs ADD COLUMN IF NOT EXISTS scan_run_id text;
-CREATE INDEX IF NOT EXISTS idx_agent_jobs_scan_run ON agent_jobs(scan_run_id);
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'scans_passport_status_check') THEN
+    ALTER TABLE public.scans ADD CONSTRAINT scans_passport_status_check CHECK (passport_status IN ('pending', 'associated', 'failed'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'scans_resolved_commit_sha_check') THEN
+    ALTER TABLE public.scans ADD CONSTRAINT scans_resolved_commit_sha_check CHECK (resolved_commit_sha IS NULL OR resolved_commit_sha ~ '^[a-f0-9]{40}$');
+  END IF;
+END $$;
 
-ALTER TABLE scans ADD COLUMN IF NOT EXISTS scan_run_id text;
-ALTER TABLE scans ADD COLUMN IF NOT EXISTS passport_id text;
-ALTER TABLE scans ADD COLUMN IF NOT EXISTS client_id text;
-ALTER TABLE scans ADD COLUMN IF NOT EXISTS failure_code text;
-CREATE INDEX IF NOT EXISTS idx_scans_scan_run ON scans(scan_run_id);
-CREATE INDEX IF NOT EXISTS idx_scans_tenant_passport ON scans(tenant_id, passport_id);
+CREATE INDEX IF NOT EXISTS idx_scans_tenant_created ON public.scans(tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_scans_tenant_passport ON public.scans(tenant_id, passport_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_scans_tenant_client ON public.scans(tenant_id, client_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_scans_tenant_status ON public.scans(tenant_id, status);
 
 -- Findings gain the file they were observed in, so FINDING -> FILE is a column
 -- rather than a sentence in the description.
-ALTER TABLE scan_findings ADD COLUMN IF NOT EXISTS file_path text;
-ALTER TABLE scan_findings ADD COLUMN IF NOT EXISTS scan_run_id text;
-CREATE INDEX IF NOT EXISTS idx_scan_findings_scan_run ON scan_findings(scan_run_id);
+ALTER TABLE public.scan_findings ADD COLUMN IF NOT EXISTS file_path text;
 
-ALTER TABLE evidence_items ADD COLUMN IF NOT EXISTS scan_run_id text;
-CREATE INDEX IF NOT EXISTS idx_evidence_items_scan_run ON evidence_items(scan_run_id);
-
-CREATE TABLE IF NOT EXISTS scan_file_inventory (
+CREATE TABLE IF NOT EXISTS public.scan_file_inventory (
   id text PRIMARY KEY,
   tenant_id text NOT NULL,
-  scan_run_id text NOT NULL REFERENCES scan_runs(id) ON DELETE RESTRICT,
+  scan_id text NOT NULL REFERENCES public.scans(id) ON DELETE RESTRICT,
   passport_id text NOT NULL,
   client_id text,
   -- The archive or upload this entry was enumerated from. NULL for a top-level
@@ -138,7 +113,8 @@ CREATE TABLE IF NOT EXISTS scan_file_inventory (
   analysis_status text NOT NULL DEFAULT 'not_analyzed' CHECK (analysis_status IN ('analyzed', 'not_analyzed', 'failed')),
   -- What "inspected" meant for this file: 'content' (bytes were read and
   -- scanned), 'catalog' (a package cataloger parsed it), 'listing' (its name
-  -- and size were observed in an archive listing and nothing more).
+  -- and size were observed in an archive listing and nothing more),
+  -- 'extracted' (an uploaded archive whose members were each recorded).
   inspection_level text,
   -- [{ "name": "spr-secret-scanner-v1", "version": "1", "action": "content" }, ...]
   tools jsonb NOT NULL DEFAULT '[]'::jsonb,
@@ -152,19 +128,19 @@ CREATE TABLE IF NOT EXISTS scan_file_inventory (
   related_finding_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
   related_evidence_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
   updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE (scan_run_id, sequence)
+  UNIQUE (scan_id, sequence)
 );
-CREATE INDEX IF NOT EXISTS idx_sfi_tenant_run_seq ON scan_file_inventory(tenant_id, scan_run_id, sequence);
-CREATE INDEX IF NOT EXISTS idx_sfi_tenant_run_disposition ON scan_file_inventory(tenant_id, scan_run_id, disposition);
-CREATE INDEX IF NOT EXISTS idx_sfi_tenant_run_category ON scan_file_inventory(tenant_id, scan_run_id, category);
-CREATE INDEX IF NOT EXISTS idx_sfi_tenant_run_inspection ON scan_file_inventory(tenant_id, scan_run_id, inspection_status);
-CREATE INDEX IF NOT EXISTS idx_sfi_tenant_run_path ON scan_file_inventory(tenant_id, scan_run_id, path);
-CREATE INDEX IF NOT EXISTS idx_sfi_tenant_passport_path ON scan_file_inventory(tenant_id, passport_id, path);
-CREATE INDEX IF NOT EXISTS idx_sfi_tenant_run_sha ON scan_file_inventory(tenant_id, scan_run_id, sha256);
-CREATE INDEX IF NOT EXISTS idx_sfi_parent ON scan_file_inventory(parent_file_id);
+CREATE INDEX IF NOT EXISTS idx_sfi_tenant_scan_seq ON public.scan_file_inventory(tenant_id, scan_id, sequence);
+CREATE INDEX IF NOT EXISTS idx_sfi_tenant_scan_disposition ON public.scan_file_inventory(tenant_id, scan_id, disposition);
+CREATE INDEX IF NOT EXISTS idx_sfi_tenant_scan_category ON public.scan_file_inventory(tenant_id, scan_id, category);
+CREATE INDEX IF NOT EXISTS idx_sfi_tenant_scan_inspection ON public.scan_file_inventory(tenant_id, scan_id, inspection_status);
+CREATE INDEX IF NOT EXISTS idx_sfi_tenant_scan_path ON public.scan_file_inventory(tenant_id, scan_id, path);
+CREATE INDEX IF NOT EXISTS idx_sfi_tenant_passport_path ON public.scan_file_inventory(tenant_id, passport_id, path);
+CREATE INDEX IF NOT EXISTS idx_sfi_tenant_scan_sha ON public.scan_file_inventory(tenant_id, scan_id, sha256);
+CREATE INDEX IF NOT EXISTS idx_sfi_parent ON public.scan_file_inventory(parent_file_id);
 
-CREATE TABLE IF NOT EXISTS scan_coverage (
-  scan_run_id text PRIMARY KEY REFERENCES scan_runs(id) ON DELETE RESTRICT,
+CREATE TABLE IF NOT EXISTS public.scan_coverage (
+  scan_id text PRIMARY KEY REFERENCES public.scans(id) ON DELETE RESTRICT,
   tenant_id text NOT NULL,
   passport_id text NOT NULL,
   files_discovered integer NOT NULL DEFAULT 0,
@@ -198,26 +174,26 @@ CREATE TABLE IF NOT EXISTS scan_coverage (
   limitations jsonb NOT NULL DEFAULT '[]'::jsonb,
   computed_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS idx_scan_coverage_tenant_passport ON scan_coverage(tenant_id, passport_id);
+CREATE INDEX IF NOT EXISTS idx_scan_coverage_tenant_passport ON public.scan_coverage(tenant_id, passport_id);
 
--- Uploaded-file scans: the intake session a scan run consumes. Until now an
--- intake session was claimed, its items marked QUEUED, and nothing consumed
--- them -- the UI reported the files as "queued for SPR analysis" while no
--- analysis existed.
-CREATE TABLE IF NOT EXISTS intake_scan_sources (
+-- Uploaded-file scans: the intake session a scan consumes. Until now an intake
+-- session was claimed, its items marked QUEUED, and nothing consumed them --
+-- the UI reported the files as "queued for SPR analysis" while no analysis
+-- existed.
+CREATE TABLE IF NOT EXISTS public.intake_scan_sources (
   id text PRIMARY KEY,
   job_id text NOT NULL UNIQUE,
-  scan_run_id text NOT NULL REFERENCES scan_runs(id) ON DELETE RESTRICT,
+  scan_id text NOT NULL REFERENCES public.scans(id) ON DELETE RESTRICT,
   tenant_id text NOT NULL,
-  session_id text NOT NULL REFERENCES intake_sessions(id) ON DELETE RESTRICT,
+  session_id text NOT NULL REFERENCES public.intake_sessions(id) ON DELETE RESTRICT,
   item_count integer NOT NULL DEFAULT 0,
   acquired_at timestamptz,
   scanner_error_category text,
   temporary_directory_removed integer NOT NULL DEFAULT 0,
   created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS idx_intake_scan_sources_tenant ON intake_scan_sources(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_intake_scan_sources_session ON intake_scan_sources(session_id);
+CREATE INDEX IF NOT EXISTS idx_intake_scan_sources_tenant ON public.intake_scan_sources(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_intake_scan_sources_session ON public.intake_scan_sources(session_id);
 
 -- Tenant isolation contract (same shape as 0048/0056): RLS enabled and forced,
 -- the app role confined to app.tenant_id, the worker role given its explicit
@@ -226,7 +202,7 @@ DO $$
 DECLARE
   tbl text;
 BEGIN
-  FOREACH tbl IN ARRAY ARRAY['scan_runs', 'scan_file_inventory', 'scan_coverage', 'intake_scan_sources']
+  FOREACH tbl IN ARRAY ARRAY['scan_file_inventory', 'scan_coverage', 'intake_scan_sources']
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', tbl);
@@ -266,7 +242,7 @@ BEGIN
     AND r.relkind = 'r'
     AND (NOT r.relrowsecurity OR NOT r.relforcerowsecurity);
   IF missing IS NOT NULL THEN
-    RAISE EXCEPTION 'TENANT_RLS_NOT_HARDENED after 0102:%', missing;
+    RAISE EXCEPTION 'TENANT_RLS_NOT_HARDENED after 0104:%', missing;
   END IF;
 END $$;
 

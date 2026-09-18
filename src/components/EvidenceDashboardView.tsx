@@ -3,7 +3,7 @@ import { Activity, AlertTriangle, ArrowUpRight, Box, CheckCircle2, ChevronRight,
 import type { Alert, Client, Scan, SoftwarePassport } from '../types';
 import PilotOnboardingChecklist from './PilotOnboardingChecklist';
 
-interface Props { clients: Client[]; alerts: Alert[]; scans: Scan[]; passports: SoftwarePassport[]; findings?: unknown[]; onNavigateTab: (path: string, itemId?: string) => void; onOpenQuickAction: (actionType: 'add-client' | 'register-passport' | 'scan-sbom') => void; }
+interface Props { clients: Client[]; alerts: Alert[]; scans: Scan[]; passports: SoftwarePassport[]; findings?: unknown[]; dataStatus?: 'loading' | 'ready' | 'error'; onNavigateTab: (path: string, itemId?: string) => void; onOpenQuickAction: (actionType: 'add-client' | 'register-passport' | 'scan-sbom') => void; }
 
 const CONNECTORS = [
   { title: 'Code & supply chain', icon: Code2, items: ['GitHub', 'GitLab', 'Bitbucket', 'Package registries', 'SBOMs'] },
@@ -15,7 +15,7 @@ const CONNECTORS = [
 function evidenceCount(passports: SoftwarePassport[]) { return passports.reduce((n, p: any) => n + (Array.isArray(p.evidence) ? p.evidence.length : 0), 0); }
 function verifiedEvidenceCount(passports: SoftwarePassport[]) { return passports.reduce((n, p: any) => n + (Array.isArray(p.evidence) ? p.evidence.filter((e: any) => String(e.status).toUpperCase() === 'VERIFIED').length : 0), 0); }
 
-export default function EvidenceDashboardView({ clients, alerts, scans, passports, findings = [], onNavigateTab, onOpenQuickAction }: Props) {
+export default function EvidenceDashboardView({ clients, alerts, scans, passports, findings = [], dataStatus = 'ready', onNavigateTab, onOpenQuickAction }: Props) {
   const [query, setQuery] = useState('');
   const [tourOpen, setTourOpen] = useState(false);
   const activeAlerts = alerts.filter(a => a.status !== 'Resolved');
@@ -43,7 +43,7 @@ export default function EvidenceDashboardView({ clients, alerts, scans, passport
         onNavigateTab={onNavigateTab}
       />
     )}
-    <section className="spr-panel p-6 md:p-9"><div className="grid gap-8 xl:grid-cols-[1.35fr_.65fr] xl:items-end"><div>
+    <section className="spr-panel p-6 md:p-9"><div className="mb-4 flex flex-wrap items-center gap-2 text-[11px]"><span className={`rounded-sm border px-2.5 py-1 font-semibold uppercase tracking-[.14em] ${dataStatus === 'error' ? 'border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 text-[var(--spr-red)]' : dataStatus === 'loading' ? 'border-[var(--spr-amber)]/40 bg-[var(--spr-amber)]/10 text-[var(--spr-amber)]' : 'border-[var(--spr-border)] bg-[var(--spr-surface-alt)] text-[var(--spr-text-faint)]'}`}>{dataStatus === 'error' ? 'Data unavailable' : dataStatus === 'loading' ? 'Loading tenant records…' : 'Tenant records loaded'}</span>{dataStatus === 'error' && <button type="button" onClick={() => window.dispatchEvent(new Event('refresh-data'))} className="spr-btn spr-btn-secondary px-3 py-1.5 text-[11px]">Retry</button>}</div><div className="grid gap-8 xl:grid-cols-[1.35fr_.65fr] xl:items-end"><div>
       <div className="mb-4 flex flex-wrap gap-2 text-[11px] font-bold uppercase tracking-[.2em] text-[var(--spr-highlight)]"><span className="rounded-sm border border-[var(--spr-border)] bg-[var(--spr-accent-soft)] px-3 py-1.5">SPR Overview</span><span className="rounded-sm border border-[var(--spr-border)] px-3 py-1.5 text-[var(--spr-text-faint)]">Evidence-first</span></div>
       <h1 className="max-w-4xl text-4xl font-semibold tracking-[-.045em] md:text-6xl">Your software trust system, at a glance.</h1>
       <p className="mt-5 max-w-3xl text-base leading-7 text-[var(--spr-text-muted)] md:text-lg">One operating view for clients, software identities, evidence, findings and monitoring. Metrics below are derived from records loaded into this workspace.</p>
