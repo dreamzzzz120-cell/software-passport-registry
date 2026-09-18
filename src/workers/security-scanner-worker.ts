@@ -59,8 +59,8 @@ async function recordFileLedger(pool: Pool, job: any, scanRoot: string, _reposit
     const isSymlink = stat.isSymbolicLink();
     totalBytes += stat.size;
     let hash: string | null = null;
-    let disposition = 'INSPECTED';
-    let inspection = 'inspected';
+    let disposition = 'INVENTORIED';
+    let inspection = 'inventoried';
     let failure: string | null = null;
     let applicable = classification.category !== 'unknown';
     if (isSymlink) {
