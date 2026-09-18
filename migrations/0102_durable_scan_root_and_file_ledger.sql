@@ -65,7 +65,6 @@ CREATE INDEX IF NOT EXISTS evidence_items_scan_id
 CREATE INDEX IF NOT EXISTS scan_findings_scan_id
   ON public.scan_findings (tenant_id, scan_id, detected_at DESC);
 
--- Scan IDs are immutable identifiers. State may change; identity may not.
 CREATE OR REPLACE FUNCTION public.prevent_scan_id_mutation()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -83,9 +82,6 @@ CREATE TRIGGER scans_id_immutable
 BEFORE UPDATE OF id ON public.scans
 FOR EACH ROW EXECUTE FUNCTION public.prevent_scan_id_mutation();
 
--- Preserve tenant isolation for the new ledger. The existing application
--- connection enforces tenant_id at the route layer; workers receive an
--- explicit cross-tenant policy just like the existing worker-owned tables.
 ALTER TABLE public.scan_file_ledger ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.scan_file_ledger FORCE ROW LEVEL SECURITY;
 
@@ -106,7 +102,7 @@ END $$;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.scan_file_ledger TO spr_app_runtime, spr_worker_runtime;
 
-DO $
+DO $$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_policies
@@ -119,8 +115,6 @@ BEGIN
       USING (tenant_id = current_setting('app.tenant_id', true))
       WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
   END IF;
-END $;
-
-ALTER TABLE public.scan_file_ledger FORCE ROW LEVEL SECURITY;
+END $$;
 
 COMMIT;
