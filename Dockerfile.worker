@@ -12,12 +12,13 @@ COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts --no-audit --no-fund
 ARG SOURCE_REV=railway-worker-hardening-20260819-v2
 RUN test "$SOURCE_REV" = "railway-worker-hardening-20260819-v2"
-# The worker never serves the SPA, but `npm run build` builds the client bundle
-# alongside worker.cjs. Pass the Supabase browser values through so that bundle
-# is built the same way as the app image's; see Dockerfile for why they are ARGs.
-ARG VITE_SUPABASE_URL
-ARG VITE_SUPABASE_PUBLISHABLE_KEY
-ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL     VITE_SUPABASE_PUBLISHABLE_KEY=$VITE_SUPABASE_PUBLISHABLE_KEY
+# The worker image does not serve the browser bundle. `npm run build` still
+# invokes Vite, so give that build a deliberately non-production browser config.
+# The real browser configuration belongs only on the app/Vercel build. Keeping
+# placeholders here prevents a worker build from depending on runtime secrets
+# or accidentally embedding a customer's Supabase configuration.
+ENV VITE_SUPABASE_URL=https://worker-build.invalid \
+    VITE_SUPABASE_PUBLISHABLE_KEY=worker-build-placeholder
 COPY . ./
 RUN npm run typecheck && npm run build
 RUN npm prune --omit=dev --no-audit --no-fund
