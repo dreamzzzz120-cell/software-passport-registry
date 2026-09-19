@@ -60,7 +60,10 @@ export default function TrustField({ dimensions, state, centerLabel = 'PASSPORT'
       {demo && <span className="absolute left-1/2 top-0 -translate-x-1/2 rounded-full border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[.15em] text-[var(--spr-text-faint)]">Example data</span>}
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="mx-auto">
         {positioned.map((dimension) => (
-          <line key={`line-${dimension.key}`} x1={center} y1={center} x2={dimension.x} y2={dimension.y} stroke={dimension.value === null ? BORDER : `${centerColor}55`} strokeWidth={1.5} strokeDasharray={dimension.value === null ? '3 4' : undefined} />
+          <g key={`edge-${dimension.key}`} role={onDimensionClick ? 'button' : undefined} tabIndex={onDimensionClick ? 0 : undefined} aria-label={onDimensionClick ? `Open ${dimension.label} relationship` : undefined} onClick={onDimensionClick ? () => onDimensionClick(dimension) : undefined} onKeyDown={onDimensionClick ? (event) => { if (event.key === 'Enter' || event.key === ' ') onDimensionClick(dimension); } : undefined} className={onDimensionClick ? 'cursor-pointer' : undefined}>
+            <line x1={center} y1={center} x2={dimension.x} y2={dimension.y} stroke={dimension.value === null ? BORDER : `${centerColor}55`} strokeWidth={1.5} strokeDasharray={dimension.value === null ? '3 4' : undefined} />
+            {onDimensionClick && <line x1={center} y1={center} x2={dimension.x} y2={dimension.y} stroke="transparent" strokeWidth={14} />}
+          </g>
         ))}
         <circle cx={center} cy={center} r={nodeRadius * 1.15} fill="var(--spr-surface-deep)" stroke={centerColor} strokeWidth={2} className="trust-field-center" />
         <text x={center} y={center - 4} textAnchor="middle" fontSize={size * 0.032} fontWeight={700} fill="var(--spr-text)" fontFamily="ui-monospace, monospace">{centerLabel}</text>
@@ -78,7 +81,8 @@ export default function TrustField({ dimensions, state, centerLabel = 'PASSPORT'
         })}
       </svg>
       {/* Textual fallback so no state depends solely on the SVG. */}
-      <div className="mt-2 text-center text-[11px] text-[var(--spr-text-faint)]">Click any node or connecting line to inspect what SPR actually observed.</div>\n      <ul className="sr-only">
+      <div className="mt-2 text-center text-[11px] text-[var(--spr-text-faint)]">Click any node or connecting line to inspect what SPR actually observed.</div>
+      <ul className="sr-only">
         {dimensions.map((dimension) => <li key={dimension.key}>{dimension.label}: {dimension.value === null ? 'Not available' : dimension.value}</li>)}
       </ul>
       <style>{`
