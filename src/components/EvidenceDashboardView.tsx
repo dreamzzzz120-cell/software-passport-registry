@@ -34,15 +34,14 @@ export default function EvidenceDashboardView({ clients, alerts, scans, passport
   ].slice(0, 6), [activeAlerts, findings]);
 
   return <div className="space-y-6 pb-10">
-    {clients.length === 0 && (
-      <PilotOnboardingChecklist
-        clientsCount={clients.length}
-        passportsCount={passports.length}
-        scansCount={scans.length}
-        onOpenQuickAction={onOpenQuickAction}
-        onNavigateTab={onNavigateTab}
-      />
-    )}
+    {/* Renders itself only while a setup step is still open; see the component. */}
+    <PilotOnboardingChecklist
+      clientsCount={clients.length}
+      passportsCount={passports.length}
+      scansCount={scans.length}
+      onOpenQuickAction={onOpenQuickAction}
+      onNavigateTab={onNavigateTab}
+    />
     <section className="spr-panel p-6 md:p-9"><div className="mb-4 flex flex-wrap items-center gap-2 text-[11px]"><span className={`rounded-sm border px-2.5 py-1 font-semibold uppercase tracking-[.14em] ${dataStatus === 'error' ? 'border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 text-[var(--spr-red)]' : dataStatus === 'loading' ? 'border-[var(--spr-amber)]/40 bg-[var(--spr-amber)]/10 text-[var(--spr-amber)]' : 'border-[var(--spr-border)] bg-[var(--spr-surface-alt)] text-[var(--spr-text-faint)]'}`}>{dataStatus === 'error' ? 'Data unavailable' : dataStatus === 'loading' ? 'Loading tenant records…' : 'Tenant records loaded'}</span>{dataStatus === 'error' && <button type="button" onClick={() => window.dispatchEvent(new Event('refresh-data'))} className="spr-btn spr-btn-secondary px-3 py-1.5 text-[11px]">Retry</button>}</div><div className="grid gap-8 xl:grid-cols-[1.35fr_.65fr] xl:items-end"><div>
       <div className="mb-4 flex flex-wrap gap-2 text-[11px] font-bold uppercase tracking-[.2em] text-[var(--spr-highlight)]"><span className="rounded-sm border border-[var(--spr-border)] bg-[var(--spr-accent-soft)] px-3 py-1.5">SPR Overview</span><span className="rounded-sm border border-[var(--spr-border)] px-3 py-1.5 text-[var(--spr-text-faint)]">Evidence-first</span></div>
       <h1 className="max-w-4xl text-4xl font-semibold tracking-[-.045em] md:text-6xl">Your software trust system, at a glance.</h1>

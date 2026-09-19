@@ -29,19 +29,37 @@ describe('public /msp landing page reuses existing pricing and billing, without 
 describe('first-run onboarding banner on the dashboard', () => {
   const source = () => read('src/components/EvidenceDashboardView.tsx');
 
-  it('is gated strictly on the real clients list being empty, not a separate persisted onboarding flag', () => {
+  // The dashboard no longer gates the checklist on clients.length === 0: that
+  // hid steps 2-5 the moment step 1 was done (observed live 2026-09-19). The
+  // checklist hides itself only when every step's real, saved-data status is
+  // complete; there is still no persisted "onboarding dismissed" flag.
+  it('is rendered by the dashboard without a clients-empty gate or a persisted onboarding flag', () => {
     const s = source();
-    expect(s).toContain('{clients.length === 0 && (');
+    expect(s).not.toContain('{clients.length === 0 && (');
+    expect(s).not.toMatch(/onboarding(Dismissed|Complete|Seen)/i);
+    expect(s).toContain('<PilotOnboardingChecklist');
+  });
+
+  it('hides itself only once every real step is complete', () => {
+    const s = read('src/components/PilotOnboardingChecklist.tsx');
+    expect(s).toContain('const completedCount = tasks.filter(t => t.status).length;');
+    expect(s).toContain('if (completedCount === tasks.length) return null;');
+    expect(s).not.toMatch(/localStorage/);
   });
 
   it('passes its own real onOpenQuickAction/onNavigateTab handlers into PilotOnboardingChecklist, not stubs', () => {
     const s = source();
-    const bannerStart = s.indexOf('{clients.length === 0 && (');
-    const bannerEnd = s.indexOf(')}\n    <section className="spr-panel p-6 md:p-9">');
+    const bannerStart = s.indexOf('<PilotOnboardingChecklist');
+    const bannerEnd = s.indexOf('<section className="spr-panel p-6 md:p-9">');
     const banner = s.slice(bannerStart, bannerEnd);
     expect(banner).toContain('<PilotOnboardingChecklist');
     expect(banner).toContain('onOpenQuickAction={onOpenQuickAction}');
     expect(banner).toContain('onNavigateTab={onNavigateTab}');
+  });
+
+  it("'register-passport' opens New Review, the only place a passport is created", () => {
+    const s = read('src/App.tsx');
+    expect(s).toContain("action === 'register-passport' ? '/extensions/new-review'");
   });
 
   it('PilotOnboardingChecklist actually calls the handlers it is given, so the banner is not a dead button', () => {
