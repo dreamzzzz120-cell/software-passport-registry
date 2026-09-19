@@ -25,10 +25,11 @@ describe('inline theme script is allowed by hash, not by unsafe-inline', () => {
   // NODE_ENV=test. This keeps a regression from reaching main through the
   // default gate, because the failure mode is silent: the browser blocks the
   // request, the server logs nothing, and sign-in simply does nothing.
-  it('connect-src reaches Firebase Auth and the intake store, and is not widened to https:', () => {
+  it('connect-src reaches Supabase and the intake store, carries no Firebase origin, and is not widened to https:', () => {
     const server = read('server.ts');
-    expect(server).toContain('https://identitytoolkit.googleapis.com');
-    expect(server).toContain('https://securetoken.googleapis.com');
+    // Auth moved to Supabase (#264); the Firebase endpoints must not linger in the policy.
+    expect(server).not.toContain('identitytoolkit.googleapis.com');
+    expect(server).not.toContain('securetoken.googleapis.com');
     // The Supabase origin is derived from SUPABASE_URL rather than hardcoded,
     // so assert the derivation exists rather than a literal host.
     expect(server).toContain('supabaseOrigin');
@@ -46,17 +47,16 @@ describe('inline theme script is allowed by hash, not by unsafe-inline', () => {
     expect(scriptSrc).toMatch(/"'sha256-[^"]+='"/);
   });
 
-  // Google sign-in (signInWithPopup) injects https://apis.google.com/js/api.js.
-  // vercel.json allowed it; server.ts did not, and on Railway every Google
-  // sign-in failed with auth/internal-error while the console showed the CSP
-  // block. Pin both configs to the same origin.
-  it('script-src allows the Firebase auth helper on both the Vercel and Express CSP', () => {
+  // Supabase OAuth is a top-level redirect, so no third-party script may run in
+  // the page. The Firebase popup helper (apis.google.com) was the only exception
+  // and left with Firebase Auth.
+  it('script-src allows no third-party script origin on either the Vercel or Express CSP', () => {
     const vercelScriptSrc = read('vercel.json').match(/script-src[^;]*/)?.[0] ?? '';
-    expect(vercelScriptSrc).toContain('https://apis.google.com');
+    expect(vercelScriptSrc).not.toContain('://');
     const server = read('server.ts');
-    expect(server).toContain("const FIREBASE_AUTH_SCRIPT_ORIGINS = ['https://apis.google.com'];");
+    expect(server).not.toContain('FIREBASE_AUTH');
     const scriptSrc = server.match(/scriptSrc: \[[^\]]*\]/)?.[0] ?? '';
-    expect(scriptSrc).toContain('...FIREBASE_AUTH_SCRIPT_ORIGINS');
+    expect(scriptSrc).not.toContain('://');
   });
 
   it('an inline script still exists to be allowed', () => {

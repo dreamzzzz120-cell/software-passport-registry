@@ -29,12 +29,3 @@ export async function signInWithOAuth(provider: 'google' | 'github' = 'google') 
 export async function signInWithPopup(_auth: any, _provider?: unknown) { await signInWithOAuth('google'); return { user: currentUser }; }
 export async function signInWithRedirect(_auth: any, _provider?: unknown) { await signInWithOAuth('google'); }
 export const googleAuthProvider = { providerId: 'google' };
-
-// Temporary compatibility surface for the existing MFA UI. Authentication
-// itself is Supabase; these methods intentionally fail closed until the MFA
-// screen is moved to supabase.auth.mfa.*.
-export const EmailAuthProvider = { credential: (email: string, password: string) => ({ email, password }) };
-export const TotpMultiFactorGenerator = { FACTOR_ID: 'totp', generateSecret: async () => { throw new Error('Authenticator enrollment is being migrated to Supabase MFA.'); }, assertionForEnrollment: () => { throw new Error('Authenticator enrollment is being migrated to Supabase MFA.'); }, assertionForSignIn: () => { throw new Error('Authenticator sign-in is being migrated to Supabase MFA.'); } };
-export function multiFactor(_user: User): any { return { enrolledFactors: [], getSession: async () => { throw new Error('Authenticator enrollment is being migrated to Supabase MFA.'); }, enroll: async () => { throw new Error('Authenticator enrollment is being migrated to Supabase MFA.'); }, unenroll: async () => { throw new Error('Authenticator removal is being migrated to Supabase MFA.'); } }; }
-export async function reauthenticateWithCredential(user: User, credential: { email: string; password: string }) { return signInWithEmailAndPassword(auth, credential.email, credential.password); }
-export function getMultiFactorResolver(): any { return null; }

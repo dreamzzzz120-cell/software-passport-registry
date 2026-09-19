@@ -12,7 +12,6 @@ import {
 } from 'lucide-react';
 import { auth } from '../lib/firebase';
 import { apiFetch } from '../utils/apiClient';
-import MfaSettingsPanel from './MfaSettingsPanel';
 import DataGovernancePanel from './DataGovernancePanel';
 
 interface SettingsViewProps {
@@ -671,7 +670,10 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
               </h3>
 
               <div className="space-y-3.5 text-xs">
-                <MfaSettingsPanel currentUser={auth.currentUser} />
+                <div>
+                  <span className="font-semibold text-[var(--spr-text)] block">Multi-Factor Authentication</span>
+                  <p className="text-[12px] text-[var(--spr-text-faint)]">Not available. SPR does not currently offer authenticator (TOTP) enrolment; sign-in is protected by your Supabase password and email confirmation only.</p>
+                </div>
 
                 <div className="flex justify-between items-center border-t border-[var(--spr-border)] pt-3">
                   <div>
