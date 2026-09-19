@@ -5,6 +5,24 @@ const parsePositiveInt = (value: string | undefined, fallback: number) => {
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
 };
 
+// TLS is configured only through SQL_SSL / SQL_SSL_CA (the ssl object built in
+// createWorkerPool). A query parameter on the URL overrides that object inside
+// pg: `?ssl=require` is parsed to the *string* "require" and crashes the
+// handshake with "Cannot use 'in' operator to search for 'key' in require"
+// (observed live 2026-09-18 21:07Z to 2026-09-19 01:17Z: eight failed worker
+// deploys); `?sslmode=...` silently replaces the CA/verification settings.
+// Refuse both up front with a message that names the variable, instead of
+// failing deep inside pg with no hint of which setting caused it.
+export function rejectTlsQueryParameters(connectionString: string | undefined): void {
+  if (!connectionString) return;
+  let params: URLSearchParams;
+  try { params = new URL(connectionString).searchParams; } catch { return; }
+  const offending = ['ssl', 'sslmode', 'sslrootcert', 'sslcert', 'sslkey'].filter((key) => params.has(key));
+  if (!offending.length) return;
+  const variable = process.env.WORKER_DATABASE_URL?.trim() ? 'WORKER_DATABASE_URL' : 'DATABASE_URL';
+  throw new Error(`WORKER_DB_URL_TLS_PARAMS: ${variable} carries ${offending.map((key) => `?${key}=`).join(', ')}; remove it and configure TLS with SQL_SSL / SQL_SSL_CA instead`);
+}
+
 export function createWorkerPool(): Pool {
   const mode = (process.env.SQL_SSL ?? '').trim().toLowerCase();
   const production = process.env.NODE_ENV === 'production';
@@ -34,6 +52,7 @@ export function createWorkerPool(): Pool {
   // an operator has provisioned WORKER_DATABASE_URL; otherwise falls back to
   // the owner connection, matching appPool's fallback in src/db/index.ts.
   const connectionString = (process.env.WORKER_DATABASE_URL || process.env.DATABASE_URL)?.trim();
+  rejectTlsQueryParameters(connectionString);
   const pool = connectionString
     ? new Pool({ connectionString, ...base })
     : new Pool({ host: process.env.SQL_HOST, user: process.env.SQL_USER, password: process.env.SQL_PASSWORD, database: process.env.SQL_DB_NAME, ...base });
