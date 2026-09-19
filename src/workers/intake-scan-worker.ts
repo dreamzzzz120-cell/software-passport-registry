@@ -306,7 +306,7 @@ async function processIntakeJob(pool: Pool, job: any) {
       const outcome = itemOutcome.get(item.id) ?? 'FAILED';
       await pool.query(`UPDATE intake_items SET status=$3 WHERE id=$1 AND tenant_id=$2`, [item.id, job.tenant_id, outcome]);
     }
-    await pool.query(`UPDATE intake_sessions SET status='COMPLETED' WHERE id=$1 AND tenant_id=$2`, [source.session_id, job.tenant_id]);
+    await pool.query(`UPDATE intake_sessions SET status='CLOSED' WHERE id=$1 AND tenant_id=$2`, [source.session_id, job.tenant_id]);
     await pool.query(`UPDATE agent_jobs SET status='Completed',progress=100,result=$2,error=NULL,completed_at=NOW(),locked_at=NULL,locked_by=NULL,updated_at=NOW() WHERE id=$1 AND tenant_id=$3 AND status='Running' AND locked_by=$4`, [job.id, JSON.stringify({ items: items.length, files: entries.length, componentsQueried: osvComponents.length, findings: scanned.findings.length, passportAssociated, limitations }), job.tenant_id, WORKER_ID]);
     await pool.query(`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES ($1,'intake-scanner',$2,'Info')`, [job.id, `Completed: ${entries.length} file(s) accounted for, ${coverage.filesInspected} inspected, ${coverage.filesAnalyzed} catalogued, ${scanned.findings.length} content finding(s).`]);
     if (passportAssociated) {
