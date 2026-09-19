@@ -18,6 +18,8 @@ const B = 'tenant-keep-me';
 
 async function seed(tenant: string, suffix: string) {
   await db.query(`INSERT INTO users (uid, email, tenant_id, role, onboarded) VALUES ($1, $2, $3, 'Owner', 1)`, [`uid_${suffix}`, `owner_${suffix}@example.test`, tenant]);
+  // An append-only audit row: its trigger refuses DELETE outside a declared workspace deletion.
+  await db.query(`INSERT INTO login_history (id, tenant_id, user_id, ip, user_agent, status) SELECT $1, $2, u.id, '127.0.0.1', 'test', 'Verified' FROM users u WHERE u.uid = $3`, [`lh_${suffix}`, tenant, `uid_${suffix}`]);
   await db.query(`INSERT INTO clients (id, tenant_id, name, domain, industry, trust_score, risk_level, avatar_color, subscription_tier, joined_date, team_count, passport_count, critical_risks_count, compliance_progress) VALUES ($1, $2, 'Client', 'c.example', 'Software', 0, 'Unknown', 'indigo', 'Standard', NOW(), 1, 0, 0, 0)`, [`client_${suffix}`, tenant]);
   await db.query(`INSERT INTO passports (id,tenant_id,client_id,name,version,publisher,category,verification_status,release_date,file_hash,license_type) VALUES ($1,$2,$3,'fixture','pending','x','Repository','unverified','2026-01-01','hash','Unknown')`, [`pass_${suffix}`, tenant, `client_${suffix}`]);
   await db.query(`INSERT INTO scans (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name,software_identity,source,source_ref,passport_id) VALUES ($1,$2,'fixture','Repository scan','uid','Queued',0,0,NOW(),'Client','fixture','github','o/r',$3)`, [`scan_${suffix}`, tenant, `pass_${suffix}`]);
@@ -48,6 +50,19 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(async () => { await pg?.close(); });
+
+describe('append-only audit tables stay immutable outside a declared workspace deletion', () => {
+  it('rejects a plain DELETE on login_history, and a delete declared for a different tenant', async () => {
+    await db.query('BEGIN');
+    await expect(db.query('DELETE FROM login_history WHERE tenant_id = $1', [A])).rejects.toThrow(/LOGIN_HISTORY_IMMUTABLE/);
+    await db.query('ROLLBACK');
+    await db.query('BEGIN');
+    await db.query("SELECT set_config('app.workspace_deletion', $1, true)", [B]);
+    await expect(db.query('DELETE FROM login_history WHERE tenant_id = $1', [A])).rejects.toThrow(/LOGIN_HISTORY_IMMUTABLE/);
+    await db.query('ROLLBACK');
+    expect((await countRows(A)).login_history).toBe(1);
+  });
+});
 
 describe('deleteWorkspaceRows on the real schema', () => {
   it('discovers the tenant tables from information_schema rather than a hard-coded list', async () => {

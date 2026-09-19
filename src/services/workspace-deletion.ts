@@ -70,6 +70,11 @@ export async function countTenantRows(db: Queryable, tenantId: string): Promise<
 export async function deleteWorkspaceRows(db: Queryable, tenantId: string, expected?: Record<string, number>): Promise<WorkspaceDeletionResult> {
   if (!tenantId || tenantId.length > 256) throw new Error('A tenant id is required');
   const tables = await listTenantTables(db);
+  // Declares, for this transaction only, which workspace is being deleted.
+  // The append-only audit tables (login_history, trust_observations, ...)
+  // reject every DELETE except rows of exactly this tenant while this is set
+  // (migration 0110); nothing else in SPR sets it.
+  await db.query("SELECT set_config('app.workspace_deletion', $1, true)", [tenantId]);
   const deleted: Record<string, number> = {};
   let remaining = tables.map((table) => ({ table, reason: '' }));
   let passes = 0;
