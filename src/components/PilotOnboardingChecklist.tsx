@@ -134,9 +134,9 @@ export default function PilotOnboardingChecklist({
     {
       id: 'register-passport',
       title: 'Register software',
-      description: 'Create a Software Passport for an application you want to track.',
+      description: 'Submit a repository or files for review. SPR creates the Software Passport from what it observes; there is no form that creates one by hand.',
       status: passportsCount > 0,
-      actionLabel: 'Create Passport',
+      actionLabel: 'Start a review',
       action: () => onOpenQuickAction('register-passport'),
       completedText: `${passportsCount} passport${passportsCount === 1 ? '' : 's'} created`
     },
@@ -171,6 +171,13 @@ export default function PilotOnboardingChecklist({
 
   const completedCount = tasks.filter(t => t.status).length;
   const progressPercent = (completedCount / tasks.length) * 100;
+
+  // The checklist exists to get a new workspace through all five steps. It
+  // used to be gated by the dashboard on `clients.length === 0`, so it
+  // disappeared the moment step 1 was done and steps 2-5 were never shown
+  // again (observed live 2026-09-19 on the SPR dogfood workspace). It now
+  // stays until every step is complete, and only then leaves the dashboard.
+  if (completedCount === tasks.length) return null;
 
   const statusBadge = (provider: RepoProvider) => {
     const status = statusOf(provider);
