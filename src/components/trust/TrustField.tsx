@@ -24,6 +24,7 @@ interface TrustFieldProps {
   /** Marks the visualization as illustrative rather than a real Passport's data (required whenever no real backend record backs it -- see the honesty policy this component exists to uphold). */
   demo?: boolean;
   size?: number;
+  onDimensionClick?: (dimension: TrustFieldDimension) => void;
 }
 
 const STATE_COLOR: Record<TrustState, string> = {
@@ -41,7 +42,7 @@ const STATE_COLOR: Record<TrustState, string> = {
 // and the only animation is a slow center-node pulse gated on
 // prefers-reduced-motion so it never becomes the sole carrier of information
 // (every value is also present as plain text below the node).
-export default function TrustField({ dimensions, state, centerLabel = 'PASSPORT', demo = false, size = 340 }: TrustFieldProps) {
+export default function TrustField({ dimensions, state, centerLabel = 'PASSPORT', demo = false, size = 340, onDimensionClick }: TrustFieldProps) {
   const radius = size * 0.36;
   const center = size / 2;
   const nodeRadius = Math.max(30, size * 0.09);
@@ -68,9 +69,9 @@ export default function TrustField({ dimensions, state, centerLabel = 'PASSPORT'
           const color = known ? centerColor : NEUTRAL;
           return (
             <g key={dimension.key}>
-              <circle cx={dimension.x} cy={dimension.y} r={nodeRadius} fill="var(--spr-surface)" stroke={color} strokeWidth={known ? 1.5 : 1} strokeDasharray={known ? undefined : '3 3'} />
-              <text x={dimension.x} y={dimension.y - 3} textAnchor="middle" fontSize={size * 0.028} fontWeight={700} fill={known ? 'var(--spr-text)' : NEUTRAL} fontFamily="ui-monospace, monospace">{known ? dimension.value : 'N/A'}</text>
-              <text x={dimension.x} y={dimension.y + size * 0.045} textAnchor="middle" fontSize={size * 0.023} fill={NEUTRAL} className="uppercase tracking-wide">{dimension.label}</text>
+              {onDimensionClick ? <circle role="button" tabIndex={0} aria-label={`Open ${dimension.label} evidence`} onClick={() => onDimensionClick(dimension)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') onDimensionClick(dimension); }} cx={dimension.x} cy={dimension.y} r={nodeRadius + 6} fill="var(--spr-surface)" stroke={color} strokeWidth={known ? 2 : 1} strokeDasharray={known ? undefined : '3 3'} className="cursor-pointer" /> : <circle cx={dimension.x} cy={dimension.y} r={nodeRadius} fill="var(--spr-surface)" stroke={color} strokeWidth={known ? 1.5 : 1} strokeDasharray={known ? undefined : '3 3'} />}
+              <text pointerEvents="none" x={dimension.x} y={dimension.y - 3} textAnchor="middle" fontSize={size * 0.028} fontWeight={700} fill={known ? 'var(--spr-text)' : NEUTRAL} fontFamily="ui-monospace, monospace">{known ? dimension.value : 'N/A'}</text>
+              <text pointerEvents="none" x={dimension.x} y={dimension.y + size * 0.045} textAnchor="middle" fontSize={size * 0.023} fill={NEUTRAL} className="uppercase tracking-wide">{dimension.label}</text>
             </g>
           );
         })}
