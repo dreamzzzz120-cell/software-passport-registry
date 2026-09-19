@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { AlertTriangle, ArrowRight, CheckCircle2, ExternalLink, FileSearch, Loader2, Radio, ShieldQuestion, X } from 'lucide-react';
 import { apiFetch } from '../../utils/apiClient';
 import TrustField from './TrustField';
+import TrustLineage from './TrustLineage';
 import TrustStateBadge, { EvidenceStatusBadge, evidenceStatusMeta, trustStateFromDecision, type VerificationDecisionState } from './TrustStateBadge';
 import { DecisionHero } from '../design/CommandCenter';
 import type { Client, SoftwarePassport } from '../../types';
@@ -171,14 +172,23 @@ export default function TrustRoom({ passport, client, canRunAudit, auditBusy, on
         </section>
       ) : <>
 
+      <TrustLineage
+        passport={passport}
+        evidence={evidence}
+        findings={vulnerabilities}
+        verificationDecision={verificationDecision}
+        verificationExplanation={verificationExplanation}
+        verificationPolicyVersion={verificationPolicyVersion}
+        onOpenPassport={() => onNavigateTab('/passport', passport.id)}
+        onOpenEvidence={(item) => setSelectedEvidence(item)}
+        onOpenFinding={(finding) => setSelectedFinding(finding)}
+        onOpenVerification={() => onNavigateTab('/passport', passport.id)}
+      />
+
       <section className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6">
         <h2 className="text-xs font-bold uppercase tracking-[.14em] text-[var(--spr-text-faint)]">Current trust state</h2>
         <div className="mt-3"><TrustStateBadge state={trustState} /></div>
         <p className="mt-2 text-sm text-[var(--spr-text-muted)]">{trustState === 'EVIDENCE_INCOMPLETE' ? 'Authoritative evidence is unavailable or insufficient. SPR does not infer a pass.' : 'Based on the latest available verified observations.'}</p>
-
-        <div className="mt-6 flex justify-center">
-          <TrustField state={trustState} centerLabel={passport.name?.slice(0, 12).toUpperCase() || 'PASSPORT'} size={300} dimensions={dimensions} onCenterClick={() => onNavigateTab('/passport', passport.id)} onDimensionClick={(dimension) => setSelectedDimension(dimension)} />
-        </div>
 
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
           <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-4">
