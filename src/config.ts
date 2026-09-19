@@ -39,7 +39,6 @@ const envSchema = z.object({
   SQL_SSL: z.preprocess((value) => typeof value === 'string' ? (value.trim() || undefined) : value, z.enum(['true', 'require', 'verify', 'verify-full', 'false', '1', '0']).optional()),
   SQL_SSL_CA: optionalTrimmedString,
   SQL_POOL_MAX: optionalPositiveIntegerString, SQL_CONNECTION_TIMEOUT_MS: optionalPositiveIntegerString, SQL_IDLE_TIMEOUT_MS: optionalPositiveIntegerString, SQL_QUERY_TIMEOUT_MS: optionalPositiveIntegerString,
-  FIREBASE_PROJECT_ID: optionalTrimmedString, FIREBASE_SERVICE_ACCOUNT_KEY: optionalTrimmedString, FIREBASE_SERVICE_ACCOUNT_KEY_B64: optionalTrimmedString, GOOGLE_APPLICATION_CREDENTIALS: optionalTrimmedString,
   STRIPE_SECRET_KEY: optionalTrimmedString, STRIPE_WEBHOOK_SECRET: optionalTrimmedString,
   STRIPE_PRICE_PILOT: optionalTrimmedString, STRIPE_PRICE_STARTER: optionalTrimmedString, STRIPE_PRICE_PROFESSIONAL: optionalTrimmedString, STRIPE_PRICE_GROWTH: optionalTrimmedString, STRIPE_PRICE_ENTERPRISE: optionalTrimmedString,
   STRIPE_PRICE_MSP_PILOT: optionalTrimmedString, STRIPE_PRICE_MSP_GROWTH: optionalTrimmedString, STRIPE_PRICE_MSP_SCALE: optionalTrimmedString,
@@ -99,7 +98,6 @@ export const config = {
     poolMax: parseNumber(parsedEnv.SQL_POOL_MAX, 20), connectionTimeoutMs: parseNumber(parsedEnv.SQL_CONNECTION_TIMEOUT_MS, 10000), idleTimeoutMs: parseNumber(parsedEnv.SQL_IDLE_TIMEOUT_MS, 30000), queryTimeoutMs: parseNumber(parsedEnv.SQL_QUERY_TIMEOUT_MS, 5000),
     isConfigured: Boolean(parsedEnv.DATABASE_URL || (parsedEnv.SQL_HOST && parsedEnv.SQL_USER && parsedEnv.SQL_PASSWORD && parsedEnv.SQL_DB_NAME)),
   },
-  firebase: { projectId: parsedEnv.FIREBASE_PROJECT_ID, serviceAccountKey: parsedEnv.FIREBASE_SERVICE_ACCOUNT_KEY, serviceAccountKeyB64: parsedEnv.FIREBASE_SERVICE_ACCOUNT_KEY_B64, googleApplicationCredentials: parsedEnv.GOOGLE_APPLICATION_CREDENTIALS },
   stripe: {
     secretKey: parsedEnv.STRIPE_SECRET_KEY, webhookSecret: parsedEnv.STRIPE_WEBHOOK_SECRET,
     prices: {
@@ -160,7 +158,6 @@ export function validateConfiguration() {
   if (!config.database.ssl) missing.push('SQL_SSL=true/require/verify/verify-full');
   if (config.database.sslVerify && !config.database.sslCa && !['verify-full', 'verify'].includes(parsedEnv.SQL_SSL ?? '')) missing.push('SQL_SSL_CA for certificate verification');
   if (!config.redis.url) missing.push('REDIS_URL');
-  if (!config.firebase.serviceAccountKey && !config.firebase.serviceAccountKeyB64 && !config.firebase.googleApplicationCredentials) missing.push('FIREBASE_SERVICE_ACCOUNT_KEY, FIREBASE_SERVICE_ACCOUNT_KEY_B64, or GOOGLE_APPLICATION_CREDENTIALS');
   if (!config.publicPassport.secret || config.publicPassport.secret.length < 32) missing.push('SPR_PUBLIC_PASSPORT_SECRET (32+ characters)');
   const bootstrapValues = [config.ownerBootstrap.initialOwnerEmail, config.ownerBootstrap.secret, config.ownerBootstrap.secretSha256];
   if (bootstrapValues.some(Boolean) && !bootstrapValues.every(Boolean)) throw new Error('Incomplete initial-owner bootstrap configuration: all three bootstrap values are required together.');
@@ -177,7 +174,7 @@ export const configurationCatalog = [
   { name: 'APP_URL', category: 'requiredProduction', requiredInProduction: true }, { name: 'APP_ALLOWED_ORIGINS', category: 'requiredProduction', requiredInProduction: true },
   { name: 'ENFORCE_HTTPS', category: 'requiredProduction', requiredInProduction: true }, { name: 'TRUST_PROXY', category: 'requiredProduction', requiredInProduction: true },
   { name: 'ALLOW_IFRAME', category: 'requiredProduction', requiredInProduction: true }, { name: 'SQL_SSL', category: 'requiredProduction', requiredInProduction: true },
-  { name: 'SQL_SSL_CA', category: 'requiredWhenVerificationIsEnabled', requiredInProduction: false }, { name: 'REDIS_URL', category: 'requiredProduction', requiredInProduction: true }, { name: 'FIREBASE_SERVICE_ACCOUNT_KEY or FIREBASE_SERVICE_ACCOUNT_KEY_B64', category: 'requiredProduction', requiredInProduction: true },
+  { name: 'SQL_SSL_CA', category: 'requiredWhenVerificationIsEnabled', requiredInProduction: false }, { name: 'REDIS_URL', category: 'requiredProduction', requiredInProduction: true },
   { name: 'SPR_PUBLIC_PASSPORT_SECRET', category: 'requiredProduction', requiredInProduction: true },
   { name: 'AI_GATEWAY_API_KEY', category: 'featureSpecific', requiredInProduction: false }, { name: 'SPR_OWNER_BOOTSTRAP_SECRET_SHA256', category: 'bootstrap-only', requiredInProduction: false },
   { name: 'SPR_FULFILMENT_EMAIL', category: 'featureSpecific', requiredInProduction: false },
