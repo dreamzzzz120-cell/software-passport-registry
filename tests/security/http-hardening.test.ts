@@ -71,12 +71,12 @@ suite('HTTP hardening', () => {
   // browser, so sign-in did nothing and surfaced no error -- the whole
   // authenticated product was unreachable while every server-side check looked
   // healthy. Asserted on the real response header, not on the source.
-  it('allows the browser to reach Firebase Auth, without widening connect-src', async () => {
+  it('allows the browser to reach Supabase, carries no Firebase origin, without widening connect-src', async () => {
     const response = await fetch(`${baseUrl}/health`);
     const csp = response.headers.get('content-security-policy') ?? '';
     const connectSrc = csp.split(';').map((d) => d.trim()).find((d) => d.startsWith('connect-src')) ?? '';
-    expect(connectSrc).toContain('https://identitytoolkit.googleapis.com');
-    expect(connectSrc).toContain('https://securetoken.googleapis.com');
+    expect(connectSrc).not.toContain('identitytoolkit.googleapis.com');
+    expect(connectSrc).not.toContain('securetoken.googleapis.com');
     // Bounding exfiltration is the entire point of connect-src: a blanket
     // https: would allow any destination and defeat it.
     expect(connectSrc.split(/\s+/)).not.toContain('https:');
