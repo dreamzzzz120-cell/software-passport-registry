@@ -44,3 +44,6 @@ tests/dist/
 
 .vercel
 .env*
+
+# Firebase CLI debug output (auth was migrated to Supabase; nothing should write this)
+firebase-debug.log
