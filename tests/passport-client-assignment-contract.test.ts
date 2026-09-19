@@ -13,7 +13,7 @@ const read = (rel: string) => fs.readFileSync(path.resolve(__dirname, '..', rel)
 describe('PATCH /api/user/passports/:id/client', () => {
   const s = read('src/routes/auth.ts');
   it('exists, is authenticated and limited to roles that may mutate passports', () => {
-    expect(s).toContain("router.patch('/user/passports/:id/client', requireAuth, requireRole(['Owner', 'Admin', 'Operator'])");
+    expect(s).toContain("router.patch('/user/passports/:id/client', requireAuth, requireRole(['Owner', 'Admin', 'Operator']), rateLimiter");
   });
   it('checks the client belongs to the caller\'s tenant before assigning it', () => {
     const start = s.indexOf("router.patch('/user/passports/:id/client'");

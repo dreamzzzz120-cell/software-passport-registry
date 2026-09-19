@@ -576,7 +576,7 @@ export default function App() {
       break;
     case '/billing': view = <BillingView />; break;
     case '/pricing': view = <MspPricingView isAuthenticated={true} onPrimaryAction={() => navigate('/billing')} />; break;
-    case '/settings': view = <SettingsView theme={theme} onToggleTheme={() => { window.localStorage.setItem('spr-theme-choice', '1'); setTheme((current) => current === 'dark' ? 'light' : 'dark'); }} />; break;
+    case '/settings': view = <SettingsView theme={theme} onToggleTheme={() => { window.localStorage.setItem('spr-theme-choice', '1'); setTheme((current) => current === 'dark' ? 'light' : 'dark'); }} role={role} userEmail={user.email ?? undefined} onWorkspaceDeleted={signOutUser} />; break;
     case '/white-label': view = <WhiteLabelView role={role} passports={passports} branding={branding} theme={theme} onBrandingSaved={setBranding} onPreview={onBrandingPreview} />; break;
     case '/team': view = <TeamView role={role} />; break;
     case '/audit-log': view = <AuditLogView />; break;

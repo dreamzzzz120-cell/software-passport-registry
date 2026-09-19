@@ -17,6 +17,10 @@ import DataGovernancePanel from './DataGovernancePanel';
 interface SettingsViewProps {
   theme: 'light' | 'dark';
   onToggleTheme: () => void;
+  /** Signed-in user's role and email; the workspace deletion panel is shown to Owners only. */
+  role?: string;
+  userEmail?: string;
+  onWorkspaceDeleted?: () => void | Promise<void>;
 }
 
 function formatUptime(totalSeconds: number): string {
@@ -28,7 +32,52 @@ function formatUptime(totalSeconds: number): string {
   return `${minutes}m`;
 }
 
-export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps) {
+function DeleteWorkspacePanel({ userEmail, onWorkspaceDeleted }: { userEmail: string; onWorkspaceDeleted?: () => void | Promise<void> }) {
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [result, setResult] = useState<{ rows: number; tables: number; logins: { deleted: string[]; retained: { email: string; reason: string }[] } } | null>(null);
+  const matches = confirm.trim().toLowerCase() === userEmail.trim().toLowerCase();
+  // DELETE /api/organization removes every row this workspace owns in one
+  // transaction and then the logins of members who belong to no other
+  // workspace. The response is shown as returned: which tables, how many
+  // rows, which logins were removed and which were kept and why.
+  const run = async () => {
+    if (!matches || busy) return;
+    setBusy(true); setError('');
+    try {
+      const response = await apiFetch('/api/organization', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirm: confirm.trim() }) });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) { setError(body?.message || body?.error || 'The workspace was not deleted.'); return; }
+      const rows = Object.values(body.deleted || {}).reduce((a: number, b: any) => a + Number(b), 0) as number;
+      setResult({ rows, tables: Object.keys(body.deleted || {}).length, logins: body.logins });
+      await onWorkspaceDeleted?.();
+    } catch { setError('The deletion request failed before the server answered; nothing is known to have been removed.'); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="spr-panel p-5 space-y-3 border-red-500/40" aria-labelledby="delete-workspace-title">
+      <h3 id="delete-workspace-title" className="text-xs font-bold text-red-300 flex items-center gap-2"><Trash2 className="w-4 h-4" /> Delete this workspace</h3>
+      <p className="text-xs text-[var(--spr-text-muted)] leading-relaxed">Permanently removes every client, passport, scan, finding, evidence record, integration credential, audit entry and team member of this workspace, then the sign-in of every member who belongs to no other workspace. This cannot be undone and there is no backup restore for it.</p>
+      {result ? (
+        <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] p-3 text-xs space-y-1">
+          <div className="font-semibold text-[var(--spr-text)]">Workspace deleted.</div>
+          <div>{result.rows} row(s) removed across {result.tables} table(s).</div>
+          <div>Sign-ins removed: {result.logins?.deleted?.length ? result.logins.deleted.join(', ') : 'none'}.</div>
+          {result.logins?.retained?.length > 0 && <div>Sign-ins kept: {result.logins.retained.map((r) => `${r.email} (${r.reason})`).join('; ')}.</div>}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2 md:flex-row md:items-center">
+          <input value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder={`Type ${userEmail} to confirm`} aria-label="Type your email to confirm workspace deletion" className="min-w-0 flex-1 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-sm text-[var(--spr-text)] outline-none focus:border-red-400" />
+          <button type="button" onClick={() => void run()} disabled={!matches || busy} className="rounded-md border border-red-500/60 bg-red-500/10 px-4 py-2 text-xs font-bold text-red-300 disabled:opacity-40">{busy ? 'Deleting…' : 'Delete workspace permanently'}</button>
+        </div>
+      )}
+      {error && <div role="alert" className="text-xs text-red-300">{error}</div>}
+    </div>
+  );
+}
+
+export default function SettingsView({ theme, onToggleTheme, role, userEmail, onWorkspaceDeleted }: SettingsViewProps) {
   const [activeSubTab, setActiveSubTab] = useState<'configurations' | 'organization' | 'guide'>('configurations');
   const [offboarding, setOffboarding] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -1102,6 +1151,7 @@ export default function SettingsView({ theme, onToggleTheme }: SettingsViewProps
       ) : (
         <GettingStartedGuide />
       )}
+      {role === 'Owner' && userEmail && <DeleteWorkspacePanel userEmail={userEmail} onWorkspaceDeleted={onWorkspaceDeleted} />}
     </div>
   );
 }

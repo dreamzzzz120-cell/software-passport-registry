@@ -13,13 +13,14 @@ import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { config } from '../config.ts';
 import { users } from '../db/schema.ts';
-import { db, checkDatabaseHealth, appPool } from '../db/index.ts';
+import { db, checkDatabaseHealth, appPool, pool } from '../db/index.ts';
 import { attachTenantScope } from '../middleware/tenant-scope.ts';
 import { AuthenticatedRequest, requireAuth, requireRole, requireFounder, rateLimiter } from '../middleware/security.ts';
 import { adminAuth, setUserCustomClaims } from '../lib/firebase-admin.ts';
 import { isEmailProviderConfigured } from '../lib/email.ts';
 import { loadEmailBrand, renderBrandedEmail, sendBrandedEmail, tenantIdForEmail, tenantIdForUid } from '../lib/branded-email.ts';
 import { appendAuditEntry, verifyAuditChain } from '../security/audit-log.ts';
+import { deleteWorkspaceRows, WorkspaceDeletionBlocked, type WorkspaceDeletionResult } from '../services/workspace-deletion.ts';
 import { describeUserAgent, sessionFingerprint } from '../security/session-tracking.ts';
 import { offboardTenantData } from '../db/sync.ts';
 import { canCreateClient, PLAN_CONFIG } from './billing.ts';
@@ -384,6 +385,61 @@ export function createAuthRouter() {
       await setUserCustomClaims(row.uid, { workspaceId: req.user!.tenantId, role: parsed.data.role });
       await appendAuditEntry(db, { tenantId: req.user!.tenantId, action: 'team.role_changed', actor: req.user!.email, payload: { targetUserId: targetId, newRole: parsed.data.role } });
       return res.json({ id: row.id, email: row.email, role: row.role });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  // Deletes the caller's whole workspace: every row the tenant owns, in one
+  // transaction, then the login of every member whose only workspace this
+  // was. Owner only, and the owner must retype their own email to confirm.
+  // The result reports exactly what was removed; when a login could not be
+  // deleted (for example the Supabase service role key is not configured)
+  // that is stated, never implied away. rateLimiter is already global for
+  // /api; it is repeated here so CodeQL's per-route check sees it.
+  const deleteWorkspaceSchema = z.object({ confirm: z.string().trim().min(3).max(320) }).strict();
+  router.delete('/organization', requireAuth, requireRole('Owner'), rateLimiter, async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const parsed = deleteWorkspaceSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+      const tenantId = req.user!.tenantId;
+      if (parsed.data.confirm.toLowerCase() !== req.user!.email.trim().toLowerCase()) {
+        return res.status(400).json({ error: 'CONFIRMATION_MISMATCH', message: 'Type the workspace owner email exactly to confirm deletion.' });
+      }
+      const members = ((await req.db!.execute(sql`SELECT uid, email FROM users WHERE tenant_id=${tenantId}`)) as any).rows as { uid: string; email: string }[];
+
+      // The owner-role pool, like migrations: the service filters every
+      // statement by tenant_id itself, and this must not depend on each of
+      // the 100+ tenant tables carrying a DELETE policy for the RLS role.
+      const client = await pool.connect();
+      let deletion: WorkspaceDeletionResult;
+      try {
+        await client.query('BEGIN');
+        deletion = await deleteWorkspaceRows(client, tenantId);
+        await client.query('COMMIT');
+      } catch (error) {
+        try { await client.query('ROLLBACK'); } catch { /* connection is released below either way */ }
+        if (error instanceof WorkspaceDeletionBlocked) {
+          console.error(JSON.stringify({ event: 'workspace_deletion_blocked', tenantId, remaining: error.remaining }));
+          return res.status(409).json({ error: 'WORKSPACE_DELETION_BLOCKED', message: 'Some workspace records could not be deleted; nothing was removed.', remaining: error.remaining });
+        }
+        throw error;
+      } finally {
+        client.release();
+      }
+
+      // Logins are deleted only for members with no remaining workspace row
+      // anywhere (the owner-role connection sees every tenant).
+      const authDeleted: string[] = [];
+      const authRetained: { email: string; reason: string }[] = [];
+      for (const member of members) {
+        const elsewhere = ((await db.execute(sql`SELECT COUNT(*)::int AS n FROM users WHERE uid=${member.uid}`)) as any).rows?.[0]?.n ?? 0;
+        if (Number(elsewhere) > 0) { authRetained.push({ email: member.email, reason: 'MEMBER_OF_ANOTHER_WORKSPACE' }); continue; }
+        try { await adminAuth.deleteUser(member.uid); authDeleted.push(member.email); }
+        catch (error) { authRetained.push({ email: member.email, reason: error instanceof Error ? error.message.slice(0, 200) : 'AUTH_DELETE_FAILED' }); }
+      }
+      console.warn(JSON.stringify({ event: 'workspace_deleted', tenantId, by: req.user!.uid, tables: Object.keys(deletion.deleted).length, rows: Object.values(deletion.deleted).reduce((a, b) => a + b, 0), authDeleted: authDeleted.length, authRetained }));
+      return res.json({ tenantId, deleted: deletion.deleted, tablesExamined: deletion.tablesExamined, passes: deletion.passes, logins: { deleted: authDeleted, retained: authRetained } });
     } catch (error) {
       return next(error);
     }
@@ -929,7 +985,8 @@ export function createAuthRouter() {
   // view can find (observed live 2026-09-19); the client must belong to the
   // caller's tenant, never trusted from the body alone.
   const assignPassportClientSchema = z.object({ clientId: z.string().min(1).max(200).nullable() }).strict();
-  router.patch('/user/passports/:id/client', requireAuth, requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
+  // rateLimiter is already global for /api; repeated so CodeQL's per-route check sees it (alert #376).
+  router.patch('/user/passports/:id/client', requireAuth, requireRole(['Owner', 'Admin', 'Operator']), rateLimiter, async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
       const parsed = assignPassportClientSchema.safeParse(req.body);
