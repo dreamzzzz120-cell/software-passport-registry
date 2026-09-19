@@ -148,7 +148,7 @@ function LineageCard({ icon, eyebrow, title, subtitle, children, onClick, compac
   eyebrow: string;
   title: string;
   subtitle: string;
-  children?: React.ReactNode;
+  children?: ReactNode;
   onClick: () => void;
   compact?: boolean;
 }) {
