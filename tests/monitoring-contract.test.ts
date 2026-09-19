@@ -139,3 +139,24 @@ describe('monitoring enrollment UI', () => {
     expect(s).toContain("const canManageAlerts = role === 'Owner' || role === 'Admin' || role === 'Technician';");
   });
 });
+
+// Observed on the live dogfood workspace 2026-09-19: /api/monitoring answered
+// 404 MONITORING_NOT_ENABLED because the tenant was not in the
+// MONITORING_ENABLED_TENANT_IDS Railway variable, and the view told the user
+// to "ask an Owner to enable it" -- a control that never existed. The plan's
+// Active Passport entitlement (migration 0064) is the only legitimate gate.
+describe('monitoring is gated by the plan entitlement, not an operator allowlist', () => {
+  it('has no tenant allowlist anywhere in the server, config, or env contract', () => {
+    for (const file of ['src/routes/monitoring.ts', 'src/config.ts', '.env.example']) {
+      expect(read(file), file).not.toContain('MONITORING_ENABLED_TENANT_IDS');
+      expect(read(file), file).not.toContain('MONITORING_NOT_ENABLED');
+      expect(read(file), file).not.toContain('enabledTenantIds');
+    }
+  });
+
+  it('does not show a dead-end "ask an Owner" message in the monitoring view', () => {
+    const view = read('src/components/MonitoringView.tsx');
+    expect(view).not.toContain('Ask an Owner to enable it');
+    expect(view).not.toContain('monitoringDisabled');
+  });
+});
