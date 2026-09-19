@@ -24,9 +24,27 @@ interface PassportsViewProps {
   clients?: Client[];
   assets?: any[];
   role?: string;
+  /** Re-fetches workspace data (clients, passports, scans) after a server-side change. */
+  onReload?: () => void;
 }
 
-export default function PassportsView({ passports, selectedPassportId, setSelectedPassportId, searchQuery, onNavigateTab, onUpdatePassport, clients = [], assets = [], role = 'Viewer', verificationDecisions, verificationDetails }: PassportsViewProps) {
+export default function PassportsView({ passports, selectedPassportId, setSelectedPassportId, searchQuery, onNavigateTab, onUpdatePassport, clients = [], assets = [], role = 'Viewer', verificationDecisions, verificationDetails, onReload }: PassportsViewProps) {
+  const canAssignClient = ['Owner', 'Admin', 'Operator'].includes(role);
+  const [assignBusy, setAssignBusy] = useState(false);
+  const [assignError, setAssignError] = useState('');
+  // PATCH /api/user/passports/:id/client moves the passport and its scans
+  // under a client of this workspace; the workspace is then re-fetched so
+  // client views, the ledger and this panel all read the same saved state.
+  const assignClient = async (passportId: string, clientId: string | null) => {
+    setAssignBusy(true); setAssignError('');
+    try {
+      const response = await apiFetch(`/api/user/passports/${encodeURIComponent(passportId)}/client`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId }) });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) { setAssignError(body?.error || 'The client assignment was not saved.'); return; }
+      onReload?.();
+    } catch { setAssignError('The client assignment request failed.'); }
+    finally { setAssignBusy(false); }
+  };
   // Matches backend gating exactly: POST /api/agent-jobs requires
   // Owner/Admin/Operator (scans.ts); POST /api/trust-loop/remediations
   // additionally allows Technician (server.ts requireTrustMutationRole).
@@ -160,6 +178,18 @@ export default function PassportsView({ passports, selectedPassportId, setSelect
           {filtered.length === 0 && <div className="rounded-md border border-dashed border-[var(--spr-border)] p-12 text-center md:col-span-2 xl:col-span-3"><FileCheck2 className="mx-auto h-8 w-8 text-[var(--spr-text-faint)]" /><p className="mt-3 text-sm font-semibold text-[var(--spr-text)]">No passport records match this view.</p><p className="mt-1 text-xs text-[var(--spr-text-faint)]">Adjust the search or category filter.</p></div>}
         </div>
 
+        {selected && (
+          <div className="flex flex-wrap items-center gap-3 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] px-4 py-3 text-xs">
+            <span className="font-semibold uppercase tracking-[.14em] text-[var(--spr-text-muted)]">Client</span>
+            <select aria-label="Assign passport to client" disabled={!canAssignClient || assignBusy} value={selected.clientId ?? ''} onChange={(e) => void assignClient(selected.id, e.target.value || null)} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-sm text-[var(--spr-text)] disabled:opacity-60">
+              <option value="">Unassigned</option>
+              {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            {assignBusy && <span className="text-[var(--spr-text-muted)]">Saving…</span>}
+            {assignError && <span role="alert" className="text-red-300">{assignError}</span>}
+            {!canAssignClient && <span className="text-[var(--spr-text-faint)]">Your {role} role cannot reassign passports.</span>}
+          </div>
+        )}
         {selected && (
           <TrustRoom
             passport={selected}

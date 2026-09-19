@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, CheckCircle2, FileArchive, Loader2, ShieldCheck, Upload } from 'lucide-react';
 import { Github } from 'lucide-react-base';
 import { apiFetch } from '../utils/apiClient';
@@ -21,8 +21,25 @@ async function digest(file: File) {
   return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-export default function NewReviewIntake({ clientId = null }: { clientId?: string | null } = {}) {
+export default function NewReviewIntake({ clientId: initialClientId = null }: { clientId?: string | null } = {}) {
   const [mode, setMode] = useState<'repository' | 'files'>('repository');
+  // Which client the passport belongs to, and what it is called. Both are
+  // sent to /api/scans/submit as clientId / name. Without them an upload
+  // used to create an unassigned passport named after the zip file (observed
+  // live 2026-09-19), which no client view could find.
+  const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
+  const [clientId, setClientId] = useState<string | null>(initialClientId);
+  const [softwareName, setSoftwareName] = useState('');
+  useEffect(() => {
+    let mounted = true;
+    apiFetch('/api/user/clients').then(async (res) => {
+      if (!res.ok || !mounted) return;
+      const list = await res.json().catch(() => []);
+      if (mounted && Array.isArray(list)) setClients(list.map((c: any) => ({ id: String(c.id), name: String(c.name) })));
+    }).catch(() => { /* the picker just stays empty; submission still works unassigned */ });
+    return () => { mounted = false; };
+  }, []);
+  const submissionFields = () => ({ ...(clientId ? { clientId } : {}), ...(softwareName.trim() ? { name: softwareName.trim() } : {}) });
   const [repository, setRepository] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
@@ -78,7 +95,7 @@ export default function NewReviewIntake({ clientId = null }: { clientId?: string
       // belong to THIS workspace, appear in its scan history and are visible
       // to its clients. (They used to be queued under the Free Review system
       // tenant, so the customer's own workspace never saw them.)
-      const response = await apiFetch('/api/scans/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source: 'github', owner: parts[0], repository: parts[1], ...(clientId ? { clientId } : {}) }) });
+      const response = await apiFetch('/api/scans/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source: 'github', owner: parts[0], repository: parts[1], ...submissionFields() }) });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body?.error?.message || body?.error || 'Could not start the repository scan.');
       if (typeof body?.scanId !== 'string') throw new Error('The scan was accepted, but SPR did not return a scan id.');
@@ -114,7 +131,7 @@ export default function NewReviewIntake({ clientId = null }: { clientId?: string
       // A claimed session is not a scan. The scan is created here, with a
       // stable id, and the page moves to its ledger entry -- the message never
       // claims analysis that has not been queued.
-      const submit = await apiFetch('/api/scans/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source: 'upload', sessionId: session.sessionId, ...(clientId ? { clientId } : {}) }) });
+      const submit = await apiFetch('/api/scans/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source: 'upload', sessionId: session.sessionId, ...submissionFields() }) });
       const submitted = await submit.json().catch(() => ({}));
       if (!submit.ok || typeof submitted?.scanId !== 'string') throw new Error(submitted?.error?.message || submitted?.error || 'Files were uploaded and hashed, but the scan could not be queued.');
       setFiles([]); setMessage(`Upload complete. ${files.length} file(s) recorded with SHA-256 and queued as scan ${submitted.scanId}.`);
@@ -128,6 +145,17 @@ export default function NewReviewIntake({ clientId = null }: { clientId?: string
     <div className="mt-5 grid gap-3 md:grid-cols-2">
       <button type="button" onClick={() => { setMode('repository'); setError(''); setMessage(''); }} className={`rounded-xl border p-4 text-left ${mode === 'repository' ? 'border-[var(--spr-highlight)] bg-[var(--spr-accent-soft)]' : 'border-[var(--spr-border)]'}`}><Github className="h-5 w-5 text-[var(--spr-highlight)]" /><div className="mt-2 text-sm font-bold">Connect repository</div><div className="mt-1 text-xs text-[var(--spr-text-muted)]">Public GitHub repository review.</div></button>
       <button type="button" onClick={() => { setMode('files'); setError(''); setMessage(''); }} className={`rounded-xl border p-4 text-left ${mode === 'files' ? 'border-[var(--spr-highlight)] bg-[var(--spr-accent-soft)]' : 'border-[var(--spr-border)]'}`}><FileArchive className="h-5 w-5 text-[var(--spr-highlight)]" /><div className="mt-2 text-sm font-bold">Upload files</div><div className="mt-1 text-xs text-[var(--spr-text-muted)]">SBOMs, ZIPs, source, manifests and evidence.</div></button>
+    </div>
+    <div className="mt-5 grid gap-3 md:grid-cols-2">
+      <label className="flex flex-col gap-1 text-xs text-[var(--spr-text-muted)]"><span className="font-semibold uppercase tracking-[.14em]">Client</span>
+        <select value={clientId ?? ''} onChange={(e) => setClientId(e.target.value || null)} className="rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-4 py-3 text-sm text-[var(--spr-text)] outline-none focus:border-[var(--spr-highlight)]">
+          <option value="">Unassigned (no client)</option>
+          {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      </label>
+      <label className="flex flex-col gap-1 text-xs text-[var(--spr-text-muted)]"><span className="font-semibold uppercase tracking-[.14em]">Software name</span>
+        <input value={softwareName} onChange={(e) => setSoftwareName(e.target.value)} maxLength={200} placeholder="Defaults to the repository or first file name" className="rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-4 py-3 text-sm text-[var(--spr-text)] outline-none focus:border-[var(--spr-highlight)]" />
+      </label>
     </div>
     {mode === 'repository' ? <form onSubmit={startRepository} className="mt-5 flex flex-col gap-3 md:flex-row"><input value={repository} onChange={(e) => setRepository(e.target.value)} placeholder="owner/repository or GitHub URL" className="min-w-0 flex-1 rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-4 py-3 text-sm outline-none focus:border-[var(--spr-highlight)]" /><button disabled={busy || !repository.trim()} className="spr-btn spr-btn-primary justify-center disabled:opacity-50">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <><span>Start review</span><ArrowRight className="h-4 w-4" /></>}</button></form> : <div className="mt-5"><div onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={(e) => { e.preventDefault(); setDragging(false); addFiles(e.dataTransfer.files); }} onClick={() => inputRef.current?.click()} className={`cursor-pointer rounded-xl border-2 border-dashed p-8 text-center ${dragging ? 'border-[var(--spr-highlight)] bg-[var(--spr-accent-soft)]' : 'border-[var(--spr-border)] hover:border-[var(--spr-highlight)]/50'}`}><input ref={inputRef} type="file" multiple className="hidden" onChange={(e) => { if (e.target.files) addFiles(e.target.files); e.currentTarget.value = ''; }} /><Upload className="mx-auto h-8 w-8 text-[var(--spr-highlight)]" /><div className="mt-3 text-sm font-bold">Drop files here or click to browse</div><div className="mt-1 text-xs text-[var(--spr-text-muted)]">100 files max • 50 MB per file • 500 MB total</div></div>{files.length > 0 && <div className="mt-3 space-y-2">{files.map((file) => <div key={`${file.name}-${file.size}-${file.lastModified}`} className="flex items-center justify-between rounded-lg border border-[var(--spr-border)] px-3 py-2"><div className="min-w-0"><div className="truncate text-xs font-semibold">{file.name}</div><div className="text-[12px] text-[var(--spr-text-faint)]">{(file.size / 1024 / 1024).toFixed(2)} MB • {classifyFile(file)}</div></div><CheckCircle2 className="h-4 w-4 text-[var(--spr-highlight)]" /></div>)}</div>}<button type="button" onClick={() => void upload()} disabled={busy || files.length === 0} className="spr-btn spr-btn-primary mt-3 w-full justify-center disabled:opacity-50">{busy ? <><Loader2 className="h-4 w-4 animate-spin" /> Uploading and verifying…</> : <><ShieldCheck className="h-4 w-4" /> Upload &amp; queue analysis</>}</button></div>}
     {message && <div className="mt-4 rounded-lg border border-[var(--spr-highlight)]/30 bg-[var(--spr-accent-soft)] p-3 text-xs text-[var(--spr-text)]">{message}</div>}

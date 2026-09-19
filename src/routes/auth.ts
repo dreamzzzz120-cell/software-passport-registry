@@ -923,6 +923,36 @@ export function createAuthRouter() {
     } catch (error) { return next(error); }
   });
 
+  // Moves a passport (and the scans recorded against it) under one of this
+  // workspace's clients, or back to unassigned. Needed because a review
+  // submitted without a client creates an unassigned passport that no client
+  // view can find (observed live 2026-09-19); the client must belong to the
+  // caller's tenant, never trusted from the body alone.
+  const assignPassportClientSchema = z.object({ clientId: z.string().min(1).max(200).nullable() }).strict();
+  router.patch('/user/passports/:id/client', requireAuth, requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const db = req.db!;
+      const parsed = assignPassportClientSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+      const passportId = String(req.params.id);
+      const tenantId = req.user!.tenantId;
+      const passport = ((await db.execute(sql`SELECT id, client_id AS "clientId" FROM passports WHERE id=${passportId} AND tenant_id=${tenantId} LIMIT 1`)) as any).rows?.[0];
+      if (!passport) return res.status(404).json({ error: 'Passport not found' });
+      let clientName: string | null = null;
+      if (parsed.data.clientId) {
+        const client = ((await db.execute(sql`SELECT id, name FROM clients WHERE id=${parsed.data.clientId} AND tenant_id=${tenantId} LIMIT 1`)) as any).rows?.[0];
+        if (!client) return res.status(404).json({ error: 'Client not found in this workspace.' });
+        clientName = String(client.name);
+      }
+      await db.execute(sql`UPDATE passports SET client_id=${parsed.data.clientId} WHERE id=${passportId} AND tenant_id=${tenantId}`);
+      await db.execute(sql`UPDATE scans SET client_id=${parsed.data.clientId}, client_name=${clientName ?? 'Unassigned'} WHERE passport_id=${passportId} AND tenant_id=${tenantId}`);
+      await appendAuditEntry(db, { tenantId, action: 'passport.client_assigned', actor: req.user!.uid, payload: { passportId, from: passport.clientId ?? null, to: parsed.data.clientId } });
+      return res.json({ id: passportId, clientId: parsed.data.clientId, clientName });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
   router.get('/user/passports', requireAuth, async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
