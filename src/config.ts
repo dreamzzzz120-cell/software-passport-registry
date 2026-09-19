@@ -57,7 +57,7 @@ const envSchema = z.object({
   // Signs DPA execution records so a downloaded agreement can be verified.
   SPR_DOCUMENT_SIGNING_SECRET: optionalTrimmedString,
   ANTHROPIC_API_KEY: optionalTrimmedString, ANTHROPIC_MODEL: optionalTrimmedString,
-  SENTRY_DSN: optionalTrimmedUrl, REDIS_URL: optionalTrimmedString, RATE_LIMIT_FAIL_OPEN: optionalBooleanString, MONITORING_ENABLED_TENANT_IDS: optionalTrimmedString,
+  SENTRY_DSN: optionalTrimmedUrl, REDIS_URL: optionalTrimmedString, RATE_LIMIT_FAIL_OPEN: optionalBooleanString,
   // Founder Command Center — platform-operator-only page (distinct from the
   // per-tenant 'Owner' role: every paying customer has an Owner, but only the
   // emails listed here may see cross-platform connection health/MRR/tasks).
@@ -131,7 +131,7 @@ export const config = {
   publicPassport: { secret: parsedEnv.SPR_PUBLIC_PASSPORT_SECRET },
   documentSigning: { secret: parsedEnv.SPR_DOCUMENT_SIGNING_SECRET },
   anthropic: { apiKey: parsedEnv.ANTHROPIC_API_KEY, model: parsedEnv.ANTHROPIC_MODEL ?? 'claude-sonnet-5' },
-  sentry: { dsn: parsedEnv.SENTRY_DSN }, redis: { url: parsedEnv.REDIS_URL, failOpen: parsedEnv.NODE_ENV !== 'production' && parseBoolean(parsedEnv.RATE_LIMIT_FAIL_OPEN, false) }, monitoring: { enabledTenantIds: parseCsv(parsedEnv.MONITORING_ENABLED_TENANT_IDS) },
+  sentry: { dsn: parsedEnv.SENTRY_DSN }, redis: { url: parsedEnv.REDIS_URL, failOpen: parsedEnv.NODE_ENV !== 'production' && parseBoolean(parsedEnv.RATE_LIMIT_FAIL_OPEN, false) },
   founder: {
     // Lowercased on purpose: compared against the lowercased email on the
     // authenticated user, same normalization used for SPR_INITIAL_OWNER_EMAIL.

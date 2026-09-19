@@ -14,13 +14,13 @@ import { z } from 'zod';
 import { config } from '../config.ts';
 import { users } from '../db/schema.ts';
 import { db, checkDatabaseHealth, appPool, pool } from '../db/index.ts';
-import { attachTenantScope } from '../middleware/tenant-scope.ts';
+import { attachTenantScope, settleTenantScope, tenantScopeClient } from '../middleware/tenant-scope.ts';
 import { AuthenticatedRequest, requireAuth, requireRole, requireFounder, rateLimiter } from '../middleware/security.ts';
 import { adminAuth, setUserCustomClaims } from '../lib/firebase-admin.ts';
 import { isEmailProviderConfigured } from '../lib/email.ts';
 import { loadEmailBrand, renderBrandedEmail, sendBrandedEmail, tenantIdForEmail, tenantIdForUid } from '../lib/branded-email.ts';
 import { appendAuditEntry, verifyAuditChain } from '../security/audit-log.ts';
-import { deleteWorkspaceRows, WorkspaceDeletionBlocked, type WorkspaceDeletionResult } from '../services/workspace-deletion.ts';
+import { countTenantRows, deleteWorkspaceRows, WorkspaceDeletionBlocked, type WorkspaceDeletionResult } from '../services/workspace-deletion.ts';
 import { describeUserAgent, sessionFingerprint } from '../security/session-tracking.ts';
 import { offboardTenantData } from '../db/sync.ts';
 import { canCreateClient, PLAN_CONFIG } from './billing.ts';
@@ -408,25 +408,31 @@ export function createAuthRouter() {
       }
       const members = ((await req.db!.execute(sql`SELECT uid, email FROM users WHERE tenant_id=${tenantId}`)) as any).rows as { uid: string; email: string }[];
 
-      // The owner-role pool, like migrations: the service filters every
-      // statement by tenant_id itself, and this must not depend on each of
-      // the 100+ tenant tables carrying a DELETE policy for the RLS role.
-      const client = await pool.connect();
+      // Runs inside this request's own tenant transaction. A separate
+      // connection deadlocked against it: requireAuth's recordSession holds a
+      // row lock on user_sessions until the response, so a second transaction
+      // deleting that table waited out the query timeout (observed live
+      // 2026-09-19 05:57Z, 500 "Query read timeout"). The RLS policies are
+      // FOR ALL, so the runtime role may delete its own tenant's rows, and the
+      // service verifies nothing remains before it returns. The transaction is
+      // committed explicitly here, before any sign-in is removed at the auth
+      // provider, so a login can never be deleted for a workspace that still
+      // exists.
+      // Counted first on the owner-role connection, which bypasses RLS, so a
+      // table the runtime role cannot see into is detected rather than skipped.
+      const expected = await countTenantRows(pool, tenantId);
       let deletion: WorkspaceDeletionResult;
       try {
-        await client.query('BEGIN');
-        deletion = await deleteWorkspaceRows(client, tenantId);
-        await client.query('COMMIT');
+        deletion = await deleteWorkspaceRows(tenantScopeClient(req.db!), tenantId, expected);
       } catch (error) {
-        try { await client.query('ROLLBACK'); } catch { /* connection is released below either way */ }
+        await settleTenantScope(req.db!, false);
         if (error instanceof WorkspaceDeletionBlocked) {
           console.error(JSON.stringify({ event: 'workspace_deletion_blocked', tenantId, remaining: error.remaining }));
           return res.status(409).json({ error: 'WORKSPACE_DELETION_BLOCKED', message: 'Some workspace records could not be deleted; nothing was removed.', remaining: error.remaining });
         }
         throw error;
-      } finally {
-        client.release();
       }
+      await settleTenantScope(req.db!, true);
 
       // Logins are deleted only for members with no remaining workspace row
       // anywhere (the owner-role connection sees every tenant).
