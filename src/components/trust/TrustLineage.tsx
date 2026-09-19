@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ArrowRight, CheckCircle2, CircleHelp, FileSearch, Fingerprint, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { ArrowRight, CircleHelp, FileSearch, Fingerprint, ShieldAlert, ShieldCheck } from 'lucide-react';
 import type { SoftwarePassport } from '../../types';
 import type { ReactNode } from 'react';
 import type { VerificationDecisionState } from './TrustStateBadge';
@@ -67,36 +67,34 @@ export default function TrustLineage({
 
       <div className="mt-6 overflow-x-auto pb-2">
         <div className="min-w-[980px]">
-          <div className="grid grid-cols-[180px_34px_minmax(250px,1fr)_34px_minmax(230px,1fr)_34px_250px] items-start gap-3">
+          <div className="grid grid-cols-[170px_30px_190px_30px_minmax(250px,1fr)_30px_minmax(230px,1fr)_30px_240px] items-start gap-3">
             <LineageCard icon={<Fingerprint className="h-4 w-4" />} eyebrow="Passport" title={passport.name || 'Unnamed software'} subtitle={passport.id} onClick={onOpenPassport}>
+              <div className="text-xs text-[var(--spr-text-muted)]">Authoritative passport record</div>
+            </LineageCard>
+
+            <ArrowColumn label="identifies" />
+
+            <LineageCard icon={<Fingerprint className="h-4 w-4" />} eyebrow="Software identity" title={passport.name || 'Unnamed software'} subtitle={passport.id} onClick={onOpenPassport}>
               <div className="text-xs text-[var(--spr-text-muted)]">{passport.publisher || 'Publisher not observed'}</div>
               <div className="mt-1 text-xs text-[var(--spr-text-muted)]">{passport.version || 'Version not observed'}</div>
             </LineageCard>
 
-            <ArrowColumn label="contains" />
+            <ArrowColumn label="records" />
 
-            <LineageColumn
-              title="Evidence"
-              count={evidence.length}
-              empty="No evidence recorded."
-            >
+            <LineageColumn title="Evidence" count={evidence.length} empty="No evidence recorded.">
               {evidence.map((item) => (
                 <LineageCard key={String(item.id)} compact icon={<FileSearch className="h-4 w-4" />} eyebrow={item.type || 'Evidence'} title={item.name || String(item.id)} subtitle={String(item.id)} onClick={() => onOpenEvidence(item)}>
                   <div className="flex flex-wrap gap-2 text-[11px] text-[var(--spr-text-muted)]">
                     <span>{item.status || 'UNKNOWN'}</span>
-                    {linkedEvidenceIds.has(String(item.id)) && <span className="text-[var(--spr-highlight)]">linked to finding</span>}
+                    {linkedEvidenceIds.has(String(item.id)) && <span className="text-[var(--spr-highlight)]">explicit finding link</span>}
                   </div>
                 </LineageCard>
               ))}
             </LineageColumn>
 
-            <ArrowColumn label={linkedEvidenceIds.size ? 'linked' : 'none recorded'} muted={!linkedEvidenceIds.size} />
+            <ArrowColumn label={linkedEvidenceIds.size ? 'explicit' : 'none'} muted={!linkedEvidenceIds.size} />
 
-            <LineageColumn
-              title="Findings"
-              count={findings.length}
-              empty="No findings recorded."
-            >
+            <LineageColumn title="Findings" count={findings.length} empty="No findings recorded.">
               {findings.map((finding, index) => {
                 const id = String(finding?.findingId ?? finding?.id ?? `finding-${index}`);
                 const refs = Array.isArray(finding?.evidenceIds) ? finding.evidenceIds : finding?.evidenceId != null ? [finding.evidenceId] : finding?.evidence?.id != null ? [finding.evidence.id] : [];
@@ -109,14 +107,12 @@ export default function TrustLineage({
               })}
             </LineageColumn>
 
-            <ArrowColumn label="decision" />
+            <ArrowColumn label="evaluates" />
 
             <LineageCard icon={<StateIcon className="h-4 w-4" />} eyebrow="Verification" title={stateLabel} subtitle={verificationPolicyVersion ? `Policy ${verificationPolicyVersion}` : 'Authoritative evaluator'} onClick={onOpenVerification}>
               <div className="text-xs leading-5 text-[var(--spr-text-muted)]">{verificationExplanation || 'No evaluator explanation has been returned.'}</div>
             </LineageCard>
-          </div>
-
-          <div className="mt-4 flex items-center gap-2 text-[11px] text-[var(--spr-text-faint)]">
+          </div>          <div className="mt-4 flex items-center gap-2 text-[11px] text-[var(--spr-text-faint)]">
             <span className="inline-block h-px w-5 bg-[var(--spr-border)]" aria-hidden="true" />
             <span>Identity and verification are passport-level records. Evidence-to-finding links are displayed only from explicit IDs supplied by the backend.</span>
           </div>
