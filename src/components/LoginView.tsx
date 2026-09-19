@@ -67,6 +67,11 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
       if (mode === 'signup') {
         if (password.length < 8) throw new Error('Password must be at least 8 characters.');
         const { data, error } = await supabase.auth.signUp({ email: email.trim().toLowerCase(), password, options: { data: { full_name: email.trim().split('@')[0] }, emailRedirectTo: getAuthRedirect() } });
+        // Observed live 2026-09-18: a second signup within a minute was refused with
+        // 429 over_email_send_rate_limit, after which sign-in reported invalid
+        // credentials, i.e. no account exists. Say that plainly; the bare
+        // "email rate limit exceeded" reads as if the account was made.
+        if (error && (error as { code?: string }).code === 'over_email_send_rate_limit') throw new Error(`Supabase refused to send a confirmation email right now (${error.message}). The account was not created; wait a while and try again.`);
         if (error) throw error;
         // With email enumeration protection on, Supabase answers a signup for an
         // address that already exists with a placeholder user carrying no
