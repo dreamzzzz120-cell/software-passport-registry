@@ -219,23 +219,17 @@ export default function TrustGraphView({ passports = [], findings = [] }: TrustG
           }
         }
 
-        if (evidencePassportRef(evidence) === passport.id) {
-          addEdge({
-            source: passportId,
-            target: evidenceNodeId,
-            label: 'contains',
-            proof: 'The evidence record explicitly references this passport.',
-          });
-        } else if (!identityNodeId || !explicitEvidenceIdentity) {
-          // passport.evidence is itself authoritative membership. We do not
-          // invent an identity edge when the evidence has no identity FK.
-          addEdge({
-            source: passportId,
-            target: evidenceNodeId,
-            label: 'contains',
-            proof: 'The evidence item is present in the passport’s persisted evidence collection.',
-          });
-        }
+        // Membership in passport.evidence is authoritative regardless of
+        // whether a separate identity FK is present. The identity edge above
+        // is deliberately narrower and requires an explicit matching FK.
+        addEdge({
+          source: passportId,
+          target: evidenceNodeId,
+          label: 'contains',
+          proof: evidencePassportRef(evidence) === passport.id
+            ? 'The evidence record explicitly references this passport.'
+            : 'The evidence item is present in the passport’s persisted evidence collection.',
+        });
       });
 
       const verificationRawId = text(passport.verificationId ?? passport.verification_id, '');
