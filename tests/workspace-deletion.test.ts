@@ -78,3 +78,28 @@ describe('deleteWorkspaceRows on the real schema', () => {
     expect(await countRows(B)).toEqual(before);
   });
 });
+
+describe('deleteWorkspaceRows with a pre-count from an RLS-bypassing connection', () => {
+  it('refuses when fewer rows were deletable than exist (a policy hiding rows), and rolls back cleanly', async () => {
+    const { countTenantRows, WorkspaceDeletionBlocked } = await import('../src/services/workspace-deletion.ts');
+    const before = await countRows(B);
+    const expected = await countTenantRows(db, B);
+    expect(expected).toEqual(before);
+    // Pretend the bypassing count saw one more passport than the deleting role can reach.
+    const inflated = { ...expected, passports: (expected.passports ?? 0) + 1 };
+    await db.query('BEGIN');
+    await expect(deleteWorkspaceRows(db, B, inflated)).rejects.toBeInstanceOf(WorkspaceDeletionBlocked);
+    await db.query('ROLLBACK');
+    expect(await countRows(B)).toEqual(before);
+  });
+
+  it('succeeds when the pre-count matches what was deleted', async () => {
+    const { countTenantRows } = await import('../src/services/workspace-deletion.ts');
+    const expected = await countTenantRows(db, B);
+    await db.query('BEGIN');
+    const result = await deleteWorkspaceRows(db, B, expected);
+    await db.query('COMMIT');
+    expect(await countRows(B)).toEqual({});
+    for (const [table, n] of Object.entries(expected)) expect(result.deleted[table]).toBe(n);
+  });
+});

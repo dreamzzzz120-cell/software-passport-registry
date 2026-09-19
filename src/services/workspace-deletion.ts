@@ -49,7 +49,25 @@ function quoteIdentifier(name: string): string {
   return `"${name}"`;
 }
 
-export async function deleteWorkspaceRows(db: Queryable, tenantId: string): Promise<WorkspaceDeletionResult> {
+/** Rows per table the tenant currently owns; only tables with at least one row. */
+export async function countTenantRows(db: Queryable, tenantId: string): Promise<Record<string, number>> {
+  const counts: Record<string, number> = {};
+  for (const table of await listTenantTables(db)) {
+    const result = await db.query(`SELECT COUNT(*)::int AS n FROM ${quoteIdentifier(table)} WHERE tenant_id = $1`, [tenantId]);
+    const n = Number(result.rows[0]?.n ?? 0);
+    if (n > 0) counts[table] = n;
+  }
+  return counts;
+}
+
+/**
+ * @param expected Row counts taken beforehand on a connection that bypasses
+ *   row-level security. When the deleting connection is the RLS runtime role,
+ *   a table whose policy hides the tenant's rows would report a smaller
+ *   delete count than really exists; that is treated as blocked, so a policy
+ *   gap can never turn into a silently partial deletion.
+ */
+export async function deleteWorkspaceRows(db: Queryable, tenantId: string, expected?: Record<string, number>): Promise<WorkspaceDeletionResult> {
   if (!tenantId || tenantId.length > 256) throw new Error('A tenant id is required');
   const tables = await listTenantTables(db);
   const deleted: Record<string, number> = {};
@@ -83,6 +101,12 @@ export async function deleteWorkspaceRows(db: Queryable, tenantId: string): Prom
     const result = await db.query(`SELECT COUNT(*)::int AS n FROM ${quoteIdentifier(table)} WHERE tenant_id = $1`, [tenantId]);
     const n = Number(result.rows[0]?.n ?? 0);
     if (n > 0) leftover.push({ table, reason: `${n} row(s) remain after delete` });
+  }
+  if (expected) {
+    for (const [table, n] of Object.entries(expected)) {
+      const removed = deleted[table] ?? 0;
+      if (removed < n) leftover.push({ table, reason: `${n} row(s) exist but only ${removed} were visible to delete` });
+    }
   }
   if (leftover.length > 0) throw new WorkspaceDeletionBlocked(leftover);
   return { deleted, tablesExamined: tables.length, passes };
