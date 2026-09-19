@@ -59,7 +59,9 @@ export default function TrustRoom({ passport, client, canRunAudit, auditBusy, on
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [selectedFinding, setSelectedFinding] = useState<any | null>(null);\n  const [selectedEvidence, setSelectedEvidence] = useState<any | null>(null);\n  const [selectedDimension, setSelectedDimension] = useState<typeof dimensions[number] | null>(null);
+  const [selectedFinding, setSelectedFinding] = useState<any | null>(null);
+  const [selectedEvidence, setSelectedEvidence] = useState<any | null>(null);
+  const [selectedDimension, setSelectedDimension] = useState<typeof dimensions[number] | null>(null);
 
   // Verification state comes from the authoritative evaluator, never from
   // passports.verification_status. The legacy column is hardcoded to
