@@ -3,8 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ArrowDown, CheckCircle2, CircleHelp, FileSearch, Fingerprint, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { ArrowRight, CheckCircle2, CircleHelp, FileSearch, Fingerprint, ShieldAlert, ShieldCheck } from 'lucide-react';
 import type { SoftwarePassport } from '../../types';
+import type { ReactNode } from 'react';
 import type { VerificationDecisionState } from './TrustStateBadge';
 
 type EvidenceItem = NonNullable<SoftwarePassport['evidence']>[number];
@@ -128,13 +129,13 @@ export default function TrustLineage({
 function ArrowColumn({ label, muted = false }: { label: string; muted?: boolean }) {
   return (
     <div className="flex min-h-[70px] flex-col items-center justify-center gap-1 text-[10px] uppercase tracking-wider text-[var(--spr-text-faint)]" aria-label={label}>
-      <ArrowDown className={`h-4 w-4 ${muted ? 'opacity-30' : ''}`} />
+      <ArrowRight className={`h-4 w-4 ${muted ? 'opacity-30' : ''}`} />
       <span className="whitespace-nowrap">{label}</span>
     </div>
   );
 }
 
-function LineageColumn({ title, count, empty, children }: { title: string; count: number; empty: string; children: React.ReactNode }) {
+function LineageColumn({ title, count, empty, children }: { title: string; count: number; empty: string; children: ReactNode }) {
   return (
     <div className="rounded-lg border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] p-3">
       <div className="flex items-center justify-between gap-2">
@@ -147,7 +148,7 @@ function LineageColumn({ title, count, empty, children }: { title: string; count
 }
 
 function LineageCard({ icon, eyebrow, title, subtitle, children, onClick, compact = false }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   eyebrow: string;
   title: string;
   subtitle: string;
