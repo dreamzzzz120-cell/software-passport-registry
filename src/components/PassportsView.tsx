@@ -5,19 +5,10 @@ import { apiFetch } from '../utils/apiClient';
 import SoftwareLineageTracker from './SoftwareLineageTracker';
 import SoftwareSectorsPanel from './SoftwareSectorsPanel';
 import TrustRoom from './trust/TrustRoom';
-import type { VerificationDecisionState } from './trust/TrustStateBadge';
+import TrustStateBadge, { trustStateFromDecision, type VerificationDecisionState } from './trust/TrustStateBadge';
 import type { VerificationDecisionDetail } from './design/CommandCenter';
-import type { Client, SoftwarePassport, VerificationStatus } from '../types';
+import type { Client, SoftwarePassport } from '../types';
 
-// A score is never shown without its verification state -- unverified means
-// no evidence was ever resolved (not a trust score of 0), partial means some
-// evidence exists but not enough to call the conclusion settled, verified
-// means enough evidence was resolved to trust the number as-is.
-function verificationBadge(status: VerificationStatus): { label: string; className: string; textClassName: string } {
-  if (status === 'verified') return { label: 'Verified', className: 'border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-green)]', textClassName: 'text-[var(--spr-green)]' };
-  if (status === 'partial') return { label: 'Partially Verified', className: 'border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-amber)]', textClassName: 'text-[var(--spr-amber)]' };
-  return { label: 'Unverified', className: 'border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-text-muted)]', textClassName: 'text-[var(--spr-text-muted)]' };
-}
 
 interface PassportsViewProps {
   passports: SoftwarePassport[];
@@ -165,7 +156,7 @@ export default function PassportsView({ passports, selectedPassportId, setSelect
 
       {tab === 'lineage' ? <SoftwareLineageTracker passports={passports} clients={clients} assets={assets} onUpdatePassport={onUpdatePassport} /> : tab === 'sectors' ? <SoftwareSectorsPanel passports={passports} onFilterCategory={(value) => { setCategory(value); setTab('catalog'); }} onNavigateTab={onNavigateTab} setSelectedPassportId={setSelectedPassportId} /> : <>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {filtered.map((passport) => { const badge = verificationBadge(passport.verificationStatus); return <button key={passport.id} onClick={() => setSelectedPassportId(passport.id)} className={`rounded-md border p-5 text-left transition ${selectedPassportId === passport.id ? 'border-[var(--spr-border)] bg-[var(--spr-accent-soft)]' : 'border-[var(--spr-border)] bg-[var(--spr-surface-alt)] hover:bg-[var(--spr-surface-sunken)]'}`}><div className="flex items-start justify-between gap-3"><span className="grid h-9 w-9 place-items-center rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)]"><FileCheck2 className="h-4 w-4 text-[var(--spr-highlight)]" /></span><span className={`rounded-full border px-2 py-1 text-[12px] font-semibold ${badge.className}`}>{badge.label}</span></div><div className="mt-4 text-sm font-semibold text-[var(--spr-text)]">{passport.name || 'Unnamed software'}</div><div className="mt-1 truncate text-xs text-[var(--spr-text-muted)]">{passport.version || 'Version not observed'} · {passport.publisher || 'Publisher not observed'}</div><div className="mt-4 grid grid-cols-2 gap-2 text-[11px]"><span className="rounded border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2 py-2 text-[var(--spr-text-muted)]">Overall <strong className="float-right text-[var(--spr-text)]">{passport.overallScore ?? '—'}</strong></span><span className="rounded border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2 py-2 text-[var(--spr-text-muted)]">Evidence <strong className="float-right text-[var(--spr-text)]">{passport.evidenceCompleteness == null ? '—' : `${passport.evidenceCompleteness}%`}</strong></span></div></button>; })}
+          {filtered.map((passport) => { return <button key={passport.id} onClick={() => setSelectedPassportId(passport.id)} className={`rounded-md border p-5 text-left transition ${selectedPassportId === passport.id ? 'border-[var(--spr-border)] bg-[var(--spr-accent-soft)]' : 'border-[var(--spr-border)] bg-[var(--spr-surface-alt)] hover:bg-[var(--spr-surface-sunken)]'}`}><div className="flex items-start justify-between gap-3"><span className="grid h-9 w-9 place-items-center rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)]"><FileCheck2 className="h-4 w-4 text-[var(--spr-highlight)]" /></span><TrustStateBadge state={trustStateFromDecision(verificationDecisions?.[passport.id])} /></div><div className="mt-4 text-sm font-semibold text-[var(--spr-text)]">{passport.name || 'Unnamed software'}</div><div className="mt-1 truncate text-xs text-[var(--spr-text-muted)]">{passport.version || 'Version not observed'} · {passport.publisher || 'Publisher not observed'}</div><div className="mt-4 grid grid-cols-2 gap-2 text-[11px]"><span className="rounded border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2 py-2 text-[var(--spr-text-muted)]">Overall <strong className="float-right text-[var(--spr-text)]">{passport.overallScore ?? '—'}</strong></span><span className="rounded border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2 py-2 text-[var(--spr-text-muted)]">Evidence <strong className="float-right text-[var(--spr-text)]">{passport.evidenceCompleteness == null ? '—' : `${passport.evidenceCompleteness}%`}</strong></span></div></button>; })}
           {filtered.length === 0 && <div className="rounded-md border border-dashed border-[var(--spr-border)] p-12 text-center md:col-span-2 xl:col-span-3"><FileCheck2 className="mx-auto h-8 w-8 text-[var(--spr-text-faint)]" /><p className="mt-3 text-sm font-semibold text-[var(--spr-text)]">No passport records match this view.</p><p className="mt-1 text-xs text-[var(--spr-text-faint)]">Adjust the search or category filter.</p></div>}
         </div>
 

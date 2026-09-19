@@ -17,6 +17,8 @@ import { appendAuditEntry } from '../security/audit-log.ts';
 import { requireAuth, requireRole, type AuthenticatedRequest } from '../middleware/security.ts';
 import { db as ownerDb } from '../db/index.ts';
 import { enqueueRepositoryScan, enqueueUploadScan } from '../scanners/scan-submission.ts';
+import { adaptEvidenceForEvaluation } from '../lib/verification/evidenceAdapter.ts';
+import { evaluateVerification } from '../lib/verification/evaluateVerification.ts';
 
 const page = z.coerce.number().int().min(1).max(100_000).default(1);
 const limit = z.coerce.number().int().min(1).max(500).default(50);
@@ -85,7 +87,7 @@ export function createScanLedgerRouter() {
       SELECT r.id, r.tenant_id AS "tenantId", r.client_id AS "clientId", r.passport_id AS "passportId", r.source AS "sourceKind", r.source_ref AS "sourceRef", r.resolved_commit_sha AS "resolvedCommitSha",
              r.status, r.job_id AS "repositoryJobId", r.worker_job_id AS "securityJobId", r.intake_job_id AS "intakeJobId", r.intake_session_id AS "intakeSessionId", r.triggered_by AS "triggeredBy",
              r.error_code AS "failureCode", r.error_state AS "errorState", r.coverage_state AS "coverageState", r.target_name AS "targetName", r.scan_type AS "scanType", r.passport_status AS "passportStatus", r.passport_failure AS "passportFailure", r.created_at AS "createdAt", r.started_at AS "startedAt", r.completed_at AS "completedAt", r.updated_at AS "updatedAt",
-             p.name AS "passportName", p.version AS "passportVersion", p.verification_status AS "passportVerificationStatus", p.client_id AS "passportClientId", c.name AS "clientName"
+             p.name AS "passportName", p.version AS "passportVersion", p.client_id AS "passportClientId", c.name AS "clientName"
       FROM scans r
       LEFT JOIN passports p ON p.id = r.passport_id AND p.tenant_id = r.tenant_id
       LEFT JOIN clients c ON c.id = COALESCE(r.client_id, p.client_id) AND c.tenant_id = r.tenant_id
@@ -93,6 +95,28 @@ export function createScanLedgerRouter() {
         AND (${clientScope}::text IS NULL OR COALESCE(r.client_id, p.client_id) = ${clientScope})
       LIMIT 1`);
     return rows(result)[0] ?? null;
+  }
+
+  /**
+   * The passport's verification state as the authoritative evaluator decides
+   * it, from the same evidence and open-finding rows GET /api/user/verification
+   * uses. The stored passports.verification_status column is the legacy
+   * scoring engine's opinion and is not shown anywhere on the ledger: on the
+   * first upload scan of SPR's own source it read "verified" while the
+   * evaluator's decision for the same passport was PARTIAL (one of five
+   * claims satisfied), and the catalog showed "Unverified" for it at the same
+   * time. One passport, one answer.
+   */
+  async function passportVerificationDecision(req: AuthenticatedRequest, passportId: string | null) {
+    if (!passportId) return null;
+    const tenantId = req.user!.tenantId;
+    const passport = rows(await req.db!.execute(sql`SELECT id, version FROM passports WHERE id=${passportId} AND tenant_id=${tenantId} LIMIT 1`))[0];
+    if (!passport) return null;
+    const evidence = rows(await req.db!.execute(sql`SELECT id, asset_id AS "assetId", name, type, status, signer, timestamp, hash, engine_id AS "engineId" FROM evidence_items WHERE tenant_id=${tenantId} AND asset_id=${passportId}`));
+    const openFindings = rows(await req.db!.execute(sql`SELECT id FROM scan_findings WHERE tenant_id=${tenantId} AND asset_id=${passportId} AND lower(status) NOT IN ('resolved','closed','verified')`));
+    const adapted = adaptEvidenceForEvaluation({ evidence, passportVersion: passport.version, openFindingEvidenceIds: openFindings.map((row) => String(row.id)) });
+    const decision = evaluateVerification({ evidence: adapted.evidence, evaluatedAt: Date.now(), targetIdentity: adapted.targetIdentity });
+    return { state: decision.state, policyVersion: decision.policyVersion, reasonCodes: decision.reasonCodes, explanation: decision.explanation };
   }
 
   router.post('/scans/submit', requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
@@ -177,7 +201,7 @@ export function createScanLedgerRouter() {
       const items = rows(await req.db!.execute(sql`
         SELECT r.id, r.client_id AS "clientId", r.passport_id AS "passportId", r.source AS "sourceKind", r.source_ref AS "sourceRef", r.resolved_commit_sha AS "resolvedCommitSha", r.status, r.error_code AS "failureCode", r.error_state AS "errorState", r.coverage_state AS "coverageState", r.target_name AS "targetName", r.scan_type AS "scanType",
                r.passport_status AS "passportStatus", r.triggered_by AS "triggeredBy", r.created_at AS "createdAt", r.started_at AS "startedAt", r.completed_at AS "completedAt",
-               p.name AS "passportName", p.verification_status AS "passportVerificationStatus", c.name AS "clientName",
+               p.name AS "passportName", c.name AS "clientName",
                cov.files_discovered AS "filesDiscovered", cov.files_inspected AS "filesInspected", cov.files_analyzed AS "filesAnalyzed", cov.files_unsupported AS "filesUnsupported", cov.files_skipped AS "filesSkipped", cov.files_failed AS "filesFailed", cov.files_inaccessible AS "filesInaccessible", cov.files_unknown AS "filesUnknown",
                cov.accounting_coverage_pct AS "accountingCoveragePct", cov.inspection_coverage_pct AS "inspectionCoveragePct", cov.analysis_coverage_pct AS "analysisCoveragePct", cov.evidence_coverage_pct AS "evidenceCoveragePct",
                (SELECT COUNT(*)::int FROM scan_findings f WHERE f.scan_id = r.id AND f.tenant_id = r.tenant_id) AS "findingsCount",
@@ -208,7 +232,8 @@ export function createScanLedgerRouter() {
       const evidenceSummary = rows(await req.db!.execute(sql`SELECT type, engine_id AS "engineId", COUNT(*)::int AS count FROM evidence_items WHERE scan_id=${run.id} AND tenant_id=${req.user!.tenantId} GROUP BY type, engine_id ORDER BY count DESC`));
       const logs = rows(await req.db!.execute(sql`SELECT l.job_id AS "jobId", l.agent_id AS "agentId", l.message, l.level, l.timestamp FROM agent_logs l JOIN agent_jobs j ON j.id = l.job_id AND j.tenant_id=${req.user!.tenantId} WHERE j.scan_id=${run.id} ORDER BY l.timestamp DESC, l.id DESC LIMIT 50`));
       const previous = rows(await req.db!.execute(sql`SELECT id, created_at AS "createdAt", status FROM scans WHERE tenant_id=${req.user!.tenantId} AND passport_id=${run.passportId} AND id <> ${run.id} AND created_at < (SELECT created_at FROM scans WHERE id = ${run.id}) AND status IN ('Completed','Partial') ORDER BY created_at DESC LIMIT 1`))[0] ?? null;
-      return res.json({ run, jobs, coverage, coverageDefinitions: COVERAGE_DEFINITIONS, breakdown: { byDisposition: dispositionBreakdown, byCategory: categoryBreakdown, byReason: reasonBreakdown }, findings: { bySeverity: findingSummary, total: findingSummary.reduce((t: number, r: any) => t + Number(r.count), 0) }, evidence: { byTypeAndEngine: evidenceSummary, total: evidenceSummary.reduce((t: number, r: any) => t + Number(r.count), 0) }, logs, previousRun: previous });
+      const passportVerification = await passportVerificationDecision(req, run.passportId ? String(run.passportId) : null);
+      return res.json({ run: { ...run, passportVerification }, jobs, coverage, coverageDefinitions: COVERAGE_DEFINITIONS, breakdown: { byDisposition: dispositionBreakdown, byCategory: categoryBreakdown, byReason: reasonBreakdown }, findings: { bySeverity: findingSummary, total: findingSummary.reduce((t: number, r: any) => t + Number(r.count), 0) }, evidence: { byTypeAndEngine: evidenceSummary, total: evidenceSummary.reduce((t: number, r: any) => t + Number(r.count), 0) }, logs, previousRun: previous });
     } catch (error) { return next(error); }
   });
 
