@@ -127,7 +127,7 @@ function edgeKey(edge: LineageEdge) {
   return `${edge.source}::${edge.target}::${edge.label}`;
 }
 
-export default function TrustGraphView({ clients = [], passports = [], findings = [] }: TrustGraphViewProps) {
+export default function TrustGraphView({ passports = [], findings = [] }: TrustGraphViewProps) {
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<LineageEdge | null>(null);
@@ -154,6 +154,7 @@ export default function TrustGraphView({ clients = [], passports = [], findings 
 
     const passportIdentityIds = new Map<string, string>();
     const evidenceNodeByRawId = new Map<string, string>();
+    const evidenceNodesByRawId = new Map<string, string[]>();
     const verificationNodeByRawId = new Map<string, string>();
 
     passports.forEach((rawPassport) => {
@@ -193,6 +194,7 @@ export default function TrustGraphView({ clients = [], passports = [], findings 
         const rawId = text(evidence.id, `index-${index}`);
         const evidenceNodeId = `evidence:${passport.id}:${rawId}`;
         evidenceNodeByRawId.set(`${passport.id}:${rawId}`, evidenceNodeId);
+        evidenceNodesByRawId.set(rawId, [...(evidenceNodesByRawId.get(rawId) || []), evidenceNodeId]);
         addNode({
           id: evidenceNodeId,
           stage: 'evidence',
@@ -269,7 +271,11 @@ export default function TrustGraphView({ clients = [], passports = [], findings 
       const verificationRefs = findingVerificationRefs(finding);
       const hasKnownPassport = passportId && passports.some((passport) => passport.id === passportId);
       const knownEvidence = evidenceRefs
-        .map((ref) => evidenceNodeByRawId.get(`${passportId}:${ref}`) ?? [...evidenceNodeByRawId.entries()].find(([key]) => key.endsWith(`:${ref}`))?.[1])
+        .map((ref) => {
+          if (passportId) return evidenceNodeByRawId.get(`${passportId}:${ref}`) || null;
+          const matches = evidenceNodesByRawId.get(ref) || [];
+          return matches.length === 1 ? matches[0] : null;
+        })
         .filter(Boolean) as string[];
 
       // A finding without a resolvable passport/evidence relationship is not
