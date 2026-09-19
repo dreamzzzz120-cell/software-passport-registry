@@ -10,11 +10,14 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ChevronLeft, ChevronRight, FileSearch, Loader2, RefreshCw } from 'lucide-react';
+import TrustStateBadge, { trustStateFromDecision, type VerificationDecisionState } from './trust/TrustStateBadge';
 import { apiFetch } from '../utils/apiClient';
 
 type Run = {
   id: string; clientId: string | null; passportId: string; sourceKind: string; sourceRef: string; resolvedCommitSha: string | null; status: string; failureCode: string | null;
-  passportStatus: string; triggeredBy: string; createdAt: string; startedAt: string | null; completedAt: string | null; passportName: string | null; passportVerificationStatus: string | null; clientName: string | null;
+  passportStatus: string; triggeredBy: string; createdAt: string; startedAt: string | null; completedAt: string | null; passportName: string | null; clientName: string | null;
+  /** The authoritative evaluator's decision for the passport, computed server-side; null when the run has no passport yet. */
+  passportVerification?: { state: VerificationDecisionState; policyVersion: string; reasonCodes: string[]; explanation: string } | null;
   filesDiscovered: number | null; filesInspected: number | null; filesAnalyzed: number | null; filesUnsupported: number | null; filesSkipped: number | null; filesFailed: number | null; filesInaccessible: number | null; filesUnknown: number | null;
   accountingCoveragePct: string | number | null; inspectionCoveragePct: string | number | null; analysisCoveragePct: string | number | null; evidenceCoveragePct: string | number | null; findingsCount: number; evidenceCount: number;
 };
@@ -174,7 +177,10 @@ export default function ScanLedgerPanel({ initialRunId, passportId }: { initialR
               <div className="text-right"><div className={`text-sm font-bold uppercase ${STATUS_CLASS[String(detail.run.status).toLowerCase()] ?? ''}`}>{detail.run.status}</div>{detail.run.failureCode && <div className="text-[11px] text-red-300">{detail.run.failureCode}</div>}<div className="text-[11px] text-[var(--spr-text-muted)]">Passport: {detail.run.passportStatus === 'associated' ? 'associated' : detail.run.passportStatus === 'failed' ? `association failed — ${detail.run.passportFailure ?? 'unknown'}` : 'pending'}</div></div>
             </div>
             <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
-              <a href={`/passports?passport=${encodeURIComponent(detail.run.passportId)}`} className="rounded-full border border-[var(--spr-border)] px-3 py-1 text-[var(--spr-highlight)]">Passport {detail.run.passportName || detail.run.passportId} ({detail.run.passportVerificationStatus || 'unverified'})</a>
+              <a href={`/passports?passport=${encodeURIComponent(detail.run.passportId)}`} className="rounded-full border border-[var(--spr-border)] px-3 py-1 text-[var(--spr-highlight)]">Passport {detail.run.passportName || detail.run.passportId}</a>
+              {/* The evaluator's decision, the same one the passport catalog and
+                  /api/user/verification show; never the stored legacy column. */}
+              {detail.run.passportVerification && <TrustStateBadge state={trustStateFromDecision(detail.run.passportVerification.state)} />}
               {detail.run.clientName && <span className="rounded-full border border-[var(--spr-border)] px-3 py-1">Client {detail.run.clientName}</span>}
               {detail.previousRun && <span className="rounded-full border border-[var(--spr-border)] px-3 py-1">Previous scan {when(detail.previousRun.createdAt)}</span>}
             </div>
