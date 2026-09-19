@@ -61,6 +61,7 @@ export default function TrustRoom({ passport, client, canRunAudit, auditBusy, on
   const [copied, setCopied] = useState(false);
   const [selectedFinding, setSelectedFinding] = useState<any | null>(null);
   const [selectedEvidence, setSelectedEvidence] = useState<any | null>(null);
+  const [verificationOpen, setVerificationOpen] = useState(false);
 
   // Verification state comes from the authoritative evaluator, never from
   // passports.verification_status. The legacy column is hardcoded to
@@ -180,7 +181,7 @@ export default function TrustRoom({ passport, client, canRunAudit, auditBusy, on
         onOpenPassport={() => onNavigateTab('/passport', passport.id)}
         onOpenEvidence={(item) => setSelectedEvidence(item)}
         onOpenFinding={(finding) => setSelectedFinding(finding)}
-        onOpenVerification={() => onNavigateTab('/passport', passport.id)}
+        onOpenVerification={() => setVerificationOpen(true)}
       />
 
       <section className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6">
@@ -317,6 +318,37 @@ export default function TrustRoom({ passport, client, canRunAudit, auditBusy, on
       </section>
 
 
+      {verificationOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-label="Verification decision detail" onClick={() => setVerificationOpen(false)}>
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="cc-eyebrow">Authoritative verification</div>
+                <h2 className="mt-1 text-xl font-bold text-[var(--spr-text)]">{verificationDecision || 'UNKNOWN'}</h2>
+                <p className="mt-1 text-sm text-[var(--spr-text-muted)]">{verificationPolicyVersion ? `Policy ${verificationPolicyVersion}` : 'Evaluator policy version not returned'}</p>
+              </div>
+              <button type="button" onClick={() => setVerificationOpen(false)} className="rounded-md p-2 text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)]" aria-label="Close verification detail"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="mt-5 rounded-lg border border-[var(--spr-border)] bg-[var(--spr-surface)] p-4">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-[var(--spr-text-faint)]">Evaluator explanation</div>
+              <p className="mt-2 text-sm leading-6 text-[var(--spr-text)]">{verificationExplanation || 'No evaluator explanation was returned.'}</p>
+            </div>
+            {verificationReasonCodes?.length ? (
+              <div className="mt-4 rounded-lg border border-[var(--spr-border)] bg-[var(--spr-surface)] p-4">
+                <div className="text-[11px] font-bold uppercase tracking-wide text-[var(--spr-text-faint)]">Reason codes</div>
+                <ul className="mt-2 space-y-1">{verificationReasonCodes.map((code) => <li key={code} className="font-mono text-xs text-[var(--spr-text-muted)]">{code}</li>)}</ul>
+              </div>
+            ) : null}
+            <div className="mt-5 grid gap-3 sm:grid-cols-3">
+              <Metric label="Observations" value={verificationCounts?.observations} />
+              <Metric label="Unique evidence" value={verificationCounts?.uniqueEvidence} />
+              <Metric label="Independent sources" value={verificationCounts?.independentSources} />
+            </div>
+            <div className="mt-5 flex justify-end"><button type="button" onClick={() => setVerificationOpen(false)} className="rounded-lg bg-[var(--spr-accent)] px-3.5 py-2 text-sm font-semibold text-white">Close</button></div>
+          </div>
+        </div>
+      )}
+
       {selectedEvidence && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-label="Evidence detail" onClick={() => setSelectedEvidence(null)}>
           <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6 shadow-2xl" onClick={(event) => event.stopPropagation()}>
@@ -360,4 +392,8 @@ export default function TrustRoom({ passport, client, canRunAudit, auditBusy, on
       </>}
     </div>
   );
+function Metric({ label, value }: { label: string; value?: number }) {
+  return <div className="rounded-lg border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3"><div className="text-[11px] uppercase tracking-wide text-[var(--spr-text-faint)]">{label}</div><div className="mt-1 text-lg font-bold text-[var(--spr-text)]">{value == null ? 'Not returned' : value}</div></div>;
+}
+
 }
