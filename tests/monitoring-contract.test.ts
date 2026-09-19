@@ -146,8 +146,10 @@ describe('monitoring enrollment UI', () => {
 // to "ask an Owner to enable it" -- a control that never existed. The plan's
 // Active Passport entitlement (migration 0064) is the only legitimate gate.
 describe('monitoring is gated by the plan entitlement, not an operator allowlist', () => {
-  it('has no tenant allowlist anywhere in the server, config, or env contract', () => {
-    for (const file of ['src/routes/monitoring.ts', 'src/config.ts', '.env.example']) {
+  it('has no tenant allowlist anywhere in the server or config', () => {
+    // .env.example is deliberately not read here: the Docker build excludes
+    // .env.* and runs this suite, so reading it fails the production build.
+    for (const file of ['src/routes/monitoring.ts', 'src/config.ts']) {
       expect(read(file), file).not.toContain('MONITORING_ENABLED_TENANT_IDS');
       expect(read(file), file).not.toContain('MONITORING_NOT_ENABLED');
       expect(read(file), file).not.toContain('enabledTenantIds');
