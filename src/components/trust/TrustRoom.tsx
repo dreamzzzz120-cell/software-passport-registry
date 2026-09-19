@@ -6,7 +6,6 @@
 import { useState } from 'react';
 import { AlertTriangle, ArrowRight, CheckCircle2, ExternalLink, FileSearch, Loader2, Radio, ShieldQuestion, X } from 'lucide-react';
 import { apiFetch } from '../../utils/apiClient';
-import TrustField from './TrustField';
 import TrustLineage from './TrustLineage';
 import TrustStateBadge, { EvidenceStatusBadge, evidenceStatusMeta, trustStateFromDecision, type VerificationDecisionState } from './TrustStateBadge';
 import { DecisionHero } from '../design/CommandCenter';
@@ -62,7 +61,6 @@ export default function TrustRoom({ passport, client, canRunAudit, auditBusy, on
   const [copied, setCopied] = useState(false);
   const [selectedFinding, setSelectedFinding] = useState<any | null>(null);
   const [selectedEvidence, setSelectedEvidence] = useState<any | null>(null);
-  const [selectedDimension, setSelectedDimension] = useState<typeof dimensions[number] | null>(null);
 
   // Verification state comes from the authoritative evaluator, never from
   // passports.verification_status. The legacy column is hardcoded to
@@ -318,23 +316,6 @@ export default function TrustRoom({ passport, client, canRunAudit, auditBusy, on
         )}
       </section>
 
-
-      {selectedDimension && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-label="Trust dimension detail" onClick={() => setSelectedDimension(null)}>
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6 shadow-2xl" onClick={(event) => event.stopPropagation()}>
-            <div className="flex items-start justify-between gap-4">
-              <div><div className="cc-eyebrow">Trust dimension</div><h2 className="mt-1 text-xl font-bold text-[var(--spr-text)]">{selectedDimension.label}</h2><p className="mt-1 text-sm text-[var(--spr-text-muted)]">This is the value currently exposed by the Passport payload.</p></div>
-              <button type="button" onClick={() => setSelectedDimension(null)} className="rounded-md p-2 text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)]" aria-label="Close dimension detail"><X className="h-5 w-5" /></button>
-            </div>
-            <div className="mt-6 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-4"><div className="text-[11px] uppercase tracking-wide text-[var(--spr-text-faint)]">Current value</div><div className="mt-1 text-2xl font-bold text-[var(--spr-text)]">{selectedDimension.value == null ? 'Not available' : selectedDimension.value}</div></div>
-              <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-4"><div className="text-[11px] uppercase tracking-wide text-[var(--spr-text-faint)]">Evidence relationship</div><div className="mt-1 text-sm text-[var(--spr-text)]">{evidence.length} total evidence item{evidence.length === 1 ? '' : 's'}</div></div>
-            </div>
-            <p className="mt-5 text-sm leading-6 text-[var(--spr-text-muted)]">SPR does not assign individual evidence items to this dimension unless the backend provides that relationship. No causal link is invented here.</p>
-            <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => { setSelectedDimension(null); onNavigateTab('/evidence-explorer'); }} className="inline-flex items-center gap-2 rounded-lg border border-[var(--spr-border)] px-3.5 py-2 text-sm font-semibold text-[var(--spr-text)] hover:bg-[var(--spr-surface-hover)]">Inspect evidence <ArrowRight className="h-4 w-4" /></button><button type="button" onClick={() => setSelectedDimension(null)} className="rounded-lg bg-[var(--spr-accent)] px-3.5 py-2 text-sm font-semibold text-white">Close</button></div>
-          </div>
-        </div>
-      )}
 
       {selectedEvidence && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-label="Evidence detail" onClick={() => setSelectedEvidence(null)}>
