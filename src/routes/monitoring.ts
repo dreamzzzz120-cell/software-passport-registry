@@ -2,7 +2,6 @@ import crypto from 'node:crypto';
 import { Router } from 'express';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { config } from '../config.ts';
 import type { ScopedDb } from '../middleware/tenant-scope.ts';
 
 function routeParam(value: string | string[] | undefined): string {
@@ -103,19 +102,11 @@ export function createMonitoringRouter() {
     next();
   });
   router.use(requireAuth);
-  router.use((req: AuthenticatedRequest, res, next) => {
-    const approved = new Set(config.monitoring.enabledTenantIds);
-    if (!approved.has(req.user!.tenantId)) {
-      return res.status(404).json({
-        error: {
-          code: 'MONITORING_NOT_ENABLED',
-          message: 'Monitoring is not enabled for this tenant.',
-          requestId: res.locals.requestId,
-        },
-      });
-    }
-    next();
-  });
+  // Monitoring is gated by the Active Passport entitlement (migration 0064,
+  // enforced again below on create), not by an operator allowlist. The former
+  // per-tenant env allowlist answered 404 for every tenant not hand-added to
+  // a Railway variable, and the UI then told users to "ask an Owner to enable
+  // it" although no Owner control existed.
 
   router.get('/collectors', (_req, res) => {
     res.json(Object.values(COLLECTORS));

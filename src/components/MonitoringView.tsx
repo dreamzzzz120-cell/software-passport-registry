@@ -39,7 +39,6 @@ export default function MonitoringView({ role = 'Viewer', passports = [], client
   const [error, setError] = useState<string | null>(null);
   const [capacityLimit, setCapacityLimit] = useState<CapacityLimit | null>(null);
   const [running, setRunning] = useState<string | null>(null);
-  const [monitoringDisabled, setMonitoringDisabled] = useState(false);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [alertUpdating, setAlertUpdating] = useState<string | null>(null);
   const canManageAlerts = role === 'Owner' || role === 'Admin' || role === 'Technician';
@@ -61,12 +60,10 @@ export default function MonitoringView({ role = 'Viewer', passports = [], client
         apiFetch('/api/monitoring/monitoring-configurations'), apiFetch('/api/monitoring/collector-jobs'),
         apiFetch('/api/monitoring/collectors'), apiFetch('/api/trust-loop/monitoring'),
       ]);
-      if (configResponse.status === 404) { setMonitoringDisabled(true); setConfigurations([]); return; }
       if (!configResponse.ok) {
         const body = await configResponse.json().catch(() => ({}));
         throw new Error(body?.error?.message || body?.error || 'Monitoring data could not be loaded.');
       }
-      setMonitoringDisabled(false);
       setConfigurations(await configResponse.json());
       if (jobsResponse.ok) setJobs(await jobsResponse.json());
       if (collectorsResponse.ok) setCollectorDefs(await collectorsResponse.json());
@@ -141,15 +138,14 @@ export default function MonitoringView({ role = 'Viewer', passports = [], client
     <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div><div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.2em] text-[var(--spr-highlight)]"><Activity className="h-4 w-4" /> Continuous verification</div><h1 className="mt-3 text-3xl font-bold tracking-tight text-[var(--spr-text)]">What changed since the last check?</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--spr-text-muted)]">Monitoring queues configured server-side collectors. A queued run is not a completed or verified result.</p></div>
       <div className="flex gap-2">
-        {canEnroll && !monitoringDisabled && <button onClick={() => { setShowEnroll(true); setEnrollError(null); }} className="spr-btn spr-btn-primary inline-flex items-center justify-center gap-2"><Plus className="h-4 w-4" />Enable monitoring</button>}
+        {canEnroll && <button onClick={() => { setShowEnroll(true); setEnrollError(null); }} className="spr-btn spr-btn-primary inline-flex items-center justify-center gap-2"><Plus className="h-4 w-4" />Enable monitoring</button>}
         <button onClick={() => void load()} disabled={loading} className="spr-btn spr-btn-secondary inline-flex items-center justify-center gap-2 disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />Refresh</button>
       </div>
     </header>
 
-    {monitoringDisabled && <div className="flex gap-3 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4 text-sm text-[var(--spr-amber)]"><AlertCircle className="h-5 w-5 shrink-0" /><div><p className="font-semibold">Monitoring is not enabled for this workspace</p><p className="mt-1 text-[var(--spr-text-muted)]">Ask an Owner to enable it for this tenant.</p></div></div>}
     {error && <div role="alert" className="flex gap-3 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4 text-sm text-[var(--spr-red)]"><AlertCircle className="h-5 w-5 shrink-0" /><div><p className="font-semibold">Verification unavailable</p><p className="mt-1 text-[var(--spr-red)]">{error}</p></div></div>}
 
-    {!monitoringDisabled && !loading && (
+    {!loading && (
       <section className="spr-panel p-5">
         <div className="flex items-center justify-between"><h2 className="text-sm font-bold uppercase tracking-wider text-[var(--spr-text)]">Alerts{openAlerts.length > 0 ? ` (${openAlerts.length} open)` : ''}</h2></div>
         {alerts.length === 0
@@ -177,7 +173,7 @@ export default function MonitoringView({ role = 'Viewer', passports = [], client
 
     {loading ? <div className="grid gap-4 md:grid-cols-2">{[1, 2].map(item => <div key={item} className="h-52 animate-pulse rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)]" />)}</div>
       : configurations.length ? <section className="grid gap-4 md:grid-cols-2">{configurations.map(config => { const job = latest(config.id); return <article key={config.id} className="spr-panel p-5"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-wider text-[var(--spr-text-faint)]">{config.collectorId.replace('_', ' ')} collector</p><h2 className="mt-2 break-all font-semibold text-[var(--spr-text)]">{config.subjectIdentifier}</h2></div><span className={`inline-flex items-center gap-1.5 rounded-sm border border-[var(--spr-border)] px-2.5 py-1 text-xs font-semibold ${config.enabled ? 'text-[var(--spr-green)]' : 'text-[var(--spr-text-muted)]'}`}><span className={`spr-status-dot ${config.enabled ? 'spr-status-dot--green' : 'spr-status-dot--gray'}`} />{config.enabled ? 'Watching' : 'Paused'}</span></div><dl className="mt-5 space-y-3 text-sm"><Row icon={<Clock3 />} label="Last observed" value={readable(config.lastObservedAt)} /><Row icon={<Activity />} label="Last run" value={job ? `${job.state} · ${readable(job.completedAt || job.createdAt)}` : 'No run recorded'} /><Row icon={<CheckCircle2 />} label="Next check" value={readable(config.nextScheduledAt)} /></dl><button onClick={() => void run(config.id)} disabled={!canRun || !config.enabled || running === config.id} title={!canRun ? `Your ${role} role cannot run verifications.` : undefined} className="spr-btn spr-btn-primary mt-6 inline-flex w-full items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"><Play className="h-4 w-4" />{running === config.id ? 'Queueing check…' : 'Re-verify now'}</button></article>; })}</section>
-      : !monitoringDisabled && <section className="spr-panel px-6 py-16 text-center"><XCircle className="mx-auto h-8 w-8 text-[var(--spr-text-faint)]" /><h2 className="mt-3 font-semibold text-[var(--spr-text)]">No verification sources configured</h2><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[var(--spr-text-muted)]">SPR cannot claim continuous coverage until an administrator configures a monitored source for this tenant.</p>{canEnroll && <button onClick={() => setShowEnroll(true)} className="spr-btn spr-btn-primary mt-5 inline-flex items-center gap-2"><Plus className="h-4 w-4" />Enable monitoring</button>}</section>}
+      : <section className="spr-panel px-6 py-16 text-center"><XCircle className="mx-auto h-8 w-8 text-[var(--spr-text-faint)]" /><h2 className="mt-3 font-semibold text-[var(--spr-text)]">No verification sources configured</h2><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[var(--spr-text-muted)]">SPR cannot claim continuous coverage until an administrator configures a monitored source for this tenant.</p>{canEnroll && <button onClick={() => setShowEnroll(true)} className="spr-btn spr-btn-primary mt-5 inline-flex items-center gap-2"><Plus className="h-4 w-4" />Enable monitoring</button>}</section>}
 
     {showEnroll && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-labelledby="enroll-title">

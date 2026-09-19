@@ -42,5 +42,30 @@ export async function attachTenantScope(tenantId: string, res: Response, userId?
   }
   res.on('finish', () => void finish(res.statusCode < 400));
   res.on('close', () => void finish(false));
-  return drizzle(client, { schema });
+  const db = drizzle(client, { schema });
+  settlers.set(db, finish);
+  return db;
+}
+
+const settlers = new WeakMap<ScopedDb, (commit: boolean) => Promise<void>>();
+
+/**
+ * Commits (or rolls back) the request's tenant transaction now, before the
+ * response is sent. Needed by the one route whose side effects outside the
+ * database (deleting sign-ins at the auth provider) must only happen once
+ * the database change is durable; the response-time finalizer then finds
+ * the transaction already settled and does nothing. The scoped db must not
+ * be used again afterwards.
+ */
+export async function settleTenantScope(db: ScopedDb, commit: boolean): Promise<void> {
+  const finish = settlers.get(db);
+  if (!finish) throw new Error('settleTenantScope: not a request-scoped database handle');
+  await finish(commit);
+}
+
+/** The underlying pg client of a request-scoped handle, for statements that take `$n` parameters directly. */
+export function tenantScopeClient(db: ScopedDb): { query: (text: string, values?: unknown[]) => Promise<{ rows: any[]; rowCount: number | null }> } {
+  const client = (db as any).$client;
+  if (!client || typeof client.query !== 'function') throw new Error('tenantScopeClient: handle has no underlying client');
+  return client;
 }
