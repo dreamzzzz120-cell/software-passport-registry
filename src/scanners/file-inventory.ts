@@ -16,6 +16,8 @@
  */
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import { probePixelSafePng } from './steganography-probe.js';
 import { lstat, open } from 'node:fs/promises';
 import path from 'node:path';
 
