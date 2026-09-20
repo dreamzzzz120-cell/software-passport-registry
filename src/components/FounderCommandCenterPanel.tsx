@@ -7,12 +7,13 @@
 // and unavailable values are rendered as "Not verified", never as invented zeroes.
 
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
+import FounderConnectionDetail, { type Connection, type ConnectionGuide } from './FounderConnectionDetail';
 
-type Connection = { name: string; status: 'ok' | 'error' | 'not_configured'; detail: string; lastChecked: string };
 type CommandCenterData = {
   connections: Connection[];
+  connectionGuides: Record<string, ConnectionGuide>;
   businessMetrics: { organizationCount: number | null; userCount: number | null; mrrCents: number | null; stripeCustomerCount: number | null; ciStatus: string };
   generatedAt: string;
 };
@@ -52,6 +53,7 @@ export default function FounderCommandCenterPanel() {
   const [visible, setVisible] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState<Task['category']>('general');
+  const [openConnection, setOpenConnection] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -115,18 +117,38 @@ export default function FounderCommandCenterPanel() {
       </div>
 
       <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-5">
-        <p className="text-[11px] uppercase tracking-[0.24em] font-semibold text-[var(--spr-text-muted)] mb-3">Connections</p>
+        <p className="text-[11px] uppercase tracking-[0.24em] font-semibold text-[var(--spr-text-muted)] mb-1">Connections</p>
+        <p className="mb-3 text-xs text-[var(--spr-text-muted)]">Live checks against each platform. Click a card for what it is, what the status means, which settings are present, and how to configure it.</p>
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-          {data.connections.map((c) => (
-            <div key={c.name} className="flex items-start gap-2 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-3">
-              <span className={DOT_CLASS[c.status]} style={{ marginTop: 4 }} />
-              <div>
-                <p className="text-sm font-medium text-[var(--spr-text)]">{c.name}</p>
-                <p className="text-xs text-[var(--spr-text-muted)]">{c.detail}</p>
-              </div>
-            </div>
-          ))}
+          {data.connections.map((c) => {
+            const open = openConnection === c.key;
+            const guide = data.connectionGuides?.[c.key];
+            const missing = guide ? guide.settings.filter((s) => !s.set).length : 0;
+            return (
+              <button
+                key={c.key}
+                type="button"
+                aria-expanded={open}
+                onClick={() => setOpenConnection(open ? null : c.key)}
+                className={`flex items-start gap-2 rounded-md border p-3 text-left transition-colors hover:border-[var(--spr-highlight)] ${open ? 'border-[var(--spr-highlight)] bg-[var(--spr-surface)]' : 'border-[var(--spr-border)] bg-[var(--spr-surface-alt)]'}`}
+              >
+                <span className={DOT_CLASS[c.status]} style={{ marginTop: 4 }} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-[var(--spr-text)]">{c.name}</p>
+                  <p className="text-xs text-[var(--spr-text-muted)]">{c.detail}</p>
+                  {guide && missing > 0 && <p className="mt-1 text-[11px] text-[var(--spr-amber)]">{missing} setting{missing === 1 ? '' : 's'} missing</p>}
+                </div>
+                {open ? <ChevronDown className="w-4 h-4 shrink-0 text-[var(--spr-text-muted)]" /> : <ChevronRight className="w-4 h-4 shrink-0 text-[var(--spr-text-muted)]" />}
+              </button>
+            );
+          })}
         </div>
+        {openConnection && (() => {
+          const c = data.connections.find((x) => x.key === openConnection);
+          const guide = data.connectionGuides?.[openConnection];
+          if (!c || !guide) return null;
+          return <FounderConnectionDetail connection={c} guide={guide} onRecheck={() => void load()} />;
+        })()}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
