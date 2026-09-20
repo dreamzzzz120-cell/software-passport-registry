@@ -130,14 +130,25 @@ BEGIN
   END LOOP;
 END $$;
 
-DO $$
+ALTER TABLE public.registry_ingestion_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.registry_ingestion_items FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS spr_registry_ingestion_app_read ON public.registry_ingestion_items;
+CREATE POLICY spr_registry_ingestion_app_read
+  ON public.registry_ingestion_items FOR SELECT TO spr_app_runtime
+  USING (current_user = 'spr_app_runtime');
+DROP POLICY IF EXISTS spr_registry_ingestion_worker_all ON public.registry_ingestion_items;
+DO $
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='spr_worker_runtime') THEN
+    CREATE POLICY spr_registry_ingestion_worker_all
+      ON public.registry_ingestion_items FOR ALL TO spr_worker_runtime
+      USING (current_user = 'spr_worker_runtime')
+      WITH CHECK (current_user = 'spr_worker_runtime');
     GRANT SELECT, INSERT, UPDATE ON registry_ingestion_items TO spr_worker_runtime;
   END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='spr_app_runtime') THEN
     GRANT SELECT ON registry_ingestion_items TO spr_app_runtime;
   END IF;
-END $$;
+END $;
 
 COMMIT;
