@@ -48,7 +48,7 @@ const PERMISSION_MATRIX: Array<{ capability: string; roles: string[] }> = [
   { capability: 'Install/remove workspace extensions', roles: ['Owner', 'Admin', 'Operator'] },
   { capability: 'Run monitoring checks, manage alert subscriptions', roles: ['Owner', 'Admin', 'Technician'] },
   { capability: 'View passports, evidence, reports, audit log', roles: ['Owner', 'Admin', 'Operator', 'Technician', 'Viewer', 'Client'] },
-  { capability: 'Offboard tenant, view founder metrics', roles: ['Owner'] },
+  { capability: 'Offboard tenant, view Founder Command Center', roles: ['Owner'] },
 ];
 const ALL_ROLES = ['Owner', 'Admin', 'Operator', 'Technician', 'Viewer', 'Client'];
 

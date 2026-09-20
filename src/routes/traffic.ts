@@ -64,7 +64,7 @@ export function createTrafficRouter() {
   // (every paying MSP customer has one), so requireRole alone let any
   // customer's Owner/Admin pull cross-tenant analytics with no tenant filter
   // at all. requireFounder restricts this to the platform operator, matching
-  // every other cross-tenant endpoint (/founder/metrics, /founder/passports).
+  // every other cross-tenant endpoint (/founder/overview, /founder/passports).
   router.get('/summary', requireAuth, requireRole(['Owner', 'Admin']), requireFounder, rateLimiter, async (_req, res) => {
     const result = await db.execute(sql`
       SELECT

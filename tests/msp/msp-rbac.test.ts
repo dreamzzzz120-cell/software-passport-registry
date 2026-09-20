@@ -19,11 +19,12 @@ function matrixRow(capability: string): string[] {
 }
 
 describe('PERMISSION_MATRIX rows genuinely match the requireRole gates on their real routes', () => {
-  it('"Offboard tenant, view founder metrics" -> Owner only, matches /tenant/offboard and /founder/metrics', () => {
-    expect(matrixRow('Offboard tenant, view founder metrics')).toEqual(['Owner']);
+  it('"Offboard tenant, view Founder Command Center" -> Owner only, matches /tenant/offboard and /founder/overview', () => {
+    expect(matrixRow('Offboard tenant, view Founder Command Center')).toEqual(['Owner']);
     const auth = fs.readFileSync(path.join(process.cwd(), 'src/routes/auth.ts'), 'utf8');
+    const founder = fs.readFileSync(path.join(process.cwd(), 'src/routes/founder-command-center.ts'), 'utf8');
     expect(auth).toContain("router.post('/tenant/offboard', requireAuth, requireRole('Owner')");
-    expect(auth).toContain("router.get('/founder/metrics', requireAuth, requireRole('Owner'), requireFounder");
+    expect(founder).toContain("router.get('/founder/overview', founderReadLimiter, requireAuth, requireRole('Owner'), requireFounder");
   });
 
   it('"Invite, re-role, or remove team members" -> Owner/Admin, matches /organization/invite and team routes', () => {
