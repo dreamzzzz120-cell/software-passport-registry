@@ -75,7 +75,7 @@ export function describeOrigin(payload: any): string {
 function distributionSubject(kind: string, payload: any, result: any): string | null {
   if (kind === 'research_url') return typeof payload?.url === 'string' ? payload.url : null;
   if (kind === 'qualify_lead') return [payload?.company, payload?.email].filter((v) => typeof v === 'string' && v.trim()).join(' · ') || (typeof payload?.leadId === 'string' ? payload.leadId : null);
-  if (kind === 'prepare_outreach') return typeof payload?.email === 'string' ? payload.email : typeof payload?.contactId === 'string' ? payload.contactId : null;
+  if (kind === 'prepare_outreach' || kind === 'send_outreach' || kind === 'followup_outreach') return typeof payload?.email === 'string' ? payload.email : typeof payload?.contactId === 'string' ? payload.contactId : null;
   return typeof result?.company === 'string' ? result.company : null;
 }
 
@@ -90,23 +90,27 @@ function distributionOutcome(kind: string, status: string, result: any): string 
     return parts.join(' · ') || 'observed';
   }
   if (kind === 'qualify_lead') return typeof result.score === 'number' ? `score ${result.score}${result.businessEmail === false ? ' · not a business email' : ''}` : 'qualified';
-  if (kind === 'prepare_outreach') return typeof result.messageId === 'string' ? `message ${result.messageId}` : typeof result.skipped === 'string' ? `skipped: ${result.skipped}` : 'prepared';
+  if (kind === 'prepare_outreach' || kind === 'send_outreach' || kind === 'followup_outreach') return typeof result.messageId === 'string' ? `message ${result.messageId}` : typeof result.skipped === 'string' ? `skipped: ${result.skipped}` : kind === 'followup_outreach' ? 'follow-up sent' : 'sent';
   return trunc(result, 120);
 }
 
-async function distributionKindReport(kind: 'research_url' | 'qualify_lead' | 'prepare_outreach') {
-  const counts = rows(await db.execute(sql`SELECT status, COUNT(*)::int AS count FROM distribution_jobs WHERE tenant_id=${DISTRIBUTION_TENANT_ID} AND kind=${kind} AND updated_at > NOW() - INTERVAL '24 hours' GROUP BY status`));
+type DistributionKind = 'research_url' | 'qualify_lead' | 'prepare_outreach' | 'send_outreach' | 'followup_outreach';
+
+async function distributionKindReport(kinds: DistributionKind | DistributionKind[]) {
+  const kindList = Array.isArray(kinds) ? kinds : [kinds];
+  const kindFilter = sql.join(kindList.map((k) => sql`${k}`), sql`, `);
+  const counts = rows(await db.execute(sql`SELECT status, COUNT(*)::int AS count FROM distribution_jobs WHERE tenant_id=${DISTRIBUTION_TENANT_ID} AND kind IN (${kindFilter}) AND updated_at > NOW() - INTERVAL '24 hours' GROUP BY status`));
   const last24h: Record<string, number> = {};
   for (const r of counts) last24h[String(r.status)] = Number(r.count);
-  const running = rows(await db.execute(sql`SELECT COUNT(*)::int AS count FROM distribution_jobs WHERE tenant_id=${DISTRIBUTION_TENANT_ID} AND kind=${kind} AND status='running'`))[0]?.count ?? 0;
-  const lastCompleted = rows(await db.execute(sql`SELECT updated_at FROM distribution_jobs WHERE tenant_id=${DISTRIBUTION_TENANT_ID} AND kind=${kind} AND status='succeeded' ORDER BY updated_at DESC LIMIT 1`))[0]?.updated_at ?? null;
-  const recentRows = rows(await db.execute(sql`SELECT id, kind, status, payload, result, last_error, attempts, locked_by, locked_at, created_at, updated_at FROM distribution_jobs WHERE tenant_id=${DISTRIBUTION_TENANT_ID} AND kind=${kind} ORDER BY updated_at DESC LIMIT ${RECENT_LIMIT}`));
+  const running = rows(await db.execute(sql`SELECT COUNT(*)::int AS count FROM distribution_jobs WHERE tenant_id=${DISTRIBUTION_TENANT_ID} AND kind IN (${kindFilter}) AND status='running'`))[0]?.count ?? 0;
+  const lastCompleted = rows(await db.execute(sql`SELECT updated_at FROM distribution_jobs WHERE tenant_id=${DISTRIBUTION_TENANT_ID} AND kind IN (${kindFilter}) AND status='succeeded' ORDER BY updated_at DESC LIMIT 1`))[0]?.updated_at ?? null;
+  const recentRows = rows(await db.execute(sql`SELECT id, kind, status, payload, result, last_error, attempts, locked_by, locked_at, created_at, updated_at FROM distribution_jobs WHERE tenant_id=${DISTRIBUTION_TENANT_ID} AND kind IN (${kindFilter}) ORDER BY updated_at DESC LIMIT ${RECENT_LIMIT}`));
   const recent: AgentActivityRow[] = recentRows.map((r) => {
     const payload = r.payload && typeof r.payload === 'object' ? r.payload : {};
     const result = r.result && typeof r.result === 'object' ? r.result : null;
     return {
       id: String(r.id), at: iso(r.updated_at) ?? iso(r.created_at) ?? new Date(0).toISOString(), kind: String(r.kind), status: String(r.status),
-      subject: distributionSubject(kind, payload, result), why: describeOrigin(payload), outcome: distributionOutcome(kind, String(r.status), result),
+      subject: distributionSubject(String(r.kind), payload, result), why: describeOrigin(payload), outcome: distributionOutcome(String(r.kind), String(r.status), result),
       error: trunc(r.last_error), attempts: typeof r.attempts === 'number' ? r.attempts : Number(r.attempts ?? 0), workerId: r.locked_by ? String(r.locked_by) : null,
     };
   });
@@ -139,7 +143,7 @@ export async function discoveryAgent(): Promise<AgentReport> {
     dataSource: 'distribution_jobs (kind research_url), distribution_campaign_settings',
     state, stateReason, runningNow: report.runningNow, last24h: report.last24h, lastCompletedAt: report.lastCompletedAt,
     config: [
-      { label: 'Discovery enabled (database gate)', value: settings ? String(Boolean(settings.discoveryEnabled)) : 'no settings row yet (worker default: true)', source: 'distribution_campaign_settings.discovery_enabled', control: 'campaign' },
+      { label: 'Discovery enabled (database gate)', value: settings ? String(Boolean(settings.discoveryEnabled)) : 'true (no settings row yet; worker default)', source: 'distribution_campaign_settings.discovery_enabled', control: 'campaign' },
       { label: 'Autonomous discovery sweep', value: process.env.DISTRIBUTION_AUTONOMOUS_DISCOVERY === undefined ? WORKER_ENV_NOTE : String(process.env.DISTRIBUTION_AUTONOMOUS_DISCOVERY === 'true'), source: 'DISTRIBUTION_AUTONOMOUS_DISCOVERY' },
       { label: 'Discovery provider URL', value: process.env.DISTRIBUTION_DISCOVERY_PROVIDER_URL === undefined ? WORKER_ENV_NOTE : (process.env.DISTRIBUTION_DISCOVERY_PROVIDER_URL.trim() ? 'set' : 'empty'), source: 'DISTRIBUTION_DISCOVERY_PROVIDER_URL' },
       { label: 'Jobs created by sweeps, last 24h', value: String(Number(sweepJobs24h)), source: 'distribution_jobs.payload.origin' },
@@ -181,7 +185,10 @@ export async function qualificationAgent(): Promise<AgentReport> {
 
 export async function outreachAgent(): Promise<AgentReport> {
   const settings = await campaignSettings();
-  const report = await distributionKindReport('prepare_outreach');
+  // The worker runs outreach as send_outreach and followup_outreach; prepare_outreach
+  // is a legacy kind kept for old rows. Reporting only the legacy kind showed
+  // "idle" while emails were being sent (review finding, 2026-09-20).
+  const report = await distributionKindReport(['send_outreach', 'followup_outreach', 'prepare_outreach']);
   const messages = rows(await db.execute(sql`SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE status='sent')::int AS sent, COUNT(*) FILTER (WHERE status='failed')::int AS failed, COUNT(*) FILTER (WHERE status='sent' AND sent_at > NOW() - INTERVAL '24 hours')::int AS "sent24h", MAX(sent_at) AS "lastSentAt" FROM distribution_messages WHERE tenant_id=${DISTRIBUTION_TENANT_ID}`))[0] ?? {};
   const contacts = rows(await db.execute(sql`SELECT status, COUNT(*)::int AS count FROM distribution_contacts WHERE tenant_id=${DISTRIBUTION_TENANT_ID} GROUP BY status`));
   const verification = rows(await db.execute(sql`SELECT from_address AS "fromAddress", status, error, sent_at AS "sentAt" FROM distribution_sender_verifications ORDER BY sent_at DESC LIMIT 1`))[0] ?? null;
@@ -196,10 +203,10 @@ export async function outreachAgent(): Promise<AgentReport> {
     key: 'outreach', name: 'Outreach agent',
     purpose: 'Sends the first email and bounded follow-ups to contacts that have an outreach basis on record, through Resend, from EMAIL_FROM. Every message is stored with its provider id and status; unsubscribes suppress the contact.',
     howItDecides: 'A contact is only emailed when it has an outreach_basis, is active, the campaign\'s daily send cap has not been reached, and the sender address has a recorded verification. Follow-ups wait followup_delay_days and stop at max_followups. Both the database switch and DISTRIBUTION_AUTONOMOUS_OUTREACH must be on.',
-    dataSource: 'distribution_jobs (kind prepare_outreach), distribution_messages, distribution_contacts, distribution_sender_verifications, distribution_campaign_settings',
+    dataSource: 'distribution_jobs (kinds send_outreach, followup_outreach), distribution_messages, distribution_contacts, distribution_sender_verifications, distribution_campaign_settings',
     state, stateReason, runningNow: report.runningNow, last24h: report.last24h, lastCompletedAt: report.lastCompletedAt,
     config: [
-      { label: 'Outreach enabled (database gate)', value: settings ? String(Boolean(settings.outreachEnabled)) : 'no settings row yet (worker default: true)', source: 'distribution_campaign_settings.outreach_enabled', control: 'campaign' },
+      { label: 'Outreach enabled (database gate)', value: settings ? String(Boolean(settings.outreachEnabled)) : 'true (no settings row yet; worker default)', source: 'distribution_campaign_settings.outreach_enabled', control: 'campaign' },
       { label: 'Autonomous outreach (env gate)', value: String(envEnabled), source: 'DISTRIBUTION_AUTONOMOUS_OUTREACH + RESEND_API_KEY + EMAIL_FROM (API service copy)' },
       { label: 'Daily send cap', value: settings ? String(settings.dailySendCap) : 'default 50', source: 'distribution_campaign_settings.daily_send_cap', control: 'campaign' },
       { label: 'Follow-up delay / max follow-ups', value: settings ? `${settings.followupDelayDays} days / ${settings.maxFollowups}` : 'default 5 days / 2', source: 'distribution_campaign_settings', control: 'campaign' },

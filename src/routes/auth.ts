@@ -961,6 +961,11 @@ export function createAuthRouter() {
       }
       await db.execute(sql`UPDATE passports SET client_id=${parsed.data.clientId} WHERE id=${passportId} AND tenant_id=${tenantId}`);
       await db.execute(sql`UPDATE scans SET client_id=${parsed.data.clientId}, client_name=${clientName ?? 'Unassigned'} WHERE passport_id=${passportId} AND tenant_id=${tenantId}`);
+      // Findings and alerts snapshot client_id at creation and gate Client-role
+      // reads by it; leaving them behind made the new client's members see the
+      // passport but none of its findings (review finding, 2026-09-20).
+      await db.execute(sql`UPDATE trust_findings SET client_id=${parsed.data.clientId} WHERE passport_id=${passportId} AND tenant_id=${tenantId}`);
+      await db.execute(sql`UPDATE alerts SET client_id=${parsed.data.clientId}, client_name=${clientName ?? 'Unassigned'} WHERE passport_id=${passportId} AND tenant_id=${tenantId}`);
       await appendAuditEntry(db, { tenantId, action: 'passport.client_assigned', actor: req.user!.uid, payload: { passportId, from: passport.clientId ?? null, to: parsed.data.clientId } });
       return res.json({ id: passportId, clientId: parsed.data.clientId, clientName });
     } catch (error) {

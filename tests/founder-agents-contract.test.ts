@@ -43,3 +43,28 @@ describe('Founder agents report', () => {
     expect(summarize24h({ 'repository_scan:Completed': 2 })).toBe('2 Completed');
   });
 });
+
+describe('Founder agents report — review follow-ups (2026-09-20)', () => {
+  it('reports outreach on the kinds the worker actually runs, not only the legacy prepare_outreach', async () => {
+    const src = await readFile(new URL('../src/lib/server/founder/agents.ts', import.meta.url), 'utf8');
+    expect(src).toContain("distributionKindReport(['send_outreach', 'followup_outreach', 'prepare_outreach'])");
+  });
+
+  it('the worker discovery sweep records its origin and query on every research job it queues', async () => {
+    const worker = await readFile(new URL('../src/workers/distribution-worker.ts', import.meta.url), 'utf8');
+    expect(worker).toContain("enqueueDistributionJob(pool,'research_url',{url:candidate.url,origin:{kind:'discovery_sweep',query}})");
+  });
+
+  it('worker last-seen counts settled jobs (workers null locked_by when a job settles)', async () => {
+    const overview = await readFile(new URL('../src/lib/server/founder/overview.ts', import.meta.url), 'utf8');
+    expect(overview).toContain("FROM agent_jobs WHERE status IN ('Running','Completed','Failed')");
+    expect(overview).not.toContain('WHERE locked_by IS NOT NULL');
+  });
+
+  it('the discovery/outreach toggles read the no-settings-row default as enabled', async () => {
+    const panel = await readFile(new URL('../src/components/FounderAgentsPanel.tsx', import.meta.url), 'utf8');
+    expect(panel).toContain(".startsWith('true')");
+    const agents = await readFile(new URL('../src/lib/server/founder/agents.ts', import.meta.url), 'utf8');
+    expect(agents).toContain("'true (no settings row yet; worker default)'");
+  });
+});

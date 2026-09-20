@@ -543,7 +543,7 @@ export default function App() {
   let view: ReactNode;
   if (selectedExtension) view = <ExtensionWorkflow id={selectedExtension} onNavigate={navigate} />;
   else switch (path) {
-    case '/dashboard': view = <EvidenceDashboardView clients={clients} alerts={alerts} scans={scans} passports={passports} findings={findings} dataStatus={dataStatus} onNavigateTab={onNavigateTab} onOpenQuickAction={quickAction} />; break;
+    case '/dashboard': view = <EvidenceDashboardView clients={clients} alerts={alerts} scans={scans} passports={passports} findings={findings} dataStatus={dataStatus} role={role} onNavigateTab={onNavigateTab} onOpenQuickAction={quickAction} />; break;
     case '/coverage': view = <CoverageView clients={clients} scans={scans} passports={passports} onNavigateTab={onNavigateTab} />; break;
     case '/evidence-explorer': view = <EvidenceExplorerView passports={passports} />; break;
     case '/assets': view = <AssetsView clients={clients} searchQuery="" assets={assets} />; break;

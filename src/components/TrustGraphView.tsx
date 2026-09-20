@@ -268,7 +268,8 @@ export default function TrustGraphView({ passports = [], findings = [] }: TrustG
         .map((ref) => {
           if (passportId) return evidenceNodeByRawId.get(`${passportId}:${ref}`) || null;
           const matches = evidenceNodesByRawId.get(ref) || [];
-          // Ambiguous evidence IDs are intentionally not resolved across passports.\n          return matches.length === 1 ? matches[0] : null;
+          // Ambiguous evidence IDs are intentionally not resolved across passports.
+          return matches.length === 1 ? matches[0] : null;
         })
         .filter(Boolean) as string[];
 

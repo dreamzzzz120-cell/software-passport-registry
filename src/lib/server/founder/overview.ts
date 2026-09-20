@@ -61,13 +61,14 @@ export async function founderPulse(): Promise<FounderPulse> {
     try { runtimeRole = (await appPool.query('SELECT current_user AS role')).rows?.[0]?.role ?? null; } catch { runtimeRole = null; }
   }
   // "Last seen" is the newest row any worker loop touched. It is evidence of
-  // the worker having done something at that time, not a heartbeat.
+  // the worker having done something at that time, not a heartbeat. Workers
+  // null locked_by when a job settles, so this looks at status, not the lock.
   let lastSeenAt: string | null = null; let lastSeenSource: string | null = null;
   try {
     const seen = rows(await db.execute(sql`
       SELECT source, seen FROM (
-        SELECT 'agent_jobs' AS source, MAX(updated_at) AS seen FROM agent_jobs WHERE locked_by IS NOT NULL
-        UNION ALL SELECT 'distribution_jobs', MAX(updated_at) FROM distribution_jobs WHERE locked_by IS NOT NULL
+        SELECT 'agent_jobs' AS source, MAX(updated_at) AS seen FROM agent_jobs WHERE status IN ('Running','Completed','Failed')
+        UNION ALL SELECT 'distribution_jobs', MAX(updated_at) FROM distribution_jobs WHERE status IN ('running','succeeded','failed','dead_letter')
         UNION ALL SELECT 'registry_crawl_runs', MAX(COALESCE(finished_at, started_at)) FROM registry_crawl_runs
       ) s WHERE seen IS NOT NULL ORDER BY seen DESC LIMIT 1`));
     if (seen[0]) { lastSeenAt = iso(seen[0].seen); lastSeenSource = String(seen[0].source); }
