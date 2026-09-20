@@ -46,7 +46,7 @@ const PERMISSION_MATRIX: Array<{ capability: string; roles: string[] }> = [
   { capability: 'Trigger scans, repository scans, agent jobs', roles: ['Owner', 'Admin', 'Operator'] },
   { capability: 'Create report share links', roles: ['Owner', 'Admin', 'Operator'] },
   { capability: 'Install/remove workspace extensions', roles: ['Owner', 'Admin', 'Operator'] },
-  { capability: 'Run monitoring checks, manage alert subscriptions', roles: ['Owner', 'Admin', 'Technician'] },
+  { capability: 'Run monitoring checks, manage alerts', roles: ['Owner', 'Admin', 'Technician'] },
   { capability: 'View passports, evidence, reports, audit log', roles: ['Owner', 'Admin', 'Operator', 'Technician', 'Viewer', 'Client'] },
   { capability: 'Offboard tenant, view Founder Command Center', roles: ['Owner'] },
 ];

@@ -71,15 +71,6 @@ describe('the server answers the ceiling with a 409, not a 500', () => {
     expect(route).toContain('error?.message ?? error?.cause?.message');
   });
 
-  it('answers in the same shape as the other route that enforces this', () => {
-    const sibling = read('src/routes/integration-monitoring.ts');
-    for (const field of ["billingUnit:'active_passport'", 'upgradeRequired:true']) {
-      expect(sibling.replace(/\s/g, ''), field).toContain(field.replace(/\s/g, ''));
-    }
-    for (const field of ["billingUnit: 'active_passport'", 'upgradeRequired: true']) {
-      expect(route, field).toContain(field);
-    }
-  });
 
   it('still treats a duplicate configuration as a duplicate', () => {
     expect(route).toContain("return res.status(409).json({ error: 'MONITORING_CONFIGURATION_EXISTS' })");

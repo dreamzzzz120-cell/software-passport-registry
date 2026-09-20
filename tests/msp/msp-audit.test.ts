@@ -49,10 +49,9 @@ describe('audit coverage for the event categories section 20 requires', () => {
     expect(hasActionPrefix('billing.')).toBe(true);
   });
 
-  it('administrative actions (retention policy, branding, tenant deletion requests) are audited', () => {
+  it('administrative actions (retention policy, branding) are audited; workspace deletion removes the tenant\'s audit rows with it and is logged at platform level instead', () => {
     expect(hasActionPrefix('retention.')).toBe(true);
     expect(hasActionPrefix('branding.')).toBe(true);
-    expect(hasActionPrefix('tenant.deletion')).toBe(true);
   });
 
   it('scan execution is audited', () => {

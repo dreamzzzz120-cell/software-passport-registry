@@ -18,7 +18,7 @@ import { attachTenantScope, settleTenantScope, tenantScopeClient } from '../midd
 import { AuthenticatedRequest, requireAuth, requireRole, requireFounder, rateLimiter } from '../middleware/security.ts';
 import { adminAuth, setUserCustomClaims } from '../lib/firebase-admin.ts';
 import { isEmailProviderConfigured } from '../lib/email.ts';
-import { loadEmailBrand, renderBrandedEmail, sendBrandedEmail, tenantIdForEmail, tenantIdForUid } from '../lib/branded-email.ts';
+import { loadEmailBrand, renderBrandedEmail, sendBrandedEmail, tenantIdForUid } from '../lib/branded-email.ts';
 import { appendAuditEntry, verifyAuditChain } from '../security/audit-log.ts';
 import { countTenantRows, deleteWorkspaceRows, WorkspaceDeletionBlocked, type WorkspaceDeletionResult } from '../services/workspace-deletion.ts';
 import { describeUserAgent, sessionFingerprint } from '../security/session-tracking.ts';
@@ -1219,31 +1219,6 @@ export function createAuthRouter() {
    * provider is configured the client is told to fall back to Firebase's
    * unbranded sender, exactly as before.
    */
-  router.post('/auth/send-password-reset', rateLimiter, async (req, res) => {
-    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
-    if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'A valid email address is required.' });
-    if (!isEmailProviderConfigured()) return res.json({ accepted: false, via: 'firebase' });
-    try {
-      const brand = await loadEmailBrand(await tenantIdForEmail(email));
-      let link: string | null = null;
-      try { link = await adminAuth.generatePasswordResetLink(email); } catch (error) {
-        const code = (error as { code?: string })?.code;
-        if (code !== 'auth/user-not-found' && code !== 'auth/email-not-found') throw error;
-      }
-      if (link) {
-        await sendBrandedEmail(email, `Reset your ${brand.productName} password`, brand, {
-          heading: 'Reset your password',
-          intro: [`Someone asked to reset the password for the ${brand.productName} account at ${email}. Use the button below to choose a new one; the link expires after a short time.`],
-          cta: { label: 'Choose a new password', url: link },
-          outro: ['If you did not ask for this, ignore this message: your password has not changed.'],
-        });
-      }
-      return res.json({ accepted: true, via: 'provider' });
-    } catch (error) {
-      console.error('[SPR] send-password-reset failed', error instanceof Error ? error.message : String(error));
-      return res.json({ accepted: false, via: 'firebase' });
-    }
-  });
 
   return router;
 }

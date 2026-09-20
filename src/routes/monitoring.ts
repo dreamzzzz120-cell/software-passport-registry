@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { Router } from 'express';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import type { ScopedDb } from '../middleware/tenant-scope.ts';
 
@@ -8,11 +8,11 @@ function routeParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] || '' : value || '';
 }
 import {
-  alertSubscriptions, clients, collectorJobs, inAppNotifications, monitoringConfigurations,
+  clients, collectorJobs, monitoringConfigurations,
   passports,
 } from '../db/schema.ts';
 import { AuthenticatedRequest, requireAuth, requireRole } from '../middleware/security.ts';
-import { COLLECTORS, advanceSchedule, collectorJobKey, observationWindow } from '../utils/monitoring.ts';
+import { COLLECTORS, collectorJobKey, observationWindow } from '../utils/monitoring.ts';
 import { createIntegrationRouter } from './integration.ts';
 
 const scheduleSchema = z.number().int().min(900).max(2_592_000);
@@ -31,27 +31,6 @@ const monitoringPatchSchema = z.object({
   scheduleSeconds: scheduleSchema.optional(),
   credentialReferenceId: z.string().min(1).max(200).nullable().optional(),
 }).strict().refine(body => Object.keys(body).length > 0);
-const alertTypes = [
-  'collector_failed', 'collector_repeatedly_failed', 'collector_timed_out', 'collector_recovered',
-  'authorization_expired', 'authorization_revoked', 'evidence_became_stale', 'evidence_expired',
-  'finding_created', 'finding_severity_increased', 'finding_resolved', 'completeness_decreased',
-  'dimension_became_unknown', 'dimension_became_unavailable', 'score_became_ineligible',
-  'repository_commit_changed', 'dependency_advisory_status_changed',
-  'tls_certificate_approaching_expiry', 'tls_certificate_expired',
-  'domain_expiry_approaching', 'monitored_endpoint_became_unreachable',
-  'monitored_endpoint_recovered',
-] as const;
-const subscriptionCreateSchema = z.object({
-  clientId: z.string().min(1).max(200).nullable().optional(),
-  assetId: z.string().min(1).max(200).nullable().optional(),
-  passportId: z.string().min(1).max(200).nullable().optional(),
-  collectorId: z.enum(['repository', 'dependency', 'tls', 'domain_dns', 'uptime', 'release']).nullable().optional(),
-  alertTypes: z.array(z.enum(alertTypes)).min(1),
-  minimumSeverity: z.enum(['informational', 'low', 'medium', 'high', 'critical']),
-  enabled: z.boolean().default(true),
-  deliveryChannel: z.literal('in_app').default('in_app'),
-}).strict();
-const subscriptionPatchSchema = subscriptionCreateSchema.partial().refine(body => Object.keys(body).length > 0);
 
 function parse<T>(schema: z.ZodType<T>, body: unknown, res: any): T | null {
   const parsed = schema.safeParse(body);
@@ -177,7 +156,7 @@ export function createMonitoringRouter() {
       // here, so hitting the plan ceiling through the UI rethrew and the customer
       // saw a 500 -- a paying user told their own product was broken at the exact
       // moment it should have offered them a larger plan. Answered with the same
-      // shape /api/integration-monitoring already returns, so one client
+      // shape the capacity-limit routes return, so one client
       // interceptor covers both routes.
       const raised = String(error?.message ?? error?.cause?.message ?? '');
       const capacity = /ACTIVE_PASSPORT_LIMIT_REACHED:(\d+):(\d+)/.exec(raised);
@@ -275,96 +254,6 @@ export function createMonitoringRouter() {
     const row = await db.select().from(collectorJobs).where(and(...conditions)).then(rows => rows[0]);
     if (!row) return res.status(404).json({ error: 'COLLECTOR_JOB_NOT_FOUND' });
     res.json(row);
-  });
-
-  router.get('/alert-subscriptions', async (req: AuthenticatedRequest, res) => {
-    const db = req.db!;
-    const clientScope = clientScopeOf(req);
-    const conditions = [eq(alertSubscriptions.tenantId, req.user!.tenantId)];
-    // Subscriptions with no clientId are tenant-wide/MSP-internal routing
-    // rules -- a 'Client'-role user only ever sees ones scoped to them.
-    if (clientScope) conditions.push(eq(alertSubscriptions.clientId, clientScope));
-    const rows = await db.select().from(alertSubscriptions).where(and(...conditions))
-      .orderBy(desc(alertSubscriptions.updatedAt));
-    res.json(rows.map(row => ({ ...row, alertTypes: JSON.parse(row.alertTypes), enabled: row.enabled === 1 })));
-  });
-
-  router.get('/alert-subscriptions/:id', async (req: AuthenticatedRequest, res) => {
-    const db = req.db!;
-    const clientScope = clientScopeOf(req);
-    const conditions = [
-      eq(alertSubscriptions.id, routeParam(req.params.id)),
-      eq(alertSubscriptions.tenantId, req.user!.tenantId),
-    ];
-    if (clientScope) conditions.push(eq(alertSubscriptions.clientId, clientScope));
-    const row = await db.select().from(alertSubscriptions).where(and(...conditions)).then(rows => rows[0]);
-    if (!row) return res.status(404).json({ error: 'ALERT_SUBSCRIPTION_NOT_FOUND' });
-    res.json({ ...row, alertTypes: JSON.parse(row.alertTypes), enabled: row.enabled === 1 });
-  });
-
-  router.post('/alert-subscriptions', requireRole(['Owner', 'Admin', 'Technician']), async (req: AuthenticatedRequest, res) => {
-    const db = req.db!;
-    const body = parse(subscriptionCreateSchema, req.body, res);
-    if (!body) return;
-    if (body.passportId && !await ownedPassport(db, req.user!.tenantId, body.passportId)) {
-      return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
-    }
-    if (body.clientId && !await ownedClient(db, req.user!.tenantId, body.clientId)) {
-      return res.status(404).json({ error: 'CLIENT_NOT_FOUND' });
-    }
-    const now = new Date().toISOString();
-    const [created] = await db.insert(alertSubscriptions).values({
-      id: `subscription-${crypto.randomUUID()}`, tenantId: req.user!.tenantId,
-      clientId: body.clientId, assetId: body.assetId, passportId: body.passportId,
-      collectorId: body.collectorId, minimumSeverity: body.minimumSeverity,
-      deliveryChannel: body.deliveryChannel, alertTypes: JSON.stringify(body.alertTypes),
-      enabled: body.enabled ? 1 : 0,
-      destinationReference: req.user!.uid, createdBy: req.user!.uid, updatedBy: req.user!.uid,
-      createdAt: now, updatedAt: now,
-    }).returning();
-    res.status(201).json({ ...created, alertTypes: JSON.parse(created.alertTypes), enabled: created.enabled === 1 });
-  });
-
-  router.patch('/alert-subscriptions/:id', requireRole(['Owner', 'Admin', 'Technician']), async (req: AuthenticatedRequest, res) => {
-    const db = req.db!;
-    const body = parse(subscriptionPatchSchema, req.body, res);
-    if (!body) return;
-    if (body.clientId && !await ownedClient(db, req.user!.tenantId, body.clientId)) {
-      return res.status(404).json({ error: 'CLIENT_NOT_FOUND' });
-    }
-    const update: Partial<typeof alertSubscriptions.$inferInsert> = {
-      ...(body.clientId === undefined ? {} : { clientId: body.clientId }),
-      ...(body.assetId === undefined ? {} : { assetId: body.assetId }),
-      ...(body.passportId === undefined ? {} : { passportId: body.passportId }),
-      ...(body.collectorId === undefined ? {} : { collectorId: body.collectorId }),
-      ...(body.minimumSeverity === undefined ? {} : { minimumSeverity: body.minimumSeverity }),
-      ...(body.deliveryChannel === undefined ? {} : { deliveryChannel: body.deliveryChannel }),
-      ...(body.alertTypes ? { alertTypes: JSON.stringify(body.alertTypes) } : {}),
-      ...(body.enabled === undefined ? {} : { enabled: body.enabled ? 1 : 0 }),
-      updatedBy: req.user!.uid, updatedAt: new Date().toISOString(),
-    };
-    const [updated] = await db.update(alertSubscriptions).set({ ...update }).where(and(
-      eq(alertSubscriptions.id, routeParam(req.params.id)), eq(alertSubscriptions.tenantId, req.user!.tenantId),
-    )).returning();
-    if (!updated) return res.status(404).json({ error: 'ALERT_SUBSCRIPTION_NOT_FOUND' });
-    res.json({ ...updated, alertTypes: JSON.parse(updated.alertTypes), enabled: updated.enabled === 1 });
-  });
-
-  router.delete('/alert-subscriptions/:id', requireRole(['Owner', 'Admin', 'Technician']), async (req: AuthenticatedRequest, res) => {
-    const db = req.db!;
-    const deleted = await db.delete(alertSubscriptions).where(and(
-      eq(alertSubscriptions.id, routeParam(req.params.id)), eq(alertSubscriptions.tenantId, req.user!.tenantId),
-    )).returning({ id: alertSubscriptions.id });
-    if (!deleted[0]) return res.status(404).json({ error: 'ALERT_SUBSCRIPTION_NOT_FOUND' });
-    res.status(204).send();
-  });
-
-  router.get('/notifications', async (req: AuthenticatedRequest, res) => {
-    const db = req.db!;
-    const rows = await db.select().from(inAppNotifications).where(
-      eq(inAppNotifications.tenantId, req.user!.tenantId),
-    ).orderBy(desc(inAppNotifications.createdAt)).limit(200);
-    res.json(rows);
   });
 
   return router;
