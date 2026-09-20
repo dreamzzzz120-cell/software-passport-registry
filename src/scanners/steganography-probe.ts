@@ -15,6 +15,8 @@ export type StegoProbeResult =
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const PIXELSAFE_SIGNATURE = Buffer.from('PixelSafe', 'ascii');
+const MAX_PROBE_PIXELS = 4_000_000;
+const MAX_INFLATED_BYTES = 32 * 1024 * 1024;
 
 function paeth(a: number, b: number, c: number): number {
   const p = a + b - c;
@@ -65,9 +67,11 @@ function decodePng(png: Buffer): { pixels: Buffer; channels: number } | null {
       else if (type === 'IEND') break;
       offset = end;
     }
-    if (!width || !height || bitDepth !== 8 || interlace !== 0 || (colorType !== 2 && colorType !== 6) || idat.length === 0) return null;
+    if (!width || !height || width * height > MAX_PROBE_PIXELS || bitDepth !== 8 || interlace !== 0 || (colorType !== 2 && colorType !== 6) || idat.length === 0) return null;
     const channels = colorType === 6 ? 4 : 3;
-    const inflated = inflateSync(Buffer.concat(idat));
+    const compressed = Buffer.concat(idat);
+    if (compressed.length > MAX_INFLATED_BYTES) return null;
+    const inflated = inflateSync(compressed, { maxOutputLength: MAX_INFLATED_BYTES });
     const pixels = unfilter(inflated, width, height, channels);
     return pixels ? { pixels, channels } : null;
   } catch {
