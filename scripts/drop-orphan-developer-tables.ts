@@ -20,7 +20,11 @@
 import { pool } from '../src/db/index.ts';
 
 // Children first: projects/tasks/snippets/work_sessions reference app_users.
+import { INTENTIONALLY_DROPPED_TABLES } from './intentionally-dropped-tables.ts';
+// Drop order: dependents first (work_sessions/snippets/tasks reference projects/app_users).
 const TABLES = ['work_sessions', 'snippets', 'tasks', 'projects', 'app_users'] as const;
+// Must stay the same set as INTENTIONALLY_DROPPED_TABLES (dependents first here); checked below.
+if ([...TABLES].sort().join() !== [...INTENTIONALLY_DROPPED_TABLES].sort().join()) throw new Error('drop-orphan-developer-tables: TABLES diverged from INTENTIONALLY_DROPPED_TABLES');
 const dryRun = process.argv.includes('--dry-run');
 
 async function main() {
