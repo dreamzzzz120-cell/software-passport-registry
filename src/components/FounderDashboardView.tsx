@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ShieldCheck, Lock, Sparkles, Database, ArrowRight, RefreshCw } from 'lucide-react';
+import { ShieldCheck, Lock, Sparkles, Database, ArrowRight, RefreshCw, ChevronDown, ChevronRight } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
 import FounderCommandCenterPanel from './FounderCommandCenterPanel';
 import FounderMonitoringPanel from './FounderMonitoringPanel';
@@ -9,8 +9,25 @@ import FounderRegistryCrawlerPanel from './FounderRegistryCrawlerPanel';
 import FounderTrafficPanel from './FounderTrafficPanel';
 import FounderDistributionOpportunities from './FounderDistributionOpportunities';
 import FounderGrowthHub from './FounderGrowthHub';
+import FounderAgentsPanel from './FounderAgentsPanel';
 
 interface FounderDashboardViewProps { userRole: string; }
+
+// The page used to stack nine panels open at once; most were empty most of
+// the time and read as dead rows. Secondary panels now sit behind a header
+// that opens on click, so the page is agents → connections → detail on demand.
+function FounderSection({ title, hint, defaultOpen = false, children }: { title: string; hint: string; defaultOpen?: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <section className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)]">
+      <button type="button" aria-expanded={open} onClick={() => setOpen((v) => !v)} className="flex w-full items-center justify-between gap-3 px-5 py-3 text-left">
+        <span><span className="text-sm font-semibold text-[var(--spr-text)]">{title}</span><span className="ml-2 text-xs text-[var(--spr-text-muted)]">{hint}</span></span>
+        {open ? <ChevronDown className="w-4 h-4 text-[var(--spr-text-muted)]" /> : <ChevronRight className="w-4 h-4 text-[var(--spr-text-muted)]" />}
+      </button>
+      {open && <div className="border-t border-[var(--spr-border)] px-5 pb-5 pt-1">{children}</div>}
+    </section>
+  );
+}
 interface FounderMetrics { latency: number | null; capitalProtected: string; throughput: number; mitigations: number; overallScore?: number; auditEvents?: number; activeThreats?: number; systemIntegrity?: string; }
 interface SelfPassportSummary { id?: string; name?: string; version?: string; overallScore?: number; healthStatus?: string; releaseDate?: string; publisher?: string; scannedAt?: string; sbomComponentCount?: number | null; evidenceCount?: number; openFindings?: number; criticalOrHigh?: number; }
 
@@ -53,17 +70,32 @@ export default function FounderDashboardView({ userRole }: FounderDashboardViewP
       {error && <div className="mt-6 rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 p-4 text-sm text-[var(--spr-red)]">{error}</div>}
       <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4"><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5"><div className="flex items-center gap-3 text-[var(--spr-text-muted)]"><Lock className="w-4 h-4" /><span className="text-[11px] uppercase tracking-[0.24em] font-semibold">Access Level</span></div><p className="mt-4 text-3xl font-bold text-[var(--spr-text)]">Owner</p><p className="mt-2 text-sm text-[var(--spr-text-muted)]">Server-authorized owner access.</p></div><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5"><div className="flex items-center gap-3 text-[var(--spr-text-muted)]"><Database className="w-4 h-4" /><span className="text-[11px] uppercase tracking-[0.24em] font-semibold">Autonomy Score</span></div><p className="mt-4 text-3xl font-bold text-[var(--spr-text)]">{loadingMetrics ? '—' : metrics?.overallScore ?? 'Not verified'}</p><p className="mt-2 text-sm text-[var(--spr-text-muted)]">Observed founder metrics only.</p></div><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5"><div className="flex items-center gap-3 text-[var(--spr-text-muted)]"><ShieldCheck className="w-4 h-4" /><span className="text-[11px] uppercase tracking-[0.24em] font-semibold">Health Status</span></div><p className="mt-4 text-3xl font-bold text-[var(--spr-text)]">{loadingMetrics ? '—' : metrics?.systemIntegrity ?? 'Not verified'}</p><p className="mt-2 text-sm text-[var(--spr-text-muted)]">Only backend-reported system integrity is shown.</p></div><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5"><div className="flex items-center gap-3 text-[var(--spr-text-muted)]"><ArrowRight className="w-4 h-4" /><span className="text-[11px] uppercase tracking-[0.24em] font-semibold">Mitigations</span></div><p className="mt-4 text-3xl font-bold text-[var(--spr-text)]">{loadingMetrics ? '—' : metrics?.mitigations ?? 'Not verified'}</p><p className="mt-2 text-sm text-[var(--spr-text-muted)]">Backend-reported mitigation evidence only.</p></div></div>
     </div>
-    <FounderMonitoringPanel />
-    <FounderLeadsPanel />
-    <FounderInquiriesPanel />
-    <FounderRegistryCrawlerPanel />
-    <FounderTrafficPanel />
-    <FounderDistributionOpportunities />
-    <FounderGrowthHub />
+    <FounderAgentsPanel />
+    <FounderCommandCenterPanel />
+    <FounderSection title="Leads" hint="Free Review visitors who left an email">
+      <FounderLeadsPanel />
+    </FounderSection>
+    <FounderSection title="Growth hub" hint="campaign settings, contacts and pipeline stages">
+      <FounderGrowthHub />
+    </FounderSection>
+    <FounderSection title="Distribution opportunities" hint="highest-scoring researched companies">
+      <FounderDistributionOpportunities />
+    </FounderSection>
+    <FounderSection title="Inquiries" hint="contact-form and feedback submissions">
+      <FounderInquiriesPanel />
+    </FounderSection>
+    <FounderSection title="Traffic" hint="observed page events">
+      <FounderTrafficPanel />
+    </FounderSection>
+    <FounderSection title="Monitoring" hint="trust monitoring runs">
+      <FounderMonitoringPanel />
+    </FounderSection>
+    <FounderSection title="Registry crawler runs" hint="raw crawl history (also summarised under Agents)">
+      <FounderRegistryCrawlerPanel />
+    </FounderSection>
     <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
       <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-6"><div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4"><div><div className="inline-flex items-center gap-2 rounded-full bg-[var(--spr-accent-soft)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--spr-highlight)]"><Sparkles className="w-4 h-4" /> Evidence-backed self passport</div><h2 className="mt-4 text-xl font-semibold text-[var(--spr-text)]">SPR Self Passport</h2><p className="mt-2 text-sm text-[var(--spr-text-muted)]">The newest completed scan of SPR's own repository in this workspace, read from the same tables every other passport uses. Nothing here is seeded or defaulted.</p></div><button onClick={fetchSelfPassport} disabled={loadingPassport} className="spr-btn spr-btn-secondary inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"><RefreshCw className="w-4 h-4" />Refresh Passport</button></div><div className="mt-6 grid gap-4 sm:grid-cols-2"><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">Passport Name</span><p className="mt-2 text-lg font-semibold text-[var(--spr-text)]">{passport?.name ?? 'Not verified'}</p></div><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">Commit</span><p className="mt-2 text-lg font-semibold text-[var(--spr-text)] font-mono break-all">{passport?.version ? passport.version.slice(0, 12) : 'Not verified'}</p></div><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">Health</span><p className="mt-2 text-lg font-semibold text-[var(--spr-text)]">{passport?.healthStatus ?? 'Not verified'}</p></div><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">Acquired</span><p className="mt-2 text-lg font-semibold text-[var(--spr-text)]">{passport?.releaseDate ?? 'Not verified'}</p></div></div>{passport?.publisher && <div className="mt-6 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">Publisher</span><p className="mt-2 text-base font-semibold text-[var(--spr-text)]">{passport.publisher}</p></div>}{passport && <div className="mt-6 grid gap-4 sm:grid-cols-4"><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">SBOM Components</span><p className="mt-2 text-lg font-semibold text-[var(--spr-text)]">{typeof passport.sbomComponentCount === 'number' ? passport.sbomComponentCount : 'Not verified'}</p><p className="mt-1 text-[11px] text-[var(--spr-text-muted)]">Syft, from the scanned commit.</p></div><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">Evidence Items</span><p className="mt-2 text-lg font-semibold text-[var(--spr-text)]">{typeof passport.evidenceCount === 'number' ? passport.evidenceCount : 'Not verified'}</p><p className="mt-1 text-[11px] text-[var(--spr-text-muted)]">Persisted scanner responses.</p></div><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">Open Findings</span><p className="mt-2 text-lg font-semibold text-[var(--spr-text)]">{typeof passport.openFindings === 'number' ? passport.openFindings : 'Not verified'}</p><p className="mt-1 text-[11px] text-[var(--spr-text-muted)]">Not resolved, closed or verified.</p></div><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">Critical / High</span><p className="mt-2 text-lg font-semibold text-[var(--spr-text)]">{typeof passport.criticalOrHigh === 'number' ? passport.criticalOrHigh : 'Not verified'}</p><p className="mt-1 text-[11px] text-[var(--spr-text-muted)]">Of the open findings.</p></div></div>}{passport?.scannedAt && <p className="mt-4 text-[12px] text-[var(--spr-text-muted)]">Scanned {new Date(passport.scannedAt).toLocaleString()} · passport <span className="font-mono">{passport.id}</span></p>}{!loadingPassport && !passport && !error && <p className="mt-6 text-sm text-[var(--spr-text-muted)]">No completed scan of the SPR repository exists in this workspace yet. Run a repository scan of dreamzzzz120-cell/software-passport-registry from the Scans page; this card fills in from that scan and from nothing else.</p>}</div>
       <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6"><div className="flex items-center gap-3 text-[var(--spr-text-muted)]"><Database className="w-4 h-4" /><span className="text-[11px] uppercase tracking-[0.24em] font-semibold">Founder Intelligence Snapshot</span></div><div className="mt-5 grid gap-4 sm:grid-cols-3"><div className="rounded-md bg-[var(--spr-surface)] p-4 text-[var(--spr-text)] border border-[var(--spr-border)]"><p className="text-[11px] uppercase tracking-[0.18em] text-[var(--spr-text-muted)]">Point-of-Trust</p><p className="mt-3 text-3xl font-bold">{loadingMetrics ? '—' : metrics?.throughput ?? 'Not verified'}</p><p className="mt-2 text-sm text-[var(--spr-text-muted)]">Backend-reported throughput.</p></div><div className="rounded-md bg-[var(--spr-surface)] p-4 text-[var(--spr-text)] border border-[var(--spr-border)]"><p className="text-[11px] uppercase tracking-[0.18em] text-[var(--spr-text-muted)]">Capital Protected</p><p className="mt-3 text-3xl font-bold">{loadingMetrics ? '—' : metrics?.capitalProtected ?? 'Not verified'}</p><p className="mt-2 text-sm text-[var(--spr-text-muted)]">Only shown when reported by the owner endpoint.</p></div><div className="rounded-md bg-[var(--spr-surface)] p-4 text-[var(--spr-text)] border border-[var(--spr-border)]"><p className="text-[11px] uppercase tracking-[0.18em] text-[var(--spr-text-muted)]">Active Threat Mitigations</p><p className="mt-3 text-3xl font-bold">{loadingMetrics ? '—' : metrics?.mitigations ?? 'Not verified'}</p><p className="mt-2 text-sm text-[var(--spr-text-muted)]">Backend-reported mitigation evidence.</p></div></div></div>
     </div>
-    <FounderCommandCenterPanel />
   </div>;
 }

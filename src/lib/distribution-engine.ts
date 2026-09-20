@@ -94,11 +94,22 @@ export async function enqueueDistributionJob(pool: Pool, kind: DistributionJobKi
   finally { client.release(); }
 }
 
-export async function enqueueResearchUrl(pool: Pool, url: string) {
+// Why a job exists. Recorded in the payload so the Founder agents page can show
+// the reason next to every job instead of inferring it; jobs created before
+// this field are reported as "origin not recorded".
+export type DistributionJobOrigin =
+  | { kind: 'discovery_sweep'; query: string }
+  | { kind: 'manual_discovery'; query: string }
+  | { kind: 'manual_research' }
+  | { kind: 'manual_research_batch' }
+  | { kind: 'lead_sweep' }
+  | { kind: 'manual_qualify' };
+
+export async function enqueueResearchUrl(pool: Pool, url: string, origin?: DistributionJobOrigin) {
   const parsed = new URL(url);
   if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('DISTRIBUTION_URL_SCHEME_NOT_ALLOWED');
   await assertPublicResearchTarget(parsed);
-  return enqueueDistributionJob(pool, 'research_url', { url: parsed.toString() });
+  return enqueueDistributionJob(pool, 'research_url', origin ? { url: parsed.toString(), origin } : { url: parsed.toString() });
 }
 
 export async function researchUrl(url: string) {
