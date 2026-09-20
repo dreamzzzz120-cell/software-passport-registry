@@ -15,10 +15,11 @@ describe('Trust Room renders only real Passport data', () => {
     expect(s).toContain('const trustState = trustStateFromDecision(verificationDecision);');
   });
 
-  it('reuses the existing TrustField rather than a second competing visualization', () => {
+  it('uses the canonical evidence-lineage view instead of the legacy radial TrustField', () => {
     const s = source();
-    expect(s).toContain("import TrustField from './TrustField';");
-    expect(s).toContain('<TrustField state={trustState}');
+    expect(s).not.toContain("import TrustField from './TrustField';");
+    expect(s).toContain('onViewLineage');
+    expect(s).toContain('View lineage');
   });
 
   it('only shows the 4 real scoring-engine dimensions, with null rendered as N/A by TrustField, never invented here', () => {
