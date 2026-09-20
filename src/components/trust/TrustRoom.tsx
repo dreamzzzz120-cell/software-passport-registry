@@ -70,7 +70,12 @@ export default function TrustRoom({ passport, client, canRunAudit, auditBusy, on
   const vulnerabilities = passport.vulnerabilities || [];
   const timeline = passport.timeline || [];
   const slsaEvidence = findSlsaEvidence(passport);
-
+  const unmeasuredDimensions = [
+    { key: 'security', label: 'Security', value: passport.securityScore },
+    { key: 'compliance', label: 'Compliance', value: passport.complianceScore },
+    { key: 'vendor', label: 'Vendor Rep.', value: passport.vendorReputationScore },
+    { key: 'confidence', label: 'Confidence', value: passport.confidenceScore },
+  ].filter((dimension) => dimension.value == null);
 
   // The single, honest explanation of "why this state": a real count of how
   // many recorded evidence items are independently verified out of the
