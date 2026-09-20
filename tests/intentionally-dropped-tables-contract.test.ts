@@ -5,9 +5,19 @@ import { INTENTIONALLY_DROPPED_TABLES } from '../scripts/intentionally-dropped-t
 
 const root = process.cwd();
 const migrationsDir = join(root, 'migrations');
+// CREATE TABLE [IF NOT EXISTS] [public.]<name>, quoted or bare -- the same
+// shape the migrator's drift audit parses. Built with a regex literal so no
+// string-escaping layer can silently turn "\s" into "s".
+const createTableRe = (table: string) => new RegExp(/create\s+table\s+(?:if\s+not\s+exists\s+)?(?:"?public"?\s*\.\s*)?"?/.source + table + /"?(?![a-z0-9_])/.source, 'i');
 const stripComments = (sql: string) => sql.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/--[^\r\n]*/g, ' ');
 
 describe('intentionally dropped orphan tables', () => {
+  it('the re-creation matcher actually matches (guards against a broken escape)', () => {
+    expect('CREATE TABLE IF NOT EXISTS app_users (').toMatch(createTableRe('app_users'));
+    expect('create table public."tasks" (').toMatch(createTableRe('tasks'));
+    expect('CREATE TABLE tasks_archive (').not.toMatch(createTableRe('tasks'));
+  });
+
   it('names exactly the five template tables migration 0084 documents as orphaned', () => {
     expect([...INTENTIONALLY_DROPPED_TABLES].sort()).toEqual(['app_users', 'projects', 'snippets', 'tasks', 'work_sessions']);
     const m84 = readFileSync(join(migrationsDir, '0084_public_pages_dpa_and_orphan_cleanup.sql'), 'utf8');
@@ -18,9 +28,7 @@ describe('intentionally dropped orphan tables', () => {
     const files = readdirSync(migrationsDir).filter((f) => f.endsWith('.sql') && !f.startsWith('0000')).sort();
     for (const f of files) {
       const sql = stripComments(readFileSync(join(migrationsDir, f), 'utf8'));
-      for (const t of INTENTIONALLY_DROPPED_TABLES) {
-        expect(sql, `${f} re-creates ${t}`).not.toMatch(new RegExp(`create\s+table\s+(?:if\s+not\s+exists\s+)?(?:"?public"?\s*\.\s*)?"?${t}"?\b`, 'i'));
-      }
+      for (const t of INTENTIONALLY_DROPPED_TABLES) expect(sql, `${f} re-creates ${t}`).not.toMatch(createTableRe(t));
     }
     const m109 = files.find((f) => f.startsWith('0109'));
     expect(m109).toBeDefined();
