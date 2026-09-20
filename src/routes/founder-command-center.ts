@@ -28,20 +28,21 @@ import {
   checkVercel,
   checkGithubCi,
   checkStripeAndMrr,
-  checkFirebase,
+  checkSupabaseAuth,
 } from '../lib/server/founder/connections.ts';
+import { connectionGuides } from '../lib/server/founder/connection-guides.ts';
 
 export function createFounderCommandCenterRouter() {
   const router = Router();
 
   router.get('/founder/command-center', requireAuth, requireRole('Owner'), requireFounder, async (_req: AuthenticatedRequest, res, next) => {
     try {
-      const [railway, vercel, githubCi, stripeResult, firebase] = await Promise.all([
+      const [railway, vercel, githubCi, stripeResult, supabaseAuth] = await Promise.all([
         checkRailway(),
         checkVercel(),
         checkGithubCi(),
         checkStripeAndMrr(),
-        checkFirebase(),
+        checkSupabaseAuth(),
       ]);
 
       // Platform-wide counts. organizations = real customer accounts
@@ -67,7 +68,10 @@ export function createFounderCommandCenterRouter() {
       }
 
       return res.json({
-        connections: [railway, vercel, githubCi, stripeResult.connection, firebase],
+        connections: [railway, vercel, githubCi, stripeResult.connection, supabaseAuth],
+        // Static guidance plus which settings are present on this process (names
+        // only). Lets the Founder page explain each card without guessing.
+        connectionGuides: connectionGuides(),
         businessMetrics: {
           organizationCount,
           userCount,
