@@ -110,13 +110,13 @@ export default function FounderCommandCenterPanel() {
   return (
     <div className="mt-8 space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-[var(--spr-text)]">Founder Command Center — Platform</h2>
+        <h2 className="text-lg font-semibold text-[var(--spr-text)]">Connections, registry and tasks</h2>
         <button onClick={() => void load()} className="spr-btn spr-btn-secondary inline-flex items-center gap-2 text-xs">
           <RefreshCw className="w-3.5 h-3.5" /> Refresh
         </button>
       </div>
 
-      <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-5">
+      <div id="founder-connections" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-5">
         <p className="text-[11px] uppercase tracking-[0.24em] font-semibold text-[var(--spr-text-muted)] mb-1">Connections</p>
         <p className="mb-3 text-xs text-[var(--spr-text-muted)]">Live checks against each platform. Click a card for what it is, what the status means, which settings are present, and how to configure it.</p>
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
@@ -151,19 +151,6 @@ export default function FounderCommandCenterPanel() {
         })()}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {[
-          { label: 'MRR', value: money(data.businessMetrics.mrrCents) },
-          { label: 'Organizations', value: observedCount(data.businessMetrics.organizationCount) },
-          { label: 'Users', value: observedCount(data.businessMetrics.userCount) },
-          { label: 'CI Status', value: data.businessMetrics.ciStatus || 'Not verified' },
-        ].map((m) => (
-          <div key={m.label} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4">
-            <p className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">{m.label}</p>
-            <p className="mt-2 text-xl font-bold text-[var(--spr-text)]">{m.value}</p>
-          </div>
-        ))}
-      </div>
 
       <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-5">
         <div className="mb-3 flex items-center justify-between">

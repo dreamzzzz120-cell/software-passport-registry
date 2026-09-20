@@ -32,6 +32,7 @@ import {
 } from '../lib/server/founder/connections.ts';
 import { connectionGuides } from '../lib/server/founder/connection-guides.ts';
 import { allAgentReports } from '../lib/server/founder/agents.ts';
+import { founderOverview } from '../lib/server/founder/overview.ts';
 
 export function createFounderCommandCenterRouter() {
   const router = Router();
@@ -91,6 +92,13 @@ export function createFounderCommandCenterRouter() {
   // worker writes. See src/lib/server/founder/agents.ts for the sources.
   router.get('/founder/agents', founderReadLimiter, requireAuth, requireRole('Owner'), requireFounder, rateLimiter, async (_req: AuthenticatedRequest, res, next) => {
     try { return res.json({ agents: await allAgentReports(), generatedAt: new Date().toISOString() }); }
+    catch (error) { return next(error); }
+  });
+
+  // Platform pulse (the /ready checks, worker last-seen, queue depths) and the
+  // 7-day funnel, every value a count from a table or null when unavailable.
+  router.get('/founder/overview', founderReadLimiter, requireAuth, requireRole('Owner'), requireFounder, rateLimiter, async (_req: AuthenticatedRequest, res, next) => {
+    try { return res.json(await founderOverview()); }
     catch (error) { return next(error); }
   });
 
