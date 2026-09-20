@@ -83,6 +83,7 @@ export const MAX_INVENTORY_ENTRIES = 100_000;
 export const MAX_NESTED_ARCHIVE_CHILDREN = 20_000;
 export const MAX_HASHED_FILE_BYTES = 50 * 1024 * 1024;
 export const MAX_NESTED_ARCHIVE_DEPTH = 1;
+export const MAX_STEGANOGRAPHY_PROBE_BYTES = 10 * 1024 * 1024;
 
 const MANIFEST_NAMES = new Set(['package.json', 'requirements.txt', 'requirements-dev.txt', 'pyproject.toml', 'pipfile', 'setup.py', 'setup.cfg', 'pom.xml', 'build.gradle', 'build.gradle.kts', 'settings.gradle', 'packages.config', 'go.mod', 'cargo.toml', 'gemfile', 'composer.json', 'mix.exs', 'pubspec.yaml', 'project.clj', 'build.sbt', 'conanfile.txt', 'conanfile.py', 'environment.yml', 'podfile', 'package.swift', 'cabal.project', 'stack.yaml', 'deno.json', 'bower.json']);
 const LOCKFILE_NAMES = new Set(['package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'pnpm-lock.yaml', 'bun.lockb', 'bun.lock', 'poetry.lock', 'pipfile.lock', 'pdm.lock', 'uv.lock', 'gradle.lockfile', 'packages.lock.json', 'go.sum', 'cargo.lock', 'gemfile.lock', 'composer.lock', 'mix.lock', 'pubspec.lock', 'podfile.lock', 'package.resolved', 'deno.lock', 'flake.lock']);
@@ -256,6 +257,23 @@ export async function observeExtractedEntries(root: string, entries: InventoryEn
         const magic = sniffMagic(head);
         if (magic) {
           entry.detectedType = `magic:${magic}`;
+          if (magic === 'png' && stats.size <= MAX_STEGANOGRAPHY_PROBE_BYTES) {
+            try {
+              const probe = probePixelSafePng(await readFile(absolute));
+              entry.notes.push({
+                tool: 'spr-steganography-probe',
+                outcome: probe.status,
+                reason: probe.method,
+                detail: probe.detail,
+              });
+              if (probe.status === 'detected') {
+                entry.detectedType = 'magic:png+steganography:PixelSafe';
+                entry.category = 'data';
+              }
+            } catch (error) {
+              entry.notes.push({ tool: 'spr-steganography-probe', outcome: 'unknown', reason: 'PROBE_FAILED', detail: error instanceof Error ? error.message.slice(0, 200) : 'probe failed' });
+            }
+          }
           entry.detectionMethod = 'magic';
           if (entry.category === 'unknown' || entry.category === 'data') entry.category = MAGIC_CATEGORY[magic] ?? entry.category;
           if (MAGIC_CATEGORY[magic] === 'archive') entry.isArchive = true;
