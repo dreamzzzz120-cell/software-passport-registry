@@ -59,7 +59,13 @@ async function githubRepositorySearch(query:string, limit=25) {
     const response = await fetch(target,{signal:controller.signal,headers});
     if (!response.ok) throw new Error(`GITHUB_DISCOVERY_HTTP_${response.status}`);
     const data:any = await response.json();
-    return (Array.isArray(data?.items)?data.items:[]).flatMap((row:any)=>typeof row?.html_url==='string'?[{url:row.html_url,title:typeof row?.full_name==='string'?row.full_name:undefined,source:'github-repository-search',discoveredAt:new Date().toISOString()}]:[]);
+    return (Array.isArray(data?.items)?data.items:[]).flatMap((row:any)=>{
+      // Prefer non-empty homepage URL (where company role emails appear), fall back to GitHub repo page
+      const homeUrl = typeof row?.homepage === 'string' && row.homepage.trim() ? row.homepage.trim() : null;
+      const url = homeUrl || (typeof row?.html_url === 'string' ? row.html_url : null);
+      if (!url) return [];
+      return [{url, title: typeof row?.full_name === 'string' ? row.full_name : undefined, source: 'github-repository-search', discoveredAt: new Date().toISOString()}];
+    });
   } finally { clearTimeout(timeout); }
 }
 
@@ -67,6 +73,7 @@ async function sweepDiscovery(pool: ReturnType<typeof createWorkerPool>){const e
 
 // Diagnostic gate: why email provider, discovery, and db controls are or are not active.
 // Counts and flags only; no prospect data. providerConfigured = email provider ready for outreach.
-function diagnosticGate(){return{autonomousOutreach:autonomousOutreachEnabled(),providerConfigured:Boolean(process.env.RESEND_API_KEY?.trim() && process.env.EMAIL_FROM?.trim()),autonomousDiscovery:process.env.DISTRIBUTION_AUTONOMOUS_DISCOVERY==='true',discoveryProviderConfigured:Boolean(process.env.DISTRIBUTION_DISCOVERY_PROVIDER_URL?.trim())};};
+function diagnosticGate(){return{autonomousOutreach:autonomousOutreachEnabled(),providerConfigured:Boolean(process.env.RESEND_API_KEY?.trim() && process.env.EMAIL_FROM?.trim()),autonomousDiscovery:process.env.DISTRIBUTION_AUTONOMOUS_DISCOVERY==='true',discoveryProviderConfigured:Boolean(process.env.DISTRIBUTION_DISCOVERY_PROVIDER_URL?.trim())};}
 export async function runDistributionWorkerLoop(){const pool=createWorkerPool();try{const controls=await campaignControls(pool);console.info('[Distribution] gates:',JSON.stringify({...diagnosticGate(),dbOutreachEnabled:controls.outreachEnabled,dbDiscoveryEnabled:controls.discoveryEnabled,dailySendLimit:process.env.DISTRIBUTION_DAILY_SEND_LIMIT??'50 (default)'}));}catch(error){console.error('[Distribution] gate read failed:',error instanceof Error?error.message:String(error));}try{const verification=await verifyOutreachSender(pool);console.info('[Distribution] outreach sender verification:',JSON.stringify(verification));}catch(error){console.error('[Distribution] outreach sender verification failed:',error instanceof Error?error.message:String(error));}let nextLeadSweep=0;let nextFollowupSweep=0;let nextDiscoverySweep=0;try{while(true){const now=Date.now();if(now>=nextLeadSweep){try{const count=await sweepFreeReviewLeads(pool);console.info(`[Distribution] lead sweep: queued ${count} Free Review lead qualification jobs`);}catch(error){console.error('[Distribution] lead sweep failed:',error instanceof Error?error.message:String(error));}nextLeadSweep=now+LEAD_SWEEP_MS;}if(now>=nextDiscoverySweep){try{const count=await sweepDiscovery(pool);const gate=diagnosticGate();console.info(`[Distribution] discovery sweep: queued ${count} research jobs`,JSON.stringify({autonomousDiscovery:gate.autonomousDiscovery,discoveryProviderConfigured:gate.discoveryProviderConfigured}));}catch(error){console.error('[Distribution] discovery sweep failed:',error instanceof Error?error.message:String(error));}nextDiscoverySweep=now+DISCOVERY_SWEEP_MS;}if(autonomousOutreachEnabled()&&now>=nextFollowupSweep){try{if((await campaignControls(pool)).outreachEnabled)await enqueueDistributionJob(pool,'followup_outreach',{});}catch(error){console.error('[Distribution] follow-up scheduling failed:',error instanceof Error?error.message:String(error));}nextFollowupSweep=now+FOLLOWUP_SWEEP_MS;}const batch=await Promise.all(Array.from({length:CONCURRENCY},()=>processJob(pool)));if(!batch.some(Boolean))await new Promise(resolve=>setTimeout(resolve,POLL_MS));}}finally{await pool.end();}}
+
 
