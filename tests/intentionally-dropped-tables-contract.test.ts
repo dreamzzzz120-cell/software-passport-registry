@@ -14,7 +14,7 @@ describe('intentionally dropped orphan tables', () => {
     for (const t of INTENTIONALLY_DROPPED_TABLES) expect(m84).toContain(t);
   });
 
-  it('no migration after 0000 re-creates them (0109 did, and was removed)', () => {
+  it('no migration after 0000 re-creates them (0109 did, and is now a no-op that keeps the sequence contiguous)', () => {
     const files = readdirSync(migrationsDir).filter((f) => f.endsWith('.sql') && !f.startsWith('0000')).sort();
     for (const f of files) {
       const sql = stripComments(readFileSync(join(migrationsDir, f), 'utf8'));
@@ -22,7 +22,9 @@ describe('intentionally dropped orphan tables', () => {
         expect(sql, `${f} re-creates ${t}`).not.toMatch(new RegExp(`create\s+table\s+(?:if\s+not\s+exists\s+)?(?:"?public"?\s*\.\s*)?"?${t}"?\b`, 'i'));
       }
     }
-    expect(files.some((f) => f.startsWith('0109'))).toBe(false);
+    const m109 = files.find((f) => f.startsWith('0109'));
+    expect(m109).toBeDefined();
+    expect(stripComments(readFileSync(join(migrationsDir, m109!), 'utf8')).trim()).toBe('SELECT 1;');
   });
 
   it('the drift audit excludes them and reports them if they come back; the drop script uses the same list', () => {

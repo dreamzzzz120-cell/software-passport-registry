@@ -1,0 +1,13 @@
+-- SPDX-License-Identifier: Apache-2.0
+-- Intentionally empty.
+--
+-- This version originally re-created app_users, projects, tasks, snippets and
+-- work_sessions -- five template tables from migration 0000 that no code path
+-- uses, carry no tenant_id and no row-level security, and that migration 0084
+-- and scripts/drop-orphan-developer-tables.ts deliberately removed from
+-- production on 2026-09-13. It was written because the migrator's schema-drift
+-- audit reported them as missing on every deploy; the audit now excludes them
+-- (scripts/intentionally-dropped-tables.ts). The version number is kept so the
+-- migration sequence stays contiguous and the ledger row already recorded in
+-- production stays valid. The tables are dropped again by running the script.
+SELECT 1;
