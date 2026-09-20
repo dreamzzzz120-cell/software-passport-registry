@@ -154,13 +154,13 @@ export async function runRegistryCrawlerLoop(): Promise<void> {
                 AND j.status IN ('Pending','Running')
                 AND lower(s.repository_owner) = ${repo.owner.toLowerCase()} AND lower(s.repository_name) = ${repo.repository.toLowerCase()} LIMIT 1
             `)) as any).rows?.length;
-            const refreshDue = !existing?.next_refresh_at || new Date(existing.next_refresh_at) <= refreshCutoff;
+            const refreshDue = !existing?.next_refresh_at || new Date(existing.next_refresh_at) <= new Date();
             if (activeJob || !refreshDue) { skipped += 1; continue; }
             const result = await enqueueFreeReview(db as any, { owner: repo.owner, repository: repo.repository, ref: null, ipHash: `registry-crawler:${runId}` });
             await client.query(`
               UPDATE registry_ingestion_items
               SET status='queued', passport_id=$2, last_error=NULL, last_error_code=NULL,
-                  refresh_reason='scheduled_refresh', updated_at=CURRENT_TIMESTAMP
+                  refresh_reason='scheduled_refresh', next_refresh_at=CURRENT_TIMESTAMP + INTERVAL '30 days', updated_at=CURRENT_TIMESTAMP
               WHERE id=$1
             `, [`reging_${identityId}`, result.passportId]);
             enqueued += 1;
