@@ -64,7 +64,7 @@ describe('production hardening contract: 50 invariants', () => {
   it('46 registry observations are immutable', () => expect(has('migrations/0111_living_registry_integrity.sql', 'REGISTRY_OBSERVATION_IMMUTABLE')).toBe(true));
   it('47 registry identity keys are unique', () => expect(has('migrations/0111_living_registry_integrity.sql', 'unique (provider, canonical_key)')).toBe(true));
   it('48 registry RLS is enabled', () => expect(has('migrations/0111_living_registry_integrity.sql', 'ENABLE ROW LEVEL SECURITY')).toBe(true));
-  it('49 registry backfill avoids fabricated popularity', () => expect(has('migrations/0112_registry_observed_backfill.sql', 'zero stars to NULL')).toBe(true));
+  it('49 registry backfill avoids fabricated popularity', () => expect(has('migrations/0112_registry_observed_backfill.sql', 'Unknown popularity is NULL, never fabricated as 0')).toBe(true));
   it('50 production containers run as non-root uid 10001', () => {
     expect(has('Dockerfile', 'USER 10001:10001')).toBe(true);
     expect(has('Dockerfile.worker', 'USER 10001:10001')).toBe(true);
