@@ -27,6 +27,7 @@ const OWNER_PATTERN = /^[A-Za-z0-9_.-]{1,100}$/;
 type Entry = {
   owner: string; repository: string; passportId: string; commitSha: string | null; acquiredAt: string | null; defaultBranch: string | null;
   componentCount: number | null; evidenceCount: number; findings: Record<string, number>; openFindings: number;
+  identityStatus: string; lastObservedAt: string | null; nextRefreshAt: string | null;
 };
 
 function escapeHtml(value: unknown): string {
@@ -59,15 +60,21 @@ async function listCompleted(scopedDb: any, limit = 5000, offset = 0, only?: { o
       WHERE j.tenant_id = ${FREE_REVIEW_TENANT_ID} AND j.job_type = 'repository_scan' AND j.status = 'Completed'
         AND EXISTS (SELECT 1 FROM agent_jobs sj WHERE sj.tenant_id = j.tenant_id AND sj.passport_id = j.passport_id AND sj.job_type = 'repository_security_scan' AND sj.status = 'Completed')${ownerFilter}
     )
-    SELECT c.owner, c.repository, c.passport_id AS "passportId", c.commit_sha AS "commitSha", c.acquired_at AS "acquiredAt", c.default_branch AS "defaultBranch", p.sbom
+    SELECT c.owner, c.repository, c.passport_id AS "passportId", c.commit_sha AS "commitSha", c.acquired_at AS "acquiredAt", c.default_branch AS "defaultBranch", p.sbom,
+           COALESCE(r.identity_status, 'observed') AS "identityStatus", r.last_observed_at AS "lastObservedAt", r.next_refresh_at AS "nextRefreshAt"
     FROM completed c JOIN passports p ON p.id = c.passport_id AND p.tenant_id = ${FREE_REVIEW_TENANT_ID}
+    LEFT JOIN software_registry_identities r ON r.provider = 'github'
+      AND lower(r.repository_owner) = lower(c.owner) AND lower(r.repository_name) = lower(c.repository)
     WHERE c.rn = 1 ORDER BY c.acquired_at DESC NULLS LAST LIMIT ${limit} OFFSET ${offset}
   `) as any).rows ?? [];
   const entries: Entry[] = [];
   for (const row of rows) {
     let componentCount: number | null = null;
     try { const parsed = typeof row.sbom === 'string' ? JSON.parse(row.sbom) : row.sbom; componentCount = Array.isArray(parsed) ? parsed.length : null; } catch { componentCount = null; }
-    entries.push({ owner: row.owner, repository: row.repository, passportId: row.passportId, commitSha: row.commitSha ?? null, acquiredAt: row.acquiredAt ? new Date(row.acquiredAt).toISOString() : null, defaultBranch: row.defaultBranch ?? null, componentCount, evidenceCount: 0, findings: {}, openFindings: 0 });
+    entries.push({ owner: row.owner, repository: row.repository, passportId: row.passportId, commitSha: row.commitSha ?? null, acquiredAt: row.acquiredAt ? new Date(row.acquiredAt).toISOString() : null, defaultBranch: row.defaultBranch ?? null, componentCount, evidenceCount: 0, findings: {}, openFindings: 0,
+      identityStatus: String(row.identityStatus ?? 'observed'),
+      lastObservedAt: row.lastObservedAt ? new Date(row.lastObservedAt).toISOString() : null,
+      nextRefreshAt: row.nextRefreshAt ? new Date(row.nextRefreshAt).toISOString() : null });
   }
   if (entries.length === 0) return entries;
   const ids = entries.map((e) => e.passportId);
@@ -122,8 +129,8 @@ export function createSoftwareRegistryRouter() {
       const page = Math.min(pages, Math.max(1, Number.parseInt(String(req.query.page ?? '1'), 10) || 1));
       const entries = await listCompleted(scopedDb, PAGE_SIZE, (page - 1) * PAGE_SIZE);
       const pager = pages > 1 ? `<p class="note" style="margin-top:12px">Page ${page} of ${pages} (${total} repositories). ${page > 1 ? `<a href="/software?page=${page - 1}">Previous</a> ` : ''}${page < pages ? `<a href="/software?page=${page + 1}">Next</a>` : ''}</p>` : '';
-      const rows = entries.map((e) => `<tr><td><a href="/software/${encodeURIComponent(e.owner)}/${encodeURIComponent(e.repository)}">${escapeHtml(e.owner)}/${escapeHtml(e.repository)}</a></td><td>${e.componentCount ?? '—'}</td><td>${e.openFindings}${e.findings.critical ? ` <span class="sev-critical">(${e.findings.critical} critical)</span>` : ''}${e.findings.high ? ` <span class="sev-high">(${e.findings.high} high)</span>` : ''}</td><td>${e.evidenceCount}</td><td>${e.acquiredAt ? escapeHtml(e.acquiredAt.slice(0, 10)) : '—'}</td></tr>`).join('');
-      const body = `<p class="k">Software Passport Registry</p><h1>Observed software passports</h1><p>${total} public repositories reviewed by SPR's own scanners: SBOM generated with Syft, dependency vulnerabilities checked against OSV, secrets and licences scanned. Each page shows exactly what was observed at a specific commit. The registry grows continuously: widely-used public repositories are discovered and reviewed through the same pipeline as a visitor's Free Review.</p><a class="cta" href="${PUBLIC_ORIGIN}/free-review">Review a public repository free</a><h2>${pages > 1 ? `Reviewed software (page ${page} of ${pages})` : 'All reviewed software'}</h2><table><thead><tr><th>Repository</th><th>SBOM components</th><th>Open findings</th><th>Evidence items</th><th>Reviewed</th></tr></thead><tbody>${rows || '<tr><td colspan="5">No completed reviews yet.</td></tr>'}</tbody></table>${pager}`;
+      const rows = entries.map((e) => `<tr><td><a href="/software/${encodeURIComponent(e.owner)}/${encodeURIComponent(e.repository)}">${escapeHtml(e.owner)}/${escapeHtml(e.repository)}</a></td><td>${e.componentCount ?? '—'}</td><td>${e.openFindings}${e.findings.critical ? ` <span class="sev-critical">(${e.findings.critical} critical)</span>` : ''}${e.findings.high ? ` <span class="sev-high">(${e.findings.high} high)</span>` : ''}</td><td>${e.evidenceCount}</td><td>${escapeHtml(e.identityStatus)}</td><td>${e.acquiredAt ? escapeHtml(e.acquiredAt.slice(0, 10)) : '—'}</td></tr>`).join('');
+      const body = `<p class="k">Software Passport Registry</p><h1>Observed software passports</h1><p>${total} public repositories reviewed by SPR's own scanners. Each entry is backed by observed evidence at a specific commit; registry identity, freshness and observation history are maintained separately from tenant passports. The registry grows continuously and refreshes previously observed software instead of treating a first scan as permanent truth.</p><a class="cta" href="${PUBLIC_ORIGIN}/free-review">Review a public repository free</a><h2>${pages > 1 ? `Reviewed software (page ${page} of ${pages})` : 'All reviewed software'}</h2><table><thead><tr><th>Repository</th><th>SBOM components</th><th>Open findings</th><th>Evidence items</th><th>Registry state</th><th>Reviewed</th></tr></thead><tbody>${rows || '<tr><td colspan="6">No completed reviews yet.</td></tr>'}</tbody></table>${pager}`;
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('Cache-Control', 'public, max-age=300');
       return res.send(layout(`Observed software passports${page > 1 ? ` (page ${page})` : ''} — Software Passport Registry`, `${total} public repositories reviewed with real SBOM, vulnerability and evidence data.`, `${PUBLIC_ORIGIN}/software${page > 1 ? `?page=${page}` : ''}`, body));
