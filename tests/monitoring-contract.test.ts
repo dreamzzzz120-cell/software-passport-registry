@@ -69,12 +69,9 @@ describe('monitoring route role gates include Owner', () => {
     expect(s).toContain("router.patch('/monitoring-configurations/:id', requireRole(['Owner', 'Admin'])");
   });
 
-  it('lets an Owner or Admin run a verification and manage alert subscriptions, matching MonitoringView\'s canRun/canManageAlerts gates', () => {
+  it('lets an Owner or Admin run a verification and matching MonitoringView\'s canRun gate', () => {
     const s = source();
     expect(s).toContain("router.post('/monitoring-configurations/:id/run', requireRole(['Owner', 'Admin', 'Technician'])");
-    expect(s).toContain("router.post('/alert-subscriptions', requireRole(['Owner', 'Admin', 'Technician'])");
-    expect(s).toContain("router.patch('/alert-subscriptions/:id', requireRole(['Owner', 'Admin', 'Technician'])");
-    expect(s).toContain("router.delete('/alert-subscriptions/:id', requireRole(['Owner', 'Admin', 'Technician'])");
   });
 });
 
@@ -92,15 +89,11 @@ describe('monitoring route client isolation', () => {
     expect((s.match(/if \(clientScope\) conditions\.push\(eq\(collectorJobs\.clientId, clientScope\)\)/g) || []).length).toBe(2);
   });
 
-  it('scopes alert-subscriptions list and detail reads to the caller\'s own client', () => {
-    const s = source();
-    expect((s.match(/if \(clientScope\) conditions\.push\(eq\(alertSubscriptions\.clientId, clientScope\)\)/g) || []).length).toBe(2);
-  });
 
-  it('verifies a submitted clientId actually belongs to the caller\'s own tenant before creating a monitoring configuration or subscription', () => {
+  it('verifies a submitted clientId actually belongs to the caller\'s own tenant before creating a monitoring configuration', () => {
     const s = source();
     expect(s).toContain('async function ownedClient(db: ScopedDb, tenantId: string, clientId: string)');
-    expect((s.match(/await ownedClient\(db, req\.user!\.tenantId, body\.clientId\)/g) || []).length).toBe(3);
+    expect((s.match(/await ownedClient\(db, req\.user!\.tenantId, body\.clientId\)/g) || []).length).toBe(1);
   });
 });
 

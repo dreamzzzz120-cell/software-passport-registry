@@ -5,7 +5,7 @@ import { sql } from 'drizzle-orm';
 import { appPool, db } from '../db/index.ts';
 import { requireAuth, requireFounder, requireRole, type AuthenticatedRequest } from '../middleware/security.ts';
 import { DISTRIBUTION_TENANT_ID, enqueueResearchUrl, enqueueDistributionJob } from '../lib/distribution-engine.ts';
-import { buildMspDiscoveryQueries, dedupeDiscoveryResults, type DiscoveryProvider } from '../lib/distribution-discovery.ts';
+import { dedupeDiscoveryResults, type DiscoveryProvider } from '../lib/distribution-discovery.ts';
 import { unsubscribeContact, autonomousOutreachEnabled } from '../lib/distribution-outreach.ts';
 
 const limiter = rateLimit({ windowMs: 60_000, limit: 30, standardHeaders: 'draft-7', legacyHeaders: false, validate: { trustProxy: false } });
@@ -60,7 +60,6 @@ export function createDistributionRouter() {
     try { const urls = Array.isArray(req.body?.urls) ? req.body.urls : []; if (urls.length < 1 || urls.length > MAX_BATCH) return res.status(400).json({ error: `Provide 1-${MAX_BATCH} URLs.` }); const ids: string[] = []; for (const value of urls) { const parsed = urlSchema.safeParse({ url: value }); if (!parsed.success) return res.status(400).json({ error: 'Every URL must be a valid HTTP(S) URL.' }); ids.push(await enqueueResearchUrl(appPool, parsed.data.url, { kind: 'manual_research_batch' })); } return res.status(202).json({ status: 'queued', count: ids.length, jobIds: ids }); }
     catch (error) { return next(error); }
   });
-  router.get('/founder/distribution/discovery/queries', ...founderOnly, (_req: AuthenticatedRequest, res) => res.json({ queries: buildMspDiscoveryQueries(), evidencePolicy: 'Queries are discovery prompts, not evidence that a company is an MSP.' }));
   router.post('/founder/distribution/discovery/run', ...founderOnly, async (req: AuthenticatedRequest, res, next) => {
     try { const parsed = discoverySchema.safeParse(req.body); if (!parsed.success) return res.status(400).json({ error: 'A valid discovery query is required.' }); const provider = configuredDiscoveryProvider(); const raw = await provider.discover(parsed.data.query, parsed.data.limit ?? 25); const unique = dedupeDiscoveryResults(raw); const queued: string[] = []; for (const result of unique) queued.push(await enqueueResearchUrl(appPool, result.url, { kind: 'manual_discovery', query: parsed.data.query })); return res.status(202).json({ status: 'queued', provider: provider.name, query: parsed.data.query, discovered: unique.length, queued: queued.length, results: unique, evidencePolicy: 'Discovery results are candidates only. Website research is observational and scoring is heuristic; review evidence before contacting.' }); }
     catch (error) { return next(error); }

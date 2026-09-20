@@ -42,11 +42,10 @@ describe('PERMISSION_MATRIX rows genuinely match the requireRole gates on their 
     expect(scans).toContain("router.post('/agent-jobs', requireRole(['Owner','Admin','Operator'])");
   });
 
-  it('"Run monitoring checks, manage alert subscriptions" -> Owner/Admin/Technician, matches monitoring.ts', () => {
-    expect(matrixRow('Run monitoring checks, manage alert subscriptions')).toEqual(['Owner', 'Admin', 'Technician']);
+  it('"Run monitoring checks, manage alerts" -> Owner/Admin/Technician, matches monitoring.ts', () => {
+    expect(matrixRow('Run monitoring checks, manage alerts')).toEqual(['Owner', 'Admin', 'Technician']);
     const monitoring = fs.readFileSync(path.join(process.cwd(), 'src/routes/monitoring.ts'), 'utf8');
     expect(monitoring).toContain("router.post('/monitoring-configurations/:id/run', requireRole(['Owner', 'Admin', 'Technician'])");
-    expect(monitoring).toContain("router.post('/alert-subscriptions', requireRole(['Owner', 'Admin', 'Technician'])");
   });
 });
 

@@ -13,7 +13,7 @@ import { Router } from 'express';
 import { sql } from 'drizzle-orm';
 import rateLimit from 'express-rate-limit';
 import { AuthenticatedRequest, requireAuth, rateLimiter } from '../middleware/security.ts';
-import { computeTrustVector, TRUST_DIMENSIONS, TRUST_VECTOR_VERSION, type TrustVectorInput } from '../trust/trust-vector.ts';
+import { computeTrustVector, type TrustVectorInput } from '../trust/trust-vector.ts';
 
 const limiter = rateLimit({ windowMs: 60 * 1000, limit: 120, standardHeaders: 'draft-7', legacyHeaders: false, validate: { trustProxy: false } });
 
@@ -55,7 +55,6 @@ export function createTrustVectorRouter() {
   const router = Router();
   router.use(limiter, requireAuth, rateLimiter);
 
-  router.get('/dimensions', (_req, res) => res.json({ version: TRUST_VECTOR_VERSION, dimensions: TRUST_DIMENSIONS }));
 
   router.get('/:passportId', async (req: AuthenticatedRequest, res, next) => {
     try {

@@ -78,7 +78,6 @@ export function createScanLedgerRouter() {
   const router = Router();
   router.use('/scans/submit', requireAuth);
   router.use('/scans/runs', requireAuth);
-  router.use('/passports/:passportId/scan-history', requireAuth);
 
   /** Loads a run the caller may see, or null. Client-role users only see runs on their own client's passports. */
   async function loadRun(req: AuthenticatedRequest, runId: string) {
@@ -217,7 +216,6 @@ export function createScanLedgerRouter() {
   };
 
   router.get('/scans/runs', (req: AuthenticatedRequest, res, next) => listRuns(req, res, next));
-  router.get('/passports/:passportId/scan-history', (req: AuthenticatedRequest, res, next) => listRuns(req, res, next, String(req.params.passportId)));
 
   router.get('/scans/runs/:id', async (req: AuthenticatedRequest, res, next) => {
     try {

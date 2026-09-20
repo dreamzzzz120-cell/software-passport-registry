@@ -6,7 +6,7 @@
 // Recognising the plan ceiling in an API response.
 //
 // Two routes enforce the Active Passport entitlement -- /api/monitoring and
-// /api/integration-monitoring -- and the database enforces it a third time in
+// the former /api/integration-monitoring route -- and the database enforces it a third time in
 // migration 0064, which is what catches a concurrent request that slipped past
 // both. All three now answer with the same 409 shape, so the client needs one
 // recogniser rather than a special case per route.
