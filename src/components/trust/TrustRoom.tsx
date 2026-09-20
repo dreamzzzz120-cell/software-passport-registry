@@ -6,7 +6,6 @@
 import { useState } from 'react';
 import { AlertTriangle, ArrowRight, CheckCircle2, ExternalLink, FileSearch, Loader2, Radio, ShieldQuestion } from 'lucide-react';
 import { apiFetch } from '../../utils/apiClient';
-import TrustField from './TrustField';
 import TrustStateBadge, { EvidenceStatusBadge, evidenceStatusMeta, trustStateFromDecision, type VerificationDecisionState } from './TrustStateBadge';
 import { DecisionHero } from '../design/CommandCenter';
 import type { Client, SoftwarePassport } from '../../types';
@@ -71,14 +70,12 @@ export default function TrustRoom({ passport, client, canRunAudit, auditBusy, on
   const vulnerabilities = passport.vulnerabilities || [];
   const timeline = passport.timeline || [];
   const slsaEvidence = findSlsaEvidence(passport);
-
-  const dimensions = [
-    { key: 'security', label: 'Security', value: passport.securityScore ?? null },
-    { key: 'compliance', label: 'Compliance', value: passport.complianceScore ?? null },
-    { key: 'vendor', label: 'Vendor Rep.', value: passport.vendorReputationScore ?? null },
-    { key: 'confidence', label: 'Confidence', value: passport.confidenceScore ?? null },
-  ];
-  const unmeasuredDimensions = dimensions.filter((dimension) => dimension.value === null);
+  const unmeasuredDimensions = [
+    { key: 'security', label: 'Security', value: passport.securityScore },
+    { key: 'compliance', label: 'Compliance', value: passport.complianceScore },
+    { key: 'vendor', label: 'Vendor Rep.', value: passport.vendorReputationScore },
+    { key: 'confidence', label: 'Confidence', value: passport.confidenceScore },
+  ].filter((dimension) => dimension.value == null);
 
   // The single, honest explanation of "why this state": a real count of how
   // many recorded evidence items are independently verified out of the
@@ -173,9 +170,6 @@ export default function TrustRoom({ passport, client, canRunAudit, auditBusy, on
         <div className="mt-3"><TrustStateBadge state={trustState} /></div>
         <p className="mt-2 text-sm text-[var(--spr-text-muted)]">{trustState === 'EVIDENCE_INCOMPLETE' ? 'Authoritative evidence is unavailable or insufficient. SPR does not infer a pass.' : 'Based on the latest available verified observations.'}</p>
 
-        <div className="mt-6 flex justify-center">
-          <TrustField state={trustState} centerLabel={passport.name?.slice(0, 12).toUpperCase() || 'PASSPORT'} size={300} dimensions={dimensions} />
-        </div>
 
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
           <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-4">
@@ -223,7 +217,12 @@ export default function TrustRoom({ passport, client, canRunAudit, auditBusy, on
         <p className="mt-1 text-sm text-[var(--spr-text-muted)]">Uncertainty is shown, not hidden. Unknown means insufficient evidence, not a failure.</p>
         {(unmeasuredDimensions.length > 0 || !slsaEvidence) ? (
           <ul className="mt-4 space-y-2">
-            {unmeasuredDimensions.map((dimension) => (
+            {[
+              { key: 'security', label: 'Security', value: passport.securityScore },
+              { key: 'compliance', label: 'Compliance', value: passport.complianceScore },
+              { key: 'vendor', label: 'Vendor Rep.', value: passport.vendorReputationScore },
+              { key: 'confidence', label: 'Confidence', value: passport.confidenceScore },
+            ].filter((dimension) => dimension.value == null).map((dimension) => (
               <li key={dimension.key} className="flex items-center justify-between rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] px-3.5 py-2.5">
                 <span className="text-sm text-[var(--spr-text)]">{dimension.label}</span>
                 <span className="text-xs text-[var(--spr-text-faint)]">Evidence not available</span>
