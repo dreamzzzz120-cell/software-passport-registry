@@ -76,6 +76,15 @@ export async function deleteWorkspaceRows(db: Queryable, tenantId: string, expec
   // (migration 0110); nothing else in SPR sets it.
   await db.query("SELECT set_config('app.workspace_deletion', $1, true)", [tenantId]);
   const deleted: Record<string, number> = {};
+  // agent_logs carries no tenant_id (migration 0000), only job_id, so the
+  // column-based discovery never reaches it and job log lines (repository
+  // names, file paths) outlived the workspace. Remove them by job id before
+  // the tenant's agent_jobs rows go (review finding, 2026-09-20).
+  {
+    const logs = await db.query(`DELETE FROM agent_logs WHERE job_id IN (SELECT id FROM agent_jobs WHERE tenant_id = $1)`, [tenantId]);
+    const count = Number(logs.rowCount ?? 0);
+    if (count > 0) deleted.agent_logs = count;
+  }
   let remaining = tables.map((table) => ({ table, reason: '' }));
   let passes = 0;
   let savepointSeq = 0;

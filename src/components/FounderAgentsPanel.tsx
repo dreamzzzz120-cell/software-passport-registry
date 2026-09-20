@@ -67,7 +67,8 @@ function Controls({ agent, onDone }: { agent: AgentReport; onDone: () => void })
   const [busy, setBusy] = useState<string | null>(null);
   const [result, setResult] = useState<ActionResult | null>(null);
   const has = (id: string) => agent.controls.some((c) => c.id === id);
-  const enabledNow = (label: string) => agent.config.find((c) => c.label.startsWith(label))?.value === 'true';
+  // The server reports the gate as 'true' / 'false', or 'true (no settings row yet; worker default)'.
+  const enabledNow = (label: string) => (agent.config.find((c) => c.label.startsWith(label))?.value ?? '').startsWith('true');
   async function run(id: string, method: 'POST' | 'PATCH', path: string, body: unknown) {
     setBusy(id); setResult(null);
     const r = await callControl(method, path, body);
