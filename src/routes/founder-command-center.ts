@@ -35,7 +35,7 @@ import { connectionGuides } from '../lib/server/founder/connection-guides.ts';
 export function createFounderCommandCenterRouter() {
   const router = Router();
 
-  router.get('/founder/command-center', requireAuth, requireRole('Owner'), requireFounder, async (_req: AuthenticatedRequest, res, next) => {
+  router.get('/founder/command-center', requireAuth, requireRole('Owner'), requireFounder, rateLimiter, async (_req: AuthenticatedRequest, res, next) => {
     try {
       const [railway, vercel, githubCi, stripeResult, supabaseAuth] = await Promise.all([
         checkRailway(),
@@ -224,7 +224,7 @@ export function createFounderCommandCenterRouter() {
     }
   });
 
-  router.get('/founder/tasks', requireAuth, requireRole('Owner'), requireFounder, async (_req: AuthenticatedRequest, res, next) => {
+  router.get('/founder/tasks', requireAuth, requireRole('Owner'), requireFounder, rateLimiter, async (_req: AuthenticatedRequest, res, next) => {
     try {
       const result = await db.execute(sql`SELECT * FROM founder_tasks ORDER BY status, created_at DESC`);
       return res.json((result as any).rows ?? []);
@@ -233,7 +233,7 @@ export function createFounderCommandCenterRouter() {
     }
   });
 
-  router.post('/founder/tasks', requireAuth, requireRole('Owner'), requireFounder, async (req: AuthenticatedRequest, res, next) => {
+  router.post('/founder/tasks', requireAuth, requireRole('Owner'), requireFounder, rateLimiter, async (req: AuthenticatedRequest, res, next) => {
     const parsed = taskSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Invalid request body', details: parsed.error.flatten() });
     try {
@@ -249,7 +249,7 @@ export function createFounderCommandCenterRouter() {
     }
   });
 
-  router.patch('/founder/tasks/:id', requireAuth, requireRole('Owner'), requireFounder, async (req: AuthenticatedRequest, res, next) => {
+  router.patch('/founder/tasks/:id', requireAuth, requireRole('Owner'), requireFounder, rateLimiter, async (req: AuthenticatedRequest, res, next) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid task id' });
     const parsed = taskUpdateSchema.safeParse(req.body);
