@@ -51,13 +51,41 @@ async function claimJob(pool: Pool) {
   try {
     await client.query('BEGIN');
     await client.query(`UPDATE agent_jobs SET status=CASE WHEN attempt_count < max_attempts THEN 'Pending' ELSE 'Failed' END, error=CASE WHEN attempt_count < max_attempts THEN NULL ELSE 'INTAKE_SCAN_LEASE_EXPIRED' END, next_attempt_at=CASE WHEN attempt_count < max_attempts THEN NOW() ELSE next_attempt_at END, locked_at=NULL, locked_by=NULL, updated_at=NOW(), completed_at=CASE WHEN attempt_count >= max_attempts THEN NOW() ELSE completed_at END WHERE job_type='intake_scan' AND status='Running' AND locked_at IS NOT NULL AND locked_at < NOW() - INTERVAL '15 minutes'`);
-    const result = await client.query(`SELECT id, tenant_id, passport_id, attempt_count, max_attempts, scan_id, job_type FROM agent_jobs WHERE status='Pending' AND job_type='intake_scan' AND (next_attempt_at IS NULL OR next_attempt_at <= NOW()) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1`);
+    const result = await client.query(`
+      WITH candidate AS (
+        SELECT id
+        FROM agent_jobs
+        WHERE status='Pending'
+          AND job_type='intake_scan'
+          AND (next_attempt_at IS NULL OR next_attempt_at <= NOW())
+        ORDER BY created_at, id
+        FOR UPDATE SKIP LOCKED
+        LIMIT 1
+      )
+      UPDATE agent_jobs j
+      SET status='Running',
+          progress=5,
+          attempt_count=j.attempt_count+1,
+          locked_at=NOW(),
+          locked_by=$1,
+          updated_at=NOW()
+      FROM candidate
+      WHERE j.id=candidate.id
+      RETURNING j.id, j.tenant_id, j.passport_id, j.attempt_count, j.max_attempts, j.scan_id, j.job_type
+    `, [WORKER_ID]);
     const job = result.rows[0];
-    if (!job) { await client.query('COMMIT'); return null; }
-    await client.query(`UPDATE agent_jobs SET status='Running', progress=5, attempt_count=attempt_count+1, locked_at=NOW(), locked_by=$2, updated_at=NOW() WHERE id=$1 AND tenant_id=$3`, [job.id, WORKER_ID, job.tenant_id]);
+    if (!job) {
+      await client.query('COMMIT');
+      return null;
+    }
     await client.query('COMMIT');
-    return { ...job, attempt_count: Number(job.attempt_count) + 1 };
-  } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
+    console.log(JSON.stringify({ event: 'intake_scan_claimed', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, scanId: job.scan_id, attempt: Number(job.attempt_count), maxAttempts: Number(job.max_attempts) }));
+    return job;
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch {}
+    console.error(JSON.stringify({ event: 'intake_scan_claim_error', workerId: WORKER_ID, reason: safeFailureReason(rootErrorMessage(error)) }));
+    throw error;
+  } finally { client.release(); }
 }
 
 /** Unique on-disk/display name per item so two uploads named the same are two entries, not one overwriting the other. */
