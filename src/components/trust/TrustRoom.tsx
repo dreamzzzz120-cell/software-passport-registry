@@ -4,9 +4,9 @@
  */
 
 import { useState } from 'react';
-import { AlertTriangle, ArrowRight, CheckCircle2, ExternalLink, FileSearch, Loader2, Radio, ShieldQuestion } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2, ExternalLink, FileSearch, Loader2, Radio, ShieldQuestion, X } from 'lucide-react';
 import { apiFetch } from '../../utils/apiClient';
-import TrustField from './TrustField';
+import TrustLineage from './TrustLineage';
 import TrustStateBadge, { EvidenceStatusBadge, evidenceStatusMeta, trustStateFromDecision, type VerificationDecisionState } from './TrustStateBadge';
 import { DecisionHero } from '../design/CommandCenter';
 import type { Client, SoftwarePassport } from '../../types';
@@ -59,6 +59,9 @@ export default function TrustRoom({ passport, client, canRunAudit, auditBusy, on
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [selectedFinding, setSelectedFinding] = useState<any | null>(null);
+  const [selectedEvidence, setSelectedEvidence] = useState<any | null>(null);
+  const [verificationOpen, setVerificationOpen] = useState(false);
 
   // Verification state comes from the authoritative evaluator, never from
   // passports.verification_status. The legacy column is hardcoded to
@@ -168,14 +171,23 @@ export default function TrustRoom({ passport, client, canRunAudit, auditBusy, on
         </section>
       ) : <>
 
+      <TrustLineage
+        passport={passport}
+        evidence={evidence}
+        findings={vulnerabilities}
+        verificationDecision={verificationDecision}
+        verificationExplanation={verificationExplanation}
+        verificationPolicyVersion={verificationPolicyVersion}
+        onOpenPassport={() => onNavigateTab('/passport', passport.id)}
+        onOpenEvidence={(item) => setSelectedEvidence(item)}
+        onOpenFinding={(finding) => setSelectedFinding(finding)}
+        onOpenVerification={() => setVerificationOpen(true)}
+      />
+
       <section className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6">
         <h2 className="text-xs font-bold uppercase tracking-[.14em] text-[var(--spr-text-faint)]">Current trust state</h2>
         <div className="mt-3"><TrustStateBadge state={trustState} /></div>
         <p className="mt-2 text-sm text-[var(--spr-text-muted)]">{trustState === 'EVIDENCE_INCOMPLETE' ? 'Authoritative evidence is unavailable or insufficient. SPR does not infer a pass.' : 'Based on the latest available verified observations.'}</p>
-
-        <div className="mt-6 flex justify-center">
-          <TrustField state={trustState} centerLabel={passport.name?.slice(0, 12).toUpperCase() || 'PASSPORT'} size={300} dimensions={dimensions} />
-        </div>
 
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
           <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-4">
@@ -199,7 +211,7 @@ export default function TrustRoom({ passport, client, canRunAudit, auditBusy, on
         {evidence.length > 0 ? (
           <ul className="mt-4 space-y-2.5">
             {evidence.map((item) => (
-              <li key={item.id} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3.5">
+              <li key={item.id} role="button" tabIndex={0} onClick={() => setSelectedEvidence(item)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setSelectedEvidence(item); }} className="cursor-pointer rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3.5 transition hover:bg-[var(--spr-surface-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--spr-highlight)]">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm font-semibold text-[var(--spr-text)]">{item.name || item.type}</p>
                   <EvidenceStatusBadge status={item.status} />
@@ -246,12 +258,12 @@ export default function TrustRoom({ passport, client, canRunAudit, auditBusy, on
             {vulnerabilities.map((v: any) => {
               const id = String(v.findingId ?? v.id ?? '');
               return (
-                <div key={id} className="flex flex-col gap-3 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3.5 sm:flex-row sm:items-center sm:justify-between">
+                <div key={id} role="button" tabIndex={0} onClick={() => setSelectedFinding(v)} className="flex cursor-pointer flex-col gap-3 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3.5 transition hover:bg-[var(--spr-surface-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--spr-highlight)] sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <div className="flex items-center gap-2"><span className={`rounded-md border px-2 py-0.5 text-[12px] font-bold ${v.severity === 'Critical' ? 'border-[var(--spr-red)]/30 bg-[var(--spr-red)]/10 text-[var(--spr-red)]' : v.severity === 'High' ? 'border-[var(--spr-amber)]/30 bg-[var(--spr-amber)]/10 text-[var(--spr-amber)]' : 'border-[var(--spr-highlight)]/30 bg-[var(--spr-highlight)]/10 text-[var(--spr-highlight)]'}`}>{v.severity || 'Unknown severity'}</span><span className="text-sm font-semibold text-[var(--spr-text)]">{v.title || id}</span></div>
                     <p className="mt-1 text-xs text-[var(--spr-text-muted)]">{v.status || 'Open'} · {v.description || 'No description recorded.'}</p>
                   </div>
-                  <button onClick={() => onCreateRemediation(v)} disabled={!canCreateRemediation || !id || remediationBusy === id} title={!canCreateRemediation ? 'Your role cannot create remediations.' : undefined} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-[var(--spr-border)] px-3.5 py-2 text-xs font-semibold text-[var(--spr-text)] hover:bg-[var(--spr-surface-hover)] disabled:cursor-not-allowed disabled:opacity-50">{remediationBusy === id ? 'Persisting…' : 'Investigate'}</button>
+                  <button onClick={(event) => { event.stopPropagation(); onCreateRemediation(v); }} disabled={!canCreateRemediation || !id || remediationBusy === id} title={!canCreateRemediation ? 'Your role cannot create remediations.' : undefined} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-[var(--spr-border)] px-3.5 py-2 text-xs font-semibold text-[var(--spr-text)] hover:bg-[var(--spr-surface-hover)] disabled:cursor-not-allowed disabled:opacity-50">{remediationBusy === id ? 'Persisting…' : 'Investigate'}</button>
                 </div>
               );
             })}
@@ -305,7 +317,83 @@ export default function TrustRoom({ passport, client, canRunAudit, auditBusy, on
         )}
       </section>
 
+
+      {verificationOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-label="Verification decision detail" onClick={() => setVerificationOpen(false)}>
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="cc-eyebrow">Authoritative verification</div>
+                <h2 className="mt-1 text-xl font-bold text-[var(--spr-text)]">{verificationDecision || 'UNKNOWN'}</h2>
+                <p className="mt-1 text-sm text-[var(--spr-text-muted)]">{verificationPolicyVersion ? `Policy ${verificationPolicyVersion}` : 'Evaluator policy version not returned'}</p>
+              </div>
+              <button type="button" onClick={() => setVerificationOpen(false)} className="rounded-md p-2 text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)]" aria-label="Close verification detail"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="mt-5 rounded-lg border border-[var(--spr-border)] bg-[var(--spr-surface)] p-4">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-[var(--spr-text-faint)]">Evaluator explanation</div>
+              <p className="mt-2 text-sm leading-6 text-[var(--spr-text)]">{verificationExplanation || 'No evaluator explanation was returned.'}</p>
+            </div>
+            {verificationReasonCodes?.length ? (
+              <div className="mt-4 rounded-lg border border-[var(--spr-border)] bg-[var(--spr-surface)] p-4">
+                <div className="text-[11px] font-bold uppercase tracking-wide text-[var(--spr-text-faint)]">Reason codes</div>
+                <ul className="mt-2 space-y-1">{verificationReasonCodes.map((code) => <li key={code} className="font-mono text-xs text-[var(--spr-text-muted)]">{code}</li>)}</ul>
+              </div>
+            ) : null}
+            <div className="mt-5 grid gap-3 sm:grid-cols-3">
+              <Metric label="Observations" value={verificationCounts?.observations} />
+              <Metric label="Unique evidence" value={verificationCounts?.uniqueEvidence} />
+              <Metric label="Independent sources" value={verificationCounts?.independentSources} />
+            </div>
+            <div className="mt-5 flex justify-end"><button type="button" onClick={() => setVerificationOpen(false)} className="rounded-lg bg-[var(--spr-accent)] px-3.5 py-2 text-sm font-semibold text-white">Close</button></div>
+          </div>
+        </div>
+      )}
+
+      {selectedEvidence && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-label="Evidence detail" onClick={() => setSelectedEvidence(null)}>
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-4">
+              <div><div className="cc-eyebrow">Evidence record</div><h2 className="mt-1 text-xl font-bold text-[var(--spr-text)]">{selectedEvidence.name || selectedEvidence.type || 'Evidence'}</h2><p className="mt-1 break-all font-mono text-[11px] text-[var(--spr-text-faint)]">{String(selectedEvidence.id || '')}</p></div>
+              <button type="button" onClick={() => setSelectedEvidence(null)} className="rounded-md p-2 text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)]" aria-label="Close evidence detail"><X className="h-5 w-5" /></button>
+            </div>
+            <dl className="mt-6 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3"><dt className="text-[11px] uppercase tracking-wide text-[var(--spr-text-faint)]">Status</dt><dd className="mt-1"><EvidenceStatusBadge status={selectedEvidence.status} /></dd></div>
+              <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3"><dt className="text-[11px] uppercase tracking-wide text-[var(--spr-text-faint)]">Type</dt><dd className="mt-1 text-sm text-[var(--spr-text)]">{selectedEvidence.type || 'Not observed'}</dd></div>
+              <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3"><dt className="text-[11px] uppercase tracking-wide text-[var(--spr-text-faint)]">Source</dt><dd className="mt-1 break-words text-sm text-[var(--spr-text)]">{selectedEvidence.signer || selectedEvidence.source || 'Not available'}</dd></div>
+              <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3"><dt className="text-[11px] uppercase tracking-wide text-[var(--spr-text-faint)]">Observed</dt><dd className="mt-1 text-sm text-[var(--spr-text)]">{formatTimestamp(selectedEvidence.timestamp) || 'Not available'}</dd></div>
+            </dl>
+            <div className="mt-5 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-4"><h3 className="text-sm font-semibold text-[var(--spr-text)]">Hash</h3><p className="mt-2 break-all font-mono text-xs text-[var(--spr-text-muted)]">{selectedEvidence.hash || 'Not available'}</p></div>
+            {selectedEvidence.failureReason && <div className="mt-5 rounded-md border border-[var(--spr-red)]/30 bg-[var(--spr-red)]/5 p-4"><h3 className="text-sm font-semibold text-[var(--spr-red)]">Failure reason</h3><p className="mt-2 text-sm text-[var(--spr-text-muted)]">{selectedEvidence.failureReason}</p></div>}
+            <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => { setSelectedEvidence(null); onNavigateTab('/evidence-explorer'); }} className="inline-flex items-center gap-2 rounded-lg border border-[var(--spr-border)] px-3.5 py-2 text-sm font-semibold text-[var(--spr-text)] hover:bg-[var(--spr-surface-hover)]">Open Evidence Explorer <ArrowRight className="h-4 w-4" /></button><button type="button" onClick={() => setSelectedEvidence(null)} className="rounded-lg bg-[var(--spr-accent)] px-3.5 py-2 text-sm font-semibold text-white">Close</button></div>
+          </div>
+        </div>
+      )}
+
+      {selectedFinding && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-label="Finding evidence detail" onClick={() => setSelectedFinding(null)}>
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-4">
+              <div><div className="cc-eyebrow">Finding evidence</div><h2 className="mt-1 text-xl font-bold text-[var(--spr-text)]">{selectedFinding.title || selectedFinding.id || selectedFinding.findingId || 'Recorded finding'}</h2><p className="mt-1 break-all font-mono text-[11px] text-[var(--spr-text-faint)]">{String(selectedFinding.findingId || selectedFinding.id || '')}</p></div>
+              <button type="button" onClick={() => setSelectedFinding(null)} className="rounded-md p-2 text-[var(--spr-text-muted)] hover:bg-[var(--spr-surface-hover)]" aria-label="Close finding detail"><X className="h-5 w-5" /></button>
+            </div>
+            <dl className="mt-6 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3"><dt className="text-[11px] uppercase tracking-wide text-[var(--spr-text-faint)]">Severity</dt><dd className="mt-1 text-sm font-semibold text-[var(--spr-text)]">{selectedFinding.severity || 'Not observed'}</dd></div>
+              <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3"><dt className="text-[11px] uppercase tracking-wide text-[var(--spr-text-faint)]">Status</dt><dd className="mt-1 text-sm font-semibold text-[var(--spr-text)]">{selectedFinding.status || 'Open'}</dd></div>
+              <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3"><dt className="text-[11px] uppercase tracking-wide text-[var(--spr-text-faint)]">CVSS</dt><dd className="mt-1 text-sm text-[var(--spr-text)]">{selectedFinding.cvss ?? 'Not observed'}</dd></div>
+              <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3"><dt className="text-[11px] uppercase tracking-wide text-[var(--spr-text-faint)]">Fixed version</dt><dd className="mt-1 text-sm text-[var(--spr-text)]">{selectedFinding.fixedVersion || selectedFinding.remediation || 'No fixed version observed'}</dd></div>
+            </dl>
+            <div className="mt-5 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-4"><h3 className="text-sm font-semibold text-[var(--spr-text)]">Recorded observation</h3><p className="mt-2 text-sm leading-6 text-[var(--spr-text-muted)]">{selectedFinding.description || 'No additional description was recorded for this finding.'}</p></div>
+            <div className="mt-5 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-4"><h3 className="text-sm font-semibold text-[var(--spr-text)]">Underlying evidence</h3><p className="mt-2 text-sm leading-6 text-[var(--spr-text-muted)]">{selectedFinding.evidence || selectedFinding.evidenceSummary || selectedFinding.rawEvidence || selectedFinding.file || selectedFinding.source || 'The current passport payload does not expose a raw-evidence field for this finding.'}</p></div>
+            <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => { setSelectedFinding(null); onNavigateTab('/evidence-explorer'); }} className="inline-flex items-center gap-2 rounded-lg border border-[var(--spr-border)] px-3.5 py-2 text-sm font-semibold text-[var(--spr-text)] hover:bg-[var(--spr-surface-hover)]">Open Evidence Explorer <ArrowRight className="h-4 w-4" /></button><button type="button" onClick={() => setSelectedFinding(null)} className="rounded-lg bg-[var(--spr-accent)] px-3.5 py-2 text-sm font-semibold text-white">Close</button></div>
+          </div>
+        </div>
+      )}
+
       </>}
     </div>
   );
+}
+
+function Metric({ label, value }: { label: string; value?: number }) {
+  return <div className="rounded-lg border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3"><div className="text-[11px] uppercase tracking-wide text-[var(--spr-text-faint)]">{label}</div><div className="mt-1 text-lg font-bold text-[var(--spr-text)]">{value == null ? 'Not returned' : value}</div></div>;
 }
