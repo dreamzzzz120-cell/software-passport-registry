@@ -94,61 +94,81 @@ ALTER TABLE registry_ingestion_items
   ADD COLUMN IF NOT EXISTS last_error_code text,
   ADD COLUMN IF NOT EXISTS refresh_reason text,
   ADD COLUMN IF NOT EXISTS observation_count integer NOT NULL DEFAULT 0 CHECK (observation_count >= 0);
+
 CREATE INDEX IF NOT EXISTS registry_ingestion_identity_idx ON registry_ingestion_items (identity_id);
 CREATE INDEX IF NOT EXISTS registry_ingestion_refresh_idx ON registry_ingestion_items (next_refresh_at, status);
 
-CREATE OR REPLACE FUNCTION prevent_registry_observation_mutation()
-RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  RAISE EXCEPTION 'REGISTRY_OBSERVATION_IMMUTABLE';
-END;
-$$;
+CREATE OR REPLACE FUNCTION public.prevent_registry_observation_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS 'BEGIN
+  RAISE EXCEPTION ''REGISTRY_OBSERVATION_IMMUTABLE'';
+END;';
 DROP TRIGGER IF EXISTS software_registry_observations_immutable ON software_registry_observations;
 CREATE TRIGGER software_registry_observations_immutable
 BEFORE UPDATE OR DELETE ON software_registry_observations
-FOR EACH ROW EXECUTE FUNCTION prevent_registry_observation_mutation();
+FOR EACH ROW EXECUTE FUNCTION public.prevent_registry_observation_mutation();
 
-DO $$
-DECLARE tbl text;
-BEGIN
-  FOREACH tbl IN ARRAY ARRAY['software_registry_identities','software_registry_aliases','software_registry_observations','software_registry_conflicts']
-  LOOP
-    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', tbl);
-    EXECUTE format('ALTER TABLE public.%I FORCE ROW LEVEL SECURITY', tbl);
-    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename=tbl AND policyname='spr_registry_app_read') THEN
-      EXECUTE format('CREATE POLICY spr_registry_app_read ON public.%I FOR SELECT TO spr_app_runtime USING (current_user = ''spr_app_runtime'')', tbl);
-    END IF;
-    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='spr_worker_runtime') THEN
-      IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename=tbl AND policyname='spr_registry_worker_all') THEN
-        EXECUTE format('CREATE POLICY spr_registry_worker_all ON public.%I FOR ALL TO spr_worker_runtime USING (current_user = ''spr_worker_runtime'') WITH CHECK (current_user = ''spr_worker_runtime'')', tbl);
-      END IF;
-      EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON public.%I TO spr_worker_runtime', tbl);
-    END IF;
-    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='spr_app_runtime') THEN
-      EXECUTE format('GRANT SELECT ON public.%I TO spr_app_runtime', tbl);
-    END IF;
-  END LOOP;
-END $$;
+ALTER TABLE public.software_registry_identities ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.software_registry_identities FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.software_registry_aliases ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.software_registry_aliases FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.software_registry_observations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.software_registry_observations FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.software_registry_conflicts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.software_registry_conflicts FORCE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS spr_registry_app_read ON public.software_registry_identities;
+CREATE POLICY spr_registry_app_read ON public.software_registry_identities
+  FOR SELECT TO spr_app_runtime USING (current_user = 'spr_app_runtime');
+DROP POLICY IF EXISTS spr_registry_app_read ON public.software_registry_aliases;
+CREATE POLICY spr_registry_app_read ON public.software_registry_aliases
+  FOR SELECT TO spr_app_runtime USING (current_user = 'spr_app_runtime');
+DROP POLICY IF EXISTS spr_registry_app_read ON public.software_registry_observations;
+CREATE POLICY spr_registry_app_read ON public.software_registry_observations
+  FOR SELECT TO spr_app_runtime USING (current_user = 'spr_app_runtime');
+DROP POLICY IF EXISTS spr_registry_app_read ON public.software_registry_conflicts;
+CREATE POLICY spr_registry_app_read ON public.software_registry_conflicts
+  FOR SELECT TO spr_app_runtime USING (current_user = 'spr_app_runtime');
+
+DROP POLICY IF EXISTS spr_registry_worker_all ON public.software_registry_identities;
+CREATE POLICY spr_registry_worker_all ON public.software_registry_identities
+  FOR ALL TO spr_worker_runtime
+  USING (current_user = 'spr_worker_runtime')
+  WITH CHECK (current_user = 'spr_worker_runtime');
+DROP POLICY IF EXISTS spr_registry_worker_all ON public.software_registry_aliases;
+CREATE POLICY spr_registry_worker_all ON public.software_registry_aliases
+  FOR ALL TO spr_worker_runtime
+  USING (current_user = 'spr_worker_runtime')
+  WITH CHECK (current_user = 'spr_worker_runtime');
+DROP POLICY IF EXISTS spr_registry_worker_all ON public.software_registry_observations;
+CREATE POLICY spr_registry_worker_all ON public.software_registry_observations
+  FOR ALL TO spr_worker_runtime
+  USING (current_user = 'spr_worker_runtime')
+  WITH CHECK (current_user = 'spr_worker_runtime');
+DROP POLICY IF EXISTS spr_registry_worker_all ON public.software_registry_conflicts;
+CREATE POLICY spr_registry_worker_all ON public.software_registry_conflicts
+  FOR ALL TO spr_worker_runtime
+  USING (current_user = 'spr_worker_runtime')
+  WITH CHECK (current_user = 'spr_worker_runtime');
+
+GRANT SELECT ON public.software_registry_identities, public.software_registry_aliases,
+  public.software_registry_observations, public.software_registry_conflicts TO spr_app_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.software_registry_identities,
+  public.software_registry_aliases, public.software_registry_observations,
+  public.software_registry_conflicts TO spr_worker_runtime;
 
 ALTER TABLE public.registry_ingestion_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.registry_ingestion_items FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS spr_registry_ingestion_app_read ON public.registry_ingestion_items;
-CREATE POLICY spr_registry_ingestion_app_read
-  ON public.registry_ingestion_items FOR SELECT TO spr_app_runtime
-  USING (current_user = 'spr_app_runtime');
+CREATE POLICY spr_registry_ingestion_app_read ON public.registry_ingestion_items
+  FOR SELECT TO spr_app_runtime USING (current_user = 'spr_app_runtime');
 DROP POLICY IF EXISTS spr_registry_ingestion_worker_all ON public.registry_ingestion_items;
-DO $
-BEGIN
-  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='spr_worker_runtime') THEN
-    CREATE POLICY spr_registry_ingestion_worker_all
-      ON public.registry_ingestion_items FOR ALL TO spr_worker_runtime
-      USING (current_user = 'spr_worker_runtime')
-      WITH CHECK (current_user = 'spr_worker_runtime');
-    GRANT SELECT, INSERT, UPDATE ON registry_ingestion_items TO spr_worker_runtime;
-  END IF;
-  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='spr_app_runtime') THEN
-    GRANT SELECT ON registry_ingestion_items TO spr_app_runtime;
-  END IF;
-END $;
+CREATE POLICY spr_registry_ingestion_worker_all ON public.registry_ingestion_items
+  FOR ALL TO spr_worker_runtime
+  USING (current_user = 'spr_worker_runtime')
+  WITH CHECK (current_user = 'spr_worker_runtime');
+GRANT SELECT ON public.registry_ingestion_items TO spr_app_runtime;
+GRANT SELECT, INSERT, UPDATE ON public.registry_ingestion_items TO spr_worker_runtime;
 
 COMMIT;
