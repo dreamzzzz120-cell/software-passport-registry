@@ -10,6 +10,7 @@ import { Pool, PoolClient } from 'pg';
 import { assessOsvSeverity } from '../security/osv-severity.ts';
 import { componentIdentity, vulnerabilityIdentity } from '../security/osv-identity.ts';
 import { normalizeCycloneDxComponentNames } from '../security/component-path-normalization.ts';
+import { osvEcosystemFromComponent } from '../security/osv-ecosystem.ts';
 // This worker used to carry its own pool factory that read DATABASE_URL -- the
 // owner role, which bypasses RLS -- and duplicated the TLS logic every other
 // worker gets from worker-db.ts. Divergence between those two copies is what
@@ -162,7 +163,7 @@ async function fetchOsv(component: Required<Pick<SbomComponent, 'name' | 'versio
       method: 'POST',
       redirect: 'error',
       headers: { 'content-type': 'application/json', accept: 'application/json' },
-      body: JSON.stringify({ package: { name: component.name, ecosystem: component.ecosystem || 'npm' }, version: component.version }),
+      body: JSON.stringify({ package: { name: component.name, ...(component.ecosystem ? { ecosystem: component.ecosystem } : {}) }, version: component.version }),
       signal: controller.signal,
     });
     if (!response.ok) throw new Error(`OSV_HTTP_${response.status}`);
@@ -491,7 +492,7 @@ export function normalizeCycloneDx(document: any) {
     if (typeof component?.name !== 'string' || component.name.trim().length === 0) throw new Error('SBOM_INVALID');
     const purl = typeof component.purl === 'string' ? component.purl : undefined;
     const version = typeof component.version === 'string' && component.version.length > 0 ? component.version : undefined;
-    const ecosystem = purl?.startsWith('pkg:npm/') ? 'npm' : purl?.startsWith('pkg:pypi/') ? 'PyPI' : undefined;
+    const ecosystem = osvEcosystemFromComponent({ purl, ecosystem: component.ecosystem });
     unique.set(`${purl || component.name}@${version || ''}`, { name: component.name, ...(version ? {version} : {}), ...(ecosystem ? {ecosystem} : {}), ...(purl ? {purl} : {}) });
   }
   const components = [...unique.values()].sort((a,b) => `${a.purl || a.name}@${a.version || ''}`.localeCompare(`${b.purl || b.name}@${b.version || ''}`));
