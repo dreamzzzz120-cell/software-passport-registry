@@ -59,7 +59,7 @@ async function githubRepositorySearch(query:string, limit=25) {
     const response = await fetch(target,{signal:controller.signal,headers});
     if (!response.ok) throw new Error(`GITHUB_DISCOVERY_HTTP_${response.status}`);
     const data:any = await response.json();
-    return (Array.isArray(data?.items)?data.items:[]).flatMap((row:any)=>typeof row?.html_url==='string'?[{url:row.html_url,title:typeof row?.full_name==='string'?row.full_name:undefined,source:'github-repository-search',discoveredAt:new Date().toISOString()}]:[]);
+    return (Array.isArray(data?.items)?data.items:[]).flatMap((row:any)=>{const homepage=typeof row?.homepage==='string'?row.homepage.trim():'';const repoUrl=typeof row?.html_url==='string'?row.html_url.trim():'';const url=homepage&&/^https?:\/\//i.test(homepage)?homepage:repoUrl;return url?[{url,title:typeof row?.full_name==='string'?row.full_name:undefined,source:'github-repository-search',discoveredAt:new Date().toISOString()}]:[];});
   } finally { clearTimeout(timeout); }
 }
 
