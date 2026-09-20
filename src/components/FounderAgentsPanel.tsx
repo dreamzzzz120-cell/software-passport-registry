@@ -10,9 +10,10 @@
 // nothing is computed or assumed client-side, and a control reports exactly
 // what the server answered.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Activity, ChevronDown, ChevronRight, Play, RefreshCw, Search, ToggleLeft, ToggleRight, UserCheck } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
+import { useFounderData } from '../lib/founderData';
 
 type AgentState = 'active' | 'idle' | 'disabled' | 'unknown';
 type AgentConfigItem = { label: string; value: string; source: string; control?: string };
@@ -177,30 +178,16 @@ function AgentDetail({ agent, onChanged }: { agent: AgentReport; onChanged: () =
 }
 
 export default function FounderAgentsPanel() {
-  const [agents, setAgents] = useState<AgentReport[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { agents, errors, loading, refresh } = useFounderData();
   const [open, setOpen] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const load = refresh;
+  const error = errors.find((e) => e.startsWith('/api/founder/agents')) ?? null;
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await apiFetch('/api/founder/agents');
-      if (!res.ok) { setError(`Agents report failed (${res.status})`); return; }
-      const data = await res.json();
-      setAgents(Array.isArray(data?.agents) ? data.agents : []);
-      setError(null);
-    } catch (e) { setError(e instanceof Error ? e.message : 'Agents report failed'); }
-    finally { setLoading(false); }
-  }, []);
-
-  useEffect(() => { void load(); }, [load]);
-
-  if (error && !agents) return <div className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 p-4 text-sm text-[var(--spr-red)]">{error}</div>;
+  if (error && !agents) return <div id="founder-agents" className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 p-4 text-sm text-[var(--spr-red)]">{error}</div>;
   if (!agents) return null;
 
   return (
-    <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-5">
+    <div id="founder-agents" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-5">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
           <p className="text-[11px] uppercase tracking-[0.24em] font-semibold text-[var(--spr-text-muted)]">Agents</p>
