@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { osvEcosystemFromPurl } from '../src/security/osv-ecosystem.ts';
+import { osvEcosystemFromPurl, osvEcosystemFromComponent } from '../src/security/osv-ecosystem.ts';
 
 describe('universal OSV ecosystem mapping', () => {
   const cases: Array<[string, string]> = [
@@ -10,7 +10,7 @@ describe('universal OSV ecosystem mapping', () => {
     ['pkg:hex/phoenix@1.7.0', 'Hex'], ['pkg:pub/flutter@3.0.0', 'Pub'],
   ];
   it.each(cases)('maps %s to %s', (purl, ecosystem) => expect(osvEcosystemFromPurl(purl)).toBe(ecosystem));
-  it('returns undefined when SPR cannot map truthfully', () => {
+  it('prefers an explicit component ecosystem when the PURL is absent', () => {\n    expect(osvEcosystemFromComponent({ ecosystem: 'Maven' })).toBe('Maven');\n  });\n\n  it('returns undefined when SPR cannot map truthfully', () => {
     expect(osvEcosystemFromPurl('pkg:generic/acme/tool@1.0.0')).toBeUndefined();
     expect(osvEcosystemFromPurl(undefined)).toBeUndefined();
   });
