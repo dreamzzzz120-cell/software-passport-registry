@@ -119,8 +119,7 @@ export async function runRegistryCrawlerLoop(): Promise<void> {
             const identityId = registryIdentityId('github', repo.owner, repo.repository);
             const canonicalKey = `github:${repo.owner.toLowerCase()}/${repo.repository.toLowerCase()}`;
             const canonicalUrl = `https://github.com/${repo.owner}/${repo.repository}`;
-            const refreshCutoff = new Date(Date.now() - REFRESH_DAYS * 24 * 60 * 60 * 1000);
-            await client.query(`
+                      await client.query(`
               INSERT INTO software_registry_identities
                 (id, provider, canonical_key, canonical_name, repository_owner, repository_name, canonical_url, stars, last_observed_at, next_refresh_at, updated_at)
               VALUES ($1,'github',$2,$3,$4,$5,$6,$7,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP + INTERVAL '30 days',CURRENT_TIMESTAMP)
