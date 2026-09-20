@@ -31,6 +31,7 @@ import {
   checkSupabaseAuth,
 } from '../lib/server/founder/connections.ts';
 import { connectionGuides } from '../lib/server/founder/connection-guides.ts';
+import { allAgentReports } from '../lib/server/founder/agents.ts';
 
 export function createFounderCommandCenterRouter() {
   const router = Router();
@@ -84,6 +85,13 @@ export function createFounderCommandCenterRouter() {
     } catch (error) {
       return next(error);
     }
+  });
+
+  // Per-agent activity: what each background agent is doing, from the rows the
+  // worker writes. See src/lib/server/founder/agents.ts for the sources.
+  router.get('/founder/agents', founderReadLimiter, requireAuth, requireRole('Owner'), requireFounder, rateLimiter, async (_req: AuthenticatedRequest, res, next) => {
+    try { return res.json({ agents: await allAgentReports(), generatedAt: new Date().toISOString() }); }
+    catch (error) { return next(error); }
   });
 
   // Platform-wide passport registry. Free Review is a system/intake tenant,

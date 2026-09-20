@@ -49,14 +49,16 @@ export function buildMspDiscoveryQueries() {
 
 export async function discoverAndQueue(provider: DiscoveryProvider, pool: Pool, queries = buildMspDiscoveryQueries(), limitPerQuery = 25) {
   const results: DiscoveryResult[] = [];
+  const queryByUrl = new Map<string, string>();
   for (const rawQuery of queries.slice(0, 10)) {
     const query = rawQuery.trim().slice(0, MAX_QUERY);
     if (!query) continue;
     const found = await provider.discover(query, Math.min(MAX_RESULTS, Math.max(1, limitPerQuery)));
+    for (const item of found) if (!queryByUrl.has(item.url)) queryByUrl.set(item.url, query);
     results.push(...found);
   }
   const unique = dedupeDiscoveryResults(results).slice(0, MAX_RESULTS);
   const jobIds: string[] = [];
-  for (const result of unique) jobIds.push(await enqueueResearchUrl(pool, result.url));
+  for (const result of unique) jobIds.push(await enqueueResearchUrl(pool, result.url, { kind: 'discovery_sweep', query: queryByUrl.get(result.url) ?? '' }));
   return { discovered: unique.length, queued: jobIds.length, results: unique, jobIds, observedAt: new Date().toISOString() };
 }
