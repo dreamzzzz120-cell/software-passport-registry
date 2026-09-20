@@ -53,7 +53,8 @@ describe('SPR authentication/RBAC/database release contracts', () => {
 
   it('keeps owner-only founder/self-passport routes server-authorized', () => {
     const auth = read('src/routes/auth.ts');
-    expect(auth).toContain("router.get('/founder/metrics'");
+    const founder = read('src/routes/founder-command-center.ts');
+    expect(founder).toContain("router.get('/founder/overview', founderReadLimiter, requireAuth, requireRole('Owner'), requireFounder");
     expect(auth).toContain("requireRole('Owner')");
     expect(auth).toContain("router.get('/passports/self-passport'");
     expect(auth).toContain('requireFounder');

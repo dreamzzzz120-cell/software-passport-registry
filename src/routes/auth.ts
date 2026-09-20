@@ -616,9 +616,6 @@ export function createAuthRouter() {
     }
   });
 
-  // Owner-only founder metrics. Every value is either observed from tenant
-  // data or explicitly reported as not verified; this endpoint never invents
-  // production health, security, financial, or performance telemetry.
   // Founder-only: send one test event to the configured error monitor so
   // delivery can be verified without waiting for a real failure. Returns the
   // event id Sentry assigned, or 503 when no DSN is configured -- never a
@@ -628,51 +625,6 @@ export function createAuthRouter() {
     const eventId = Sentry.captureMessage(`SPR founder test event from ${req.user!.email ?? 'founder'}`, { level: 'info', tags: { source: 'founder-dashboard' } });
     await Sentry.flush(5000).catch(() => undefined);
     return res.json({ eventId, sentAt: new Date().toISOString() });
-  });
-
-  router.get('/founder/metrics', requireAuth, requireRole('Owner'), requireFounder, async (req: AuthenticatedRequest, res, next) => {
-    try {
-      const db = req.db!;
-      const counts = await db.execute(sql`
-        SELECT
-          (SELECT COUNT(*)::int FROM clients WHERE tenant_id = ${req.user!.tenantId}) AS "clientCount",
-          (SELECT COUNT(*)::int FROM passports WHERE tenant_id = ${req.user!.tenantId}) AS "passportCount",
-          (SELECT COUNT(*)::int FROM scans WHERE tenant_id = ${req.user!.tenantId}) AS "scanCount",
-          (SELECT COUNT(*)::int FROM alerts WHERE tenant_id = ${req.user!.tenantId} AND resolved_at IS NOT NULL) AS "resolvedAlertCount"
-      `);
-      const row = (counts as any).rows?.[0] || {};
-      // systemIntegrity uses the same three real checks /ready and the
-      // self-passport endpoint use (database, tenant RLS, least-privilege
-      // runtime role). mitigations and throughput are real observed counts.
-      // overallScore ("Autonomy Score") and capitalProtected have no defined
-      // methodology or schema field anywhere in this codebase -- inventing a
-      // formula for either would be exactly the fabrication this platform's
-      // evidence model exists to prevent, so both stay honestly unverified.
-      const database = await checkDatabaseHealth();
-      let rlsOk: boolean | null = null;
-      if (database.ok) { try { await db.execute(sql`SELECT spr_assert_tenant_rls()`); rlsOk = true; } catch { rlsOk = false; } }
-      let runtimeRole: string | null = null;
-      if (database.ok) { try { const scoped = await appPool.query('SELECT current_user AS role'); runtimeRole = scoped.rows?.[0]?.role ?? null; } catch { runtimeRole = null; } }
-      const leastPrivilege = runtimeRole === 'spr_app_runtime';
-      const systemIntegrity = database.ok && rlsOk === true && leastPrivilege ? 'Healthy' : 'Not verified';
-      return res.json({
-        latency: database.ok ? database.latencyMs : null,
-        capitalProtected: 'Not verified',
-        throughput: Number(row.scanCount || 0),
-        mitigations: Number(row.resolvedAlertCount || 0),
-        overallScore: null,
-        auditEvents: null,
-        activeThreats: null,
-        systemIntegrity,
-        observed: {
-          clientCount: Number(row.clientCount || 0),
-          passportCount: Number(row.passportCount || 0),
-          scanCount: Number(row.scanCount || 0),
-        },
-      });
-    } catch (error) {
-      return next(error);
-    }
   });
 
   // Owner-only self-passport retrieval. SPR's self passport is SPR's own
@@ -1258,7 +1210,6 @@ export function createAuthRouter() {
       return next(error);
     }
   });
-
 
   /**
    * Password reset from our own domain, branded for the workspace the

@@ -15,49 +15,14 @@ type ComplianceSchedule = {
   createdAt: string;
 };
 
-type Framework = 'SOC2' | 'ISO27001' | 'HIPAA' | 'NIST';
-
-type Control = {
-  code: string;
-  description: string;
-  status: 'Not verified';
-  evidence: string;
-};
-
-const FRAMEWORKS: Record<Framework, { name: string; description: string; controls: Control[] }> = {
-  SOC2: {
-    name: 'SOC 2 Type II',
-    description: 'Trust Services Criteria controls are shown only when backed by tenant evidence.',
-    controls: [
-      { code: 'CC6.1', description: 'Logical access and signature controls.', status: 'Not verified', evidence: 'No authoritative control evidence connected.' },
-      { code: 'CC7.2', description: 'Vulnerability evaluation and remediation.', status: 'Not verified', evidence: 'No authoritative scan evidence connected.' },
-      { code: 'CC8.1', description: 'Supplier and license review.', status: 'Not verified', evidence: 'No authoritative supplier evidence connected.' },
-    ],
-  },
-  ISO27001: {
-    name: 'ISO/IEC 27001',
-    description: 'ISMS controls remain unverified until supporting records are observed.',
-    controls: [
-      { code: 'A.12.6.1', description: 'Management of technical vulnerabilities.', status: 'Not verified', evidence: 'No authoritative vulnerability evidence connected.' },
-      { code: 'A.18.1.1', description: 'Applicable legal and license requirements.', status: 'Not verified', evidence: 'No authoritative legal/compliance evidence connected.' },
-    ],
-  },
-  HIPAA: {
-    name: 'HIPAA Security & Privacy',
-    description: 'HIPAA safeguards are not attested by UI state; evidence must be supplied and verified.',
-    controls: [
-      { code: '§164.312(a)', description: 'Access control mechanisms for systems handling PHI.', status: 'Not verified', evidence: 'No authoritative HIPAA evidence connected.' },
-    ],
-  },
-  NIST: {
-    name: 'NIST / SSDF',
-    description: 'NIST control mappings require recorded evidence from the tenant environment.',
-    controls: [
-      { code: 'PS.1', description: 'Protect all forms of code from unauthorized access and tampering.', status: 'Not verified', evidence: 'No authoritative SSDF evidence connected.' },
-      { code: 'PW.4', description: 'Reuse existing, well-secured software when feasible.', status: 'Not verified', evidence: 'No authoritative dependency evidence connected.' },
-    ],
-  },
-};
+// The framework catalogue used to be a hard-coded list of SOC 2 / ISO / HIPAA
+// / NIST control codes, each with status 'Not verified' and "No authoritative
+// evidence connected" baked into the source. Nothing fed it, so it could never
+// say anything else. This view now reads the tenant's real governance records
+// (compliance_frameworks, controls) and links to Governance → Frameworks,
+// where those records are managed.
+type GovernanceFramework = { id: string; frameworkKey: string; name: string; version: string | null; publishedBy: string | null; status: string };
+type GovernanceControl = { id: string; controlKey: string; name: string; implementationStatus: string; lastTestedAt: string | null; nextTestDueAt: string | null; frequency: string | null };
 
 const formatDate = (value?: string | null) => value ? new Date(value).toLocaleString() : 'Not observed';
 
@@ -65,7 +30,9 @@ export default function ComplianceView({ clients, role = 'Viewer' }: { clients: 
   // Matches backend gating exactly: POST/PUT/DELETE /api/compliance/schedules
   // and POST .../run all require Owner/Admin/Operator (src/routes/compliance.ts).
   const canManageSchedules = ['Owner', 'Admin', 'Operator'].includes(role);
-  const [framework, setFramework] = useState<Framework>('SOC2');
+  const [frameworks, setFrameworks] = useState<GovernanceFramework[] | null>(null);
+  const [govControls, setGovControls] = useState<GovernanceControl[] | null>(null);
+  const [govError, setGovError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [schedules, setSchedules] = useState<ComplianceSchedule[]>([]);
   const [loading, setLoading] = useState(false);
@@ -100,7 +67,21 @@ export default function ComplianceView({ clients, role = 'Viewer' }: { clients: 
     try { await loadSchedules(); } finally { setRefreshing(false); }
   };
 
-  const controls = useMemo(() => FRAMEWORKS[framework].controls.filter((control) => `${control.code} ${control.description} ${control.evidence}`.toLowerCase().includes(query.toLowerCase())), [framework, query]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [fRes, cRes] = await Promise.all([apiFetch('/api/governance/frameworks'), apiFetch('/api/governance/controls')]);
+        const f = fRes.ok ? await fRes.json() : null; const c = cRes.ok ? await cRes.json() : null;
+        if (cancelled) return;
+        if (!fRes.ok || !cRes.ok) setGovError(`Governance records could not be loaded (frameworks ${fRes.status}, controls ${cRes.status}).`);
+        setFrameworks(Array.isArray(f) ? f : []); setGovControls(Array.isArray(c) ? c : []);
+      } catch (cause: any) { if (!cancelled) setGovError(cause?.message || 'Governance records could not be loaded.'); }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  const controls = useMemo(() => (govControls ?? []).filter((control) => `${control.controlKey} ${control.name} ${control.implementationStatus}`.toLowerCase().includes(query.toLowerCase())), [govControls, query]);
+  const controlsByStatus = useMemo(() => { const out: Record<string, number> = {}; for (const c of govControls ?? []) out[c.implementationStatus || 'unknown'] = (out[c.implementationStatus || 'unknown'] ?? 0) + 1; return out; }, [govControls]);
 
   const createSchedule = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -161,9 +142,29 @@ export default function ComplianceView({ clients, role = 'Viewer' }: { clients: 
       {notice && <div role="status" className="mt-4 flex gap-2 rounded-md border border-[var(--spr-green)]/30 bg-[var(--spr-green)]/10 px-3 py-2 text-xs text-[var(--spr-green)]"><Check size={14}/> {notice}</div>}
     </header>
 
-    <div className="grid gap-3 sm:grid-cols-4">{(Object.keys(FRAMEWORKS) as Framework[]).map((item) => <button key={item} onClick={() => setFramework(item)} className={`rounded-md border p-4 text-left ${framework === item ? 'border-[var(--spr-accent)] bg-[var(--spr-accent-soft)]' : 'border-[var(--spr-border)] spr-panel-alt'}`}><div className="text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--spr-text-faint)]">Framework</div><div className="mt-1 font-semibold">{item}</div><div className="mt-2 text-xs text-[var(--spr-text-muted)]">{FRAMEWORKS[item].controls.length} controls</div></button>)}</div>
-
-    <section className="spr-panel p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">{FRAMEWORKS[framework].name}</h2><p className="mt-1 text-sm text-[var(--spr-text-muted)]">{FRAMEWORKS[framework].description}</p></div><label className="flex items-center gap-2 rounded-md border border-[var(--spr-border)] px-3 py-2"><Search size={15} className="text-[var(--spr-text-muted)]"/><input aria-label="Search compliance controls" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search controls" className="bg-transparent text-sm outline-none"/></label></div><div className="mt-5 space-y-3">{controls.map((control) => <article key={control.code} className="spr-panel-alt p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><div className="text-xs font-mono text-[var(--spr-highlight)]">{control.code}</div><h3 className="mt-1 font-medium">{control.description}</h3></div><span className="rounded-full border border-[var(--spr-amber)]/30 bg-[var(--spr-amber)]/10 px-2.5 py-1 text-[12px] font-semibold text-[var(--spr-amber)]">Not verified</span></div><p className="mt-2 text-xs text-[var(--spr-text-muted)]">{control.evidence}</p></article>)}</div></section>
+    <section className="spr-panel p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div><h2 className="text-lg font-semibold">Frameworks and controls on record</h2><p className="mt-1 text-sm text-[var(--spr-text-muted)]">Read from this workspace's governance records. A control's status is whatever was recorded for it; nothing here is attested by the page itself. Manage them under Governance → Frameworks and Controls.</p></div>
+        <label className="flex items-center gap-2 rounded-md border border-[var(--spr-border)] px-3 py-2"><Search size={15} className="text-[var(--spr-text-muted)]"/><input aria-label="Search controls" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search controls" className="bg-transparent text-sm outline-none"/></label>
+      </div>
+      {govError && <div role="alert" className="mt-3 text-xs text-[var(--spr-red)]">{govError}</div>}
+      {frameworks === null && !govError && <p className="mt-3 text-xs text-[var(--spr-text-muted)]">Loading governance records…</p>}
+      {frameworks !== null && (
+        <div className="mt-4 grid gap-3 sm:grid-cols-4">
+          {frameworks.length === 0 && <p className="text-xs text-[var(--spr-text-muted)] sm:col-span-4">No compliance frameworks recorded yet. Add one under Governance → Frameworks.</p>}
+          {frameworks.map((f) => <div key={f.id} className="rounded-md border border-[var(--spr-border)] spr-panel-alt p-4"><div className="text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--spr-text-faint)]">Framework</div><div className="mt-1 font-semibold">{f.name}{f.version ? <span className="ml-1 text-xs font-normal text-[var(--spr-text-muted)]">v{f.version}</span> : null}</div><div className="mt-2 text-xs text-[var(--spr-text-muted)]">{f.status}{f.publishedBy ? ` · ${f.publishedBy}` : ''}</div></div>)}
+        </div>
+      )}
+      {govControls !== null && (
+        <div className="mt-5">
+          <p className="text-xs text-[var(--spr-text-muted)]">{govControls.length} control{govControls.length === 1 ? '' : 's'} recorded{Object.keys(controlsByStatus).length ? ` — ${Object.entries(controlsByStatus).map(([k, v]) => `${v} ${k}`).join(' · ')}` : ''}.</p>
+          <div className="mt-3 space-y-3">
+            {controls.length === 0 && <p className="text-xs text-[var(--spr-text-muted)]">{govControls.length === 0 ? 'No controls recorded yet. Add them under Governance → Controls.' : 'No controls match the search.'}</p>}
+            {controls.map((control) => <article key={control.id} className="spr-panel-alt p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><div className="text-xs font-mono text-[var(--spr-highlight)]">{control.controlKey}</div><h3 className="mt-1 font-medium">{control.name}</h3></div><span className="rounded-full border border-[var(--spr-border)] px-2.5 py-1 text-[12px] font-semibold text-[var(--spr-text)]">{control.implementationStatus || 'status not recorded'}</span></div><p className="mt-2 text-xs text-[var(--spr-text-muted)]">{control.lastTestedAt ? `Last tested ${new Date(control.lastTestedAt).toLocaleDateString()}` : 'Never tested'}{control.nextTestDueAt ? ` · next due ${new Date(control.nextTestDueAt).toLocaleDateString()}` : ''}{control.frequency ? ` · ${control.frequency}` : ''}</p></article>)}
+          </div>
+        </div>
+      )}
+    </section>
 
     <section className="spr-panel p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">Compliance verification schedules</h2><p className="mt-1 text-sm text-[var(--spr-text-muted)]">Server-backed schedules only. A queued audit is not itself a passed audit. "Verify now" generates a real report — it does not email anyone or run automatically.</p></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => void refreshSchedules()} disabled={loading || refreshing} className="rounded-lg border border-[var(--spr-border)] px-3 py-2 text-xs disabled:opacity-50">{refreshing ? 'Refreshing…' : 'Refresh'}</button><button onClick={() => setShowAdd((value) => !value)} disabled={!canManageSchedules} title={!canManageSchedules ? `Your ${role} role cannot manage compliance schedules.` : undefined} className="spr-btn spr-btn-primary inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"><Plus size={14}/> Add schedule</button></div></div>
       {showAdd && <form onSubmit={createSchedule} className="mt-4 grid gap-3 spr-panel-alt p-4 md:grid-cols-4"><select aria-label="Client" value={newClientId} onChange={(event) => setNewClientId(event.target.value)} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-sm text-[var(--spr-text)]"><option value="">Select client</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select><select aria-label="Frequency" value={newFrequency} onChange={(event) => setNewFrequency(event.target.value)} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-sm text-[var(--spr-text)]"><option>Daily</option><option>Weekly</option><option>Monthly</option></select><input aria-label="Target email" type="email" required value={newTargetEmail} onChange={(event) => setNewTargetEmail(event.target.value)} placeholder="notification@example.com" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-sm text-[var(--spr-text)]"/><button type="submit" disabled={actionLoading === 'create'} className="spr-btn spr-btn-primary">{actionLoading === 'create' ? 'Saving…' : 'Create'}</button></form>}

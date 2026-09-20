@@ -5,7 +5,7 @@
 
 // Founder Command Center — platform-operator-only routes.
 //
-// Deliberately separate from the existing /founder/metrics in src/routes/auth.ts:
+// Deliberately separate from the self-passport route in src/routes/auth.ts:
 // that route is per-tenant (any customer's Owner can see their own tenant's
 // counts). This route is cross-platform (connections, MRR, growth tasks) and
 // is gated by BOTH requireRole('Owner') AND requireFounder (FOUNDER_EMAILS
