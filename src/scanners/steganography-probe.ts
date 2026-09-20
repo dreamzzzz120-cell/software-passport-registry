@@ -60,8 +60,8 @@ function decodePng(png: Buffer): { pixels: Buffer; channels: number } | null {
       if (end > png.length) return null;
       const body = png.subarray(offset + 8, offset + 8 + length);
       if (type === 'IHDR' && length === 13) {
-        width = png.readUInt32BE(offset + 16);
-        height = png.readUInt32BE(offset + 20);
+        width = png.readUInt32BE(offset + 8);
+        height = png.readUInt32BE(offset + 12);
         bitDepth = body[8]; colorType = body[9]; interlace = body[12];
       } else if (type === 'IDAT') idat.push(body);
       else if (type === 'IEND') break;
