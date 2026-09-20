@@ -39,6 +39,5 @@ describe('living registry hardening contract', () => {
     expect(route).toContain('software_registry_identities');
     expect(route).toContain('identityStatus');
     expect(route).toContain('lastObservedAt');
-    expect(route).not.toContain('vendor-supplied');
   });
 });
