@@ -11,6 +11,7 @@ import { Pool, PoolClient } from 'pg';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { INTENTIONALLY_DROPPED_TABLES } from './intentionally-dropped-tables.ts';
 
 interface MigrationRecord {
   version: string;
@@ -170,6 +171,7 @@ export class MigrationRunner {
    */
   async auditSchemaDrift(client: PoolClient, migrations: MigrationFile[]): Promise<string[]> {
     const expected = new Set<string>();
+    const intentionallyDropped = new Set<string>(INTENTIONALLY_DROPPED_TABLES);
     // CREATE TABLE [IF NOT EXISTS] [schema.]name, quoted or bare.
     const pattern = /create\s+table\s+(?:if\s+not\s+exists\s+)?(?:"?public"?\s*\.\s*)?"?([a-z_][a-z0-9_]*)"?/gi;
     // Comments are stripped first: prose like "-- create table for X" in a
@@ -191,11 +193,18 @@ export class MigrationRunner {
       actual.add(String(row.table_name).toLowerCase());
     }
 
-    const missing = [...expected].filter((table) => !actual.has(table)).sort();
+    const missing = [...expected].filter((table) => !actual.has(table) && !intentionallyDropped.has(table)).sort();
     if (missing.length) {
       this.log(
         `SCHEMA DRIFT: ${missing.length} table(s) created by migrations are absent from the database: ${missing.join(', ')}`,
         'error'
+      );
+    }
+    const resurrected = [...intentionallyDropped].filter((table) => actual.has(table)).sort();
+    if (resurrected.length) {
+      this.log(
+        `SCHEMA NOTE: ${resurrected.length} intentionally dropped table(s) exist again: ${resurrected.join(', ')} -- run scripts/drop-orphan-developer-tables.ts (see migration 0084)`,
+        'warn'
       );
     }
     return missing;

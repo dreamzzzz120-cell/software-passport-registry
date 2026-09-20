@@ -20,7 +20,9 @@
 import { pool } from '../src/db/index.ts';
 
 // Children first: projects/tasks/snippets/work_sessions reference app_users.
-const TABLES = ['work_sessions', 'snippets', 'tasks', 'projects', 'app_users'] as const;
+import { INTENTIONALLY_DROPPED_TABLES } from './intentionally-dropped-tables.ts';
+// Drop order: dependents first (work_sessions/snippets/tasks reference projects/app_users).
+const TABLES = [...INTENTIONALLY_DROPPED_TABLES].reverse();
 const dryRun = process.argv.includes('--dry-run');
 
 async function main() {
