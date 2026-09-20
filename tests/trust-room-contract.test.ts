@@ -22,12 +22,12 @@ describe('Trust Room renders only real Passport data', () => {
     expect(s).toContain('View lineage');
   });
 
-  it('only shows the 4 real scoring-engine dimensions, with null rendered as N/A by TrustField, never invented here', () => {
+  it('only shows the 4 real scoring-engine dimensions and treats missing values as unmeasured, never invented here', () => {
     const s = source();
-    expect(s).toContain("{ key: 'security', label: 'Security', value: passport.securityScore ?? null }");
-    expect(s).toContain("{ key: 'compliance', label: 'Compliance', value: passport.complianceScore ?? null }");
-    expect(s).toContain("{ key: 'vendor', label: 'Vendor Rep.', value: passport.vendorReputationScore ?? null }");
-    expect(s).toContain("{ key: 'confidence', label: 'Confidence', value: passport.confidenceScore ?? null }");
+    expect(s).toContain("{ key: 'security', label: 'Security', value: passport.securityScore }");
+    expect(s).toContain("{ key: 'compliance', label: 'Compliance', value: passport.complianceScore }");
+    expect(s).toContain("{ key: 'vendor', label: 'Vendor Rep.', value: passport.vendorReputationScore }");
+    expect(s).toContain("{ key: 'confidence', label: 'Confidence', value: passport.confidenceScore }");
   });
 
   it('Trust Score and Evidence Confidence show "Not available" rather than a fabricated number', () => {
@@ -51,7 +51,8 @@ describe('Trust Room renders only real Passport data', () => {
 
   it('"What we don\'t know" lists real unmeasured dimensions and reuses the same SLSA-detection predicate as Lineage', () => {
     const s = source();
-    expect(s).toContain('const unmeasuredDimensions = dimensions.filter((dimension) => dimension.value === null);');
+    expect(s).toContain('const unmeasuredDimensions = [');
+    expect(s).toContain(".filter((dimension) => dimension.value == null);");
     expect(s).toContain("function findSlsaEvidence(passport: SoftwarePassport)");
     expect(s).toContain("item.type === 'Attestation' && /slsa/i.test(item.name)");
   });
