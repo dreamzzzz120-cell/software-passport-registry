@@ -1,0 +1,4 @@
+Final auto-deploy verification
+Test date: 2026-08-31
+Expected: spr-worker auto-deploys to SUCCESS (not SKIPPED)
+
