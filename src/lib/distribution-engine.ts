@@ -8,7 +8,7 @@ export type DistributionJobKind = 'research_url' | 'qualify_lead' | 'prepare_out
 
 const MAX_PAYLOAD_BYTES = 32_000;
 const REQUEST_TIMEOUT_MS = 8_000;
-const MAX_BODY_BYTES = 256_000;
+const MAX_BODY_BYTES = 1_000_000;
 
 function assertPayload(payload: Record<string, unknown>) {
   const encoded = JSON.stringify(payload);
