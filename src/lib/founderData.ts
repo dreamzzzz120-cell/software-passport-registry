@@ -18,6 +18,7 @@ export type CommandCenter = { connections: Connection[]; connectionGuides: Recor
 export type Overview = {
   pulse: { database: { ok: boolean; latencyMs: number | null }; tenantRls: boolean | null; runtimeRole: string | null; leastPrivilege: boolean | null; apiUptimeSeconds: number; worker: { lastSeenAt: string | null; lastSeenSource: string | null }; scanQueue: { pending: number | null; running: number | null; failed24h: number | null }; distributionQueue: { queued: number | null; running: number | null; deadLetter: number | null } };
   funnel: { windowDays: number; pageViews: number | null; visitors: number | null; freeReviewsCompleted: number | null; freeReviewsFailed: number | null; leads: number | null; leadsQualified: number | null; contacts: number | null; messagesSent: number | null; signups: number | null; organizations: number | null };
+  traffic: { activeEvents: number | null; activeSessions: number | null; visitors24h: number | null; pageViews24h: number | null; visitors7d: number | null; pageViews7d: number | null };
   generatedAt: string;
 };
 export type FounderData = { overview: Overview | null; commandCenter: CommandCenter | null; agents: AgentReport[] | null; errors: string[]; loadedAt: string | null; loading: boolean };

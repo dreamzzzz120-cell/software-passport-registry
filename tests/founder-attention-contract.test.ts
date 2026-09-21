@@ -5,6 +5,7 @@ import { computeAttention, minutesSince } from '../src/lib/founderData';
 const healthyOverview = {
   pulse: { database: { ok: true, latencyMs: 3 }, tenantRls: true, runtimeRole: 'spr_app_runtime', leastPrivilege: true, apiUptimeSeconds: 100, worker: { lastSeenAt: new Date(Date.now() - 60000).toISOString(), lastSeenSource: 'agent_jobs' }, scanQueue: { pending: 0, running: 1, failed24h: 0 }, distributionQueue: { queued: 0, running: 0, deadLetter: 0 } },
   funnel: { windowDays: 7, pageViews: 1, visitors: 1, freeReviewsCompleted: 1, freeReviewsFailed: 0, leads: 0, leadsQualified: 0, contacts: 0, messagesSent: 0, signups: 0, organizations: 0 },
+  traffic: { activeEvents: 0, activeSessions: 0, visitors24h: 1, pageViews24h: 1, visitors7d: 1, pageViews7d: 1 },
   generatedAt: new Date().toISOString(),
 };
 const okCommandCenter = { connections: [{ key: 'railway', name: 'Railway', status: 'ok' as const, detail: '5 services reachable', lastChecked: '' }], connectionGuides: {}, businessMetrics: { organizationCount: 1, userCount: 1, mrrCents: 0, stripeCustomerCount: 0, activeSubscriptionCount: 0, successfulPaymentCount30d: 0, successfulPaymentAmount30dCents: 0, ciStatus: 'ok' }, generatedAt: '' };
@@ -42,7 +43,6 @@ describe('Founder "needs attention" rules', () => {
     expect(titles).toContain('Outreach agent is disabled');
     expect(titles).toContain('Outreach agent: 2 failed jobs in 24h');
     expect(titles).toContain('Outreach sender address has no verification on record');
-    // Sorted critical → warning → info.
     const order = items.map((i) => i.severity);
     expect(order).toEqual([...order].sort((a, b) => ({ critical: 0, warning: 1, info: 2 })[a] - ({ critical: 0, warning: 1, info: 2 })[b]));
   });

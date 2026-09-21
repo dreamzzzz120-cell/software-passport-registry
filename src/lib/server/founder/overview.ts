@@ -41,7 +41,16 @@ export type FounderFunnel = {
   organizations: number | null;
 };
 
-export type FounderOverview = { pulse: FounderPulse; funnel: FounderFunnel; generatedAt: string };
+export type FounderTraffic = {
+  activeEvents: number | null;
+  activeSessions: number | null;
+  visitors24h: number | null;
+  pageViews24h: number | null;
+  visitors7d: number | null;
+  pageViews7d: number | null;
+};
+
+export type FounderOverview = { pulse: FounderPulse; funnel: FounderFunnel; traffic: FounderTraffic; generatedAt: string };
 
 function rows(result: unknown): any[] { return ((result as any)?.rows ?? []) as any[]; }
 function iso(value: unknown): string | null { if (!value) return null; const d = new Date(value as string); return Number.isFinite(d.getTime()) ? d.toISOString() : null; }
@@ -110,5 +119,36 @@ export async function founderFunnel(windowDays = 7): Promise<FounderFunnel> {
 
 export async function founderOverview(): Promise<FounderOverview> {
   const [pulse, funnel] = await Promise.all([founderPulse(), founderFunnel()]);
-  return { pulse, funnel, generatedAt: new Date().toISOString() };
+  const [trafficResult, topPageResult] = await Promise.all([
+    db.execute(sql`
+      SELECT
+        COUNT(*) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '30 minutes')::int AS active_events,
+        COUNT(DISTINCT session_id) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '30 minutes')::int AS active_sessions,
+        COUNT(DISTINCT session_id) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours')::int AS visitors_24h,
+        COUNT(*) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours')::int AS pageviews_24h,
+        COUNT(DISTINCT session_id) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '7 days')::int AS visitors_7d,
+        COUNT(*) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '7 days')::int AS pageviews_7d
+      FROM traffic_events
+    `).catch((err) => { console.error('[FounderOverview] traffic summary failed:', err instanceof Error ? err.message : String(err)); return null; }),
+    db.execute(sql`
+      SELECT path, COUNT(*)::int AS views FROM traffic_events
+      WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours'
+      GROUP BY path ORDER BY views DESC LIMIT 20
+    `).catch((err) => { console.error('[FounderOverview] traffic pages failed:', err instanceof Error ? err.message : String(err)); return null; }),
+  ]);
+  const trafficRow = rows(trafficResult)[0];
+  const topPages = rows(topPageResult);
+  return {
+    pulse,
+    funnel,
+    traffic: {
+      activeEvents: trafficRow?.active_events == null ? null : Number(trafficRow.active_events),
+      activeSessions: trafficRow?.active_sessions == null ? null : Number(trafficRow.active_sessions),
+      visitors24h: trafficRow?.visitors_24h == null ? null : Number(trafficRow.visitors_24h),
+      pageViews24h: trafficRow?.pageviews_24h == null ? null : Number(trafficRow.pageviews_24h),
+      visitors7d: trafficRow?.visitors_7d == null ? null : Number(trafficRow.visitors_7d),
+      pageViews7d: trafficRow?.pageviews_7d == null ? null : Number(trafficRow.pageviews_7d),
+    },
+    generatedAt: new Date().toISOString(),
+  };
 }
