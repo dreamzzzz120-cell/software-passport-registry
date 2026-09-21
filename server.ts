@@ -118,6 +118,7 @@ app.use('/api/agent/v1', createPublicApiV1Router());
 // Keep the authenticated Experience Agent separate from the machine-to-machine API.
 // The latter owns /api/agent/v1 and requires X-API-Key; sharing that prefix caused
 // the in-product agent's /command and /verify-software calls to be intercepted.
+// Keep these namespaces explicit so future route additions cannot recreate the collision.
 app.use('/api/experience-agent/v1', createAgentApiRouter());
 app.use('/api/msp', requireAuth, createMspRouter());
 app.use('/api/billing', createBillingRouter());
