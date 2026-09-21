@@ -107,8 +107,9 @@ export async function queueContact(email: string, company: string | null, source
   });
 }
 
-const parsedQualifyLeadContactThreshold = Number.parseInt(process.env.DISTRIBUTION_QUALIFY_LEAD_CONTACT_THRESHOLD ?? '25', 10);
-const QUALIFY_LEAD_CONTACT_THRESHOLD = Math.max(0, Math.min(100, Number.isFinite(parsedQualifyLeadContactThreshold) ? parsedQualifyLeadContactThreshold : 25));
+// scoreQualifyLead now requires an MSP/security industry signal before awarding points. The minimum score with a signal is 35, so 25 would allow the signal alone to create a contact.
+const parsedQualifyLeadContactThreshold = Number.parseInt(process.env.DISTRIBUTION_QUALIFY_LEAD_CONTACT_THRESHOLD ?? '45', 10);
+const QUALIFY_LEAD_CONTACT_THRESHOLD = Math.max(0, Math.min(100, Number.isFinite(parsedQualifyLeadContactThreshold) ? parsedQualifyLeadContactThreshold : 45));
 
 export async function ingestQualifiedLead(result: Record<string, unknown>, score: number) {
   if (score < QUALIFY_LEAD_CONTACT_THRESHOLD) return { created: false, reason: 'below_contact_threshold' };
@@ -131,7 +132,18 @@ export async function ingestQualifiedLead(result: Record<string, unknown>, score
   }
 }
 
+const parsedResearchMinScore = Number.parseInt(process.env.DISTRIBUTION_RESEARCH_CONTACT_MIN_SCORE ?? '55', 10);
+const RESEARCH_CONTACT_MIN_SCORE = Math.max(0, Math.min(100, Number.isFinite(parsedResearchMinScore) ? parsedResearchMinScore : 55));
+
+function hasRelevantIndustrySignal(result: Record<string, unknown>) {
+  const signals = result.signals && typeof result.signals === 'object' ? result.signals as Record<string, unknown> : null;
+  if (!signals) return false;
+  return Boolean(signals.msp || signals.cybersecurity || signals.compliance || signals.psa);
+}
+
 export async function ingestResearchResult(result: Record<string, unknown>, defaultBasis: string) {
+  const score = typeof result.score === 'number' ? result.score : 0;
+  if (score < RESEARCH_CONTACT_MIN_SCORE || !hasRelevantIndustrySignal(result)) return 0;
   const emails = Array.isArray(result.publicRoleEmails) ? result.publicRoleEmails.filter((v): v is string => typeof v === 'string') : [];
   const company = typeof result.company === 'string' ? result.company : null;
   const sourceUrl = typeof result.url === 'string' ? result.url : null;
