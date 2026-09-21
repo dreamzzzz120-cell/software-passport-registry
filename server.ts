@@ -115,7 +115,10 @@ app.use('/api/trust-loop', requireAuth, requireTrustMutationRole, requireClientT
 app.use('/api/trust-loop', createTrustLoopRouter());
 app.use('/api/monitoring', createMonitoringRouter());
 app.use('/api/agent/v1', createPublicApiV1Router());
-app.use('/api/agent/v1', createAgentApiRouter());
+// Keep the authenticated Experience Agent separate from the machine-to-machine API.
+// The latter owns /api/agent/v1 and requires X-API-Key; sharing that prefix caused
+// the in-product agent's /command and /verify-software calls to be intercepted.
+app.use('/api/experience-agent/v1', createAgentApiRouter());
 app.use('/api/msp', requireAuth, createMspRouter());
 app.use('/api/billing', createBillingRouter());
 app.use('/api/commercial', createCommercialRouter());
