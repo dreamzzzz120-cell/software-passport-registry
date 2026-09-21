@@ -16,7 +16,7 @@ const QUICK_ACTIONS = [
 ];
 
 const SAFE_NAV_PATHS = new Set(['/dashboard', '/clients', '/passports', '/vendors', '/monitoring', '/compliance', '/reports', '/billing', '/settings']);
-const SAFE_ACTION_ENDPOINTS = new Set(['/api/agent/v1/verify-software']);
+const SAFE_ACTION_ENDPOINTS = new Set(['/api/experience-agent/v1/verify-software']);
 
 // Returns whether navigation actually happened. A path outside the fixed
 // allowlist is refused here regardless of what the server (or anything that
@@ -58,7 +58,7 @@ export default function ExperienceAgent() {
     if (!text || busy || !auth.currentUser) return;
     setInput(''); setMessages((current) => [...current, { role: 'user', text }]); setBusy(true);
     try {
-      const response = await apiFetch('/api/agent/v1/command', { method: 'POST', body: JSON.stringify({ input: text, context: { path: window.location.pathname } }), timeout: 30_000 });
+      const response = await apiFetch('/api/experience-agent/v1/command', { method: 'POST', body: JSON.stringify({ input: text, context: { path: window.location.pathname } }), timeout: 30_000 });
       const payload = await response.json().catch(() => ({})) as CommandResponse;
       if (!response.ok) throw new Error(typeof payload.reply === 'string' ? payload.reply : 'SPR Agent could not complete the request.');
       setMessages((current) => [...current, { role: 'agent', text: payload.reply || 'The request completed without a factual response.', data: payload.data, provenance: payload.provenance, actions: payload.actions }]);
