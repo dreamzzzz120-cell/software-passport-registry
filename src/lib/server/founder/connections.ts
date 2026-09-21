@@ -100,8 +100,8 @@ export async function checkGithubCi(): Promise<ConnectionStatus> {
 // records. MRR is normalized to a monthly value and discounts are applied.
 // Failed/unavailable checks return null values so the Founder UI cannot turn a
 // provider failure into a false zero.
-export async function checkStripeAndMrr(): Promise<{ connection: ConnectionStatus; customerCount: number | null; mrrCents: number | null }> {
-  if (!config.stripe.secretKey) return { connection: { key: 'stripe', name: 'Stripe', status: 'not_configured', detail: 'Stripe connection is not configured', lastChecked: now() }, customerCount: null, mrrCents: null };
+export async function checkStripeAndMrr(): Promise<{ connection: ConnectionStatus; customerCount: number | null; mrrCents: number | null; activeSubscriptionCount: number | null; successfulPaymentCount30d: number | null; successfulPaymentAmount30dCents: number | null }> {
+  if (!config.stripe.secretKey) return { connection: { key: 'stripe', name: 'Stripe', status: 'not_configured', detail: 'Stripe connection is not configured', lastChecked: now() }, customerCount: null, mrrCents: null, activeSubscriptionCount: null, successfulPaymentCount30d: null, successfulPaymentAmount30dCents: null };
   try {
     const Stripe = (await import('stripe')).default;
     const stripe = new Stripe(config.stripe.secretKey);
@@ -135,9 +135,25 @@ export async function checkStripeAndMrr(): Promise<{ connection: ConnectionStatu
       mrrCents += applyDiscounts(itemTotal, discounts);
     }
 
-    return { connection: { key: 'stripe', name: 'Stripe', status: 'ok', detail: `${customerCount} customers, ${activeSubscriptions} active subs`, lastChecked: now() }, customerCount, mrrCents: Math.max(0, Math.round(mrrCents)) };
+    const createdAfter = Math.floor((Date.now() - 30 * 24 * 60 * 60 * 1000) / 1000);
+    let successfulPaymentCount30d = 0;
+    let successfulPaymentAmount30dCents = 0;
+    for await (const intent of stripe.paymentIntents.list({ limit: 100, created: { gte: createdAfter } })) {
+      if (intent.status !== 'succeeded') continue;
+      successfulPaymentCount30d += 1;
+      successfulPaymentAmount30dCents += intent.amount_received ?? intent.amount ?? 0;
+    }
+
+    return {
+      connection: { key: 'stripe', name: 'Stripe', status: 'ok', detail: customerCount + ' customers, ' + activeSubscriptions + ' active subs, ' + successfulPaymentCount30d + ' successful payments in 30d', lastChecked: now() },
+      customerCount,
+      mrrCents: Math.max(0, Math.round(mrrCents)),
+      activeSubscriptionCount: activeSubscriptions,
+      successfulPaymentCount30d,
+      successfulPaymentAmount30dCents,
+    };
   } catch (err) {
-    return { connection: { key: 'stripe', name: 'Stripe', status: 'error', detail: safeErrorDetail(err), lastChecked: now() }, customerCount: null, mrrCents: null };
+    return { connection: { key: 'stripe', name: 'Stripe', status: 'error', detail: safeErrorDetail(err), lastChecked: now() }, customerCount: null, mrrCents: null, activeSubscriptionCount: null, successfulPaymentCount30d: null, successfulPaymentAmount30dCents: null };
   }
 }
 
