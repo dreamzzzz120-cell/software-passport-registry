@@ -42,6 +42,11 @@ export function unsubscribeUrl(email: string) {
   return `${PUBLIC_ORIGIN}/api/public/distribution/unsubscribe?email=${encodeURIComponent(email)}&token=${encodeURIComponent(outreachToken(email))}`;
 }
 
+function validEmailAddress(email: string) {
+  const [local, domain] = email.trim().toLowerCase().split('@');
+  return Boolean(local && domain && domain.includes('.') && /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email.trim()));
+}
+
 function validRoleAddress(email: string) {
   const [local, domain] = email.trim().toLowerCase().split('@');
   if (!local || !domain || !domain.includes('.')) return false;
@@ -86,7 +91,12 @@ async function dailySendCount(client: any) {
 }
 
 export async function queueContact(email: string, company: string | null, sourceUrl: string | null, evidence: Record<string, unknown>, outreachBasis: string, consentEvidenceUrl: string | null) {
-  if (!validRoleAddress(email)) throw new Error('DISTRIBUTION_ROLE_EMAIL_REQUIRED');
+  if (outreachBasis === 'consent') {
+    if (!validEmailAddress(email)) throw new Error('DISTRIBUTION_EMAIL_INVALID');
+    if (!consentEvidenceUrl?.trim()) throw new Error('DISTRIBUTION_CONSENT_EVIDENCE_REQUIRED');
+  } else if (!validRoleAddress(email)) {
+    throw new Error('DISTRIBUTION_ROLE_EMAIL_REQUIRED');
+  }
   if (!['consent','legitimate_interest'].includes(outreachBasis)) throw new Error('DISTRIBUTION_OUTREACH_BASIS_INVALID');
   const id = `dc_${crypto.randomUUID().replace(/-/g, '')}`;
   return withTenant(async (client) => {
@@ -95,6 +105,26 @@ export async function queueContact(email: string, company: string | null, source
     await client.query(`INSERT INTO distribution_contacts (id,tenant_id,email,company,source_url,evidence,outreach_basis,consent_evidence_url) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8)`, [id,DISTRIBUTION_TENANT_ID,email.trim().toLowerCase(),company,sourceUrl,JSON.stringify(evidence),outreachBasis,consentEvidenceUrl]);
     return id;
   });
+}
+
+const parsedQualifyLeadContactThreshold = Number.parseInt(process.env.DISTRIBUTION_QUALIFY_LEAD_CONTACT_THRESHOLD ?? '25', 10);
+const QUALIFY_LEAD_CONTACT_THRESHOLD = Math.max(0, Math.min(100, Number.isFinite(parsedQualifyLeadContactThreshold) ? parsedQualifyLeadContactThreshold : 25));
+
+export async function ingestQualifiedLead(result: Record<string, unknown>, score: number) {
+  if (score < QUALIFY_LEAD_CONTACT_THRESHOLD) return { created: false, reason: 'below_contact_threshold' };
+  const email = typeof result.email === 'string' ? result.email.trim().toLowerCase() : '';
+  if (!validEmailAddress(email)) return { created: false, reason: 'invalid_email' };
+  const company = typeof result.company === 'string' ? result.company : null;
+  const sourceUrl = typeof result.url === 'string' ? result.url : null;
+  const outreachBasis = typeof result.outreachBasis === 'string' ? result.outreachBasis : (process.env.DISTRIBUTION_DEFAULT_OUTREACH_BASIS ?? 'legitimate_interest');
+  const consentEvidenceUrl = typeof result.consentEvidenceUrl === 'string' ? result.consentEvidenceUrl : null;
+  if (outreachBasis === 'consent' && !consentEvidenceUrl?.trim()) return { created: false, reason: 'consent_evidence_required' };
+  try {
+    const id = await queueContact(email, company, sourceUrl, result, outreachBasis, consentEvidenceUrl);
+    return { created: true, contactId: id };
+  } catch (error) {
+    return { created: false, reason: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 export async function ingestResearchResult(result: Record<string, unknown>, defaultBasis: string) {
