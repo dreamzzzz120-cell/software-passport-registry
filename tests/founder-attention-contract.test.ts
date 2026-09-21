@@ -7,7 +7,7 @@ const healthyOverview = {
   funnel: { windowDays: 7, pageViews: 1, visitors: 1, freeReviewsCompleted: 1, freeReviewsFailed: 0, leads: 0, leadsQualified: 0, contacts: 0, messagesSent: 0, signups: 0, organizations: 0 },
   generatedAt: new Date().toISOString(),
 };
-const okCommandCenter = { connections: [{ key: 'railway', name: 'Railway', status: 'ok' as const, detail: '5 services reachable', lastChecked: '' }], connectionGuides: {}, businessMetrics: { organizationCount: 1, userCount: 1, mrrCents: 0, stripeCustomerCount: 0, ciStatus: 'ok' }, generatedAt: '' };
+const okCommandCenter = { connections: [{ key: 'railway', name: 'Railway', status: 'ok' as const, detail: '5 services reachable', lastChecked: '' }], connectionGuides: {}, businessMetrics: { organizationCount: 1, userCount: 1, mrrCents: 0, stripeCustomerCount: 0, activeSubscriptionCount: 0, successfulPaymentCount30d: 0, successfulPaymentAmount30dCents: 0, ciStatus: 'ok' }, generatedAt: '' };
 const agent = (over: Partial<any>): any => ({ key: 'discovery', name: 'Discovery agent', purpose: '', howItDecides: '', dataSource: '', state: 'active', stateReason: '', runningNow: 0, last24h: {}, lastCompletedAt: null, config: [], recent: [], controls: [], generatedAt: '', ...over });
 
 describe('Founder "needs attention" rules', () => {
