@@ -197,6 +197,7 @@ export async function outreachAgent(): Promise<AgentReport> {
   let state: AgentState; let stateReason: string;
   if (dbEnabled === false) { state = 'disabled'; stateReason = 'outreach_enabled is false in distribution_campaign_settings'; }
   else if (!envEnabled) { state = 'disabled'; stateReason = process.env.DISTRIBUTION_AUTONOMOUS_OUTREACH === 'true' ? 'DISTRIBUTION_AUTONOMOUS_OUTREACH is true but RESEND_API_KEY or EMAIL_FROM is missing, so no email can be sent' : 'DISTRIBUTION_AUTONOMOUS_OUTREACH is not "true" on the API service; the worker has its own copy of this variable'; }
+  else if (Number(messages.sent ?? 0) === 0) { state = 'idle'; stateReason = report.runningNow > 0 || Object.values(report.last24h).some((value) => value > 0) ? 'job activity exists, but no outreach message has ever been sent' : 'no outreach message has ever been sent'; }
   else ({ state, stateReason } = stateFromActivity(true, report.runningNow, report.last24h, ''));
   const contactCounts = Object.fromEntries(contacts.map((c) => [String(c.status), Number(c.count)]));
   return {
