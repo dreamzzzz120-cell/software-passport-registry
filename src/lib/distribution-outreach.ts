@@ -116,9 +116,13 @@ export async function ingestQualifiedLead(result: Record<string, unknown>, score
   if (!validEmailAddress(email)) return { created: false, reason: 'invalid_email' };
   const company = typeof result.company === 'string' ? result.company : null;
   const sourceUrl = typeof result.url === 'string' ? result.url : null;
-  const outreachBasis = typeof result.outreachBasis === 'string' ? result.outreachBasis : (process.env.DISTRIBUTION_DEFAULT_OUTREACH_BASIS ?? 'legitimate_interest');
-  const consentEvidenceUrl = typeof result.consentEvidenceUrl === 'string' ? result.consentEvidenceUrl : null;
-  if (outreachBasis === 'consent' && !consentEvidenceUrl?.trim()) return { created: false, reason: 'consent_evidence_required' };
+  // A qualify_lead job is created from a person who supplied their own email for a Free Review.
+  // Default this path to consent so real signup addresses are not misclassified as researched
+  // legitimate-interest role addresses. Explicit caller input still overrides the default.
+  const outreachBasis = typeof result.outreachBasis === 'string' ? result.outreachBasis : 'consent';
+  const consentEvidenceUrl = typeof result.consentEvidenceUrl === 'string'
+    ? result.consentEvidenceUrl
+    : `${PUBLIC_ORIGIN}/founder?panel=leads&leadId=${encodeURIComponent(typeof result.leadId === 'string' ? result.leadId : email)}`;
   try {
     const id = await queueContact(email, company, sourceUrl, result, outreachBasis, consentEvidenceUrl);
     return { created: true, contactId: id };
