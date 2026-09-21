@@ -5,41 +5,45 @@
 
 import { useEffect, useState } from 'react';
 import { Activity } from 'lucide-react';
-import { apiFetch } from '../utils/apiClient';
+import { useFounderData } from '../lib/founderData';
 
 // Founder-only site traffic, read from SPR's own page-view telemetry
 // (traffic_events, written by installPageViewTracking in the SPA). Counts
 // are what the server returns and nothing else. Scope matters here: only
 // SPA pages send events, so the server-rendered /software, /whitepaper and
 // /roi pages -- and every crawler hit on them -- are not in these numbers.
-type Summary = { active_sessions?: number; active_events?: number; users_24h?: number; pageviews_24h?: number; users_7d?: number; pageviews_7d?: number };
+type Summary = { activeSessions: number | null; activeEvents: number | null; visitors24h: number | null; pageViews24h: number | null; visitors7d: number | null; pageViews7d: number | null };
 type TopPage = { path: string; views: number };
 
 export default function FounderTrafficPanel() {
-  const [summary, setSummary] = useState<Summary>({});
+  const { overview, loading } = useFounderData();
+  const traffic = overview?.traffic;
   const [topPages, setTopPages] = useState<TopPage[]>([]);
-  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [pagesState, setPagesState] = useState<'loading' | 'ready' | 'error'>('loading');
 
   useEffect(() => {
     let cancelled = false;
-    apiFetch('/api/traffic/summary').then(async (res) => {
+    // Top pages are supplemental. The headline traffic numbers come from the
+    // shared founder snapshot so Refresh Everything keeps the Founder page
+    // internally consistent and a failed pages query cannot turn totals into
+    // false zeros.
+    fetch('/api/traffic/summary', { credentials: 'include' }).then(async (res) => {
       const data = await res.json().catch(() => null);
       if (cancelled) return;
-      if (!res.ok || !data || typeof data !== 'object') { setState('error'); return; }
-      setSummary(data.summary && typeof data.summary === 'object' ? data.summary : {});
+      if (!res.ok || !data || typeof data !== 'object') { setPagesState('error'); return; }
       setTopPages(Array.isArray(data.topPages) ? data.topPages : []);
-      setState('ready');
-    }).catch(() => { if (!cancelled) setState('error'); });
+      setPagesState('ready');
+    }).catch(() => { if (!cancelled) setPagesState('error'); });
     return () => { cancelled = true; };
   }, []);
 
-  const n = (v: number | undefined) => (typeof v === 'number' ? v.toLocaleString() : 'Not verified');
-  const tiles: [string, number | undefined][] = [
-    ['Sessions, last 30 min', summary.active_sessions],
-    ['Visitors, 24 h', summary.users_24h],
-    ['Page views, 24 h', summary.pageviews_24h],
-    ['Visitors, 7 d', summary.users_7d],
-    ['Page views, 7 d', summary.pageviews_7d],
+  const n = (v: number | null | undefined) => (typeof v === 'number' ? v.toLocaleString() : 'Not verified');
+  const tiles: [string, number | null | undefined][] = [
+    ['Sessions, last 30 min', traffic?.activeSessions],
+    ['Visitors, 24 h', traffic?.visitors24h],
+    ['Page views, 24 h', traffic?.pageViews24h],
+    ['Visitors, 7 d', traffic?.visitors7d],
+    ['Page views, 7 d', traffic?.pageViews7d],
   ];
 
   return (
@@ -49,9 +53,9 @@ export default function FounderTrafficPanel() {
         <h2 className="text-sm font-bold text-[var(--spr-text)]">Site traffic</h2>
         <span className="text-xs text-[var(--spr-text-muted)]">SPR page-view telemetry (app pages only; server-rendered /software pages and crawlers are not counted)</span>
       </div>
-      {state === 'loading' && <p className="text-xs text-[var(--spr-text-muted)]">Loading…</p>}
-      {state === 'error' && <p role="alert" className="text-xs text-[var(--spr-red)]">Traffic could not be loaded.</p>}
-      {state === 'ready' && (
+      {loading && !overview && <p className="text-xs text-[var(--spr-text-muted)]">Loading…</p>}
+      {!loading && !traffic && <p role="alert" className="text-xs text-[var(--spr-red)]">Traffic could not be verified.</p>}
+      {traffic && (
         <>
           <div className="grid gap-3 sm:grid-cols-5">
             {tiles.map(([label, value]) => (
@@ -61,8 +65,10 @@ export default function FounderTrafficPanel() {
               </div>
             ))}
           </div>
-          {topPages.length === 0 && <p className="text-xs text-[var(--spr-text-muted)]">No page views recorded in the last 24 hours.</p>}
-          {topPages.length > 0 && (
+          {pagesState === 'loading' && <p className="text-xs text-[var(--spr-text-muted)]">Loading top pages…</p>}
+          {pagesState === 'error' && <p className="text-xs text-[var(--spr-text-muted)]">Top-page detail could not be loaded; headline totals above remain from the founder snapshot.</p>}
+          {pagesState === 'ready' && topPages.length === 0 && <p className="text-xs text-[var(--spr-text-muted)]">No page views recorded in the last 24 hours.</p>}
+          {pagesState === 'ready' && topPages.length > 0 && (
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead><tr className="text-left text-[11px] uppercase tracking-wide text-[var(--spr-text-muted)]"><th className="py-1 pr-3">Page (24 h)</th><th className="py-1 pr-3 text-right">Views</th></tr></thead>
