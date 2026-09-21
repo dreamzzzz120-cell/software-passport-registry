@@ -45,3 +45,5 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+# CI trigger normalization: keep the required `verify` check observable on PR updates.
