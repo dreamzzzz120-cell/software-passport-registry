@@ -81,7 +81,7 @@ describe('navigation and action allowlists on the client', () => {
     await mount(true);
     await openAndSend('show passports');
     await waitFor(() => expect(window.location.pathname).toBe('/passports'));
-    expect(calls[0]).toEqual({ url: '/api/agent/v1/command', body: { input: 'show passports', context: { path: '/dashboard' } } });
+    expect(calls[0]).toEqual({ url: '/api/experience-agent/v1/command', body: { input: 'show passports', context: { path: '/dashboard' } } });
   });
 
   it('ignores a non-allowlisted path even if the server returns one', async () => {
@@ -98,11 +98,11 @@ describe('navigation and action allowlists on the client', () => {
   });
 
   it('executes only the allowlisted verify endpoint; any other action is refused without a request', async () => {
-    responder = (url) => url === '/api/agent/v1/command' ? ok({ intent: 'passport', reply: 'planning', action: { type: 'verify', endpoint: '/api/agent/v1/delete-passport', payload: { id: 'x' } } }) : ok({});
+    responder = (url) => url === '/api/experience-agent/v1/command' ? ok({ intent: 'passport', reply: 'planning', action: { type: 'verify', endpoint: '/api/experience-agent/v1/delete-passport', payload: { id: 'x' } } }) : ok({});
     await mount(true);
     await openAndSend('verify alpha app');
     await screen.findByText(/not in the agent’s approved action allowlist/);
-    expect(calls.map((c) => c.url)).toEqual(['/api/agent/v1/command']);
+    expect(calls.map((c) => c.url)).toEqual(['/api/experience-agent/v1/command']);
   });
 
   it('action buttons returned by the server only navigate within the allowlist', async () => {
@@ -125,11 +125,11 @@ describe('evidence, provenance and UNKNOWN as shown to the user', () => {
   };
 
   it('displays the observed counts and the provenance (ids, hash, source URL, timestamp, limitation)', async () => {
-    responder = (url) => url === '/api/agent/v1/command' ? ok({ intent: 'passport', reply: 'planning', action: { type: 'verify', endpoint: '/api/agent/v1/verify-software', payload: { query: 'alpha app' } } }) : ok(verified);
+    responder = (url) => url === '/api/experience-agent/v1/command' ? ok({ intent: 'passport', reply: 'planning', action: { type: 'verify', endpoint: '/api/experience-agent/v1/verify-software', payload: { query: 'alpha app' } } }) : ok(verified);
     await mount(true);
     await openAndSend('verify alpha app');
     await screen.findByText(/I observed 1 evidence record\(s\)\. I am not assigning a separate trust decision\./);
-    expect(calls.map((c) => c.url)).toEqual(['/api/agent/v1/command', '/api/agent/v1/verify-software']);
+    expect(calls.map((c) => c.url)).toEqual(['/api/experience-agent/v1/command', '/api/experience-agent/v1/verify-software']);
     expect(calls[1].body).toEqual({ query: 'alpha app' });
     const dialog = screen.getByRole('dialog');
     expect(dialog.textContent).toContain('Observed: OBSERVED');
@@ -146,7 +146,7 @@ describe('evidence, provenance and UNKNOWN as shown to the user', () => {
   });
 
   it('shows UNKNOWN clearly when no passport was observed, with no negative claim', async () => {
-    responder = (url) => url === '/api/agent/v1/command' ? ok({ intent: 'passport', reply: 'planning', action: { type: 'verify', endpoint: '/api/agent/v1/verify-software', payload: { query: 'nothing' } } }) : notFound({ status: 'UNKNOWN', reason: 'SOFTWARE_NOT_REGISTERED', provenance: { kind: 'tenant_scoped_database_lookup', table: 'passports', fields: ['id', 'name'], matched: false } });
+    responder = (url) => url === '/api/experience-agent/v1/command' ? ok({ intent: 'passport', reply: 'planning', action: { type: 'verify', endpoint: '/api/experience-agent/v1/verify-software', payload: { query: 'nothing' } } }) : notFound({ status: 'UNKNOWN', reason: 'SOFTWARE_NOT_REGISTERED', provenance: { kind: 'tenant_scoped_database_lookup', table: 'passports', fields: ['id', 'name'], matched: false } });
     await mount(true);
     await openAndSend('verify nothing');
     await screen.findByText(/That software is UNKNOWN because no matching passport record was observed in your authorized workspace\. No negative trust claim was made\./);
