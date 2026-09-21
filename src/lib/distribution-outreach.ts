@@ -44,7 +44,7 @@ export function unsubscribeUrl(email: string) {
 
 function validEmailAddress(email: string) {
   const [local, domain] = email.trim().toLowerCase().split('@');
-  return Boolean(local && domain && domain.includes('.') && /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email.trim()));
+  return Boolean(local && domain && domain.includes('.') && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()));
 }
 
 function validRoleAddress(email: string) {
