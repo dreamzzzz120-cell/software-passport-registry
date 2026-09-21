@@ -38,6 +38,13 @@ export function dedupeDiscoveryResults(results: DiscoveryResult[]) {
   });
 }
 
+const NON_BUSINESS_DOMAINS = new Set(['github.com','gitlab.com','bitbucket.org','codeberg.org','sourceforge.net','stackoverflow.com','stackexchange.com','linkedin.com','facebook.com','instagram.com','x.com','twitter.com','youtube.com','youtu.be','medium.com','dev.to','blogspot.com','wordpress.com','substack.com']);
+
+export function isNonBusinessDomain(hostname: string) {
+  const normalized = hostname.trim().toLowerCase().replace(/^www\./, '');
+  return [...NON_BUSINESS_DOMAINS].some((domain) => normalized === domain || normalized.endsWith('.' + domain));
+}
+
 export function buildMspDiscoveryQueries() {
   return [
     'managed service provider cybersecurity compliance',
