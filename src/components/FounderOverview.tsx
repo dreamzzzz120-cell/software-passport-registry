@@ -83,9 +83,28 @@ export default function FounderOverview() {
             <Pill ok={p.scanQueue.pending === null ? null : (p.scanQueue.pending ?? 0) <= 25} label="Scan queue" detail={`${n(p.scanQueue.pending)} pending · ${n(p.scanQueue.running)} running · ${n(p.scanQueue.failed24h)} failed in 24h`} />
             <Pill ok={p.distributionQueue.deadLetter === null ? null : (p.distributionQueue.deadLetter ?? 0) === 0} label="Distribution queue" detail={`${n(p.distributionQueue.queued)} queued · ${n(p.distributionQueue.running)} running · ${n(p.distributionQueue.deadLetter)} dead-lettered`} />
             <Pill ok={true} label="API process" detail={`up ${Math.floor(p.apiUptimeSeconds / 3600)}h ${Math.floor((p.apiUptimeSeconds % 3600) / 60)}m`} />
-            <Pill ok={b ? (b.mrrCents === null ? null : true) : null} label="Revenue (Stripe)" detail={b ? `MRR ${b.mrrCents === null ? 'Not verified' : `$${(b.mrrCents / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}`} · ${n(b.stripeCustomerCount)} customers · ${n(b.organizationCount)} orgs · ${n(b.userCount)} users` : 'Not verified'} />
+            <Pill ok={b ? (b.mrrCents === null ? null : true) : null} label="Stripe MRR" detail={b ? `MRR ${b.mrrCents === null ? 'Not verified' : `${(b.mrrCents / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}`} · ${n(b.activeSubscriptionCount)} active subscriptions` : 'Not verified'} />
+            <Pill ok={b ? b.successfulPaymentCount30d !== null : null} label="Successful Stripe payments · 30d" detail={b ? `${n(b.successfulPaymentCount30d)} payments · ${b.successfulPaymentAmount30dCents === null ? 'Not verified' : `${(b.successfulPaymentAmount30dCents / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}`} gross` : 'Not verified'} />
           </div>
         )}
+      </section>
+
+      <section id="founder-data-truth" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-5">
+        <p className="text-[11px] uppercase tracking-[0.24em] font-semibold text-[var(--spr-text-muted)]">Data truth</p>
+        <div className="mt-2 grid gap-2 sm:grid-cols-3">
+          <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-3">
+            <p className="text-xs font-semibold text-[var(--spr-text)]">Stripe payments</p>
+            <p className="mt-1 text-[11px] text-[var(--spr-text-muted)]">Account-wide successful PaymentIntents. This is transaction activity, not proof of an independent customer purchase.</p>
+          </div>
+          <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-3">
+            <p className="text-xs font-semibold text-[var(--spr-text)]">Customer revenue</p>
+            <p className="mt-1 text-[11px] text-[var(--spr-text-muted)]">Count external customer revenue only after matching the payment to a non-founder SPR account and paid entitlement.</p>
+          </div>
+          <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-3">
+            <p className="text-xs font-semibold text-[var(--spr-text)]">Unknown stays unknown</p>
+            <p className="mt-1 text-[11px] text-[var(--spr-text-muted)]">Unavailable data renders “Not verified” instead of zero or an estimate.</p>
+          </div>
+        </div>
       </section>
 
       <section id="founder-funnel" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-5">
