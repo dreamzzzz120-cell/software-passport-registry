@@ -107,7 +107,8 @@ export async function queueContact(email: string, company: string | null, source
   });
 }
 
-const QUALIFY_LEAD_CONTACT_THRESHOLD = Math.max(0, Math.min(100, Number.parseInt(process.env.DISTRIBUTION_QUALIFY_LEAD_CONTACT_THRESHOLD ?? '25', 10) || 0));
+const parsedQualifyLeadContactThreshold = Number.parseInt(process.env.DISTRIBUTION_QUALIFY_LEAD_CONTACT_THRESHOLD ?? '25', 10);
+const QUALIFY_LEAD_CONTACT_THRESHOLD = Math.max(0, Math.min(100, Number.isFinite(parsedQualifyLeadContactThreshold) ? parsedQualifyLeadContactThreshold : 25));
 
 export async function ingestQualifiedLead(result: Record<string, unknown>, score: number) {
   if (score < QUALIFY_LEAD_CONTACT_THRESHOLD) return { created: false, reason: 'below_contact_threshold' };
