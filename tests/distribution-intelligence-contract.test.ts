@@ -34,6 +34,13 @@ describe('distribution intelligence hardening', () => {
     expect(source).toContain("accept: 'text/html,application/xhtml+xml'");
   });
 
+  it('rejects malformed hosts and oversized research queries', () => {
+    const source = fs.readFileSync('src/lib/distribution-engine.ts', 'utf8');
+    expect(source).toContain("DISTRIBUTION_HOST_INVALID");
+    expect(source).toContain("DISTRIBUTION_QUERY_TOO_LONG");
+    expect(source).toContain("host.includes('..')");
+  });
+
   it('bounds URL, hostname, and DNS response dimensions', () => {
     const source = fs.readFileSync('src/lib/distribution-engine.ts', 'utf8');
     expect(source).toContain('MAX_RESEARCH_URL_LENGTH = 2048');
