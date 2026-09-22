@@ -36,7 +36,7 @@ try {
         WHEN p.verification_status = 'verified'
         THEN p.id
       END)::int AS verified_passport_count,
-      MAX(to_timestamp(NULLIF(o.generated_at, '')::double precision)) AS latest_observation_at
+      MAX(NULLIF(o.generated_at, '')::timestamptz) AS latest_observation_at
     FROM public.clients c
     LEFT JOIN public.passports p
       ON p.client_id = c.id AND p.tenant_id = c.tenant_id
