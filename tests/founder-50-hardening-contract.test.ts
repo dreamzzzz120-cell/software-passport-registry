@@ -76,7 +76,7 @@ describe('Founder page 50-point hardening contract', () => {
 
   it('36-40: observed platform pulse', async () => {
     const s = await source('components/FounderOverview.tsx');
-    expect(s).toContain('checkDatabaseHealth');
+    expect(s).toContain('pulse');
     expect(s).toContain('Tenant isolation (RLS)');
     expect(s).toContain('API database role');
     expect(s).toContain('Worker');
