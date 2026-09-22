@@ -16,7 +16,7 @@ export type SupabaseAuthUser = {
 };
 
 export type OwnerBootstrapAuth = {
-  getUserByEmail(email: string): Promise<FirebaseUser>;
+  getUserByEmail(email: string): Promise<SupabaseAuthUser>;
   setCustomUserClaims(uid: string, claims: Record<string, unknown>): Promise<void>;
 };
 
@@ -63,7 +63,7 @@ export async function bootstrapInitialOwner(
     throw new OwnerBootstrapDeniedError();
   }
 
-  let supabaseUser: FirebaseUser;
+  let supabaseUser: SupabaseAuthUser;
   try {
     supabaseUser = await auth.getUserByEmail(configuredEmail);
   } catch {
@@ -108,7 +108,7 @@ export async function bootstrapInitialOwner(
       try {
         await auth.setCustomUserClaims(supabaseUser.uid, previousClaims);
       } catch (rollbackError) {
-        console.error('[Initial Owner Bootstrap] Firebase claim rollback failed', rollbackError);
+        console.error('[Initial Owner Bootstrap] Supabase claim rollback failed', rollbackError);
       }
     }
     if (error instanceof OwnerBootstrapDeniedError) throw error;
