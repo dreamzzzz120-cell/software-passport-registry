@@ -39,6 +39,16 @@ export default function FounderDashboardView({ userRole }: FounderDashboardViewP
   const ownerAccess = userRole === 'Owner';
   const { overview, commandCenter, agents, loading, refresh } = useFounderData();
 
+  // The Founder cockpit is a live operator surface. Refreshing automatically keeps
+  // agent state, worker heartbeat, queues, connections and business telemetry aligned
+  // without pretending that stale data is live. The explicit refresh button remains
+  // available for an immediate snapshot.
+  useEffect(() => {
+    if (!ownerAccess) return;
+    const timer = window.setInterval(() => { void refresh(); }, 10_000);
+    return () => window.clearInterval(timer);
+  }, [ownerAccess, refresh]);
+
   // The self passport used to wait for a button click and sat empty until
   // then; it now loads with the page.
   useEffect(() => { if (ownerAccess) void fetchSelfPassport(); }, [ownerAccess]);
