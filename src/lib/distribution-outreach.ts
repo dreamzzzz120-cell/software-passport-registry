@@ -64,11 +64,38 @@ export function extractPublicRoleEmails(html: string) {
 }
 
 function makeCopy(company: string, evidence: Record<string, unknown>, followup: boolean) {
-  const signals = evidence.signals && typeof evidence.signals === 'object' ? evidence.signals as Record<string, unknown> : {};
-  const focus = signals.compliance ? 'client software and vendor risk evidence' : signals.cybersecurity ? 'software security and vendor risk' : 'software trust and verification';
   const greeting = company ? `Hi ${company} team,` : 'Hi there,';
-  if (followup) return { subject: `Following up — ${focus}`, intro: [greeting, `I wanted to follow up on my note about SPR for ${focus}. It gives MSPs an evidence-first way to verify software, document findings, and produce client-ready trust reports.`, 'If this is relevant, I can point you straight to the free repo review. If not, no worries.'], cta: { label: 'Run a free repo review', url: `${PUBLIC_ORIGIN}/` } };
-  return { subject: `Software trust for ${company || 'your MSP clients'}`, intro: [greeting, `I came across your business while researching MSPs and IT/security providers. SPR is built for ${focus}, with the evidence retained behind every result.`, 'There is a free repo review so you can see the workflow before buying anything.'], cta: { label: 'Run a free repo review', url: `${PUBLIC_ORIGIN}/` } };
+  const focus = 'software audits, SBOMs, vendor evidence, and compliance readiness';
+
+  if (followup) return {
+    subject: 'Following up — turn software audit work into MSP revenue',
+    intro: [
+      greeting,
+      'I wanted to follow up on my note about Software Passport Registry (SPR). MSPs are already spending engineer time pulling software lists, managing SBOMs, and proving compliance for client security reviews and cyber-insurance renewals.',
+      'SPR is designed to turn that administrative work into a repeatable, billable Software Trust Assessment service—with evidence retained behind every result.',
+      'As an example, 5,000 managed seats at $3/seat/month is $15,000 MRR, and 15 compliance-heavy clients at $500/month is another $7,500 MRR: $22,500 MRR or $270,000 annually if those services are sold and adopted.',
+      'If useful, I can show you the workflow and run your own software stack through the review. If not, no worries.'
+    ],
+    cta: { label: 'Run a free repo review', url: `${PUBLIC_ORIGIN}/free-review` }
+  };
+
+  return {
+    subject: 'Stop treating software audits as unbillable work',
+    intro: [
+      greeting,
+      `Your engineers may be spending unbillable hours on ${focus} when clients face cyber-insurance renewals, security reviews, or compliance audits.`,
+      'What if your MSP could turn that work into a recurring revenue service?',
+      'I’m Keith, founder of Software Passport Registry (SPR). We built an evidence-first framework specifically for MSPs to package and monetize Software Trust Assessments.',
+      'Here is one example of the revenue model:',
+      '• 5,000 managed seats × $3/seat/month = $15,000 MRR.',
+      '• 15 compliance-heavy clients × $500/month = $7,500 MRR.',
+      '• Potential total = $22,500 MRR / $270,000 annually.',
+      'The exact pricing will vary by MSP and client mix. The point is to turn work you may already be doing into a measurable, repeatable, billable service.',
+      'I’m looking for 3 early MSP partners to pressure-test the model. I’ll start by auditing your own internal software stack so you can see what SPR finds and where the service opportunity could come from.',
+      'Worth a 10-minute chat?'
+    ],
+    cta: { label: 'Run a free repo review', url: `${PUBLIC_ORIGIN}/free-review` }
+  };
 }
 
 async function withTenant<T>(fn: (client: any) => Promise<T>) {
