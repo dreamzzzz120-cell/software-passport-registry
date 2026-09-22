@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: LicenseRef-SPR-Proprietary
+name: SPR LOM Continuous Security Monitor
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "7/7 * * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: lom-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  lom:
+    name: LOM source dependency runtime scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Run LOM
+        env:
+          LOM_RUNTIME_URL: ${{ vars.LOM_RUNTIME_URL }}
+        run: npm run lom:scan -- --report artifacts/lom-report.json
+      - name: Print LOM report summary
+        if: always()
+        run: cat artifacts/lom-report.json 2>/dev/null || true
