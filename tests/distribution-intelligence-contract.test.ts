@@ -19,6 +19,14 @@ describe('distribution intelligence hardening', () => {
     }
   });
 
+  it('enforces a narrow outbound network boundary', () => {
+    const source = fs.readFileSync('src/lib/distribution-engine.ts', 'utf8');
+    expect(source).toContain('DISTRIBUTION_PORT_NOT_ALLOWED');
+    expect(source).toContain('DISTRIBUTION_FRAGMENT_NOT_ALLOWED');
+    expect(source).toContain('a >= 224');
+    expect(source).toContain("normalized.startsWith('ff')");
+  });
+
   it('blocks credentialed and cloud metadata research targets', () => {
     const source = fs.readFileSync('src/lib/distribution-engine.ts', 'utf8');
     expect(source).toContain('DISTRIBUTION_CREDENTIALS_IN_URL_BLOCKED');
