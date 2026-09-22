@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm';
 import crypto from 'node:crypto';
 import { z } from 'zod';
 import { AuthenticatedRequest, requireRole } from '../middleware/security.ts';
-import { appendAuditEntry } from '../security/audit-log.ts';
+import { appendAuditEntry, verifyAuditChain } from '../security/audit-log.ts';
 
 const assignSchema = z.object({
   clientId: z.string().trim().min(1).max(255),
@@ -56,6 +56,55 @@ export function createMspRouter() {
       if (!((result as any).rows?.length)) return res.status(404).json({ error: 'ASSIGNMENT_NOT_FOUND' });
       await appendAuditEntry(db, { tenantId, action: 'client.technician_unassigned', actor: req.user!.email, payload: { clientId: req.params.clientId } });
       return res.status(204).send();
+    } catch (error) { return next(error); }
+  });
+
+  // Full tenant-scoped MSP audit export. Internal MSP roles only.
+  router.get('/audit-export', requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const [tenant, clients, passports, findings, evidence, observations, remediation, controls, policies, risks, schedules, auditTrail, auditIntegrity] = await Promise.all([
+        db.execute(sql`SELECT id, name, created_at AS "createdAt" FROM tenants WHERE id=${tenantId} LIMIT 1`),
+        db.execute(sql`SELECT id, name, created_at AS "createdAt", updated_at AS "updatedAt" FROM clients WHERE tenant_id=${tenantId} ORDER BY name ASC`),
+        db.execute(sql`SELECT id, name, version, client_id AS "clientId", overall_score AS "overallScore", security_score AS "securityScore", compliance_score AS "complianceScore", verification_status AS "verificationStatus", evidence_completeness AS "evidenceCompleteness", created_at AS "createdAt", updated_at AS "updatedAt" FROM passports WHERE tenant_id=${tenantId} ORDER BY name ASC`),
+        db.execute(sql`SELECT id, passport_id AS "passportId", control_id AS "controlId", title, severity, status, description, remediation, updated_at AS "updatedAt", resolved_at AS "resolvedAt" FROM trust_findings WHERE tenant_id=${tenantId} ORDER BY updated_at DESC LIMIT 10000`),
+        db.execute(sql`SELECT id, passport_id AS "passportId", provider, control_id AS "controlId", subject, source_url AS "sourceUrl", observed_at AS "observedAt", verification_method AS "verificationMethod", status, severity, evidence_hash AS "evidenceHash", limitation FROM evidence_ledger WHERE tenant_id=${tenantId} ORDER BY observed_at DESC LIMIT 10000`),
+        db.execute(sql`SELECT id, passport_id AS "passportId", observation_version AS "observationVersion", generated_at AS "generatedAt", canonical_payload_hash AS "canonicalPayloadHash", completeness_basis_points AS "completenessBasisPoints", open_finding_count AS "openFindingCount", unknown_dimension_count AS "unknownDimensionCount" FROM trust_observations WHERE tenant_id=${tenantId} ORDER BY generated_at DESC LIMIT 10000`),
+        db.execute(sql`SELECT id, passport_id AS "passportId", status, priority, owner_display AS "ownerDisplay", updated_at AS "updatedAt", resolved_at AS "resolvedAt" FROM trust_remediation_work_items WHERE tenant_id=${tenantId} ORDER BY updated_at DESC LIMIT 10000`),
+        db.execute(sql`SELECT id, control_key AS "controlKey", name, implementation_status AS "implementationStatus", frequency, last_tested_at AS "lastTestedAt", next_test_due_at AS "nextTestDueAt", updated_at AS "updatedAt" FROM controls WHERE tenant_id=${tenantId} ORDER BY control_key ASC`),
+        db.execute(sql`SELECT id, policy_key AS "policyKey", name, version, status, approval_status AS "approvalStatus", effective_date AS "effectiveDate", review_date AS "reviewDate", updated_at AS "updatedAt" FROM policies WHERE tenant_id=${tenantId} ORDER BY policy_key ASC`),
+        db.execute(sql`SELECT id, title, category, likelihood, impact, residual_likelihood AS "residualLikelihood", residual_impact AS "residualImpact", acceptance_status AS "acceptanceStatus", accepted_by AS "acceptedBy", accepted_at AS "acceptedAt", review_date AS "reviewDate", updated_at AS "updatedAt" FROM risks WHERE tenant_id=${tenantId} ORDER BY updated_at DESC`),
+        db.execute(sql`SELECT id, client_id AS "clientId", frequency, target_email AS "targetEmail", status, last_audit_at AS "lastAuditAt", next_audit_at AS "nextAuditAt", created_at AS "createdAt" FROM compliance_schedules WHERE tenant_id=${tenantId} ORDER BY created_at DESC`),
+        db.execute(sql`SELECT id, action, timestamp, actor, payload, previous_hash AS "previousHash", current_hash AS "currentHash" FROM audit_trail WHERE tenant_id=${tenantId} ORDER BY id DESC LIMIT 10000`),
+        verifyAuditChain(db, tenantId),
+      ]);
+      const payload = {
+        schemaVersion: 'spr.msp.audit-export.v1',
+        generatedAt: new Date().toISOString(),
+        tenantId,
+        tenant: (tenant as any).rows?.[0] ?? { id: tenantId },
+        counts: {
+          clients: (clients as any).rows?.length ?? 0, passports: (passports as any).rows?.length ?? 0,
+          findings: (findings as any).rows?.length ?? 0, evidence: (evidence as any).rows?.length ?? 0,
+          observations: (observations as any).rows?.length ?? 0, remediation: (remediation as any).rows?.length ?? 0,
+          controls: (controls as any).rows?.length ?? 0, policies: (policies as any).rows?.length ?? 0,
+          risks: (risks as any).rows?.length ?? 0, schedules: (schedules as any).rows?.length ?? 0,
+          auditEvents: (auditTrail as any).rows?.length ?? 0,
+        },
+        auditIntegrity,
+        clients: (clients as any).rows ?? [], passports: (passports as any).rows ?? [],
+        findings: (findings as any).rows ?? [], evidence: (evidence as any).rows ?? [],
+        observations: (observations as any).rows ?? [], remediation: (remediation as any).rows ?? [],
+        controls: (controls as any).rows ?? [], policies: (policies as any).rows ?? [],
+        risks: (risks as any).rows ?? [], complianceSchedules: (schedules as any).rows ?? [],
+        auditTrail: (auditTrail as any).rows ?? [],
+        limitations: ['Recorded application evidence only; this export is not a certification or independent auditor opinion.', 'Collections are capped at 10,000 records per collection.'],
+      };
+      const exportHash = crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+      await appendAuditEntry(db, { tenantId, action: 'msp.audit_export.generated', actor: req.user!.email, payload: { exportHash, format: 'json+pdf-source', counts: payload.counts } });
+      res.setHeader('X-SPR-Audit-Export-Hash', exportHash);
+      return res.json({ ...payload, exportHash });
     } catch (error) { return next(error); }
   });
 
