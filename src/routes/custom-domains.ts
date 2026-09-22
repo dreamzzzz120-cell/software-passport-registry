@@ -74,9 +74,9 @@ export function publicBrandingView(row: { companyName: string | null; brandColor
     return out;
   };
   return {
-    companyName: typeof row.companyName === 'string' ? row.companyName.slice(0, 120) : null, brandColor: row.brandColor, logoDataUrl: row.logoDataUrl,
+    companyName: typeof row.companyName === 'string' ? row.companyName.slice(0, 120) : null, brandColor: typeof row.brandColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(row.brandColor) ? row.brandColor : null, logoDataUrl: row.logoDataUrl && /^(data:image\/(png|jpeg|jpg|webp);base64,)/i.test(row.logoDataUrl) ? row.logoDataUrl : null,
     theme: {
-      productName: typeof theme.productName === 'string' ? theme.productName.slice(0, 80) : null, theme.productName ?? null, tagline: typeof theme.tagline === 'string' ? theme.tagline.slice(0, 240) : null, fontId: theme.fontId ?? null, radius: theme.radius ?? null,
+      productName: typeof theme.productName === 'string' ? theme.productName.slice(0, 80) : null, tagline: typeof theme.tagline === 'string' ? theme.tagline.slice(0, 240) : null, fontId: theme.fontId ?? null, radius: theme.radius ?? null,
       defaultMode: theme.defaultMode ?? null, colors: { light: palette('light'), dark: palette('dark') }, faviconDataUrl: theme.faviconDataUrl ?? null,
       supportEmail: typeof theme.supportEmail === 'string' ? theme.supportEmail.slice(0, 254) : null, supportUrl: typeof theme.supportUrl === 'string' ? theme.supportUrl.slice(0, 2048) : null, footerText: typeof theme.footerText === 'string' ? theme.footerText.slice(0, 500) : null, hideSprAttribution: theme.hideSprAttribution === true,
     },
