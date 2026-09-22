@@ -51,7 +51,6 @@ Disallow: /savings
 Disallow: /governance
 Disallow: /integrations
 Disallow: /monitoring
-Disallow: /security
 Disallow: /compliance
 Disallow: /agent-trust
 Disallow: /ai-trust-center
