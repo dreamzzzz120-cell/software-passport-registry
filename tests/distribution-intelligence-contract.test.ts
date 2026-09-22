@@ -19,6 +19,14 @@ describe('distribution intelligence hardening', () => {
     }
   });
 
+  it('applies the same destination controls to direct research requests', () => {
+    const source = fs.readFileSync('src/lib/distribution-engine.ts', 'utf8');
+    expect(source).toContain("parsed.port && parsed.port !== '80' && parsed.port !== '443'");
+    expect(source).toContain("parsed.hash");
+    expect(source).toContain("parsed.username || parsed.password");
+    expect(source).toContain("declaredLength");
+  });
+
   it('refuses to score error pages or non-HTML responses', () => {
     const source = fs.readFileSync('src/lib/distribution-engine.ts', 'utf8');
     expect(source).toContain("response.status < 200 || response.status >= 300");
