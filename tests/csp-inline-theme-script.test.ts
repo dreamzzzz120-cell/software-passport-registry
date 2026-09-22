@@ -68,7 +68,7 @@ describe('inline theme script is allowed by hash, not by unsafe-inline', () => {
     // source template by whitespace. Editing the script - even whitespace -
     // invalidates the hash and silently re-blocks the script, so this test
     // records the dependency explicitly.
-    const source = read('index.html').match(/<script[^>]*>([\s\S]*?)<\/script>/)?.[1] ?? '';
+    const source = read('index.html').match(/<script[^>]*>([\s\S]*?data-theme[\s\S]*?)<\/script>/)?.[1] ?? '';
     const sourceHash = 'sha256-' + crypto.createHash('sha256').update(source, 'utf8').digest('base64');
     expect(sourceHash.startsWith('sha256-')).toBe(true);
     expect(source).toContain('spr-theme');
