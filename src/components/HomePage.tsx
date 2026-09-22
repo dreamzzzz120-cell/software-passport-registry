@@ -46,17 +46,17 @@ export default function HomePage({ onCreatePassport, onExploreTrustNetwork, onVi
         <div className="max-w-2xl">
           <img src="/brand/spr-logo.jpg" alt="Software Passport Registry" className="mb-6 h-24 w-auto drop-shadow-[0_4px_20px_rgba(0,0,0,0.35)]" />
           <div className="mb-5 flex flex-wrap items-center gap-3">
-            <span className="text-[11px] font-bold uppercase tracking-[.22em] text-[var(--spr-highlight)]">Software Trust Infrastructure</span>
+            <span className="text-[11px] font-bold uppercase tracking-[.22em] text-[var(--spr-highlight)]">Software Trust Infrastructure · Automated Software Verification</span>
             <span className="rounded-full border border-[var(--spr-amber)]/40 bg-[var(--spr-amber)]/10 px-2.5 py-1 text-[12px] font-bold uppercase tracking-[.14em] text-[var(--spr-amber)]">Limited early access</span>
           </div>
           <h1 className="text-4xl font-semibold leading-[1.05] tracking-[-.02em] text-[var(--spr-text)] md:text-5xl">Verify software before you trust it.</h1>
-          <p className="mt-6 max-w-xl text-base leading-7 text-[var(--spr-text-muted)]">SPR turns repositories, applications, dependencies and vendors into evidence-backed Software Passports — so buyers, security teams and operators can see what was observed, what was verified, and what remains unknown.</p>
+          <p className="mt-6 max-w-xl text-base leading-7 text-[var(--spr-text-muted)]">SPR automatically analyzes software and its supply chain, builds the security blueprint, and turns observed evidence into a Software Passport — so buyers, security teams, MSPs and operators can see what was observed, what was verified, and what remains unknown.</p>
           <div className="mt-8 flex flex-wrap gap-3">
             <button onClick={onExploreTrustNetwork} className="inline-flex items-center gap-2 rounded-[3px] bg-[var(--spr-accent)] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[var(--spr-accent-hover)]">Run a Free Review <ArrowRight className="h-4 w-4" /></button>
             <a href="/software" className="inline-flex items-center gap-2 rounded-[3px] border border-[var(--spr-highlight)]/50 bg-[var(--spr-surface-sunken)] px-6 py-3 text-sm font-semibold text-[var(--spr-text)] transition-colors hover:bg-[var(--spr-surface-hover)]" aria-label="Open the public Software Passport Registry">Explore the Software Registry <ExternalLink className="h-4 w-4" /></a>
             <button onClick={onCreatePassport} className="rounded-[3px] border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-6 py-3 text-sm font-semibold text-[#cccccc] transition-colors hover:bg-[var(--spr-surface-hover)]">Sign in</button>
           </div>
-          <p className="mt-3 text-xs text-[var(--spr-text-muted)]">Public registry: observed repositories only. No invented scores or placeholder records.</p>
+          <p className="mt-3 text-xs text-[var(--spr-text-muted)]">Start with the scanner. The registry is the durable record created from real observations — not a directory that depends on vendors volunteering data.</p>
           <LegalFooterLinks className="mt-8" />
         </div>
         <div className="hidden w-full flex-1 justify-center lg:flex">
@@ -81,6 +81,34 @@ export default function HomePage({ onCreatePassport, onExploreTrustNetwork, onVi
         <div className="mx-auto max-w-7xl">
           <div className="mb-10 max-w-3xl"><div className="text-[12px] font-bold uppercase tracking-[.2em] text-[var(--spr-highlight)]">Universal intake</div><h2 className="mt-3 text-3xl font-semibold text-[var(--spr-text)] md:text-4xl">Give SPR everything you already have.</h2><p className="mt-3 text-sm leading-6 text-[var(--spr-text-muted)]">No SBOM preparation project. No guessing where a document belongs. Stage the software and the evidence together, then continue into the workspace.</p></div>
           <UniversalIntakeView onContinue={onCreatePassport} />
+        </div>
+      </section>
+
+      <section className="border-t border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-6 py-20">
+        <div className="mx-auto max-w-6xl">
+          <div className="max-w-3xl">
+            <div className="text-[12px] font-bold uppercase tracking-[.2em] text-[var(--spr-highlight)]">Scanner-first trust engine</div>
+            <h2 className="mt-3 text-3xl font-semibold text-[var(--spr-text)] md:text-4xl">Scan the software first. Build the registry from evidence.</h2>
+            <p className="mt-4 text-sm leading-7 text-[var(--spr-text-muted)]">SPR does not require a vendor to submit a passport before you can assess its software. Give SPR a public repository or supported software evidence and the acquisition, inventory, SBOM, vulnerability, content-inspection and verification pipeline records what it actually observes.</p>
+          </div>
+          <div className="mt-9 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {[
+              ['01', 'Acquire', 'Read the permitted software source and resolve the real default branch or explicitly requested revision.'],
+              ['02', 'Blueprint', 'Inventory files and dependencies, generate SBOM evidence, and preserve source lineage and hashes.'],
+              ['03', 'Verify', 'Correlate vulnerabilities and other observations without turning missing evidence into a clean result.'],
+              ['04', 'Passport', 'Persist the evidence-backed software identity, trust state and observation history for reuse and monitoring.'],
+            ].map(([n, title, body]) => (
+              <div key={n} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5">
+                <div className="font-mono text-xs font-bold text-[var(--spr-highlight)]">{n}</div>
+                <h3 className="mt-2 text-sm font-semibold text-[var(--spr-text)]">{title}</h3>
+                <p className="mt-2 text-xs leading-5 text-[var(--spr-text-muted)]">{body}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-7 rounded-md border border-[var(--spr-amber)]/30 bg-[var(--spr-amber)]/5 p-5">
+            <div className="text-xs font-bold uppercase tracking-[.16em] text-[var(--spr-amber)]">Hardening rule</div>
+            <p className="mt-2 text-sm leading-6 text-[var(--spr-text)]"><strong>UNKNOWN is preserved.</strong> Unsupported files, failed acquisition, incomplete scans and unverified claims remain explicit states. SPR never converts “not observed” into “safe,” “compliant,” or “verified.”</p>
+          </div>
         </div>
       </section>
 

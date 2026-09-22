@@ -14,6 +14,26 @@ import { newScanId } from './scan-ledger.ts';
 
 function id(prefix: string) { return `${prefix}_${crypto.randomUUID().replace(/-/g, '')}`; }
 
+// Defense-in-depth: every repository scan, including authenticated/internal callers,
+// must enter the GitHub acquisition pipeline with path-safe identifiers. The public
+// route validates these fields too, but the queue boundary is the security boundary
+// that prevents a future caller from bypassing that validation.
+const GITHUB_NAME = /^[A-Za-z0-9_.-]{1,100}$/;
+const GITHUB_REF = /^[^\u0000-\u001f\u007f]{1,200}$/;
+const SAFE_SUBDIRECTORY = /^(?:[^\u0000-\u001f\u007f\\]*\/)*[^\u0000-\u001f\u007f\\]*$/;
+
+function assertRepositorySubmission(input: RepositorySubmission): void {
+  if (!GITHUB_NAME.test(input.owner) || !GITHUB_NAME.test(input.repository)) {
+    throw new Error('REPOSITORY_INPUT_INVALID');
+  }
+  if (input.ref !== null && !GITHUB_REF.test(input.ref)) {
+    throw new Error('REPOSITORY_REF_INVALID');
+  }
+  if (!SAFE_SUBDIRECTORY.test(input.subdirectory) || input.subdirectory.length > 500) {
+    throw new Error('REPOSITORY_SUBDIRECTORY_INVALID');
+  }
+}
+
 export interface RepositorySubmission {
   tenantId: string;
   clientId: string | null;
@@ -35,6 +55,7 @@ export interface RepositorySubmission {
 export interface SubmittedScan { scanId: string; repositoryJobId: string; securityJobId: string }
 
 export async function enqueueRepositoryScan(db: ScopedDb, input: RepositorySubmission): Promise<SubmittedScan> {
+  assertRepositorySubmission(input);
   const existingConnection = (await db.execute(sql`SELECT id FROM repository_connections WHERE tenant_id=${input.tenantId} AND provider='github' AND access_mode='public' AND status='Active' ORDER BY created_at ASC LIMIT 1`) as any).rows?.[0];
   const connectionId = existingConnection?.id || id('repo');
   if (!existingConnection) await db.execute(sql`INSERT INTO repository_connections (id,tenant_id,provider,installation_id,label,access_mode,status) VALUES (${connectionId},${input.tenantId},'github','public-github',${input.connectionLabel ?? 'Public GitHub acquisition'},'public','Active')`);
