@@ -41,7 +41,7 @@ jobs:
           npm ci
           npm audit --audit-level=low
           npm run typecheck
-          npm test -- --runInBand
+          npm test
 
       - name: Open dependency patch PR
         if: steps.changes.outputs.changed == 'true'
