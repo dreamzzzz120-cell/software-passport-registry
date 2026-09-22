@@ -80,6 +80,8 @@ export default function ClientsView({
   const [creatingClient, setCreatingClient] = useState(false);
   const [addClientError, setAddClientError] = useState<string | null>(null);
   const [addClientSuccess, setAddClientSuccess] = useState<string | null>(null);
+  const [assuranceBusy, setAssuranceBusy] = useState(false);
+  const [assuranceMessage, setAssuranceMessage] = useState<string | null>(null);
 
   const canCreateClient = role === 'Owner' || role === 'Admin';
 
@@ -197,6 +199,28 @@ export default function ClientsView({
       setAddClientError(error instanceof Error ? error.message : 'Unable to create client.');
     } finally {
       setCreatingClient(false);
+    }
+  };
+
+  const handleEnableAssurance = async () => {
+    if (!selectedClient || assuranceBusy || !canCreateClient) return;
+    setAssuranceBusy(true);
+    setAssuranceMessage(null);
+    try {
+      const response = await apiFetch(`/api/monitoring/assurance/clients/${encodeURIComponent(selectedClient.id)}/enable`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(data?.message || data?.error || 'Unable to enable continuous assurance.');
+      }
+      const count = Array.isArray(data?.assurance?.monitors) ? data.assurance.monitors.length : 0;
+      setAssuranceMessage(`Continuous assurance enabled: ${count} monitor(s) active.`);
+    } catch (error) {
+      setAssuranceMessage(error instanceof Error ? error.message : 'Unable to enable continuous assurance.');
+    } finally {
+      setAssuranceBusy(false);
     }
   };
 
@@ -390,6 +414,23 @@ export default function ClientsView({
                   </div>
                   <p className="text-[11px] text-[var(--spr-text-muted)] mt-2">Coverage is based on available records. It should not be read as a certification by itself.</p>
                 </div>
+
+                {canCreateClient && (
+                  <div className="border border-[var(--spr-border)] rounded-md p-3 bg-[var(--spr-surface-alt)]">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-bold text-[var(--spr-text)]">Continuous Software Assurance</p>
+                        <p className="text-[10px] text-[var(--spr-text-muted)] mt-1">Monitor the client's domain continuously using observed uptime and TLS evidence.</p>
+                      </div>
+                      <button type="button" className="spr-btn spr-btn-primary text-[11px] shrink-0" onClick={handleEnableAssurance} disabled={assuranceBusy || !selectedPassports.length}>
+                        {assuranceBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
+                        {assuranceBusy ? 'Enabling…' : 'Enable assurance'}
+                      </button>
+                    </div>
+                    {assuranceMessage && <p className="text-[10px] mt-2 text-[var(--spr-text-muted)]">{assuranceMessage}</p>}
+                    {!selectedPassports.length && <p className="text-[10px] mt-2 text-[var(--spr-amber)]">A linked passport is required before monitoring can be enabled.</p>}
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-2">
                   <ActionButton icon={<FileCheck2 className="w-4 h-4" />} label="Open passports" onClick={() => onNavigateTab('passports')} />
