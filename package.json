@@ -28,7 +28,8 @@
     "verify:actions": "node scripts/verify-actions-pinned.mjs",
     "zip:full": "node scripts/make-full-zip.js",
     "seed:registry": "node dist/seed-software-registry.cjs",
-    "lom:scan": "node scripts/lom-scan.mjs"
+    "lom:scan": "node scripts/lom-scan.mjs",
+    "hardening:10m": "node scripts/hardening-10m.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",
