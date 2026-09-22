@@ -18,10 +18,11 @@ describe('public /msp landing page reuses existing pricing and billing, without 
     const publicPathsLine = s.split('\n').find((l) => l.includes('const PUBLIC_PATHS = new Set(')) ?? '';
     expect(publicPathsLine).toContain("'/msp'");
     expect(s).toContain("if (!user && path === '/msp') return <MspLandingView onEnter={() => navigate('/login')} onViewPricing={() => navigate('/pricing')} />;");
-    // Asserts the authenticated /msp route still renders MSPCommandCenter,
-    // without pinning the full prop list - that made the test break on any
-    // unrelated prop addition rather than on the behaviour it guards.
-    expect(s).toContain("case '/msp': view = <MSPCommandCenter");
+    // The authenticated /msp route is now the evidence-backed MSP Operations
+    // Command Center. The detailed legacy MSPCommandCenter remains embedded
+    // inside it, so this test follows the actual route boundary rather than
+    // requiring the wrapper to be the leaf component.
+    expect(s).toContain("case '/msp': view = <MSPOperationsCommandCenter");
     expect(s).toContain('clients={clients} alerts={alerts} passports={passports} role={role}');
   });
 });
