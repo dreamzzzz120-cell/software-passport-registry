@@ -19,6 +19,13 @@ describe('distribution intelligence hardening', () => {
     }
   });
 
+  it('bounds DNS resolution latency before research continues', () => {
+    const source = fs.readFileSync('src/lib/distribution-engine.ts', 'utf8');
+    expect(source).toContain('DNS_TIMEOUT_MS = 2_000');
+    expect(source).toContain('DISTRIBUTION_DNS_TIMEOUT');
+    expect(source).toContain('Promise.race([dnsPromise, timeoutPromise])');
+  });
+
   it('isolates outbound research fetches from ambient browser state', () => {
     const source = fs.readFileSync('src/lib/distribution-engine.ts', 'utf8');
     expect(source).toContain("credentials: 'omit'");
