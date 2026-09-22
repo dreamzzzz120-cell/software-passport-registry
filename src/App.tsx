@@ -38,6 +38,7 @@ import AuditLogView from './components/AuditLogView';
 import MonitoringView from './components/MonitoringView';
 import SecurityCenterView from './components/SecurityCenterView';
 import MSPCommandCenter from './components/MSPCommandCenter';
+import MSPOperationsCommandCenter from './components/MSPOperationsCommandCenter';
 import MspPricingView from './components/MspPricingView';
 import MspLandingView from './components/MspLandingView';
 import HomePage from './components/HomePage';
@@ -562,7 +563,7 @@ export default function App() {
     case '/monitoring': view = <MonitoringView role={role} passports={passports} clients={clients} />; break;
     case '/security': view = <SecurityCenterView clients={clients} passports={passports} />; break;
     case '/compliance': view = <ComplianceView clients={clients} role={role} />; break;
-    case '/msp': view = <MSPCommandCenter clients={clients} alerts={alerts} passports={passports} role={role} onSelectClient={setSelectedClientId} onSelectPassport={setSelectedPassportId} onNavigate={navigate} verificationDecisions={verificationDecisions} dataStatus={dataStatus} onRetry={() => setReloadKey((n) => n + 1)} />; break;
+    case '/msp': view = <MSPOperationsCommandCenter clients={clients} alerts={alerts} passports={passports} role={role} onSelectClient={setSelectedClientId} onSelectPassport={setSelectedPassportId} onNavigate={navigate} verificationDecisions={verificationDecisions} dataStatus={dataStatus} onRetry={() => setReloadKey((n) => n + 1)} />; break;
     // Guided wrapper around the existing Universal Intake endpoints. It adds no
     case '/agent-trust': view = <AgentTrustView />; break;
     case '/ai-trust-center': view = <AITrustCenterView role={role} passports={passports} />; break;
