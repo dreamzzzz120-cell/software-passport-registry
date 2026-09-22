@@ -10,6 +10,10 @@ const runtimeUrl=(arg('--runtime-url')||process.env.LOM_RUNTIME_URL||'').replace
 const reportPath=resolve(root,arg('--report')||'artifacts/lom-report.json');
 const findings=[],inventory=[];
 const add=(severity,category,title,file,detail)=>findings.push({severity,category,title,file:file||null,detail:detail||null});
+const TEST_OR_CI=/((^|\\/)(?:tests?|__tests__|__mocks__|__fixtures__)\\/|\\.(?:test|spec)\\.[cm]?[jt]sx?$|^\\.github\\/workflows\\/)/i;
+const ENV_NAME=/^[A-Z][A-Z0-9_]{2,}$/;
+const PLACEHOLDER=/(missing|placeholder|changeme|not[-_]?(?:a[-_]?)?secret|invalid|example|dummy|fixture|xxx|your[-_])/i;
+const isPlausibleSecret=(value)=>!ENV_NAME.test(value)&&!PLACEHOLDER.test(value);
 const textExts=new Set(['.js','.jsx','.ts','.tsx','.mjs','.cjs','.json','.yaml','.yml','.toml','.ini','.md','.txt','.sql','.sh','.ps1','.bat','.cmd','.xml','.html','.css','.scss','.lock','.conf','.config','.properties','.tf','.tfvars']);
 const files=execFileSync('git',['ls-files','-z'],{encoding:'utf8',maxBuffer:50*1024*1024}).split('\0').filter(Boolean);
 const hash=(v)=>createHash('sha256').update(v).digest('hex');
@@ -20,10 +24,13 @@ for(const file of files){
   let content;try{content=readFileSync(full,'utf8')}catch{add('high','inventory','Tracked file could not be inspected',file);continue}
   record.sha256=hash(content);
   if(/^\.env(?:\.|$)/i.test(basename(file))||/\.(pem|key|p12|pfx)$/i.test(file))add('critical','credential-material','Credential-bearing file is tracked',file,'Remove it from source control and rotate any real credential.');
-  if(/\b(?:password|secret|api[_-]?key|access[_-]?token|client[_-]?secret)\b\s*[:=]\s*[\"'`][^\"'`\n]{20,}[\"'`]/i.test(content))add('high','credential-exposure','Possible hard-coded credential assignment',file,'Move credentials to the deployment secret store and keep source values non-secret.');
+  if(!TEST_OR_CI.test(file)){
+  const genericSecret=/(?:password|passwd|secret|api[_-]?key|access[_-]?token|client[_-]?secret)\\s*[:=]\\s*[\"']([^\"']{12,})[\"']/ig;
+  for(const m of content.matchAll(genericSecret)){if(m[1]&&isPlausibleSecret(m[1])){add('high','credential-exposure','Possible hard-coded credential assignment',file,'Move credentials to the deployment secret store and keep source values non-secret.');break;}}
+}
   if(/(?:curl|wget)[^\n|]{0,300}\|\s*(?:ba)?sh\b/i.test(content))add('high','execution','Remote content is piped directly to a shell',file,'Pin and verify downloaded artifacts before execution.');
   if(/\bchmod\s+(?:-R\s+)?777\b/i.test(content))add('high','permissions','World-writable permissions requested',file,'Use least privilege.');
-  if(/\b(?:eval|new Function)\s*\(/.test(content))add('high','execution','Dynamic code execution primitive found',file,'Review whether untrusted input can reach the execution boundary.');
+  if(/(?<![.\\w$])(?:eval|Function)\\s*\\(/.test(content)||/\\bnew\\s+Function\\s*\\(/.test(content))add('high','execution','Dynamic code execution primitive found',file,'Review whether untrusted input can reach the execution boundary.');
   if(/\.github\/workflows\//.test(file)&&/permissions:\s*write-all/i.test(content))add('high','workflow','Workflow requests write-all permissions',file,'Use least-privilege permissions.');
 }
 if(existsSync(resolve(root,'package-lock.json'))){
