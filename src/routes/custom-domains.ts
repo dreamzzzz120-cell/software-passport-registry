@@ -124,7 +124,9 @@ export function createCustomDomainsRouter() {
   });
 
   router.post('/organization/domains/:id/verify', domainLimiter, requireAuth, requireRole(['Owner', 'Admin']), rateLimiter, async (req: AuthenticatedRequest, res, next) => {
+    // Verification is an externally visible hosting mutation; keep it behind the same paid white-label entitlement as domain creation.
     try {
+      if (!(await enforceCapability(req, res, 'white_label'))) return;
       if (!isVercelDomainsConfigured()) return res.status(503).json({ error: 'CUSTOM_DOMAINS_NOT_CONFIGURED', message: 'Hosting-provider credentials are not configured on this deployment.' });
       const tenantId = req.user!.tenantId;
       const id = String(req.params.id ?? '');
@@ -171,6 +173,7 @@ export function createCustomDomainsRouter() {
 
   router.delete('/organization/domains/:id', domainLimiter, requireAuth, requireRole('Owner'), rateLimiter, async (req: AuthenticatedRequest, res, next) => {
     try {
+      if (!(await enforceCapability(req, res, 'white_label'))) return;
       const tenantId = req.user!.tenantId;
       const id = String(req.params.id ?? '');
       const row = (await req.db!.execute(sql`SELECT id, hostname, sign_in_enabled AS "signInEnabled" FROM tenant_custom_domains WHERE id = ${id} AND tenant_id = ${tenantId} LIMIT 1`) as any).rows?.[0];
