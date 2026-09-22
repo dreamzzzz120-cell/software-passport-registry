@@ -143,8 +143,13 @@ export async function researchUrl(url: string) {
   try {
     const response = await fetch(parsed, { signal: controller.signal, redirect: 'manual', headers: { 'user-agent': 'SPR-Distribution-Research/1.0 (+https://www.softwarepassportregistry.com)' } });
     if (response.status >= 300 && response.status < 400) return { url: parsed.toString(), httpObserved: true, status: response.status, redirected: true, score: null, signals: null, observedAt: new Date().toISOString() };
+    if (response.status < 200 || response.status >= 300) return { url: parsed.toString(), httpObserved: true, status: response.status, score: null, signals: null, observedAt: new Date().toISOString() };
+    const contentType = (response.headers.get('content-type') ?? '').toLowerCase();
+    if (contentType && !contentType.includes('text/html') && !contentType.includes('application/xhtml+xml')) {
+      return { url: parsed.toString(), httpObserved: true, status: response.status, contentType, score: null, signals: null, observedAt: new Date().toISOString() };
+    }
     const html = await readBoundedBody(response);
-    return { ...extractResearchSignals(parsed, html), status: response.status };
+    return { ...extractResearchSignals(parsed, html), status: response.status, contentType };
   } finally { clearTimeout(timeout); }
 }
 
