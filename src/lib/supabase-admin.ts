@@ -39,4 +39,4 @@ export async function setUserCustomClaims(_uid: string, _claims: Record<string, 
 export async function ensureAuthorizedDomain(_domain: string) { return undefined; }
 export async function removeAuthorizedDomain(_domain: string) { return undefined; }
 export const addAuthorizedDomain = ensureAuthorizedDomain;
-export const removeAuthorizedDomain = removeAuthorizedDomain;
+
