@@ -131,6 +131,7 @@ export type DistributionJobOrigin =
 export async function enqueueResearchUrl(pool: Pool, url: string, origin?: DistributionJobOrigin) {
   if (typeof url !== 'string' || url.length > MAX_RESEARCH_URL_LENGTH) throw new Error('DISTRIBUTION_URL_TOO_LONG');
   const parsed = new URL(url);
+  if (parsed.hostname.includes('%')) throw new Error('DISTRIBUTION_HOST_ENCODING_BLOCKED');
   if (parsed.protocol === 'http:' && parsed.hostname.includes('[')) throw new Error('DISTRIBUTION_IPV6_HTTP_BLOCKED');
   if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('DISTRIBUTION_URL_SCHEME_NOT_ALLOWED');
   if (parsed.port && parsed.port !== '80' && parsed.port !== '443') throw new Error('DISTRIBUTION_PORT_NOT_ALLOWED');
