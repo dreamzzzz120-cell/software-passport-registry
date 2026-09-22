@@ -19,11 +19,11 @@ function isPrivateIp(address: string) {
   const family = net.isIP(address);
   if (family === 4) {
     const [a, b] = address.split('.').map(Number);
-    return a === 10 || a === 127 || (a === 169 && b === 254) || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31);
+    return a === 0 || a === 10 || a === 100 && b >= 64 && b <= 127 || a === 127 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 0) || (a === 192 && b === 168) || (a === 198 && (b === 18 || b === 19 || b === 51)) || (a === 203 && b === 0) || a >= 224;
   }
   if (family === 6) {
     const normalized = address.toLowerCase();
-    return normalized === '::1' || normalized.startsWith('fc') || normalized.startsWith('fd') || normalized.startsWith('fe80:');
+    return normalized === '::' || normalized === '::1' || normalized.startsWith('fc') || normalized.startsWith('fd') || normalized.startsWith('fe80:') || normalized.startsWith('ff');
   }
   return true;
 }
@@ -122,6 +122,8 @@ export type DistributionJobOrigin =
 export async function enqueueResearchUrl(pool: Pool, url: string, origin?: DistributionJobOrigin) {
   const parsed = new URL(url);
   if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('DISTRIBUTION_URL_SCHEME_NOT_ALLOWED');
+  if (parsed.port && parsed.port !== '80' && parsed.port !== '443') throw new Error('DISTRIBUTION_PORT_NOT_ALLOWED');
+  if (parsed.hash) throw new Error('DISTRIBUTION_FRAGMENT_NOT_ALLOWED');
   await assertPublicResearchTarget(parsed);
   // Research is intentionally limited to public web targets. Never let the
   // discovery worker become a generic URL fetcher or SSRF primitive.
