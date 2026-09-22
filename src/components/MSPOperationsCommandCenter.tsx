@@ -193,7 +193,7 @@ export default function MSPOperationsCommandCenter(props: Props) {
           <div className="mt-4 space-y-2">
             {serviceSignals.map(signal => (
               <button key={signal.label} onClick={() => onNavigate(signal.label.includes('Monitoring') ? '/monitoring' : signal.label.includes('Clients') ? '/clients' : '/passports')} className="flex w-full items-center gap-3 rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3 text-left hover:border-[var(--spr-highlight)]/40">
-                <span className="text-[var(--spr-highlight)]">{React.cloneElement(signal.icon as React.ReactElement, { className: 'h-4 w-4' })}</span>
+                <span className="text-[var(--spr-highlight)]">{signal.icon}</span>
                 <span className="min-w-0 flex-1"><span className="block text-xs font-semibold text-[var(--spr-text)]">{signal.label}</span><span className="block text-[11px] text-[var(--spr-text-faint)]">{signal.description}</span></span>
                 <span className="font-mono text-sm font-bold text-[var(--spr-text)]">{signal.value}</span>
               </button>
