@@ -204,6 +204,7 @@ export function createCustomDomainsRouter() {
       if (!domain) { res.setHeader('Cache-Control', 'public, max-age=60'); return res.status(404).json({ error: 'NOT_FOUND' }); }
       const branding = (await db.execute(sql`SELECT company_name AS "companyName", brand_color AS "brandColor", logo_data_url AS "logoDataUrl", theme FROM tenant_branding WHERE tenant_id = ${domain.tenantId} LIMIT 1`) as any).rows?.[0];
       res.setHeader('Cache-Control', 'public, max-age=300');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
       return res.json({ host, branding: publicBrandingView(branding ?? { companyName: null, brandColor: null, logoDataUrl: null, theme: {} }) });
     } catch (error) { return next(error); }
   });
