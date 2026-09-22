@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 const root = process.cwd();
 const pkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as {
-  private: boolean; version: string; engines: { node: string }; packageManager: string;
+  private: boolean; version: string; license: string; engines: { node: string }; packageManager: string;
   scripts: Record<string,string>; dependencies: Record<string,string>; devDependencies: Record<string,string>;
   overrides: Record<string,unknown>;
 };
@@ -22,7 +22,6 @@ const checks: Array<[string, () => void]> = [
   ['08 test script is Vitest', () => expect(pkg.scripts.test).toBe('vitest run')],
   ['09 license verification exists', () => expect(pkg.scripts['verify:license']).toBeTruthy()],
   ['10 action pin verification exists', () => expect(pkg.scripts['verify:actions']).toBeTruthy()],
-
   ['11 React is present', () => expect(pkg.dependencies.react).toBeTruthy()],
   ['12 Supabase JS is present', () => expect(pkg.dependencies['@supabase/supabase-js']).toBeTruthy()],
   ['13 Supabase SSR is present', () => expect(pkg.dependencies['@supabase/ssr']).toBeTruthy()],
@@ -33,7 +32,6 @@ const checks: Array<[string, () => void]> = [
   ['18 Zod validation library is present', () => expect(pkg.dependencies.zod).toBeTruthy()],
   ['19 DOMPurify is present', () => expect(pkg.dependencies.dompurify).toBeTruthy()],
   ['20 TypeScript is present in dev dependencies', () => expect(pkg.devDependencies.typescript).toBeTruthy()],
-
   ['21 legacy Firebase package is absent', () => expect(JSON.stringify(pkg)).not.toMatch(/firebase/i)],
   ['22 package has no firebase-admin dependency', () => expect(pkg.dependencies['firebase-admin']).toBeUndefined()],
   ['23 package has no firebase dependency', () => expect(pkg.dependencies.firebase).toBeUndefined()],
@@ -44,18 +42,16 @@ const checks: Array<[string, () => void]> = [
   ['28 recast override is present', () => expect(pkg.overrides.recast).toBeTruthy()],
   ['29 package declares proprietary license', () => expect(pkg.license).toContain('Proprietary')],
   ['30 package version is nonzero', () => expect(pkg.version).not.toBe('0.0.0')],
-
   ['31 CI runs on main pushes', () => expect(ci).toContain('branches: [main]')],
   ['32 CI runs on pull requests', () => expect(ci).toContain('pull_request:')],
   ['33 CI has read-only contents permission', () => expect(ci).toContain('contents: read')],
   ['34 CI uses Ubuntu', () => expect(ci).toContain('runs-on: ubuntu-latest')],
   ['35 CI has a finite timeout', () => expect(ci).toContain('timeout-minutes: 15')],
-  ['36 checkout action is pinned by SHA', () => expect(ci).toMatch(/actions\/checkout@[0-9a-f]{40}/)],
-  ['37 setup-node action is pinned by SHA', () => expect(ci).toMatch(/actions\/setup-node@[0-9a-f]{40}/)],
+  ['36 checkout action is pinned by SHA', () => expect(ci).toMatch(/actions\\/checkout@[0-9a-f]{40}/)],
+  ['37 setup-node action is pinned by SHA', () => expect(ci).toMatch(/actions\\/setup-node@[0-9a-f]{40}/)],
   ['38 Node 22 is used in CI', () => expect(ci).toContain('node-version: 22')],
   ['39 npm cache is enabled', () => expect(ci).toContain('cache: npm')],
   ['40 CI uses npm ci', () => expect(ci).toContain('npm ci')],
-
   ['41 CI disables install scripts', () => expect(ci).toContain('--ignore-scripts')],
   ['42 CI disables npm audit during install', () => expect(ci).toContain('--no-audit')],
   ['43 CI disables npm fund noise', () => expect(ci).toContain('--no-fund')],
@@ -66,7 +62,6 @@ const checks: Array<[string, () => void]> = [
   ['48 CI runs tests', () => expect(ci).toContain('npm test')],
   ['49 CI builds production', () => expect(ci).toContain('npm run build')],
   ['50 CI has a verify job', () => expect(ci).toContain('verify:')],
-
   ['51 worker bounds poll interval', () => expect(worker).toContain('Math.max(250')],
   ['52 worker bounds concurrency minimum', () => expect(worker).toContain('Math.max(1')],
   ['53 worker bounds concurrency maximum', () => expect(worker).toContain('Math.min(50')],
@@ -77,7 +72,6 @@ const checks: Array<[string, () => void]> = [
   ['58 worker identifies process id', () => expect(worker).toContain('process.pid')],
   ['59 worker creates a worker pool', () => expect(worker).toContain('createWorkerPool()')],
   ['60 worker closes its pool in finally', () => expect(worker).toContain('finally{await pool.end();}')],
-
   ['61 worker sets tenant context in campaign controls', () => expect(worker).toContain("set_config('app.tenant_id',$1,true)")],
   ['62 campaign controls filter by tenant', () => expect(worker).toContain('WHERE tenant_id=$1')],
   ['63 campaign controls use a transaction', () => expect(worker).toContain("await client.query('BEGIN')")],
@@ -88,7 +82,6 @@ const checks: Array<[string, () => void]> = [
   ['68 job attempts increment', () => expect(worker).toContain('Number(job.attempts)+1')],
   ['69 job lock owner is recorded', () => expect(worker).toContain('locked_by=$3')],
   ['70 job lock timestamp is recorded', () => expect(worker).toContain('locked_at=CURRENT_TIMESTAMP')],
-
   ['71 succeeded jobs clear last error', () => expect(worker).toContain('last_error=NULL')],
   ['72 succeeded jobs release lock', () => expect(worker).toContain('locked_at=NULL,locked_by=NULL')],
   ['73 failed jobs retain error text', () => expect(worker).toContain('last_error=$4')],
@@ -99,7 +92,6 @@ const checks: Array<[string, () => void]> = [
   ['78 job status updates require running state', () => expect(worker).toContain("WHERE id=$1 AND status='running'")],
   ['79 unknown job kinds fail closed', () => expect(worker).toContain('DISTRIBUTION_UNKNOWN_JOB_KIND')],
   ['80 malformed required URL input fails', () => expect(worker).toContain('DISTRIBUTION_URL_REQUIRED')],
-
   ['81 outreach requires autonomous gate', () => expect(worker).toContain('autonomousOutreachEnabled()')],
   ['82 outreach checks DB campaign control', () => expect(worker).toContain('outreachEnabled')],
   ['83 paused outreach raises explicit error', () => expect(worker).toContain('DISTRIBUTION_OUTREACH_PAUSED')],
@@ -110,7 +102,6 @@ const checks: Array<[string, () => void]> = [
   ['88 contact query has a hard limit', () => expect(worker).toContain('LIMIT 25')],
   ['89 lead sweep has a hard limit', () => expect(worker).toContain('LIMIT 100')],
   ['90 lead qualification jobs are deduplicated', () => expect(worker).toContain("j.kind='qualify_lead'")],
-
   ['91 discovery requires explicit autonomous flag', () => expect(worker).toContain("DISTRIBUTION_AUTONOMOUS_DISCOVERY==='true'")],
   ['92 discovery obeys DB enablement', () => expect(worker).toContain('controls.discoveryEnabled')],
   ['93 discovery provider only permits HTTP(S)', () => expect(worker).toContain("['http:','https:'].includes(parsed.protocol)")],
