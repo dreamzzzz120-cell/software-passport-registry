@@ -8,8 +8,8 @@ function routeParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] || '' : value || '';
 }
 import {
-  clients, collectorJobs, monitoringConfigurations,
-  passports,
+  alerts, clients, collectorJobs, monitoringConfigurations,
+  passports, trustObservations,
 } from '../db/schema.ts';
 import { AuthenticatedRequest, requireAuth, requireRole } from '../middleware/security.ts';
 import { appendAuditEntry } from '../security/audit-log.ts';
@@ -159,6 +159,83 @@ export function createMonitoringRouter() {
       client: { id: client.id, name: client.name, domain: client.domain },
       passportId: passport.id,
       assurance: { enabled: true, monitors: created },
+    });
+  });
+
+  router.get('/assurance/clients/:clientId', async (req: AuthenticatedRequest, res) => {
+    const db = req.db!;
+    const clientId = routeParam(req.params.clientId);
+    const tenantId = req.user!.tenantId;
+    const clientScope = clientScopeOf(req);
+    if (clientScope && clientScope !== clientId) {
+      return res.status(404).json({ error: 'CLIENT_NOT_FOUND' });
+    }
+
+    const client = await db.select({
+      id: clients.id,
+      name: clients.name,
+      domain: clients.domain,
+    }).from(clients).where(and(
+      eq(clients.id, clientId),
+      eq(clients.tenantId, tenantId),
+    )).then(rows => rows[0]);
+
+    if (!client) return res.status(404).json({ error: 'CLIENT_NOT_FOUND' });
+
+    const monitors = await db.select().from(monitoringConfigurations).where(and(
+      eq(monitoringConfigurations.tenantId, tenantId),
+      eq(monitoringConfigurations.clientId, clientId),
+    )).orderBy(desc(monitoringConfigurations.updatedAt));
+
+    const recentAlerts = await db.select({
+      id: alerts.id,
+      severity: alerts.severity,
+      category: alerts.category,
+      status: alerts.status,
+      createdAt: alerts.createdAt,
+      updatedAt: alerts.updatedAt,
+    }).from(alerts).where(and(
+      eq(alerts.tenantId, tenantId),
+      eq(alerts.clientId, clientId),
+    )).orderBy(desc(alerts.updatedAt)).limit(50);
+
+    const latestObservation = await db.select({
+      id: trustObservations.id,
+      generatedAt: trustObservations.generatedAt,
+      confidence: trustObservations.confidence,
+      completeness: trustObservations.completeness,
+    }).from(trustObservations).where(and(
+      eq(trustObservations.tenantId, tenantId),
+      eq(trustObservations.clientId, clientId),
+    )).orderBy(desc(trustObservations.generatedAt)).limit(1).then(rows => rows[0] || null);
+
+    const enabled = monitors.filter(row => row.enabled === 1);
+    const fresh = enabled.filter(row =>
+      row.lastSuccessfulAt !== null &&
+      new Date(row.lastSuccessfulAt).getTime() >= Date.now() - (row.scheduleSeconds * 2 * 1000)
+    );
+    const highAlerts = recentAlerts.filter(row =>
+      row.status === 'Active' && (row.severity === 'critical' || row.severity === 'high')
+    );
+
+    const state =
+      enabled.length === 0 ? 'UNMONITORED' :
+      fresh.length !== enabled.length ? 'STALE' :
+      highAlerts.length > 0 ? 'ACTION_REQUIRED' :
+      latestObservation ? 'ASSURANCE_ACTIVE' : 'OBSERVED';
+
+    return res.json({
+      client,
+      assurance: {
+        state,
+        monitorCount: monitors.length,
+        enabledMonitorCount: enabled.length,
+        freshMonitorCount: fresh.length,
+        latestObservation,
+        highAlertCount: highAlerts.length,
+        alerts: recentAlerts,
+        monitors: monitors.map(publicConfiguration),
+      },
     });
   });
 
