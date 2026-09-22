@@ -1,9 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import {
-  DEFAULT_KOSMOS_POLICY,
-  KOSMOS_POLICY_VERSION,
-  requiresApproval,
-} from "./policy.js";
+import { DEFAULT_KOSMOS_POLICY, KOSMOS_POLICY_VERSION, requiresApproval } from "./policy.js";
 import type { KosmosEvidence, KosmosFinding, KosmosRun, KosmosTask } from "./types.js";
 
 export type KosmosObservation = {
@@ -19,8 +15,7 @@ export type KosmosAdapter = {
   observe(targetId: string): Promise<KosmosObservation[]>;
 };
 
-const hash = (value: unknown) =>
-  createHash("sha256").update(JSON.stringify(value)).digest("hex");
+const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 function toEvidence(observation: KosmosObservation): KosmosEvidence {
   const claims = observation.claims ?? {};
@@ -35,17 +30,23 @@ function toEvidence(observation: KosmosObservation): KosmosEvidence {
   };
 }
 
-function deriveFindings(
-  evidence: KosmosEvidence[],
-  minConfidence: number,
-): KosmosFinding[] {
+function deriveFindings(evidence: KosmosEvidence[], minConfidence: number): KosmosFinding[] {
   const findings: KosmosFinding[] = [];
   for (const item of evidence) {
     if (item.confidence < minConfidence) continue;
-
-    const vulnerability = item.claims.vulnerability;
-    const healthy = item.claims.healthy;
-    if (healthy === false) {\n      findings.push({\n        id: randomUUID(),\n        severity: "high",\n        category: "availability",\n        title: "Observed unhealthy runtime",\n        description: "A trusted runtime observation reported an unhealthy endpoint.",\n        evidenceIds: [item.id],\n        confidence: item.confidence,\n        status: "open",\n      });\n    }\n\n    if (vulnerability === true) {
+    if (item.claims.healthy === false) {
+      findings.push({
+        id: randomUUID(),
+        severity: "high",
+        category: "availability",
+        title: "Observed unhealthy runtime",
+        description: "A trusted runtime observation reported an unhealthy endpoint.",
+        evidenceIds: [item.id],
+        confidence: item.confidence,
+        status: "open",
+      });
+    }
+    if (item.claims.vulnerability === true) {
       findings.push({
         id: randomUUID(),
         severity: "high",
@@ -57,7 +58,6 @@ function deriveFindings(
         status: "open",
       });
     }
-
     if (item.claims.secretExposed === true) {
       findings.push({
         id: randomUUID(),
@@ -70,7 +70,6 @@ function deriveFindings(
         status: "open",
       });
     }
-
     if (item.claims.stale === true) {
       findings.push({
         id: randomUUID(),
@@ -87,11 +86,7 @@ function deriveFindings(
   return findings;
 }
 
-export async function runKosmos(
-  scope: KosmosRun["scope"],
-  targets: string[],
-  adapter: KosmosAdapter,
-): Promise<KosmosRun> {
+export async function runKosmos(scope: KosmosRun["scope"], targets: string[], adapter: KosmosAdapter): Promise<KosmosRun> {
   const policy = DEFAULT_KOSMOS_POLICY;
   const startedAt = new Date().toISOString();
   const tasks: KosmosTask[] = targets.slice(0, policy.maxTasksPerRun).map((targetId) => ({
@@ -112,9 +107,7 @@ export async function runKosmos(
     task.status = "running";
     try {
       const observations = await adapter.observe(task.targetId);
-      const accepted = observations.map(toEvidence).filter(
-        (item) => item.confidence >= policy.minEvidenceConfidence,
-      );
+      const accepted = observations.map(toEvidence).filter((item) => item.confidence >= policy.minEvidenceConfidence);
       task.evidenceIds = accepted.map((item) => item.id);
       evidence.push(...accepted);
       task.status = "validated";
@@ -124,12 +117,10 @@ export async function runKosmos(
   }
 
   const findings = deriveFindings(evidence, policy.minEvidenceConfidence);
-  const findingIds = new Set(findings.map((f) => f.id));
   for (const task of tasks) {
     task.findingIds = findings
-      .filter((f) => f.evidenceIds.some((id) => task.evidenceIds.includes(id)))
-      .filter((f) => findingIds.has(f.id))
-      .map((f) => f.id);
+      .filter((finding) => finding.evidenceIds.some((id) => task.evidenceIds.includes(id)))
+      .map((finding) => finding.id);
   }
 
   return {
