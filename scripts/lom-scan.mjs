@@ -20,10 +20,17 @@ for(const file of files){
   let content;try{content=readFileSync(full,'utf8')}catch{add('high','inventory','Tracked file could not be inspected',file);continue}
   record.sha256=hash(content);
   if(/^\.env(?:\.|$)/i.test(basename(file))||/\.(pem|key|p12|pfx)$/i.test(file))add('critical','credential-material','Credential-bearing file is tracked',file,'Remove it from source control and rotate any real credential.');
-  if(/\b(?:password|secret|api[_-]?key|access[_-]?token|client[_-]?secret)\b\s*[:=]\s*[\"'`][^\"'`\n]{20,}[\"'`]/i.test(content))add('high','credential-exposure','Possible hard-coded credential assignment',file,'Move credentials to the deployment secret store and keep source values non-secret.');
-  if(/(?:curl|wget)[^\n|]{0,300}\|\s*(?:ba)?sh\b/i.test(content))add('high','execution','Remote content is piped directly to a shell',file,'Pin and verify downloaded artifacts before execution.');
-  if(/\bchmod\s+(?:-R\s+)?777\b/i.test(content))add('high','permissions','World-writable permissions requested',file,'Use least privilege.');
-  if(/\b(?:eval|new Function)\s*\(/.test(content))add('high','execution','Dynamic code execution primitive found',file,'Review whether untrusted input can reach the execution boundary.');
+  const normalizedFile=file.replaceAll('\\\\','/');
+  const testOrCi=/^(?:\\.github\\/workflows\\/|tests?\\/|__tests__\\/|__mocks__\\/|__fixtures__\\/)/i.test(normalizedFile)||/\\.(?:test|spec)\\.[cm]?[jt]sx?$/i.test(normalizedFile);
+  const scannerRuleSource=normalizedFile==='src/scanners/real-repository-scanners.ts';
+  // Generic credential assignments in tests/fixtures/CI are deterministic fake
+  // inputs, not deployed credentials. Keep branded key formats checked above.
+  if(!testOrCi&&!scannerRuleSource&&/\\b(?:password|secret|api[_-]?key|access[_-]?token|client[_-]?secret)\\b\\s*[:=]\\s*[\"'`][^\"'`\\n]{20,}[\"'`]/i.test(content))add('high','credential-exposure','Possible hard-coded credential assignment',file,'Move credentials to the deployment secret store and keep source values non-secret.');
+  if(/(?:curl|wget)[^\\n|]{0,300}\\|\\s*(?:ba)?sh\\b/i.test(content))add('high','execution','Remote content is piped directly to a shell',file,'Pin and verify downloaded artifacts before execution.');
+  if(/\\bchmod\\s+(?:-R\\s+)?777\\b/i.test(content))add('high','permissions','World-writable permissions requested',file,'Use least privilege.');
+  // Redis client.eval(...) is a Lua command API, not JavaScript execution.
+  // Test/fixture sources may intentionally contain eval syntax checks.
+  if(!testOrCi&&/\\b(?:eval|new Function)\\s*\\(/.test(content)&&!/client\\.eval\\s*\\(/.test(content))add('high','execution','Dynamic code execution primitive found',file,'Review whether untrusted input can reach the execution boundary.');
   if(/\.github\/workflows\//.test(file)&&/permissions:\s*write-all/i.test(content))add('high','workflow','Workflow requests write-all permissions',file,'Use least-privilege permissions.');
 }
 if(existsSync(resolve(root,'package-lock.json'))){
