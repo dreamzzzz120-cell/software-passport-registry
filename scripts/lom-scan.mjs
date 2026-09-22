@@ -20,7 +20,19 @@ for(const file of files){
   let content;try{content=readFileSync(full,'utf8')}catch{add('high','inventory','Tracked file could not be inspected',file);continue}
   record.sha256=hash(content);
   if(/^\.env(?:\.|$)/i.test(basename(file))||/\.(pem|key|p12|pfx)$/i.test(file))add('critical','credential-material','Credential-bearing file is tracked',file,'Remove it from source control and rotate any real credential.');
-  if(/\b(?:password|secret|api[_-]?key|access[_-]?token|client[_-]?secret)\b\s*[:=]\s*[\"'`][^\"'`\n]{20,}[\"'`]/i.test(content))add('high','credential-exposure','Possible hard-coded credential assignment',file,'Move credentials to the deployment secret store and keep source values non-secret.');
+  const TEST_OR_CI=/(^|\/)(?:tests?|__tests__|__mocks__|__fixtures__)\/|\.(?:test|spec)\.[cm]?[jt]sx?$|^\.github\/workflows\//i;
+  const ENV_NAME=/^[A-Z][A-Z0-9_]{2,}$/;
+  const PLACEHOLDER=/(missing|placeholder|changeme|not[-_]?(?:a[-_]?)?secret|invalid|example|dummy|fixture|xxx|your[-_])/i;
+  if(!TEST_OR_CI.test(file)){
+    const genericSecret=/(?:password|passwd|secret|api[_-]?key|access[_-]?token|client[_-]?secret)\s*[:=]\s*[\"']([^\"']{12,})[\"']/ig;
+    for(const match of content.matchAll(genericSecret)){
+      const value=match[1]||'';
+      if(value && !ENV_NAME.test(value) && !PLACEHOLDER.test(value)){
+        add('high','credential-exposure','Possible hard-coded credential assignment',file,'Move credentials to the deployment secret store and keep source values non-secret.');
+        break;
+      }
+    }
+  }
   if(/(?:curl|wget)[^\n|]{0,300}\|\s*(?:ba)?sh\b/i.test(content))add('high','execution','Remote content is piped directly to a shell',file,'Pin and verify downloaded artifacts before execution.');
   if(/\bchmod\s+(?:-R\s+)?777\b/i.test(content))add('high','permissions','World-writable permissions requested',file,'Use least privilege.');
   if(/\b(?:eval|new Function)\s*\(/.test(content))add('high','execution','Dynamic code execution primitive found',file,'Review whether untrusted input can reach the execution boundary.');
