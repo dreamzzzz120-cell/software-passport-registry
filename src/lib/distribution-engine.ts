@@ -12,6 +12,7 @@ const MAX_BODY_BYTES = 1_000_000;
 const MAX_RESEARCH_URL_LENGTH = 2048;
 const MAX_DNS_ADDRESSES = 16;
 const DNS_TIMEOUT_MS = 2_000;
+const MAX_REDIRECT_HEADERS = 0;
 
 function assertPayload(payload: Record<string, unknown>) {
   const encoded = JSON.stringify(payload);
@@ -33,7 +34,8 @@ function isPrivateIp(address: string) {
 
 async function assertPublicResearchTarget(parsed: URL) {
   const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
-  if (!host || host.length > 253) throw new Error('DISTRIBUTION_HOST_INVALID');
+  if (!host || host.length > 253 || /[^a-z0-9.:-]/i.test(host)) throw new Error('DISTRIBUTION_HOST_INVALID');
+  if (host.includes('..') || host.startsWith('.') || host.endsWith('.')) throw new Error('DISTRIBUTION_HOST_INVALID');
   if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local')) throw new Error('DISTRIBUTION_PRIVATE_TARGET_BLOCKED');
   if (net.isIP(host) && isPrivateIp(host)) throw new Error('DISTRIBUTION_PRIVATE_TARGET_BLOCKED');
   if (!net.isIP(host)) {
@@ -129,6 +131,7 @@ export type DistributionJobOrigin =
 export async function enqueueResearchUrl(pool: Pool, url: string, origin?: DistributionJobOrigin) {
   if (typeof url !== 'string' || url.length > MAX_RESEARCH_URL_LENGTH) throw new Error('DISTRIBUTION_URL_TOO_LONG');
   const parsed = new URL(url);
+  if (parsed.protocol === 'http:' && parsed.hostname.includes('[')) throw new Error('DISTRIBUTION_IPV6_HTTP_BLOCKED');
   if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('DISTRIBUTION_URL_SCHEME_NOT_ALLOWED');
   if (parsed.port && parsed.port !== '80' && parsed.port !== '443') throw new Error('DISTRIBUTION_PORT_NOT_ALLOWED');
   if (parsed.hash) throw new Error('DISTRIBUTION_FRAGMENT_NOT_ALLOWED');
