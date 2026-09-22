@@ -137,6 +137,11 @@ export default function MspPricingView({ isAuthenticated, onPrimaryAction }: Pro
         <p className="mx-auto mt-4 max-w-3xl text-sm leading-6 text-[var(--spr-text-muted)]">
           SPR gives MSPs the evidence, monitoring, reports, white-label delivery, and portfolio visibility needed to offer software trust and verification to their clients.
         </p>
+        <div className="mx-auto mt-6 flex max-w-3xl flex-wrap items-center justify-center gap-2 text-[11px] font-semibold uppercase tracking-[.12em]">
+          <span className="rounded-full border border-[var(--spr-highlight)]/50 bg-[var(--spr-highlight)]/10 px-3 py-1.5 text-[var(--spr-highlight)]">Free Review · $0</span>
+          <span className="rounded-full border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-3 py-1.5 text-[var(--spr-text-muted)]">Paid plans · live Stripe pricing</span>
+          <span className="rounded-full border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-3 py-1.5 text-[var(--spr-text-muted)]">MSP · recurring service</span>
+        </div>
       </div>
 
       {catalogError && (
