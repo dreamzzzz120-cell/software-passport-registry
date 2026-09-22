@@ -16,6 +16,14 @@ function id(prefix: string) { return `${prefix}_${crypto.randomUUID().replaceAll
 export function createMspRouter() {
   const router = Router();
 
+  // MSP operational surfaces are tenant-private and must never be cached by a browser, proxy, or shared CDN.
+  router.use((req, res, next) => {
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    return next();
+  });
+
   router.get('/assignments', async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
@@ -116,7 +124,8 @@ export function createMspRouter() {
           'Only tenant-scoped tables represented by the current production schema are exported; unsupported external evidence is not invented.',
         ],
       };
-      const exportHash = crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+      // Bind the export hash to the tenant and actor so a copied JSON artifact cannot be mistaken for another workspace's export.
+      const exportHash = crypto.createHash('sha256').update(JSON.stringify({ tenantId, actor: req.user!.uid, payload })).digest('hex');
       await appendAuditEntry(db, { tenantId, action: 'msp.audit_export.generated', actor: req.user!.email, payload: { exportHash, format: 'json+pdf-source', counts: payload.counts } });
       res.setHeader('X-SPR-Audit-Export-Hash', exportHash);
       return res.json({ ...payload, exportHash });
