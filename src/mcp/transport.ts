@@ -33,7 +33,11 @@ function authToken(request: Request): string | null {
   return authorization.slice(7);
 }
 
-function tokenFingerprint(token: string): string {\n  return createHash('sha256').update(token, 'utf8').digest('hex');\n}\n\nfunction requestKey(request: Request, token: string): string {
+function tokenFingerprint(token: string): string {
+  return createHash('sha256').update(token, 'utf8').digest('hex');
+}
+
+function requestKey(request: Request, token: string): string {
   const forwarded = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
   return createHash('sha256').update(`${token}:${forwarded}`).digest('hex');
 }
