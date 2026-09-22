@@ -33,7 +33,7 @@ import { db } from '../db/index.ts';
 import { AuthenticatedRequest, requireAuth, requireRole, rateLimiter } from '../middleware/security.ts';
 import { enforceCapability } from '../security/entitlements.ts';
 import { appendAuditEntry } from '../security/audit-log.ts';
-import { addAuthorizedDomain, removeAuthorizedDomain } from '../lib/firebase-admin.ts';
+import { addAuthorizedDomain, removeAuthorizedDomain } from '../lib/supabase-admin.ts';
 import { addProjectDomain, dnsInstructions, getDomainConfig, getProjectDomain, isVercelDomainsConfigured, removeProjectDomain, verifyProjectDomain, VercelApiError } from '../lib/server/vercel-domains.ts';
 import { THEME_COLOR_KEYS, type BrandingTheme } from '../lib/brandingTheme.ts';
 

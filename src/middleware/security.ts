@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { createHash, randomUUID } from 'node:crypto';
 import IORedis from 'ioredis';
-import { adminAuth } from '../lib/firebase-admin.ts';
+import { adminAuth } from '../lib/supabase-admin.ts';
 import { config } from '../config.ts';
 import { db } from '../db/index.ts';
 import { users } from '../db/schema.ts';

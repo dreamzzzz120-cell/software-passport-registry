@@ -158,10 +158,7 @@ export async function checkStripeAndMrr(): Promise<{ connection: ConnectionStatu
 }
 
 // --- Supabase Auth ------------------------------------------------------------
-// Authentication moved from Firebase to Supabase; ../../firebase-admin.ts is the
-// Supabase adapter kept under its historical module name. This card was still
-// labelled "Firebase — Admin SDK reachable", which reported a product that is
-// no longer part of the system. The probe is a real admin-API call
+// Authentication uses Supabase Auth. The probe is a real admin-API call. The probe is a real admin-API call
 // (auth.admin.listUsers, service-role key), so the label now says what it
 // actually reached.
 export async function checkSupabaseAuth(): Promise<ConnectionStatus> {
@@ -169,7 +166,7 @@ export async function checkSupabaseAuth(): Promise<ConnectionStatus> {
     return { key: 'supabase_auth', name: 'Supabase Auth', status: 'not_configured', detail: 'SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not set', lastChecked: now() };
   }
   try {
-    const { adminAuth } = await import('../../firebase-admin.ts');
+    const { adminAuth } = await import('../../supabase-admin.ts');
     await Promise.race([
       adminAuth.listUsers(1),
       new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), CHECK_TIMEOUT_MS)),

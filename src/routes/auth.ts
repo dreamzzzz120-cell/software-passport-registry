@@ -16,7 +16,7 @@ import { users } from '../db/schema.ts';
 import { db, checkDatabaseHealth, appPool, pool } from '../db/index.ts';
 import { attachTenantScope, settleTenantScope, tenantScopeClient } from '../middleware/tenant-scope.ts';
 import { AuthenticatedRequest, requireAuth, requireRole, requireFounder, rateLimiter } from '../middleware/security.ts';
-import { adminAuth, setUserCustomClaims } from '../lib/firebase-admin.ts';
+import { adminAuth, setUserCustomClaims } from '../lib/supabase-admin.ts';
 import { isEmailProviderConfigured } from '../lib/email.ts';
 import { loadEmailBrand, renderBrandedEmail, sendBrandedEmail, tenantIdForUid } from '../lib/branded-email.ts';
 import { appendAuditEntry, verifyAuditChain } from '../security/audit-log.ts';

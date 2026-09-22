@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { getRedirectResult, onAuthStateChanged, signOut, type User } from 'firebase/auth';
+import { getRedirectResult, onAuthStateChanged, signOut, type User } from './lib/supabase-auth';
 import type { Alert, Client, Integration, Scan, SoftwarePassport, Vendor } from './types';
 import { apiFetch } from './utils/apiClient';
-import { auth } from './lib/firebase';
+import { auth } from './lib/supabase-auth';
 import { setAuthNotice } from './lib/authNotice';
 import { isSignupTransitionActive, beginSignupTransition, endSignupTransition } from './lib/signupTransition';
 import CommandCenter from './components/CommandCenter';
@@ -281,7 +281,7 @@ export default function App() {
     const timeoutId = window.setTimeout(() => {
       if (mounted) setAuthReady(true);
     }, 10_000);
-    // Firebase auto-signs-in a newly created account before SPR has
+    // Supabase may create a session a newly created account before SPR has
     // provisioned or verified it. That transient session must not be
     // treated as a completed SPR login, or it unmounts LoginView mid-signup
     // and triggers an authenticated data load that correctly 403s - which
@@ -297,11 +297,6 @@ export default function App() {
       applyUser(currentUser);
       setAuthReady(true);
       window.clearTimeout(timeoutId);
-    }, () => {
-      if (mounted) {
-        setAuthReady(true);
-        window.clearTimeout(timeoutId);
-      }
     });
     void getRedirectResult(auth).then((result) => {
       redirectSettled = true;

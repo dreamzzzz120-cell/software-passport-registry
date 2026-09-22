@@ -3,12 +3,12 @@ import { desc, eq, sql } from 'drizzle-orm';
 import { config } from '../config.ts';
 import { db } from '../db/index.ts';
 import { auditTrail, users } from '../db/schema.ts';
-import { adminAuth } from '../lib/firebase-admin.ts';
+import { adminAuth } from '../lib/supabase-admin.ts';
 
 /** Genesis marker for the audit_trail hash chain (see also src/security/audit-log.ts). */
 export const AUDIT_TRAIL_GENESIS_HASH = '0000000000000000000000000000000000000000000000000000000000000000';
 
-export type FirebaseUser = {
+export type SupabaseAuthUser = {
   uid: string;
   email?: string;
   emailVerified: boolean;
@@ -16,7 +16,7 @@ export type FirebaseUser = {
 };
 
 export type OwnerBootstrapAuth = {
-  getUserByEmail(email: string): Promise<FirebaseUser>;
+  getUserByEmail(email: string): Promise<SupabaseAuthUser>;
   setCustomUserClaims(uid: string, claims: Record<string, unknown>): Promise<void>;
 };
 
@@ -63,22 +63,22 @@ export async function bootstrapInitialOwner(
     throw new OwnerBootstrapDeniedError();
   }
 
-  let firebaseUser: FirebaseUser;
+  let supabaseUser: SupabaseAuthUser;
   try {
-    firebaseUser = await auth.getUserByEmail(configuredEmail);
+    supabaseUser = await auth.getUserByEmail(configuredEmail);
   } catch {
     throw new OwnerBootstrapDeniedError();
   }
 
   if (
-    !firebaseUser.emailVerified ||
-    !firebaseUser.email ||
-    normalizeEmail(firebaseUser.email) !== configuredEmail
+    !supabaseUser.emailVerified ||
+    !supabaseUser.email ||
+    normalizeEmail(supabaseUser.email) !== configuredEmail
   ) {
     throw new OwnerBootstrapDeniedError();
   }
 
-  const previousClaims = firebaseUser.customClaims ?? {};
+  const previousClaims = supabaseUser.customClaims ?? {};
   let claimsChanged = false;
 
   try {
@@ -88,7 +88,7 @@ export async function bootstrapInitialOwner(
       const tenantId = `tenant-${crypto.randomUUID()}`;
       // Claims alone never authorize access: requireAuth checks the persisted
       // user role and tenant on every request before accepting these claims.
-      await auth.setCustomUserClaims(firebaseUser.uid, {
+      await auth.setCustomUserClaims(supabaseUser.uid, {
         workspaceId: tenantId,
         tenantId,
         role: 'Owner',
@@ -96,7 +96,7 @@ export async function bootstrapInitialOwner(
       claimsChanged = true;
 
       await lockedStore.createOrPromoteInitialOwner({
-        uid: firebaseUser.uid,
+        uid: supabaseUser.uid,
         email: configuredEmail,
         tenantId,
       });
@@ -106,9 +106,9 @@ export async function bootstrapInitialOwner(
   } catch (error) {
     if (claimsChanged) {
       try {
-        await auth.setCustomUserClaims(firebaseUser.uid, previousClaims);
+        await auth.setCustomUserClaims(supabaseUser.uid, previousClaims);
       } catch (rollbackError) {
-        console.error('[Initial Owner Bootstrap] Firebase claim rollback failed', rollbackError);
+        console.error('[Initial Owner Bootstrap] Supabase claim rollback failed', rollbackError);
       }
     }
     if (error instanceof OwnerBootstrapDeniedError) throw error;

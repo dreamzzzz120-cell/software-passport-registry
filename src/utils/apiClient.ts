@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { auth, supabase } from '../lib/firebase';
+import { auth, supabase } from '../lib/supabase-auth';
 import { setAuthNotice, notProvisionedMessage } from '../lib/authNotice';
 import { isSignupTransitionActive } from '../lib/signupTransition';
 

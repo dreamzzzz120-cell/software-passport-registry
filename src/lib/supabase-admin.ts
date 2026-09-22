@@ -1,4 +1,4 @@
-/** Supabase authentication adapter retained under the historical module name during migration. */
+/** Server-side Supabase authentication adapter. */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || '';
@@ -36,7 +36,7 @@ export const adminAuth = {
   async setCustomUserClaims(_uid: string, _claims: Record<string, unknown>) { return undefined; },
 };
 export async function setUserCustomClaims(_uid: string, _claims: Record<string, unknown>) { return undefined; }
-export async function ensureFirebaseAuthorizedDomain(_domain: string) { return undefined; }
-export async function removeFirebaseAuthorizedDomain(_domain: string) { return undefined; }
-export const addAuthorizedDomain = ensureFirebaseAuthorizedDomain;
-export const removeAuthorizedDomain = removeFirebaseAuthorizedDomain;
+export async function ensureAuthorizedDomain(_domain: string) { return undefined; }
+export async function removeAuthorizedDomain(_domain: string) { return undefined; }
+export const addAuthorizedDomain = ensureAuthorizedDomain;
+

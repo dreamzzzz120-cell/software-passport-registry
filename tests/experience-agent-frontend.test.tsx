@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * Experience Agent frontend regression tests. The component is rendered for
- * real in jsdom with Firebase auth and the API client replaced by fakes, so
+ * real in jsdom with Supabase auth and the API client replaced by fakes, so
  * these assertions are about what a user would actually see and what the
  * component actually sends and does -- not about how the file reads.
  */
@@ -11,8 +11,17 @@ import { readRaw } from './helpers/source-contract.ts';
 
 const authState: { currentUser: null | { uid: string } } = { currentUser: null };
 const listeners: Array<(user: unknown) => void> = [];
-vi.mock('../src/lib/firebase', () => ({ auth: authState }));
-vi.mock('firebase/auth', () => ({ onAuthStateChanged: (_auth: unknown, cb: (user: unknown) => void) => { listeners.push(cb); cb(authState.currentUser); return () => { const i = listeners.indexOf(cb); if (i >= 0) listeners.splice(i, 1); }; } }));
+vi.mock('../src/lib/supabase-auth', () => ({
+  auth: authState,
+  onAuthStateChanged: (_auth: unknown, cb: (user: unknown) => void) => {
+    listeners.push(cb);
+    cb(authState.currentUser);
+    return () => {
+      const i = listeners.indexOf(cb);
+      if (i >= 0) listeners.splice(i, 1);
+    };
+  },
+}));
 
 type FakeResponse = { status: number; ok: boolean; json: () => Promise<unknown> };
 const calls: Array<{ url: string; body: unknown }> = [];
@@ -128,7 +137,7 @@ describe('evidence, provenance and UNKNOWN as shown to the user', () => {
     responder = (url) => url === '/api/agent/v1/command' ? ok({ intent: 'passport', reply: 'planning', action: { type: 'verify', endpoint: '/api/agent/v1/verify-software', payload: { query: 'alpha app' } } }) : ok(verified);
     await mount(true);
     await openAndSend('verify alpha app');
-    await screen.findByText(/I observed 1 evidence record\(s\)\. I am not assigning a separate trust decision\./);
+    await screen.findByText('I observed 1 evidence record(s). I am not assigning a separate trust decision.');
     expect(calls.map((c) => c.url)).toEqual(['/api/agent/v1/command', '/api/agent/v1/verify-software']);
     expect(calls[1].body).toEqual({ query: 'alpha app' });
     const dialog = screen.getByRole('dialog');
