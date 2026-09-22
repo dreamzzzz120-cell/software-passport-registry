@@ -51,6 +51,7 @@ const EXECUTIVE: NavItem[] = [
 const SYSTEM: NavItem[] = [
   { id: 'team', label: 'Team', icon: Users, path: '/team', color: TEAL, desc: 'Manage teammates and their roles in this workspace.' },
   { id: 'extensions', label: 'Extension Marketplace', icon: Puzzle, path: '/extensions', color: PURPLE, desc: 'Optional workflow extensions you can add to SPR.' },
+  { id: 'pricing', label: 'Pricing & Plans', icon: CreditCard, path: '/pricing', color: AMBER, desc: 'Compare SPR plans, pricing and MSP service options.' },
   { id: 'billing', label: 'Billing', icon: CreditCard, path: '/billing', color: AMBER, desc: 'Subscription plan and billing details.' },
   { id: 'white-label', label: 'White-label', icon: Paintbrush, path: '/white-label', color: PURPLE, desc: 'Your logo, colours, typography and support details across the workspace, reports and public passports.' },
   { id: 'settings', label: 'Settings', icon: Settings, path: '/settings', color: CYAN, desc: 'Workspace configuration and preferences.' },
@@ -220,6 +221,7 @@ export default function CommandCenter({ children, path, userEmail, role, isFound
                 <span className="spr-status-dot spr-status-dot--green" /> Live
               </span>
               <span title="Your role in this workspace, which controls what you can view and change." className="hidden rounded-sm border border-[var(--spr-border)] px-2 py-0.5 text-[11px] text-[var(--spr-text-muted)] md:inline">{role}</span>
+              <button onClick={() => onNavigate('/pricing')} title="Compare SPR plans and pricing." className="spr-btn spr-btn-primary !hidden !py-1 !px-3 !text-[11px] md:!inline-flex">Pricing</button>
               <span title="The account you're signed in as." className="hidden max-w-[180px] truncate text-[11px] text-[var(--spr-text-faint)] xl:inline">{userEmail || 'Authenticated user'}</span>
               <button
                 onClick={() => setMobileMenuOpen((open) => !open)}
