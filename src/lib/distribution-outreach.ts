@@ -206,6 +206,11 @@ export async function sendDueFollowups() {
       await withTenant(async (client) => {
         const result = await client.query(`SELECT id,email,company,evidence,followup_count,outreach_basis FROM distribution_contacts WHERE id=$1 AND tenant_id=$2 AND status='active' LIMIT 1`, [row.id,DISTRIBUTION_TENANT_ID]);
         const contact = result.rows?.[0]; if (!contact) return;
+        const replied = await client.query(`SELECT 1 FROM distribution_messages WHERE contact_id=$1 AND kind IN ('reply','inbound_reply') AND status IN ('received','processed','replied') LIMIT 1`, [contact.id]);
+        if (replied.rows?.length) {
+          await client.query(`UPDATE distribution_contacts SET next_followup_at=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=$1`, [contact.id]);
+          return;
+        }
         outreachAllowed(contact.outreach_basis);
         if (await dailySendCount(client) >= DAILY_LIMIT) throw new Error('DISTRIBUTION_DAILY_SEND_LIMIT_REACHED');
         const copy = makeCopy(String(contact.company ?? ''), contact.evidence ?? {}, true);
