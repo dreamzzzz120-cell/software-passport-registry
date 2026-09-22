@@ -191,6 +191,15 @@ describe('the prerender fails loudly instead of shipping wrong metadata', () => 
     expect(packageJson.scripts.build.indexOf('vite build')).toBeLessThan(packageJson.scripts.build.indexOf('prerender-public-routes'));
   });
 
+  it('keeps baseline browser hardening headers explicit without disabling public caching', () => {
+    const vercel = JSON.parse(read('vercel.json')) as { headers: Array<{ source: string; headers: Array<{ key: string; value: string }> }> };
+    const rule = vercel.headers.find(item => item.source === '/(.*)');
+    expect(rule?.headers).toContainEqual({ key: 'X-DNS-Prefetch-Control', value: 'off' });
+    expect(rule?.headers).toContainEqual({ key: 'X-Download-Options', value: 'noopen' });
+    expect(rule?.headers).toContainEqual({ key: 'X-XSS-Protection', value: '0' });
+    expect(rule?.headers.some(item => item.key === 'Cache-Control')).toBe(false);
+  });
+
   it('marks private, authenticated and tokenized routes noindex at the edge', () => {
     const vercel = JSON.parse(read('vercel.json')) as { headers: Array<{ source: string; headers: Array<{ key: string; value: string }> }> };
     const expected = ['/dashboard/:path*','/billing/:path*','/settings/:path*','/audit-log/:path*','/free-review/result/:path*','/api/:path*'];
