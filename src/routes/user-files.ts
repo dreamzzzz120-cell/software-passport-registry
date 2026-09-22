@@ -130,7 +130,7 @@ export function createUserFilesRouter() {
       const file=(await req.db!.execute(sql`SELECT id FROM user_files WHERE id=${fileId} AND tenant_id=${tenant} AND lifecycle_status <> 'deleted'`) as any).rows?.[0];if(!file)return res.status(404).json({error:'FILE_NOT_FOUND'});
       const linkId=id('flink');
       const row=(await req.db!.execute(sql`INSERT INTO user_file_links (id,tenant_id,file_id,link_type,target_id,created_by) VALUES (${linkId},${tenant},${fileId},${p.data.linkType},${p.data.targetId},${req.user!.uid}) ON CONFLICT (tenant_id,file_id,link_type,target_id) DO UPDATE SET created_at=CURRENT_TIMESTAMP RETURNING *`) as any).rows?.[0];
-      await audit(req,fileId,'link',{linkType:p.data.linkType,targetId:p.data.targetId});
+      await audit(req,fileId,'link','allowed',{linkType:p.data.linkType,targetId:p.data.targetId});
       return res.status(201).json(row);
     }catch(e){return next(e);}
   });
