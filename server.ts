@@ -139,7 +139,7 @@ const spaShell = path.join(publicDir, 'index.html');
 if (config.isProduction && publicDir !== distDir) { console.error('[SPR] FATAL: dist/index.html is missing. The client bundle was not built into this image; refusing to serve the source shell.'); process.exit(1); }
 app.use((req, res, next) => {
   if (!['GET', 'HEAD'].includes(req.method) || req.path.startsWith('/api/') || req.path === '/mcp' || !req.accepts('html')) return next();
-  const relative = decodeURIComponent(req.path).replace(/^\\/+/, '');
+  const relative = decodeURIComponent(req.path).replace(/^\/+/, '');
   const candidate = path.resolve(publicDir, relative, 'index.html');
   const withinPublicDir = candidate === spaShell || candidate.startsWith(path.resolve(publicDir) + path.sep);
   const file = withinPublicDir && fs.existsSync(candidate) ? candidate : spaShell;
