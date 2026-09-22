@@ -137,7 +137,7 @@ describe('evidence, provenance and UNKNOWN as shown to the user', () => {
     responder = (url) => url === '/api/agent/v1/command' ? ok({ intent: 'passport', reply: 'planning', action: { type: 'verify', endpoint: '/api/agent/v1/verify-software', payload: { query: 'alpha app' } } }) : ok(verified);
     await mount(true);
     await openAndSend('verify alpha app');
-    await screen.findByText(/I observed 1 evidence record\(s)\. I am not assigning a separate trust decision\./);
+    await screen.findByText('I observed 1 evidence record(s). I am not assigning a separate trust decision.');
     expect(calls.map((c) => c.url)).toEqual(['/api/agent/v1/command', '/api/agent/v1/verify-software']);
     expect(calls[1].body).toEqual({ query: 'alpha app' });
     const dialog = screen.getByRole('dialog');
