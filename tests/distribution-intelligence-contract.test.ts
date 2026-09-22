@@ -34,6 +34,11 @@ describe('distribution intelligence hardening', () => {
     expect(source).toContain("accept: 'text/html,application/xhtml+xml'");
   });
 
+  it('bounds research path length', () => {
+    const source = fs.readFileSync('src/lib/distribution-engine.ts', 'utf8');
+    expect(source).toContain("DISTRIBUTION_PATH_TOO_LONG");
+  });
+
   it('rejects control characters in research input', () => {
     const source = fs.readFileSync('src/lib/distribution-engine.ts', 'utf8');
     expect(source).toContain("DISTRIBUTION_CONTROL_CHAR_BLOCKED");
