@@ -58,6 +58,16 @@ export default function HomePage({ onCreatePassport, onExploreTrustNetwork, onVi
           </div>
           <p className="mt-3 text-xs text-[var(--spr-text-muted)]">Public registry: observed repositories only. No invented scores or placeholder records.</p>
           <LegalFooterLinks className="mt-8" />
+          <div className="mt-8 rounded-md border-2 border-[var(--spr-highlight)]/50 bg-[var(--spr-surface-deep)] p-5 shadow-[0_10px_40px_rgba(0,0,0,0.18)]">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <div className="text-[11px] font-bold uppercase tracking-[.2em] text-[var(--spr-highlight)]">Plans & pricing</div>
+                <h2 className="mt-1 text-xl font-semibold text-[var(--spr-text)]">Choose the SPR service that fits the job.</h2>
+                <p className="mt-1.5 text-sm leading-6 text-[var(--spr-text-muted)]">Free Review gets you started. Paid plans unlock recurring verification, reports, vendor risk, API access and MSP operations.</p>
+              </div>
+              <a href="/pricing" className="spr-btn spr-btn-primary shrink-0 !px-5 !py-2.5 text-sm">View pricing →</a>
+            </div>
+          </div>
         </div>
         <div className="hidden w-full flex-1 justify-center lg:flex">
           <div className="w-full max-w-md rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] p-7">
