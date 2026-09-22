@@ -69,15 +69,29 @@ function publicRoleEmails(html: string) {
 function extractResearchSignals(url: URL, html: string) {
   const text = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 100_000).toLowerCase();
   const signals = {
-    msp: /managed service provider|managed services|managed it\b|it services/.test(text),
-    cybersecurity: /cybersecurity|cyber security|managed security|security operations|soc\b/.test(text),
+    msp: /managed service provider|managed services|managed it\\b|it services/.test(text),
+    cybersecurity: /cybersecurity|cyber security|managed security|security operations|soc\\b/.test(text),
     compliance: /compliance|vulnerability management|risk management|audit readiness|iso 27001|soc 2/.test(text),
     psa: /connectwise|autotask|datto|halo psa|kaseya/.test(text),
     multiClient: /clients|customers|managed endpoints|businesses we serve/.test(text),
+    vendorRisk: /vendor risk|third[- ]party risk|supplier risk|software risk/.test(text),
+    softwareSupplyChain: /software supply chain|software composition|sbom|software bill of materials|dependency risk/.test(text),
+    procurement: /procurement|vendor assessment|due diligence|third[- ]party assessment/.test(text),
+    vCiso: /vcio|vciso|virtual ciso|fractional ciso/.test(text),
   };
-  const score = (signals.msp ? 30 : 0) + (signals.cybersecurity ? 20 : 0) + (signals.compliance ? 15 : 0) + (signals.psa ? 15 : 0) + (signals.multiClient ? 10 : 0) + (html.length > 0 ? 10 : 0);
+  const score = Math.min(100,
+    (signals.msp ? 25 : 0) + (signals.cybersecurity ? 15 : 0) + (signals.compliance ? 12 : 0) +
+    (signals.psa ? 10 : 0) + (signals.multiClient ? 8 : 0) + (signals.vendorRisk ? 10 : 0) +
+    (signals.softwareSupplyChain ? 8 : 0) + (signals.procurement ? 7 : 0) + (signals.vCiso ? 5 : 0)
+  );
+  const fitReasons = [
+    signals.msp && 'managed-services', signals.cybersecurity && 'cybersecurity', signals.compliance && 'compliance',
+    signals.psa && 'PSA', signals.multiClient && 'multi-client', signals.vendorRisk && 'vendor-risk',
+    signals.softwareSupplyChain && 'software-supply-chain', signals.procurement && 'procurement', signals.vCiso && 'vCISO',
+  ].filter(Boolean);
+  const recommendedOffer = signals.msp || signals.multiClient ? 'msp' : signals.vendorRisk || signals.procurement ? 'vendor-risk' : signals.softwareSupplyChain ? 'software-passport' : signals.compliance ? 'evidence-report' : 'free-review';
   const title = (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
-  return { url: url.toString(), httpObserved: true, contentBytes: Buffer.byteLength(html, 'utf8'), title, publicRoleEmails: publicRoleEmails(html), signals, score, observedAt: new Date().toISOString() };
+  return { url: url.toString(), httpObserved: true, contentBytes: Buffer.byteLength(html, 'utf8'), title, publicRoleEmails: publicRoleEmails(html), signals, score, fitReasons, recommendedOffer, observedAt: new Date().toISOString() };
 }
 
 export async function enqueueDistributionJob(pool: Pool, kind: DistributionJobKind, payload: Record<string, unknown>) {
