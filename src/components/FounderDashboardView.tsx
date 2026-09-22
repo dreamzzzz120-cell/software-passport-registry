@@ -104,6 +104,7 @@ export default function FounderDashboardView({ userRole }: FounderDashboardViewP
       <div className="cc-feed-row"><span className="cc-feed-time">NOW</span><span className="cc-feed-dot" /><span>{agents ? agents.length + ' agent reports observed' : 'Agent reports unavailable'}</span><span className="cc-feed-source">/api/founder/agents</span></div>
       <div className="cc-feed-row"><span className="cc-feed-time">NOW</span><span className="cc-feed-dot" /><span>{commandCenter ? commandCenter.connections.length + ' platform connections observed' : 'Connection telemetry unavailable'}</span><span className="cc-feed-source">/api/founder/command-center</span></div>
     </div>
+    </div>
     <div className="space-y-8">
       <FounderOverview />
     {error && <div className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 p-4 text-sm text-[var(--spr-red)]">{error}</div>}
