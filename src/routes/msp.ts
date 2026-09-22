@@ -42,8 +42,16 @@ export function createMspRouter() {
     try {
       const db = req.db!;
       const tenantId = req.user!.tenantId;
-      const client = (await db.execute(sql`SELECT id FROM clients WHERE id=${parsed.data.clientId} AND tenant_id=${tenantId} LIMIT 1`) as any).rows?.[0];
+      const client = (await db.execute(sql`SELECT id FROM clients WHERE id=\${parsed.data.clientId} AND tenant_id=\${tenantId} LIMIT 1`) as any).rows?.[0];
       if (!client) return res.status(404).json({ error: 'CLIENT_NOT_FOUND' });
+      // Never trust a caller-supplied technician id as display metadata.
+      // Resolve it inside the tenant-scoped transaction and require an
+      // MSP-capable role, preventing cross-tenant assignment and assignment
+      // of Client/Viewer accounts as technicians.
+      if (parsed.data.technicianUserId !== undefined) {
+        const technician = (await db.execute(sql`SELECT id FROM users WHERE id=\${parsed.data.technicianUserId} AND tenant_id=\${tenantId} AND role IN ('Owner','Admin','Operator','Technician') LIMIT 1`) as any).rows?.[0];
+        if (!technician) return res.status(400).json({ error: 'INVALID_TECHNICIAN' });
+      }
       const now = new Date().toISOString();
       const row = (await db.execute(sql`
         INSERT INTO client_assignments (id, tenant_id, client_id, technician_user_id, technician_display, assigned_by, created_at, updated_at)
