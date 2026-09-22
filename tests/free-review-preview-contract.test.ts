@@ -69,6 +69,13 @@ describe('the preview page renders only what the API sends', () => {
     expect(source).toContain('areas without enough evidence');
   });
 
+  it('does not turn missing SBOM or capability data into fabricated zeroes', () => {
+    const source = view();
+    expect(source).not.toContain(code`result.verifiedCapabilities?.length ?? 0`);
+    expect(source).not.toContain(code`result.sbom?.componentCount ?? 0`);
+    expect(source).toContain('UNKNOWN — exact evidence timestamps are not exposed in the free preview');
+  });
+
   it('states zero verification as zero verification', () => {
     const source = view();
     expect(source).toContain('Verified');
