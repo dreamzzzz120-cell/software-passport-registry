@@ -39,6 +39,13 @@ describe('distribution intelligence hardening', () => {
     expect(source).toContain("DISTRIBUTION_PATH_TOO_LONG");
   });
 
+  it('rejects URL parser ambiguity and invalid host labels', () => {
+    const source = fs.readFileSync('src/lib/distribution-engine.ts', 'utf8');
+    expect(source).toContain("DISTRIBUTION_BACKSLASH_BLOCKED");
+    expect(source).toContain('MAX_HOST_LABEL_LENGTH = 63');
+    expect(source).toContain("label.startsWith('-')");
+  });
+
   it('rejects control characters in research input', () => {
     const source = fs.readFileSync('src/lib/distribution-engine.ts', 'utf8');
     expect(source).toContain("DISTRIBUTION_CONTROL_CHAR_BLOCKED");
