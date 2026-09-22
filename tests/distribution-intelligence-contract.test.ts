@@ -34,6 +34,11 @@ describe('distribution intelligence hardening', () => {
     expect(source).toContain("accept: 'text/html,application/xhtml+xml'");
   });
 
+  it('requires a concrete HTTP origin for research', () => {
+    const source = fs.readFileSync('src/lib/distribution-engine.ts', 'utf8');
+    expect(source).toContain("DISTRIBUTION_ORIGIN_INVALID");
+  });
+
   it('rejects encoded hostnames before network access', () => {
     const source = fs.readFileSync('src/lib/distribution-engine.ts', 'utf8');
     expect(source).toContain("DISTRIBUTION_HOST_ENCODING_BLOCKED");
