@@ -123,6 +123,12 @@ export async function enqueueResearchUrl(pool: Pool, url: string, origin?: Distr
   const parsed = new URL(url);
   if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('DISTRIBUTION_URL_SCHEME_NOT_ALLOWED');
   await assertPublicResearchTarget(parsed);
+  // Research is intentionally limited to public web targets. Never let the
+  // discovery worker become a generic URL fetcher or SSRF primitive.
+  if (parsed.username || parsed.password) throw new Error('DISTRIBUTION_CREDENTIALS_IN_URL_BLOCKED');
+  const hostname = parsed.hostname.toLowerCase();
+  const blockedHosts = new Set(['metadata.google.internal', 'metadata.google', 'instance-data']);
+  if (blockedHosts.has(hostname)) throw new Error('DISTRIBUTION_METADATA_TARGET_BLOCKED');
   return enqueueDistributionJob(pool, 'research_url', origin ? { url: parsed.toString(), origin } : { url: parsed.toString() });
 }
 
