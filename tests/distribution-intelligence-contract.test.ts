@@ -19,6 +19,13 @@ describe('distribution intelligence hardening', () => {
     }
   });
 
+  it('refuses to score error pages or non-HTML responses', () => {
+    const source = fs.readFileSync('src/lib/distribution-engine.ts', 'utf8');
+    expect(source).toContain("response.status < 200 || response.status >= 300");
+    expect(source).toContain("application/xhtml+xml");
+    expect(source).toContain("contentType");
+  });
+
   it('enforces a narrow outbound network boundary', () => {
     const source = fs.readFileSync('src/lib/distribution-engine.ts', 'utf8');
     expect(source).toContain('DISTRIBUTION_PORT_NOT_ALLOWED');
