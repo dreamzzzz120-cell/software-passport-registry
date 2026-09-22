@@ -119,7 +119,7 @@ export async function founderFunnel(windowDays = 7): Promise<FounderFunnel> {
 
 export async function founderOverview(): Promise<FounderOverview> {
   const [pulse, funnel] = await Promise.all([founderPulse(), founderFunnel()]);
-  const [trafficResult, topPageResult] = await Promise.all([
+  const [trafficResult] = await Promise.all([
     db.execute(sql`
       SELECT
         COUNT(*) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '30 minutes')::int AS active_events,
@@ -130,14 +130,8 @@ export async function founderOverview(): Promise<FounderOverview> {
         COUNT(*) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '7 days')::int AS pageviews_7d
       FROM traffic_events
     `).catch((err) => { console.error('[FounderOverview] traffic summary failed:', err instanceof Error ? err.message : String(err)); return null; }),
-    db.execute(sql`
-      SELECT path, COUNT(*)::int AS views FROM traffic_events
-      WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours'
-      GROUP BY path ORDER BY views DESC LIMIT 20
-    `).catch((err) => { console.error('[FounderOverview] traffic pages failed:', err instanceof Error ? err.message : String(err)); return null; }),
   ]);
   const trafficRow = rows(trafficResult)[0];
-  const topPages = rows(topPageResult);
   return {
     pulse,
     funnel,
