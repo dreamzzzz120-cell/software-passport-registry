@@ -19,6 +19,14 @@ describe('distribution intelligence hardening', () => {
     }
   });
 
+  it('bounds URL, hostname, and DNS response dimensions', () => {
+    const source = fs.readFileSync('src/lib/distribution-engine.ts', 'utf8');
+    expect(source).toContain('MAX_RESEARCH_URL_LENGTH = 2048');
+    expect(source).toContain('MAX_DNS_ADDRESSES = 16');
+    expect(source).toContain("DISTRIBUTION_HOST_INVALID");
+    expect(source).toContain("DISTRIBUTION_DNS_ANSWER_LIMIT");
+  });
+
   it('applies the same destination controls to direct research requests', () => {
     const source = fs.readFileSync('src/lib/distribution-engine.ts', 'utf8');
     expect(source).toContain("parsed.port && parsed.port !== '80' && parsed.port !== '443'");
