@@ -134,6 +134,7 @@ export async function enqueueResearchUrl(pool: Pool, url: string, origin?: Distr
   if (parsed.hostname.includes('%')) throw new Error('DISTRIBUTION_HOST_ENCODING_BLOCKED');
   if (parsed.protocol === 'http:' && parsed.hostname.includes('[')) throw new Error('DISTRIBUTION_IPV6_HTTP_BLOCKED');
   if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('DISTRIBUTION_URL_SCHEME_NOT_ALLOWED');
+  if (parsed.origin === 'null') throw new Error('DISTRIBUTION_ORIGIN_INVALID');
   if (parsed.port && parsed.port !== '80' && parsed.port !== '443') throw new Error('DISTRIBUTION_PORT_NOT_ALLOWED');
   if (parsed.hash) throw new Error('DISTRIBUTION_FRAGMENT_NOT_ALLOWED');
   if (parsed.search.length > 1024) throw new Error('DISTRIBUTION_QUERY_TOO_LONG');
