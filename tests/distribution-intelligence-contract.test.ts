@@ -19,6 +19,14 @@ describe('distribution intelligence hardening', () => {
     }
   });
 
+  it('isolates outbound research fetches from ambient browser state', () => {
+    const source = fs.readFileSync('src/lib/distribution-engine.ts', 'utf8');
+    expect(source).toContain("credentials: 'omit'");
+    expect(source).toContain("referrerPolicy: 'no-referrer'");
+    expect(source).toContain("cache: 'no-store'");
+    expect(source).toContain("accept: 'text/html,application/xhtml+xml'");
+  });
+
   it('bounds URL, hostname, and DNS response dimensions', () => {
     const source = fs.readFileSync('src/lib/distribution-engine.ts', 'utf8');
     expect(source).toContain('MAX_RESEARCH_URL_LENGTH = 2048');
