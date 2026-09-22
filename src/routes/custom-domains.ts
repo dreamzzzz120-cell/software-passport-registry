@@ -74,11 +74,11 @@ export function publicBrandingView(row: { companyName: string | null; brandColor
     return out;
   };
   return {
-    companyName: row.companyName, brandColor: row.brandColor, logoDataUrl: row.logoDataUrl,
+    companyName: typeof row.companyName === 'string' ? row.companyName.slice(0, 120) : null, brandColor: row.brandColor, logoDataUrl: row.logoDataUrl,
     theme: {
-      productName: theme.productName ?? null, tagline: theme.tagline ?? null, fontId: theme.fontId ?? null, radius: theme.radius ?? null,
+      productName: typeof theme.productName === 'string' ? theme.productName.slice(0, 80) : null, theme.productName ?? null, tagline: typeof theme.tagline === 'string' ? theme.tagline.slice(0, 240) : null, fontId: theme.fontId ?? null, radius: theme.radius ?? null,
       defaultMode: theme.defaultMode ?? null, colors: { light: palette('light'), dark: palette('dark') }, faviconDataUrl: theme.faviconDataUrl ?? null,
-      supportEmail: theme.supportEmail ?? null, supportUrl: theme.supportUrl ?? null, footerText: theme.footerText ?? null, hideSprAttribution: theme.hideSprAttribution === true,
+      supportEmail: typeof theme.supportEmail === 'string' ? theme.supportEmail.slice(0, 254) : null, supportUrl: typeof theme.supportUrl === 'string' ? theme.supportUrl.slice(0, 2048) : null, footerText: typeof theme.footerText === 'string' ? theme.footerText.slice(0, 500) : null, hideSprAttribution: theme.hideSprAttribution === true,
     },
   };
 }
@@ -200,6 +200,7 @@ export function createCustomDomainsRouter() {
     try {
       const host = typeof req.query.host === 'string' ? normalizeHostname(req.query.host) : null;
       if (!host) return res.status(404).json({ error: 'NOT_FOUND' });
+      res.setHeader('Vary', 'Host');
       const domain = (await db.execute(sql`SELECT tenant_id AS "tenantId" FROM tenant_custom_domains WHERE lower(hostname) = ${host} AND status = 'active' LIMIT 1`) as any).rows?.[0];
       if (!domain) { res.setHeader('Cache-Control', 'public, max-age=60'); return res.status(404).json({ error: 'NOT_FOUND' }); }
       const branding = (await db.execute(sql`SELECT company_name AS "companyName", brand_color AS "brandColor", logo_data_url AS "logoDataUrl", theme FROM tenant_branding WHERE tenant_id = ${domain.tenantId} LIMIT 1`) as any).rows?.[0];
