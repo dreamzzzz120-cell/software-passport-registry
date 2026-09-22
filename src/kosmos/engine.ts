@@ -44,7 +44,8 @@ function deriveFindings(
     if (item.confidence < minConfidence) continue;
 
     const vulnerability = item.claims.vulnerability;
-    if (vulnerability === true) {
+    const healthy = item.claims.healthy;
+    if (healthy === false) {\n      findings.push({\n        id: randomUUID(),\n        severity: "high",\n        category: "availability",\n        title: "Observed unhealthy runtime",\n        description: "A trusted runtime observation reported an unhealthy endpoint.",\n        evidenceIds: [item.id],\n        confidence: item.confidence,\n        status: "open",\n      });\n    }\n\n    if (vulnerability === true) {
       findings.push({
         id: randomUUID(),
         severity: "high",
