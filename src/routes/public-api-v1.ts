@@ -69,7 +69,18 @@ export function createPublicApiV1Router() {
   });
   publicApi.post('/vendor-risk', scope('read'), async (req: AuthenticatedRequest, res, next) => { try { const passportId = String(req.body?.passportId ?? ''); if (!passportId) return res.status(400).json({ error: 'INVALID_VENDOR_RISK_REQUEST' }); const passport = (await req.db!.execute(sql`SELECT id,name FROM passports WHERE tenant_id=${req.user!.tenantId} AND id=${passportId} LIMIT 1`) as any).rows?.[0]; if (!passport) return res.status(404).json({ status: 'UNKNOWN', reason: 'PASSPORT_NOT_FOUND', passportId }); const findings = (await req.db!.execute(sql`SELECT id,severity,status,title,updated_at FROM trust_findings WHERE tenant_id=${req.user!.tenantId} AND passport_id=${passport.id} ORDER BY updated_at DESC LIMIT 200`) as any).rows ?? []; return res.json({ status: findings.length ? 'OBSERVED' : 'UNKNOWN', passport, findings, provenance: { tenantScoped: true, findingIds: findings.map((f: any) => String(f.id)) } }); } catch (error) { next(error); } });
 
-  router.use(publicApi);
+  // The browser Experience Agent uses the same /api/agent/v1 prefix as the
+  // machine API, but authenticates with the user's Supabase Bearer token rather
+  // than an SPR live API key. Do not let the machine-API router consume those
+  // requests first: doing so returns INVALID_API_KEY before createAgentApiRouter
+  // can see the request. API-key requests continue through publicApi unchanged;
+  // Bearer requests fall through to the authenticated Experience Agent router.
+  router.use((req, res, next) => {
+    const apiKey = typeof req.headers['x-api-key'] === 'string' ? req.headers['x-api-key'].trim() : '';
+    const bearer = typeof req.headers.authorization === 'string' && req.headers.authorization.startsWith('Bearer ');
+    if (!apiKey && bearer) return next();
+    return publicApi(req, res, next);
+  });
   router.use(requireAuth);
   router.post('/api-keys', requireRole(['Owner', 'Admin']), async (req: AuthenticatedRequest, res, next) => { const parsed = keyCreate.safeParse(req.body); if (!parsed.success || !future(parsed.success ? parsed.data.expiresAt : undefined)) return res.status(400).json({ error: 'INVALID_API_KEY_REQUEST', details: parsed.success ? { expiresAt: 'expiresAt must be a future timestamp.' } : parsed.error.flatten() }); try { const secret = newKey(); const id = `key_${randomUUID()}`; const prefix = secret.slice(0, 16); await req.db!.execute(sql`INSERT INTO spr_api_keys (id,tenant_id,name,key_prefix,key_hash,scopes,expires_at,created_by) VALUES (${id},${req.user!.tenantId},${parsed.data.name},${prefix},${hashKey(secret)},${JSON.stringify(parsed.data.scopes)},${parsed.data.expiresAt ?? null},${String(req.user!.id)})`); return res.status(201).json({ id, name: parsed.data.name, keyPrefix: prefix, scopes: parsed.data.scopes, expiresAt: parsed.data.expiresAt ?? null, apiKey: secret, warning: 'Store this API key now. SPR cannot recover the secret after this response.' }); } catch (error) { next(error); } });
   router.get('/api-keys', requireRole(['Owner', 'Admin']), async (req: AuthenticatedRequest, res, next) => { try { const rows = (await req.db!.execute(sql`SELECT id,name,key_prefix AS "keyPrefix",scopes,expires_at AS "expiresAt",last_used_at AS "lastUsedAt",revoked_at AS "revokedAt",created_at AS "createdAt" FROM spr_api_keys WHERE tenant_id=${req.user!.tenantId} ORDER BY created_at DESC`) as any).rows ?? []; return res.json({ keys: rows }); } catch (error) { next(error); } });
