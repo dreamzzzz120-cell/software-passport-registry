@@ -285,7 +285,7 @@ describe('TrustRoom and MSPCommandCenter consume the authoritative decision', ()
     // so adding a prop cannot break the behaviour this guards.
     expect(app).toContain('verificationDecisions={verificationDecisions}');
     expect(app).toContain('<PassportsView verificationDecisions={verificationDecisions}');
-    expect(app).toContain('<MSPCommandCenter');
+    expect(app).toContain('<MSPOperationsCommandCenter');
     expect(app).toContain('verificationDetails={verificationDetails}');
   });
 
