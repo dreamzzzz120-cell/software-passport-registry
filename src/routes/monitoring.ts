@@ -12,6 +12,7 @@ import {
   passports,
 } from '../db/schema.ts';
 import { AuthenticatedRequest, requireAuth, requireRole } from '../middleware/security.ts';
+import { appendAuditEntry } from '../security/audit-log.ts';
 import { COLLECTORS, collectorJobKey, observationWindow } from '../utils/monitoring.ts';
 import { createIntegrationRouter } from './integration.ts';
 
@@ -148,6 +149,12 @@ export function createMonitoringRouter() {
       const [inserted] = await db.insert(monitoringConfigurations).values(row).returning();
       created.push(publicConfiguration(inserted));
     }
+    await appendAuditEntry(db, {
+      tenantId,
+      action: 'csa.assurance_enabled',
+      actor: req.user!.email,
+      payload: { clientId: client.id, passportId: passport.id, monitorCount: created.length },
+    });
     return res.status(200).json({
       client: { id: client.id, name: client.name, domain: client.domain },
       passportId: passport.id,
