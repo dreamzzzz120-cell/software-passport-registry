@@ -37,6 +37,7 @@ export default function FounderDashboardView({ userRole }: FounderDashboardViewP
   const [loadingPassport, setLoadingPassport] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const ownerAccess = userRole === 'Owner';
+  const { overview, commandCenter, agents, loading, refresh } = useFounderData();
 
   // The self passport used to wait for a button click and sat empty until
   // then; it now loads with the page.
@@ -56,7 +57,6 @@ export default function FounderDashboardView({ userRole }: FounderDashboardViewP
 
   if (!ownerAccess) return <div className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 p-8 text-[var(--spr-text)]"><div className="flex items-center gap-3 mb-4"><ShieldCheck className="w-6 h-6 text-[var(--spr-red)]" /><div><h1 className="text-xl font-semibold">Founder Admin Access Required</h1><p className="text-sm text-[var(--spr-text-muted)]">You must be signed in as an Owner to view the Founder/Admin Control Center.</p></div></div><div className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-surface)] p-6"><p className="text-sm text-[var(--spr-text-muted)]">This dashboard contains privileged SPR system telemetry, self-verification reports, and high-confidence executive controls. Please contact your administrator to request Owner role access.</p></div></div>;
 
-  const { overview, commandCenter, agents, loading, refresh } = useFounderData();
   const pulse = overview?.pulse;
   const business = commandCenter?.businessMetrics;
   const metric = (value: number | null | undefined) => value == null ? 'NOT VERIFIED' : value.toLocaleString();
