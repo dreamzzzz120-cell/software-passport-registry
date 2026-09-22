@@ -11,6 +11,7 @@ const REQUEST_TIMEOUT_MS = 8_000;
 const MAX_BODY_BYTES = 1_000_000;
 const MAX_RESEARCH_URL_LENGTH = 2048;
 const MAX_DNS_ADDRESSES = 16;
+const DNS_TIMEOUT_MS = 2_000;
 
 function assertPayload(payload: Record<string, unknown>) {
   const encoded = JSON.stringify(payload);
@@ -36,7 +37,9 @@ async function assertPublicResearchTarget(parsed: URL) {
   if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local')) throw new Error('DISTRIBUTION_PRIVATE_TARGET_BLOCKED');
   if (net.isIP(host) && isPrivateIp(host)) throw new Error('DISTRIBUTION_PRIVATE_TARGET_BLOCKED');
   if (!net.isIP(host)) {
-    const addresses = await dns.lookup(host, { all: true, verbatim: true });
+    const dnsPromise = dns.lookup(host, { all: true, verbatim: true });
+    const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('DISTRIBUTION_DNS_TIMEOUT')), DNS_TIMEOUT_MS));
+    const addresses = await Promise.race([dnsPromise, timeoutPromise]);
     if (addresses.length > MAX_DNS_ADDRESSES) throw new Error('DISTRIBUTION_DNS_ANSWER_LIMIT');
     if (!addresses.length || addresses.some(({ address }) => isPrivateIp(address))) throw new Error('DISTRIBUTION_PRIVATE_TARGET_BLOCKED');
   }
