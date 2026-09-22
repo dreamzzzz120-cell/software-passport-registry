@@ -43,6 +43,9 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: 10M hardening campaign
+        run: npm run hardening:10m
+
       - name: Production build
         run: npm run build
 
