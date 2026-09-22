@@ -152,7 +152,17 @@ export async function researchUrl(url: string) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const response = await fetch(parsed, { signal: controller.signal, redirect: 'manual', headers: { 'user-agent': 'SPR-Distribution-Research/1.0 (+https://www.softwarepassportregistry.com)' } });
+    const response = await fetch(parsed, {
+      signal: controller.signal,
+      redirect: 'manual',
+      credentials: 'omit',
+      referrerPolicy: 'no-referrer',
+      cache: 'no-store',
+      headers: {
+        accept: 'text/html,application/xhtml+xml',
+        'user-agent': 'SPR-Distribution-Research/1.0 (+https://www.softwarepassportregistry.com)',
+      },
+    });
     if (response.status >= 300 && response.status < 400) return { url: parsed.toString(), httpObserved: true, status: response.status, redirected: true, score: null, signals: null, observedAt: new Date().toISOString() };
     if (response.status < 200 || response.status >= 300) return { url: parsed.toString(), httpObserved: true, status: response.status, score: null, signals: null, observedAt: new Date().toISOString() };
     const declaredLength = Number(response.headers.get('content-length') ?? '');
