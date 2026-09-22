@@ -27,7 +27,8 @@
     "verify:license": "node scripts/verify-license-manifest.mjs",
     "verify:actions": "node scripts/verify-actions-pinned.mjs",
     "zip:full": "node scripts/make-full-zip.js",
-    "seed:registry": "node dist/seed-software-registry.cjs"
+    "seed:registry": "node dist/seed-software-registry.cjs",
+    "csa:reconcile": "node scripts/continuous-software-assurance.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",
