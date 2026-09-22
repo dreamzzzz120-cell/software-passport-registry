@@ -10,7 +10,7 @@ import {
   PlusCircle, AlertTriangle, Check,
   Layers, ShieldAlert, CheckCircle2, AlertCircle
 } from 'lucide-react';
-import { auth } from '../lib/firebase';
+import { auth } from '../lib/supabase-auth';
 import { apiFetch } from '../utils/apiClient';
 import DataGovernancePanel from './DataGovernancePanel';
 
