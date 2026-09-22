@@ -91,6 +91,40 @@ export function createFounderCommandCenterRouter() {
     }
   });
 
+  // Platform traffic telemetry. Cross-tenant site analytics are founder-only
+  // platform data, so this endpoint uses the same founder gate as the command center
+  // and reads the existing traffic_events ledger directly.
+  router.get('/founder/traffic', founderReadLimiter, requireAuth, requireRole('Owner'), requireFounder, rateLimiter, async (_req: AuthenticatedRequest, res, next) => {
+    try {
+      const [summary, topPages, recent] = await Promise.all([
+        db.execute(sql`
+          SELECT
+            COUNT(*) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '30 minutes')::int AS "activeEvents",
+            COUNT(DISTINCT session_id) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '30 minutes')::int AS "activeSessions",
+            COUNT(DISTINCT session_id) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours')::int AS "users24h",
+            COUNT(*) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours')::int AS "pageviews24h",
+            COUNT(DISTINCT session_id) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '7 days')::int AS "users7d",
+            COUNT(*) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '7 days')::int AS "pageviews7d"
+          FROM traffic_events
+        `),
+        db.execute(sql`
+          SELECT path, COUNT(*)::int AS views
+          FROM traffic_events
+          WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours'
+          GROUP BY path ORDER BY views DESC LIMIT 20
+        `),
+        db.execute(sql`
+          SELECT occurred_at AS "occurredAt", path, device_type AS "deviceType", country
+          FROM traffic_events
+          ORDER BY occurred_at DESC LIMIT 100
+        `),
+      ]);
+      return res.json({ summary: (summary as any).rows?.[0] ?? null, topPages: (topPages as any).rows ?? [], recent: (recent as any).rows ?? [], generatedAt: new Date().toISOString() });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
   // Per-agent activity: what each background agent is doing, from the rows the
   // worker writes. See src/lib/server/founder/agents.ts for the sources.
   router.get('/founder/agents', founderReadLimiter, requireAuth, requireRole('Owner'), requireFounder, rateLimiter, async (_req: AuthenticatedRequest, res, next) => {
