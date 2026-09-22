@@ -12,7 +12,6 @@ const MAX_BODY_BYTES = 1_000_000;
 const MAX_RESEARCH_URL_LENGTH = 2048;
 const MAX_DNS_ADDRESSES = 16;
 const DNS_TIMEOUT_MS = 2_000;
-const MAX_REDIRECT_HEADERS = 0;
 
 function assertPayload(payload: Record<string, unknown>) {
   const encoded = JSON.stringify(payload);
@@ -135,6 +134,7 @@ export async function enqueueResearchUrl(pool: Pool, url: string, origin?: Distr
   if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('DISTRIBUTION_URL_SCHEME_NOT_ALLOWED');
   if (parsed.port && parsed.port !== '80' && parsed.port !== '443') throw new Error('DISTRIBUTION_PORT_NOT_ALLOWED');
   if (parsed.hash) throw new Error('DISTRIBUTION_FRAGMENT_NOT_ALLOWED');
+  if (parsed.search.length > 1024) throw new Error('DISTRIBUTION_QUERY_TOO_LONG');
   await assertPublicResearchTarget(parsed);
   // Research is intentionally limited to public web targets. Never let the
   // discovery worker become a generic URL fetcher or SSRF primitive.
