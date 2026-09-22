@@ -1,0 +1,148 @@
+# SPDX-License-Identifier: LicenseRef-SPR-Proprietary
+# Copyright (c) 2026 Software Passport Registry. All rights reserved.
+
+name: Security Invariant Gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-invariants-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  security-invariants:
+    name: Security Invariants
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout without credential persistence
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Setup Node 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Locked dependency install
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Verify pinned GitHub Actions
+        run: npm run verify:actions
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Full test suite
+        run: npm test -- --reporter=dot
+
+      - name: Production build
+        run: npm run build
+
+      - name: High-severity production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Reject tracked secret material
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git ls-files -z | xargs -0 -r grep -IlE '-----BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----' --; then
+            echo 'Private-key material is tracked.'
+            exit 1
+          fi
+          if git ls-files | grep -E '(^|/)(\.env|\.env\.(production|local|development))$'; then
+            echo 'Environment file is tracked.'
+            exit 1
+          fi
+
+      - name: Verify runtime images are non-root
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Eq '^USER 10001:10001$' Dockerfile
+          grep -Eq '^USER 10001:10001$' Dockerfile.worker
+
+      - name: Verify runtime images are production-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Eq '^ENV NODE_ENV=production$' Dockerfile
+          grep -Eq '^ENV NODE_ENV=production$' Dockerfile.worker
+          grep -Eq 'npm prune --omit=dev' Dockerfile
+          grep -Eq 'npm prune --omit=dev' Dockerfile.worker
+
+      - name: Verify worker never embeds production browser credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'worker-build.invalid' Dockerfile.worker
+          grep -q 'worker-build-placeholder' Dockerfile.worker
+
+      - name: Verify image secret-material scan
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "firebase-applet-config.json" Dockerfile
+          grep -q "secret\*.json" Dockerfile
+          grep -q "\.pem" Dockerfile
+          grep -q "\.key" Dockerfile.worker
+
+      - name: Verify hardened outbound research controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "DISTRIBUTION_CREDENTIALS_IN_URL_BLOCKED" src/lib/distribution-engine.ts
+          grep -q "DISTRIBUTION_METADATA_TARGET_BLOCKED" src/lib/distribution-engine.ts
+          grep -q "DISTRIBUTION_PORT_NOT_ALLOWED" src/lib/distribution-engine.ts
+          grep -q "DISTRIBUTION_REDIRECT_BLOCKED" src/lib/distribution-engine.ts
+          grep -q "credentials: 'omit'" src/lib/distribution-engine.ts
+          grep -q "referrerPolicy: 'no-referrer'" src/lib/distribution-engine.ts
+
+      - name: Verify outreach safety gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "DISTRIBUTION_AUTONOMOUS_OUTREACH" src/lib/distribution-outreach.ts
+          grep -q "DISTRIBUTION_LI_ATTESTED" src/lib/distribution-outreach.ts
+          grep -q "DISTRIBUTION_DAILY_SEND_LIMIT" src/lib/distribution-outreach.ts
+          grep -q "next_followup_at=NULL" src/lib/distribution-outreach.ts
+          grep -q "DISTRIBUTION_UNSUBSCRIBE_TOKEN_INVALID" src/lib/distribution-outreach.ts
+
+      - name: Verify private-route indexing protection
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'X-Robots-Tag' vercel.json
+          grep -q 'noindex, nofollow, noarchive' vercel.json
+
+      - name: Verify baseline security headers
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'X-Content-Type-Options' vercel.json
+          grep -q 'X-Frame-Options' vercel.json
+          grep -q 'Strict-Transport-Security' vercel.json
+          grep -q 'Referrer-Policy' vercel.json
+          grep -q 'Permissions-Policy' vercel.json
+          grep -q 'Content-Security-Policy' vercel.json
+
+      - name: Verify migration safety gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f migrations/0007_webhook_delivery_hardening.sql
+          test -f migrations/0009_authoritative_integrity_and_event_guards.sql
+          test -f migrations/0010_foreign_key_integrity.sql
+          grep -q 'pg_advisory_lock' scripts/migrate.ts
+
+      - name: Verify hardening regression matrix
+        run: npm test -- tests/maximum-hardening-contract.test.ts --reporter=dot
