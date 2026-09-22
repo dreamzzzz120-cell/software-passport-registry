@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { sql } from 'drizzle-orm';
 import crypto from 'node:crypto';
 import { z } from 'zod';
-import { AuthenticatedRequest, requireRole } from '../middleware/security.ts';
+import { AuthenticatedRequest, rateLimiter, requireRole } from '../middleware/security.ts';
 import { appendAuditEntry, verifyAuditChain } from '../security/audit-log.ts';
 
 const assignSchema = z.object({
@@ -17,6 +17,8 @@ export function createMspRouter() {
   const router = Router();
 
   // MSP operational surfaces are tenant-private and must never be cached by a browser, proxy, or shared CDN.
+  router.use(rateLimiter);
+
   router.use((req, res, next) => {
     res.setHeader('Cache-Control', 'private, no-store');
     res.setHeader('Pragma', 'no-cache');
