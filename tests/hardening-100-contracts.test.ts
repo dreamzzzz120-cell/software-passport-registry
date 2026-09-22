@@ -111,7 +111,7 @@ const checks: Array<[string, () => void]> = [
   ['97 GitHub discovery has a bounded page size', () => expect(worker).toContain('per_page')],
   ['98 GitHub discovery has a bounded query length', () => expect(worker).toContain('query.trim().slice(0,200)')],
   ['99 Slack alerts have bounded message size', () => expect(worker).toContain('message.slice(0,3_000)')],
-  ['100 Slack alerts have a timeout and do not crash worker', () => { expect(worker).toContain('setTimeout(() => controller.abort(), 5_000)'); expect(worker).toContain("catch(error){console.error('[Distribution] Slack alert failed:"); }],
+  ['100 Slack alerts have a timeout and do not crash worker', () => { expect(worker).toContain('setTimeout(() => controller.abort(), 5_000)'); expect(worker).toContain("catch(error){console.error('[Distribution] Slack alert failed:'"); }],
 ];
 
 describe('SPR 100-point hardening contract', () => {
