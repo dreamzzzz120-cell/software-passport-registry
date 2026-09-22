@@ -18,6 +18,7 @@ Allow: /pricing
 Allow: /msp
 Allow: /passport/demo
 Allow: /software
+Allow: /software/
 Allow: /whitepaper
 Allow: /terms
 Allow: /privacy
@@ -74,6 +75,7 @@ Disallow: /free-review/result
 # APIs, including signed public share links. A Passport verification link
 # is a time-boxed bearer token; it must not be crawled, cached or indexed.
 Disallow: /api/
+Disallow: /*?*
 
 Sitemap: https://www.softwarepassportregistry.com/sitemap.xml
 Sitemap: https://www.softwarepassportregistry.com/software/sitemap.xml
