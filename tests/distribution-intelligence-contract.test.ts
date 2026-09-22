@@ -19,6 +19,13 @@ describe('distribution intelligence hardening', () => {
     }
   });
 
+  it('blocks credentialed and cloud metadata research targets', () => {
+    const source = fs.readFileSync('src/lib/distribution-engine.ts', 'utf8');
+    expect(source).toContain('DISTRIBUTION_CREDENTIALS_IN_URL_BLOCKED');
+    expect(source).toContain('metadata.google.internal');
+    expect(source).toContain('DISTRIBUTION_METADATA_TARGET_BLOCKED');
+  });
+
   it('stops followups after an observed reply', () => {
     const source = fs.readFileSync('src/lib/distribution-outreach.ts', 'utf8');
     expect(source).toContain("kind IN ('reply','inbound_reply')");
