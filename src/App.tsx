@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { getRedirectResult, onAuthStateChanged, signOut, type User } from 'firebase/auth';
+import { getRedirectResult, onAuthStateChanged, signOut, type User } from './lib/supabase-auth';
 import type { Alert, Client, Integration, Scan, SoftwarePassport, Vendor } from './types';
 import { apiFetch } from './utils/apiClient';
-import { auth } from './lib/firebase';
+import { auth } from './lib/supabase-auth';
 import { setAuthNotice } from './lib/authNotice';
 import { isSignupTransitionActive, beginSignupTransition, endSignupTransition } from './lib/signupTransition';
 import CommandCenter from './components/CommandCenter';
