@@ -83,8 +83,8 @@ describe('the public route set matches the application itself', () => {
 });
 
 describe('structured data and social metadata are honest', () => {
-  it('the JSON-LD block is valid JSON', () => { const match = indexHtml.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/); expect(match).not.toBeNull(); expect(() => JSON.parse(match![1])).not.toThrow(); });
-  it('declares only Organization and WebSite', () => { const match = indexHtml.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/); const parsed = JSON.parse(match![1]); const types = parsed['@graph'].map((node: { '@type': string }) => node['@type']); expect(types.sort()).toEqual(['Organization', 'WebSite']); });
+  it('the JSON-LD block is valid JSON', () => { const match = indexHtml.match(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/); expect(match).not.toBeNull(); expect(() => JSON.parse(match![1])).not.toThrow(); });
+  it('declares only Organization and WebSite', () => { const match = indexHtml.match(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/); const parsed = JSON.parse(match![1]); const types = parsed['@graph'].map((node: { '@type': string }) => node['@type']); expect(types.sort()).toEqual(['Organization', 'WebSite']); });
   it('fabricates no ratings, reviews, prices or certifications', () => { for (const forbidden of ['AggregateRating', 'aggregateRating', 'Review', 'ratingValue', 'reviewCount', 'Offer', 'priceCurrency', 'certification']) expect(indexMarkup).not.toContain(forbidden); });
   it('makes no unqualified safety claim in social metadata', () => { const meta = [...indexMarkup.matchAll(/content="([^"]*)"/g)].map((m) => m[1]).join(' ').toLowerCase(); for (const claim of ['guaranteed', 'vulnerability-free', 'fully secure', 'certified secure', '100% safe']) expect(meta).not.toContain(claim); });
   it('declares no static canonical, which would collapse every route onto the homepage', () => { expect(indexMarkup).not.toContain('rel="canonical"'); });

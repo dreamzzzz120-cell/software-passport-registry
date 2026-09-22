@@ -130,7 +130,7 @@ describe('generated metadata is well-formed and honest', () => {
 
   it('adds only a WebPage node to the existing Organization + WebSite graph', () => {
     const html = rendered('/pricing');
-    const block = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
+    const block = html.match(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/);
     expect(block).not.toBeNull();
     const graph = JSON.parse(block![1]);
     const types = graph['@graph'].map((node: { '@type': string }) => node['@type']).sort();

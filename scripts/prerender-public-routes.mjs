@@ -57,7 +57,7 @@ export function canonicalUrl(origin, routePath) {
   return routePath === '/' ? `${origin}/` : `${origin}${routePath}`;
 }
 
-const LD_JSON_PATTERN = /<script type="application\/ld\+json">([\s\S]*?)<\/script>/;
+const LD_JSON_PATTERN = /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/;
 
 /**
  * Adds a WebPage node describing this specific route to the existing
@@ -90,7 +90,7 @@ function withWebPageNode(html, page, url) {
     .split('\n')
     .map((line, index) => (index === 0 ? line : `      ${line}`))
     .join('\n');
-  return html.replace(LD_JSON_PATTERN, () => `<script type="application/ld+json">\n      ${serialized}\n    </script>`);
+  return html.replace(LD_JSON_PATTERN, (full) => { const attrs = full.match(/^<script([^>]*)>/)?.[1] ?? ''; return `<script${attrs}>\n      ${serialized}\n    </script>`; });
 }
 
 export function applyPageMetadata(shell, page, origin) {

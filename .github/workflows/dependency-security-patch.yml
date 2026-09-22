@@ -1,0 +1,58 @@
+name: Automated dependency security patching
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * 1'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Refresh vulnerable transitive dependencies
+        run: npm audit fix --package-lock-only --audit-level=low
+
+      - name: Stop when there is nothing to patch
+        id: changes
+        run: |
+          if git diff --quiet -- package.json package-lock.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validate patched dependency tree
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          npm ci
+          npm audit --audit-level=low
+          npm run typecheck
+          npm test
+
+      - name: Open dependency patch PR
+        if: steps.changes.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          branch="security/dependency-patch-$(date -u +%Y%m%d%H%M%S)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add package.json package-lock.json
+          git commit -m "chore(deps): patch audited transitive dependencies"
+          git push --set-upstream origin "$branch"
+          gh pr create             --base main             --head "$branch"             --title "chore(deps): patch audited transitive dependencies"             --body "Automated npm audit patch. The workflow only opens this PR after npm audit, typecheck, and tests pass."

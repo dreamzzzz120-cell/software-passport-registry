@@ -555,7 +555,7 @@ export default function App() {
     case '/privacy': view = <PrivacyView role={role} />; break;
     case '/integrations': view = <IntegrationsView passports={passports} clients={clients} onNavigateTab={onNavigateTab} />; break;
     case '/monitoring': view = <MonitoringView role={role} passports={passports} clients={clients} />; break;
-    case '/security': view = <SecurityCenterView clients={clients} passports={passports} />; break;
+    case '/security': view = <SecurityCenterView clients={clients} passports={passports} role={role} />; break;
     case '/compliance': view = <ComplianceView clients={clients} role={role} />; break;
     case '/msp': view = <MSPCommandCenter clients={clients} alerts={alerts} passports={passports} role={role} onSelectClient={setSelectedClientId} onSelectPassport={setSelectedPassportId} onNavigate={navigate} verificationDecisions={verificationDecisions} dataStatus={dataStatus} onRetry={() => setReloadKey((n) => n + 1)} />; break;
     // Guided wrapper around the existing Universal Intake endpoints. It adds no

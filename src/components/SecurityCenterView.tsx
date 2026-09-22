@@ -1,10 +1,13 @@
 import { useMemo, useState, type ReactNode } from 'react';
+import { jsPDF } from 'jspdf';
+import { apiFetch } from '../utils/apiClient';
 import { AlertTriangle, Filter, Search, ShieldCheck, ShieldAlert, XCircle } from 'lucide-react';
 import type { Client, SoftwarePassport, Vulnerability } from '../types';
 
 interface SecurityCenterViewProps {
   clients: Client[];
   passports: SoftwarePassport[];
+  role?: string;
 }
 
 type VulnerabilityRow = Vulnerability & { clientName: string; passportName: string };
@@ -23,7 +26,7 @@ const statusStyles: Record<string, string> = {
   Snoozed: 'border-[var(--spr-border)] bg-[var(--spr-surface-alt)] text-[var(--spr-text-muted)]',
 };
 
-export default function SecurityCenterView({ clients, passports }: SecurityCenterViewProps) {
+export default function SecurityCenterView({ clients, passports, role = 'Viewer' }: SecurityCenterViewProps) {
   const [severityFilter, setSeverityFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -52,12 +55,84 @@ export default function SecurityCenterView({ clients, passports }: SecurityCente
     });
   }, [allVulnerabilities, searchQuery, severityFilter]);
 
+  const canExportAudit = ['Owner', 'Admin', 'Operator'].includes(role);
+  const [auditExporting, setAuditExporting] = useState(false);
+  const [auditExportMessage, setAuditExportMessage] = useState('');
+
+  const exportMspAudit = async () => {
+    if (!canExportAudit || auditExporting) return;
+    setAuditExporting(true);
+    setAuditExportMessage('');
+    try {
+      const response = await apiFetch('/api/msp/audit-export');
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload) throw new Error(String(payload?.error || `Audit export failed (${response.status})`));
+
+      const stamp = new Date(payload.generatedAt || Date.now()).toISOString().replace(/[:.]/g, '-');
+      const json = JSON.stringify(payload, null, 2);
+      const jsonBlob = new Blob([json], { type: 'application/json' });
+      const jsonUrl = URL.createObjectURL(jsonBlob);
+      const jsonLink = document.createElement('a');
+      jsonLink.href = jsonUrl;
+      jsonLink.download = `spr-msp-audit-${stamp}.json`;
+      document.body.appendChild(jsonLink);
+      jsonLink.click();
+      jsonLink.remove();
+      URL.revokeObjectURL(jsonUrl);
+
+      const pdf = new jsPDF({ unit: 'pt', format: 'letter' });
+      const margin = 40;
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      let y = 48;
+      const write = (line: string, size = 9) => {
+        pdf.setFontSize(size);
+        const lines = pdf.splitTextToSize(line, pageWidth - margin * 2);
+        for (const wrapped of lines) {
+          if (y > pageHeight - 42) { pdf.addPage(); y = 48; }
+          pdf.text(String(wrapped), margin, y);
+          y += size + 4;
+        }
+      };
+      write('Software Passport Registry — Full MSP Audit Export', 16);
+      write(`Generated: ${payload.generatedAt || 'Unknown'}`);
+      write(`Tenant: ${payload.tenant?.name || payload.tenantId || 'Unknown'}`);
+      write(`Export hash: ${payload.exportHash || 'Not returned'}`);
+      write(`Audit chain: ${payload.auditIntegrity?.status || 'Unknown'} — ${payload.auditIntegrity?.totalBlocksVerified ?? 0} blocks verified`);
+      y += 8;
+      write('Recorded counts', 11);
+      for (const [key, value] of Object.entries(payload.counts || {})) write(`${key}: ${String(value)}`);
+      y += 8;
+      write('Authoritative export payload (complete JSON)', 11);
+      for (const line of json.split('\\n')) write(line);
+      pdf.save(`spr-msp-audit-${stamp}.pdf`);
+      setAuditExportMessage('Full JSON and PDF audit exports generated. The export hash is recorded in the tenant audit chain.');
+    } catch (error) {
+      setAuditExportMessage(error instanceof Error ? error.message : 'Unable to generate the MSP audit export.');
+    } finally {
+      setAuditExporting(false);
+    }
+  };
+
   const unresolved = allVulnerabilities.filter((item) => !['Mitigated', 'Resolved'].includes(item.status));
   const critical = unresolved.filter((item) => item.severity === 'Critical').length;
   const mitigated = allVulnerabilities.filter((item) => ['Mitigated', 'Resolved'].includes(item.status)).length;
 
   return (
     <section className="space-y-6" id="msp-security-center">
+      <section className="spr-panel p-5" aria-labelledby="msp-audit-export-title">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--spr-highlight)]">Administrative evidence export</div>
+            <h2 id="msp-audit-export-title" className="mt-1 text-lg font-semibold">Full MSP audit export</h2>
+            <p className="mt-1 max-w-3xl text-sm text-[var(--spr-text-muted)]">Generates the tenant-scoped JSON source and a complete PDF rendering of that same recorded payload, including the audit-chain integrity result.</p>
+          </div>
+          <button type="button" onClick={() => void exportMspAudit()} disabled={!canExportAudit || auditExporting} className="spr-btn spr-btn-primary disabled:cursor-not-allowed disabled:opacity-50">{auditExporting ? 'Generating…' : 'Export full MSP audit'}</button>
+        </div>
+        {auditExportMessage && <p role="status" className="mt-3 text-xs text-[var(--spr-text-muted)]">{auditExportMessage}</p>}
+        {!canExportAudit && <p className="mt-2 text-xs text-[var(--spr-text-faint)]">Owner, Admin, or Operator role required.</p>}
+      </section>
+
       <header className="rounded-[28px] border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6 md:p-8">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
