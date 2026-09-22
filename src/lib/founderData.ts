@@ -26,6 +26,7 @@ export type FounderData = { overview: Overview | null; commandCenter: CommandCen
 const EMPTY: FounderData = { overview: null, commandCenter: null, agents: null, errors: [], loadedAt: null, loading: false };
 let current: FounderData = EMPTY;
 let inflight: Promise<void> | null = null;
+let refreshGeneration = 0;
 const listeners = new Set<(d: FounderData) => void>();
 function emit() { for (const l of listeners) l(current); }
 
@@ -39,18 +40,37 @@ async function getJson<T>(path: string, errors: string[]): Promise<T | null> {
 
 export function loadFounderData(force = false): Promise<void> {
   if (inflight && !force) return inflight;
-  current = { ...current, loading: true }; emit();
-  inflight = (async () => {
+  const generation = ++refreshGeneration;
+  // Keep the last known-good snapshot visible while refreshing. This prevents
+  // a transient request from turning populated Founder telemetry into a blank
+  // page, and the generation guard prevents an older refresh from overwriting
+  // a newer one when two refreshes overlap.
+  current = { ...current, loading: true, errors: [] }; emit();
+  const previous = current;
+  const request = (async () => {
     const errors: string[] = [];
     const [overview, commandCenter, agentsPayload] = await Promise.all([
       getJson<Overview>('/api/founder/overview', errors),
       getJson<CommandCenter>('/api/founder/command-center', errors),
       getJson<{ agents: AgentReport[] }>('/api/founder/agents', errors),
     ]);
-    current = { overview, commandCenter, agents: agentsPayload?.agents ?? null, errors, loadedAt: new Date().toISOString(), loading: false };
+    if (generation !== refreshGeneration) return;
+    // A partial refresh must retain healthy fields from the previous snapshot;
+    // only replace a field when its request actually returned usable data.
+    current = {
+      overview: overview ?? previous.overview,
+      commandCenter: commandCenter ?? previous.commandCenter,
+      agents: agentsPayload?.agents ?? previous.agents,
+      errors,
+      loadedAt: new Date().toISOString(),
+      loading: false,
+    };
     emit();
-  })().finally(() => { inflight = null; });
-  return inflight;
+  })().finally(() => {
+    if (generation === refreshGeneration) inflight = null;
+  });
+  inflight = request;
+  return request;
 }
 
 export function useFounderData(): FounderData & { refresh: () => Promise<void> } {
