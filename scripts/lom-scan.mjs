@@ -10,7 +10,7 @@ const runtimeUrl=(arg('--runtime-url')||process.env.LOM_RUNTIME_URL||'').replace
 const reportPath=resolve(root,arg('--report')||'artifacts/lom-report.json');
 const findings=[],inventory=[];
 const add=(severity,category,title,file,detail)=>findings.push({severity,category,title,file:file||null,detail:detail||null});
-const TEST_OR_CI=/((^|\\/)(?:tests?|__tests__|__mocks__|__fixtures__)\\/|\\.(?:test|spec)\\.[cm]?[jt]sx?$|^\\.github\\/workflows\\/)/i;
+const TEST_OR_CI=/(^|\/)(?:tests?|__tests__|__mocks__|__fixtures__)\/|\.(?:test|spec)\.[cm]?[jt]sx?$|^\.github\/workflows\//i;
 const ENV_NAME=/^[A-Z][A-Z0-9_]{2,}$/;
 const PLACEHOLDER=/(missing|placeholder|changeme|not[-_]?(?:a[-_]?)?secret|invalid|example|dummy|fixture|xxx|your[-_])/i;
 const isPlausibleSecret=(value)=>!ENV_NAME.test(value)&&!PLACEHOLDER.test(value);
