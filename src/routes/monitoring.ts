@@ -104,7 +104,7 @@ export function createMonitoringRouter() {
       .then(rows => rows[0]);
     if (!passport) return res.status(409).json({ error: 'PASSPORT_REQUIRED', message: 'Create or attach a software passport before enabling continuous assurance.' });
 
-    const domain = client.domain.trim().replace(/^https?:\\/\\//i, '').replace(/\\/.*$/, '').toLowerCase();
+    const domain = client.domain.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '').toLowerCase();
     const now = new Date();
     const definitions = [
       { collectorId: 'uptime', subjectType: 'url', subjectIdentifier: `https://${domain}`, scheduleSeconds: 900 },
