@@ -137,6 +137,11 @@ export async function enqueueResearchUrl(pool: Pool, url: string, origin?: Distr
 export async function researchUrl(url: string) {
   const parsed = new URL(url);
   if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('DISTRIBUTION_URL_SCHEME_NOT_ALLOWED');
+  if (parsed.port && parsed.port !== '80' && parsed.port !== '443') throw new Error('DISTRIBUTION_PORT_NOT_ALLOWED');
+  if (parsed.hash) throw new Error('DISTRIBUTION_FRAGMENT_NOT_ALLOWED');
+  if (parsed.username || parsed.password) throw new Error('DISTRIBUTION_CREDENTIALS_IN_URL_BLOCKED');
+  const hostname = parsed.hostname.toLowerCase();
+  if (new Set(['metadata.google.internal', 'metadata.google', 'instance-data']).has(hostname)) throw new Error('DISTRIBUTION_METADATA_TARGET_BLOCKED');
   await assertPublicResearchTarget(parsed);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -144,6 +149,8 @@ export async function researchUrl(url: string) {
     const response = await fetch(parsed, { signal: controller.signal, redirect: 'manual', headers: { 'user-agent': 'SPR-Distribution-Research/1.0 (+https://www.softwarepassportregistry.com)' } });
     if (response.status >= 300 && response.status < 400) return { url: parsed.toString(), httpObserved: true, status: response.status, redirected: true, score: null, signals: null, observedAt: new Date().toISOString() };
     if (response.status < 200 || response.status >= 300) return { url: parsed.toString(), httpObserved: true, status: response.status, score: null, signals: null, observedAt: new Date().toISOString() };
+    const declaredLength = Number(response.headers.get('content-length') ?? '');
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) throw new Error('DISTRIBUTION_RESPONSE_TOO_LARGE');
     const contentType = (response.headers.get('content-type') ?? '').toLowerCase();
     if (contentType && !contentType.includes('text/html') && !contentType.includes('application/xhtml+xml')) {
       return { url: parsed.toString(), httpObserved: true, status: response.status, contentType, score: null, signals: null, observedAt: new Date().toISOString() };
