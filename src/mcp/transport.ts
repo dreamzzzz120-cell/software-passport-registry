@@ -1,4 +1,4 @@
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { mcpInvalidArguments, mcpToolNotFound, mcpUnauthorized, MCP_SERVER_INFO, MCP_TOOLS, validateToolArguments, validateToolName } from './server.ts';
 
 const MAX_BODY_BYTES = 128 * 1024;
@@ -7,7 +7,7 @@ const MAX_ID_LENGTH = 128;
 const MAX_ORIGIN_LENGTH = 512;
 const WINDOW_MS = 60_000;
 const MAX_REQUESTS_PER_WINDOW = 60;
-const sessions = new Map<string, { createdAt: number; lastSeen: number }>();
+const sessions = new Map<string, { createdAt: number; lastSeen: number; tokenHash: string; origin: string | null }>();
 const counters = new Map<string, { started: number; count: number }>();
 
 const forbiddenHeaders = /^(cookie|set-cookie|authorization|proxy-authorization|x-api-key)$/i;
@@ -33,7 +33,7 @@ function authToken(request: Request): string | null {
   return authorization.slice(7);
 }
 
-function requestKey(request: Request, token: string): string {
+function tokenFingerprint(token: string): string {\n  return createHash('sha256').update(token, 'utf8').digest('hex');\n}\n\nfunction requestKey(request: Request, token: string): string {
   const forwarded = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
   return createHash('sha256').update(`${token}:${forwarded}`).digest('hex');
 }
