@@ -64,6 +64,8 @@ describe('every required public route gets its own metadata', () => {
     expect(ogDescriptionOf(html)).toBe(escaped(page.description));
     expect(ogUrlOf(html)).toBe(expectedUrl);
     expect(twitterUrlOf(html)).toBe(expectedUrl);
+    expect(html).toContain('<meta name="robots" content="index,follow,max-image-preview:large" />');
+    expect(html).toContain('<meta property="og:image:alt" content="Software Passport Registry logo" />');
   });
 
   it('uses the exact titles the production SEO specification requires', () => {
