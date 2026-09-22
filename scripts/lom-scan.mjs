@@ -25,12 +25,12 @@ for(const file of files){
   record.sha256=hash(content);
   if(/^\.env(?:\.|$)/i.test(basename(file))||/\.(pem|key|p12|pfx)$/i.test(file))add('critical','credential-material','Credential-bearing file is tracked',file,'Remove it from source control and rotate any real credential.');
   if(!TEST_OR_CI.test(file)){
-  const genericSecret=/(?:password|passwd|secret|api[_-]?key|access[_-]?token|client[_-]?secret)\\s*[:=]\\s*[\"']([^\"']{12,})[\"']/ig;
+  const genericSecret=/(?:password|passwd|secret|api[_-]?key|access[_-]?token|client[_-]?secret)\s*[:=]\s*[\"']([^\"']{12,})[\"']/ig;
   for(const m of content.matchAll(genericSecret)){if(m[1]&&isPlausibleSecret(m[1])){add('high','credential-exposure','Possible hard-coded credential assignment',file,'Move credentials to the deployment secret store and keep source values non-secret.');break;}}
 }
   if(/(?:curl|wget)[^\n|]{0,300}\|\s*(?:ba)?sh\b/i.test(content))add('high','execution','Remote content is piped directly to a shell',file,'Pin and verify downloaded artifacts before execution.');
   if(/\bchmod\s+(?:-R\s+)?777\b/i.test(content))add('high','permissions','World-writable permissions requested',file,'Use least privilege.');
-  if(/(?<![.\w$])(?:eval|Function)\s*\(/.test(content)||/\bnew\s+Function\s*\(/.test(content))add('high','execution','Dynamic code execution primitive found',file,'Review whether untrusted input can reach the execution boundary.');
+  if(!TEST_OR_CI.test(file)&&/(?<![.\w$])(?:eval|Function)\s*\(/.test(content)||!TEST_OR_CI.test(file)&&/\bnew\s+Function\s*\(/.test(content))add('high','execution','Dynamic code execution primitive found',file,'Review whether untrusted input can reach the execution boundary.');
   if(/\.github\/workflows\//.test(file)&&/permissions:\s*write-all/i.test(content))add('high','workflow','Workflow requests write-all permissions',file,'Use least-privilege permissions.');
 }
 if(existsSync(resolve(root,'package-lock.json'))){
