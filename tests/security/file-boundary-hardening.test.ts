@@ -1,0 +1,8 @@
+import { describe, expect, it } from 'vitest';
+import { assertDeclaredTypeMatchesMagic, detectMagicType, sanitizeDisplayFilename, safeArchiveEntryPath, validateArchiveManifest, validateUploadSize } from '../../src/security/file-boundary.ts';
+describe('file boundary hardening', () => {
+ it('bounds uploads and archive expansion', () => { expect(() => validateUploadSize(50 * 1024 * 1024 + 1)).toThrow('FILE_SIZE_LIMIT_EXCEEDED'); expect(() => validateUploadSize(100 * 1024 * 1024 + 1, true)).toThrow('FILE_SIZE_LIMIT_EXCEEDED'); expect(() => validateArchiveManifest([{ name: 'a', uncompressedSize: 500 * 1024 * 1024 + 1 }])).toThrow('ARCHIVE_EXPANDED_SIZE_LIMIT_EXCEEDED'); });
+ it('blocks traversal, absolute paths and symlinks', () => { expect(() => safeArchiveEntryPath('/tmp/spr', '../escape')).toThrow('ARCHIVE_TRAVERSAL_BLOCKED'); expect(() => safeArchiveEntryPath('/tmp/spr', '/etc/passwd')).toThrow('ARCHIVE_ABSOLUTE_PATH_BLOCKED'); expect(() => validateArchiveManifest([{ name: 'link', isSymlink: true }])).toThrow('ARCHIVE_SYMLINK_BLOCKED'); });
+ it('normalizes display names without allowing path components', () => { expect(sanitizeDisplayFilename('report final.pdf')).toBe('report final.pdf'); expect(() => sanitizeDisplayFilename('../report.pdf')).toThrow(); });
+ it('checks magic bytes', () => { const zip = Uint8Array.from([0x50,0x4b,0x03,0x04]); expect(detectMagicType(zip)).toBe('zip'); expect(() => assertDeclaredTypeMatchesMagic('application/pdf', zip)).toThrow('FILE_MAGIC_TYPE_MISMATCH'); expect(() => assertDeclaredTypeMatchesMagic('application/zip', zip)).not.toThrow(); });
+});
