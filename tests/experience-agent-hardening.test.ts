@@ -315,4 +315,12 @@ describe('architecture boundaries (source contracts)', () => {
     expect(serverPaths.length).toBeGreaterThan(0);
     for (const p of new Set(serverPaths)) expect(allowlist, p).toContain(p);
   });
+  it('routes browser Bearer requests past the machine API-key router to the Experience Agent', async () => {
+    const { readRaw } = await import('./helpers/source-contract.ts');
+    const source = readRaw('src/routes/public-api-v1.ts');
+    expect(source).toContain("const apiKey = typeof req.headers['x-api-key'] === 'string'");
+    expect(source).toContain("const bearer = typeof req.headers.authorization === 'string' && req.headers.authorization.startsWith('Bearer ')");
+    expect(source).toContain('if (!apiKey && bearer) return next();');
+    expect(source).toContain('return publicApi(req, res, next);');
+  });
 });
