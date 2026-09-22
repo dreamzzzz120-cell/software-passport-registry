@@ -87,6 +87,74 @@ export function createMonitoringRouter() {
   // a Railway variable, and the UI then told users to "ask an Owner to enable
   // it" although no Owner control existed.
 
+  router.post('/assurance/clients/:clientId/enable', requireRole(['Owner', 'Admin']), async (req: AuthenticatedRequest, res) => {
+    const db = req.db!;
+    const clientId = routeParam(req.params.clientId);
+    const tenantId = req.user!.tenantId;
+    const client = await db.select({ id: clients.id, domain: clients.domain, name: clients.name })
+      .from(clients)
+      .where(and(eq(clients.id, clientId), eq(clients.tenantId, tenantId)))
+      .then(rows => rows[0]);
+    if (!client) return res.status(404).json({ error: 'CLIENT_NOT_FOUND' });
+
+    const passport = await db.select({ id: passports.id })
+      .from(passports)
+      .where(and(eq(passports.clientId, clientId), eq(passports.tenantId, tenantId)))
+      .orderBy(desc(passports.releaseDate))
+      .then(rows => rows[0]);
+    if (!passport) return res.status(409).json({ error: 'PASSPORT_REQUIRED', message: 'Create or attach a software passport before enabling continuous assurance.' });
+
+    const domain = client.domain.trim().replace(/^https?:\\/\\//i, '').replace(/\\/.*$/, '').toLowerCase();
+    const now = new Date();
+    const definitions = [
+      { collectorId: 'uptime', subjectType: 'url', subjectIdentifier: `https://${domain}`, scheduleSeconds: 900 },
+      { collectorId: 'tls', subjectType: 'hostname', subjectIdentifier: domain, scheduleSeconds: 3600 },
+    ] as const;
+    const created: unknown[] = [];
+    for (const definition of definitions) {
+      const existing = await db.select().from(monitoringConfigurations).where(and(
+        eq(monitoringConfigurations.tenantId, tenantId),
+        eq(monitoringConfigurations.clientId, clientId),
+        eq(monitoringConfigurations.passportId, passport.id),
+        eq(monitoringConfigurations.collectorId, definition.collectorId),
+        eq(monitoringConfigurations.subjectIdentifier, definition.subjectIdentifier),
+      )).then(rows => rows[0]);
+      if (existing) {
+        created.push(publicConfiguration(existing));
+        continue;
+      }
+      const policy = COLLECTORS[definition.collectorId];
+      const row: typeof monitoringConfigurations.$inferInsert = {
+        id: `monitor-${crypto.randomUUID()}`,
+        tenantId,
+        clientId,
+        assetId: `client-domain:${clientId}`,
+        passportId: passport.id,
+        collectorId: definition.collectorId,
+        subjectType: definition.subjectType,
+        subjectIdentifier: definition.subjectIdentifier,
+        scheduleSeconds: definition.scheduleSeconds,
+        enabled: 1,
+        credentialReferenceId: null,
+        nextScheduledAt: now.toISOString(),
+        lastStatus: 'unknown',
+        freshnessPolicyId: policy.freshnessPolicyId,
+        confidencePolicyId: policy.confidencePolicyId,
+        createdBy: req.user!.uid,
+        updatedBy: req.user!.uid,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      };
+      const [inserted] = await db.insert(monitoringConfigurations).values(row).returning();
+      created.push(publicConfiguration(inserted));
+    }
+    return res.status(200).json({
+      client: { id: client.id, name: client.name, domain: client.domain },
+      passportId: passport.id,
+      assurance: { enabled: true, monitors: created },
+    });
+  });
+
   router.get('/collectors', (_req, res) => {
     res.json(Object.values(COLLECTORS));
   });
