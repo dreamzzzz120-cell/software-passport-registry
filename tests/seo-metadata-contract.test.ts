@@ -191,6 +191,15 @@ describe('the prerender fails loudly instead of shipping wrong metadata', () => 
     expect(packageJson.scripts.build.indexOf('vite build')).toBeLessThan(packageJson.scripts.build.indexOf('prerender-public-routes'));
   });
 
+  it('marks private, authenticated and tokenized routes noindex at the edge', () => {
+    const vercel = JSON.parse(read('vercel.json')) as { headers: Array<{ source: string; headers: Array<{ key: string; value: string }> }> };
+    const expected = ['/dashboard/:path*','/billing/:path*','/settings/:path*','/audit-log/:path*','/free-review/result/:path*','/api/:path*'];
+    for (const source of expected) {
+      const rule = vercel.headers.find(item => item.source === source);
+      expect(rule, `${source} must have an edge indexing policy`).toBeDefined();
+      expect(rule?.headers).toContainEqual({ key: 'X-Robots-Tag', value: 'noindex, nofollow, noarchive' });
+    }
+  });
   it('writes each route to the path Vercel resolves before the SPA catch-all rewrite', () => {
     expect(outputFileFor('/dist', '/')).toBe(path.join('/dist', 'index.html'));
     expect(outputFileFor('/dist', '/pricing')).toBe(path.join('/dist', 'pricing', 'index.html'));
