@@ -5,6 +5,9 @@ on:
     paths:
       - "scripts/continuous-software-assurance.mjs"
       - "package.json"
+      - "src/routes/monitoring.ts"
+      - "src/db/schema.ts"
+      - "src/components/ClientsView.tsx"
   workflow_dispatch:
 
 permissions:
