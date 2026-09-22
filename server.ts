@@ -48,6 +48,7 @@ import { createCommercialRouter } from './src/routes/commercial.ts';
 import { createDistributionRouter } from './src/routes/distribution.ts';
 import { createDistributionGrowthRouter } from './src/routes/distribution-growth.ts';
 import { createReportSchedulesRouter } from './src/routes/report-schedules.ts';
+import { createUserFilesRouter } from './src/routes/user-files.ts';
 import { createMcpTransport } from './src/mcp/transport.ts';
 import { executePublicMcpTool } from './src/mcp/execute.ts';
 
@@ -129,6 +130,7 @@ app.use('/api/privacy', createPrivacyRouter());
 app.use('/api/ai-trust', requireAuth, createAiTrustRouter());
 app.use('/api/remediation-tasks', requireAuth, createRemediationTasksRouter());
 app.use('/api/report-schedules', requireAuth, createReportSchedulesRouter());
+app.use('/api/files', requireAuth, createUserFilesRouter());
 const mcpBearer = process.env.SPR_MCP_BEARER_TOKEN;
 if (mcpBearer) { const mcpTransport = createMcpTransport({ expectedBearer: mcpBearer, executeTool: async (tool, args) => executePublicMcpTool(tool, args) }); app.post('/mcp', async (req, res) => { const response = await mcpTransport(new Request(`${config.appUrl || 'https://localhost'}/mcp`, { method: 'POST', headers: req.headers as Record<string, string>, body: JSON.stringify(req.body) })); res.status(response.status); response.headers.forEach((value, key) => res.setHeader(key, value)); res.send(Buffer.from(await response.arrayBuffer())); }); }
 app.use('/api', createScanLedgerRouter());
