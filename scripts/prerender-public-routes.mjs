@@ -112,7 +112,7 @@ export function applyPageMetadata(shell, page, origin) {
     throw new Error('[prerender] the shell already declares a canonical link; a static canonical would point every route at one URL.');
   }
   html = withWebPageNode(html, page, url);
-  return replaceExactlyOnce(html, /<\/head>/, `  <link rel="canonical" href="${url}" />\n  </head>`, '</head>');
+  return replaceExactlyOnce(html, /<\/head>/, `  <meta name="robots" content="index,follow,max-image-preview:large" />\n  <meta property="og:image:alt" content="Software Passport Registry logo" />\n  <link rel="canonical" href="${url}" />\n  </head>`, '</head>');
 }
 
 export function outputFileFor(distDir, routePath) {
