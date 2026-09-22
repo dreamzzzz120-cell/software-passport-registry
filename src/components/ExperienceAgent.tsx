@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '../lib/firebase';
+import { onAuthStateChanged } from '../lib/supabase-auth';
+import { auth } from '../lib/supabase-auth';
 import { apiFetch } from '../utils/apiClient';
 
 type AgentResult = { status?: string; trustDecision?: { status?: string; reason?: string }; evidence?: { count?: number; latestObservationAt?: string | null; latestHash?: string | null }; findings?: { open?: number; criticalOrHigh?: number }; sources?: Array<{ evidenceId?: string; provider?: string | null; sourceUrl?: string | null; observedAt?: string | null; verificationMethod?: string | null; evidenceHash?: string | null; limitation?: string | null }>; provenance?: { tenantScoped?: boolean; findingRecords?: { findingIds?: string[] }; evidenceRecords?: { evidenceIds?: string[] }; observationRecords?: { observationIds?: string[] } } };
