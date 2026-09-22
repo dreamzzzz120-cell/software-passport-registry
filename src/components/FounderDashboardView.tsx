@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { ShieldCheck, Sparkles, RefreshCw, ChevronDown, ChevronRight } from 'lucide-react';
+import { ShieldCheck, Sparkles, RefreshCw, ChevronDown, ChevronRight, Activity, Bot, MessageSquare, Zap } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
+import { useFounderData, minutesSince } from '../lib/founderData';
 import FounderCommandCenterPanel from './FounderCommandCenterPanel';
 import FounderMonitoringPanel from './FounderMonitoringPanel';
 import FounderLeadsPanel from './FounderLeadsPanel';
