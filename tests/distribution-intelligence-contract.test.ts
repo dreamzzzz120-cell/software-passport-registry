@@ -19,6 +19,18 @@ describe('distribution intelligence hardening', () => {
     }
   });
 
+  it('stops followups after an observed reply', () => {
+    const source = fs.readFileSync('src/lib/distribution-outreach.ts', 'utf8');
+    expect(source).toContain("kind IN ('reply','inbound_reply')");
+    expect(source).toContain("next_followup_at=NULL");
+  });
+
+  it('keeps the public security page crawlable', () => {
+    const robots = fs.readFileSync('public/robots.txt', 'utf8');
+    expect(robots).toContain('Allow: /security/');
+    expect(robots).not.toContain('Disallow: /security');
+  });
+
   it('keeps outreach evidence-based and points prospects to the real free-review route', () => {
     const source = fs.readFileSync('src/lib/distribution-outreach.ts', 'utf8');
     expect(source).toContain('public site references');
