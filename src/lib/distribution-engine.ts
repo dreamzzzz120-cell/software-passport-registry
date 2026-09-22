@@ -138,6 +138,7 @@ export async function enqueueResearchUrl(pool: Pool, url: string, origin?: Distr
   if (parsed.port && parsed.port !== '80' && parsed.port !== '443') throw new Error('DISTRIBUTION_PORT_NOT_ALLOWED');
   if (parsed.hash) throw new Error('DISTRIBUTION_FRAGMENT_NOT_ALLOWED');
   if (parsed.search.length > 1024) throw new Error('DISTRIBUTION_QUERY_TOO_LONG');
+  if (/[\u0000-\u001f\u007f]/.test(url)) throw new Error('DISTRIBUTION_CONTROL_CHAR_BLOCKED');
   await assertPublicResearchTarget(parsed);
   // Research is intentionally limited to public web targets. Never let the
   // discovery worker become a generic URL fetcher or SSRF primitive.
