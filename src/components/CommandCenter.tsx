@@ -158,7 +158,7 @@ export default function CommandCenter({ children, path, userEmail, role, isFound
           </button>
           <NavGroup group={{ label: 'Core workflow', items: CORE }} activePath={active} onNavigate={onNavigate} defaultOpen />
           <NavGroup group={{ label: 'Governance', items: GOVERNANCE }} activePath={active} onNavigate={onNavigate} defaultOpen />
-          <NavGroup group={{ label: 'Executive', items: executiveItems }} activePath={active} onNavigate={onNavigate} defaultOpen={false} />
+          <NavGroup group={{ label: 'Executive', items: executiveItems }} activePath={active} onNavigate={onNavigate} defaultOpen={isFounder} />
           <div className="mb-1 mt-2 flex items-center justify-between px-2 py-1.5 text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--spr-text-faint)]">
             <span>Extensions</span>
             <span title={`${EXTENSIONS.length} extension${EXTENSIONS.length === 1 ? '' : 's'} installed in this workspace.`} className="rounded-sm border border-[var(--spr-border)] px-1.5 text-[11px] text-[var(--spr-text-muted)]">{EXTENSIONS.length}</span>
