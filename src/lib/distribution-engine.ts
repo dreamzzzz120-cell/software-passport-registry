@@ -12,6 +12,8 @@ const MAX_BODY_BYTES = 1_000_000;
 const MAX_RESEARCH_URL_LENGTH = 2048;
 const MAX_DNS_ADDRESSES = 16;
 const DNS_TIMEOUT_MS = 2_000;
+const MAX_HOST_LABEL_LENGTH = 63;
+const MAX_TTL_SECONDS = 300;
 
 function assertPayload(payload: Record<string, unknown>) {
   const encoded = JSON.stringify(payload);
@@ -36,6 +38,7 @@ async function assertPublicResearchTarget(parsed: URL) {
   if (host.endsWith('.') || host.startsWith('.')) throw new Error('DISTRIBUTION_HOST_INVALID');
   if (!host || host.length > 253 || /[^a-z0-9.:-]/i.test(host)) throw new Error('DISTRIBUTION_HOST_INVALID');
   if (host.includes('..') || host.startsWith('.') || host.endsWith('.')) throw new Error('DISTRIBUTION_HOST_INVALID');
+  if (host.split('.').some(label => label.length > MAX_HOST_LABEL_LENGTH || label.startsWith('-') || label.endsWith('-'))) throw new Error('DISTRIBUTION_HOST_INVALID');
   if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local')) throw new Error('DISTRIBUTION_PRIVATE_TARGET_BLOCKED');
   if (net.isIP(host) && isPrivateIp(host)) throw new Error('DISTRIBUTION_PRIVATE_TARGET_BLOCKED');
   if (!net.isIP(host)) {
