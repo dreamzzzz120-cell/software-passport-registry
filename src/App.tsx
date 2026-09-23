@@ -42,6 +42,7 @@ import MSPOperationsCommandCenter from './components/MSPOperationsCommandCenter'
 import MspPricingView from './components/MspPricingView';
 import MspLandingView from './components/MspLandingView';
 import HomePage from './components/HomePage';
+import OnboardingView from './components/OnboardingView';
 import FreeReviewView from './components/FreeReviewView';
 import DemoPassport from './components/DemoPassport';
 import ViewErrorBoundary from './components/ViewErrorBoundary';
@@ -320,6 +321,11 @@ export default function App() {
   useEffect(() => { if (authReady && !user && !isPublicPath(path)) navigate('/login'); }, [authReady, user, path]);
 
   useEffect(() => {
+    if (!user || isFounder || dataStatus !== 'ready') return;
+    if (path === '/dashboard' && clients.length === 0 && passports.length === 0 && scans.length === 0) navigate('/onboarding');
+  }, [user, isFounder, dataStatus, clients.length, passports.length, scans.length, path]);
+
+  useEffect(() => {
     if (!user) return;
     let cancelled = false;
     const load = async () => {
@@ -539,7 +545,8 @@ export default function App() {
   let view: ReactNode;
   if (selectedExtension) view = <ExtensionWorkflow id={selectedExtension} onNavigate={navigate} />;
   else switch (path) {
-    case '/dashboard': view = <EvidenceDashboardView clients={clients} alerts={alerts} scans={scans} passports={passports} findings={findings} dataStatus={dataStatus} role={role} onNavigateTab={onNavigateTab} onOpenQuickAction={quickAction} />; break;
+    case '/onboarding': view = <OnboardingView clientsCount={clients.length} passportsCount={passports.length} scansCount={scans.length} onOpenQuickAction={quickAction} onNavigateTab={onNavigateTab} />; break;
+     case '/dashboard': view = <EvidenceDashboardView clients={clients} alerts={alerts} scans={scans} passports={passports} findings={findings} dataStatus={dataStatus} role={role} onNavigateTab={onNavigateTab} onOpenQuickAction={quickAction} />; break;
     case '/coverage': view = <CoverageView clients={clients} scans={scans} passports={passports} onNavigateTab={onNavigateTab} />; break;
     case '/evidence-explorer': view = <EvidenceExplorerView passports={passports} />; break;
     case '/assets': view = <AssetsView clients={clients} searchQuery="" assets={assets} />; break;
