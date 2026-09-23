@@ -16,6 +16,7 @@ interface PilotOnboardingChecklistProps {
   scansCount: number;
   onOpenQuickAction: (actionType: 'add-client' | 'register-passport' | 'scan-sbom') => void;
   onNavigateTab: (tab: string, itemId?: string) => void;
+  onComplete?: () => void;
 }
 
 // Shapes are the real responses of GET /api/integrations-live and
@@ -44,7 +45,8 @@ export default function PilotOnboardingChecklist({
   passportsCount,
   scansCount,
   onOpenQuickAction,
-  onNavigateTab
+  onNavigateTab,
+  onComplete,
 }: PilotOnboardingChecklistProps) {
   const [activeTab, setActiveTab] = useState<'integrations' | 'billing' | 'none'>('none');
   const [saving, setSaving] = useState<RepoProvider | null>(null);
@@ -171,6 +173,10 @@ export default function PilotOnboardingChecklist({
 
   const completedCount = tasks.filter(t => t.status).length;
   const progressPercent = (completedCount / tasks.length) * 100;
+
+  useEffect(() => {
+    if (completedCount === tasks.length) onComplete?.();
+  }, [completedCount, onComplete, tasks.length]);
 
   // The checklist exists to get a new workspace through all five steps. It
   // used to be gated by the dashboard on `clients.length === 0`, so it
