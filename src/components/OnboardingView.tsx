@@ -11,6 +11,7 @@ interface OnboardingViewProps {
   scansCount: number;
   onOpenQuickAction: (actionType: 'add-client' | 'register-passport' | 'scan-sbom') => void;
   onNavigateTab: (tab: string, itemId?: string) => void;
+  onComplete: () => void;
 }
 
 export default function OnboardingView({
@@ -19,6 +20,7 @@ export default function OnboardingView({
   scansCount,
   onOpenQuickAction,
   onNavigateTab,
+  onComplete,
 }: OnboardingViewProps) {
   return (
     <main className="min-h-[calc(100vh-2rem)] p-4 md:p-8">
@@ -34,6 +36,7 @@ export default function OnboardingView({
           scansCount={scansCount}
           onOpenQuickAction={onOpenQuickAction}
           onNavigateTab={onNavigateTab}
+          onComplete={onComplete}
         />
       </div>
     </main>
