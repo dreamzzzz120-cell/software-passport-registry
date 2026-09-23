@@ -22,10 +22,6 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  // The address whose confirmation email can be re-sent. Set only when Supabase
-  // itself established that the account is unconfirmed: a signup that returned
-  // no session, an email_not_confirmed sign-in rejection, or an expired-link
-  // redirect (for which the address is unknown and taken from the form).
   const [unconfirmedEmail, setUnconfirmedEmail] = useState('');
   const [resending, setResending] = useState(false);
   const productName = brand?.productName || 'Software Passport Registry';
@@ -34,7 +30,14 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
     const user = session.user;
     const token = session.access_token;
     if (!user?.id || !token) throw new Error('Supabase returned an invalid session.');
-    const emailVerified = Boolean(user.email_confirmed_at);\n    if (!emailVerified) {\n      const address = user.email?.trim().toLowerCase() || '';\n      setUnconfirmedEmail(address);\n      setNotice(address ? `Your account exists, but the email address is not confirmed yet. Open the confirmation link sent to ${address}, or request a new one below.` : 'Your account exists, but the email address is not confirmed yet. Open the confirmation link to activate it.');\n      return;\n    }\n    onLoginSuccess({ uid: user.id, email: user.email ?? null, displayName: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User', token, emailVerified, onboarded: 0 });
+    const emailVerified = Boolean(user.email_confirmed_at);
+    if (!emailVerified) {
+      const address = user.email?.trim().toLowerCase() || '';
+      setUnconfirmedEmail(address);
+      setNotice(address ? `Your account exists, but the email address is not confirmed yet. Open the confirmation link sent to ${address}, or request a new one below.` : 'Your account exists, but the email address is not confirmed yet. Open the confirmation link to activate it.');
+      return;
+    }
+    onLoginSuccess({ uid: user.id, email: user.email ?? null, displayName: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User', token, emailVerified, onboarded: 0 });
   };
   useEffect(() => {
     const pending = consumeAuthNotice();
@@ -67,15 +70,8 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
       if (mode === 'signup') {
         if (password.length < 8) throw new Error('Password must be at least 8 characters.');
         const { data, error } = await supabase.auth.signUp({ email: email.trim().toLowerCase(), password, options: { data: { full_name: email.trim().split('@')[0] }, emailRedirectTo: getAuthRedirect() } });
-        // Observed live 2026-09-18: a second signup within a minute was refused with
-        // 429 over_email_send_rate_limit, after which sign-in reported invalid
-        // credentials, i.e. no account exists. Say that plainly; the bare
-        // "email rate limit exceeded" reads as if the account was made.
         if (error && (error as { code?: string }).code === 'over_email_send_rate_limit') throw new Error(`Supabase refused to send a confirmation email right now (${error.message}). The account was not created; wait a while and try again.`);
         if (error) throw error;
-        // With email enumeration protection on, Supabase answers a signup for an
-        // address that already exists with a placeholder user carrying no
-        // identities and sends nothing. Say so instead of promising an email.
         if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
           setError('An account with this email already exists. Sign in, or use "Forgot password?" to reset it.');
           return;
@@ -104,12 +100,8 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
     setResending(true); setError(''); setNotice('');
     try {
       const { error } = await supabase.auth.resend({ type: 'signup', email: address, options: { emailRedirectTo: getAuthRedirect() } });
-      // Supabase's own message is shown verbatim: it is the only party that
-      // knows whether the send was rate-limited, rejected, or accepted.
       if (error) throw error;
       setUnconfirmedEmail(address);
-      // A 200 here does not confirm a send: Supabase answers 200 for unknown
-      // addresses too (email enumeration protection, observed 2026-09-18).
       setNotice(`Request accepted. If an unconfirmed account exists for ${address}, Supabase will email it a new confirmation link; open that link as soon as it arrives.`);
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not request a new confirmation link.'); } finally { setResending(false); }
   };
