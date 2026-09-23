@@ -1,9 +1,13 @@
-import { describe, expect, it, afterEach, vi } from 'vitest';
+import { describe, expect, it, afterEach, beforeEach, vi } from 'vitest';
 import { collectProviderEvidence } from '../src/integrations/adapters.ts';
+
+const { lookup } = vi.hoisted(() => ({ lookup: vi.fn() }));
+vi.mock('node:dns/promises', () => ({ default: { lookup }, lookup }));
 
 const fakeResponse = (body: unknown, status = 200, headers: Record<string, string> = { 'content-type': 'application/json' }) => new Response(JSON.stringify(body), { status, headers });
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); lookup.mockReset(); });
+beforeEach(() => lookup.mockResolvedValue([{ address: '93.184.215.14', family: 4 }]));
 
 describe('provider evidence collectors', () => {
   it('collects GitLab identity and project evidence', async () => {
@@ -53,6 +57,7 @@ describe('provider evidence collectors', () => {
   });
 
   it('fails closed when a provider hostname cannot be resolved', async () => {
+    lookup.mockRejectedValueOnce(Object.assign(new Error('getaddrinfo ENOTFOUND does-not-exist.invalid'), { code: 'ENOTFOUND' }));
     const fetchMock = vi.fn(); vi.stubGlobal('fetch', fetchMock);
     await expect(collectProviderEvidence('gitlab', { accessToken: 'test', baseUrl: 'https://does-not-exist.invalid' })).rejects.toThrow(/ENOTFOUND|PROVIDER_URL_RESOLVES_PRIVATE/);
     expect(fetchMock).not.toHaveBeenCalled();
