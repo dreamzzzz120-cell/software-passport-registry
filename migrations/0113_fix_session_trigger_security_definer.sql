@@ -39,7 +39,13 @@ BEGIN
   END IF;
   -- DELETE is required for explicit tenant/workspace erasure. The
   -- immutability rule applies to history mutation, not retention policy.
-IF NOT EXISTS (
+  IF TG_OP = 'DELETE' THEN
+    IF current_setting('app.workspace_deletion', true) IS DISTINCT FROM OLD.tenant_id THEN
+      RAISE EXCEPTION 'LOGIN_HISTORY_DELETE_NOT_AUTHORIZED';
+    END IF;
+    RETURN OLD;
+  END IF;
+  IF NOT EXISTS (
     SELECT 1 FROM users u
     WHERE u.id = NEW.user_id
       AND u.tenant_id = NEW.tenant_id
