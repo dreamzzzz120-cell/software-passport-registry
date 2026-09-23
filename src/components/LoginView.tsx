@@ -34,7 +34,7 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
     const user = session.user;
     const token = session.access_token;
     if (!user?.id || !token) throw new Error('Supabase returned an invalid session.');
-    onLoginSuccess({ uid: user.id, email: user.email ?? null, displayName: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User', token, emailVerified: true, onboarded: 0 });
+    const emailVerified = Boolean(user.email_confirmed_at);\n    if (!emailVerified) {\n      const address = user.email?.trim().toLowerCase() || '';\n      setUnconfirmedEmail(address);\n      setNotice(address ? `Your account exists, but the email address is not confirmed yet. Open the confirmation link sent to ${address}, or request a new one below.` : 'Your account exists, but the email address is not confirmed yet. Open the confirmation link to activate it.');\n      return;\n    }\n    onLoginSuccess({ uid: user.id, email: user.email ?? null, displayName: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User', token, emailVerified, onboarded: 0 });
   };
   useEffect(() => {
     const pending = consumeAuthNotice();
