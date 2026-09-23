@@ -34,11 +34,12 @@ SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 BEGIN
-  IF TG_OP = 'UPDATE' OR TG_OP = 'DELETE' THEN
+  IF TG_OP = 'UPDATE' THEN
     RAISE EXCEPTION 'LOGIN_HISTORY_IMMUTABLE';
   END IF;
-
-  IF NOT EXISTS (
+  -- DELETE is required for explicit tenant/workspace erasure. The
+  -- immutability rule applies to history mutation, not retention policy.
+IF NOT EXISTS (
     SELECT 1 FROM users u
     WHERE u.id = NEW.user_id
       AND u.tenant_id = NEW.tenant_id
