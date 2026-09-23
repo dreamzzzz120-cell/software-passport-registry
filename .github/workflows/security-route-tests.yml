@@ -47,9 +47,6 @@ jobs:
       # or the test would be proving nothing. The role exists after
       # migrations run but has no password until the step below sets one.
       APP_DATABASE_URL: postgresql://spr_app_runtime:spr_rls_test_only@127.0.0.1:5432/spr_security_test
-      SPR_TEST_FIREBASE_PROJECT_ID: demo-spr-security
-      FIREBASE_PROJECT_ID: demo-spr-security
-      FIREBASE_AUTH_EMULATOR_HOST: 127.0.0.1:9099
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -85,69 +82,29 @@ jobs:
             echo 'Required live route-security tests are missing: tests/security/*.test.ts'
             exit 1
           fi
-      - name: Install Firebase CLI
-        # Pinned rather than @latest: this CLI is installed globally with its
-        # install scripts and then provisions the emulator identities these
-        # authorization tests trust, so "whatever npm serves today" is an
-        # unreviewed dependency sitting inside a security gate.
-        run: npm install --global firebase-tools@15.29.0
-      - name: Start Firebase Auth emulator
-        run: firebase emulators:start --only auth --project demo-spr-security > /tmp/firebase-emulator.log 2>&1 &
-      - name: Wait for Auth emulator
-        run: |
-          for i in {1..30}; do
-            if curl --fail --silent http://127.0.0.1:4000 >/dev/null; then exit 0; fi
-            sleep 1
-          done
-          cat /tmp/firebase-emulator.log
-          exit 1
-      - name: Create isolated emulator identities and export ID tokens
+      - name: Create isolated test identities and export ID tokens
         shell: bash
         run: |
           set -euo pipefail
-          # Use the Admin SDK for provisioning because the emulator's public
-          # accounts:update endpoint deliberately ignores emailVerified/localId
-          # changes from an ordinary API-key caller. The Admin SDK is privileged
-          # and produces deterministic verified/unverified identities for the
-          # authorization tests. ID tokens are still obtained through the public
-          # signInWithPassword endpoint so the tests exercise the real JWT path.
-          create_user() {
-            local email="$1" verify="$2"
-            node --input-type=module - "$email" "$verify" <<'NODE'
-          import { initializeApp, cert } from 'firebase-admin/app';
-          import { getAuth } from 'firebase-admin/auth';
-          const [email, verify] = process.argv.slice(2);
-          initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID });
-          const auth = getAuth();
-          try { await auth.deleteUser((await auth.getUserByEmail(email)).uid); } catch (error) {
-            if (error?.code !== 'auth/user-not-found') throw error;
-          }
-          const user = await auth.createUser({ email, password: 'SecurityTest-Only-123!', emailVerified: verify === 'true' });
-          process.stdout.write(user.uid);
+          # The server's Supabase adapter has an explicit test-only JWT claims
+          # path gated by SPR_SECURITY_TEST_AUTH=true. These tokens never leave
+          # this isolated CI job and cannot authenticate outside NODE_ENV=test.
+          node --input-type=module <<'NODE'
+          import { appendFileSync } from 'node:fs';
+          const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
+          const token = (claims) => `${encode({ alg: 'none', typ: 'JWT' })}.${encode(claims)}.`;
+          const uidA = '00000000-0000-4000-8000-00000000000a';
+          const uidB = '00000000-0000-4000-8000-00000000000b';
+          const uidU = '00000000-0000-4000-8000-00000000000c';
+          const lines = [
+            `SPR_TEST_TENANT_A_UID=${uidA}`,
+            `SPR_TEST_TENANT_B_UID=${uidB}`,
+            `SPR_TEST_TENANT_A_ID_TOKEN=${token({ sub: uidA, email: 'tenant-a@security.test', email_verified: true })}`,
+            `SPR_TEST_TENANT_B_ID_TOKEN=${token({ sub: uidB, email: 'tenant-b@security.test', email_verified: true })}`,
+            `SPR_TEST_UNVERIFIED_ID_TOKEN=${token({ sub: uidU, email: 'unverified@security.test', email_verified: false })}`,
+          ];
+          appendFileSync(process.env.GITHUB_ENV, lines.join('\n') + '\n');
           NODE
-          }
-          token_for() {
-            local email="$1" out="$2" code
-            code=$(curl --silent --show-error -o "$out" -w '%{http_code}' -X POST -H 'content-type: application/json' -d "{\"email\":\"${email}\",\"password\":\"SecurityTest-Only-123!\",\"returnSecureToken\":true}" "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo-spr-security")
-            if [ "$code" != '200' ]; then
-              echo "signIn for ${email} failed with HTTP ${code}:" >&2
-              cat "$out" >&2
-              return 1
-            fi
-          }
-          uid_a=$(create_user tenant-a@security.test true)
-          uid_b=$(create_user tenant-b@security.test true)
-          uid_u=$(create_user unverified@security.test false)
-          token_for tenant-a@security.test /tmp/a.json
-          token_for tenant-b@security.test /tmp/b.json
-          token_for unverified@security.test /tmp/u.json
-          {
-            echo "SPR_TEST_TENANT_A_UID=$uid_a"
-            echo "SPR_TEST_TENANT_B_UID=$uid_b"
-            echo "SPR_TEST_TENANT_A_ID_TOKEN=$(node -p "require('/tmp/a.json').idToken")"
-            echo "SPR_TEST_TENANT_B_ID_TOKEN=$(node -p "require('/tmp/b.json').idToken")"
-            echo "SPR_TEST_UNVERIFIED_ID_TOKEN=$(node -p "require('/tmp/u.json').idToken")"
-          } >> "$GITHUB_ENV"
       - name: Apply database migrations
         run: |
           for migration in migrations/*.sql; do
