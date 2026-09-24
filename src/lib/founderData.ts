@@ -30,7 +30,7 @@ let current: FounderData = EMPTY;
 let inflight: Promise<void> | null = null;
 const listeners = new Set<(d: FounderData) => void>();
 const AUTO_REFRESH_MS = 15_000;
-let autoRefreshTimer: ReturnType<typeof setInterval> | null = null;
+let autoRefreshTimer: number | null = null;
 let visibilityBound = false;
 function emit() { for (const l of listeners) l(current); }
 function onVisibilityChange() {
