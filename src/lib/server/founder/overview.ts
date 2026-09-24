@@ -41,6 +41,15 @@ export type FounderFunnel = {
   organizations: number | null;
 };
 
+export type FounderActivity = {
+  id: string;
+  category: 'agent_job' | 'distribution_job' | 'lead' | 'signup' | 'crawler';
+  label: string;
+  state: string | null;
+  occurredAt: string;
+  source: string;
+};
+
 export type FounderTraffic = {
   activeEvents: number | null;
   activeSessions: number | null;
@@ -48,9 +57,10 @@ export type FounderTraffic = {
   pageViews24h: number | null;
   visitors7d: number | null;
   pageViews7d: number | null;
+  topPages: { path: string; views: number }[] | null;
 };
 
-export type FounderOverview = { pulse: FounderPulse; funnel: FounderFunnel; traffic: FounderTraffic; generatedAt: string };
+export type FounderOverview = { pulse: FounderPulse; funnel: FounderFunnel; traffic: FounderTraffic; recentActivity: FounderActivity[] | null; generatedAt: string };
 
 function rows(result: unknown): any[] { return ((result as any)?.rows ?? []) as any[]; }
 function iso(value: unknown): string | null { if (!value) return null; const d = new Date(value as string); return Number.isFinite(d.getTime()) ? d.toISOString() : null; }
@@ -119,7 +129,7 @@ export async function founderFunnel(windowDays = 7): Promise<FounderFunnel> {
 
 export async function founderOverview(): Promise<FounderOverview> {
   const [pulse, funnel] = await Promise.all([founderPulse(), founderFunnel()]);
-  const [trafficResult, topPageResult] = await Promise.all([
+  const [trafficResult, topPageResult, activityResult] = await Promise.all([
     db.execute(sql`
       SELECT
         COUNT(*) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '30 minutes')::int AS active_events,
@@ -135,9 +145,43 @@ export async function founderOverview(): Promise<FounderOverview> {
       WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours'
       GROUP BY path ORDER BY views DESC LIMIT 20
     `).catch((err) => { console.error('[FounderOverview] traffic pages failed:', err instanceof Error ? err.message : String(err)); return null; }),
+    db.execute(sql`
+      SELECT * FROM (
+        SELECT 'agent:' || id::text AS id, 'agent_job'::text AS category, job_type::text AS label, status::text AS state,
+               updated_at AS "occurredAt", 'agent_jobs'::text AS source
+        FROM agent_jobs WHERE updated_at IS NOT NULL
+        UNION ALL
+        SELECT 'distribution:' || id::text, 'distribution_job'::text, kind::text, status::text,
+               updated_at, 'distribution_jobs'::text
+        FROM distribution_jobs WHERE updated_at IS NOT NULL
+        UNION ALL
+        SELECT 'lead:' || id::text, 'lead'::text, 'Free Review lead captured'::text, NULL::text,
+               created_at, 'free_review_leads'::text
+        FROM free_review_leads WHERE created_at IS NOT NULL
+        UNION ALL
+        SELECT 'signup:' || id::text, 'signup'::text, 'User provisioned'::text, role::text,
+               created_at, 'users'::text
+        FROM users WHERE created_at IS NOT NULL
+        UNION ALL
+        SELECT 'crawl:' || id::text, 'crawler'::text, 'Registry crawl'::text,
+               CASE WHEN error IS NULL THEN 'observed' ELSE 'error' END::text,
+               COALESCE(finished_at, started_at), 'registry_crawl_runs'::text
+        FROM registry_crawl_runs WHERE COALESCE(finished_at, started_at) IS NOT NULL
+      ) activity
+      ORDER BY "occurredAt" DESC NULLS LAST
+      LIMIT 40
+    `).catch((err) => { console.error('[FounderOverview] recent activity failed:', err instanceof Error ? err.message : String(err)); return null; }),
   ]);
   const trafficRow = rows(trafficResult)[0];
-  const topPages = rows(topPageResult);
+  const topPages = topPageResult === null ? null : rows(topPageResult).map((row) => ({ path: String(row.path ?? ''), views: Number(row.views ?? 0) }));
+  const recentActivity = activityResult === null ? null : rows(activityResult).map((row) => ({
+    id: String(row.id),
+    category: String(row.category) as FounderActivity['category'],
+    label: String(row.label ?? 'Observed activity'),
+    state: row.state == null ? null : String(row.state),
+    occurredAt: iso(row.occurredAt) ?? new Date(0).toISOString(),
+    source: String(row.source ?? 'unknown'),
+  })).filter((row) => row.occurredAt !== new Date(0).toISOString());
   return {
     pulse,
     funnel,
@@ -148,7 +192,9 @@ export async function founderOverview(): Promise<FounderOverview> {
       pageViews24h: trafficRow?.pageviews_24h == null ? null : Number(trafficRow.pageviews_24h),
       visitors7d: trafficRow?.visitors_7d == null ? null : Number(trafficRow.visitors_7d),
       pageViews7d: trafficRow?.pageviews_7d == null ? null : Number(trafficRow.pageviews_7d),
+      topPages,
     },
+    recentActivity,
     generatedAt: new Date().toISOString(),
   };
 }
