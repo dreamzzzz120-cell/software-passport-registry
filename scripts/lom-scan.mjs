@@ -36,7 +36,8 @@ for(const file of files){
   if(!TEST_OR_CI.test(file)){
     if(/(?:curl|wget)[^\n|]{0,300}\|\s*(?:ba)?sh\b/i.test(content))add('high','execution','Remote content is piped directly to a shell',file,'Pin and verify downloaded artifacts before execution.');
     if(/\bchmod\s+(?:-R\s+)?777\b/i.test(content))add('high','permissions','World-writable permissions requested',file,'Use least privilege.');
-    if(const dynamicEval = /(?:^|[;{}])\s*(?:globalThis\.)?eval\s*\(/m.test(content) || /\b(?:globalThis\.)?eval\s*\(/.test(content.replace(/\b(?:interface|type)\s+[^\n{]+\{[^}]*\}/gs, '')); || /\bnew\s+Function\s*\(/.test(content))add('high','execution','Dynamic code execution primitive found',file,'Review whether untrusted input can reach the execution boundary.');
+    const executableContent = content.replace(/\beval\s*\([^)]*\)\s*:\s*(?:Promise<[^>]+>|[A-Za-z][\w<>| ]*)/g, '');
+    if(/(?:^|[;{}])\s*(?:globalThis\.)?eval\s*\(/m.test(executableContent) || /\bnew\s+Function\s*\(/.test(executableContent))add('high','execution','Dynamic code execution primitive found',file,'Review whether untrusted input can reach the execution boundary.');
   }
   if(/\.github\/workflows\//.test(file)&&/permissions:\s*write-all/i.test(content))add('high','workflow','Workflow requests write-all permissions',file,'Use least-privilege permissions.');
 }
