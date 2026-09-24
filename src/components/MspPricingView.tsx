@@ -139,7 +139,7 @@ export default function MspPricingView({ isAuthenticated, onPrimaryAction }: Pro
         </p>
         <div className="mx-auto mt-6 flex max-w-3xl flex-wrap items-center justify-center gap-2 text-[11px] font-semibold uppercase tracking-[.12em]">
           <span className="rounded-full border border-[var(--spr-highlight)]/50 bg-[var(--spr-highlight)]/10 px-3 py-1.5 text-[var(--spr-highlight)]">Free Review · $0</span>
-          <span className="rounded-full border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-3 py-1.5 text-[var(--spr-text-muted)]">Paid plans · live Stripe pricing</span>
+          <span className="rounded-full border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-3 py-1.5 text-[var(--spr-text-muted)]">Paid plans · {plans?.some((plan) => plan.checkoutAvailable) ? 'see current prices below' : 'contact us for pricing'}</span>
           <span className="rounded-full border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-3 py-1.5 text-[var(--spr-text-muted)]">MSP · recurring service</span>
         </div>
       </div>
@@ -194,7 +194,7 @@ export default function MspPricingView({ isAuthenticated, onPrimaryAction }: Pro
                 ))}
               </ul>
               <button onClick={onPrimaryAction} className="spr-btn spr-btn-primary mt-6 w-full">
-                {isAuthenticated ? 'Open billing' : plan.checkoutAvailable ? 'Get started' : 'Talk to us'}
+                {isAuthenticated ? 'Open billing' : plan.checkoutAvailable ? 'Get started' : 'Sign in'}
               </button>
             </div>
           );
@@ -225,7 +225,10 @@ export default function MspPricingView({ isAuthenticated, onPrimaryAction }: Pro
       <div className="mx-auto mt-8 flex max-w-4xl items-start gap-3 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] p-4 text-xs leading-5 text-[var(--spr-text-muted)]">
         <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[var(--spr-highlight)]" />
         <p>
-          Recurring plans are billed through Stripe inside SPR Billing, and every price above is read from the live Stripe price that checkout charges against. Enterprise pricing and limits are contractual. White-label and advanced capabilities are subject to the plan and configured account entitlements.
+          {plans?.some((plan) => plan.checkoutAvailable)
+            ? 'Available checkout prices are read from Stripe. Recurring plans are billed through Stripe inside SPR Billing.'
+            : 'Online checkout is currently unavailable. Sign in to explore the workspace and billing options.'}
+          {' '}Enterprise pricing and limits are contractual. White-label and advanced capabilities are subject to the plan and configured account entitlements.
         </p>
       </div>
 
