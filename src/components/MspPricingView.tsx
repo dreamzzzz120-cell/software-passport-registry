@@ -226,7 +226,7 @@ export default function MspPricingView({ isAuthenticated, onPrimaryAction }: Pro
         <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[var(--spr-highlight)]" />
         <p>
           {plans?.some((plan) => plan.checkoutAvailable)
-            ? 'Available checkout prices are read from Stripe. Recurring plans are billed through SPR Billing.'
+            ? 'Available checkout prices are read from Stripe. Recurring plans are billed through Stripe inside SPR Billing.'
             : 'Online checkout is currently unavailable. Sign in to explore the workspace and billing options.'}
           {' '}Enterprise pricing and limits are contractual. White-label and advanced capabilities are subject to the plan and configured account entitlements.
         </p>
