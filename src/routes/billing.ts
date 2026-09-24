@@ -534,12 +534,32 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
         const resolvedPlan = PLAN_IDS.find((id) => planPriceId(id) === currentPriceId);
         const metadataPlan = subscription.metadata?.plan as PlanId | undefined;
         const plan = resolvedPlan ?? (metadataPlan && PLAN_CONFIG[metadataPlan] ? metadataPlan : undefined);
-        const updated = tenantId && plan && PLAN_CONFIG[plan]
-          ? (await db.execute(sql`UPDATE tenant_subscriptions SET stripe_subscription_id = ${subscription.id}, plan = ${plan}, client_limit = ${PLAN_CLIENT_LIMITS[plan]}, status = ${subscription.status}, current_period_end = ${periodEnd}, updated_at = CURRENT_TIMESTAMP WHERE tenant_id = ${tenantId} RETURNING tenant_id`) as any).rows?.[0]
+        // Upsert plan subscription only for tenantId that maps to a real tenant.
+        // Prevents orphaned subscriptions and silent acceptance of malformed events.
+        // Status is persisted as Stripe reports it; access granting is handled
+        // by enforcePaidAccess (only active/trialing grant access).
+        let updated: any = null;
+        if (tenantId && plan && PLAN_CONFIG[plan]) {
+          const clientLimit = PLAN_CLIENT_LIMITS[plan];
+          updated = (await db.execute(sql`
+            INSERT INTO tenant_subscriptions (tenant_id, stripe_subscription_id, plan, client_limit, status, current_period_end, updated_at)
+            SELECT ${tenantId}, ${subscription.id}, ${plan}, ${clientLimit}, ${subscription.status}, ${periodEnd}, CURRENT_TIMESTAMP
+            WHERE EXISTS (SELECT 1 FROM users WHERE tenant_id = ${tenantId})
+            ON CONFLICT (tenant_id) DO UPDATE SET
+              stripe_subscription_id = EXCLUDED.stripe_subscription_id,
+              plan = EXCLUDED.plan,
+              client_limit = EXCLUDED.client_limit,
+              status = EXCLUDED.status,
+              current_period_end = EXCLUDED.current_period_end,
+              updated_at = CURRENT_TIMESTAMP
+            RETURNING tenant_id
+          `) as any).rows?.[0];
+        } else if (subscription.id) {
           // No usable plan metadata: fall back to the subscription id, which
           // matches the plan row and nothing else. This preserves status
           // changes even if a malformed third-party subscription event arrives.
-          : (await db.execute(sql`UPDATE tenant_subscriptions SET status = ${subscription.status}, current_period_end = ${periodEnd}, updated_at = CURRENT_TIMESTAMP WHERE stripe_subscription_id = ${subscription.id} RETURNING tenant_id`) as any).rows?.[0];
+          updated = (await db.execute(sql`UPDATE tenant_subscriptions SET status = ${subscription.status}, current_period_end = ${periodEnd}, updated_at = CURRENT_TIMESTAMP WHERE stripe_subscription_id = ${subscription.id} RETURNING tenant_id`) as any).rows?.[0];
+        }
         if (updated?.tenant_id) await appendAuditEntry(db, { tenantId: updated.tenant_id, action: 'billing.subscription.status_changed', actor: 'stripe-webhook', payload: { status: subscription.status, plan: plan ?? null, priceId: currentPriceId ?? null, stripeEventId: event.id, stripeSubscriptionId: subscription.id } });
         break;
       }

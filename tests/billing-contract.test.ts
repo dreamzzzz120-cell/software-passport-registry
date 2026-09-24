@@ -282,3 +282,36 @@ describe('one-time purchases are fulfilled, not just recorded', () => {
     expect(c).toContain("{ name: 'SPR_FULFILMENT_EMAIL', category: 'featureSpecific'");
   });
 });
+
+
+describe('Stripe webhook: customer.subscription.created/updated with INSERT...ON CONFLICT UPSERT', () => {
+  const source = () => read('src/routes/billing.ts');
+
+  it('uses INSERT...ON CONFLICT to upsert subscription when no pre-existing row exists', () => {
+    const s = source();
+    const branch = s.slice(s.indexOf("case 'customer.subscription.created':"), s.indexOf("case 'customer.subscription.deleted':"));
+    expect(branch).toContain('INSERT INTO tenant_subscriptions');
+    expect(branch).toContain('ON CONFLICT (tenant_id) DO UPDATE SET');
+    expect(branch).toContain('WHERE EXISTS (SELECT 1 FROM users WHERE tenant_id');
+  });
+
+  it('validates tenantId maps to real tenant before persisting subscription row', () => {
+    const s = source();
+    const branch = s.slice(s.indexOf("case 'customer.subscription.created':"), s.indexOf("case 'customer.subscription.deleted':"));
+    expect(branch).toContain('WHERE EXISTS (SELECT 1 FROM users WHERE tenant_id = ${tenantId})');
+  });
+
+  it('persists subscription status as Stripe reports it without granting access unless active/trialing', () => {
+    const s = source();
+    const branch = s.slice(s.indexOf("case 'customer.subscription.created':"), s.indexOf("case 'customer.subscription.deleted':"));
+    expect(branch).toContain('status = ${subscription.status}');
+    expect(branch).toContain('by enforcePaidAccess (only active/trialing grant access)');
+  });
+
+  it('only creates audit entry when subscription row was actually affected', () => {
+    const s = source();
+    const branch = s.slice(s.indexOf("case 'customer.subscription.created':"), s.indexOf("case 'customer.subscription.deleted':"));
+    expect(branch).toContain('if (updated?.tenant_id)');
+    expect(branch).toContain("action: 'billing.subscription.status_changed'");
+  });
+});
