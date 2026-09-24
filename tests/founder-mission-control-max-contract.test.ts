@@ -25,7 +25,7 @@ describe('Founder Mission Control maximum-upgrade contracts', () => {
 
   it('exposes observed top pages without inventing missing traffic', () => {
     expect(overview).toContain('topPages: { path: string; views: number }[] | null');
-    expect(data).toContain('topPages: { path: string; views: number }[] | null');
+    expect(data).toContain('topPages?: { path: string; views: number }[] | null');
     expect(mission).toContain('Top observed pages · 24h');
     expect(mission).toContain('Top-page traffic is not verified.');
   });
