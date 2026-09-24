@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { Analytics } from '@vercel/analytics/react';
 import ExperienceAgent from './components/ExperienceAgent';
 import SoftwareWorkspaceView from './components/SoftwareWorkspaceView';
 import './index.css';
@@ -17,7 +18,7 @@ installPageViewTracking();
 function SprApplication() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/';
   if (path === '/software/workspace') return <SoftwareWorkspaceView />;
-  return (<><App /><ExperienceAgent /></>);
+  return (<><App /><ExperienceAgent /><Analytics /></>);
 }
 
 ReactDOM.createRoot(root).render(<React.StrictMode><SprApplication /></React.StrictMode>);

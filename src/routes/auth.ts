@@ -187,7 +187,12 @@ export function createAuthRouter() {
   // record supplies the tenant/RBAC projection after token verification.
   router.get('/user/me', requireAuth, async (req: AuthenticatedRequest, res, next) => {
     try {
-      const db = req.db!;
+      // requireAuth already resolved this exact UID from the authoritative users
+      // table before tenant scoping. Read the caller's own profile by that verified
+      // UID here rather than through the tenant-scoped connection: users-table RLS
+      // can legitimately hide the membership row during this bootstrap/profile
+      // request, which previously turned a valid login into a false
+      // "User account is not provisioned" response.
       const user = await db.select({
         id: users.id,
         uid: users.uid,

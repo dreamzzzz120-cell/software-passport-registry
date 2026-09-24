@@ -57,6 +57,12 @@ export default function HomePage({ onCreatePassport, onExploreTrustNetwork, onVi
             <button onClick={onCreatePassport} className="rounded-[3px] border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-6 py-3 text-sm font-semibold text-[#cccccc] transition-colors hover:bg-[var(--spr-surface-hover)]">Sign in</button>
           </div>
           <p className="mt-3 text-xs text-[var(--spr-text-muted)]">Public registry: observed repositories only. No invented scores or placeholder records.</p>
+          <div className="mt-6 rounded-md border border-[var(--spr-highlight)]/30 bg-[var(--spr-accent-soft)]/10 p-4">
+            <div className="text-[11px] font-bold uppercase tracking-[.18em] text-[var(--spr-highlight)]">For MSPs</div>
+            <p className="mt-2 text-sm font-semibold text-[var(--spr-text)]">Turn software verification into a repeatable client service.</p>
+            <p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">Review software, preserve the evidence, share a Software Passport, and keep observing it over time.</p>
+            <a href="/msp" className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-[var(--spr-highlight)]">See the MSP offering <ArrowRight className="h-4 w-4" /></a>
+          </div>
           <LegalFooterLinks className="mt-8" />
           <div className="mt-8 rounded-md border-2 border-[var(--spr-highlight)]/50 bg-[var(--spr-surface-deep)] p-5 shadow-[0_10px_40px_rgba(0,0,0,0.18)]">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
