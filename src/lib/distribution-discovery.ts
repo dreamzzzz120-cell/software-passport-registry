@@ -44,6 +44,14 @@ export function buildMspDiscoveryQueries() {
     'managed IT services cybersecurity ConnectWise',
     'MSP managed security compliance vendor risk',
     'IT services provider managed clients cybersecurity',
+    'managed service provider software vendor risk',
+    'MSP software supply chain SBOM security',
+    'managed IT services vendor assessment due diligence',
+    'vCISO managed services software risk',
+    'MSP compliance audit readiness software security',
+    'technology service provider third party risk',
+    'IT provider software inventory client risk',
+    'cybersecurity MSP software verification',
   ];
 }
 

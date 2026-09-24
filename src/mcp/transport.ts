@@ -1,4 +1,4 @@
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { mcpInvalidArguments, mcpToolNotFound, mcpUnauthorized, MCP_SERVER_INFO, MCP_TOOLS, validateToolArguments, validateToolName } from './server.ts';
 
 const MAX_BODY_BYTES = 128 * 1024;
@@ -7,7 +7,7 @@ const MAX_ID_LENGTH = 128;
 const MAX_ORIGIN_LENGTH = 512;
 const WINDOW_MS = 60_000;
 const MAX_REQUESTS_PER_WINDOW = 60;
-const sessions = new Map<string, { createdAt: number; lastSeen: number }>();
+const sessions = new Map<string, { createdAt: number; lastSeen: number; tokenHash: string; origin: string | null }>();
 const counters = new Map<string, { started: number; count: number }>();
 
 const forbiddenHeaders = /^(cookie|set-cookie|authorization|proxy-authorization|x-api-key)$/i;
@@ -33,6 +33,10 @@ function authToken(request: Request): string | null {
   return authorization.slice(7);
 }
 
+function tokenFingerprint(token: string): string {
+  return createHash('sha256').update(token, 'utf8').digest('hex');
+}
+
 function requestKey(request: Request, token: string): string {
   const forwarded = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
   return createHash('sha256').update(`${token}:${forwarded}`).digest('hex');
@@ -56,13 +60,15 @@ function sessionId(request: Request): string | null {
   return value;
 }
 
-function validateOrigin(request: Request): boolean {
+function validateOrigin(request: Request, allowedOrigins?: readonly string[]): boolean {
   const origin = request.headers.get('origin');
   if (!origin) return true;
   if (origin.length > MAX_ORIGIN_LENGTH) return false;
   try {
     const url = new URL(origin);
-    return url.protocol === 'https:' && url.hostname !== 'localhost' && !/^127(?:\.\d{1,3}){3}$/.test(url.hostname);
+    if (url.protocol !== 'https:' || url.hostname === 'localhost' || /^(127(?:\.\d{1,3}){3}|0\.0\.0\.0|::1)$/.test(url.hostname)) return false;
+    if (!allowedOrigins?.length) return true;
+    return allowedOrigins.some(allowed => allowed === url.origin);
   } catch { return false; }
 }
 
@@ -80,14 +86,14 @@ function cleanup() {
   for (const [key, value] of sessions) if (value.lastSeen < cutoff) sessions.delete(key);
 }
 
-export function createMcpTransport(options: { expectedBearer: string; executeTool: (tool: string, args: Record<string, string>, request: Request) => Promise<unknown> }) {
+export function createMcpTransport(options: { expectedBearer: string; allowedOrigins?: readonly string[]; executeTool: (tool: string, args: Record<string, string>, request: Request) => Promise<unknown> }) {
   if (!/^[A-Za-z0-9._~-]{32,4096}$/.test(options.expectedBearer)) throw new Error('MCP bearer credential is missing or too weak');
 
   return async function handle(request: Request): Promise<Response> {
     cleanup();
     const headers = new Headers({ 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
     if (request.method !== 'POST') return new Response(JSON.stringify(jsonRpcError(null, -32600, 'POST is required')), { status: 405, headers });
-    if (!validateOrigin(request)) return new Response(JSON.stringify(jsonRpcError(null, -32600, 'Invalid origin')), { status: 403, headers });
+    if (!validateOrigin(request, options.allowedOrigins)) return new Response(JSON.stringify(jsonRpcError(null, -32600, 'Invalid origin')), { status: 403, headers });
     for (const key of request.headers.keys()) if (forbiddenHeaders.test(key) && key.toLowerCase() !== 'authorization') return new Response(JSON.stringify(jsonRpcError(null, -32600, 'Forbidden header')), { status: 400, headers });
     const token = authToken(request);
     if (!token || !constantTimeToken(options.expectedBearer, token)) return new Response(JSON.stringify(jsonRpcError(null, -32001, mcpUnauthorized().error.message)), { status: 401, headers });

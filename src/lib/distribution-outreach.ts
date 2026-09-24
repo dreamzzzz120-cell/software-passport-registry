@@ -65,10 +65,42 @@ export function extractPublicRoleEmails(html: string) {
 
 function makeCopy(company: string, evidence: Record<string, unknown>, followup: boolean) {
   const signals = evidence.signals && typeof evidence.signals === 'object' ? evidence.signals as Record<string, unknown> : {};
-  const focus = signals.compliance ? 'client software and vendor risk evidence' : signals.cybersecurity ? 'software security and vendor risk' : 'software trust and verification';
+  const observed = [
+    signals.msp && 'managed services',
+    signals.cybersecurity && 'cybersecurity',
+    signals.compliance && 'compliance',
+    signals.psa && 'a PSA platform',
+    signals.multiClient && 'multi-client delivery',
+    signals.vendorRisk && 'vendor risk',
+    signals.softwareSupplyChain && 'software supply-chain work',
+    signals.procurement && 'vendor assessment or due diligence',
+    signals.vCiso && 'vCISO services',
+  ].filter(Boolean).slice(0, 2) as string[];
+  const focus = signals.msp || signals.multiClient
+    ? 'software trust and risk visibility across client environments'
+    : signals.vendorRisk || signals.procurement
+      ? 'vendor and software risk evidence'
+      : signals.softwareSupplyChain
+        ? 'software supply-chain evidence'
+        : signals.compliance
+          ? 'client software and compliance evidence'
+          : signals.cybersecurity
+            ? 'software security and vendor risk'
+            : 'software trust and verification';
   const greeting = company ? `Hi ${company} team,` : 'Hi there,';
-  if (followup) return { subject: `Following up — ${focus}`, intro: [greeting, `I wanted to follow up on my note about SPR for ${focus}. It gives MSPs an evidence-first way to verify software, document findings, and produce client-ready trust reports.`, 'If this is relevant, I can point you straight to the free repo review. If not, no worries.'], cta: { label: 'Run a free repo review', url: `${PUBLIC_ORIGIN}/` } };
-  return { subject: `Software trust for ${company || 'your MSP clients'}`, intro: [greeting, `I came across your business while researching MSPs and IT/security providers. SPR is built for ${focus}, with the evidence retained behind every result.`, 'There is a free repo review so you can see the workflow before buying anything.'], cta: { label: 'Run a free repo review', url: `${PUBLIC_ORIGIN}/` } };
+  const proof = observed.length
+    ? `I noticed your public site references ${observed.join(' and ')}. That is the kind of workflow SPR is designed to support.`
+    : 'I found your company while researching software-risk and managed-service providers.';
+  if (followup) return {
+    subject: `Following up — ${focus}`,
+    intro: [greeting, `Following up on my note about ${focus}. SPR gives teams an evidence-first workflow for verifying software, preserving the underlying observations, and producing client-ready trust reports.`, 'If it is relevant, I can point you straight to the free repo review. If not, no worries.'],
+    cta: { label: 'Run a free repo review', url: `${PUBLIC_ORIGIN}/free-review` },
+  };
+  return {
+    subject: `Software trust for ${company || 'your clients'}`,
+    intro: [greeting, proof, `SPR provides ${focus}, with observed evidence retained behind each result rather than replacing evidence with a marketing claim.`, 'There is a free repo review so you can inspect the workflow before buying anything.'],
+    cta: { label: 'Run a free repo review', url: `${PUBLIC_ORIGIN}/free-review` },
+  };
 }
 
 async function withTenant<T>(fn: (client: any) => Promise<T>) {
@@ -174,6 +206,11 @@ export async function sendDueFollowups() {
       await withTenant(async (client) => {
         const result = await client.query(`SELECT id,email,company,evidence,followup_count,outreach_basis FROM distribution_contacts WHERE id=$1 AND tenant_id=$2 AND status='active' LIMIT 1`, [row.id,DISTRIBUTION_TENANT_ID]);
         const contact = result.rows?.[0]; if (!contact) return;
+        const replied = await client.query(`SELECT 1 FROM distribution_messages WHERE contact_id=$1 AND kind IN ('reply','inbound_reply') AND status IN ('received','processed','replied') LIMIT 1`, [contact.id]);
+        if (replied.rows?.length) {
+          await client.query(`UPDATE distribution_contacts SET next_followup_at=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=$1`, [contact.id]);
+          return;
+        }
         outreachAllowed(contact.outreach_basis);
         if (await dailySendCount(client) >= DAILY_LIMIT) throw new Error('DISTRIBUTION_DAILY_SEND_LIMIT_REACHED');
         const copy = makeCopy(String(contact.company ?? ''), contact.evidence ?? {}, true);

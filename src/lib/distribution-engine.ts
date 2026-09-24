@@ -9,6 +9,11 @@ export type DistributionJobKind = 'research_url' | 'qualify_lead' | 'prepare_out
 const MAX_PAYLOAD_BYTES = 32_000;
 const REQUEST_TIMEOUT_MS = 8_000;
 const MAX_BODY_BYTES = 1_000_000;
+const MAX_RESEARCH_URL_LENGTH = 2048;
+const MAX_DNS_ADDRESSES = 16;
+const DNS_TIMEOUT_MS = 2_000;
+const MAX_HOST_LABEL_LENGTH = 63;
+const MAX_TTL_SECONDS = 300;
 
 function assertPayload(payload: Record<string, unknown>) {
   const encoded = JSON.stringify(payload);
@@ -19,21 +24,28 @@ function isPrivateIp(address: string) {
   const family = net.isIP(address);
   if (family === 4) {
     const [a, b] = address.split('.').map(Number);
-    return a === 10 || a === 127 || (a === 169 && b === 254) || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31);
+    return a === 0 || a === 10 || a === 100 && b >= 64 && b <= 127 || a === 127 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 0) || (a === 192 && b === 168) || (a === 198 && (b === 18 || b === 19 || b === 51)) || (a === 203 && b === 0) || a >= 224;
   }
   if (family === 6) {
     const normalized = address.toLowerCase();
-    return normalized === '::1' || normalized.startsWith('fc') || normalized.startsWith('fd') || normalized.startsWith('fe80:');
+    return normalized === '::' || normalized === '::1' || normalized.startsWith('fc') || normalized.startsWith('fd') || normalized.startsWith('fe80:') || normalized.startsWith('ff');
   }
   return true;
 }
 
 async function assertPublicResearchTarget(parsed: URL) {
   const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (host.endsWith('.') || host.startsWith('.')) throw new Error('DISTRIBUTION_HOST_INVALID');
+  if (!host || host.length > 253 || /[^a-z0-9.:-]/i.test(host)) throw new Error('DISTRIBUTION_HOST_INVALID');
+  if (host.includes('..') || host.startsWith('.') || host.endsWith('.')) throw new Error('DISTRIBUTION_HOST_INVALID');
+  if (host.split('.').some(label => label.length > MAX_HOST_LABEL_LENGTH || label.startsWith('-') || label.endsWith('-'))) throw new Error('DISTRIBUTION_HOST_INVALID');
   if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local')) throw new Error('DISTRIBUTION_PRIVATE_TARGET_BLOCKED');
   if (net.isIP(host) && isPrivateIp(host)) throw new Error('DISTRIBUTION_PRIVATE_TARGET_BLOCKED');
   if (!net.isIP(host)) {
-    const addresses = await dns.lookup(host, { all: true, verbatim: true });
+    const dnsPromise = dns.lookup(host, { all: true, verbatim: true });
+    const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('DISTRIBUTION_DNS_TIMEOUT')), DNS_TIMEOUT_MS));
+    const addresses = await Promise.race([dnsPromise, timeoutPromise]);
+    if (addresses.length > MAX_DNS_ADDRESSES) throw new Error('DISTRIBUTION_DNS_ANSWER_LIMIT');
     if (!addresses.length || addresses.some(({ address }) => isPrivateIp(address))) throw new Error('DISTRIBUTION_PRIVATE_TARGET_BLOCKED');
   }
 }
@@ -69,15 +81,29 @@ function publicRoleEmails(html: string) {
 function extractResearchSignals(url: URL, html: string) {
   const text = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 100_000).toLowerCase();
   const signals = {
-    msp: /managed service provider|managed services|managed it\b|it services/.test(text),
-    cybersecurity: /cybersecurity|cyber security|managed security|security operations|soc\b/.test(text),
+    msp: /managed service provider|managed services|managed it\\b|it services/.test(text),
+    cybersecurity: /cybersecurity|cyber security|managed security|security operations|soc\\b/.test(text),
     compliance: /compliance|vulnerability management|risk management|audit readiness|iso 27001|soc 2/.test(text),
     psa: /connectwise|autotask|datto|halo psa|kaseya/.test(text),
     multiClient: /clients|customers|managed endpoints|businesses we serve/.test(text),
+    vendorRisk: /vendor risk|third[- ]party risk|supplier risk|software risk/.test(text),
+    softwareSupplyChain: /software supply chain|software composition|sbom|software bill of materials|dependency risk/.test(text),
+    procurement: /procurement|vendor assessment|due diligence|third[- ]party assessment/.test(text),
+    vCiso: /vcio|vciso|virtual ciso|fractional ciso/.test(text),
   };
-  const score = (signals.msp ? 30 : 0) + (signals.cybersecurity ? 20 : 0) + (signals.compliance ? 15 : 0) + (signals.psa ? 15 : 0) + (signals.multiClient ? 10 : 0) + (html.length > 0 ? 10 : 0);
+  const score = Math.min(100,
+    (signals.msp ? 25 : 0) + (signals.cybersecurity ? 15 : 0) + (signals.compliance ? 12 : 0) +
+    (signals.psa ? 10 : 0) + (signals.multiClient ? 8 : 0) + (signals.vendorRisk ? 10 : 0) +
+    (signals.softwareSupplyChain ? 8 : 0) + (signals.procurement ? 7 : 0) + (signals.vCiso ? 5 : 0)
+  );
+  const fitReasons = [
+    signals.msp && 'managed-services', signals.cybersecurity && 'cybersecurity', signals.compliance && 'compliance',
+    signals.psa && 'PSA', signals.multiClient && 'multi-client', signals.vendorRisk && 'vendor-risk',
+    signals.softwareSupplyChain && 'software-supply-chain', signals.procurement && 'procurement', signals.vCiso && 'vCISO',
+  ].filter(Boolean);
+  const recommendedOffer = signals.msp || signals.multiClient ? 'msp' : signals.vendorRisk || signals.procurement ? 'vendor-risk' : signals.softwareSupplyChain ? 'software-passport' : signals.compliance ? 'evidence-report' : 'free-review';
   const title = (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
-  return { url: url.toString(), httpObserved: true, contentBytes: Buffer.byteLength(html, 'utf8'), title, publicRoleEmails: publicRoleEmails(html), signals, score, observedAt: new Date().toISOString() };
+  return { url: url.toString(), httpObserved: true, contentBytes: Buffer.byteLength(html, 'utf8'), title, publicRoleEmails: publicRoleEmails(html), signals, score, fitReasons, recommendedOffer, observedAt: new Date().toISOString() };
 }
 
 export async function enqueueDistributionJob(pool: Pool, kind: DistributionJobKind, payload: Record<string, unknown>) {
@@ -106,23 +132,63 @@ export type DistributionJobOrigin =
   | { kind: 'manual_qualify' };
 
 export async function enqueueResearchUrl(pool: Pool, url: string, origin?: DistributionJobOrigin) {
+  if (typeof url !== 'string' || url.length > MAX_RESEARCH_URL_LENGTH) throw new Error('DISTRIBUTION_URL_TOO_LONG');
   const parsed = new URL(url);
+  if (parsed.hostname.includes('%')) throw new Error('DISTRIBUTION_HOST_ENCODING_BLOCKED');
+  if (parsed.protocol === 'http:' && parsed.hostname.includes('[')) throw new Error('DISTRIBUTION_IPV6_HTTP_BLOCKED');
   if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('DISTRIBUTION_URL_SCHEME_NOT_ALLOWED');
+  if (parsed.origin === 'null') throw new Error('DISTRIBUTION_ORIGIN_INVALID');
+  if (parsed.port && parsed.port !== '80' && parsed.port !== '443') throw new Error('DISTRIBUTION_PORT_NOT_ALLOWED');
+  if (parsed.hash) throw new Error('DISTRIBUTION_FRAGMENT_NOT_ALLOWED');
+  if (parsed.search.length > 1024) throw new Error('DISTRIBUTION_QUERY_TOO_LONG');
+  if (parsed.pathname.includes('\\')) throw new Error('DISTRIBUTION_BACKSLASH_BLOCKED');
+  if (parsed.username || parsed.password) throw new Error('DISTRIBUTION_CREDENTIALS_IN_URL_BLOCKED');
+  if (parsed.pathname.length > 4096) throw new Error('DISTRIBUTION_PATH_TOO_LONG');
+  if (/[\u0000-\u001f\u007f]/.test(url)) throw new Error('DISTRIBUTION_CONTROL_CHAR_BLOCKED');
   await assertPublicResearchTarget(parsed);
+  // Research is intentionally limited to public web targets. Never let the
+  // discovery worker become a generic URL fetcher or SSRF primitive.
+  if (parsed.username || parsed.password) throw new Error('DISTRIBUTION_CREDENTIALS_IN_URL_BLOCKED');
+  const hostname = parsed.hostname.toLowerCase();
+  const blockedHosts = new Set(['metadata.google.internal', 'metadata.google', 'instance-data']);
+  if (blockedHosts.has(hostname)) throw new Error('DISTRIBUTION_METADATA_TARGET_BLOCKED');
   return enqueueDistributionJob(pool, 'research_url', origin ? { url: parsed.toString(), origin } : { url: parsed.toString() });
 }
 
 export async function researchUrl(url: string) {
+  if (typeof url !== 'string' || url.length > MAX_RESEARCH_URL_LENGTH) throw new Error('DISTRIBUTION_URL_TOO_LONG');
   const parsed = new URL(url);
   if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('DISTRIBUTION_URL_SCHEME_NOT_ALLOWED');
+  if (parsed.port && parsed.port !== '80' && parsed.port !== '443') throw new Error('DISTRIBUTION_PORT_NOT_ALLOWED');
+  if (parsed.hash) throw new Error('DISTRIBUTION_FRAGMENT_NOT_ALLOWED');
+  if (parsed.username || parsed.password) throw new Error('DISTRIBUTION_CREDENTIALS_IN_URL_BLOCKED');
+  const hostname = parsed.hostname.toLowerCase();
+  if (new Set(['metadata.google.internal', 'metadata.google', 'instance-data']).has(hostname)) throw new Error('DISTRIBUTION_METADATA_TARGET_BLOCKED');
   await assertPublicResearchTarget(parsed);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const response = await fetch(parsed, { signal: controller.signal, redirect: 'manual', headers: { 'user-agent': 'SPR-Distribution-Research/1.0 (+https://www.softwarepassportregistry.com)' } });
+    const response = await fetch(parsed, {
+      signal: controller.signal,
+      redirect: 'manual',
+      credentials: 'omit',
+      referrerPolicy: 'no-referrer',
+      cache: 'no-store',
+      headers: {
+        accept: 'text/html,application/xhtml+xml',
+        'user-agent': 'SPR-Distribution-Research/1.0 (+https://www.softwarepassportregistry.com)',
+      },
+    });
     if (response.status >= 300 && response.status < 400) return { url: parsed.toString(), httpObserved: true, status: response.status, redirected: true, score: null, signals: null, observedAt: new Date().toISOString() };
+    if (response.status < 200 || response.status >= 300) return { url: parsed.toString(), httpObserved: true, status: response.status, score: null, signals: null, observedAt: new Date().toISOString() };
+    const declaredLength = Number(response.headers.get('content-length') ?? '');
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) throw new Error('DISTRIBUTION_RESPONSE_TOO_LARGE');
+    const contentType = (response.headers.get('content-type') ?? '').toLowerCase();
+    if (contentType && !contentType.includes('text/html') && !contentType.includes('application/xhtml+xml')) {
+      return { url: parsed.toString(), httpObserved: true, status: response.status, contentType, score: null, signals: null, observedAt: new Date().toISOString() };
+    }
     const html = await readBoundedBody(response);
-    return { ...extractResearchSignals(parsed, html), status: response.status };
+    return { ...extractResearchSignals(parsed, html), status: response.status, contentType };
   } finally { clearTimeout(timeout); }
 }
 

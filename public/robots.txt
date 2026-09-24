@@ -18,6 +18,7 @@ Allow: /pricing
 Allow: /msp
 Allow: /passport/demo
 Allow: /software
+Allow: /software/
 Allow: /whitepaper
 Allow: /terms
 Allow: /privacy
@@ -51,7 +52,6 @@ Disallow: /savings
 Disallow: /governance
 Disallow: /integrations
 Disallow: /monitoring
-Disallow: /security
 Disallow: /compliance
 Disallow: /agent-trust
 Disallow: /ai-trust-center

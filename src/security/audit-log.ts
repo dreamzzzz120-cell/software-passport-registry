@@ -24,6 +24,33 @@ function canonicalTimestamp(value: string | Date): string {
   return date.toISOString();
 }
 
+const AUDIT_MAX_PAYLOAD_BYTES = 32 * 1024;
+const AUDIT_MAX_DEPTH = 8;
+const AUDIT_SECRET_KEY = /token|secret|password|api[_-]?key|private[_-]?key|credential|authorization|cookie|session|set-cookie|service[_-]?account/i;
+
+function sanitizeAuditValue(value: unknown, depth = 0): unknown {
+  if (depth > AUDIT_MAX_DEPTH) return '[TRUNCATED_DEPTH]';
+  if (typeof value === 'string') return value.length > 4096 ? `${value.slice(0, 4096)}[TRUNCATED]` : value;
+  if (typeof value === 'number' || typeof value === 'boolean' || value === null) return value;
+  if (Array.isArray(value)) return value.slice(0, 256).map(item => sanitizeAuditValue(item, depth + 1));
+  if (typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value as Record<string, unknown>).slice(0, 256)) {
+      out[key] = AUDIT_SECRET_KEY.test(key) ? '[REDACTED]' : sanitizeAuditValue(item, depth + 1);
+    }
+    return out;
+  }
+  return '[UNSUPPORTED_VALUE]';
+}
+
+export function sanitizeAuditPayload(payload: Record<string, unknown>): string {
+  const sanitized = JSON.stringify(sanitizeAuditValue(payload)) ?? '{}';
+  if (Buffer.byteLength(sanitized, 'utf8') > AUDIT_MAX_PAYLOAD_BYTES) {
+    return JSON.stringify({ _audit: 'PAYLOAD_TRUNCATED', sha256: crypto.createHash('sha256').update(sanitized).digest('hex') });
+  }
+  return sanitized;
+}
+
 function computeHash(action: string, timestamp: string | Date, actor: string, payload: string, previousHash: string) {
   return crypto
     .createHash('sha256')
@@ -37,7 +64,7 @@ export async function appendAuditEntry(
   params: { tenantId: string; action: string; actor: string; payload: Record<string, unknown> },
 ) {
   const timestamp = new Date().toISOString();
-  const payloadJson = JSON.stringify(params.payload ?? {});
+  const payloadJson = sanitizeAuditPayload(params.payload ?? {});
   const last = await db.execute(
     sql`SELECT current_hash AS "currentHash" FROM audit_trail WHERE tenant_id = ${params.tenantId} ORDER BY id DESC LIMIT 1`,
   );
@@ -63,7 +90,7 @@ export async function appendAuditEntryViaPool(
   params: { tenantId: string; action: string; actor: string; payload: Record<string, unknown> },
 ) {
   const timestamp = new Date().toISOString();
-  const payloadJson = JSON.stringify(params.payload ?? {});
+  const payloadJson = sanitizeAuditPayload(params.payload ?? {});
   const last = await pool.query(
     'SELECT current_hash AS "currentHash" FROM audit_trail WHERE tenant_id = $1 ORDER BY id DESC LIMIT 1',
     [params.tenantId],
