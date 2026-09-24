@@ -15,10 +15,12 @@ import type { AgentReport } from '../components/FounderAgentsPanel';
 export type Connection = { key: string; name: string; status: 'ok' | 'error' | 'not_configured'; detail: string; lastChecked: string };
 export type ConnectionGuide = { key: string; name: string; purpose: string; probe: string; statusMeaning: Record<Connection['status'], string>; configuredAt: string; steps: string[]; settings: { name: string; secret: boolean; set: boolean; purpose: string; whereToGet: string }[] };
 export type CommandCenter = { connections: Connection[]; connectionGuides: Record<string, ConnectionGuide>; businessMetrics: { organizationCount: number | null; userCount: number | null; mrrCents: number | null; stripeCustomerCount: number | null; activeSubscriptionCount: number | null; successfulPaymentCount30d: number | null; successfulPaymentAmount30dCents: number | null; ciStatus: string }; generatedAt: string };
+export type FounderActivity = { id: string; category: 'agent_job' | 'distribution_job' | 'lead' | 'signup' | 'crawler'; label: string; state: string | null; occurredAt: string; source: string };
 export type Overview = {
   pulse: { database: { ok: boolean; latencyMs: number | null }; tenantRls: boolean | null; runtimeRole: string | null; leastPrivilege: boolean | null; apiUptimeSeconds: number; worker: { lastSeenAt: string | null; lastSeenSource: string | null }; scanQueue: { pending: number | null; running: number | null; failed24h: number | null }; distributionQueue: { queued: number | null; running: number | null; deadLetter: number | null } };
   funnel: { windowDays: number; pageViews: number | null; visitors: number | null; freeReviewsCompleted: number | null; freeReviewsFailed: number | null; leads: number | null; leadsQualified: number | null; contacts: number | null; messagesSent: number | null; signups: number | null; organizations: number | null };
-  traffic: { activeEvents: number | null; activeSessions: number | null; visitors24h: number | null; pageViews24h: number | null; visitors7d: number | null; pageViews7d: number | null };
+  traffic: { activeEvents: number | null; activeSessions: number | null; visitors24h: number | null; pageViews24h: number | null; visitors7d: number | null; pageViews7d: number | null; topPages: { path: string; views: number }[] | null };
+  recentActivity: FounderActivity[] | null;
   generatedAt: string;
 };
 export type FounderData = { overview: Overview | null; commandCenter: CommandCenter | null; agents: AgentReport[] | null; errors: string[]; loadedAt: string | null; loading: boolean };
@@ -27,7 +29,24 @@ const EMPTY: FounderData = { overview: null, commandCenter: null, agents: null, 
 let current: FounderData = EMPTY;
 let inflight: Promise<void> | null = null;
 const listeners = new Set<(d: FounderData) => void>();
+const AUTO_REFRESH_MS = 15_000;
+let autoRefreshTimer: ReturnType<typeof setInterval> | null = null;
+let visibilityBound = false;
 function emit() { for (const l of listeners) l(current); }
+function onVisibilityChange() {
+  if (typeof document !== 'undefined' && document.visibilityState === 'visible') void loadFounderData(true);
+}
+function startAutoRefresh() {
+  if (typeof window === 'undefined' || autoRefreshTimer) return;
+  autoRefreshTimer = window.setInterval(() => {
+    if (document.visibilityState === 'visible') void loadFounderData(true);
+  }, AUTO_REFRESH_MS);
+  if (!visibilityBound) { document.addEventListener('visibilitychange', onVisibilityChange); visibilityBound = true; }
+}
+function stopAutoRefresh() {
+  if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
+  if (visibilityBound && typeof document !== 'undefined') { document.removeEventListener('visibilitychange', onVisibilityChange); visibilityBound = false; }
+}
 
 async function getJson<T>(path: string, errors: string[]): Promise<T | null> {
   try {
@@ -38,7 +57,9 @@ async function getJson<T>(path: string, errors: string[]): Promise<T | null> {
 }
 
 export function loadFounderData(force = false): Promise<void> {
-  if (inflight && !force) return inflight;
+  if (inflight) return inflight;
+  const loadedMs = current.loadedAt ? new Date(current.loadedAt).getTime() : 0;
+  if (!force && loadedMs && Number.isFinite(loadedMs) && Date.now() - loadedMs < 5_000) return Promise.resolve();
   current = { ...current, loading: true }; emit();
   inflight = (async () => {
     const errors: string[] = [];
@@ -57,8 +78,9 @@ export function useFounderData(): FounderData & { refresh: () => Promise<void> }
   const [data, setData] = useState<FounderData>(current);
   useEffect(() => {
     listeners.add(setData);
+    startAutoRefresh();
     if (!current.loadedAt && !inflight) void loadFounderData();
-    return () => { listeners.delete(setData); };
+    return () => { listeners.delete(setData); if (listeners.size === 0) stopAutoRefresh(); };
   }, []);
   return { ...data, refresh: () => loadFounderData(true) };
 }
