@@ -162,8 +162,9 @@ export async function checkStripeAndMrr(): Promise<{ connection: ConnectionStatu
 // (auth.admin.listUsers, service-role key), so the label now says what it
 // actually reached.
 export async function checkSupabaseAuth(): Promise<ConnectionStatus> {
-  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return { key: 'supabase_auth', name: 'Supabase Auth', status: 'not_configured', detail: 'SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not set', lastChecked: now() };
+  const adminKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || process.env.SUPABASE_SECRET_KEY?.trim();
+  if (!process.env.SUPABASE_URL?.trim() || !adminKey) {
+    return { key: 'supabase_auth', name: 'Supabase Auth', status: 'not_configured', detail: 'SUPABASE_URL, or SUPABASE_SERVICE_ROLE_KEY / SUPABASE_SECRET_KEY, is not set', lastChecked: now() };
   }
   try {
     const { adminAuth } = await import('../../supabase-admin.ts');

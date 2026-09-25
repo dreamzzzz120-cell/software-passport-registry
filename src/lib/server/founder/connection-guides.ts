@@ -148,7 +148,7 @@ export function connectionGuides(): Record<ConnectionKey, ConnectionGuide> {
       ],
       settings: [
         { name: 'SUPABASE_URL', secret: false, set: present(process.env.SUPABASE_URL), purpose: 'The Supabase project URL.', whereToGet: 'Supabase → Project Settings → API keys → Project URL' },
-        { name: 'SUPABASE_SERVICE_ROLE_KEY', secret: true, set: present(process.env.SUPABASE_SERVICE_ROLE_KEY), purpose: 'Admin operations on users (server only).', whereToGet: 'Supabase → Project Settings → API keys → Secret keys' },
+        { name: 'SUPABASE_SERVICE_ROLE_KEY', secret: true, set: present(process.env.SUPABASE_SERVICE_ROLE_KEY) || present(process.env.SUPABASE_SECRET_KEY), purpose: 'Admin operations on users (server only). SUPABASE_SECRET_KEY (new-style sb_secret_ key) is accepted instead.', whereToGet: 'Supabase → Project Settings → API keys → Secret keys' },
         { name: 'SUPABASE_PUBLISHABLE_KEY', secret: false, set: present(process.env.SUPABASE_PUBLISHABLE_KEY) || present(process.env.SUPABASE_ANON_KEY), purpose: 'Verifies user access tokens on API requests.', whereToGet: 'Supabase → Project Settings → API keys → Publishable keys' },
       ],
     },

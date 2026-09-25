@@ -82,7 +82,7 @@ export default function FounderDistributionOpportunities() {
         ))}
       </div>
 
-      <p className="mt-4 border-t border-[var(--spr-border)] pt-3 text-[11px] text-[var(--spr-text-muted)]">Evidence policy: scores are heuristic observations from stored job results. Review the source evidence before contacting anyone. SPR does not automatically send unsolicited outreach.</p>
+      <p className="mt-4 border-t border-[var(--spr-border)] pt-3 text-[11px] text-[var(--spr-text-muted)]">Evidence policy: scores are heuristic observations from stored job results. When autonomous outreach is on, the engine emails public role addresses (info@, sales@) found on researched sites, one intro plus follow-ups, each with an opt-out link. Pause it from the Growth Hub.</p>
     </section>
   );
 }

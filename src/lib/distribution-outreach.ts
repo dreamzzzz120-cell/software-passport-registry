@@ -63,12 +63,26 @@ export function extractPublicRoleEmails(html: string) {
   return [...found].slice(0, 5);
 }
 
-function makeCopy(company: string, evidence: Record<string, unknown>, followup: boolean) {
+// The offer an MSP can resell: a white-label report on one of THEIR CLIENTS'
+// software, plus a short local walkthrough. The earlier copy asked MSPs to
+// review their own repo, which isn't what they buy (22 sends, 0 replies).
+// Every claim here is a product capability; nothing about the recipient is
+// asserted beyond the public signals research actually observed.
+export function makeCopy(company: string, evidence: Record<string, unknown>, followup: boolean) {
   const signals = evidence.signals && typeof evidence.signals === 'object' ? evidence.signals as Record<string, unknown> : {};
-  const focus = signals.compliance ? 'client software and vendor risk evidence' : signals.cybersecurity ? 'software security and vendor risk' : 'software trust and verification';
-  const greeting = company ? `Hi ${company} team,` : 'Hi there,';
-  if (followup) return { subject: `Following up — ${focus}`, intro: [greeting, `I wanted to follow up on my note about SPR for ${focus}. It gives MSPs an evidence-first way to verify software, document findings, and produce client-ready trust reports.`, 'If this is relevant, I can point you straight to the free repo review. If not, no worries.'], cta: { label: 'Run a free repo review', url: `${PUBLIC_ORIGIN}/` } };
-  return { subject: `Software trust for ${company || 'your MSP clients'}`, intro: [greeting, `I came across your business while researching MSPs and IT/security providers. SPR is built for ${focus}, with the evidence retained behind every result.`, 'There is a free repo review so you can see the workflow before buying anything.'], cta: { label: 'Run a free repo review', url: `${PUBLIC_ORIGIN}/` } };
+  const name = company.trim();
+  const greeting = name ? `Hi ${name} team,` : 'Hi there,';
+  const theirClients = name ? `${name}'s clients` : 'your clients';
+  const fit = signals.compliance
+    ? 'Your site mentions compliance work, so this gives you the software evidence auditors and vendor-risk reviews ask for.'
+    : signals.cybersecurity
+      ? 'Your site mentions security services, so this adds software supply-chain evidence to what you already sell.'
+      : 'It gives you a concrete, repeatable software-risk deliverable for every client.';
+  const cta = { label: 'See how SPR works', url: `${PUBLIC_ORIGIN}/` };
+  if (followup) {
+    return { subject: `Free client software report for ${name || 'your MSP'}`, intro: [greeting, `Following up on my earlier note. The offer stands: I'll run one free software risk report on a client stack you choose, white-labelled with your logo, and walk you through it in 15 minutes.`, 'Reply to this email to set it up. If it isn\'t a fit, the opt-out link below stops any further messages.'], cta };
+  }
+  return { subject: `White-label software risk reports for ${theirClients}`, intro: [greeting, 'I\'m Keith, founder of Software Passport Registry, a software-risk company in Kelowna, BC. SPR scans a client\'s code and applications, builds the software bill of materials, checks every component against known vulnerabilities, and produces a report under your logo that you can hand to the client.', fit, 'I\'ll run one free report on a client stack of your choice and walk you through it in 15 minutes, by call or in person. Reply to this email to set it up.'], cta };
 }
 
 async function withTenant<T>(fn: (client: any) => Promise<T>) {
