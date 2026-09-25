@@ -22,6 +22,19 @@ function configuredDiscoveryProvider(): DiscoveryProvider {
   return provider;
 }
 
+// The same URL is re-researched on every sweep, so without this the queue
+// filled with one company repeated 100 times. Rows arrive best-first; keep the
+// first per URL (or lead), dropping the rest.
+export function firstPerCompany() {
+  const seen = new Set<string>();
+  return (item: { url: string | null; leadId: string | null; jobId: string }) => {
+    const key = item.url ? `url:${item.url.toLowerCase().replace(/\/+$/, '')}` : item.leadId ? `lead:${item.leadId}` : `job:${item.jobId}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  };
+}
+
 export function createDistributionRouter() {
   const router = Router();
 
@@ -57,7 +70,7 @@ export function createDistributionRouter() {
     catch (error) { return next(error); }
   });
   router.get('/founder/distribution/opportunities', ...founderOnly, async (_req: AuthenticatedRequest, res, next) => {
-    try { const result = await db.execute(sql`SELECT id, kind, result, created_at, updated_at FROM distribution_jobs WHERE tenant_id = ${DISTRIBUTION_TENANT_ID} AND status = 'succeeded' AND kind IN ('research_url', 'qualify_lead') ORDER BY updated_at DESC LIMIT ${MAX_OPPORTUNITIES * 3}`); const rows = (result as any).rows ?? []; const opportunities = rows.map((row: any) => { const value = row.result && typeof row.result === 'object' ? row.result : {}; const score = typeof value.score === 'number' ? value.score : null; const signals = value.signals && typeof value.signals === 'object' ? value.signals : null; return { jobId: String(row.id), kind: String(row.kind), score, company: typeof value.company === 'string' && value.company.trim() ? value.company.trim() : null, url: typeof value.url === 'string' && value.url.trim() ? value.url.trim() : null, leadId: typeof value.leadId === 'string' ? value.leadId : null, businessEmail: typeof value.businessEmail === 'boolean' ? value.businessEmail : null, publicRoleEmails: Array.isArray(value.publicRoleEmails) ? value.publicRoleEmails : [], signals, observedAt: typeof value.observedAt === 'string' ? value.observedAt : null, jobUpdatedAt: row.updated_at }; }).filter((item: any) => item.score !== null).sort((a: any,b: any) => (b.score ?? -1)-(a.score ?? -1) || String(b.jobUpdatedAt).localeCompare(String(a.jobUpdatedAt))).slice(0,MAX_OPPORTUNITIES); return res.json({ opportunities, generatedAt: new Date().toISOString(), evidencePolicy: 'Scores are heuristic observations from stored job results; review source evidence before contacting.' }); }
+    try { const result = await db.execute(sql`SELECT id, kind, result, created_at, updated_at FROM distribution_jobs WHERE tenant_id = ${DISTRIBUTION_TENANT_ID} AND status = 'succeeded' AND kind IN ('research_url', 'qualify_lead') ORDER BY updated_at DESC LIMIT ${MAX_OPPORTUNITIES * 3}`); const rows = (result as any).rows ?? []; const opportunities = rows.map((row: any) => { const value = row.result && typeof row.result === 'object' ? row.result : {}; const score = typeof value.score === 'number' ? value.score : null; const signals = value.signals && typeof value.signals === 'object' ? value.signals : null; return { jobId: String(row.id), kind: String(row.kind), score, company: typeof value.company === 'string' && value.company.trim() ? value.company.trim() : null, url: typeof value.url === 'string' && value.url.trim() ? value.url.trim() : null, leadId: typeof value.leadId === 'string' ? value.leadId : null, businessEmail: typeof value.businessEmail === 'boolean' ? value.businessEmail : null, publicRoleEmails: Array.isArray(value.publicRoleEmails) ? value.publicRoleEmails : [], signals, observedAt: typeof value.observedAt === 'string' ? value.observedAt : null, jobUpdatedAt: row.updated_at }; }).filter((item: any) => item.score !== null).sort((a: any,b: any) => (b.score ?? -1)-(a.score ?? -1) || String(b.jobUpdatedAt).localeCompare(String(a.jobUpdatedAt))).filter(firstPerCompany()).slice(0,MAX_OPPORTUNITIES); return res.json({ opportunities, generatedAt: new Date().toISOString(), evidencePolicy: 'Scores are heuristic observations from stored job results; review source evidence before contacting.' }); }
     catch (error) { return next(error); }
   });
   return router;

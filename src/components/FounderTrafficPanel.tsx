@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Activity, RefreshCw } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
 
@@ -26,8 +26,14 @@ export default function FounderTrafficPanel() {
   const [data, setData] = useState<TrafficData | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
 
+  const hasData = useRef(false);
+
+  // Stable across renders. It used to depend on `data`, so every successful
+  // fetch rebuilt `load`, re-ran the effect below and fetched again -- a tight
+  // loop (~5 requests/s) that exhausted the founder rate-limit budget and
+  // 429'd every other founder panel.
   const load = useCallback(async () => {
-    setState((prev) => (data ? prev : 'loading'));
+    if (!hasData.current) setState('loading');
     try {
       const res = await apiFetch('/api/founder/traffic');
       if (!res.ok) {
@@ -45,11 +51,12 @@ export default function FounderTrafficPanel() {
         recent: Array.isArray(next.recent) ? next.recent : [],
         generatedAt: next.generatedAt,
       });
+      hasData.current = true;
       setState('ready');
     } catch {
       setState('error');
     }
-  }, [data]);
+  }, []);
 
   useEffect(() => {
     void load();
