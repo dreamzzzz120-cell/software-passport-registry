@@ -38,7 +38,7 @@ describe('completed public scan lineage', () => {
         ('j1','tenant-free-review-system','Acme','One',repeat('a',40),'2026-09-25T10:00:00Z','main'),
         ('j2','tenant-free-review-system','Acme','Two',repeat('b',40),'2026-09-25T11:00:00Z','main');
     `);
-    const pool = { connect: async () => ({ query: (q: string) => db.query(q), release: () => undefined }) };
+    const pool = { connect: async () => ({ query: async (q: string) => { const result = await db.query(q); return { ...result, rowCount: result.affectedRows }; }, release: () => undefined }) };
     try {
       expect(await reconcileRegistryLineage(pool)).toEqual({ identities: 1, observations: 2 });
       expect(await reconcileRegistryLineage(pool)).toEqual({ identities: 0, observations: 0 });
