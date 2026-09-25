@@ -498,6 +498,51 @@ export function normalizeCycloneDx(document: any) {
   if (components.length === 0) throw new Error('SBOM_EMPTY'); return components;
 }
 
+async function recordPublicRegistryObservation(pool: Pool, job: ClaimedJob, source: any, commitSha: string, acquiredAt: Date, defaultBranch: string | null) {
+  if (job.tenant_id !== 'tenant-free-review-system') return;
+  const owner = String(source.repository_owner);
+  const repository = String(source.repository_name);
+  const canonicalKey = `github:${owner.toLowerCase()}/${repository.toLowerCase()}`;
+  const locator = `https://github.com/${owner}/${repository}`;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const identity = (await client.query<{ id: string }>(`
+      INSERT INTO software_registry_identities
+        (id, provider, canonical_key, canonical_name, repository_owner, repository_name,
+         canonical_url, first_observed_at, last_observed_at, latest_commit_sha,
+         default_branch, next_refresh_at, observation_count)
+      VALUES ('reg_' || md5($1), 'github', $1, $2, $3, $4, $5, $6, $6, $7, $8, $6::timestamptz + INTERVAL '30 days', 0)
+      ON CONFLICT (provider, canonical_key) DO UPDATE SET
+        last_observed_at = GREATEST(software_registry_identities.last_observed_at, EXCLUDED.last_observed_at),
+        latest_commit_sha = CASE WHEN EXCLUDED.last_observed_at >= software_registry_identities.last_observed_at
+          THEN EXCLUDED.latest_commit_sha ELSE software_registry_identities.latest_commit_sha END,
+        updated_at = CURRENT_TIMESTAMP
+      RETURNING id
+    `, [canonicalKey, `${owner}/${repository}`, owner, repository, locator, acquiredAt, commitSha, defaultBranch])).rows[0];
+    await client.query(`
+      INSERT INTO software_registry_observations
+        (id, identity_id, source_type, source_locator, observed_at, commit_sha, payload_hash, outcome, evidence)
+      VALUES ('regobs_' || md5('spr-free-review:' || $1 || ':' || $2), $3, 'spr-free-review',
+        $4, $5, $2, md5('spr-free-review:' || $1 || ':' || $2), 'observed',
+        jsonb_build_object('passportId', $1, 'commitSha', $2, 'defaultBranch', $6::text, 'observedAt', $5::timestamptz))
+      ON CONFLICT DO NOTHING
+    `, [job.passport_id, commitSha, identity.id, locator, acquiredAt, defaultBranch]);
+    await client.query(`
+      UPDATE software_registry_identities
+      SET observation_count = (SELECT count(*)::int FROM software_registry_observations WHERE identity_id = $1),
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = $1
+    `, [identity.id]);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function processRepositoryJob(pool: Pool, job: ClaimedJob) {
   const source = (await pool.query('SELECT * FROM repository_scan_sources WHERE job_id = $1 AND tenant_id = $2', [job.id, job.tenant_id])).rows[0];
   if (!source) throw new Error('REPOSITORY_CONNECTION_NOT_FOUND');
@@ -618,6 +663,8 @@ async function processRepositoryJob(pool: Pool, job: ClaimedJob) {
       if (ledger) await recordPassportAssociation(pool, job.tenant_id, ledger.scanId, { ok: false, failure: reason });
       else throw error;
     }
+    if (passportAssociated) await recordPublicRegistryObservation(pool, job, source, commitSha, acquiredAt, descriptor.defaultBranch);
+    mark('registry_observation_recorded');
     mark('osv_query_started', { componentCount: osvComponents.length });
     // OSV reads the passport SBOM; when the passport could not be written the
     // components this job generated are queried directly so the dependency
