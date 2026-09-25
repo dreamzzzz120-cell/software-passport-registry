@@ -5,11 +5,11 @@
  * Provisions the least-privileged runtime roles without creating a password
  * drift between PostgreSQL and the connection URLs used by the services.
  *
- * Required env vars: DATABASE_URL and APP_DATABASE_URL. If
- * WORKER_DATABASE_URL is configured, its password is synchronized to the
- * worker role as well. The runtime URLs remain the source of truth for their
- * corresponding service credentials; this prevents every release from
- * rotating a role password behind a static Railway connection URL.
+ * Required env vars: DATABASE_URL and the runtime URL for this process role.
+ * The app release provisions spr_app_runtime from APP_DATABASE_URL; the worker
+ * release provisions spr_worker_runtime from WORKER_DATABASE_URL. Each service
+ * owns its own credential, so an app deploy cannot rotate the worker's role
+ * behind the worker's configured connection URL.
  */
 
 import { Pool } from 'pg';
@@ -42,9 +42,10 @@ async function main() {
   const databaseUrl = process.env.DATABASE_URL?.trim();
   if (!databaseUrl) throw new Error('DATABASE_URL is required (must be the owner/migrator connection).');
 
-  const appPassword = passwordFromUrl(process.env.APP_DATABASE_URL, 'APP_DATABASE_URL');
-  const workerUrl = process.env.WORKER_DATABASE_URL?.trim();
-  const workerPassword = workerUrl ? passwordFromUrl(workerUrl, 'WORKER_DATABASE_URL') : undefined;
+  const isWorker = process.env.PROCESS_ROLE?.trim() === 'worker';
+  const runtimeRole = isWorker ? 'spr_worker_runtime' : 'spr_app_runtime';
+  const runtimeUrlName = isWorker ? 'WORKER_DATABASE_URL' : 'APP_DATABASE_URL';
+  const runtimePassword = passwordFromUrl(process.env[runtimeUrlName], runtimeUrlName);
 
   const pool = new Pool({ connectionString: databaseUrl });
   try {
@@ -52,13 +53,11 @@ async function main() {
       `SELECT rolname FROM pg_roles WHERE rolname IN ('spr_app_runtime', 'spr_worker_runtime')`,
     );
     const roleNames = new Set(roles.rows.map((row) => row.rolname));
-    if (!roleNames.has('spr_app_runtime')) throw new Error('Role spr_app_runtime does not exist yet; run migrations first.');
-    if (!roleNames.has('spr_worker_runtime')) throw new Error('Role spr_worker_runtime does not exist yet; run migrations first.');
+    if (!roleNames.has(runtimeRole)) throw new Error(`Role ${runtimeRole} does not exist yet; run migrations first.`);
 
-    await setRolePassword(pool, 'spr_app_runtime', appPassword);
-    if (workerPassword) await setRolePassword(pool, 'spr_worker_runtime', workerPassword);
+    await setRolePassword(pool, runtimeRole, runtimePassword);
 
-    console.log(`[ProvisionRuntimeRoles] Runtime credentials synchronized for spr_app_runtime${workerPassword ? ' and spr_worker_runtime' : ''}.`);
+    console.log(`[ProvisionRuntimeRoles] Runtime credentials synchronized for ${runtimeRole}.`);
   } finally {
     await pool.end();
   }
