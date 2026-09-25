@@ -93,11 +93,26 @@ async function findingDetails(scopedDb: any, passportId: string, limit = 25) {
 const STYLE = `:root{--ink:#111A24;--muted:#5C6670;--line:#D9DED9;--bg:#F6F7F4;--surface:#fff;--accent:#1F5F7A;--crit:#9E2B25;--high:#B7791F;--ok:#2E7D4F}@media(prefers-color-scheme:dark){:root{--ink:#E6EAEE;--muted:#97A2AB;--line:#263038;--bg:#0F1519;--surface:#161E25;--accent:#6FB3D2;--crit:#F08A80;--high:#E0B25C;--ok:#6CC594}}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;padding:24px 16px 64px}main{max-width:900px;margin:0 auto}h1{font-size:28px;margin:0 0 6px}h2{font-size:17px;margin:28px 0 8px}p{margin:0 0 8px}a{color:var(--accent)}.k{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:16px 0}.tile{background:var(--surface);border:1px solid var(--line);padding:12px 14px}.tile b{font-size:22px;font-variant-numeric:tabular-nums;display:block}table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--line);font-variant-numeric:tabular-nums}th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:top}th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}.sev-critical{color:var(--crit);font-weight:600}.sev-high{color:var(--high);font-weight:600}.note{border:1px solid var(--line);background:var(--surface);padding:12px 14px;font-size:13px;color:var(--muted)}.cta{display:inline-block;margin-top:12px;padding:8px 14px;background:var(--accent);color:#fff;text-decoration:none;font-weight:600;font-size:14px}`;
 
 function layout(title: string, description: string, canonical: string, body: string): string {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><meta name="description" content="${escapeHtml(description)}"><link rel="canonical" href="${escapeHtml(canonical)}"><meta property="og:title" content="${escapeHtml(title)}"><meta property="og:description" content="${escapeHtml(description)}"><style>${STYLE}</style></head><body><main>${body}<p class="note" style="margin-top:32px">Software Passport Registry Ltd. Every number on this page was observed by SPR's own scan of the public repository at the commit shown; nothing is estimated or vendor-supplied. Absence of a finding is not proof of safety. <a href="${PUBLIC_ORIGIN}/terms">Terms</a> · <a href="${PUBLIC_ORIGIN}/privacy">Privacy</a></p></main></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><meta name="description" content="${escapeHtml(description)}"><link rel="canonical" href="${escapeHtml(canonical)}"><meta property="og:title" content="${escapeHtml(title)}"><meta property="og:description" content="${escapeHtml(description)}"><style>${STYLE}</style><script src="/software/track.js" defer></script></head><body><main>${body}<p class="note" style="margin-top:32px">Software Passport Registry Ltd. Every number on this page was observed by SPR's own scan of the public repository at the commit shown; nothing is estimated or vendor-supplied. Absence of a finding is not proof of safety. <a href="${PUBLIC_ORIGIN}/terms">Terms</a> · <a href="${PUBLIC_ORIGIN}/privacy">Privacy</a></p></main></body></html>`;
 }
+
+
+// Page-view beacon for these server-rendered pages. The SPA records views via
+// src/analytics.ts, but /software/* never loads the SPA bundle, so the pages
+// carrying most of the site's organic traffic recorded nothing. Served as a
+// same-origin file so it passes script-src 'self' on both Vercel and Railway
+// without a nonce, and uses the SPA's storage key so one visitor stays one
+// session across both. Crawlers that don't execute JS are excluded by design.
+export const TRACKER_JS = `(function(){try{var K='spr-analytics-session',R=/^[A-Za-z0-9_-]{16,80}$/,s;try{s=localStorage.getItem(K);if(!s||!R.test(s)){s=(crypto.randomUUID?crypto.randomUUID().replace(/-/g,''):Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2))+Date.now().toString(36);s=s.replace(/[^A-Za-z0-9_-]/g,'').slice(0,48);localStorage.setItem(K,s)}}catch(e){s=(Date.now().toString(36)+Math.random().toString(36).slice(2)).replace(/[^A-Za-z0-9_-]/g,'').slice(0,32);while(s.length<16)s+='0'}var p=location.pathname+location.search;if(!p||p.length>500)return;var w=innerWidth,d=w<768?'mobile':w<1024?'tablet':'desktop';var b=JSON.stringify({sessionId:s,path:p,referrer:document.referrer||null,deviceType:d});if(navigator.sendBeacon&&navigator.sendBeacon('/api/traffic/event',new Blob([b],{type:'application/json'})))return;fetch('/api/traffic/event',{method:'POST',headers:{'content-type':'application/json'},body:b,keepalive:true}).catch(function(){})}catch(e){}})();`;
 
 export function createSoftwareRegistryRouter() {
   const router = Router();
+
+  router.get('/track.js', (_req: Request, res: Response) => {
+    res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    return res.send(TRACKER_JS);
+  });
 
   router.get('/sitemap.xml', async (_req: Request, res: Response, next) => {
     try {
