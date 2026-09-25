@@ -61,7 +61,7 @@ async function listCompleted(scopedDb: any, limit = 5000, offset = 0, only?: { o
         AND EXISTS (SELECT 1 FROM agent_jobs sj WHERE sj.tenant_id = j.tenant_id AND sj.passport_id = j.passport_id AND sj.job_type = 'repository_security_scan' AND sj.status = 'Completed')${ownerFilter}
     )
     SELECT c.owner, c.repository, c.passport_id AS "passportId", c.commit_sha AS "commitSha", c.acquired_at AS "acquiredAt", c.default_branch AS "defaultBranch", p.sbom,
-           COALESCE(r.identity_status, 'observed') AS "identityStatus", r.last_observed_at AS "lastObservedAt", r.next_refresh_at AS "nextRefreshAt"
+           COALESCE(r.identity_status, 'unlinked') AS "identityStatus", r.last_observed_at AS "lastObservedAt", r.next_refresh_at AS "nextRefreshAt"
     FROM completed c JOIN passports p ON p.id = c.passport_id AND p.tenant_id = ${FREE_REVIEW_TENANT_ID}
     LEFT JOIN software_registry_identities r ON r.provider = 'github'
       AND lower(r.repository_owner) = lower(c.owner) AND lower(r.repository_name) = lower(c.repository)
