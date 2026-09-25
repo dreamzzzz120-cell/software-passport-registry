@@ -5,7 +5,7 @@ import { sql } from 'drizzle-orm';
 import { appPool, db } from '../db/index.ts';
 import { requireAuth, requireFounder, requireRole, type AuthenticatedRequest } from '../middleware/security.ts';
 import { DISTRIBUTION_TENANT_ID, enqueueResearchUrl, enqueueDistributionJob } from '../lib/distribution-engine.ts';
-import { dedupeDiscoveryResults, type DiscoveryProvider } from '../lib/distribution-discovery.ts';
+import { dedupeDiscoveryResults, resolveDiscoveryProvider, type DiscoveryProvider } from '../lib/distribution-discovery.ts';
 import { unsubscribeContact, autonomousOutreachEnabled } from '../lib/distribution-outreach.ts';
 
 const limiter = rateLimit({ windowMs: 60_000, limit: 30, standardHeaders: 'draft-7', legacyHeaders: false, validate: { trustProxy: false } });
@@ -17,25 +17,9 @@ const MAX_BATCH = 100;
 const MAX_OPPORTUNITIES = 100;
 
 function configuredDiscoveryProvider(): DiscoveryProvider {
-  const endpoint = process.env.DISTRIBUTION_DISCOVERY_PROVIDER_URL?.trim();
-  if (!endpoint) throw new Error('DISTRIBUTION_DISCOVERY_PROVIDER_NOT_CONFIGURED');
-  const parsed = new URL(endpoint);
-  if (!['https:', 'http:'].includes(parsed.protocol)) throw new Error('DISTRIBUTION_DISCOVERY_PROVIDER_SCHEME_NOT_ALLOWED');
-  return { name: 'configured-http-provider', async discover(query, limit) {
-    const target = new URL(parsed.toString()); target.searchParams.set('q', query); target.searchParams.set('limit', String(limit));
-    const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 8_000);
-    try {
-      const response = await fetch(target, { signal: controller.signal, redirect: 'manual', headers: { accept: 'application/json', 'user-agent': 'SPR-Distribution-Discovery/1.0 (+https://www.softwarepassportregistry.com)' } });
-      if (!response.ok) throw new Error(`DISTRIBUTION_DISCOVERY_PROVIDER_HTTP_${response.status}`);
-      const data: unknown = await response.json();
-      const rows = data && typeof data === 'object' && Array.isArray((data as { results?: unknown }).results) ? (data as { results: unknown[] }).results : [];
-      return rows.slice(0, limit).flatMap((row) => {
-        if (!row || typeof row !== 'object' || typeof (row as { url?: unknown }).url !== 'string') return [];
-        try { const url = new URL((row as { url: string }).url); if (!['http:','https:'].includes(url.protocol)) return []; return [{ url: url.toString(), title: typeof (row as { title?: unknown }).title === 'string' ? (row as { title: string }).title.slice(0,500) : undefined, source: this.name, discoveredAt: new Date().toISOString() }]; }
-        catch { return []; }
-      });
-    } finally { clearTimeout(timeout); }
-  } };
+  const provider = resolveDiscoveryProvider();
+  if (!provider) throw new Error('DISTRIBUTION_DISCOVERY_PROVIDER_NOT_CONFIGURED');
+  return provider;
 }
 
 export function createDistributionRouter() {

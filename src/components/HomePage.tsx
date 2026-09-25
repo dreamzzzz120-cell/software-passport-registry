@@ -1,6 +1,5 @@
-import { ArrowRight, ExternalLink } from 'lucide-react';
+import { ArrowRight, CheckCircle2 } from 'lucide-react';
 import LegalFooterLinks from './legal/LegalFooterLinks';
-import UniversalIntakeView from './UniversalIntakeView';
 
 interface Props {
   onCreatePassport: () => void;
@@ -8,104 +7,143 @@ interface Props {
   onViewSamplePassport: () => void;
 }
 
+// One audience (MSPs), one offer (a free report on one repository), one
+// primary action (Run a Free Review). Everything else on the page exists to
+// get a visitor to that button.
+
+// What an MSP's clients are starting to ask, and what the report answers.
 const BUYER_QUESTIONS = [
-  'Can we verify what we are buying?',
-  'Has this software changed since the last review?',
-  'Which evidence supports this risk assessment?',
-  'What do we actually know about this vendor?',
+  'What open-source components are inside the software we run?',
+  'Do any of them have known vulnerabilities right now?',
+  'Can you show us an SBOM for this application?',
+  'Has anything changed since the last review?',
   'What remains UNKNOWN?',
 ];
 
-const AUDIENCES = [
-  { who: 'Security & IT teams', job: 'Decide whether software is safe to approve, with the evidence attached.' },
-  { who: 'Procurement & vendor risk', job: 'Replace a questionnaire answer with an observation you can check.' },
-  { who: 'MSPs', job: 'Assess software across many client environments from one place.' },
-  { who: 'Software buyers', job: 'Understand what a supplier can and cannot demonstrate.' },
-  { who: 'Developers & software owners', job: 'Show customers what your release actually proves.' },
+const STEPS = [
+  { n: '1', title: 'Paste a GitHub repository', body: 'Any public repo one of your clients depends on. No account, no install.' },
+  { n: '2', title: 'SPR scans it', body: 'Builds an SBOM of its dependencies and checks every component against the OSV vulnerability database.' },
+  { n: '3', title: 'Download the PDF', body: 'A report you can put in front of a client: components, known vulnerabilities, and what could not be verified.' },
 ];
 
-const OUTPUTS = [
-  { title: 'Software Passport', body: 'A durable identity and evidence record for one software asset at one exact version.' },
-  { title: 'Evidence Explorer', body: 'Inspect the observations behind a result — source, timestamp and content hash.' },
-  { title: 'Decision & trust state', body: 'What the evidence supports, what it does not, and the reason codes for both.' },
-  { title: 'Continuous observation', body: 'Re-observe over time so an old review is not treated as permanent truth.' },
+const REPORT_CONTENTS = [
+  'Software Bill of Materials (SBOM) — every dependency observed',
+  'Known vulnerabilities matched from OSV, with severity',
+  'Evidence status for each finding: verified, observed or UNKNOWN',
+  'Timestamp and source for everything in the report',
 ];
 
-const INFRASTRUCTURE_STEPS: { n: string; title: string; description: string }[] = [
-  { n: '01', title: 'Identity', description: 'Establish what a piece of software actually is — its name, version, publisher, and release.' },
-  { n: '02', title: 'Evidence', description: 'Collect observable information: SBOMs, scan results, attestations, repository signals, policies and documents.' },
-  { n: '03', title: 'Verification', description: 'Independently re-check what can be verified. Self-reported claims are confirmed, not assumed.' },
-  { n: '04', title: 'Trust State', description: 'Turn available evidence into a current, explainable state — never a fabricated conclusion.' },
-  { n: '05', title: 'Continuous Observation', description: 'Track what changes over time, so the trust state stays current rather than static.' },
+const PAID_ADDS = [
+  'Your logo and colours on every report (white-label)',
+  'Organise reports by client and re-scan on a schedule',
+  'Alerts when a new vulnerability hits a client’s software',
+  'ConnectWise PSA tickets filed automatically',
 ];
 
-export default function HomePage({ onCreatePassport, onExploreTrustNetwork, onViewSamplePassport }: Props) {
+function PrimaryCta({ onClick, className = '' }: { onClick: () => void; className?: string }) {
   return (
-    <div className="min-h-screen bg-[var(--spr-surface)] text-[#cccccc]">
-      <section className="mx-auto flex max-w-7xl flex-col items-center gap-14 px-6 py-20 lg:flex-row lg:items-center lg:py-28">
-        <div className="max-w-2xl">
-          <img src="/brand/spr-logo.jpg" alt="Software Passport Registry" className="mb-6 h-24 w-auto drop-shadow-[0_4px_20px_rgba(0,0,0,0.35)]" />
-          <div className="mb-5 flex flex-wrap items-center gap-3">
-            <span className="text-[11px] font-bold uppercase tracking-[.22em] text-[var(--spr-highlight)]">Software Trust Infrastructure</span>
-            <span className="rounded-full border border-[var(--spr-amber)]/40 bg-[var(--spr-amber)]/10 px-2.5 py-1 text-[12px] font-bold uppercase tracking-[.14em] text-[var(--spr-amber)]">Limited early access</span>
-          </div>
-          <h1 className="text-4xl font-semibold leading-[1.05] tracking-[-.02em] text-[var(--spr-text)] md:text-5xl">Verify software before you trust it.</h1>
-          <p className="mt-6 max-w-xl text-base leading-7 text-[var(--spr-text-muted)]">SPR turns repositories, applications, dependencies and vendors into evidence-backed Software Passports — so buyers, security teams and operators can see what was observed, what was verified, and what remains unknown.</p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <button onClick={onExploreTrustNetwork} className="inline-flex items-center gap-2 rounded-[3px] bg-[var(--spr-accent)] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[var(--spr-accent-hover)]">Run a Free Review <ArrowRight className="h-4 w-4" /></button>
-            <a href="/software" className="inline-flex items-center gap-2 rounded-[3px] border border-[var(--spr-highlight)]/50 bg-[var(--spr-surface-sunken)] px-6 py-3 text-sm font-semibold text-[var(--spr-text)] transition-colors hover:bg-[var(--spr-surface-hover)]" aria-label="Open the public Software Passport Registry">Explore the Software Registry <ExternalLink className="h-4 w-4" /></a>
-            <button onClick={onCreatePassport} className="rounded-[3px] border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-6 py-3 text-sm font-semibold text-[#cccccc] transition-colors hover:bg-[var(--spr-surface-hover)]">Sign in</button>
-          </div>
-          <p className="mt-3 text-xs text-[var(--spr-text-muted)]">Public registry: observed repositories only. No invented scores or placeholder records.</p>
-          <div className="mt-6 rounded-md border border-[var(--spr-highlight)]/30 bg-[var(--spr-accent-soft)]/10 p-4">
-            <div className="text-[11px] font-bold uppercase tracking-[.18em] text-[var(--spr-highlight)]">For MSPs</div>
-            <p className="mt-2 text-sm font-semibold text-[var(--spr-text)]">Turn software verification into a repeatable client service.</p>
-            <p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">Review software, preserve the evidence, share a Software Passport, and keep observing it over time.</p>
-            <a href="/msp" className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-[var(--spr-highlight)]">See the MSP offering <ArrowRight className="h-4 w-4" /></a>
-          </div>
-          <LegalFooterLinks className="mt-8" />
-          <div className="mt-8 rounded-md border-2 border-[var(--spr-highlight)]/50 bg-[var(--spr-surface-deep)] p-5 shadow-[0_10px_40px_rgba(0,0,0,0.18)]">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <div className="text-[11px] font-bold uppercase tracking-[.2em] text-[var(--spr-highlight)]">Plans & pricing</div>
-                <h2 className="mt-1 text-xl font-semibold text-[var(--spr-text)]">Choose the SPR service that fits the job.</h2>
-                <p className="mt-1.5 text-sm leading-6 text-[var(--spr-text-muted)]">Free Review gets you started. Paid plans unlock recurring verification, reports, vendor risk, API access and MSP operations.</p>
-              </div>
-              <a href="/pricing" className="spr-btn spr-btn-primary shrink-0 !px-5 !py-2.5 text-sm">View pricing →</a>
-            </div>
-          </div>
+    <button onClick={onClick} className={`inline-flex items-center gap-2 rounded-[3px] bg-[var(--spr-accent)] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[var(--spr-accent-hover)] ${className}`}>
+      Run a Free Review <ArrowRight className="h-4 w-4" />
+    </button>
+  );
+}
+
+export default function HomePage({ onCreatePassport, onExploreTrustNetwork }: Props) {
+  return (
+    <div className="min-h-screen bg-[var(--spr-surface)] text-[var(--spr-text)]">
+      <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
+        <img src="/brand/spr-logo.jpg" alt="Software Passport Registry" className="h-10 w-auto" />
+        <nav className="flex items-center gap-5 text-sm">
+          <a href="/pricing" className="text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]">Pricing</a>
+          <button onClick={onCreatePassport} className="text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]">Sign in</button>
+        </nav>
+      </header>
+
+      <section className="mx-auto max-w-4xl px-6 pb-16 pt-10 text-center md:pt-16">
+        <div className="mb-5 flex flex-wrap items-center justify-center gap-3">
+          <span className="text-[11px] font-bold uppercase tracking-[.22em] text-[var(--spr-highlight)]">For Managed Service Providers</span>
+          <span className="rounded-full border border-[var(--spr-amber)]/40 bg-[var(--spr-amber)]/10 px-2.5 py-1 text-[12px] font-bold uppercase tracking-[.14em] text-[var(--spr-amber)]">Limited early access</span>
         </div>
-        <div className="hidden w-full flex-1 justify-center lg:flex">
-          <div className="w-full max-w-md rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] p-7">
-            <div className="text-[11px] font-bold uppercase tracking-[.18em] text-[var(--spr-highlight)]">Live evidence only</div>
-            <h2 className="mt-3 text-2xl font-semibold text-[var(--spr-text)]">No software is being scored here.</h2>
-            <p className="mt-3 text-sm leading-6 text-[var(--spr-text-muted)]">This homepage does not invent a security, compliance, vendor, or confidence score. Run a Free Review and SPR will populate the result from the repository and evidence it actually observed.</p>
-            <div className="mt-6 grid grid-cols-2 gap-3 text-xs">
-              {['Repository identity', 'SBOM evidence', 'Vulnerability findings', 'Verification state'].map((item) => (
-                <div key={item} className="rounded border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-3 text-[var(--spr-text-muted)]">{item}<div className="mt-1 font-semibold text-[var(--spr-text)]">Not yet observed</div></div>
+        <h1 className="text-4xl font-semibold leading-[1.08] tracking-[-.02em] md:text-5xl">Show your clients what’s inside their software.</h1>
+        <p className="mx-auto mt-6 max-w-2xl text-base leading-7 text-[var(--spr-text-muted)]">
+          SBOM and vulnerability reports your MSP can hand to clients — built from what was actually observed, with nothing invented.
+          Clients are starting to ask for SBOMs as new rules like the EU’s CRA make SBOMs and vulnerability handling a requirement for software. Be the MSP that already has the answer.
+        </p>
+        <div className="mt-9 flex flex-col items-center gap-3">
+          <PrimaryCta onClick={onExploreTrustNetwork} className="px-8 py-3.5 text-base" />
+          <p className="text-xs text-[var(--spr-text-muted)]">Free. Paste a GitHub repo, get a PDF report. No account needed.</p>
+        </div>
+      </section>
+
+      <section className="border-y border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-6 py-16">
+        <div className="mx-auto max-w-5xl">
+          <h2 className="text-center text-2xl font-semibold md:text-3xl">How the free review works</h2>
+          <ol className="mt-10 grid gap-5 md:grid-cols-3">
+            {STEPS.map((step) => (
+              <li key={step.n} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5">
+                <div className="font-mono text-xs font-bold text-[var(--spr-highlight)]">STEP {step.n}</div>
+                <h3 className="mt-2 text-sm font-semibold">{step.title}</h3>
+                <p className="mt-2 text-xs leading-5 text-[var(--spr-text-muted)]">{step.body}</p>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      <section className="px-6 py-16">
+        <div className="mx-auto grid max-w-5xl gap-10 md:grid-cols-2">
+          <div>
+            <h2 className="text-2xl font-semibold">What’s in the report</h2>
+            <ul className="mt-6 space-y-3">
+              {REPORT_CONTENTS.map((item) => (
+                <li key={item} className="flex gap-3 text-sm leading-6"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--spr-highlight)]" />{item}</li>
               ))}
-            </div>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <button onClick={onExploreTrustNetwork} className="inline-flex items-center gap-2 rounded-[3px] bg-[var(--spr-accent)] px-5 py-2.5 text-sm font-semibold text-white">Run a Free Review <ArrowRight className="h-4 w-4" /></button>
-              <a href="/software" className="inline-flex items-center gap-2 rounded-[3px] border border-[var(--spr-border)] px-5 py-2.5 text-sm font-semibold text-[var(--spr-text)]">Open Registry <ExternalLink className="h-4 w-4" /></a>
-            </div>
+            </ul>
+          </div>
+          <div>
+            <h2 className="text-2xl font-semibold">The questions it answers</h2>
+            <ul className="mt-6 space-y-2">
+              {BUYER_QUESTIONS.map((q) => (
+                <li key={q} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] px-4 py-3 text-sm">{q}</li>
+              ))}
+            </ul>
           </div>
         </div>
       </section>
 
-      <section className="border-y border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-6 py-20">
-        <div className="mx-auto max-w-7xl">
-          <div className="mb-10 max-w-3xl"><div className="text-[12px] font-bold uppercase tracking-[.2em] text-[var(--spr-highlight)]">Universal intake</div><h2 className="mt-3 text-3xl font-semibold text-[var(--spr-text)] md:text-4xl">Give SPR everything you already have.</h2><p className="mt-3 text-sm leading-6 text-[var(--spr-text-muted)]">No SBOM preparation project. No guessing where a document belongs. Stage the software and the evidence together, then continue into the workspace.</p></div>
-          <UniversalIntakeView onContinue={onCreatePassport} />
+      <section className="border-t border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-6 py-16">
+        <div className="mx-auto max-w-3xl">
+          <div className="text-[12px] font-bold uppercase tracking-[.18em] text-[var(--spr-amber)]">Honest by design</div>
+          <h2 className="mt-2 text-2xl font-semibold">UNKNOWN is a real answer.</h2>
+          <p className="mt-3 text-sm leading-7 text-[var(--spr-text-muted)]">
+            UNKNOWN does not mean safe, and it does not mean unsafe. It means available evidence is insufficient to make that determination.
+            SPR does not invent scores, badges or certainty it has not observed — so nothing in a report will embarrass you in front of a client.
+          </p>
         </div>
       </section>
 
-      <section className="border-t border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-6 py-20"><div className="mx-auto max-w-5xl"><h2 className="text-2xl font-semibold text-[var(--spr-text)] md:text-3xl">The questions SPR is built to answer.</h2><ul className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{BUYER_QUESTIONS.map(q => <li key={q} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5 text-sm leading-6 text-[var(--spr-text)]">{q}</li>)}</ul></div></section>
-      <section className="border-t border-[var(--spr-border)] px-6 py-20"><div className="mx-auto max-w-5xl"><h2 className="text-2xl font-semibold text-[var(--spr-text)] md:text-3xl">Who SPR is for</h2><dl className="mt-8 grid gap-5 md:grid-cols-2">{AUDIENCES.map(item => <div key={item.who} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5"><dt className="text-sm font-semibold text-[var(--spr-text)]">{item.who}</dt><dd className="mt-1.5 text-xs leading-5 text-[var(--spr-text-muted)]">{item.job}</dd></div>)}</dl></div></section>
-      <section className="border-t border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-6 py-20"><div className="mx-auto max-w-5xl"><h2 className="text-2xl font-semibold text-[var(--spr-text)] md:text-3xl">See the evidence.</h2><p className="mt-4 max-w-3xl text-sm leading-7 text-[var(--spr-text-muted)]">SPR keeps observations, evidence, independent sources, verification, trust state and the decision separate. Repeated observations of one source are not independent corroboration, and missing evidence stays visible.</p><div className="mt-9 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6"><div className="text-[12px] font-bold uppercase tracking-[.18em] text-[var(--spr-amber)]">A state most products hide</div><h3 className="mt-2 text-xl font-semibold text-[var(--spr-text)]">UNKNOWN is a real answer.</h3><p className="mt-3 max-w-3xl text-sm leading-7 text-[var(--spr-text-muted)]">UNKNOWN does not mean safe, and it does not mean unsafe. It means available evidence is insufficient to make that determination. SPR does not invent certainty it has not observed.</p><button onClick={onExploreTrustNetwork} className="mt-6 inline-flex items-center gap-2 rounded-[3px] bg-[var(--spr-accent)] px-5 py-2.5 text-sm font-semibold text-white">Run a Free Review <ArrowRight className="h-4 w-4" /></button></div></div></section>
-      <section className="border-t border-[var(--spr-border)] px-6 py-20"><div className="mx-auto max-w-5xl"><h2 className="text-2xl font-semibold text-[var(--spr-text)] md:text-3xl">What you get</h2><div className="mt-8 grid gap-5 md:grid-cols-2">{OUTPUTS.map(item => <div key={item.title} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5"><h3 className="text-sm font-semibold text-[var(--spr-text)]">{item.title}</h3><p className="mt-1.5 text-xs leading-5 text-[var(--spr-text-muted)]">{item.body}</p></div>)}</div></div></section>
-      <section className="border-t border-[var(--spr-border)] px-6 py-20"><div className="mx-auto max-w-5xl"><div className="grid gap-6 md:grid-cols-5">{INFRASTRUCTURE_STEPS.map(step => <div key={step.n} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5"><div className="font-mono text-xs font-bold text-[var(--spr-highlight)]">{step.n}</div><h3 className="mt-2 text-sm font-semibold text-[var(--spr-text)]">{step.title}</h3><p className="mt-2 text-xs leading-5 text-[var(--spr-text-muted)]">{step.description}</p></div>)}</div><div className="mt-10 text-center"><div className="inline-block rounded-md border border-[var(--spr-highlight)]/40 bg-[var(--spr-accent-soft)]/15 px-6 py-3 text-sm font-bold uppercase tracking-[.15em] text-[var(--spr-highlight)]">Software Passport</div></div></div></section>
-      <section className="border-t border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-6 py-16 text-center"><div className="mx-auto max-w-2xl"><div className="text-[11px] font-bold uppercase tracking-[.22em] text-[var(--spr-highlight)]">Software Trust Infrastructure</div><p className="mt-3 text-lg font-semibold text-[var(--spr-text)]">The trust layer for the software ecosystem.</p><p className="mt-2 text-sm leading-6 text-[var(--spr-text-muted)]">Persistent software identity. Verifiable evidence. Explainable trust. Continuous observation.</p><a href="/software" className="mt-6 inline-flex items-center gap-2 rounded-[3px] border border-[var(--spr-border)] px-5 py-2.5 text-sm font-semibold text-[var(--spr-text)]">Browse the public Software Registry <ExternalLink className="h-4 w-4" /></a></div></section>
+      <section className="border-t border-[var(--spr-border)] px-6 py-16">
+        <div className="mx-auto max-w-5xl rounded-md border-2 border-[var(--spr-highlight)]/50 bg-[var(--spr-surface-deep)] p-7 md:flex md:items-center md:justify-between md:gap-10">
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-[.2em] text-[var(--spr-highlight)]">When you’re ready to offer it as a service</div>
+            <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+              {PAID_ADDS.map((item) => (
+                <li key={item} className="flex gap-2 text-sm leading-6"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-[var(--spr-highlight)]" />{item}</li>
+              ))}
+            </ul>
+          </div>
+          <a href="/pricing" className="spr-btn spr-btn-primary mt-6 inline-block shrink-0 !px-5 !py-2.5 text-sm md:mt-0">View MSP pricing →</a>
+        </div>
+      </section>
+
+      <section className="border-t border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-6 py-16 text-center">
+        <h2 className="text-2xl font-semibold">Try it on one of your clients’ apps.</h2>
+        <p className="mt-2 text-sm text-[var(--spr-text-muted)]">Takes a couple of minutes. You keep the PDF either way.</p>
+        <PrimaryCta onClick={onExploreTrustNetwork} className="mt-6" />
+        <div className="mx-auto max-w-5xl">
+          <LegalFooterLinks className="mt-8" />
+        </div>
+      </section>
     </div>
   );
 }

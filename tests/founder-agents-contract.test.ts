@@ -52,7 +52,8 @@ describe('Founder agents report — review follow-ups (2026-09-20)', () => {
 
   it('the worker discovery sweep records its origin and query on every research job it queues', async () => {
     const worker = await readFile(new URL('../src/workers/distribution-worker.ts', import.meta.url), 'utf8');
-    expect(worker).toContain("enqueueDistributionJob(pool,'research_url',{url:candidate.url,origin:{kind:'discovery_sweep',query}})");
+    // enqueueResearchUrl also applies the public-target (SSRF) check before queueing.
+    expect(worker).toContain("enqueueResearchUrl(pool, candidate.url, { kind: 'discovery_sweep', query })");
   });
 
   it('worker last-seen counts settled jobs (workers null locked_by when a job settles)', async () => {

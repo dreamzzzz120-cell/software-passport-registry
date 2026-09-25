@@ -139,7 +139,7 @@ export async function discoveryAgent(): Promise<AgentReport> {
   return {
     key: 'discovery', name: 'Discovery agent',
     purpose: 'Finds candidate MSP / IT-services companies to approach. Each candidate URL becomes a research_url job; the worker fetches the public site and extracts observable signals (company name, role emails, services) into a heuristic score. Nothing is contacted at this stage.',
-    howItDecides: 'Two sources create research jobs: the worker\'s hourly discovery sweep (only when DISTRIBUTION_AUTONOMOUS_DISCOVERY=true and a DISTRIBUTION_DISCOVERY_PROVIDER_URL is set on the worker) and a founder running discovery or research from this page. Each job records which of these created it. A job is retried with backoff up to its max_attempts, then dead-lettered.',
+    howItDecides: 'Two sources create research jobs: the worker\'s hourly discovery sweep (only when DISTRIBUTION_AUTONOMOUS_DISCOVERY=true and a business-search provider is set on the worker: GOOGLE_PLACES_API_KEY, BRAVE_SEARCH_API_KEY or DISTRIBUTION_DISCOVERY_PROVIDER_URL) and a founder running discovery or research from this page. Each job records which of these created it. A job is retried with backoff up to its max_attempts, then dead-lettered.',
     dataSource: 'distribution_jobs (kind research_url), distribution_campaign_settings',
     state, stateReason, runningNow: report.runningNow, last24h: report.last24h, lastCompletedAt: report.lastCompletedAt,
     config: [

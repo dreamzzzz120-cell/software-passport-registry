@@ -1,14 +1,14 @@
 import os from 'node:os';
 import { createWorkerPool } from './worker-db.ts';
-import { calculateBackoff, researchUrl, DISTRIBUTION_TENANT_ID, enqueueDistributionJob } from '../lib/distribution-engine.ts';
+import { calculateBackoff, researchUrl, DISTRIBUTION_TENANT_ID, enqueueDistributionJob, enqueueResearchUrl } from '../lib/distribution-engine.ts';
 import { ingestResearchResult, ingestQualifiedLead, sendInitial, sendDueFollowups, autonomousOutreachEnabled, verifyOutreachSender } from '../lib/distribution-outreach.ts';
-import { buildMspDiscoveryQueries, dedupeDiscoveryResults } from '../lib/distribution-discovery.ts';
+import { buildMspDiscoveryQueries, canonicalizeDomain, dedupeDiscoveryResults, resolveDiscoveryProvider, type DiscoveryResult } from '../lib/distribution-discovery.ts';
 
 const POLL_MS = Math.max(250, Number.parseInt(process.env.DISTRIBUTION_POLL_MS ?? '1000', 10) || 1000);
 const CONCURRENCY = Math.max(1, Math.min(50, Number.parseInt(process.env.DISTRIBUTION_CONCURRENCY ?? '10', 10) || 10));
 const LEAD_SWEEP_MS = Math.max(60_000, Number.parseInt(process.env.DISTRIBUTION_LEAD_SWEEP_MS ?? '300000', 10) || 300_000);
 const FOLLOWUP_SWEEP_MS = Math.max(60_000, Number.parseInt(process.env.DISTRIBUTION_FOLLOWUP_SWEEP_MS ?? '300000', 10) || 300_000);
-const DISCOVERY_SWEEP_MS = Math.max(300_000, Number.parseInt(process.env.DISTRIBUTION_DISCOVERY_SWEEP_MS ?? '3600000', 10) || 3_600_000);
+const DISCOVERY_SWEEP_MS = Math.max(300_000, Number.parseInt(process.env.DISTRIBUTION_DISCOVERY_SWEEP_MS ?? '86400000', 10) || 86_400_000); // daily: business-search APIs bill per query and MSP lists change slowly
 const WORKER_ID = `distribution-${os.hostname()}-${process.pid}`;
 
 async function notifySlack(message: string) {
@@ -44,29 +44,51 @@ async function processJob(pool: ReturnType<typeof createWorkerPool>){const job=a
 
 async function sweepFreeReviewLeads(pool: ReturnType<typeof createWorkerPool>){const client=await pool.connect();try{await client.query('BEGIN');await client.query(`SELECT set_config('app.tenant_id',$1,true)`,[DISTRIBUTION_TENANT_ID]);const result=await client.query(`SELECT l.id,l.name,l.email,l.company FROM free_review_leads l WHERE l.tenant_id=$1 AND NOT EXISTS (SELECT 1 FROM distribution_jobs j WHERE j.tenant_id=$1 AND j.kind='qualify_lead' AND j.payload->>'leadId'=l.id AND j.status IN ('queued','running','succeeded')) ORDER BY l.created_at ASC LIMIT 100`,[DISTRIBUTION_TENANT_ID]);await client.query('COMMIT');for(const lead of result.rows)await enqueueDistributionJob(pool,'qualify_lead',{leadId:lead.id,name:lead.name,email:lead.email,company:lead.company??'',origin:{kind:'lead_sweep'}});return result.rows.length;}catch(error){await client.query('ROLLBACK').catch(()=>undefined);throw error;}finally{client.release();}}
 
-async function githubRepositorySearch(query:string, limit=25) {
-  const target = new URL('https://api.github.com/search/repositories');
-  target.searchParams.set('q', query.trim().slice(0,200));
-  target.searchParams.set('per_page', String(Math.min(25, Math.max(1, limit))));
-  target.searchParams.set('sort', 'stars');
-  target.searchParams.set('order', 'desc');
-  const headers: Record<string,string> = { accept:'application/vnd.github+json', 'user-agent':'SPR-Distribution-Discovery/1.0' };
-  const token = process.env.GITHUB_TOKEN?.trim() || process.env.GITHUB_API_TOKEN?.trim();
-  if (token) headers.authorization = `Bearer ${token}`;
-  const controller = new AbortController();
-  const timeout = setTimeout(()=>controller.abort(),8000);
+async function knownResearchDomains(pool: ReturnType<typeof createWorkerPool>) {
+  const client = await pool.connect();
   try {
-    const response = await fetch(target,{signal:controller.signal,headers});
-    if (!response.ok) throw new Error(`GITHUB_DISCOVERY_HTTP_${response.status}`);
-    const data:any = await response.json();
-    return (Array.isArray(data?.items)?data.items:[]).flatMap((row:any)=>{const homepage=typeof row?.homepage==='string'?row.homepage.trim():'';const repoUrl=typeof row?.html_url==='string'?row.html_url.trim():'';const url=homepage&&/^https?:\/\//i.test(homepage)?homepage:repoUrl;return url?[{url,title:typeof row?.full_name==='string'?row.full_name:undefined,source:'github-repository-search',discoveredAt:new Date().toISOString()}]:[];});
-  } finally { clearTimeout(timeout); }
+    await client.query('BEGIN');
+    await client.query(`SELECT set_config('app.tenant_id',$1,true)`, [DISTRIBUTION_TENANT_ID]);
+    const result = await client.query(`SELECT DISTINCT payload->>'url' AS url FROM distribution_jobs WHERE tenant_id=$1 AND kind='research_url' AND payload ? 'url'`, [DISTRIBUTION_TENANT_ID]);
+    await client.query('COMMIT');
+    const domains = new Set<string>();
+    for (const row of result.rows) { try { domains.add(canonicalizeDomain(row.url)); } catch { /* malformed legacy row */ } }
+    return domains;
+  } catch (error) { await client.query('ROLLBACK').catch(() => undefined); throw error; }
+  finally { client.release(); }
 }
 
-async function sweepDiscovery(pool: ReturnType<typeof createWorkerPool>){const endpoint=process.env.DISTRIBUTION_DISCOVERY_PROVIDER_URL?.trim();if(process.env.DISTRIBUTION_AUTONOMOUS_DISCOVERY!=='true')return 0;const controls=await campaignControls(pool);if(!controls.discoveryEnabled)return 0;const configured=process.env.DISTRIBUTION_DISCOVERY_QUERIES?.split('\n').map(s=>s.trim()).filter(Boolean);const queries=configured?.length?configured:buildMspDiscoveryQueries().slice(0,5);let queued=0;for(const query of queries){let candidates:any[]=[];if(endpoint){const parsed=new URL(endpoint);if(!['http:','https:'].includes(parsed.protocol))throw new Error('DISTRIBUTION_DISCOVERY_PROVIDER_SCHEME_NOT_ALLOWED');const target=new URL(parsed.toString());target.searchParams.set('q',query);target.searchParams.set('limit','25');const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),8000);try{const response=await fetch(target,{signal:controller.signal,redirect:'manual',headers:{accept:'application/json','user-agent':'SPR-Distribution-Discovery/1.0 (+https://www.softwarepassportregistry.com)'}});if(!response.ok){if(response.status===422){console.warn(`[Distribution] discovery provider returned 422; falling back to GitHub search for query: ${query}`);candidates=await githubRepositorySearch(query,25);}else throw new Error(`DISTRIBUTION_DISCOVERY_PROVIDER_HTTP_${response.status}`);}else{const data:any=await response.json();const rows=Array.isArray(data?.results)?data.results:[];candidates=rows.flatMap((row:any)=>{if(!row||typeof row.url!=='string')return[];try{const url=new URL(row.url);return ['http:','https:'].includes(url.protocol)?[{url:url.toString(),title:typeof row.title==='string'?row.title.slice(0,500):undefined,source:'configured-http-provider',discoveredAt:new Date().toISOString()}]:[];}catch{return[];}});}}finally{clearTimeout(timeout);}}else{candidates=await githubRepositorySearch(query,25);}const unique=dedupeDiscoveryResults(candidates);for(const candidate of unique){await enqueueDistributionJob(pool,'research_url',{url:candidate.url,origin:{kind:'discovery_sweep',query}});queued++;}}return queued;}
+async function sweepDiscovery(pool: ReturnType<typeof createWorkerPool>) {
+  if (process.env.DISTRIBUTION_AUTONOMOUS_DISCOVERY !== 'true') return 0;
+  const controls = await campaignControls(pool);
+  if (!controls.discoveryEnabled) return 0;
+  const provider = resolveDiscoveryProvider();
+  if (!provider) {
+    console.warn('[Distribution] discovery skipped: no business-search provider configured (set GOOGLE_PLACES_API_KEY, BRAVE_SEARCH_API_KEY or DISTRIBUTION_DISCOVERY_PROVIDER_URL)');
+    return 0;
+  }
+  const configured = process.env.DISTRIBUTION_DISCOVERY_QUERIES?.split('\n').map((s) => s.trim()).filter(Boolean);
+  const queries = (configured?.length ? configured : buildMspDiscoveryQueries()).slice(0, 20);
+  // Every domain already researched, so a daily sweep only queues new businesses.
+  const seen = await knownResearchDomains(pool);
+  let queued = 0;
+  for (const query of queries) {
+    let candidates: DiscoveryResult[] = [];
+    try { candidates = await provider.discover(query, 20); }
+    catch (error) { console.error(`[Distribution] ${provider.name} failed for "${query}":`, error instanceof Error ? error.message : String(error)); continue; }
+    for (const candidate of dedupeDiscoveryResults(candidates)) {
+      const domain = canonicalizeDomain(candidate.url);
+      if (seen.has(domain)) continue;
+      seen.add(domain);
+      try { await enqueueResearchUrl(pool, candidate.url, { kind: 'discovery_sweep', query }); queued++; }
+      catch (error) { console.warn(`[Distribution] skipped ${candidate.url}:`, error instanceof Error ? error.message : String(error)); }
+    }
+  }
+  return queued;
+}
 
 // Diagnostic gate: why email provider, discovery, and db controls are or are not active.
 // Counts and flags only; no prospect data. providerConfigured = email provider ready for outreach.
-function diagnosticGate(){return{autonomousOutreach:autonomousOutreachEnabled(),providerConfigured:Boolean(process.env.RESEND_API_KEY?.trim() && process.env.EMAIL_FROM?.trim()),autonomousDiscovery:process.env.DISTRIBUTION_AUTONOMOUS_DISCOVERY==='true',discoveryProviderConfigured:Boolean(process.env.DISTRIBUTION_DISCOVERY_PROVIDER_URL?.trim())};};
-export async function runDistributionWorkerLoop(){const pool=createWorkerPool();try{const controls=await campaignControls(pool);console.info('[Distribution] gates:',JSON.stringify({...diagnosticGate(),dbOutreachEnabled:controls.outreachEnabled,dbDiscoveryEnabled:controls.discoveryEnabled,dailySendLimit:process.env.DISTRIBUTION_DAILY_SEND_LIMIT??'50 (default)'}));}catch(error){console.error('[Distribution] gate read failed:',error instanceof Error?error.message:String(error));}try{const verification=await verifyOutreachSender(pool);console.info('[Distribution] outreach sender verification:',JSON.stringify(verification));}catch(error){console.error('[Distribution] outreach sender verification failed:',error instanceof Error?error.message:String(error));}let nextLeadSweep=0;let nextFollowupSweep=0;let nextDiscoverySweep=0;try{while(true){const now=Date.now();if(now>=nextLeadSweep){try{const count=await sweepFreeReviewLeads(pool);console.info(`[Distribution] lead sweep: queued ${count} Free Review lead qualification jobs`);}catch(error){console.error('[Distribution] lead sweep failed:',error instanceof Error?error.message:String(error));}nextLeadSweep=now+LEAD_SWEEP_MS;}if(now>=nextDiscoverySweep){try{const count=await sweepDiscovery(pool);const gate=diagnosticGate();console.info(`[Distribution] discovery sweep: queued ${count} research jobs`,JSON.stringify({autonomousDiscovery:gate.autonomousDiscovery,discoveryProviderConfigured:gate.discoveryProviderConfigured}));}catch(error){console.error('[Distribution] discovery sweep failed:',error instanceof Error?error.message:String(error));}nextDiscoverySweep=now+DISCOVERY_SWEEP_MS;}if(autonomousOutreachEnabled()&&now>=nextFollowupSweep){try{if((await campaignControls(pool)).outreachEnabled)await enqueueDistributionJob(pool,'followup_outreach',{});}catch(error){console.error('[Distribution] follow-up scheduling failed:',error instanceof Error?error.message:String(error));}nextFollowupSweep=now+FOLLOWUP_SWEEP_MS;}const batch=await Promise.all(Array.from({length:CONCURRENCY},()=>processJob(pool)));if(!batch.some(Boolean))await new Promise(resolve=>setTimeout(resolve,POLL_MS));}}finally{await pool.end();}}
+function diagnosticGate(){return{autonomousOutreach:autonomousOutreachEnabled(),providerConfigured:Boolean(process.env.RESEND_API_KEY?.trim() && process.env.EMAIL_FROM?.trim()),autonomousDiscovery:process.env.DISTRIBUTION_AUTONOMOUS_DISCOVERY==='true',discoveryProvider:resolveDiscoveryProvider()?.name??null};};
+export async function runDistributionWorkerLoop(){const pool=createWorkerPool();try{const controls=await campaignControls(pool);console.info('[Distribution] gates:',JSON.stringify({...diagnosticGate(),dbOutreachEnabled:controls.outreachEnabled,dbDiscoveryEnabled:controls.discoveryEnabled,dailySendLimit:process.env.DISTRIBUTION_DAILY_SEND_LIMIT??'50 (default)'}));}catch(error){console.error('[Distribution] gate read failed:',error instanceof Error?error.message:String(error));}try{const verification=await verifyOutreachSender(pool);console.info('[Distribution] outreach sender verification:',JSON.stringify(verification));}catch(error){console.error('[Distribution] outreach sender verification failed:',error instanceof Error?error.message:String(error));}let nextLeadSweep=0;let nextFollowupSweep=0;let nextDiscoverySweep=0;try{while(true){const now=Date.now();if(now>=nextLeadSweep){try{const count=await sweepFreeReviewLeads(pool);console.info(`[Distribution] lead sweep: queued ${count} Free Review lead qualification jobs`);}catch(error){console.error('[Distribution] lead sweep failed:',error instanceof Error?error.message:String(error));}nextLeadSweep=now+LEAD_SWEEP_MS;}if(now>=nextDiscoverySweep){try{const count=await sweepDiscovery(pool);const gate=diagnosticGate();console.info(`[Distribution] discovery sweep: queued ${count} research jobs`,JSON.stringify({autonomousDiscovery:gate.autonomousDiscovery,discoveryProvider:gate.discoveryProvider}));}catch(error){console.error('[Distribution] discovery sweep failed:',error instanceof Error?error.message:String(error));}nextDiscoverySweep=now+DISCOVERY_SWEEP_MS;}if(autonomousOutreachEnabled()&&now>=nextFollowupSweep){try{if((await campaignControls(pool)).outreachEnabled)await enqueueDistributionJob(pool,'followup_outreach',{});}catch(error){console.error('[Distribution] follow-up scheduling failed:',error instanceof Error?error.message:String(error));}nextFollowupSweep=now+FOLLOWUP_SWEEP_MS;}const batch=await Promise.all(Array.from({length:CONCURRENCY},()=>processJob(pool)));if(!batch.some(Boolean))await new Promise(resolve=>setTimeout(resolve,POLL_MS));}}finally{await pool.end();}}
 

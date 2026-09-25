@@ -14,7 +14,8 @@ const stripComments = (s: string) => s.split(String.fromCharCode(10))
 
 describe('homepage presents the product without evaluating anything', () => {
   it('leads with the value proposition and the Free Review as primary CTA', () => {
-    expect(home).toContain('Verify software before you trust it.');
+    expect(home).toContain('Show your clients what’s inside their software.');
+    expect(home).toContain('For Managed Service Providers');
     expect(home).toContain('Run a Free Review');
     expect(home).not.toContain('View Sample Passport');
   });
