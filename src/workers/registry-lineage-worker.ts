@@ -115,5 +115,5 @@ export async function runRegistryLineageLoop(): Promise<void> {
   } finally {
     await pool.end();
   }
-  await new Promise((resolve) => setTimeout(resolve, 60 * 60 * 1000));
+  await new Promise((resolve) => setTimeout(resolve, 5 * 60 * 1000));
 }
