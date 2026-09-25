@@ -17,9 +17,15 @@ function hashIp(value: string | undefined): string | null {
   return createHash('sha256').update(value).digest('hex');
 }
 
-function countryFromRequest(req: any): string | null {
-  const value = req.headers['x-vercel-ip-country'] || req.headers['cf-ipcountry'];
-  return typeof value === 'string' && /^[A-Z]{2}$/.test(value) ? value : null;
+// Vercel does not forward its x-vercel-ip-country header to an external
+// rewrite target, so every event arrived with country=null. vercel.json
+// captures the header in a rewrite rule and passes it as ?vc_country=. The
+// header forms stay for direct or Cloudflare-fronted traffic. The value is the
+// edge's IP geolocation (a two-letter code), used only for aggregate counts.
+export function countryFromRequest(req: any): string | null {
+  const candidates = [req.headers['x-vercel-ip-country'], req.headers['cf-ipcountry'], req.query?.vc_country];
+  for (const value of candidates) if (typeof value === 'string' && /^[A-Z]{2}$/.test(value)) return value;
+  return null;
 }
 
 export function createTrafficRouter() {

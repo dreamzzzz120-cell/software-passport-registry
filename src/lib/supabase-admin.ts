@@ -2,12 +2,14 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || '';
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+// Supabase's newer 'secret' API key (sb_secret_...) replaces the legacy
+// service_role JWT; accept either so a project on the new keys isn't locked out.
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || process.env.SUPABASE_SECRET_KEY?.trim() || '';
 let client: SupabaseClient | null = null;
 let adminClient: SupabaseClient | null = null;
 function requireUrl() { if (!SUPABASE_URL) throw new Error('SUPABASE_URL is required for authentication'); return SUPABASE_URL; }
 function getClient() { if (!SUPABASE_KEY) throw new Error('SUPABASE_ANON_KEY or SUPABASE_PUBLISHABLE_KEY is required for token verification'); if (!client) client = createClient(requireUrl(), SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } }); return client; }
-function getAdminClient() { if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error('SUPABASE_SERVICE_ROLE_KEY is required for administrative authentication operations'); if (!adminClient) adminClient = createClient(requireUrl(), SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } }); return adminClient; }
+function getAdminClient() { if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error('SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SECRET_KEY is required for administrative authentication operations'); if (!adminClient) adminClient = createClient(requireUrl(), SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } }); return adminClient; }
 function testOnlyClaims(token: string) {
   if (process.env.SPR_SECURITY_TEST_AUTH !== 'true') return null;
   try {
