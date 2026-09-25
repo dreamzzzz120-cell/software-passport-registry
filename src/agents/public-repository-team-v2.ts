@@ -72,6 +72,33 @@ async function searchGithub(query:string,page:number,token:string):Promise<Searc
   if(outcome==='error')throw new Error(`GITHUB_SEARCH_${r.status}`);
   const j:any=await r.json(); return {outcome,items:Array.isArray(j?.items)?j.items:[]};
 }
+// A repository search result does not imply the repo contains a dependency manifest.
+// Inspect GitHub's recursive tree before scheduling costly scans. If GitHub cannot
+// establish a complete tree, preserve the existing scan path rather than falsely
+// claiming the repository has no supported manifest.
+const SUPPORTED_MANIFESTS = new Set([
+  'package.json','package-lock.json','npm-shrinkwrap.json','yarn.lock','pnpm-lock.yaml',
+  'requirements.txt','requirements-dev.txt','pyproject.toml','poetry.lock','Pipfile','Pipfile.lock',
+  'pom.xml','build.gradle','build.gradle.kts','gradle.lockfile','packages.lock.json',
+  'packages.config','go.mod','go.sum','Cargo.toml','Cargo.lock','Gemfile','Gemfile.lock',
+  'composer.json','composer.lock',
+]);
+export function treeHasSupportedManifest(tree: Array<{path?:string;type?:string}>): boolean {
+  return tree.some(item => item.type === 'blob' && typeof item.path === 'string' &&
+    (SUPPORTED_MANIFESTS.has(item.path.split('/').at(-1) ?? '') || item.path.endsWith('.csproj')));
+}
+async function hasSupportedManifest(c:Candidate,token:string):Promise<boolean>{
+  if(!c.defaultBranch)return true;
+  const u=new URL(`https://api.github.com/repos/${encodeURIComponent(c.owner)}/${encodeURIComponent(c.repository)}/git/trees/${encodeURIComponent(c.defaultBranch)}`);
+  u.searchParams.set('recursive','1');
+  try{
+    const r=await fetch(u,{headers:{Accept:'application/vnd.github+json','User-Agent':'software-passport-registry-public-repository-team/1.0',...(token?{Authorization:`Bearer ${token}`}:{})}});
+    if(!r.ok)return true;
+    const body:any=await r.json();
+    if(body?.truncated===true || !Array.isArray(body?.tree))return true;
+    return treeHasSupportedManifest(body.tree);
+  }catch{return true;}
+}
 async function saveCursor(pool:Pool,next:TeamCursor){ await pool.query(`INSERT INTO registry_crawl_state (id,strategy_index,query_index,page,language_index,updated_at) VALUES ('default',$1,$2,$3,$4,CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET strategy_index=EXCLUDED.strategy_index,query_index=EXCLUDED.query_index,page=EXCLUDED.page,language_index=EXCLUDED.language_index,updated_at=CURRENT_TIMESTAMP`,[next.strategyIndex,next.queryIndex,next.page,next.languageIndex]); }
 
 async function tenant<T>(pool:Pool,fn:(client:PoolClient)=>Promise<T>):Promise<T>{ const c=await pool.connect(); try{await c.query('BEGIN');await c.query("SELECT set_config('app.tenant_id',$1,true)",[FREE_REVIEW_TENANT_ID]);const x=await fn(c);await c.query('COMMIT');return x;}catch(e){await c.query('ROLLBACK').catch(()=>undefined);throw e;}finally{c.release();} }
@@ -98,7 +125,7 @@ export async function runPublicRepositoryAgentTeamOnce(pool:Pool){
       if(r.outcome==='invalid_query'){out.failed++;console.error('[PublicRepositoryTeam] invalid search query skipped',JSON.stringify({query,reason:r.reason}));cur2=advanceCursor(cur2,0,q.length);await saveCursor(pool,cur2);continue;}
       found=r;break;
     }
-    if(!found)return out;const conn=await connection(pool);for(const raw of found.items){if(out.queued>=batch)break;out.discovered++;const c=normalizeCandidate(raw);if(!c||c.archived||c.fork){out.quarantined++;continue;}let row:IngestionRow|undefined;try{row=await upsert(pool,c);const due=!row.next_refresh_at||new Date(row.next_refresh_at).getTime()<=Date.now();if(!row.passport_id){const db=drizzle(pool,{schema});const x=await enqueueFreeReview(db as any,{owner:c.owner,repository:c.repository,ref:null,ipHash:`registry-team:${run}`});await setStatus(pool,row.id,'queued',x.passportId);out.queued++;}else if(due){await refresh(pool,String(row.passport_id),c.owner,c.repository,conn);await pool.query(`UPDATE registry_ingestion_items SET status='refresh_queued',evidence_agent=$2,verification_agent=$2,next_refresh_at=CURRENT_TIMESTAMP + ($3 * INTERVAL '1 hour'),updated_at=CURRENT_TIMESTAMP WHERE id=$1`,[row.id,VERSION,envInt('REGISTRY_CRAWL_REFRESH_HOURS',DEFAULT_REFRESH_HOURS,8760)]);out.refreshed++;}}catch(e){out.failed++;if(row?.id)await setStatus(pool,row.id,'failed').catch(()=>undefined);console.error('[PublicRepositoryTeam] item failed',c.url,e instanceof Error?e.message:String(e));}}
+    if(!found)return out;const conn=await connection(pool);for(const raw of found.items){if(out.queued>=batch)break;out.discovered++;const c=normalizeCandidate(raw);if(!c||c.archived||c.fork){out.quarantined++;continue;}let row:IngestionRow|undefined;try{if(!await hasSupportedManifest(c,token)){out.quarantined++;continue;}row=await upsert(pool,c);const due=!row.next_refresh_at||new Date(row.next_refresh_at).getTime()<=Date.now();if(!row.passport_id){const db=drizzle(pool,{schema});const x=await enqueueFreeReview(db as any,{owner:c.owner,repository:c.repository,ref:null,ipHash:`registry-team:${run}`});await setStatus(pool,row.id,'queued',x.passportId);out.queued++;}else if(due){await refresh(pool,String(row.passport_id),c.owner,c.repository,conn);await pool.query(`UPDATE registry_ingestion_items SET status='refresh_queued',evidence_agent=$2,verification_agent=$2,next_refresh_at=CURRENT_TIMESTAMP + ($3 * INTERVAL '1 hour'),updated_at=CURRENT_TIMESTAMP WHERE id=$1`,[row.id,VERSION,envInt('REGISTRY_CRAWL_REFRESH_HOURS',DEFAULT_REFRESH_HOURS,8760)]);out.refreshed++;}}catch(e){out.failed++;if(row?.id)await setStatus(pool,row.id,'failed').catch(()=>undefined);console.error('[PublicRepositoryTeam] item failed',c.url,e instanceof Error?e.message:String(e));}}
     await saveCursor(pool,advanceCursor(cur2,found.items.length,q.length));
   }finally{await pool.query(`UPDATE registry_crawl_runs SET finished_at=CURRENT_TIMESTAMP,discovered=$2,enqueued=$3,skipped=0,refreshed=$4,quarantined=$5,failed=$6 WHERE id=$1`,[run,out.discovered,out.queued,out.refreshed,out.quarantined,out.failed]).catch(()=>undefined);}return out;
 }
