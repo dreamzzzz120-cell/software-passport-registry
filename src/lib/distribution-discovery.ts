@@ -130,6 +130,21 @@ export function httpEndpointProvider(endpoint: string): DiscoveryProvider {
   } };
 }
 
+// A fixed list of MSP home pages, one per line (or comma-separated), for
+// prospects found by hand. Every sweep offers the same list; the sweep skips
+// domains already researched and contacts are deduped by email, so nothing
+// is researched or emailed twice. Cheapest way to point the engine at a
+// known market without a search API.
+export function parseSeedUrls(raw: string | undefined): string[] {
+  if (!raw) return [];
+  return raw.split(/[\n,]/).map((s) => s.trim()).filter(Boolean).slice(0, MAX_RESULTS);
+}
+
+export function seedListProvider(urls: string[]): DiscoveryProvider {
+  const results = dedupeDiscoveryResults(urls.flatMap((url) => toResult(url, undefined, 'seed-list')));
+  return { name: 'seed-list', async discover(_query, limit) { return results.slice(0, Math.max(1, limit)); } };
+}
+
 // Business-search providers only. There is deliberately no GitHub fallback:
 // repository search finds software projects, not MSPs, and every lead it
 // produced was noise. No provider configured means no autonomous discovery.
@@ -140,6 +155,8 @@ export function resolveDiscoveryProvider(env: NodeJS.ProcessEnv = process.env): 
   if (brave) return braveSearchProvider(brave);
   const endpoint = env.DISTRIBUTION_DISCOVERY_PROVIDER_URL?.trim();
   if (endpoint) return httpEndpointProvider(endpoint);
+  const seeds = parseSeedUrls(env.DISTRIBUTION_DISCOVERY_SEED_URLS);
+  if (seeds.length) return seedListProvider(seeds);
   return null;
 }
 
