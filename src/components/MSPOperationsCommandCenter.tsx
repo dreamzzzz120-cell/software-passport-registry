@@ -8,6 +8,7 @@ import {
 import type { Alert, Client, SoftwarePassport } from '../types';
 import type { VerificationDecisionState } from './trust/TrustStateBadge';
 import MSPCommandCenter from './MSPCommandCenter';
+import RevenueReviewPanel from './RevenueReviewPanel';
 
 interface Props {
   clients: Client[];
@@ -201,6 +202,11 @@ export default function MSPOperationsCommandCenter(props: Props) {
           </div>
         </div>
       </section>
+
+      {['Owner', 'Admin', 'Operator'].includes(role) && <RevenueReviewPanel
+        onOpenClient={id => { onSelectClient(id); onNavigate('/clients'); }}
+        onOpenPassport={id => { onSelectPassport?.(id); onNavigate('/passports'); }}
+      />}
 
       <section className="rounded-[26px] border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5 md:p-6">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
