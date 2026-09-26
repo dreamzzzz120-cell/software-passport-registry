@@ -3,7 +3,6 @@ name: SPR LOM Continuous Security Monitor
 on:
   push:
     branches: [main]
-  pull_request:
   schedule:
     - cron: "7/7 * * * *"
   workflow_dispatch:
