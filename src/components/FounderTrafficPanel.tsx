@@ -69,9 +69,9 @@ export default function FounderTrafficPanel() {
   const tiles: [string, number | null | undefined][] = [
     ['Active events, 30 min', summary?.activeEvents],
     ['Active sessions, 30 min', summary?.activeSessions],
-    ['Visitors, 24 h', summary?.users24h],
+    ['Sessions, 24 h', summary?.users24h],
     ['Page views, 24 h', summary?.pageviews24h],
-    ['Visitors, 7 d', summary?.users7d],
+    ['Sessions, 7 d', summary?.users7d],
     ['Page views, 7 d', summary?.pageviews7d],
   ];
 
