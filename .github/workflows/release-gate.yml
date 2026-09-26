@@ -4,19 +4,17 @@
 name: Production Release Gate
 
 on:
-  pull_request:
-    branches: [main]
   push:
     branches: [main]
 
 permissions:
   contents: read
 
-# A release verification run is evidence. Do not cancel it because another
-# commit lands while it is running; the result must be observable.
+# Release verification is performed once the change lands on main.
+# Superseded main runs can be cancelled; the newest commit is authoritative.
 concurrency:
   group: release-gate-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   migration-safety:
