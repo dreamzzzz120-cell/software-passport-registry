@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { requireAuth, requireRole, type AuthenticatedRequest } from '../middleware/security.ts';
 import { attachTenantScope } from '../middleware/tenant-scope.ts';
 import { db } from '../db/index.ts';
+import { compareRegisteredDigest } from '../agents/registered-digest.ts';
 
 const scopes = z.enum(['read', 'write', 'webhooks']);
 const keyCreate = z.object({ name: z.string().trim().min(1).max(120), scopes: z.array(scopes).min(1).max(3).refine(v => new Set(v).size === v.length), expiresAt: z.string().trim().min(1).max(64).optional() }).strict();
@@ -39,7 +40,7 @@ export function createPublicApiV1Router() {
   const router = Router();
   const publicApi = Router();
   publicApi.use(apiKeyAuth);
-  publicApi.get('/openapi.json', (_req, res) => res.json({ openapi: '3.1.0', info: { title: 'Software Passport Registry API', version: '1.0.0', description: 'Evidence-first software verification. UNKNOWN is valid and never represents approval.' }, servers: [{ url: '/api/agent/v1' }], security: [{ ApiKeyAuth: [] }], components: { securitySchemes: { ApiKeyAuth: { type: 'apiKey', in: 'header', name: 'X-API-Key' } } }, paths: { '/passports': { post: {}, }, '/passports/verify': { post: {} }, '/passports/{passportId}': { get: {} }, '/passports/{passportId}/evidence': { get: {} }, '/passports/{passportId}/freshness': { get: {} }, '/verify-software': { post: {} } } }));
+  publicApi.get('/openapi.json', (_req, res) => res.json({ openapi: '3.1.0', info: { title: 'Software Passport Registry API', version: '1.0.0', description: 'Evidence-first software verification. UNKNOWN is valid and never represents approval.' }, servers: [{ url: '/api/agent/v1' }], security: [{ ApiKeyAuth: [] }], components: { securitySchemes: { ApiKeyAuth: { type: 'apiKey', in: 'header', name: 'X-API-Key' } } }, paths: { '/passports': { post: {}, }, '/passports/verify': { post: {} }, '/passports/{passportId}': { get: {} }, '/passports/{passportId}/evidence': { get: {} }, '/passports/{passportId}/freshness': { get: {} }, '/passports/{passportId}/registered-digest': { get: {} }, '/verify-software': { post: {} } } }));
 
   publicApi.post('/passports', scope('write'), async (req: AuthenticatedRequest, res, next) => {
     const parsed = mintInput.safeParse(req.body);
@@ -61,6 +62,17 @@ export function createPublicApiV1Router() {
     const parsed = softwareInput.safeParse(req.body); if (!parsed.success) return res.status(400).json({ error: 'INVALID_QUERY', details: parsed.error.flatten() });
     try { const q = parsed.data.query.toLowerCase(); const passport = (await req.db!.execute(sql`SELECT id,name FROM passports WHERE tenant_id=${req.user!.tenantId} AND (LOWER(name)=${q} OR LOWER(id)=${q}) LIMIT 1`) as any).rows?.[0]; if (!passport) return res.status(404).json({ status: 'UNKNOWN', reason: 'SOFTWARE_NOT_REGISTERED', query: parsed.data.query }); return verification(req, res, next, passport); } catch (error) { next(error); }
   });
+  publicApi.get('/passports/:passportId/registered-digest', scope('read'), async (req: AuthenticatedRequest, res, next) => {
+    const passportId = z.string().trim().min(1).max(255).safeParse(req.params.passportId);
+    const digest = z.string().trim().min(1).max(71).safeParse(req.query.digest);
+    if (!passportId.success || !digest.success) return res.status(400).json({ error: 'INVALID_DIGEST_QUERY' });
+    try {
+      const passport = (await req.db!.execute(sql\`SELECT id,file_hash AS "fileHash" FROM passports WHERE tenant_id=\${req.user!.tenantId} AND id=\${passportId.data} LIMIT 1\`) as any).rows?.[0];
+      if (!passport) return res.status(404).json({ status: 'UNKNOWN', reason: 'PASSPORT_NOT_FOUND' });
+      return res.json(compareRegisteredDigest(passport, digest.data));
+    } catch (error) { next(error); }
+  });
+
   publicApi.get('/passports/:passportId/evidence', scope('read'), async (req: AuthenticatedRequest, res, next) => {
     try { const passport = (await req.db!.execute(sql`SELECT id FROM passports WHERE tenant_id=${req.user!.tenantId} AND id=${req.params.passportId} LIMIT 1`) as any).rows?.[0]; if (!passport) return res.status(404).json({ status: 'UNKNOWN', reason: 'PASSPORT_NOT_FOUND', passportId: req.params.passportId }); const rows = (await req.db!.execute(sql`SELECT id,provider,control_id AS "controlId",subject,source_url AS "sourceUrl",observed_at AS "observedAt",verification_method AS "verificationMethod",status,severity,evidence_hash AS "evidenceHash",limitation FROM evidence_ledger WHERE tenant_id=${req.user!.tenantId} AND passport_id=${passport.id} ORDER BY observed_at DESC LIMIT 500`) as any).rows ?? []; return res.json({ passportId: passport.id, count: rows.length, evidence: rows }); } catch (error) { next(error); }
   });
