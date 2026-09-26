@@ -164,5 +164,8 @@
         }
       ]
     }
-  ]
+  ],
+  "git": {
+    "deploymentEnabled": false
+  }
 }
