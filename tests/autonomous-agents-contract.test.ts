@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { evaluateMonitoring } from '../src/agents/monitoring-agent.ts';
 import { buildAgentReport } from '../src/agents/report-agent.ts';
 import { evaluateRevenue } from '../src/agents/revenue-agent.ts';
+import { readFileSync } from 'node:fs';
+
+const agentApiSource = readFileSync(new URL('../src/routes/agent-api.ts', import.meta.url), 'utf8');
 
 describe('autonomous agent suite', () => {
   it('detects monitoring changes deterministically', () => {
@@ -60,4 +63,13 @@ describe('autonomous agent suite', () => {
     expect(result.opportunities[0].basis).toBe('EVIDENCE_GAP');
     expect(result.opportunities[0].value).toBeNull();
   });
+  it('wires revenue opportunities to tenant-scoped persisted trust records', () => {
+    expect(agentApiSource).toContain("router.post('/revenue-opportunities'");
+    expect(agentApiSource).toContain('WHERE tenant_id=${tenantId} AND passport_id=${passport.id}');
+    expect(agentApiSource).toContain("table: 'evidence_ledger'");
+    expect(agentApiSource).toContain("table: 'trust_findings'");
+    expect(agentApiSource).toContain("table: 'trust_observations'");
+    expect(agentApiSource).toContain("table: 'monitoring_configurations'");
+  });
+
 });
