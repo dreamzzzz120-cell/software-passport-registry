@@ -84,11 +84,18 @@ export async function collectFiles(root: string): Promise<{ files: FileOffer[]; 
         // .length property splices in a sparse "empty" hole before the next
         // push ever runs, so every file after the first left `files` with
         // undefined entries interleaved among the real paths.
-        if (++fileCount > MAX_FILES) throw new Error('REPOSITORY_FILE_LIMIT_EXCEEDED');
-        const size = (await stat(full)).size;
-        totalBytes += size;
-        if (totalBytes > MAX_TOTAL_BYTES) throw new Error('REPOSITORY_TOO_LARGE');
         const rel = relative(full);
+        const size = (await stat(full)).size;
+        fileCount += 1;
+        if (fileCount > MAX_FILES) {
+          reports.push({ path: rel, outcome: 'skipped', tool: inventoryTool, reasonCode: 'CONTENT_FILE_BUDGET_EXCEEDED', reasonDetail: `Only the first ${MAX_FILES} files are offered to content engines; the repository scan and SBOM continue.` });
+          continue;
+        }
+        if (totalBytes + size > MAX_TOTAL_BYTES) {
+          reports.push({ path: rel, outcome: 'skipped', tool: inventoryTool, reasonCode: 'CONTENT_BYTE_BUDGET_EXCEEDED', reasonDetail: `Content inspection is capped at ${MAX_TOTAL_BYTES} bytes; the repository scan and SBOM continue.` });
+          continue;
+        }
+        totalBytes += size;
         if (!isContentInspectable(rel)) { reports.push({ path: rel, outcome: 'unsupported', tool: inventoryTool, reasonCode: 'NOT_A_CONTENT_INSPECTED_TYPE', reasonDetail: 'The content engines do not read this file type.' }); continue; }
         if (size > MAX_FILE_BYTES) { reports.push({ path: rel, outcome: 'skipped', tool: inventoryTool, reasonCode: 'FILE_TOO_LARGE', reasonDetail: `Files over ${MAX_FILE_BYTES} bytes are not read by the content engines.` }); continue; }
         files.push({ absolutePath: full, relativePath: rel, size });
