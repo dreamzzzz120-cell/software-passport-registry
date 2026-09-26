@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { requireAuth, AuthenticatedRequest } from '../middleware/security.ts';
 import type { ScopedDb } from '../middleware/tenant-scope.ts';
 import { evaluateVendorRisk } from '../agents/vendor-risk-agent.ts';
+import { evaluateUnmappedClaim } from '../agents/claim-evaluation.ts';
 
 const passportInput = z.object({ passportId: z.string().trim().min(1).max(255) }).strict();
 const softwareInput = z.object({ query: z.string().trim().min(1).max(500) }).strict();
@@ -110,32 +111,7 @@ export function createAgentApiRouter() {
       const evidenceCount = (await db.execute(sql`SELECT COUNT(*)::int AS count FROM evidence_items WHERE tenant_id=${tenantId} AND asset_id=${passport.id}`) as any).rows?.[0]?.count ?? 0;
       const openFindings = (await db.execute(sql`SELECT COUNT(*)::int AS count FROM scan_findings WHERE tenant_id=${tenantId} AND asset_id=${passport.id} AND lower(status) NOT IN ('resolved','closed','verified')`) as any).rows?.[0]?.count ?? 0;
       const claimHash = `sha256:${createHash('sha256').update(claim.normalize('NFKC'), 'utf8').digest('hex')}`;
-      const hasEvidence = evidenceCount > 0;
-      const hasOpenFindings = openFindings > 0;
-      const claimLower = claim.toLowerCase();
-      const securityKeywords = ['security', 'vulnerab', 'cve', 'exploit', 'breach', 'malware', 'backdoor', 'risk'];
-      const complianceKeywords = ['compliance', 'audit', 'certif', 'soc', 'iso', 'gdpr', 'hipaa', 'pci'];
-      const isSecurityClaim = securityKeywords.some(kw => claimLower.includes(kw));
-      const isComplianceClaim = complianceKeywords.some(kw => claimLower.includes(kw));
-      let status: string;
-      let reason: string;
-      if (!hasEvidence) {
-        status = 'UNVERIFIED';
-        reason = 'No observed evidence exists for this passport. SPR does not infer a claim from absent evidence.';
-      } else if (isSecurityClaim && hasOpenFindings) {
-        status = 'CONTRADICTED';
-        reason = `Observed evidence shows ${openFindings} open finding(s) for this passport. A security claim is contradicted by open findings.`;
-      } else if (isSecurityClaim && !hasOpenFindings) {
-        status = 'VERIFIED';
-        reason = `Security evidence observed: ${evidenceCount} evidence item(s), 0 open findings. The claim is supported by current observations.`;
-      } else if (isComplianceClaim) {
-        status = 'UNVERIFIED';
-        reason = 'Compliance evidence is observed but not inferred. SPR maps evidence to controls only through the compliance workflow, not from a natural-language claim.';
-      } else {
-        status = 'UNVERIFIED';
-        reason = 'SPR cannot verify this claim from observed evidence. The claim does not map to a specific evidence category SPR evaluates.';
-      }
-      const statusValue = status;
+      const { status, reason } = evaluateUnmappedClaim(evidenceCount, openFindings);
       return res.json({ status, reason, claimHash, passportId: passport.id, passportName: passport.name, evidenceCount, openFindings, provenance: { kind: 'tenant_scoped_evidence_evaluation', passportId: passport.id, evidenceCount, openFindings } });
     } catch (error) { return next(error); }
   });
