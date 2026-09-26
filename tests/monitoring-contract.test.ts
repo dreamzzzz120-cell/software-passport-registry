@@ -155,3 +155,27 @@ describe('monitoring is gated by the plan entitlement, not an operator allowlist
     expect(view).not.toContain('monitoringDisabled');
   });
 });
+
+
+describe('automatic repository monitoring bootstrap', () => {
+  const source = () => read('src/workers/trust-monitoring-worker.ts');
+
+  it('enrolls only completed client-bound repository scans whose tenant has a GitHub integration credential', () => {
+    const s = source();
+    expect(s).toContain("j.status='Completed'");
+    expect(s).toContain('s.client_id IS NOT NULL');
+    expect(s).toContain("ic.provider='github'");
+  });
+
+  it('makes the first observation due immediately, then lets scheduleDue advance the recurring interval', () => {
+    const s = source();
+    expect(s).toContain("CURRENT_TIMESTAMP::text,NULL,0,0,'unknown'");
+    expect(s).not.toContain("(CURRENT_TIMESTAMP + INTERVAL '6 hours')::text,NULL,0,0,'unknown'");
+  });
+
+  it('logs eligible and created counts so an idle scheduler is diagnosable without exposing credentials', () => {
+    const s = source();
+    expect(s).toContain("return {eligible:Number(eligible.rows[0]?.count||0),created:result.rowCount ?? 0};");
+    expect(s).toContain("console.info('[TrustMonitoring] bootstrap:',JSON.stringify(bootstrap));");
+  });
+});
