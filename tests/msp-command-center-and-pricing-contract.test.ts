@@ -113,3 +113,27 @@ describe('SPR MSP operations — evidence-backed revenue opportunities', () => {
     expect(source()).toContain(code`SPR will not manufacture client work when persisted trust state does not support it.`);
   });
 });
+
+
+describe('SPR revenue opportunity remediation loop', () => {
+  const source = () => readCode('src/components/MSPOperationsCommandCenter.tsx');
+
+  it('creates remediation only from a supporting persisted finding', () => {
+    const s = source();
+    expect(s).toContain(code`const findingId = opportunity.findingIds?.[0]`);
+    expect(s).toContain(code`apiFetch('/api/remediation-tasks'`);
+    expect(s).toContain(code`JSON.stringify({ alertId: findingId })`);
+  });
+
+  it('does not invent a remediation finding for evidence-gap opportunities', () => {
+    const s = source();
+    expect(s).toContain(code`This opportunity has no remediation finding yet.`);
+    expect(s).toContain(code`Resolve evidence gap`);
+  });
+
+  it('routes created work into the existing monitoring and re-verification workflow', () => {
+    const s = source();
+    expect(s).toContain(code`Work the task, then queue re-verification.`);
+    expect(s).toContain(code`onNavigate('/monitoring')`);
+  });
+});
