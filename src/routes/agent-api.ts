@@ -2,10 +2,11 @@ import { Router } from 'express';
 import { createHash } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { requireAuth, AuthenticatedRequest } from '../middleware/security.ts';
+import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/security.ts';
 import type { ScopedDb } from '../middleware/tenant-scope.ts';
 import { evaluateVendorRisk } from '../agents/vendor-risk-agent.ts';
 import { evaluateUnmappedClaim } from '../agents/claim-evaluation.ts';
+import { listRevenueReviewCandidates, revenueQuery } from '../agents/revenue-query.ts';
 
 const passportInput = z.object({ passportId: z.string().trim().min(1).max(255) }).strict();
 const softwareInput = z.object({ query: z.string().trim().min(1).max(500) }).strict();
@@ -19,6 +20,13 @@ const MUTATION_INTENT = /\b(delete|remove|purge|drop|wipe|erase|destroy|update|e
 export function createAgentApiRouter() {
   const router = Router();
   router.use(requireAuth);
+
+  router.get('/revenue/opportunities', requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
+    const parsed = revenueQuery.safeParse(req.query);
+    if (!parsed.success) return res.status(400).json({ error: 'INVALID_OPPORTUNITY_QUERY' });
+    try { return res.json(await listRevenueReviewCandidates(req.db!, req.user!.tenantId, parsed.data)); }
+    catch (error) { return next(error); }
+  });
 
   router.post('/command', async (req: AuthenticatedRequest, res, next) => {
     const parsed = commandInput.safeParse(req.body);
