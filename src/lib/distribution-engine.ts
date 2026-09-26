@@ -170,7 +170,11 @@ export async function researchUrl(url: string) {
   if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('DISTRIBUTION_URL_SCHEME_NOT_ALLOWED');
   const home = await fetchResearchPage(parsed);
   if (home.html === null) return { url: parsed.toString(), httpObserved: true, status: home.status, redirected: true, score: null, signals: null, observedAt: new Date().toISOString(), researchVersion: RESEARCH_VERSION };
-  const result = { ...extractResearchSignals(home.url, home.html), status: home.status, researchVersion: RESEARCH_VERSION } as ReturnType<typeof extractResearchSignals> & { status: number; researchVersion: number; contactPage?: string };
+  // `url` stays the URL that was queued: contacts are saved under it and the
+  // send step looks them up by it. Recording the post-redirect URL there left
+  // every redirecting site's contacts saved but never emailed.
+  const result = { ...extractResearchSignals(parsed, home.html), status: home.status, researchVersion: RESEARCH_VERSION } as ReturnType<typeof extractResearchSignals> & { status: number; researchVersion: number; contactPage?: string; finalUrl?: string };
+  if (home.url.toString() !== parsed.toString()) result.finalUrl = home.url.toString();
   if (result.publicRoleEmails.length === 0) {
     for (const candidate of contactPageCandidates(home.url, home.html)) {
       try {
