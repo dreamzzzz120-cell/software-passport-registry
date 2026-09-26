@@ -4,9 +4,16 @@
 name: SPR CI
 
 on:
+  pull_request:
+    branches: [main]
   push:
     branches: [main]
-  pull_request:
+
+concurrency:
+  # A new commit supersedes an older CI run for the same PR/ref. This prevents
+  # obsolete commits from consuming private-repository runner minutes.
+  group: spr-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
