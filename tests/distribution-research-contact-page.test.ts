@@ -66,3 +66,14 @@ describe('research v2', () => {
     expect(c.map(String)).toEqual(['https://acme.ca/contact', 'https://acme.ca/contact-us']);
   });
 });
+
+describe('re-research bookkeeping', () => {
+  it('treats a domain as researched by the version that ran it, not the one that queued it', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync(new URL('../src/workers/distribution-worker.ts', import.meta.url), 'utf8');
+    const q = src.slice(src.indexOf('async function knownResearchDomains'), src.indexOf('async function sweepDiscovery'));
+    expect(q).toContain(`(result->>'researchVersion')::text = '2'`);
+    expect(q).toContain(`status IN ('queued','running')`);
+    expect(q).not.toContain(`payload->>'rv' = '2'`);
+  });
+});
