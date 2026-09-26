@@ -50,9 +50,12 @@ async function knownResearchDomains(pool: ReturnType<typeof createWorkerPool>) {
     await client.query('BEGIN');
     await client.query(`SELECT set_config('app.tenant_id',$1,true)`, [DISTRIBUTION_TENANT_ID]);
     // A domain counts as researched once v2 research (contact page + same-site
-    // redirects) has run on it, or once any research found a contact. v1 jobs
-    // that found nothing get exactly one v2 pass.
-    const result = await client.query(`SELECT DISTINCT payload->>'url' AS url FROM distribution_jobs WHERE tenant_id=$1 AND kind='research_url' AND payload ? 'url' AND (payload->>'rv' = '2' OR (CASE WHEN jsonb_typeof(result->'publicRoleEmails') = 'array' THEN jsonb_array_length(result->'publicRoleEmails') ELSE 0 END) > 0)`, [DISTRIBUTION_TENANT_ID]);
+    // redirects) has actually RUN on it -- the result records the version that
+    // processed it -- or once any research found a contact. Keyed on the result,
+    // not the payload: during a rolling deploy the old worker can claim a job
+    // queued by the new one and research it with the old logic. A job still
+    // queued/running also counts, so a sweep never double-queues a domain.
+    const result = await client.query(`SELECT DISTINCT payload->>'url' AS url FROM distribution_jobs WHERE tenant_id=$1 AND kind='research_url' AND payload ? 'url' AND (status IN ('queued','running') OR (result->>'researchVersion')::text = '2' OR (CASE WHEN jsonb_typeof(result->'publicRoleEmails') = 'array' THEN jsonb_array_length(result->'publicRoleEmails') ELSE 0 END) > 0)`, [DISTRIBUTION_TENANT_ID]);
     await client.query('COMMIT');
     const domains = new Set<string>();
     for (const row of result.rows) { try { domains.add(canonicalizeDomain(row.url)); } catch { /* malformed legacy row */ } }
