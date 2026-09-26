@@ -8,7 +8,7 @@ import {
 import type { Alert, Client, SoftwarePassport } from '../types';
 import type { VerificationDecisionState } from './trust/TrustStateBadge';
 import MSPCommandCenter from './MSPCommandCenter';
-import { apiFetch } from '../utils/api';
+import { apiFetch } from '../utils/apiClient';
 
 interface Props {
   clients: Client[];
