@@ -43,6 +43,8 @@ export default function MSPOperationsCommandCenter(props: Props) {
   const [showAllActions, setShowAllActions] = useState(false);
   const [revenueResults, setRevenueResults] = useState<any[]>([]);
   const [revenueLoading, setRevenueLoading] = useState(false);
+  const [opportunityAction, setOpportunityAction] = useState<string | null>(null);
+  const [opportunityMessage, setOpportunityMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,6 +59,14 @@ export default function MSPOperationsCommandCenter(props: Props) {
   }, [passports]);
 
   const evidenceBackedOpportunities = useMemo(() => revenueResults.flatMap(result => (result.opportunities || []).map((opportunity: any) => ({ ...opportunity, passport: result.passport, clientId: result.clientId, observation: result.latestObservation }))), [revenueResults]);
+
+  const startOpportunityWork = async (opportunity: any) => {
+    const findingId = opportunity.findingIds?.[0];
+    if (!findingId) { setOpportunityMessage('This opportunity has no remediation finding yet. Open the passport to collect or review the missing proof.'); if (opportunity.passport?.id) onSelectPassport?.(opportunity.passport.id); onNavigate('/passports'); return; }
+    const key = String(opportunity.passport?.id || 'passport') + ':' + String(findingId); setOpportunityAction(key); setOpportunityMessage(null);
+    try { const response = await apiFetch('/api/remediation-tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ alertId: findingId }) }); const body = await response.json().catch(() => ({})); if (!response.ok) throw new Error(body?.error || 'SPR could not create the remediation task.'); setOpportunityMessage(response.status === 201 ? 'Remediation task created. Work the task, then queue re-verification.' : 'An active remediation task already exists; SPR did not create a duplicate.'); onNavigate('/monitoring'); }
+    catch (cause: any) { setOpportunityMessage(cause?.message || 'SPR could not create the remediation task.'); } finally { setOpportunityAction(null); }
+  };
 
   const portfolio = useMemo(() => {
     const activeAlerts = alerts.filter(a => !['Resolved', 'Cancelled'].includes(a.status));
@@ -185,14 +195,15 @@ export default function MSPOperationsCommandCenter(props: Props) {
           <button onClick={() => onNavigate('/billing')} className="inline-flex items-center gap-2 text-xs font-semibold text-[var(--spr-highlight)]">Configure service pricing <ArrowRight className="h-3.5 w-3.5" /></button>
         </div>
         <div className="mt-4 space-y-2">
+          {opportunityMessage && <div role="status" className="rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface)] px-4 py-3 text-xs text-[var(--spr-text-muted)]">{opportunityMessage}</div>}
           {revenueLoading && <div className="h-24 animate-pulse rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface)]" />}
           {!revenueLoading && evidenceBackedOpportunities.length === 0 && <Empty icon={<CheckCircle2 />} title="No evidence-backed opportunities found" detail="SPR will not manufacture client work when persisted trust state does not support it." />}
           {!revenueLoading && evidenceBackedOpportunities.slice(0, 12).map((opportunity: any, index: number) => (
-            <button key={`${opportunity.passport?.id || 'passport'}-${opportunity.service}-${index}`} onClick={() => { if (opportunity.passport?.id) onSelectPassport?.(opportunity.passport.id); onNavigate('/passports'); }} className="flex w-full flex-col gap-3 rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface)] p-4 text-left transition hover:border-[var(--spr-highlight)]/40 md:flex-row md:items-center">
+            <div key={`${opportunity.passport?.id || 'passport'}-${opportunity.service}-${index}`} className="flex w-full flex-col gap-3 rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface)] p-4 text-left md:flex-row md:items-center">
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)]"><BriefcaseBusiness className="h-4 w-4" /></span>
               <span className="min-w-0 flex-1"><span className="flex flex-wrap items-center gap-2"><span className="text-sm font-semibold text-[var(--spr-text)]">{opportunity.service}</span><span className="rounded-full border border-[var(--spr-border)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--spr-text-faint)]">{opportunity.basis}</span><span className="rounded-full border border-[var(--spr-border)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--spr-text-faint)]">{opportunity.urgency}</span></span><span className="mt-1 block text-xs text-[var(--spr-text-muted)]">{opportunity.passport?.name}: {opportunity.trigger}</span><span className="mt-1 block text-[11px] text-[var(--spr-text-faint)]">{opportunity.evidenceIds?.length || 0} evidence · {opportunity.findingIds?.length || 0} findings · {opportunity.unknowns?.length || 0} unknowns</span></span>
-              <span className="shrink-0 text-right"><span className="block text-sm font-bold text-[var(--spr-text)]">{opportunity.value == null ? 'Price not configured' : `${Number(opportunity.value).toLocaleString()}`}</span><span className="mt-1 block text-[11px] font-semibold text-[var(--spr-highlight)]">Open proof <ChevronRight className="inline h-3 w-3" /></span></span>
-            </button>
+              <span className="shrink-0 text-right"><span className="block text-sm font-bold text-[var(--spr-text)]">{opportunity.value == null ? 'Price not configured' : `${Number(opportunity.value).toLocaleString()}`}</span><span className="mt-2 flex gap-2"><button onClick={() => { if (opportunity.passport?.id) onSelectPassport?.(opportunity.passport.id); onNavigate('/passports'); }} className="text-[11px] font-semibold text-[var(--spr-highlight)]">Open proof <ChevronRight className="inline h-3 w-3" /></button><button disabled={opportunityAction === String(opportunity.passport?.id || 'passport') + ':' + String(opportunity.findingIds?.[0])} onClick={() => startOpportunityWork(opportunity)} className="rounded-lg bg-[var(--spr-accent)] px-2.5 py-1.5 text-[11px] font-bold text-white disabled:opacity-50">{opportunity.findingIds?.length ? 'Start remediation' : 'Resolve evidence gap'}</button></span></span>
+            </div>
           ))}
         </div>
       </section>
