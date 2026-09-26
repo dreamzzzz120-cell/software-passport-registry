@@ -2,7 +2,7 @@ import { decryptCredentials } from '../integrations/credential-vault.ts';
 import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, mkdir, writeFile, readdir, lstat, rm, unlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, open, readdir, lstat, rm, unlink } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { appendAuditEntryViaPool } from '../security/audit-log.ts';
 import { calculateAndStoreTrustScore } from '../utils/scanner.ts';
@@ -39,9 +39,12 @@ const WORKER_ID = `${os.hostname()}:${process.pid}`;
 const PROVIDER_TIMEOUT_MS = 15_000;
 const PROVIDER_MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
 const JOB_LEASE_MS = 10 * 60 * 1000;
-const MAX_ARCHIVE_BYTES = 50 * 1024 * 1024;
-const MAX_EXTRACTED_BYTES = 200 * 1024 * 1024;
-const MAX_FILE_COUNT = 50_000;
+// Large repositories are bounded by disk/file limits, not by buffering the
+// entire archive in RAM. Defaults are intentionally generous enough for real
+// customer repositories while remaining configurable at deployment time.
+const MAX_ARCHIVE_BYTES = Math.max(50 * 1024 * 1024, Math.min(1024 * 1024 * 1024, Number.parseInt(process.env.REPOSITORY_MAX_ARCHIVE_BYTES || '', 10) || 250 * 1024 * 1024));
+const MAX_EXTRACTED_BYTES = Math.max(200 * 1024 * 1024, Math.min(4 * 1024 * 1024 * 1024, Number.parseInt(process.env.REPOSITORY_MAX_EXTRACTED_BYTES || '', 10) || 1024 * 1024 * 1024));
+const MAX_FILE_COUNT = Math.max(50_000, Math.min(250_000, Number.parseInt(process.env.REPOSITORY_MAX_FILE_COUNT || '', 10) || 100_000));
 const ACQUISITION_TIMEOUT_MS = 30_000;
 const SBOM_TIMEOUT_MS = 120_000;
 export const SYFT_VERSION = '1.49.0';
@@ -397,13 +400,26 @@ export async function downloadArchive(url: string, destination: string, options:
     if (!response.ok || !response.body) throw new Error('REPOSITORY_ACCESS_DENIED');
     const declaredSize = Number(response.headers.get('content-length') || 0);
     if (declaredSize > maxBytes) throw new Error('REPOSITORY_TOO_LARGE');
-    const chunks: Buffer[] = []; let size = 0;
-    for await (const chunk of response.body as any) {
-      const buffer = Buffer.from(chunk); size += buffer.length;
-      if (size > maxBytes) throw new Error('REPOSITORY_TOO_LARGE');
-      chunks.push(buffer);
+    // Stream directly to the temporary archive file. The previous
+    // implementation accumulated every chunk in memory and then Buffer.concat'd
+    // the whole ZIP, making the 50 MB guard do double duty as a memory-safety
+    // workaround. Streaming lets us support much larger repositories while the
+    // explicit byte cap still bounds disk and decompression work.
+    const file = await open(destination, 'w');
+    let size = 0;
+    try {
+      for await (const chunk of response.body as any) {
+        const buffer = Buffer.from(chunk);
+        size += buffer.length;
+        if (size > maxBytes) {
+          await response.body.cancel().catch(() => undefined);
+          throw new Error('REPOSITORY_TOO_LARGE');
+        }
+        await file.write(buffer);
+      }
+    } finally {
+      await file.close();
     }
-    await writeFile(destination, Buffer.concat(chunks));
   } catch (error: any) {
     if (error?.name === 'AbortError') throw new Error('REPOSITORY_ACQUISITION_TIMEOUT');
     throw error;
