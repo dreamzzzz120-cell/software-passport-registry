@@ -191,8 +191,16 @@ export default function FreeReviewView({
   onSignUp,
   initialResult,
 }: FreeReviewViewProps) {
-  const [owner, setOwner] = useState('');
-  const [repository, setRepository] = useState('');
+  // Prefill from ?owner=&repo= so a registry page's "maintain this project?"
+  // link lands on a ready-to-run form. Values are only used as initial input
+  // text and must match GitHub's owner/repo character set.
+  const prefill = (key: string): string => {
+    if (typeof window === 'undefined') return '';
+    const value = new URLSearchParams(window.location.search).get(key) ?? '';
+    return /^[A-Za-z0-9._-]{1,100}$/.test(value) ? value : '';
+  };
+  const [owner, setOwner] = useState(() => prefill('owner'));
+  const [repository, setRepository] = useState(() => prefill('repo'));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [statusUrl, setStatusUrl] = useState(
