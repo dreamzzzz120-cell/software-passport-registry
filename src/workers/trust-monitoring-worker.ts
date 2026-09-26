@@ -19,6 +19,27 @@ function id(p:string){return`${p}_${crypto.randomUUID().replaceAll('-','')}`;}
 function pool(){return createWorkerPool();}
 
 async function bootstrapRepositoryMonitoring(p:Pool){
+  // Keep the bootstrap fail-closed, but make a zero eligible count diagnosable.
+  // These are counts only: no repository names, customer identifiers, tokens,
+  // or other tenant data are written to logs.
+  const gates=await p.query(`
+    SELECT
+      COUNT(DISTINCT CASE WHEN j.status='Completed' THEN j.id END)::int AS completed_repository_scans,
+      COUNT(DISTINCT CASE WHEN j.status='Completed' AND s.client_id IS NOT NULL THEN j.id END)::int AS completed_client_repository_scans,
+      COUNT(DISTINCT CASE WHEN j.status='Completed' AND s.client_id IS NOT NULL AND EXISTS (
+        SELECT 1 FROM integration_credentials ic
+        WHERE ic.tenant_id=j.tenant_id AND ic.provider='github'
+      ) THEN j.id END)::int AS completed_client_scans_with_github_credential
+    FROM repository_scan_sources rss
+    JOIN agent_jobs j ON j.id=rss.job_id AND j.tenant_id=rss.tenant_id
+    JOIN scans s ON s.id=j.scan_id AND s.tenant_id=j.tenant_id
+  `);
+  const gateCounts=gates.rows[0]??{};
+  console.info('[TrustMonitoring] bootstrap gates:',JSON.stringify({
+    completedRepositoryScans:Number(gateCounts.completed_repository_scans||0),
+    completedClientRepositoryScans:Number(gateCounts.completed_client_repository_scans||0),
+    completedClientScansWithGithubCredential:Number(gateCounts.completed_client_scans_with_github_credential||0),
+  }));
   // Repository scans already prove the tenant/passport/repository relationship.
   // Backfill continuous monitoring for completed customer scans when that tenant
   // has a real GitHub integration credential. This makes monitoring automatic
