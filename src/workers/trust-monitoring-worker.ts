@@ -23,6 +23,18 @@ async function bootstrapRepositoryMonitoring(p:Pool){
   // Backfill continuous monitoring for completed customer scans when that tenant
   // has a real GitHub integration credential. This makes monitoring automatic
   // without inventing credentials or enabling it for anonymous/free-review data.
+  const eligible=await p.query(`
+    SELECT COUNT(DISTINCT (j.tenant_id || chr(31) || j.passport_id || chr(31) || rss.repository_owner || '/' || rss.repository_name))::int AS count
+    FROM repository_scan_sources rss
+    JOIN agent_jobs j ON j.id=rss.job_id AND j.tenant_id=rss.tenant_id
+    JOIN scans s ON s.id=j.scan_id AND s.tenant_id=j.tenant_id
+    WHERE j.status='Completed'
+      AND s.client_id IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM integration_credentials ic
+        WHERE ic.tenant_id=j.tenant_id AND ic.provider='github'
+      )
+  `);
   const result=await p.query(`
     INSERT INTO monitoring_configurations (
       id,tenant_id,client_id,asset_id,passport_id,collector_id,subject_type,
@@ -34,7 +46,7 @@ async function bootstrapRepositoryMonitoring(p:Pool){
       'monitor-auto-' || md5(j.tenant_id || chr(31) || j.passport_id || chr(31) || rss.repository_owner || '/' || rss.repository_name),
       j.tenant_id,s.client_id,j.passport_id,j.passport_id,'repository','github_repository',
       rss.repository_owner || '/' || rss.repository_name,1,21600,NULL,NULL,
-      (CURRENT_TIMESTAMP + INTERVAL '6 hours')::text,NULL,0,0,'unknown',
+      CURRENT_TIMESTAMP::text,NULL,0,0,'unknown',
       'repository.v1','observed.v1','repository-worker','repository-worker',
       CURRENT_TIMESTAMP::text,CURRENT_TIMESTAMP::text
     FROM repository_scan_sources rss
@@ -48,7 +60,7 @@ async function bootstrapRepositoryMonitoring(p:Pool){
       )
     ON CONFLICT (tenant_id,asset_id,collector_id,subject_identifier) DO NOTHING
   `);
-  return result.rowCount ?? 0;
+  return {eligible:Number(eligible.rows[0]?.count||0),created:result.rowCount ?? 0};
 }
 
 async function tenantGithubCredentials(p:Pool,tenantId:string){
@@ -143,4 +155,4 @@ async function fail(p:Pool,job:any,error:any){const now=new Date().toISOString()
 // nothing was due, so a production log can prove the loop ran (or show it
 // idle) rather than being silent in both cases. Counts only.
 const SUMMARY_MS=5*60*1000;
-export async function runTrustMonitoringWorkerLoop(){const p=pool();let lastSchedule=0,lastBootstrap=0,lastSummary=Date.now();const tally={scheduled:0,claimed:0,completed:0,failed:0};console.info('[TrustMonitoring] loop started');for(;;){try{if(Date.now()-lastBootstrap>=300000){const created=await bootstrapRepositoryMonitoring(p);if(created)console.info(`[TrustMonitoring] bootstrapped ${created} repository monitoring configuration(s)`);lastBootstrap=Date.now();}if(Date.now()-lastSchedule>=30000){const due=await scheduleDue(p);tally.scheduled+=due??0;if(due)console.info(`[TrustMonitoring] scheduled ${due} due configuration(s)`);lastSchedule=Date.now();}}catch(e){console.error('TRUST_SCHEDULER_ERROR',e);}if(Date.now()-lastSummary>=SUMMARY_MS){console.info('[TrustMonitoring] last 5m:',JSON.stringify(tally));tally.scheduled=tally.claimed=tally.completed=tally.failed=0;lastSummary=Date.now();}const job=await claim(p);if(!job){await new Promise(r=>setTimeout(r,1500));continue;}tally.claimed++;try{const observations=await execute(p,job);await complete(p,job,observations);tally.completed++;console.info(`[TrustMonitoring] job ${job.id} completed collector=${job.collector_id} observations=${observations.length}`);}catch(e){tally.failed++;console.error(`[TrustMonitoring] job ${job.id} failed collector=${job.collector_id}:`,e instanceof Error?e.message:String(e));await fail(p,job,e);}}}
+export async function runTrustMonitoringWorkerLoop(){const p=pool();let lastSchedule=0,lastBootstrap=0,lastSummary=Date.now();const tally={scheduled:0,claimed:0,completed:0,failed:0};console.info('[TrustMonitoring] loop started');for(;;){try{if(Date.now()-lastBootstrap>=300000){const bootstrap=await bootstrapRepositoryMonitoring(p);console.info('[TrustMonitoring] bootstrap:',JSON.stringify(bootstrap));lastBootstrap=Date.now();}if(Date.now()-lastSchedule>=30000){const due=await scheduleDue(p);tally.scheduled+=due??0;if(due)console.info(`[TrustMonitoring] scheduled ${due} due configuration(s)`);lastSchedule=Date.now();}}catch(e){console.error('TRUST_SCHEDULER_ERROR',e);}if(Date.now()-lastSummary>=SUMMARY_MS){console.info('[TrustMonitoring] last 5m:',JSON.stringify(tally));tally.scheduled=tally.claimed=tally.completed=tally.failed=0;lastSummary=Date.now();}const job=await claim(p);if(!job){await new Promise(r=>setTimeout(r,1500));continue;}tally.claimed++;try{const observations=await execute(p,job);await complete(p,job,observations);tally.completed++;console.info(`[TrustMonitoring] job ${job.id} completed collector=${job.collector_id} observations=${observations.length}`);}catch(e){tally.failed++;console.error(`[TrustMonitoring] job ${job.id} failed collector=${job.collector_id}:`,e instanceof Error?e.message:String(e));await fail(p,job,e);}}}
