@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Activity, AlertTriangle, ArrowRight, Bot, BriefcaseBusiness, CheckCircle2,
   ChevronRight, Clock3, DollarSign, FileCheck2, Gauge, Layers3, Radar,
@@ -8,6 +8,7 @@ import {
 import type { Alert, Client, SoftwarePassport } from '../types';
 import type { VerificationDecisionState } from './trust/TrustStateBadge';
 import MSPCommandCenter from './MSPCommandCenter';
+import { apiFetch } from '../utils/api';
 
 interface Props {
   clients: Client[];
@@ -32,7 +33,6 @@ type Action = {
   onClick: () => void;
 };
 
-const money = (n: number) => `$${Math.round(n).toLocaleString()}`;
 const pct = (n: number | null) => n === null ? 'Not verified' : `${n}%`;
 
 export default function MSPOperationsCommandCenter(props: Props) {
@@ -41,6 +41,22 @@ export default function MSPOperationsCommandCenter(props: Props) {
     onSelectClient, onSelectPassport, onNavigate, dataStatus = 'ready', onRetry
   } = props;
   const [showAllActions, setShowAllActions] = useState(false);
+  const [revenueResults, setRevenueResults] = useState<any[]>([]);
+  const [revenueLoading, setRevenueLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!passports.length) { setRevenueResults([]); return; }
+    setRevenueLoading(true);
+    Promise.all(passports.slice(0, 100).map(async passport => {
+      const response = await apiFetch('/api/agent/v1/revenue-opportunities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ passportId: passport.id, catalog: {} }) });
+      if (!response.ok) return null;
+      return response.json();
+    })).then(rows => { if (!cancelled) setRevenueResults(rows.filter(Boolean)); }).catch(() => { if (!cancelled) setRevenueResults([]); }).finally(() => { if (!cancelled) setRevenueLoading(false); });
+    return () => { cancelled = true; };
+  }, [passports]);
+
+  const evidenceBackedOpportunities = useMemo(() => revenueResults.flatMap(result => (result.opportunities || []).map((opportunity: any) => ({ ...opportunity, passport: result.passport, clientId: result.clientId, observation: result.latestObservation }))), [revenueResults]);
 
   const portfolio = useMemo(() => {
     const activeAlerts = alerts.filter(a => !['Resolved', 'Cancelled'].includes(a.status));
@@ -123,11 +139,6 @@ export default function MSPOperationsCommandCenter(props: Props) {
     ];
   }, [clients, passports, portfolio]);
 
-  const monthlyServiceOpportunity = clients.length
-    ? clients.filter(c => (c.softwareInventory || []).length === 0).length * 49
-      + portfolio.unknown * 49
-      + Math.max(0, passports.length - portfolio.monitored) * 49
-    : 0;
 
   return (
     <div className="mx-auto max-w-[1500px] space-y-6 pb-16" id="msp-operations-command-center">
@@ -165,7 +176,25 @@ export default function MSPOperationsCommandCenter(props: Props) {
         <SignalCard title="Trust coverage" value={pct(portfolio.coverage)} sub={`${portfolio.verified} verified · ${portfolio.review} review · ${portfolio.unknown} unknown`} icon={<Gauge />} />
         <SignalCard title="Evidence freshness" value={pct(portfolio.freshness)} sub={`${portfolio.fresh} fresh · ${Math.max(0, passports.length - portfolio.fresh)} gap`} icon={<Clock3 />} />
         <SignalCard title="Critical exposure" value={portfolio.critical.toLocaleString()} sub={`${portfolio.high} high · ${portfolio.activeAlerts.length} active alerts`} icon={<ShieldAlert />} danger={portfolio.critical > 0} />
-        <SignalCard title="Service surface" value={money(monthlyServiceOpportunity)} sub="Observed gaps × $49/mo signal; not booked revenue" icon={<DollarSign />} />
+        <SignalCard title="Evidence-backed opportunities" value={revenueLoading ? "Loading…" : evidenceBackedOpportunities.length.toLocaleString()} sub="Derived by Revenue Engine v2; no assumed price or booked revenue" icon={<DollarSign />} />
+      </section>
+
+      <section className="rounded-[26px] border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5 md:p-6" id="revenue-opportunities">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div><div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.18em] text-[var(--spr-highlight)]"><DollarSign className="h-4 w-4" /> Revenue opportunities</div><h2 className="mt-2 text-xl font-bold text-[var(--spr-text)]">Turn observed trust gaps into defensible client work.</h2><p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">Every item below comes from persisted SPR evidence, findings, UNKNOWN state, freshness, or monitoring configuration. Price is never assumed.</p></div>
+          <button onClick={() => onNavigate('/billing')} className="inline-flex items-center gap-2 text-xs font-semibold text-[var(--spr-highlight)]">Configure service pricing <ArrowRight className="h-3.5 w-3.5" /></button>
+        </div>
+        <div className="mt-4 space-y-2">
+          {revenueLoading && <div className="h-24 animate-pulse rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface)]" />}
+          {!revenueLoading && evidenceBackedOpportunities.length === 0 && <Empty icon={<CheckCircle2 />} title="No evidence-backed opportunities found" detail="SPR will not manufacture client work when persisted trust state does not support it." />}
+          {!revenueLoading && evidenceBackedOpportunities.slice(0, 12).map((opportunity: any, index: number) => (
+            <button key={`${opportunity.passport?.id || 'passport'}-${opportunity.service}-${index}`} onClick={() => { if (opportunity.passport?.id) onSelectPassport?.(opportunity.passport.id); onNavigate('/passports'); }} className="flex w-full flex-col gap-3 rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface)] p-4 text-left transition hover:border-[var(--spr-highlight)]/40 md:flex-row md:items-center">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)]"><BriefcaseBusiness className="h-4 w-4" /></span>
+              <span className="min-w-0 flex-1"><span className="flex flex-wrap items-center gap-2"><span className="text-sm font-semibold text-[var(--spr-text)]">{opportunity.service}</span><span className="rounded-full border border-[var(--spr-border)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--spr-text-faint)]">{opportunity.basis}</span><span className="rounded-full border border-[var(--spr-border)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--spr-text-faint)]">{opportunity.urgency}</span></span><span className="mt-1 block text-xs text-[var(--spr-text-muted)]">{opportunity.passport?.name}: {opportunity.trigger}</span><span className="mt-1 block text-[11px] text-[var(--spr-text-faint)]">{opportunity.evidenceIds?.length || 0} evidence · {opportunity.findingIds?.length || 0} findings · {opportunity.unknowns?.length || 0} unknowns</span></span>
+              <span className="shrink-0 text-right"><span className="block text-sm font-bold text-[var(--spr-text)]">{opportunity.value == null ? 'Price not configured' : `${Number(opportunity.value).toLocaleString()}`}</span><span className="mt-1 block text-[11px] font-semibold text-[var(--spr-highlight)]">Open proof <ChevronRight className="inline h-3 w-3" /></span></span>
+            </button>
+          ))}
+        </div>
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.35fr_.65fr]">

@@ -87,3 +87,29 @@ describe('SPR MSP pricing — packaging separated from live billing', () => {
     expect(app).toContain(code`case '/pricing': view = <MspPricingView isAuthenticated={true}`);
   });
 });
+
+
+describe('SPR MSP operations — evidence-backed revenue opportunities', () => {
+  const source = () => readCode('src/components/MSPOperationsCommandCenter.tsx');
+
+  it('loads opportunities from Revenue Engine v2 rather than calculating synthetic gap pricing', () => {
+    const s = source();
+    expect(s).toContain(code`apiFetch('/api/agent/v1/revenue-opportunities'`);
+    expect(s).toContain(code`catalog: {}`);
+    expect(s).toContain(code`Price not configured`);
+    expect(s).not.toContain(code`* 49`);
+    expect(s).not.toContain(code`gaps × $49`);
+  });
+
+  it('shows opportunity provenance counts and explicit evidence basis', () => {
+    const s = source();
+    expect(s).toContain(code`opportunity.basis`);
+    expect(s).toContain(code`opportunity.evidenceIds?.length`);
+    expect(s).toContain(code`opportunity.findingIds?.length`);
+    expect(s).toContain(code`opportunity.unknowns?.length`);
+  });
+
+  it('does not manufacture an empty-state sales opportunity', () => {
+    expect(source()).toContain(code`SPR will not manufacture client work when persisted trust state does not support it.`);
+  });
+});
