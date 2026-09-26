@@ -109,21 +109,79 @@ export async function enqueueResearchUrl(pool: Pool, url: string, origin?: Distr
   const parsed = new URL(url);
   if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('DISTRIBUTION_URL_SCHEME_NOT_ALLOWED');
   await assertPublicResearchTarget(parsed);
-  return enqueueDistributionJob(pool, 'research_url', origin ? { url: parsed.toString(), origin } : { url: parsed.toString() });
+  return enqueueDistributionJob(pool, 'research_url', origin ? { url: parsed.toString(), origin, rv: RESEARCH_VERSION } : { url: parsed.toString(), rv: RESEARCH_VERSION });
+}
+
+// v2: follows same-site redirects and, when the home page shows no public
+// role address, checks the contact page -- where most MSPs publish info@ or
+// sales@. v1 read only the home page and never followed redirects, so most
+// researched MSPs yielded no contact. The sweep re-researches a v1 domain
+// that found nothing exactly once (see knownResearchDomains).
+export const RESEARCH_VERSION = 2;
+const RESEARCH_UA = 'SPR-Distribution-Research/1.0 (+https://www.softwarepassportregistry.com)';
+const MAX_REDIRECTS = 2;
+
+function siteKey(host: string) { return host.toLowerCase().replace(/^www\./, ''); }
+
+type FetchedPage = { url: URL; status: number; html: string | null };
+
+async function fetchResearchPage(start: URL): Promise<FetchedPage> {
+  let target = start;
+  let lastStatus = 0;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    await assertPublicResearchTarget(target);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    try {
+      const response = await fetch(target, { signal: controller.signal, redirect: 'manual', headers: { 'user-agent': RESEARCH_UA } });
+      lastStatus = response.status;
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get('location');
+        if (!location) return { url: target, status: response.status, html: null };
+        const next = new URL(location, target);
+        // Only follow within the same site (apex <-> www, http -> https); a
+        // redirect to another domain is not this business's page.
+        if (!['http:', 'https:'].includes(next.protocol) || siteKey(next.hostname) !== siteKey(start.hostname)) return { url: target, status: response.status, html: null };
+        target = next;
+        continue;
+      }
+      return { url: target, status: response.status, html: await readBoundedBody(response) };
+    } finally { clearTimeout(timeout); }
+  }
+  return { url: target, status: lastStatus, html: null };
+}
+
+export function contactPageCandidates(home: URL, html: string): URL[] {
+  const out: URL[] = [];
+  const seen = new Set<string>();
+  const add = (u: URL) => { const k = u.origin + u.pathname.replace(/\/+$/, ''); if (!seen.has(k) && u.origin === home.origin && k !== home.origin) { seen.add(k); out.push(u); } };
+  for (const m of html.matchAll(/<a\b[^>]*href\s*=\s*["']([^"'#]+)["'][^>]*>/gi)) {
+    const href = m[1];
+    if (!/contact/i.test(href)) continue;
+    try { add(new URL(href, home)); } catch { /* bad href */ }
+    if (out.length >= 1) break;
+  }
+  for (const path of ['/contact', '/contact-us']) add(new URL(path, home.origin));
+  return out.slice(0, 2);
 }
 
 export async function researchUrl(url: string) {
   const parsed = new URL(url);
   if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('DISTRIBUTION_URL_SCHEME_NOT_ALLOWED');
-  await assertPublicResearchTarget(parsed);
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  try {
-    const response = await fetch(parsed, { signal: controller.signal, redirect: 'manual', headers: { 'user-agent': 'SPR-Distribution-Research/1.0 (+https://www.softwarepassportregistry.com)' } });
-    if (response.status >= 300 && response.status < 400) return { url: parsed.toString(), httpObserved: true, status: response.status, redirected: true, score: null, signals: null, observedAt: new Date().toISOString() };
-    const html = await readBoundedBody(response);
-    return { ...extractResearchSignals(parsed, html), status: response.status };
-  } finally { clearTimeout(timeout); }
+  const home = await fetchResearchPage(parsed);
+  if (home.html === null) return { url: parsed.toString(), httpObserved: true, status: home.status, redirected: true, score: null, signals: null, observedAt: new Date().toISOString(), researchVersion: RESEARCH_VERSION };
+  const result = { ...extractResearchSignals(home.url, home.html), status: home.status, researchVersion: RESEARCH_VERSION } as ReturnType<typeof extractResearchSignals> & { status: number; researchVersion: number; contactPage?: string };
+  if (result.publicRoleEmails.length === 0) {
+    for (const candidate of contactPageCandidates(home.url, home.html)) {
+      try {
+        const page = await fetchResearchPage(candidate);
+        if (page.html === null || page.status >= 400) continue;
+        const emails = publicRoleEmails(page.html);
+        if (emails.length) { result.publicRoleEmails = emails; result.contactPage = page.url.toString(); break; }
+      } catch { /* a contact page that fails doesn't fail the research */ }
+    }
+  }
+  return result;
 }
 
 export function calculateBackoff(attempt: number) { return Math.min(60_000, 1_000 * 2 ** Math.max(0, attempt - 1)); }

@@ -49,7 +49,10 @@ async function knownResearchDomains(pool: ReturnType<typeof createWorkerPool>) {
   try {
     await client.query('BEGIN');
     await client.query(`SELECT set_config('app.tenant_id',$1,true)`, [DISTRIBUTION_TENANT_ID]);
-    const result = await client.query(`SELECT DISTINCT payload->>'url' AS url FROM distribution_jobs WHERE tenant_id=$1 AND kind='research_url' AND payload ? 'url'`, [DISTRIBUTION_TENANT_ID]);
+    // A domain counts as researched once v2 research (contact page + same-site
+    // redirects) has run on it, or once any research found a contact. v1 jobs
+    // that found nothing get exactly one v2 pass.
+    const result = await client.query(`SELECT DISTINCT payload->>'url' AS url FROM distribution_jobs WHERE tenant_id=$1 AND kind='research_url' AND payload ? 'url' AND (payload->>'rv' = '2' OR (CASE WHEN jsonb_typeof(result->'publicRoleEmails') = 'array' THEN jsonb_array_length(result->'publicRoleEmails') ELSE 0 END) > 0)`, [DISTRIBUTION_TENANT_ID]);
     await client.query('COMMIT');
     const domains = new Set<string>();
     for (const row of result.rows) { try { domains.add(canonicalizeDomain(row.url)); } catch { /* malformed legacy row */ } }
