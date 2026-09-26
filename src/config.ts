@@ -74,6 +74,15 @@ const normalizeOrigin = (origin: string) => new URL(origin).origin;
 const parseOriginList = (input: string | undefined) => parseCsv(input).map(normalizeOrigin);
 const parsedEnv = envSchema.parse(process.env);
 
+// Fail billing closed when a deployment accidentally wires another provider's
+// credential (for example a Resend key) into STRIPE_SECRET_KEY. Treating any
+// non-empty string as Stripe-ready caused repeated live API failures and made
+// the catalogue look configured when checkout could never work.
+const stripeSecretKey = parsedEnv.STRIPE_SECRET_KEY && /^sk_(?:live|test)_[A-Za-z0-9]+$/.test(parsedEnv.STRIPE_SECRET_KEY)
+  ? parsedEnv.STRIPE_SECRET_KEY
+  : undefined;
+export const stripeSecretKeyMisconfigured = Boolean(parsedEnv.STRIPE_SECRET_KEY && !stripeSecretKey);
+
 const railwayPublicUrl = process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN.trim()}` : undefined;
 const effectiveAppUrl = parsedEnv.APP_URL ?? railwayPublicUrl;
 const effectiveAllowedOrigins = [...new Set([
@@ -99,7 +108,7 @@ export const config = {
     isConfigured: Boolean(parsedEnv.DATABASE_URL || (parsedEnv.SQL_HOST && parsedEnv.SQL_USER && parsedEnv.SQL_PASSWORD && parsedEnv.SQL_DB_NAME)),
   },
   stripe: {
-    secretKey: parsedEnv.STRIPE_SECRET_KEY, webhookSecret: parsedEnv.STRIPE_WEBHOOK_SECRET,
+    secretKey: stripeSecretKey, webhookSecret: parsedEnv.STRIPE_WEBHOOK_SECRET,
     prices: {
       pilot: parsedEnv.STRIPE_PRICE_MSP_PILOT ?? parsedEnv.STRIPE_PRICE_PILOT,
       starter: parsedEnv.STRIPE_PRICE_STARTER,
