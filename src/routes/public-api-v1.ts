@@ -67,7 +67,7 @@ export function createPublicApiV1Router() {
     const digest = z.string().trim().min(1).max(71).safeParse(req.query.digest);
     if (!passportId.success || !digest.success) return res.status(400).json({ error: 'INVALID_DIGEST_QUERY' });
     try {
-      const passport = (await req.db!.execute(sql\`SELECT id,file_hash AS "fileHash" FROM passports WHERE tenant_id=\${req.user!.tenantId} AND id=\${passportId.data} LIMIT 1\`) as any).rows?.[0];
+      const passport = (await req.db!.execute(sql`SELECT id,file_hash AS "fileHash" FROM passports WHERE tenant_id=${req.user!.tenantId} AND id=${passportId.data} LIMIT 1`) as any).rows?.[0];
       if (!passport) return res.status(404).json({ status: 'UNKNOWN', reason: 'PASSPORT_NOT_FOUND' });
       return res.json(compareRegisteredDigest(passport, digest.data));
     } catch (error) { next(error); }
