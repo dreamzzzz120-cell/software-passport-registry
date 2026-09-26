@@ -159,7 +159,9 @@ export async function ingestResearchResult(result: Record<string, unknown>, defa
 
 export async function sendInitial(contactId: string) {
   return withTenant(async (client) => {
-    const contactResult = await client.query(`SELECT id,email,company,evidence,status,outreach_basis,consent_evidence_url FROM distribution_contacts WHERE id=$1 AND tenant_id=$2 LIMIT 1`, [contactId,DISTRIBUTION_TENANT_ID]);
+    // FOR UPDATE serialises concurrent sends to one contact: a second job waits
+    // here, then sees the first one's 'initial' message and stops.
+    const contactResult = await client.query(`SELECT id,email,company,evidence,status,outreach_basis,consent_evidence_url FROM distribution_contacts WHERE id=$1 AND tenant_id=$2 LIMIT 1 FOR UPDATE`, [contactId,DISTRIBUTION_TENANT_ID]);
     const contact = contactResult.rows?.[0];
     if (!contact || contact.status !== 'active') throw new Error('DISTRIBUTION_CONTACT_NOT_ACTIVE');
     outreachAllowed(contact.outreach_basis);

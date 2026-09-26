@@ -32,6 +32,9 @@ describe('research v2', () => {
     const r: any = await researchUrl('https://acme.ca/');
     expect(r.publicRoleEmails).toEqual(['info@acme.ca']);
     expect(r.contactPage).toBe('https://www.acme.ca/get-in-touch/contact');
+    // Contacts are saved under, and the send step looks them up by, the queued URL.
+    expect(r.url).toBe('https://acme.ca/');
+    expect(r.finalUrl).toBe('https://www.acme.ca/');
     expect(r.signals.msp).toBe(true);
     expect(r.researchVersion).toBe(RESEARCH_VERSION);
   });
@@ -75,5 +78,20 @@ describe('re-research bookkeeping', () => {
     expect(q).toContain(`(result->>'researchVersion')::text = '2'`);
     expect(q).toContain(`status IN ('queued','running')`);
     expect(q).not.toContain(`payload->>'rv' = '2'`);
+  });
+});
+
+describe('send hand-off safety', () => {
+  it('sweeps recent, active, never-emailed researched contacts only', async () => {
+    const { UNSENT_CONTACT_SQL } = await import('../src/workers/distribution-worker.ts');
+    for (const part of [`c.status='active'`, `c.source_url IS NOT NULL`, `INTERVAL '10 minutes'`, `INTERVAL '14 days'`, `m.kind='initial' AND m.status='sent'`, `j.kind='send_outreach'`, `LIMIT 25`]) expect(UNSENT_CONTACT_SQL).toContain(part);
+  });
+
+  it('serialises sends per contact and makes the sweep single-flight', async () => {
+    const { readFileSync } = await import('node:fs');
+    const outreach = readFileSync(new URL('../src/lib/distribution-outreach.ts', import.meta.url), 'utf8');
+    expect(outreach.slice(outreach.indexOf('export async function sendInitial'))).toMatch(/FROM distribution_contacts WHERE id=\$1 AND tenant_id=\$2 LIMIT 1 FOR UPDATE/);
+    const worker = readFileSync(new URL('../src/workers/distribution-worker.ts', import.meta.url), 'utf8');
+    expect(worker).toContain(`pg_try_advisory_xact_lock(hashtext('spr-distribution-unsent-sweep'))`);
   });
 });
