@@ -21,7 +21,7 @@ import { encryptCredential } from '../security/credential-vault.ts';
 type SprApiRequest = { sprApi?: { id: string; tenantId: string; name: string; scopes: readonly string[]; db?: ScopedDb } };
 const API_VERSION = '2026-08-01';
 const PUBLIC_SCOPES = ['read', 'write', 'webhooks'] as const;
-const DEFAULT_EVENTS = ['passport.updated', 'trust.changed', 'risk.created', 'risk.resolved', 'evidence.updated', 'verification.completed', 'verification.expired'] as const;
+const DEFAULT_EVENTS = ['passport.updated', 'trust.changed', 'risk.created', 'risk.resolved', 'evidence.updated', 'verification.completed', 'verification.expired', 'opportunity.reviewed'] as const;
 const RESERVED_METADATA_KEYS = new Set([
   'trustscore', 'trust_score', 'securityscore', 'security_score', 'compliancescore', 'compliance_score',
   'reputationscore', 'reputation_score', 'overallscore', 'overall_score', 'risklevel', 'risk_level',
