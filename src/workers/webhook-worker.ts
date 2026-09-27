@@ -14,6 +14,7 @@ const DISABLE_AFTER_FAILURES = 10;
 const ALLOWED_WEBHOOK_EVENTS = new Set([
   'passport.updated', 'trust.changed', 'risk.created', 'risk.resolved',
   'evidence.updated', 'verification.completed', 'verification.expired',
+  'opportunity.reviewed',
 ]);
 
 function safeError(code: string, message: string) {
