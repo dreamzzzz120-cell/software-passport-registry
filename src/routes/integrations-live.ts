@@ -7,7 +7,7 @@ import { appendAuditEntry } from '../security/audit-log.ts';
 import { INTEGRATION_CATALOG } from '../integrations/catalog.ts';
 import { collectProviderEvidence, Provider, ProviderCredentials } from '../integrations/adapters.ts';
 import { decryptCredentials, encryptCredentials } from '../integrations/credential-vault.ts';
-import { discoverProviderCustomers, supportsCustomerDiscovery, type CustomerDiscoveryProvider } from '../integrations/customer-discovery.ts';
+import { discoverProviderCustomersWithCoverage, supportsCustomerDiscovery, type CustomerDiscoveryProvider } from '../integrations/customer-discovery.ts';
 
 const PROVIDERS = new Set(INTEGRATION_CATALOG.map(item => item.provider));
 const credentialSchema = z.record(z.string().min(1).max(128), z.string().max(4096)).refine(v => Object.keys(v).length > 0, 'Credentials cannot be empty');
@@ -121,10 +121,17 @@ export function createLiveIntegrationsRouter() {
       const stored = await db.execute(sql`SELECT encrypted_payload FROM integration_credentials WHERE tenant_id = ${tenantId} AND provider = ${provider} LIMIT 1`);
       const payload = (stored as any).rows?.[0]?.encrypted_payload;
       if (!payload) return res.status(409).json({ error: 'CREDENTIAL_NOT_CONFIGURED' });
-      const discovered = await discoverProviderCustomers(provider, decryptCredentials(payload) as ProviderCredentials);
+      const runId = id('custdisc');
+      const startedAt = new Date().toISOString();
+      const discovery = await discoverProviderCustomersWithCoverage(provider, decryptCredentials(payload) as ProviderCredentials);
       const now = new Date().toISOString();
-      await db.transaction(async tx => { for (const customer of discovered) { await tx.execute(sql`INSERT INTO provider_customers (id, tenant_id, provider, external_customer_id, external_customer_name, raw_metadata, discovered_at, last_synced_at) VALUES (${id('provcust')}, ${tenantId}, ${provider}, ${customer.externalId}, ${customer.name}, ${JSON.stringify(customer.raw)}, ${now}, ${now}) ON CONFLICT (tenant_id, provider, external_customer_id) DO UPDATE SET external_customer_name = EXCLUDED.external_customer_name, raw_metadata = EXCLUDED.raw_metadata, last_synced_at = EXCLUDED.last_synced_at`); } });
-      return res.json({ provider, discoveredCount: discovered.length, syncedAt: now });
+      await db.transaction(async tx => {
+        await tx.execute(sql`INSERT INTO provider_customer_discovery_runs (id, tenant_id, provider, status, pages_fetched, records_fetched, limitation, started_at, completed_at) VALUES (${runId}, ${tenantId}, ${provider}, ${discovery.complete ? 'COMPLETE' : 'PARTIAL'}, ${discovery.pagesFetched}, ${discovery.customers.length}, ${discovery.limitation}, ${startedAt}, ${now})`);
+        for (const customer of discovery.customers) {
+          await tx.execute(sql`INSERT INTO provider_customers (id, tenant_id, provider, external_customer_id, external_customer_name, raw_metadata, discovered_at, last_synced_at) VALUES (${id('provcust')}, ${tenantId}, ${provider}, ${customer.externalId}, ${customer.name}, ${JSON.stringify(customer.raw)}, ${now}, ${now}) ON CONFLICT (tenant_id, provider, external_customer_id) DO UPDATE SET external_customer_name = EXCLUDED.external_customer_name, raw_metadata = EXCLUDED.raw_metadata, last_synced_at = EXCLUDED.last_synced_at`);
+        }
+      });
+      return res.json({ provider, runId, status: discovery.complete ? 'COMPLETE' : 'PARTIAL', complete: discovery.complete, discoveredCount: discovery.customers.length, pagesFetched: discovery.pagesFetched, limitation: discovery.limitation, syncedAt: now });
     } catch (error: any) { const message = error instanceof Error ? error.message : String(error); if (/CREDENTIAL_|PROVIDER_|UNSUPPORTED_|HTTP_/.test(message)) return res.status(502).json({ error: message }); return next(error); }
   });
 
