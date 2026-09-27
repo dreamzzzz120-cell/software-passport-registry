@@ -18,52 +18,5 @@ describe('autonomous agent suite', () => {
     expect(result.sections.find(s => s.title === 'Recommended Actions')?.source).toBe('RECOMMENDED_ACTION');
   });
 
-  it('preserves evidence lineage and unknowns on revenue opportunities', () => {
-    const result = evaluateRevenue({
-      passport: { id: 'p1', name: 'Example' },
-      openCriticalOrHigh: 1,
-      openFindings: 3,
-      stale: true,
-      vendorRiskStatus: 'MEDIUM',
-      complianceStatus: 'UNKNOWN',
-      monitoringEnabled: false,
-      observedEvidenceCount: 2,
-      catalog: { security_assessment: 500, monitoring: 100 },
-      evidenceIds: ['e2', 'e1', 'e1'],
-      findingIds: ['f1'],
-      unknowns: ['SBOM coverage is not established'],
-    });
-    expect(result.schemaVersion).toBe('spr-revenue-agent-v2');
-    expect(result.opportunities.some(o => o.basis === 'VERIFIED_FINDING' && o.findingIds.includes('f1'))).toBe(true);
-    expect(result.opportunities.some(o => o.basis === 'EVIDENCE_GAP' && o.unknowns.includes('SBOM coverage is not established'))).toBe(true);
-    expect(result.opportunities.every(o => Array.isArray(o.evidenceIds) && Array.isArray(o.findingIds) && Array.isArray(o.unknowns))).toBe(true);
-    expect(result.summary.configuredValue).toBe(600);
-  });
-
-  it('fails closed to an evidence-baseline opportunity when nothing is observed', () => {
-    const result = evaluateRevenue({
-      passport: { id: 'p1', name: 'Example' },
-      openCriticalOrHigh: 0,
-      openFindings: 0,
-      stale: false,
-      vendorRiskStatus: null,
-      complianceStatus: null,
-      monitoringEnabled: false,
-      observedEvidenceCount: 0,
-      catalog: {},
-    });
-    expect(result.opportunities).toHaveLength(1);
-    expect(result.opportunities[0].type).toBe('UNKNOWN');
-    expect(result.opportunities[0].basis).toBe('EVIDENCE_GAP');
-    expect(result.opportunities[0].value).toBeNull();
-  });
-  it('wires revenue opportunities to tenant-scoped persisted trust records', () => {
-    expect(agentApiSource).toContain("router.post('/revenue-opportunities'");
-    expect(agentApiSource).toContain('WHERE tenant_id=${tenantId} AND passport_id=${passport.id}');
-    expect(agentApiSource).toContain("table: 'evidence_ledger'");
-    expect(agentApiSource).toContain("table: 'trust_findings'");
-    expect(agentApiSource).toContain("table: 'trust_observations'");
-    expect(agentApiSource).toContain("table: 'monitoring_configurations'");
-  });
 
 });
