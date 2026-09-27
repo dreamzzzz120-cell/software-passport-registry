@@ -8,6 +8,7 @@ import { INTEGRATION_CATALOG } from '../integrations/catalog.ts';
 import { collectProviderEvidence, Provider, ProviderCredentials } from '../integrations/adapters.ts';
 import { decryptCredentials, encryptCredentials } from '../integrations/credential-vault.ts';
 import { discoverProviderCustomers, supportsCustomerDiscovery, type CustomerDiscoveryProvider } from '../integrations/customer-discovery.ts';
+import { collectProviderSoftwareInventory } from '../integrations/provider-software-inventory.ts';
 
 const PROVIDERS = new Set(INTEGRATION_CATALOG.map(item => item.provider));
 const credentialSchema = z.record(z.string().min(1).max(128), z.string().max(4096)).refine(v => Object.keys(v).length > 0, 'Credentials cannot be empty');
@@ -126,6 +127,40 @@ export function createLiveIntegrationsRouter() {
       await db.transaction(async tx => { for (const customer of discovered) { await tx.execute(sql`INSERT INTO provider_customers (id, tenant_id, provider, external_customer_id, external_customer_name, raw_metadata, discovered_at, last_synced_at) VALUES (${id('provcust')}, ${tenantId}, ${provider}, ${customer.externalId}, ${customer.name}, ${JSON.stringify(customer.raw)}, ${now}, ${now}) ON CONFLICT (tenant_id, provider, external_customer_id) DO UPDATE SET external_customer_name = EXCLUDED.external_customer_name, raw_metadata = EXCLUDED.raw_metadata, last_synced_at = EXCLUDED.last_synced_at`); } });
       return res.json({ provider, discoveredCount: discovered.length, syncedAt: now });
     } catch (error: any) { const message = error instanceof Error ? error.message : String(error); if (/CREDENTIAL_|PROVIDER_|UNSUPPORTED_|HTTP_/.test(message)) return res.status(502).json({ error: message }); return next(error); }
+  });
+
+  router.post('/:provider/customers/:externalId/software/discover', requireAuth, requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const provider = customerDiscoveryProviderFromParam(routeParam(req.params.provider));
+      const externalId = routeParam(req.params.externalId);
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const customer = await db.execute(sql`SELECT id, client_id FROM provider_customers WHERE tenant_id = ${tenantId} AND provider = ${provider} AND external_customer_id = ${externalId} LIMIT 1`);
+      const customerRow = (customer as any).rows?.[0];
+      if (!customerRow) return res.status(404).json({ error: 'Discovered customer not found for this tenant.' });
+      const stored = await db.execute(sql`SELECT encrypted_payload FROM integration_credentials WHERE tenant_id = ${tenantId} AND provider = ${provider} LIMIT 1`);
+      const payload = (stored as any).rows?.[0]?.encrypted_payload;
+      if (!payload) return res.status(409).json({ error: 'CREDENTIAL_NOT_CONFIGURED' });
+
+      const runId = id('softdisc');
+      const startedAt = new Date().toISOString();
+      await db.execute(sql`INSERT INTO provider_software_inventory_runs (id, tenant_id, provider, provider_customer_id, status, observations_fetched, limitation, started_at, completed_at) VALUES (${runId}, ${tenantId}, ${provider}, ${customerRow.id}, 'RUNNING', 0, NULL, ${startedAt}, NULL)`);
+      try {
+        const inventory = await collectProviderSoftwareInventory(provider, decryptCredentials(payload) as ProviderCredentials, externalId);
+        const completedAt = new Date().toISOString();
+        await db.execute(sql`UPDATE provider_software_inventory_runs SET status = ${inventory.status}, observations_fetched = ${inventory.observations.length}, limitation = ${inventory.limitation}, completed_at = ${completedAt} WHERE id = ${runId} AND tenant_id = ${tenantId}`);
+        return res.json({ provider, externalCustomerId: externalId, runId, status: inventory.status, complete: inventory.complete, observationsFetched: inventory.observations.length, limitation: inventory.limitation, collectedAt: completedAt });
+      } catch (collectionError: any) {
+        const completedAt = new Date().toISOString();
+        const safeReason = /^([A-Z0-9_]{3,80})$/.test(collectionError?.message || '') ? collectionError.message : 'SOFTWARE_INVENTORY_COLLECTION_FAILED';
+        await db.execute(sql`UPDATE provider_software_inventory_runs SET status = 'FAILED', limitation = ${safeReason}, completed_at = ${completedAt} WHERE id = ${runId} AND tenant_id = ${tenantId}`);
+        throw collectionError;
+      }
+    } catch (error: any) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/CREDENTIAL_|PROVIDER_|UNSUPPORTED_|HTTP_/.test(message)) return res.status(502).json({ error: message });
+      return next(error);
+    }
   });
 
   router.get('/:provider/customers', requireAuth, async (req: AuthenticatedRequest, res, next) => {
