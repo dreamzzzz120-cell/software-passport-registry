@@ -21,6 +21,7 @@ AS $$
 DECLARE
   item jsonb;
   inserted_count integer := 0;
+  row_count integer := 0;
   run_provider text;
   run_customer_id text;
 BEGIN
@@ -68,7 +69,8 @@ BEGIN
     )
     ON CONFLICT (tenant_id, provider, provider_customer_id, external_device_id, observation_hash)
     DO NOTHING;
-    inserted_count := inserted_count + 1;
+    GET DIAGNOSTICS row_count = ROW_COUNT;
+    inserted_count := inserted_count + row_count;
   END LOOP;
 
   UPDATE provider_software_inventory_runs
