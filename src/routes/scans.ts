@@ -119,7 +119,6 @@ export function createScansRouter() {
 
       const itemCount = Number(((await db.execute(sql`SELECT COUNT(*)::int AS count FROM intake_items WHERE session_id=${input.sessionId} AND tenant_id=${req.user!.tenantId} AND status='QUEUED'`)).rows?.[0] as any)?.count || 0);
       const submitted = await enqueueUploadScan(db, { tenantId: req.user!.tenantId, clientId: input.clientId ?? null, passportId, sessionId: input.sessionId, itemCount, triggeredBy: req.user!.uid, targetName, clientName });
-      await db.execute(sql`UPDATE intake_sessions SET status='QUEUED' WHERE id=${input.sessionId} AND tenant_id=${req.user!.tenantId} AND status='CLAIMED'`);
       await appendAuditEntry(db, { tenantId: req.user!.tenantId, action: 'scan.queued', actor: req.user!.uid, payload: { scanId: submitted.scanId, passportId, clientId: input.clientId ?? null, source: 'upload', sessionId: input.sessionId } });
       return res.status(202).json({ ...submitted, passportId, scanId: submitted.scanId, status: 'Pending' });
     } catch (error) { return next(error); }
