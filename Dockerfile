@@ -48,7 +48,9 @@ ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 # "unzip -Z1" with REPOSITORY_ACQUISITION_FAILED -- observed live on 2026-09-11.
 ENV SYFT_PATH=/usr/local/bin/syft
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl unzip tar && rm -rf /var/lib/apt/lists/* \
-  && curl -fsSL https://github.com/anchore/syft/releases/download/v1.49.0/syft_1.49.0_linux_amd64.tar.gz -o /tmp/syft.tar.gz \
+      && arch="$(dpkg --print-architecture)" \
+  && case "$arch" in amd64|arm64) ;; *) echo "Unsupported architecture: $arch" >&2; exit 1 ;; esac \
+  && curl -fsSL "https://github.com/anchore/syft/releases/download/v1.49.0/syft_1.49.0_linux_${arch}.tar.gz" -o /tmp/syft.tar.gz \
   && tar -xzf /tmp/syft.tar.gz -C /usr/local/bin syft \
   && chmod 0755 /usr/local/bin/syft \
   && rm -f /tmp/syft.tar.gz \
