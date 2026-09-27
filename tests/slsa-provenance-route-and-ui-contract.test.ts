@@ -36,12 +36,12 @@ describe('POST /api/passports/:id/evidence/slsa-provenance', () => {
 
   it('records the DB status/verified flag from the independent verification result, not a hardcoded value', () => {
     const body = routeBody();
-    expect(body).toContain("${result.outcome === 'VERIFIED' ? 1 : 0}, ${result.outcome}");
+    expect(body).toContain("'Attestation', 0, ${result.outcome}");
   });
 
-  it('audits both a verified and a failed outcome', () => {
+  it('audits both an observed and a failed outcome', () => {
     const body = routeBody();
-    expect(body).toContain("result.outcome === 'VERIFIED' ? 'evidence.slsa_provenance.verified' : 'evidence.slsa_provenance.failed'");
+    expect(body).toContain("result.outcome === 'OBSERVED' ? 'evidence.slsa_provenance.observed' : 'evidence.slsa_provenance.failed'");
   });
 
   it('recomputes the passport\'s trust score through the single canonical scoring engine after recording new evidence', () => {
@@ -73,14 +73,14 @@ describe('SoftwareLineageTracker no longer fabricates provenance data', () => {
     expect(s).toContain("(activePassport.evidence || []).find((item) => item.type === 'Attestation' && /slsa/i.test(item.name))");
   });
 
-  it('"SLSA Provenance — Verified" can only render when a real evidence item has status VERIFIED', () => {
+  it('labels both current and historical unsigned statements as signature unverified', () => {
     const s = source();
-    const verifiedBranch = s.indexOf("slsaEvidence && slsaEvidence.status === 'VERIFIED'");
+    const verifiedBranch = s.indexOf("slsaEvidence && (slsaEvidence.status === 'OBSERVED' || slsaEvidence.status === 'VERIFIED')");
     expect(verifiedBranch).toBeGreaterThan(-1);
-    const verifiedLabelIndex = s.indexOf('SLSA Provenance — Verified');
+    const verifiedLabelIndex = s.indexOf('SLSA Provenance — Signature Unverified');
     expect(verifiedLabelIndex).toBeGreaterThan(verifiedBranch);
     // No other, unguarded occurrence of the Verified label exists.
-    expect(s.indexOf('SLSA Provenance — Verified', verifiedLabelIndex + 1)).toBe(-1);
+    expect(s.indexOf('SLSA Provenance — Signature Unverified', verifiedLabelIndex + 1)).toBe(-1);
   });
 
   it('shows an honest "Evidence Not Available" state when no SLSA evidence exists for the passport', () => {

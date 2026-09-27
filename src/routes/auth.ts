@@ -995,9 +995,9 @@ export function createAuthRouter() {
   });
 
   // Accepts a self-reported SLSA/in-toto provenance statement and
-  // independently re-verifies it before recording anything -- this route
-  // never trusts the caller's own claim about the statement's validity.
-  // A prior VERIFIED/FAILED SLSA Provenance Attestation row for this passport
+  // checks its format and content hash before recording anything. A hash
+  // supplied by the submitter does not authenticate the builder or signer.
+  // A prior OBSERVED/FAILED SLSA Provenance Attestation row for this passport
   // is replaced (not accumulated) so the passport always carries at most one
   // current result for this evidence slot. Recomputes the passport's trust
   // score afterward through the single canonical scoring engine, the same
@@ -1023,18 +1023,18 @@ export function createAuthRouter() {
         buildType: result.buildType,
         subjectName: result.subjectName,
         subjectDigestSha256: result.subjectDigestSha256,
-        note: 'SPR independently verified this statement\'s content against its declared hash and confirmed it is a well-formed in-toto/SLSA provenance statement. SPR does not independently verify the Sigstore/DSSE signature chain.',
+        note: 'SPR checked this statement against its submitted hash and recognized its in-toto/SLSA format. The hash is self supplied; SPR has not verified the signature, builder identity, artifact digest or transparency log.',
       });
 
       await db.execute(sql`DELETE FROM evidence_items WHERE tenant_id=${tenantId} AND asset_id=${passportId} AND type='Attestation' AND name='SLSA Provenance Attestation'`);
       await db.execute(sql`
         INSERT INTO evidence_items (id, tenant_id, asset_id, name, type, verified, status, signer, timestamp, hash, raw_content, engine_id, verification_failure_reason)
-        VALUES (${evidenceId}, ${tenantId}, ${passportId}, 'SLSA Provenance Attestation', 'Attestation', ${result.outcome === 'VERIFIED' ? 1 : 0}, ${result.outcome}, ${parsed.data.signer || result.builderId || 'self-reported'}, ${timestamp}, ${`sha256:${normalizedHash}`}, ${rawContent}, 'provenance-verifier', ${result.failureReason})
+        VALUES (${evidenceId}, ${tenantId}, ${passportId}, 'SLSA Provenance Attestation', 'Attestation', 0, ${result.outcome}, ${parsed.data.signer || result.builderId || 'self-reported'}, ${timestamp}, ${`sha256:${normalizedHash}`}, ${rawContent}, 'provenance-verifier', ${result.failureReason})
       `);
 
       await appendAuditEntry(db, {
         tenantId,
-        action: result.outcome === 'VERIFIED' ? 'evidence.slsa_provenance.verified' : 'evidence.slsa_provenance.failed',
+        action: result.outcome === 'OBSERVED' ? 'evidence.slsa_provenance.observed' : 'evidence.slsa_provenance.failed',
         actor: req.user!.email,
         payload: { passportId, evidenceId, predicateType: result.predicateType, builderId: result.builderId, failureReason: result.failureReason },
       });

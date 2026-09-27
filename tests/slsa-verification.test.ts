@@ -21,19 +21,19 @@ const validStatement = JSON.stringify({
 // This is the load-bearing invariant behind the whole feature: SPR must
 // never display "SLSA Level 4 -- Verified" (or any Verified state) unless a
 // real, well-formed, hash-consistent provenance statement was actually
-// submitted. Every case here that isn't the single valid one must FAIL --
+// submitted. Every case here that isn't the single structurally valid one must FAIL --
 // there is no path that lets a fabricated or malformed statement pass.
 describe('verifySlsaProvenance', () => {
-  it('verifies a well-formed, hash-consistent in-toto/SLSA provenance statement', () => {
+  it('observes a well-formed, hash-consistent statement without authenticating its signer', () => {
     const result = verifySlsaProvenance(validStatement, sha256(validStatement));
-    expect(result.outcome).toBe('VERIFIED');
+    expect(result.outcome).toBe('OBSERVED');
     expect(result.failureReason).toBeNull();
     expect(result.builderId).toBe('https://github.com/actions/runner');
     expect(result.predicateType).toBe('https://slsa.dev/provenance/v1');
     expect(result.subjectDigestSha256).toBe('a'.repeat(64));
   });
 
-  it('never reports VERIFIED when the content does not match the declared hash', () => {
+  it('never reports OBSERVED when the content does not match the declared hash', () => {
     const result = verifySlsaProvenance(validStatement, sha256('tampered content'));
     expect(result.outcome).toBe('FAILED');
     expect(result.failureReason).toContain('HASH_MISMATCH');
