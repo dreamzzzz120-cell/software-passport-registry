@@ -58,7 +58,7 @@ export function generateRealSbom(workspacePath = '.'): {
   let directDeps = new Set<string>();
   let rootPkgName = 'software-passport-registry';
   let rootPkgVersion = '1.0.0';
-  let rootLicense = 'MIT';
+  let rootLicense = 'UNKNOWN';
 
   if (fs.existsSync(rootPkgPath)) {
     try {
@@ -117,7 +117,7 @@ export function generateRealSbom(workspacePath = '.'): {
         }
 
         if (!license) {
-          license = 'MIT'; // Fallback standard OSI license
+          license = 'UNKNOWN';
         }
 
         const encodedName = name.includes('/') ? name.replace(/@/g, '%40') : name;
@@ -127,7 +127,7 @@ export function generateRealSbom(workspacePath = '.'): {
 
         let trustLevel: 'Trusted' | 'Review Required' | 'Blocked' = 'Trusted';
         const licenseUpper = String(license).toUpperCase();
-        if (licenseUpper.includes('GPL') || licenseUpper.includes('AGPL')) {
+        if (licenseUpper === 'UNKNOWN' || licenseUpper.includes('GPL') || licenseUpper.includes('AGPL')) {
           trustLevel = 'Review Required';
         }
 
