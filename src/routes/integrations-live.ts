@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { Router } from 'express';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
+import rateLimit from 'express-rate-limit';
 import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/security.ts';
 import { appendAuditEntry } from '../security/audit-log.ts';
 import { INTEGRATION_CATALOG } from '../integrations/catalog.ts';
@@ -12,6 +13,12 @@ import { collectProviderSoftwareInventory } from '../integrations/provider-softw
 
 const PROVIDERS = new Set(INTEGRATION_CATALOG.map(item => item.provider));
 const credentialSchema = z.record(z.string().min(1).max(128), z.string().max(4096)).refine(v => Object.keys(v).length > 0, 'Credentials cannot be empty');
+const integrationDiscoveryRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false
+});
 const testSchema = z.object({ passportId: z.string().trim().min(1).max(255) }).strict();
 const mappingSchema = z.object({ clientId: z.string().trim().min(1).max(255).nullable() }).strict();
 function id(prefix: string) { return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`; }
@@ -114,7 +121,7 @@ export function createLiveIntegrationsRouter() {
     }
   });
 
-  router.post('/:provider/customers/discover', requireAuth, requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
+  router.post('/:provider/customers/discover', integrationDiscoveryRateLimiter, requireAuth, requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
     try {
       const provider = customerDiscoveryProviderFromParam(routeParam(req.params.provider));
       const db = req.db!;
@@ -129,7 +136,7 @@ export function createLiveIntegrationsRouter() {
     } catch (error: any) { const message = error instanceof Error ? error.message : String(error); if (/CREDENTIAL_|PROVIDER_|UNSUPPORTED_|HTTP_/.test(message)) return res.status(502).json({ error: message }); return next(error); }
   });
 
-  router.post('/:provider/customers/:externalId/software/discover', requireAuth, requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
+  router.post('/:provider/customers/:externalId/software/discover', integrationDiscoveryRateLimiter, requireAuth, requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
     try {
       const provider = customerDiscoveryProviderFromParam(routeParam(req.params.provider));
       const externalId = routeParam(req.params.externalId);
