@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { AuthenticatedRequest, requireRole } from '../middleware/security.ts';
 import { decryptCredentials } from '../integrations/credential-vault.ts';
 import { collectDeepProviderEvidence } from '../integrations/deep-collectors.ts';
+import { summarizeCollectionHealth } from '../integrations/collection-health.ts';
 import { collectGitHubDeepEvidence } from '../integrations/github-deep.ts';
 import { persistTrustLoop, verifyRemediation } from '../trust/trust-loop.ts';
 import { classifyCanonicalChange, compareCanonicalObservations } from '../utils/observation-history.ts';
@@ -107,10 +108,7 @@ export function createTrustLoopRouter() {
       // A completed HTTP request can still have yielded only UNKNOWN observations
       // (permission failure, unsupported scope, or incomplete provider data).
       // Preserve the evidence, but never advertise that source as healthy/live.
-      const unknownCount = observations.filter((o) => o.status === 'UNKNOWN').length;
-      const collectionStatus = unknownCount ? 'PARTIAL' : 'SUCCEEDED';
-      const monitoringStatus = unknownCount ? 'DEGRADED' : 'HEALTHY';
-      const credentialStatus = unknownCount ? 'ERROR' : 'LIVE';
+      const { unknownCount, status: collectionStatus, monitoringStatus, credentialStatus } = summarizeCollectionHealth(observations);
       await db.execute(sql`UPDATE trust_collection_runs SET completed_at=${completedAt},status=${collectionStatus},observation_count=${observations.length},evidence_count=${result.evidenceIds.length},failure_count=${unknownCount},collector_version='deep-v2' WHERE id=${runId} AND tenant_id=${tenantId}`);
       await db.execute(sql`UPDATE integration_credentials SET status=${credentialStatus}, last_tested_at=${completedAt}, updated_at=${completedAt} WHERE tenant_id=${tenantId} AND provider=${provider}`);
       await db.execute(sql`INSERT INTO trust_monitoring_state (id,tenant_id,passport_id,provider,next_run_at,last_run_at,last_success_at,last_evidence_hash,consecutive_failures,status,updated_at) VALUES (${id('monitor')},${tenantId},${passportId},${provider},${new Date(Date.now()+3600000).toISOString()},${completedAt},${unknownCount ? null : completedAt},${result.payloadHash},${unknownCount ? 1 : 0},${monitoringStatus},${completedAt}) ON CONFLICT (tenant_id,passport_id,provider) DO UPDATE SET next_run_at=EXCLUDED.next_run_at,last_run_at=EXCLUDED.last_run_at,last_success_at=COALESCE(EXCLUDED.last_success_at,trust_monitoring_state.last_success_at),last_evidence_hash=EXCLUDED.last_evidence_hash,consecutive_failures=EXCLUDED.consecutive_failures,status=EXCLUDED.status,updated_at=EXCLUDED.updated_at`);
