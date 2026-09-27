@@ -144,16 +144,16 @@ export function createLiveIntegrationsRouter() {
 
       const runId = id('softdisc');
       const startedAt = new Date().toISOString();
-      await db.execute(sql`INSERT INTO provider_software_inventory_runs (id, tenant_id, provider, provider_customer_id, status, observations_fetched, limitation, started_at, completed_at) VALUES (${runId}, ${tenantId}, ${provider}, ${customerRow.id}, 'RUNNING', 0, NULL, ${startedAt}, NULL)`);
+      await db.execute(sql`INSERT INTO provider_software_inventory_runs (id, tenant_id, provider, provider_customer_id, status, observations_fetched, limitation_code, limitation, started_at, completed_at) VALUES (${runId}, ${tenantId}, ${provider}, ${customerRow.id}, 'RUNNING', 0, NULL, NULL, ${startedAt}, NULL)`);
       try {
         const inventory = await collectProviderSoftwareInventory(provider, decryptCredentials(payload) as ProviderCredentials, externalId);
         const completedAt = new Date().toISOString();
-        await db.execute(sql`UPDATE provider_software_inventory_runs SET status = ${inventory.status}, observations_fetched = ${inventory.observations.length}, limitation = ${inventory.limitation}, completed_at = ${completedAt} WHERE id = ${runId} AND tenant_id = ${tenantId}`);
-        return res.json({ provider, externalCustomerId: externalId, runId, status: inventory.status, complete: inventory.complete, observationsFetched: inventory.observations.length, limitation: inventory.limitation, collectedAt: completedAt });
+        await db.execute(sql`UPDATE provider_software_inventory_runs SET status = ${inventory.status}, observations_fetched = ${inventory.observations.length}, limitation_code = ${inventory.limitationCode}, limitation = ${inventory.limitation}, completed_at = ${completedAt} WHERE id = ${runId} AND tenant_id = ${tenantId}`);
+        return res.json({ provider, externalCustomerId: externalId, runId, status: inventory.status, complete: inventory.complete, observationsFetched: inventory.observations.length, limitationCode: inventory.limitationCode, limitation: inventory.limitation, collectedAt: completedAt });
       } catch (collectionError: any) {
         const completedAt = new Date().toISOString();
         const safeReason = /^([A-Z0-9_]{3,80})$/.test(collectionError?.message || '') ? collectionError.message : 'SOFTWARE_INVENTORY_COLLECTION_FAILED';
-        await db.execute(sql`UPDATE provider_software_inventory_runs SET status = 'FAILED', limitation = ${safeReason}, completed_at = ${completedAt} WHERE id = ${runId} AND tenant_id = ${tenantId}`);
+        await db.execute(sql`UPDATE provider_software_inventory_runs SET status = 'FAILED', limitation_code = ${safeReason}, limitation = 'Software inventory collection failed.', completed_at = ${completedAt} WHERE id = ${runId} AND tenant_id = ${tenantId}`);
         throw collectionError;
       }
     } catch (error: any) {
