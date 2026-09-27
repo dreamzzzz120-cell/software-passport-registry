@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { evaluateMonitoring } from '../src/agents/monitoring-agent.ts';
 import { buildAgentReport } from '../src/agents/report-agent.ts';
-import { evaluateRevenue } from '../src/agents/revenue-agent.ts';
 import { readFileSync } from 'node:fs';
 
 const agentApiSource = readFileSync(new URL('../src/routes/agent-api.ts', import.meta.url), 'utf8');
