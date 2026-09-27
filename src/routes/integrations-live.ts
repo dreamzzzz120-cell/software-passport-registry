@@ -173,9 +173,9 @@ export function createLiveIntegrationsRouter() {
             canonicalVersion: prepared.version ?? null,
             normalizationDisposition: prepared.disposition,
             normalizationConfidence: prepared.confidence,
-            sourceObservedAt: observation.sourceObservedAt,
-            freshnessState: 'UNKNOWN',
-            rawObservation: observation.raw,
+            sourceObservedAt: prepared.sourceObservedAt,
+            freshnessState: prepared.freshnessState,
+            rawObservation: prepared.sanitizedRaw,
             observationHash: prepared.observationHash,
           };
         });

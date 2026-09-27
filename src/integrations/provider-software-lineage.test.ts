@@ -40,4 +40,20 @@ describe('provider software lineage boundary', () => {
     const b = prepareSoftwareLineageObservation({ provider: 'ninjaone', providerCustomerId: 'c', externalDeviceId: 'd', name: 'Tool', sourceObservedAt: '2026-09-27T00:00:00Z', raw: { version: 2 } });
     expect(a.observationHash).not.toBe(b.observationHash);
   });
+  it('redacts credential-shaped fields before persistence and hashing', () => {
+    const result = prepareSoftwareLineageObservation({
+      provider: 'ninjaone', providerCustomerId: 'c', externalDeviceId: 'd', name: 'Tool',
+      sourceObservedAt: '2026-09-27T00:00:00Z',
+      raw: { id: '1', authorization: 'Bearer secret', nested: { apiKey: 'secret', safe: 'kept' } },
+    });
+    expect(result.sanitizedRaw).toEqual({ id: '1', authorization: '[REDACTED]', nested: { apiKey: '[REDACTED]', safe: 'kept' } });
+    expect(result.freshnessState).toBe('UNKNOWN');
+  });
+
+  it('rejects invalid source timestamps instead of inventing freshness', () => {
+    expect(() => prepareSoftwareLineageObservation({
+      provider: 'ninjaone', providerCustomerId: 'c', externalDeviceId: 'd', name: 'Tool',
+      sourceObservedAt: 'not-a-date', raw: { id: '1' },
+    })).toThrow('SOFTWARE_OBSERVATION_INVALID_TIMESTAMP');
+  });
 });
