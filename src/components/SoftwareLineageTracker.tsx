@@ -59,16 +59,9 @@ export default function SoftwareLineageTracker({ passports, clients, assets, onU
   // 2. Map downstream assets for the selected passport
   const deployedAssets = useMemo(() => {
     if (!activePassport) return [];
-    return assets.filter(a => {
-      const pName = activePassport.name.toLowerCase();
-      const aPassport = (a.activePassport || '').toLowerCase();
-      return (
-        aPassport === pName ||
-        aPassport.includes(pName) ||
-        pName.includes(aPassport) ||
-        (a.activePassport === `Custom/Generic: ${activePassport.name}`)
-      );
-    });
+    // A name match is not a deployment link: different clients can run the
+    // same product. Show only an explicit passport association.
+    return assets.filter(a => String(a.passportId ?? '') === activePassport.id);
   }, [assets, activePassport]);
 
   // Real SLSA/in-toto provenance evidence for the active passport, if any was
@@ -169,47 +162,17 @@ export default function SoftwareLineageTracker({ passports, clients, assets, onU
     );
   }, [activePassport, dependencySearchQuery]);
 
-  // Dynamic digital map description generator for storytelling
-  const getDigitalMnemonic = (name: string) => {
-    const nameLower = name.toLowerCase();
-    if (nameLower.includes('salesforce')) {
-      return {
-        whatItDoes: 'Manages customer interactions, deals pipelines, and account records.',
-        whoUsesit: '35 employees in sales & service',
-        businessImportance: 'Critical operations node',
-        connections: 'Slack alerts, payment logs, secure backup instances',
-        explanation: 'This software manages customer pipelines and sales communications. Removing or disabling it would freeze lead intake, affecting 40% of daily transactions and disconnecting client interactions.'
-      };
-    }
-    if (nameLower.includes('slack')) {
-      return {
-        whatItDoes: 'Primary communication hub, notifications router, and collaboration channel.',
-        whoUsesit: 'All staff / 120 active employees',
-        businessImportance: 'High (Ops critical)',
-        connections: 'Salesforce CRM, OpenAI API, AWS status logs',
-        explanation: 'This is the communication spine of your company. It routes direct messages and security notifications instantly. It integrates automated bots to manage system outages and triggers real-time responses.'
-      };
-    }
-    if (nameLower.includes('stripe')) {
-      return {
-        whatItDoes: 'Handles invoice charging, checkout systems, and financial gateway flows.',
-        whoUsesit: 'Billing admins & payment triggers',
-        businessImportance: 'Immediate revenue impact',
-        connections: 'Corporate banking, QuickBooks, accounting DB',
-        explanation: 'This handles all credit-card processing and active payment endpoints. Removing it instantly disables checkout, halting incoming streams and breaking invoicing operations.'
-      };
-    }
-    // Default fallback
-    return {
-      whatItDoes: 'Provides central system infrastructure, service integrations, or package dependencies.',
-      whoUsesit: 'Engineering & operations',
-      businessImportance: 'High technical dependency',
-      connections: 'Cloud security pipelines, active virtual instances',
-      explanation: 'This node sits directly in the processing path. If detached, dependent backend routines would fail, triggering cascading connection errors across operational services.'
-    };
+  // No client-specific business impact or integration relationship is inferred
+  // from a product name. Those fields need source-backed observations.
+  const activeMnemonic = {
+    whatItDoes: 'No verified functional description is available in this view.',
+    whoUsesit: 'Not observed',
+    businessImportance: 'Not assessed',
+    connections: 'No verified service relationships recorded here',
+    explanation: deployedAssets.length
+      ? `${deployedAssets.length} asset(s) explicitly reference this passport. Usage, business impact and downstream connections need separate evidence.`
+      : 'No asset explicitly references this passport in the current inventory. Usage and business impact remain unknown.',
   };
-
-  const activeMnemonic = activePassport ? getDigitalMnemonic(activePassport.name) : getDigitalMnemonic('');
 
   return (
     <div className="space-y-6" id="software-lineage-ledger-panel">
@@ -224,7 +187,7 @@ export default function SoftwareLineageTracker({ passports, clients, assets, onU
             <span>Interactive Software Lineage Map</span>
           </h1>
           <p className="text-xs text-[var(--spr-text-muted)] font-sans mt-1">
-            Explore your digital DNA. Trace any software asset from source code commits up to production cloud runtimes.
+            Inspect recorded software components, evidence, and explicitly linked assets.
           </p>
         </div>
 
