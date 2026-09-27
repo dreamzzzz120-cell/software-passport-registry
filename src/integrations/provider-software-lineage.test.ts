@@ -14,7 +14,7 @@ describe('provider software lineage boundary', () => {
       sourceObservedAt: '2026-09-27T00:00:00Z', raw: { id: 'software-1', name: 'Microsoft 365' },
     });
     expect(result.disposition).toBe('matched');
-    expect(result.autoMatchAllowed).toBe(true);
+    expect(result.identityAutoMatchAllowed).toBe(true);
     expect(result.passportId).toBeNull();
   });
 
@@ -25,11 +25,17 @@ describe('provider software lineage boundary', () => {
       raw: { name: 'Agent' },
     });
     expect(result.disposition).toBe('unknown');
-    expect(result.autoMatchAllowed).toBe(false);
+    expect(result.identityAutoMatchAllowed).toBe(false);
     expect(result.passportId).toBeNull();
   });
 
-  it('hashes the exact raw source observation for lineage', () => {
+  it('hashes semantically identical JSON deterministically regardless of object key order', () => {
+    const a = prepareSoftwareLineageObservation({ provider: 'ninjaone', providerCustomerId: 'c', externalDeviceId: 'd', name: 'Tool', sourceObservedAt: '2026-09-27T00:00:00Z', raw: { name: 'Tool', nested: { b: 2, a: 1 } } });
+    const b = prepareSoftwareLineageObservation({ provider: 'ninjaone', providerCustomerId: 'c', externalDeviceId: 'd', name: 'Tool', sourceObservedAt: '2026-09-27T00:00:00Z', raw: { nested: { a: 1, b: 2 }, name: 'Tool' } });
+    expect(a.observationHash).toBe(b.observationHash);
+  });
+
+  it('hashes materially different source observations differently', () => {
     const a = prepareSoftwareLineageObservation({ provider: 'ninjaone', providerCustomerId: 'c', externalDeviceId: 'd', name: 'Tool', sourceObservedAt: '2026-09-27T00:00:00Z', raw: { version: 1 } });
     const b = prepareSoftwareLineageObservation({ provider: 'ninjaone', providerCustomerId: 'c', externalDeviceId: 'd', name: 'Tool', sourceObservedAt: '2026-09-27T00:00:00Z', raw: { version: 2 } });
     expect(a.observationHash).not.toBe(b.observationHash);
