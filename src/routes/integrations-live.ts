@@ -7,7 +7,7 @@ import { appendAuditEntry } from '../security/audit-log.ts';
 import { INTEGRATION_CATALOG } from '../integrations/catalog.ts';
 import { collectProviderEvidence, Provider, ProviderCredentials } from '../integrations/adapters.ts';
 import { decryptCredentials, encryptCredentials } from '../integrations/credential-vault.ts';
-import { discoverProviderCustomersWithCoverage, supportsCustomerDiscovery, type CustomerDiscoveryProvider } from '../integrations/customer-discovery.ts';
+import { discoverProviderCustomers, supportsCustomerDiscovery, type CustomerDiscoveryProvider } from '../integrations/customer-discovery.ts';
 
 const PROVIDERS = new Set(INTEGRATION_CATALOG.map(item => item.provider));
 const credentialSchema = z.record(z.string().min(1).max(128), z.string().max(4096)).refine(v => Object.keys(v).length > 0, 'Credentials cannot be empty');
@@ -121,20 +121,10 @@ export function createLiveIntegrationsRouter() {
       const stored = await db.execute(sql`SELECT encrypted_payload FROM integration_credentials WHERE tenant_id = ${tenantId} AND provider = ${provider} LIMIT 1`);
       const payload = (stored as any).rows?.[0]?.encrypted_payload;
       if (!payload) return res.status(409).json({ error: 'CREDENTIAL_NOT_CONFIGURED' });
-      const runId = id('custdisc');
-      const startedAt = new Date().toISOString();
-      const discovery = await discoverProviderCustomersWithCoverage(provider, decryptCredentials(payload) as ProviderCredentials);
+      const discovered = await discoverProviderCustomers(provider, decryptCredentials(payload) as ProviderCredentials);
       const now = new Date().toISOString();
-      await db.transaction(async tx => {
-        await tx.execute(sql`INSERT INTO provider_customer_discovery_runs (id, tenant_id, provider, status, pages_fetched, records_fetched, limitation, started_at, completed_at) VALUES (${runId}, ${tenantId}, ${provider}, ${discovery.complete ? 'COMPLETE' : 'PARTIAL'}, ${discovery.pagesFetched}, ${discovery.customers.length}, ${discovery.limitation}, ${startedAt}, ${now})`);
-        for (const customer of discovery.customers) {
-          await tx.execute(sql`INSERT INTO provider_customers (id, tenant_id, provider, external_customer_id, external_customer_name, raw_metadata, discovered_at, last_synced_at, lifecycle_status, last_seen_run_id, absent_since) VALUES (${id('provcust')}, ${tenantId}, ${provider}, ${customer.externalId}, ${customer.name}, ${JSON.stringify(customer.raw)}, ${now}, ${now}, 'ACTIVE', ${runId}, NULL) ON CONFLICT (tenant_id, provider, external_customer_id) DO UPDATE SET external_customer_name = EXCLUDED.external_customer_name, raw_metadata = EXCLUDED.raw_metadata, last_synced_at = EXCLUDED.last_synced_at, lifecycle_status = 'ACTIVE', last_seen_run_id = EXCLUDED.last_seen_run_id, absent_since = NULL`);
-        }
-        if (discovery.complete) {
-          await tx.execute(sql`UPDATE provider_customers SET lifecycle_status = 'ABSENT', absent_since = COALESCE(absent_since, ${now}) WHERE tenant_id = ${tenantId} AND provider = ${provider} AND lifecycle_status = 'ACTIVE' AND (last_seen_run_id IS NULL OR last_seen_run_id <> ${runId})`);
-        }
-      });
-      return res.json({ provider, runId, status: discovery.complete ? 'COMPLETE' : 'PARTIAL', complete: discovery.complete, discoveredCount: discovery.customers.length, pagesFetched: discovery.pagesFetched, limitation: discovery.limitation, syncedAt: now });
+      await db.transaction(async tx => { for (const customer of discovered) { await tx.execute(sql`INSERT INTO provider_customers (id, tenant_id, provider, external_customer_id, external_customer_name, raw_metadata, discovered_at, last_synced_at) VALUES (${id('provcust')}, ${tenantId}, ${provider}, ${customer.externalId}, ${customer.name}, ${JSON.stringify(customer.raw)}, ${now}, ${now}) ON CONFLICT (tenant_id, provider, external_customer_id) DO UPDATE SET external_customer_name = EXCLUDED.external_customer_name, raw_metadata = EXCLUDED.raw_metadata, last_synced_at = EXCLUDED.last_synced_at`); } });
+      return res.json({ provider, discoveredCount: discovered.length, syncedAt: now });
     } catch (error: any) { const message = error instanceof Error ? error.message : String(error); if (/CREDENTIAL_|PROVIDER_|UNSUPPORTED_|HTTP_/.test(message)) return res.status(502).json({ error: message }); return next(error); }
   });
 
@@ -143,7 +133,7 @@ export function createLiveIntegrationsRouter() {
       const provider = customerDiscoveryProviderFromParam(routeParam(req.params.provider));
       const db = req.db!; const tenantId = req.user!.tenantId; const isClient = req.user!.role === 'Client'; const clientId = req.user!.clientId;
       if (isClient && !clientId) return res.status(403).json({ error: 'Client account has invalid client configuration' });
-      const rows = await db.execute(sql`SELECT pc.id, pc.external_customer_id, pc.external_customer_name, pc.client_id, pc.discovered_at, pc.last_synced_at, pc.mapped_at, pc.lifecycle_status, pc.absent_since, pc.last_seen_run_id, c.name AS client_name FROM provider_customers pc LEFT JOIN clients c ON c.id = pc.client_id AND c.tenant_id = pc.tenant_id WHERE pc.tenant_id = ${tenantId} AND pc.provider = ${provider} AND (${isClient ? sql`pc.client_id = ${clientId}` : sql`TRUE`}) ORDER BY pc.external_customer_name ASC`);
+      const rows = await db.execute(sql`SELECT pc.id, pc.external_customer_id, pc.external_customer_name, pc.client_id, pc.discovered_at, pc.last_synced_at, pc.mapped_at, c.name AS client_name FROM provider_customers pc LEFT JOIN clients c ON c.id = pc.client_id AND c.tenant_id = pc.tenant_id WHERE pc.tenant_id = ${tenantId} AND pc.provider = ${provider} AND (${isClient ? sql`pc.client_id = ${clientId}` : sql`TRUE`}) ORDER BY pc.external_customer_name ASC`);
       return res.json((rows as any).rows ?? []);
     } catch (error: any) { if (/PROVIDER_/.test(error?.message || '')) return res.status(400).json({ error: error.message }); return next(error); }
   });
