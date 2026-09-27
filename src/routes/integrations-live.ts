@@ -10,6 +10,7 @@ import { collectProviderEvidence, Provider, ProviderCredentials } from '../integ
 import { decryptCredentials, encryptCredentials } from '../integrations/credential-vault.ts';
 import { discoverProviderCustomers, supportsCustomerDiscovery, type CustomerDiscoveryProvider } from '../integrations/customer-discovery.ts';
 import { collectProviderSoftwareInventory } from '../integrations/provider-software-inventory.ts';
+import { prepareSoftwareLineageObservation } from '../integrations/provider-software-lineage.ts';
 
 const PROVIDERS = new Set(INTEGRATION_CATALOG.map(item => item.provider));
 const credentialSchema = z.record(z.string().min(1).max(128), z.string().max(4096)).refine(v => Object.keys(v).length > 0, 'Credentials cannot be empty');
@@ -155,8 +156,32 @@ export function createLiveIntegrationsRouter() {
       try {
         const inventory = await collectProviderSoftwareInventory(provider, decryptCredentials(payload) as ProviderCredentials, externalId);
         const completedAt = new Date().toISOString();
-        await db.execute(sql`UPDATE provider_software_inventory_runs SET status = ${inventory.status}, observations_fetched = ${inventory.observations.length}, limitation_code = ${inventory.limitationCode}, limitation = ${inventory.limitation}, completed_at = ${completedAt} WHERE id = ${runId} AND tenant_id = ${tenantId}`);
-        return res.json({ provider, externalCustomerId: externalId, runId, status: inventory.status, complete: inventory.complete, observationsFetched: inventory.observations.length, limitationCode: inventory.limitationCode, limitation: inventory.limitation, collectedAt: completedAt });
+        const preparedObservations = inventory.observations.map((observation) => {
+          const prepared = prepareSoftwareLineageObservation(observation);
+          return {
+            id: id('softobs'),
+            clientId: customerRow.client_id ?? null,
+            externalDeviceId: observation.externalDeviceId,
+            externalSoftwareId: observation.externalSoftwareId ?? null,
+            observedName: observation.name,
+            observedPublisher: observation.publisher ?? null,
+            observedVersion: observation.version ?? null,
+            observedProductCode: observation.productCode ?? null,
+            observedPackageId: observation.packageId ?? null,
+            canonicalName: prepared.canonicalName,
+            canonicalPublisher: prepared.publisher ?? null,
+            canonicalVersion: prepared.version ?? null,
+            normalizationDisposition: prepared.disposition,
+            normalizationConfidence: prepared.confidence,
+            sourceObservedAt: observation.sourceObservedAt,
+            freshnessState: 'UNKNOWN',
+            rawObservation: observation.raw,
+            observationHash: prepared.observationHash,
+          };
+        });
+        const observationsJson = JSON.stringify(preparedObservations);
+        await db.execute(sql`SELECT finalize_provider_software_inventory_run(${runId}, ${tenantId}, ${inventory.status}, ${inventory.limitationCode}, ${inventory.limitation}, ${completedAt}, ${observationsJson}::jsonb)`);
+        return res.json({ provider, externalCustomerId: externalId, runId, status: inventory.status, complete: inventory.complete, observationsFetched: preparedObservations.length, limitationCode: inventory.limitationCode, limitation: inventory.limitation, collectedAt: completedAt });
       } catch (collectionError: any) {
         const completedAt = new Date().toISOString();
         const safeReason = /^([A-Z0-9_]{3,80})$/.test(collectionError?.message || '') ? collectionError.message : 'SOFTWARE_INVENTORY_COLLECTION_FAILED';
