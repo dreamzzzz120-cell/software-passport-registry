@@ -376,14 +376,14 @@ export default function SoftwareLineageTracker({ passports, clients, assets, onU
                   </div>
                 )}
 
-                {slsaEvidence && slsaEvidence.status === 'VERIFIED' && (
+                {slsaEvidence && (slsaEvidence.status === 'OBSERVED' || slsaEvidence.status === 'VERIFIED') && (
                   <div className="space-y-3 font-sans">
                     <div className="p-2.5 bg-[var(--spr-accent-soft)] border border-[var(--spr-highlight)] rounded-md text-xs space-y-1">
                       <div className="flex items-center gap-1 text-[11px] font-bold text-[var(--spr-highlight)]">
                         <FileSignature className="w-3.5 h-3.5 shrink-0" />
-                        <span>SLSA Provenance — Verified</span>
+                        <span>SLSA Provenance — Signature Unverified</span>
                       </div>
-                      <p className="text-[11px] font-mono text-[var(--spr-highlight)] leading-tight">Structurally valid, hash-verified in-toto provenance statement</p>
+                      <p className="text-[11px] font-mono text-[var(--spr-highlight)] leading-tight">Format and submitted hash checked; signer and artifact unverified</p>
                     </div>
                     <div className="p-2.5 bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] rounded-md text-xs space-y-1">
                       <p className="text-[11px] font-mono uppercase font-bold tracking-wider text-[var(--spr-text-muted)]">Builder</p>
@@ -393,7 +393,7 @@ export default function SoftwareLineageTracker({ passports, clients, assets, onU
                       <p className="text-[11px] font-mono uppercase font-bold tracking-wider text-[var(--spr-text-muted)]">Predicate type</p>
                       <p className="text-[11px] text-[var(--spr-text-muted)] break-all">{slsaDetails?.predicateType || 'unknown'}</p>
                     </div>
-                    <p className="text-[11px] text-[var(--spr-text-faint)] leading-relaxed">SPR does not independently verify the attestation's Sigstore/DSSE signature chain.</p>
+                    <p className="text-[11px] text-[var(--spr-text-faint)] leading-relaxed">The submitted hash does not prove provenance. SPR has not verified the Sigstore/DSSE signature chain or artifact digest.</p>
                   </div>
                 )}
 
@@ -412,7 +412,7 @@ export default function SoftwareLineageTracker({ passports, clients, assets, onU
                   </div>
                 )}
 
-                {slsaEvidence && slsaEvidence.status !== 'VERIFIED' && slsaEvidence.status !== 'FAILED' && (
+                {slsaEvidence && slsaEvidence.status !== 'VERIFIED' && slsaEvidence.status !== 'OBSERVED' && slsaEvidence.status !== 'FAILED' && (
                   <div className="p-2.5 bg-[var(--spr-surface-sunken)] border border-[var(--spr-amber)] rounded-md text-xs space-y-1">
                     <p className="text-[12px] font-bold text-[var(--spr-amber)]">SLSA Provenance — Detected, Not Yet Verified</p>
                   </div>
