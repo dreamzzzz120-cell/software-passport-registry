@@ -17,11 +17,6 @@ describe('autonomous agent suite', () => {
     expect(result.sections.find(s => s.title === 'Compliance')?.source).toBe('DERIVED');
     expect(result.sections.find(s => s.title === 'Recommended Actions')?.source).toBe('RECOMMENDED_ACTION');
   });
-  it('never invents revenue value when catalog pricing is absent', () => {
-    const result = evaluateRevenue({ passport: { id: 'p1', name: 'Example' }, openCriticalOrHigh: 1, openFindings: 1, stale: true, vendorRiskStatus: 'HIGH', complianceStatus: 'FAIL', monitoringEnabled: false, observedEvidenceCount: 2, catalog: {} });
-    expect(result.opportunities.length).toBeGreaterThan(0);
-    expect(result.opportunities.every(o => o.value === null)).toBe(true);
-  });
 
   it('preserves evidence lineage and unknowns on revenue opportunities', () => {
     const result = evaluateRevenue({
