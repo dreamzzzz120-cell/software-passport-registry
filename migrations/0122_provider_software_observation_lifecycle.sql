@@ -42,7 +42,7 @@ BEGIN
    WHERE tenant_id = p_tenant_id
      AND provider = run_provider
      AND provider_customer_id = run_customer_id
-     AND collection_run_id = p_run_id;
+     AND (collection_run_id = p_run_id OR last_seen_run_id = p_run_id);
 
   UPDATE provider_software_observations previous
      SET lifecycle_status = 'ABSENT',
@@ -58,7 +58,7 @@ BEGIN
         WHERE current.tenant_id = p_tenant_id
           AND current.provider = run_provider
           AND current.provider_customer_id = run_customer_id
-          AND current.collection_run_id = p_run_id
+          AND (current.collection_run_id = p_run_id OR current.last_seen_run_id = p_run_id)
           AND current.external_device_id = previous.external_device_id
           AND current.observation_hash = previous.observation_hash
      );
