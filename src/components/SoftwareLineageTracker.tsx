@@ -760,7 +760,7 @@ export default function SoftwareLineageTracker({ passports, clients, assets, onU
           <div className="relative w-full max-w-lg bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] rounded-md p-6 z-10 space-y-4">
             <h3 className="text-sm font-bold text-[var(--spr-text)]">Submit SLSA provenance attestation for {activePassport.name}</h3>
             <p className="text-[11px] text-[var(--spr-text-muted)] leading-relaxed">
-              Paste the raw in-toto/SLSA provenance statement JSON (e.g. produced by slsa-github-generator or <code className="bg-[var(--spr-surface-hover)] px-1 rounded font-mono">cosign attest</code>). SPR independently checks it is well-formed and hash-consistent before marking it Verified — it does not fabricate a result.
+              Paste the raw in-toto/SLSA provenance statement JSON (e.g. produced by slsa-github-generator or <code className="bg-[var(--spr-surface-hover)] px-1 rounded font-mono">cosign attest</code>). SPR checks the format and submitted hash. This does not authenticate the builder or artifact; the statement remains signature unverified.
             </p>
             <textarea
               value={slsaStatementText}
@@ -773,7 +773,7 @@ export default function SoftwareLineageTracker({ passports, clients, assets, onU
             <div className="flex justify-end gap-2">
               <button type="button" onClick={() => setSlsaModalOpen(false)} disabled={slsaSubmitting} className="rounded-md border border-[var(--spr-border)] px-4 py-2 text-xs text-[var(--spr-text-muted)] cursor-pointer disabled:opacity-50">Cancel</button>
               <button type="button" onClick={() => void submitSlsaProvenance()} disabled={slsaSubmitting || !slsaStatementText.trim()} className="bg-[var(--spr-accent)] hover:bg-[var(--spr-accent-hover)] disabled:opacity-40 text-white font-bold px-4 py-2 rounded-md text-xs cursor-pointer transition-colors">
-                {slsaSubmitting ? 'Verifying…' : 'Verify & submit'}
+                {slsaSubmitting ? 'Checking…' : 'Check & submit'}
               </button>
             </div>
           </div>
