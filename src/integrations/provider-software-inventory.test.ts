@@ -10,6 +10,7 @@ describe('provider software inventory capability', () => {
     const result = await collectProviderSoftwareInventory('ninjaone', { accessToken: 'test' }, 'customer-1');
     expect(result.status).toBe('UNSUPPORTED');
     expect(result.complete).toBe(false);
+    expect(result.limitationCode).toBe('COLLECTOR_NOT_VERIFIED');
     expect(result.observations).toEqual([]);
     expect(result.limitation).toMatch(/No verified device-software API collector/);
   });
