@@ -130,16 +130,7 @@ export default function SoftwareLineageTracker({ passports, clients, assets, onU
       const foundComp = p.sbom.find(s => s.name.toLowerCase().includes(query) || s.purl.toLowerCase().includes(query));
       if (foundComp) {
         // Find hosting assets running this parent software
-        const hosts = assets.filter(a => {
-          const pName = p.name.toLowerCase();
-          const aPassport = (a.activePassport || '').toLowerCase();
-          return (
-            aPassport === pName ||
-            aPassport.includes(pName) ||
-            pName.includes(aPassport) ||
-            (a.activePassport === `Custom/Generic: ${p.name}`)
-          );
-        });
+        const hosts = assets.filter(a => String(a.passportId ?? '') === p.id);
 
         results.push({
           passport: p,
