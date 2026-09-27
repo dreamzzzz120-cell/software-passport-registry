@@ -108,7 +108,7 @@ export function createTrustLoopRouter() {
       // (permission failure, unsupported scope, or incomplete provider data).
       // Preserve the evidence, but never advertise that source as healthy/live.
       const unknownCount = observations.filter((o) => o.status === 'UNKNOWN').length;
-      const collectionStatus = unknownCount ? 'DEGRADED' : 'SUCCEEDED';
+      const collectionStatus = unknownCount ? 'PARTIAL' : 'SUCCEEDED';
       const monitoringStatus = unknownCount ? 'DEGRADED' : 'HEALTHY';
       const credentialStatus = unknownCount ? 'ERROR' : 'LIVE';
       await db.execute(sql`UPDATE trust_collection_runs SET completed_at=${completedAt},status=${collectionStatus},observation_count=${observations.length},evidence_count=${result.evidenceIds.length},failure_count=${unknownCount},collector_version='deep-v2' WHERE id=${runId} AND tenant_id=${tenantId}`);
