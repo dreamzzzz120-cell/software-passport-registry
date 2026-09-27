@@ -8,7 +8,7 @@ import Stripe from 'stripe';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuthenticatedRequest, requireAuth, requireRole } from '../middleware/security.ts';
-import { config } from '../config.ts';
+import { config, stripeSecretKeyMisconfigured } from '../config.ts';
 import { db } from '../db/index.ts';
 import { appendAuditEntry } from '../security/audit-log.ts';
 
@@ -179,6 +179,7 @@ export async function buildCatalog() {
   const prices = await loadPrices();
   return {
     billingConfigured: Boolean(config.stripe.secretKey),
+    billingConfigurationError: stripeSecretKeyMisconfigured ? 'STRIPE_SECRET_KEY_INVALID' : null,
     plans: PLAN_IDS.map((id) => ({
       ...catalogEntry(id, PLAN_CONFIG[id].label, planPriceId(id), prices),
       clientLimit: PLAN_CONFIG[id].clientLimit,
