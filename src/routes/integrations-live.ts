@@ -181,6 +181,9 @@ export function createLiveIntegrationsRouter() {
         });
         const observationsJson = JSON.stringify(preparedObservations);
         await db.execute(sql`SELECT finalize_provider_software_inventory_run(${runId}, ${tenantId}, ${inventory.status}, ${inventory.limitationCode}, ${inventory.limitation}, ${completedAt}, ${observationsJson}::jsonb)`);
+        if (inventory.status === 'COMPLETE') {
+          await db.execute(sql`SELECT reconcile_provider_software_inventory_lifecycle(${runId}, ${tenantId})`);
+        }
         return res.json({ provider, externalCustomerId: externalId, runId, status: inventory.status, complete: inventory.complete, observationsFetched: preparedObservations.length, limitationCode: inventory.limitationCode, limitation: inventory.limitation, collectedAt: completedAt });
       } catch (collectionError: any) {
         const completedAt = new Date().toISOString();
