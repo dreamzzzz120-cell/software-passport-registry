@@ -7,12 +7,13 @@ CREATE TABLE IF NOT EXISTS provider_software_inventory_runs (
   provider_customer_id text NOT NULL,
   status text NOT NULL CHECK (status IN ('RUNNING','COMPLETE','PARTIAL','FAILED','UNSUPPORTED')),
   observations_fetched integer NOT NULL DEFAULT 0 CHECK (observations_fetched >= 0),
+  limitation_code text,
   limitation text,
   started_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   completed_at timestamp,
   CHECK ((status = 'RUNNING' AND completed_at IS NULL) OR (status <> 'RUNNING' AND completed_at IS NOT NULL)),
   CHECK (status <> 'COMPLETE' OR limitation IS NULL),
-  CHECK (status IN ('RUNNING','COMPLETE') OR limitation IS NOT NULL)
+  CHECK (status IN ('RUNNING','COMPLETE') OR (limitation_code IS NOT NULL AND limitation IS NOT NULL))
 );
 
 CREATE INDEX IF NOT EXISTS provider_software_inventory_runs_tenant_idx
