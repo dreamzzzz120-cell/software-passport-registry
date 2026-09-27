@@ -145,9 +145,9 @@ export function createLiveIntegrationsRouter() {
       const externalId = routeParam(req.params.externalId);
       const db = req.db!;
       const tenantId = req.user!.tenantId;
-      const customer = await db.execute(sql`SELECT id, client_id FROM provider_customers WHERE tenant_id = ${tenantId} AND provider = ${provider} AND external_customer_id = ${externalId} AND lifecycle_status = 'ACTIVE' LIMIT 1`);
+      const customer = await db.execute(sql`SELECT id, client_id FROM provider_customers WHERE tenant_id = ${tenantId} AND provider = ${provider} AND external_customer_id = ${externalId} LIMIT 1`);
       const customerRow = (customer as any).rows?.[0];
-      if (!customerRow) return res.status(404).json({ error: 'Active discovered customer not found for this tenant.' });
+      if (!customerRow) return res.status(404).json({ error: 'Discovered customer not found for this tenant.' });
       const stored = await db.execute(sql`SELECT encrypted_payload FROM integration_credentials WHERE tenant_id = ${tenantId} AND provider = ${provider} LIMIT 1`);
       const payload = (stored as any).rows?.[0]?.encrypted_payload;
       if (!payload) return res.status(409).json({ error: 'CREDENTIAL_NOT_CONFIGURED' });
