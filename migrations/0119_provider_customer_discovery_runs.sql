@@ -16,6 +16,7 @@ CREATE INDEX IF NOT EXISTS provider_customer_discovery_runs_tenant_idx
   ON provider_customer_discovery_runs (tenant_id, provider, started_at DESC);
 
 ALTER TABLE provider_customer_discovery_runs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE provider_customer_discovery_runs FORCE ROW LEVEL SECURITY;
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='provider_customer_discovery_runs' AND policyname='spr_tenant_isolation') THEN
@@ -23,9 +24,15 @@ BEGIN
       USING (tenant_id = current_setting('app.tenant_id', true))
       WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
   END IF;
-END $$;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='provider_customer_discovery_runs' AND policyname='spr_worker_cross_tenant') THEN
+    CREATE POLICY spr_worker_cross_tenant ON provider_customer_discovery_runs
+      FOR ALL TO spr_worker_runtime
+      USING (current_user = 'spr_worker_runtime')
+      WITH CHECK (current_user = 'spr_worker_runtime');
+  END IF;
+END $;
 
-DO $$
+DO $
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='spr_app_runtime') THEN
     GRANT SELECT, INSERT, UPDATE ON provider_customer_discovery_runs TO spr_app_runtime;
