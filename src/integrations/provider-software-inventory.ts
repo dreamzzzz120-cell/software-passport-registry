@@ -10,6 +10,7 @@ export type SoftwareInventoryCoverage = {
   observations: ProviderSoftwareObservation[];
   complete: boolean;
   status: 'COMPLETE' | 'PARTIAL' | 'UNSUPPORTED';
+  limitationCode: string | null;
   limitation: string | null;
 };
 
@@ -29,6 +30,7 @@ export async function collectProviderSoftwareInventory(
     observations: [],
     complete: false,
     status: 'UNSUPPORTED',
+    limitationCode: 'COLLECTOR_NOT_VERIFIED',
     limitation: 'No verified device-software API collector is implemented for this provider.',
   };
 }
