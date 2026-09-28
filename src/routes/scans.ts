@@ -179,10 +179,22 @@ export function createScansRouter() {
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
       const db = req.db!;
       const data = parsed.data;
+      const passport = (await db.execute(sql`SELECT p.id, p.name, p.client_id, c.name AS client_name
+        FROM passports p
+        LEFT JOIN clients c ON c.id=p.client_id AND c.tenant_id=p.tenant_id
+        WHERE p.tenant_id=${req.user!.tenantId}
+          AND (p.id=${data.assetId} OR LOWER(p.name)=LOWER(${data.assetHostName}))
+        ORDER BY CASE WHEN p.id=${data.assetId} THEN 0 ELSE 1 END, p.id
+        LIMIT 2`)).rows as any[];
+      if (passport.length === 0) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
+      if (passport.length > 1 && !passport.some((p) => p.id === data.assetId)) {
+        return res.status(409).json({ error: 'AMBIGUOUS_PASSPORT_TARGET' });
+      }
+      const target = passport.find((p) => p.id === data.assetId) ?? passport[0];
       const now = new Date();
       const schedule = {
-        id: id('schedule'), assetId: data.assetId, assetHostName: data.assetHostName,
-        assetType: data.assetType, clientName: data.clientName, frequency: data.frequency,
+        id: id('schedule'), assetId: target.id, assetHostName: target.name,
+        assetType: data.assetType, clientName: target.client_name ?? 'Unassigned', frequency: data.frequency,
         scanType: data.scanType, status: 'Active', lastRunAt: null,
         nextRunAt: nextRunAt(data.frequency, now), createdAt: now.toISOString(),
       };
@@ -218,11 +230,21 @@ export function createScansRouter() {
       const schedule = (await db.execute(sql`SELECT id, asset_id AS "assetId", asset_host_name AS "assetHostName", asset_type AS "assetType", client_name AS "clientName", frequency, scan_type AS "scanType", status, last_run_at AS "lastRunAt", next_run_at AS "nextRunAt", created_at AS "createdAt" FROM scan_schedules WHERE id=${req.params.id} AND tenant_id=${req.user!.tenantId} LIMIT 1`)).rows?.[0] as any;
       if (!schedule) return res.status(404).json({ error: 'Scan schedule not found' });
       if (schedule.status !== 'Active') return res.status(409).json({ error: 'Scan schedule is paused' });
-      const passport = (await db.execute(sql`SELECT id, client_id FROM passports WHERE tenant_id=${req.user!.tenantId} AND (id=${schedule.assetId} OR LOWER(name)=LOWER(${schedule.assetHostName})) LIMIT 1`)).rows?.[0] as any;
-      if (!passport) return res.status(422).json({ error: 'No matching Software Passport exists for this scheduled target.', queued: false });
+      const passportRows = (await db.execute(sql`SELECT p.id, p.name, p.client_id, c.name AS client_name
+        FROM passports p
+        LEFT JOIN clients c ON c.id=p.client_id AND c.tenant_id=p.tenant_id
+        WHERE p.tenant_id=${req.user!.tenantId}
+          AND (p.id=${schedule.assetId} OR LOWER(p.name)=LOWER(${schedule.assetHostName}))
+        ORDER BY CASE WHEN p.id=${schedule.assetId} THEN 0 ELSE 1 END, p.id
+        LIMIT 2`)).rows as any[];
+      if (passportRows.length === 0) return res.status(422).json({ error: 'No matching Software Passport exists for this scheduled target.', queued: false });
+      if (passportRows.length > 1 && !passportRows.some((p) => p.id === schedule.assetId)) {
+        return res.status(409).json({ error: 'AMBIGUOUS_PASSPORT_TARGET', queued: false });
+      }
+      const passport = passportRows.find((p) => p.id === schedule.assetId) ?? passportRows[0];
       const now = new Date();
       const next = nextRunAt(schedule.frequency, now);
-      const submitted = await enqueueSbomScan(db, { tenantId: req.user!.tenantId, clientId: passport.client_id ?? null, passportId: passport.id, triggeredBy: req.user!.uid, targetName: schedule.assetHostName, clientName: schedule.clientName, scanType: schedule.scanType });
+      const submitted = await enqueueSbomScan(db, { tenantId: req.user!.tenantId, clientId: passport.client_id ?? null, passportId: passport.id, triggeredBy: req.user!.uid, targetName: schedule.assetHostName, clientName: passport.client_name ?? 'Unassigned', scanType: schedule.scanType });
       const scanId = submitted.scanId;
       const jobId = submitted.jobId;
       await db.execute(sql`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES (${jobId},'comprehensive_scanner',${'Scheduled OSV dependency scan dispatched for ' + schedule.assetHostName},'Info')`);

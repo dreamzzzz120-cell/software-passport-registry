@@ -91,7 +91,8 @@ export function createScanLedgerRouter() {
       LEFT JOIN passports p ON p.id = r.passport_id AND p.tenant_id = r.tenant_id
       LEFT JOIN clients c ON c.id = COALESCE(r.client_id, p.client_id) AND c.tenant_id = r.tenant_id
       WHERE r.id = ${runId} AND r.tenant_id = ${req.user!.tenantId}
-        AND (${clientScope}::text IS NULL OR COALESCE(r.client_id, p.client_id) = ${clientScope})
+        AND (${clientScope}::text IS NULL OR (COALESCE(r.client_id, p.client_id) = ${clientScope} AND (r.client_id IS NULL OR p.client_id IS NULL OR r.client_id = p.client_id)))
+      AND (r.client_id IS NULL OR p.client_id IS NULL OR r.client_id = p.client_id)
       LIMIT 1`);
     return rows(result)[0] ?? null;
   }
@@ -190,7 +191,8 @@ export function createScanLedgerRouter() {
       const offset = (parsed.data.page - 1) * parsed.data.limit;
       const like = q ? `%${q.replace(/[%_\\]/g, (m) => `\\${m}`)}%` : null;
       const where = sql`r.tenant_id = ${req.user!.tenantId} AND r.passport_id IS NOT NULL
-        AND (${clientScope}::text IS NULL OR COALESCE(r.client_id, p.client_id) = ${clientScope})
+        AND (${clientScope}::text IS NULL OR (COALESCE(r.client_id, p.client_id) = ${clientScope} AND (r.client_id IS NULL OR p.client_id IS NULL OR r.client_id = p.client_id)))
+        AND (r.client_id IS NULL OR p.client_id IS NULL OR r.client_id = p.client_id)
         AND (${passportId ?? null}::text IS NULL OR r.passport_id = ${passportId ?? null})
         AND (${clientId ?? null}::text IS NULL OR COALESCE(r.client_id, p.client_id) = ${clientId ?? null})
         AND (${status ?? null}::text IS NULL OR r.status = ${status ?? null})
@@ -221,6 +223,9 @@ export function createScanLedgerRouter() {
     try {
       const run = await loadRun(req, String(req.params.id));
       if (!run) return res.status(404).json({ error: 'SCAN_RUN_NOT_FOUND' });
+      // Child rows are only reachable through a run whose passport/client lineage
+      // is internally consistent. This prevents a corrupted or legacy row with
+      // a caller-visible client_id from exposing another client's passport.
       const jobs = rows(await req.db!.execute(sql`SELECT id, agent_id AS "agentId", job_type AS "jobType", status, progress, error, attempt_count AS "attemptCount", max_attempts AS "maxAttempts", created_at AS "createdAt", updated_at AS "updatedAt", completed_at AS "completedAt", locked_at AS "lockedAt" FROM agent_jobs WHERE scan_id=${run.id} AND tenant_id=${req.user!.tenantId} ORDER BY created_at ASC`));
       const coverage = rows(await req.db!.execute(sql`SELECT files_discovered AS "filesDiscovered", files_accounted_for AS "filesAccountedFor", files_inspected AS "filesInspected", files_partially_inspected AS "filesPartiallyInspected", files_analyzed AS "filesAnalyzed", files_unsupported AS "filesUnsupported", files_skipped AS "filesSkipped", files_failed AS "filesFailed", files_inaccessible AS "filesInaccessible", files_unknown AS "filesUnknown", files_with_findings AS "filesWithFindings", files_without_findings AS "filesWithoutFindings", files_with_evidence AS "filesWithEvidence", archives_discovered AS "archivesDiscovered", archives_enumerated AS "archivesEnumerated", archives_unreadable AS "archivesUnreadable", inspection_applicable AS "inspectionApplicable", analysis_applicable AS "analysisApplicable", accounting_coverage_pct AS "accountingCoveragePct", inspection_coverage_pct AS "inspectionCoveragePct", analysis_coverage_pct AS "analysisCoveragePct", evidence_coverage_pct AS "evidenceCoveragePct", inventory_complete = 1 AS "inventoryComplete", limitations, computed_at AS "computedAt" FROM scan_coverage WHERE scan_id=${run.id} AND tenant_id=${req.user!.tenantId} LIMIT 1`))[0] ?? null;
       const dispositionBreakdown = rows(await req.db!.execute(sql`SELECT disposition, COUNT(*)::int AS count FROM scan_file_inventory WHERE scan_id=${run.id} AND tenant_id=${req.user!.tenantId} GROUP BY disposition ORDER BY count DESC`));
