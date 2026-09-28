@@ -2,10 +2,11 @@ import { Router } from 'express';
 import { createHash } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { requireAuth, AuthenticatedRequest } from '../middleware/security.ts';
+import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/security.ts';
 import type { ScopedDb } from '../middleware/tenant-scope.ts';
 import { evaluateVendorRisk } from '../agents/vendor-risk-agent.ts';
-import { evaluateRevenue } from '../agents/revenue-agent.ts';
+import { evaluateUnmappedClaim } from '../agents/claim-evaluation.ts';
+import { listRevenueReviewCandidates, revenueQuery } from '../agents/revenue-query.ts';
 
 const passportInput = z.object({ passportId: z.string().trim().min(1).max(255) }).strict();
 const softwareInput = z.object({ query: z.string().trim().min(1).max(500) }).strict();
@@ -19,6 +20,13 @@ const MUTATION_INTENT = /\b(delete|remove|purge|drop|wipe|erase|destroy|update|e
 export function createAgentApiRouter() {
   const router = Router();
   router.use(requireAuth);
+
+  router.get('/revenue/opportunities', requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
+    const parsed = revenueQuery.safeParse(req.query);
+    if (!parsed.success) return res.status(400).json({ error: 'INVALID_OPPORTUNITY_QUERY' });
+    try { return res.json(await listRevenueReviewCandidates(req.db!, req.user!.tenantId, parsed.data)); }
+    catch (error) { return next(error); }
+  });
 
   router.post('/command', async (req: AuthenticatedRequest, res, next) => {
     const parsed = commandInput.safeParse(req.body);
@@ -99,67 +107,6 @@ export function createAgentApiRouter() {
   });
 
 
-  router.post('/revenue-opportunities', async (req: AuthenticatedRequest, res, next) => {
-    const parsed = z.object({
-      passportId: z.string().trim().min(1).max(255),
-      catalog: z.record(z.string(), z.number().finite().nonnegative()).default({}),
-      staleAfterDays: z.number().int().min(1).max(3650).default(30),
-    }).strict().safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: 'INVALID_REVENUE_REQUEST', details: parsed.error.flatten() });
-    try {
-      const db = req.db!;
-      const tenantId = req.user!.tenantId;
-      const passport = (await db.execute(sql`SELECT id,name,client_id FROM passports WHERE tenant_id=${tenantId} AND id=${parsed.data.passportId} LIMIT 1`) as any).rows?.[0];
-      if (!passport) return res.status(404).json({ schemaVersion: 'spr-revenue-agent-v2', status: 'UNKNOWN', reason: 'PASSPORT_NOT_FOUND', passportId: parsed.data.passportId });
-
-      const findings = (await db.execute(sql`SELECT id,severity,status,control_id,title,evidence_ids,updated_at FROM trust_findings WHERE tenant_id=${tenantId} AND passport_id=${passport.id} ORDER BY updated_at DESC LIMIT 500`) as any).rows || [];
-      const evidence = (await db.execute(sql`SELECT id,provider,control_id,observed_at,status,limitation FROM evidence_ledger WHERE tenant_id=${tenantId} AND passport_id=${passport.id} ORDER BY observed_at DESC LIMIT 1000`) as any).rows || [];
-      const latest = (await db.execute(sql`SELECT id,generated_at,evidence_ids,finding_ids,unknown_dimension_count,completeness_basis_points FROM trust_observations WHERE tenant_id=${tenantId} AND passport_id=${passport.id} ORDER BY observation_version DESC LIMIT 1`) as any).rows?.[0] || null;
-      const monitoring = (await db.execute(sql`SELECT id,enabled,status,last_successful_at,next_scheduled_at FROM monitoring_configurations WHERE tenant_id=${tenantId} AND passport_id=${passport.id} ORDER BY updated_at DESC LIMIT 1`) as any).rows?.[0] || null;
-
-      const open = findings.filter((f: any) => !['resolved','closed','verified'].includes(String(f.status || '').toLowerCase()));
-      const criticalHigh = open.filter((f: any) => ['critical','high'].includes(String(f.severity || '').toLowerCase()));
-      const latestAt = latest?.generated_at ? new Date(latest.generated_at).getTime() : NaN;
-      const stale = Number.isFinite(latestAt) && Date.now() - latestAt > parsed.data.staleAfterDays * 86_400_000;
-      const unknowns: string[] = [];
-      const unknownCount = Number(latest?.unknown_dimension_count || 0);
-      if (unknownCount > 0) unknowns.push(`${unknownCount} trust dimension(s) are UNKNOWN in the latest immutable observation.`);
-      for (const item of evidence) if (item.limitation) unknowns.push(String(item.limitation));
-
-      const result = evaluateRevenue({
-        passport: { id: String(passport.id), name: String(passport.name) },
-        openCriticalOrHigh: criticalHigh.length,
-        openFindings: open.length,
-        stale,
-        vendorRiskStatus: null,
-        complianceStatus: null,
-        monitoringEnabled: Boolean(monitoring?.enabled),
-        observedEvidenceCount: evidence.length,
-        catalog: parsed.data.catalog,
-        evidenceIds: evidence.map((e: any) => String(e.id)),
-        findingIds: open.map((f: any) => String(f.id)),
-        unknowns,
-      });
-
-      return res.json({
-        ...result,
-        clientId: passport.client_id ?? null,
-        latestObservation: latest ? { id: String(latest.id), generatedAt: latest.generated_at, completenessBasisPoints: latest.completeness_basis_points, unknownDimensionCount: unknownCount } : null,
-        monitoring: monitoring ? { id: String(monitoring.id), enabled: Boolean(monitoring.enabled), status: monitoring.status, lastSuccessfulAt: monitoring.last_successful_at, nextScheduledAt: monitoring.next_scheduled_at } : null,
-        provenance: {
-          tenantScoped: true,
-          sources: [
-            { table: 'passports', ids: [String(passport.id)] },
-            { table: 'evidence_ledger', ids: evidence.map((e: any) => String(e.id)) },
-            { table: 'trust_findings', ids: findings.map((f: any) => String(f.id)) },
-            { table: 'trust_observations', ids: latest ? [String(latest.id)] : [] },
-            { table: 'monitoring_configurations', ids: monitoring ? [String(monitoring.id)] : [] },
-          ],
-        },
-      });
-    } catch (error) { return next(error); }
-  });
-
   router.post('/verify-claim', async (req: AuthenticatedRequest, res, next) => {
     const claimSchema = z.object({ passport: z.string().trim().min(1).max(512), claim: z.string().trim().min(1).max(2000) }).strict();
     const parsed = claimSchema.safeParse(req.body);
@@ -173,13 +120,7 @@ export function createAgentApiRouter() {
       const evidenceCount = (await db.execute(sql`SELECT COUNT(*)::int AS count FROM evidence_items WHERE tenant_id=${tenantId} AND asset_id=${passport.id}`) as any).rows?.[0]?.count ?? 0;
       const openFindings = (await db.execute(sql`SELECT COUNT(*)::int AS count FROM scan_findings WHERE tenant_id=${tenantId} AND asset_id=${passport.id} AND lower(status) NOT IN ('resolved','closed','verified')`) as any).rows?.[0]?.count ?? 0;
       const claimHash = `sha256:${createHash('sha256').update(claim.normalize('NFKC'), 'utf8').digest('hex')}`;
-      // Counts alone cannot establish what a natural-language claim asserts. An
-      // open finding may warrant investigation, but neither its absence nor an
-      // unrelated evidence item proves a broad security or compliance claim.
-      const status = 'UNVERIFIED';
-      const reason = evidenceCount === 0
-        ? 'No observed evidence exists for this passport. SPR cannot verify the claim.'
-        : 'Evidence exists, but SPR has no claim-to-control and evidence mapping for this statement. Review the cited records and evaluate the specific claim before asserting verification.';
+      const { status, reason } = evaluateUnmappedClaim(evidenceCount, openFindings);
       return res.json({ status, reason, claimHash, passportId: passport.id, passportName: passport.name, evidenceCount, openFindings, provenance: { kind: 'tenant_scoped_evidence_evaluation', passportId: passport.id, evidenceCount, openFindings } });
     } catch (error) { return next(error); }
   });
