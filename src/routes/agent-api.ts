@@ -120,13 +120,7 @@ export function createAgentApiRouter() {
       const evidenceCount = (await db.execute(sql`SELECT COUNT(*)::int AS count FROM evidence_items WHERE tenant_id=${tenantId} AND asset_id=${passport.id}`) as any).rows?.[0]?.count ?? 0;
       const openFindings = (await db.execute(sql`SELECT COUNT(*)::int AS count FROM scan_findings WHERE tenant_id=${tenantId} AND asset_id=${passport.id} AND lower(status) NOT IN ('resolved','closed','verified')`) as any).rows?.[0]?.count ?? 0;
       const claimHash = `sha256:${createHash('sha256').update(claim.normalize('NFKC'), 'utf8').digest('hex')}`;
-      // Counts alone cannot establish what a natural-language claim asserts. An
-      // open finding may warrant investigation, but neither its absence nor an
-      // unrelated evidence item proves a broad security or compliance claim.
-      const status = 'UNVERIFIED';
-      const reason = evidenceCount === 0
-        ? 'No observed evidence exists for this passport. SPR cannot verify the claim.'
-        : 'Evidence exists, but SPR has no claim-to-control and evidence mapping for this statement. Review the cited records and evaluate the specific claim before asserting verification.';
+      const { status, reason } = evaluateUnmappedClaim(evidenceCount, openFindings);
       return res.json({ status, reason, claimHash, passportId: passport.id, passportName: passport.name, evidenceCount, openFindings, provenance: { kind: 'tenant_scoped_evidence_evaluation', passportId: passport.id, evidenceCount, openFindings } });
     } catch (error) { return next(error); }
   });
