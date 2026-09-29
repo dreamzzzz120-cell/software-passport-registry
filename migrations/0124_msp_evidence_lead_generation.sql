@@ -137,3 +137,13 @@ BEGIN
 END $$;
 DROP TRIGGER IF EXISTS msp_lead_outreach_guard ON msp_lead_outreach_events;
 CREATE TRIGGER msp_lead_outreach_guard BEFORE INSERT ON msp_lead_outreach_events FOR EACH ROW EXECUTE FUNCTION spr_guard_lead_outreach();
+
+
+-- Runtime roles predate these tables. Explicitly grant only the DML needed by
+-- the HTTP application; the worker has no lead-generation responsibility.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='spr_app_runtime') THEN
+    GRANT SELECT, INSERT, UPDATE, DELETE ON msp_leads, msp_lead_evidence, msp_lead_reviews, msp_lead_suppressions, msp_lead_outreach_events TO spr_app_runtime;
+  END IF;
+END $$;
