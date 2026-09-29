@@ -13,16 +13,20 @@ if ($LASTEXITCODE -ne 0) { throw 'Start Docker Desktop first.' }
 $envFile = Join-Path (Get-Location) '.env.local'
 if (-not (Test-Path $envFile)) {
   $bytes = New-Object byte[] 32
-  [System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
-  $password = [Convert]::ToHexString($bytes).ToLowerInvariant()
-  @"
+  $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+  $rng.GetBytes($bytes)
+  $rng.Dispose()
+  $password = ([BitConverter]::ToString($bytes) -replace '-', '').ToLowerInvariant()
+  $contents = @"
 SPR_LOCAL_DB_PASSWORD=$password
 VITE_SUPABASE_URL=
 VITE_SUPABASE_PUBLISHABLE_KEY=
 SUPABASE_URL=
 SUPABASE_PUBLISHABLE_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
-"@ | Set-Content -Path $envFile -Encoding utf8
+SPR_INITIAL_OWNER_EMAIL=
+"@
+  [System.IO.File]::WriteAllText($envFile, $contents, (New-Object System.Text.UTF8Encoding($false)))
   Write-Host 'Created .env.local. Fill the Supabase URL and keys from your existing SPR configuration, then run this script again.'
   exit 0
 }
@@ -54,5 +58,25 @@ foreach ($name in @('VITE_SUPABASE_URL', 'VITE_SUPABASE_PUBLISHABLE_KEY', 'SUPAB
 if (-not $SkipInstall) { npm ci; if ($LASTEXITCODE -ne 0) { throw 'npm ci failed.' } }
 npm run migrate
 if ($LASTEXITCODE -ne 0) { throw 'Database migration failed. No app was started.' }
+$ownerCount = docker compose --env-file .env.local -f compose.local.yml exec -T postgres psql -U spr -d spr -Atqc "SELECT count(*) FROM users WHERE role = 'Owner'"
+if ($LASTEXITCODE -ne 0) { throw 'Could not check the Owner record.' }
+if (($ownerCount | Out-String).Trim() -eq '0') {
+  if (-not $settings['SUPABASE_SERVICE_ROLE_KEY'] -or -not $settings['SPR_INITIAL_OWNER_EMAIL']) {
+    throw 'Fresh database needs SUPABASE_SERVICE_ROLE_KEY and SPR_INITIAL_OWNER_EMAIL in .env.local to create the first Owner.'
+  }
+  $env:SPR_INITIAL_OWNER_EMAIL = $settings['SPR_INITIAL_OWNER_EMAIL']
+  $bootstrapBytes = New-Object byte[] 32
+  $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+  $rng.GetBytes($bootstrapBytes)
+  $rng.Dispose()
+  $env:SPR_OWNER_BOOTSTRAP_SECRET = ([BitConverter]::ToString($bootstrapBytes) -replace '-', '').ToLowerInvariant()
+  $hasher = [System.Security.Cryptography.SHA256]::Create()
+  $hashBytes = $hasher.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($env:SPR_OWNER_BOOTSTRAP_SECRET))
+  $hasher.Dispose()
+  $env:SPR_OWNER_BOOTSTRAP_SECRET_SHA256 = ([BitConverter]::ToString($hashBytes) -replace '-', '').ToLowerInvariant()
+  npx tsx scripts/bootstrap-initial-owner.ts
+  if ($LASTEXITCODE -ne 0) { throw 'Owner bootstrap failed. Verify the Supabase user exists and has a confirmed email.' }
+  Remove-Item Env:SPR_OWNER_BOOTSTRAP_SECRET, Env:SPR_OWNER_BOOTSTRAP_SECRET_SHA256 -ErrorAction SilentlyContinue
+}
 Write-Host 'SPR local database is ready. Opening http://localhost:3000'
 npm run dev
