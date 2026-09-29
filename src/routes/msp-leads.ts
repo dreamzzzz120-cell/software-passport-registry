@@ -26,6 +26,20 @@ const reviewSchema = z.object({
   reason: z.string().trim().min(1).max(2000),
 }).strict();
 
+
+const suppressionSchema = z.object({
+  target: z.string().trim().min(3).max(320),
+  reason: z.string().trim().min(1).max(1000),
+}).strict();
+
+const outreachSchema = z.object({
+  idempotencyKey: z.string().trim().min(8).max(200),
+  channel: z.enum(['EMAIL','PHONE','OTHER']),
+  target: z.string().trim().min(3).max(320),
+}).strict();
+
+function normalizeTarget(value: string) { return value.trim().toLowerCase(); }
+
 const transitionSchema = z.object({
   status: z.enum(['CONTACTED','REPLIED','MEETING','PROPOSAL','WON','LOST','DISQUALIFIED']),
 }).strict();
@@ -118,6 +132,52 @@ export function createMspLeadRouter() {
       await req.db!.execute(sql`UPDATE msp_leads SET status=${parsed.data.status}, updated_at=now() WHERE id=${req.params.leadId} AND tenant_id=${tenantId} AND status=${lead.status}`);
       await appendAuditEntry(req.db!, { tenantId, action: 'msp.lead.status_changed', actor: req.user!.email, payload: { leadId: req.params.leadId, from: lead.status, to: parsed.data.status } });
       return res.json({ id: req.params.leadId, status: parsed.data.status });
+    } catch (error) { return next(error); }
+  });
+
+  router.post('/suppressions', requireRole(['Owner','Admin','Operator']), async (req: AuthenticatedRequest, res, next) => {
+    const parsed = suppressionSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'INVALID_PAYLOAD', details: parsed.error.flatten() });
+    try {
+      const tenantId = req.user!.tenantId;
+      const target = normalizeTarget(parsed.data.target);
+      const row = rows(await req.db!.execute(sql`INSERT INTO msp_lead_suppressions (tenant_id, normalized_target, reason, created_by) VALUES (${tenantId}, ${target}, ${parsed.data.reason}, ${req.user!.id}) ON CONFLICT (tenant_id, normalized_target) DO UPDATE SET reason=EXCLUDED.reason RETURNING id, normalized_target AS "target", reason, created_at AS "createdAt"`))[0];
+      await appendAuditEntry(req.db!, { tenantId, action: 'msp.lead.target_suppressed', actor: req.user!.email, payload: { target, reason: parsed.data.reason } });
+      return res.status(201).json(row);
+    } catch (error) { return next(error); }
+  });
+
+  router.post('/:leadId/outreach', requireRole(['Owner','Admin','Operator']), async (req: AuthenticatedRequest, res, next) => {
+    const parsed = outreachSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'INVALID_PAYLOAD', details: parsed.error.flatten() });
+    try {
+      const tenantId = req.user!.tenantId;
+      const target = normalizeTarget(parsed.data.target);
+      const result = await req.db!.execute(sql`INSERT INTO msp_lead_outreach_events (tenant_id, lead_id, idempotency_key, channel, target, status) VALUES (${tenantId}, ${req.params.leadId}, ${parsed.data.idempotencyKey}, ${parsed.data.channel}, ${target}, 'QUEUED') ON CONFLICT (tenant_id, idempotency_key) DO NOTHING RETURNING id, lead_id AS "leadId", channel, target, status, created_at AS "createdAt"`);
+      const event = rows(result)[0];
+      if (!event) return res.status(409).json({ error: 'DUPLICATE_OUTREACH_REQUEST' });
+      await appendAuditEntry(req.db!, { tenantId, action: 'msp.lead.outreach_queued', actor: req.user!.email, payload: { leadId: req.params.leadId, outreachEventId: event.id, channel: event.channel } });
+      return res.status(201).json(event);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('not human-approved')) return res.status(409).json({ error: 'HUMAN_APPROVAL_REQUIRED' });
+      if (message.includes('no current supporting evidence')) return res.status(409).json({ error: 'CURRENT_EVIDENCE_REQUIRED' });
+      if (message.includes('target is suppressed')) return res.status(409).json({ error: 'OUTREACH_TARGET_SUPPRESSED' });
+      return next(error);
+    }
+  });
+
+  router.get('/:leadId/history', requireRole(['Owner','Admin','Operator','Technician','Viewer']), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const tenantId = req.user!.tenantId;
+      const lead = rows(await req.db!.execute(sql`SELECT id, company_name AS "companyName", status, created_at AS "createdAt", updated_at AS "updatedAt" FROM msp_leads WHERE tenant_id=${tenantId} AND id=${req.params.leadId} LIMIT 1`))[0];
+      if (!lead) return res.status(404).json({ error: 'LEAD_NOT_FOUND' });
+      const [evidence, reviews, outreach] = await Promise.all([
+        req.db!.execute(sql`SELECT id, source_type AS "sourceType", source_locator AS "sourceLocator", observed_fact AS "observedFact", observed_at AS "observedAt", collected_at AS "collectedAt", evidence_digest AS "evidenceDigest", confidence, freshness_state AS "freshnessState" FROM msp_lead_evidence WHERE tenant_id=${tenantId} AND lead_id=${req.params.leadId} ORDER BY collected_at ASC`),
+        req.db!.execute(sql`SELECT id, reviewer_id AS "reviewerId", decision, reason, created_at AS "createdAt" FROM msp_lead_reviews WHERE tenant_id=${tenantId} AND lead_id=${req.params.leadId} ORDER BY created_at ASC`),
+        req.db!.execute(sql`SELECT id, channel, target, status, provider_reference AS "providerReference", created_at AS "createdAt" FROM msp_lead_outreach_events WHERE tenant_id=${tenantId} AND lead_id=${req.params.leadId} ORDER BY created_at ASC`),
+      ]);
+      return res.json({ lead, evidence: rows(evidence), reviews: rows(reviews), outreach: rows(outreach), limitations: ['History contains only persisted SPR observations and actions; absence of a record is not evidence that an external event did or did not occur.'] });
     } catch (error) { return next(error); }
   });
 
