@@ -48,6 +48,23 @@ describe('MSP lead intelligence hardening contract', () => {
     expect(migration).toContain('outreach target is suppressed');
   });
 
+  it('exposes suppression and guarded queueing rather than direct sending', () => {
+    expect(route).toContain("router.post('/suppressions'");
+    expect(route).toContain("router.post('/:leadId/outreach'");
+    expect(route).toContain("'QUEUED'");
+    expect(route).not.toContain("'SENT') ON CONFLICT");
+  });
+
+  it('exposes a human-readable persisted history with an explicit limitation', () => {
+    expect(route).toContain("router.get('/:leadId/history'");
+    expect(route).toContain('absence of a record is not evidence');
+  });
+
+  it('grants new tables to the least-privileged app role without granting the worker', () => {
+    expect(migration).toContain('TO spr_app_runtime');
+    expect(migration).not.toMatch(/msp_leads[^;]+TO spr_worker_runtime/);
+  });
+
   it('enforces outreach idempotency per tenant', () => {
     expect(migration).toContain('UNIQUE (tenant_id, idempotency_key)');
   });
