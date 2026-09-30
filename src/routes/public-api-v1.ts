@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { requireAuth, requireRole, type AuthenticatedRequest } from '../middleware/security.ts';
 import { attachTenantScope } from '../middleware/tenant-scope.ts';
 import { db } from '../db/index.ts';
+import { recordM2MReceipt, verifyM2MPassport } from './m2m-trust.ts';
 
 const scopes = z.enum(['read', 'write', 'webhooks']);
 const keyCreate = z.object({ name: z.string().trim().min(1).max(120), scopes: z.array(scopes).min(1).max(3).refine(v => new Set(v).size === v.length), expiresAt: z.string().trim().min(1).max(64).optional() }).strict();
@@ -67,6 +68,8 @@ export function createPublicApiV1Router() {
   publicApi.get('/passports/:passportId/freshness', scope('read'), async (req: AuthenticatedRequest, res, next) => {
     try { const passport = (await req.db!.execute(sql`SELECT id FROM passports WHERE tenant_id=${req.user!.tenantId} AND id=${req.params.passportId} LIMIT 1`) as any).rows?.[0]; if (!passport) return res.status(404).json({ status: 'UNKNOWN', reason: 'PASSPORT_NOT_FOUND', passportId: req.params.passportId }); const latest = (await req.db!.execute(sql`SELECT generated_at AS "generatedAt",observation_version AS "observationVersion",canonical_payload_hash AS "canonicalPayloadHash" FROM trust_observations WHERE tenant_id=${req.user!.tenantId} AND passport_id=${passport.id} ORDER BY observation_version DESC LIMIT 1`) as any).rows?.[0]; if (!latest) return res.json({ passportId: passport.id, status: 'UNKNOWN', reason: 'NO_OBSERVATION' }); const staleAfterDays = Math.min(3650, Math.max(1, Number(req.query.staleAfterDays ?? 30) || 30)); const ageDays = (Date.now() - new Date(latest.generatedAt).getTime()) / 86400000; return res.json({ passportId: passport.id, status: ageDays <= staleAfterDays ? 'CURRENT' : 'STALE', ageDays: Number(ageDays.toFixed(3)), staleAfterDays, generatedAt: latest.generatedAt, observationVersion: latest.observationVersion, canonicalPayloadHash: latest.canonicalPayloadHash }); } catch (error) { next(error); }
   });
+  publicApi.get('/m2m/passports/:passportId/verify', scope('read'), verifyM2MPassport);
+  publicApi.post('/m2m/receipts', scope('write'), recordM2MReceipt);
   publicApi.post('/vendor-risk', scope('read'), async (req: AuthenticatedRequest, res, next) => { try { const passportId = String(req.body?.passportId ?? ''); if (!passportId) return res.status(400).json({ error: 'INVALID_VENDOR_RISK_REQUEST' }); const passport = (await req.db!.execute(sql`SELECT id,name FROM passports WHERE tenant_id=${req.user!.tenantId} AND id=${passportId} LIMIT 1`) as any).rows?.[0]; if (!passport) return res.status(404).json({ status: 'UNKNOWN', reason: 'PASSPORT_NOT_FOUND', passportId }); const findings = (await req.db!.execute(sql`SELECT id,severity,status,title,updated_at FROM trust_findings WHERE tenant_id=${req.user!.tenantId} AND passport_id=${passport.id} ORDER BY updated_at DESC LIMIT 200`) as any).rows ?? []; return res.json({ status: findings.length ? 'OBSERVED' : 'UNKNOWN', passport, findings, provenance: { tenantScoped: true, findingIds: findings.map((f: any) => String(f.id)) } }); } catch (error) { next(error); } });
 
   // The browser Experience Agent uses the same /api/agent/v1 prefix as the
