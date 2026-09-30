@@ -22,29 +22,29 @@ const receiptSchema = z.object({
 export async function verifyM2MPassport(req: AuthenticatedRequest, res: any, next: any) {
   try {
     const passportId = String(req.params.passportId ?? '');
-    const passport = (await req.db!.execute(sql\`
+    const passport = (await req.db!.execute(sql`
       SELECT id,name,verification_status AS "verificationStatus"
       FROM passports
-      WHERE tenant_id=\${req.user!.tenantId} AND id=\${passportId}
+      WHERE tenant_id=${req.user!.tenantId} AND id=${passportId}
       LIMIT 1
-    \`) as any).rows?.[0];
+    `) as any).rows?.[0];
     if (!passport) return res.status(404).json({ passportId, passportState: 'UNKNOWN', passportVerified: false, reason: 'PASSPORT_NOT_FOUND' });
 
-    const latestObservation = (await req.db!.execute(sql\`
+    const latestObservation = (await req.db!.execute(sql`
       SELECT canonical_payload_hash AS "canonicalPayloadHash", generated_at AS "generatedAt"
       FROM trust_observations
-      WHERE tenant_id=\${req.user!.tenantId} AND passport_id=\${passportId}
+      WHERE tenant_id=${req.user!.tenantId} AND passport_id=${passportId}
       ORDER BY observation_version DESC
       LIMIT 1
-    \`) as any).rows?.[0];
+    `) as any).rows?.[0];
 
-    const latestEvidence = (await req.db!.execute(sql\`
+    const latestEvidence = (await req.db!.execute(sql`
       SELECT evidence_hash AS "evidenceHash", observed_at AS "observedAt"
       FROM evidence_ledger
-      WHERE tenant_id=\${req.user!.tenantId} AND passport_id=\${passportId}
+      WHERE tenant_id=${req.user!.tenantId} AND passport_id=${passportId}
       ORDER BY observed_at DESC
       LIMIT 1
-    \`) as any).rows?.[0];
+    `) as any).rows?.[0];
 
     const status = String(passport.verificationStatus ?? '').toLowerCase();
     const revoked = status.includes('revok');
@@ -72,17 +72,17 @@ export async function recordM2MReceipt(req: AuthenticatedRequest, res: any, next
   if (!parsed.success) return res.status(400).json({ error: 'INVALID_M2M_RECEIPT', details: parsed.error.flatten() });
   try {
     const r = parsed.data;
-    const passport = (await req.db!.execute(sql\`
-      SELECT id FROM passports WHERE tenant_id=\${req.user!.tenantId} AND id=\${r.subjectPassportId} LIMIT 1
-    \`) as any).rows?.[0];
+    const passport = (await req.db!.execute(sql`
+      SELECT id FROM passports WHERE tenant_id=${req.user!.tenantId} AND id=${r.subjectPassportId} LIMIT 1
+    `) as any).rows?.[0];
     if (!passport) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
 
-    const existing = (await req.db!.execute(sql\`
+    const existing = (await req.db!.execute(sql`
       SELECT id,receipt_digest AS "receiptDigest"
       FROM m2m_trust_receipts
-      WHERE tenant_id=\${req.user!.tenantId} AND envelope_digest=\${r.envelopeDigest}
+      WHERE tenant_id=${req.user!.tenantId} AND envelope_digest=${r.envelopeDigest}
       LIMIT 1
-    \`) as any).rows?.[0];
+    `) as any).rows?.[0];
     if (existing) {
       if (existing.receiptDigest !== r.receiptDigest) return res.status(409).json({ error: 'M2M_RECEIPT_REPLAY_MISMATCH' });
       return res.status(200).json({ id: existing.id, created: false, receiptDigest: existing.receiptDigest });
@@ -91,17 +91,17 @@ export async function recordM2MReceipt(req: AuthenticatedRequest, res: any, next
     const canonical = JSON.stringify(r, Object.keys(r).sort());
     const serverDigest = createHash('sha256').update(canonical).digest('hex');
     const id = 'm2mr_' + randomUUID();
-    await req.db!.execute(sql\`
+    await req.db!.execute(sql`
       INSERT INTO m2m_trust_receipts(
         id,tenant_id,passport_id,envelope_digest,actor_machine_id,subject_machine_id,
         requested_action,authority_decision,trust_decision,execution_outcome,
         evidence_digest,observed_at,receipt_digest,server_record_digest
       ) VALUES (
-        \${id},\${req.user!.tenantId},\${r.subjectPassportId},\${r.envelopeDigest},\${r.actorMachineId},\${r.subjectMachineId},
-        \${r.requestedAction},\${r.authorityDecision},\${r.trustDecision},\${r.executionOutcome},
-        \${r.evidenceDigest ?? null},\${r.observedAt},\${r.receiptDigest},\${serverDigest}
+        ${id},${req.user!.tenantId},${r.subjectPassportId},${r.envelopeDigest},${r.actorMachineId},${r.subjectMachineId},
+        ${r.requestedAction},${r.authorityDecision},${r.trustDecision},${r.executionOutcome},
+        ${r.evidenceDigest ?? null},${r.observedAt},${r.receiptDigest},${serverDigest}
       )
-    \`);
+    `);
     return res.status(201).json({ id, created: true, receiptDigest: r.receiptDigest, serverRecordDigest: serverDigest });
   } catch (error) { next(error); }
 }
