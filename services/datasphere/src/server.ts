@@ -11,6 +11,11 @@ const env=z.object({
   DATASPHERE_CONSTELLATION_INGEST_TOKEN:z.string().min(32),
   DATASPHERE_M2M_INGEST_TOKEN:z.string().min(32).optional(),
   DATASPHERE_INFRA_INGEST_TOKEN:z.string().min(32).optional(),
+  DATASPHERE_SPR_SOURCE_IDENTITY:z.string().min(1).default('SPR'),
+  DATASPHERE_CONSTELLATION_SOURCE_IDENTITY:z.string().min(1).default('CONSTELLATION'),
+  DATASPHERE_M2M_SOURCE_IDENTITY:z.string().min(1).default('M2M'),
+  DATASPHERE_INFRA_SOURCE_IDENTITY:z.string().min(1).default('INFRASTRUCTURE'),
+  DATASPHERE_MAX_FUTURE_SKEW_SECONDS:z.coerce.number().int().min(0).max(3600).default(300),
   DATASPHERE_OWNER_READ_TOKEN:z.string().min(32)
 }).parse(process.env);
 
@@ -24,15 +29,20 @@ const stable=(v:unknown):string=>{
   return '{'+Object.entries(v as Record<string,unknown>).sort(([a],[b])=>a.localeCompare(b))
     .map(([k,x])=>JSON.stringify(k)+':'+stable(x)).join(',')+'}';
 };
-const authorized=(source:'SPR'|'CONSTELLATION'|'M2M'|'INFRASTRUCTURE',h?:string)=>{
-  const expected=
+const sourceAuth=(source:'SPR'|'CONSTELLATION'|'M2M'|'INFRASTRUCTURE',h?:string)=>{
+  const expectedToken=
     source==='SPR'?env.DATASPHERE_SPR_INGEST_TOKEN:
     source==='CONSTELLATION'?env.DATASPHERE_CONSTELLATION_INGEST_TOKEN:
     source==='M2M'?env.DATASPHERE_M2M_INGEST_TOKEN:
     env.DATASPHERE_INFRA_INGEST_TOKEN;
-  if(!expected)return false;
-  const a=Buffer.from(h??''),b=Buffer.from('Bearer '+expected);
-  return a.length===b.length&&timingSafeEqual(a,b);
+  const expectedIdentity=
+    source==='SPR'?env.DATASPHERE_SPR_SOURCE_IDENTITY:
+    source==='CONSTELLATION'?env.DATASPHERE_CONSTELLATION_SOURCE_IDENTITY:
+    source==='M2M'?env.DATASPHERE_M2M_SOURCE_IDENTITY:
+    env.DATASPHERE_INFRA_SOURCE_IDENTITY;
+  if(!expectedToken)return{authorized:false,expectedIdentity};
+  const a=Buffer.from(h??''),b=Buffer.from('Bearer '+expectedToken);
+  return{authorized:a.length===b.length&&timingSafeEqual(a,b),expectedIdentity};
 };
 const forbiddenPortableConclusion=(payload:Record<string,unknown>)=>{
   const forbidden=new Set(['trustscore','approved','safe','compliant','authorized']);
@@ -103,7 +113,13 @@ app.post('/v1/events',{config:{rateLimit:{max:60,timeWindow:'1 minute'}}},async(
   if(!parsed.success)return r.code(400).send({code:'INVALID_EVENT',issues:parsed.error.issues});
   const e=parsed.data;
   const requestHash=sha(stable(e));
-  if(!authorized(e.sourceSystem,q.headers.authorization))return r.code(401).send({code:'UNAUTHORIZED_SOURCE'});
+  const auth=sourceAuth(e.sourceSystem,q.headers.authorization);
+  if(!auth.authorized)return r.code(401).send({code:'UNAUTHORIZED_SOURCE'});
+  if(e.sourceIdentity!==auth.expectedIdentity)return r.code(401).send({code:'SOURCE_IDENTITY_MISMATCH'});
+  const maxFuture=Date.now()+env.DATASPHERE_MAX_FUTURE_SKEW_SECONDS*1000;
+  if(Date.parse(e.timestamp)>maxFuture||Date.parse(e.observedAt)>maxFuture){
+    return r.code(400).send({code:'FUTURE_TIMESTAMP_REJECTED'});
+  }
   if(forbiddenPortableConclusion(e.payload))return r.code(400).send({code:'PORTABLE_CONCLUSION_FORBIDDEN'});
   const payloadHash=sha(stable(e.payload));
   try{
