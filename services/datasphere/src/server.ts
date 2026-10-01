@@ -116,9 +116,9 @@ app.get('/v1/internal/tenants/:tenantId/verify',{config:{rateLimit:{max:10,timeW
   if(!ownerAuthorized(q.headers.authorization))return r.code(404).send({code:'NOT_FOUND'});
   const params=z.object({tenantId:z.string().min(1).max(200)}).strict().safeParse(q.params);
   if(!params.success)return r.code(400).send({code:'INVALID_TENANT'});
-  const rows=await sql<{id:string,event_hash:string,previous_hash:string|null,request_hash:string|null}[]>\`
+  const rows=await sql<{id:string,event_hash:string,previous_hash:string|null,request_hash:string|null}[]>`
     SELECT id,event_hash,previous_hash,request_hash FROM datasphere_events
-    WHERE tenant_id=\${params.data.tenantId} ORDER BY received_at ASC,id ASC\`;
+    WHERE tenant_id=${params.data.tenantId} ORDER BY received_at ASC,id ASC`;
   let previous:string|null=null;
   for(const row of rows){
     if(row.previous_hash!==previous)return r.code(409).send({valid:false,code:'CHAIN_LINK_MISMATCH',id:row.id});
