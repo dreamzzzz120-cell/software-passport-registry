@@ -9,6 +9,8 @@ const env=z.object({
   DATABASE_URL:z.string().min(1),
   DATASPHERE_SPR_INGEST_TOKEN:z.string().min(32),
   DATASPHERE_CONSTELLATION_INGEST_TOKEN:z.string().min(32),
+  DATASPHERE_M2M_INGEST_TOKEN:z.string().min(32).optional(),
+  DATASPHERE_INFRA_INGEST_TOKEN:z.string().min(32).optional(),
   DATASPHERE_OWNER_READ_TOKEN:z.string().min(32)
 }).parse(process.env);
 
@@ -22,8 +24,13 @@ const stable=(v:unknown):string=>{
   return '{'+Object.entries(v as Record<string,unknown>).sort(([a],[b])=>a.localeCompare(b))
     .map(([k,x])=>JSON.stringify(k)+':'+stable(x)).join(',')+'}';
 };
-const authorized=(source:'SPR'|'CONSTELLATION',h?:string)=>{
-  const expected=source==='SPR'?env.DATASPHERE_SPR_INGEST_TOKEN:env.DATASPHERE_CONSTELLATION_INGEST_TOKEN;
+const authorized=(source:'SPR'|'CONSTELLATION'|'M2M'|'INFRASTRUCTURE',h?:string)=>{
+  const expected=
+    source==='SPR'?env.DATASPHERE_SPR_INGEST_TOKEN:
+    source==='CONSTELLATION'?env.DATASPHERE_CONSTELLATION_INGEST_TOKEN:
+    source==='M2M'?env.DATASPHERE_M2M_INGEST_TOKEN:
+    env.DATASPHERE_INFRA_INGEST_TOKEN;
+  if(!expected)return false;
   const a=Buffer.from(h??''),b=Buffer.from('Bearer '+expected);
   return a.length===b.length&&timingSafeEqual(a,b);
 };
@@ -36,21 +43,35 @@ const forbiddenPortableConclusion=(payload:Record<string,unknown>)=>{
   };
   return walk(payload);
 };
+const verificationState=z.enum(['OBSERVED','VERIFIED','UNVERIFIED','CONFLICTING','INVALID','UNKNOWN']);
 const envelope=z.object({
-  tenantId:z.string().min(1).max(200),
-  sourceSystem:z.enum(['SPR','CONSTELLATION']),
-  sourceEventId:z.string().min(1).max(300),
+  eventId:z.string().uuid(),
   eventType:z.string().min(1).max(200),
+  schemaVersion:z.number().int().positive().max(1000),
+  sourceSystem:z.enum(['SPR','CONSTELLATION','M2M','INFRASTRUCTURE']),
+  sourceIdentity:z.string().min(1).max(300),
+  sourceEventId:z.string().min(1).max(300),
+  tenantId:z.string().min(1).max(200),
+  galaxyId:z.string().max(300).nullable().optional(),
   subjectType:z.string().min(1).max(100),
   subjectId:z.string().min(1).max(300),
+  correlationId:z.string().min(1).max(300),
+  causationId:z.string().max(300).nullable().optional(),
+  parentEventId:z.string().max(300).nullable().optional(),
+  timestamp:z.string().datetime({offset:true}),
   observedAt:z.string().datetime({offset:true}),
   evidenceHash:z.string().regex(/^[0-9a-f]{64}$/),
-  verificationState:z.enum(['VERIFIED','OBSERVED','DECLARED','UNKNOWN','STALE','CONFLICTING','UNAVAILABLE']),
-  schemaVersion:z.number().int().positive().default(1),
-  correlationId:z.string().max(300).nullable().optional(),
-  parentEventId:z.string().max(300).nullable().optional(),
+  verificationState,
+  cryptography:z.object({
+    algorithm:z.string().min(1).max(100),
+    keyId:z.string().max(300).nullable(),
+    signature:z.string().max(20000).nullable(),
+    verificationTime:z.string().datetime({offset:true}),
+    verificationResult:verificationState,
+    metadata:z.record(z.string(),z.unknown()).default({})
+  }).strict(),
   retentionClass:z.string().min(1).max(100).default('STANDARD'),
-  limitations:z.array(z.string().max(1000)).default([]),
+  limitations:z.array(z.string().max(1000)).max(100).default([]),
   payload:z.record(z.string(),z.unknown())
 }).strict();
 
@@ -88,14 +109,16 @@ app.post('/v1/events',{config:{rateLimit:{max:60,timeWindow:'1 minute'}}},async(
       const eventHash=sha(stable({...e,payloadHash,previousHash,payload:undefined}));
       const rows=await tx<{id:string}[]>`
         INSERT INTO datasphere_events(
-          tenant_id,source_system,source_event_id,event_type,subject_type,subject_id,observed_at,
-          evidence_hash,payload_hash,request_hash,previous_hash,event_hash,schema_version,verification_state,
-          correlation_id,parent_event_id,retention_class,limitations,payload
+          event_id,tenant_id,source_system,source_identity,source_event_id,event_type,subject_type,subject_id,galaxy_id,
+          occurred_at,observed_at,evidence_hash,payload_hash,request_hash,previous_hash,event_hash,schema_version,verification_state,
+          correlation_id,causation_id,parent_event_id,retention_class,limitations,payload,
+          signing_algorithm,signing_key_id,signature,signature_verified_at,signature_verification_result,crypto_metadata
         ) VALUES(
-          ${e.tenantId},${e.sourceSystem},${e.sourceEventId},${e.eventType},${e.subjectType},${e.subjectId},
-          ${e.observedAt},${e.evidenceHash},${payloadHash},${requestHash},${previousHash},${eventHash},${e.schemaVersion},
-          ${e.verificationState},${e.correlationId??null},${e.parentEventId??null},${e.retentionClass},
-          ${JSON.stringify(e.limitations)},${JSON.stringify(e.payload)}
+          ${e.eventId},${e.tenantId},${e.sourceSystem},${e.sourceIdentity},${e.sourceEventId},${e.eventType},${e.subjectType},${e.subjectId},${e.galaxyId??null},
+          ${e.timestamp},${e.observedAt},${e.evidenceHash},${payloadHash},${requestHash},${previousHash},${eventHash},${e.schemaVersion},
+          ${e.verificationState},${e.correlationId},${e.causationId??null},${e.parentEventId??null},${e.retentionClass},
+          ${JSON.stringify(e.limitations)},${JSON.stringify(e.payload)},${e.cryptography.algorithm},${e.cryptography.keyId},${e.cryptography.signature},
+          ${e.cryptography.verificationTime},${e.cryptography.verificationResult},${JSON.stringify(e.cryptography.metadata)}
         ) RETURNING id`;
       return{id:rows[0]!.id,eventHash,duplicate:false};
     });
@@ -126,6 +149,21 @@ app.get('/v1/internal/tenants/:tenantId/verify',{config:{rateLimit:{max:10,timeW
     previous=row.event_hash;
   }
   return{valid:true,count:rows.length,lastEventHash:previous};
+});
+
+app.get('/v1/internal/crypto/algorithms/:algorithm/events',{config:{rateLimit:{max:10,timeWindow:'1 minute'}}},async(q,r)=>{
+  if(!ownerAuthorized(q.headers.authorization))return r.code(404).send({code:'NOT_FOUND'});
+  const params=z.object({algorithm:z.string().min(1).max(100)}).strict().safeParse(q.params);
+  if(!params.success)return r.code(400).send({code:'INVALID_ALGORITHM'});
+  const rows=await sql`
+    SELECT event_id,tenant_id,source_system,source_identity,event_type,subject_type,subject_id,galaxy_id,
+           correlation_id,causation_id,parent_event_id,observed_at,received_at,signing_algorithm,
+           signing_key_id,signature_verification_result,event_hash
+    FROM datasphere_events
+    WHERE signing_algorithm=${params.data.algorithm}
+    ORDER BY received_at ASC,id ASC
+    LIMIT 10000`;
+  return{algorithm:params.data.algorithm,count:rows.length,events:rows};
 });
 
 process.on('SIGTERM',()=>void sql.end({timeout:5}));
