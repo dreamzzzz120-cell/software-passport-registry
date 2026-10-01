@@ -94,3 +94,9 @@ CREATE INDEX IF NOT EXISTS datasphere_events_key_idx
 CREATE INDEX IF NOT EXISTS datasphere_events_causation_idx
   ON datasphere_events(tenant_id,causation_id)
   WHERE causation_id IS NOT NULL;
+
+ALTER TABLE datasphere_events DROP CONSTRAINT IF EXISTS datasphere_events_verification_state_check;
+ALTER TABLE datasphere_events ADD CONSTRAINT datasphere_events_verification_state_check
+  CHECK (verification_state IN (
+    'VERIFIED','OBSERVED','DECLARED','UNKNOWN','STALE','CONFLICTING','UNAVAILABLE','UNVERIFIED','INVALID'
+  ));
