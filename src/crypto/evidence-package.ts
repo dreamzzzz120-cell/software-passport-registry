@@ -1,5 +1,5 @@
-import crypto from 'node:crypto';
 import { digestUtf8, parseDigest, requireActiveCryptoAlgorithm } from './algorithm-registry.ts';
+import type { SignatureSigner, SignatureVerifier } from './signature-provider.ts';
 
 const FORBIDDEN_PORTABLE_CONCLUSIONS = new Set([
   'trustScore', 'safe', 'approved', 'compliant', 'authorized', 'trusted'
@@ -71,7 +71,7 @@ export interface EvidencePackageUnsigned {
 
 export function createEvidencePackage(
   input: EvidencePackageUnsigned,
-  signing: { algorithmId: string; keyId: string; privateKeyPem: string; digestAlgorithmId?: string }
+  signing: { signer: SignatureSigner; digestAlgorithmId?: string }
 ): CanonicalEvidencePackage {
   assertNoPortableConclusions(input);
   if (!input.packageId || !input.issuer || !input.tenantId || !input.subject) throw new Error('EVIDENCE_PACKAGE_REQUIRED_FIELD_MISSING');
@@ -82,7 +82,7 @@ export function createEvidencePackage(
   const created = Date.parse(input.createdAt);
   if (!Number.isFinite(created)) throw new Error('INVALID_CREATED_AT');
   if (input.expiresAt && Date.parse(input.expiresAt) <= created) throw new Error('INVALID_EXPIRATION');
-  requireActiveCryptoAlgorithm(signing.algorithmId, 'signature');
+  requireActiveCryptoAlgorithm(signing.signer.algorithmId, 'signature');
   const digestAlgorithm = signing.digestAlgorithmId ?? 'sha2-256';
   requireActiveCryptoAlgorithm(digestAlgorithm, 'hash');
 
@@ -103,29 +103,19 @@ export function createEvidencePackage(
     ...payload,
     payloadDigestAlgorithm: digestAlgorithm,
     payloadDigest,
-    signatureAlgorithm: signing.algorithmId,
-    signingKeyId: signing.keyId,
+    signatureAlgorithm: signing.signer.algorithmId,
+    signingKeyId: signing.signer.keyId,
   };
-  const signature = signPayload(signing.algorithmId, canonicalJson(signedMetadata), signing.privateKeyPem);
+  const signature = signing.signer.sign(Buffer.from(canonicalJson(signedMetadata), 'utf8'));
   return {
     ...signedMetadata,
     signature,
   };
 }
 
-function signPayload(algorithmId: string, canonical: string, privateKeyPem: string): string {
-  if (algorithmId === 'ed25519') {
-    return crypto.sign(null, Buffer.from(canonical), privateKeyPem).toString('base64url');
-  }
-  if (algorithmId === 'ecdsa-p256-sha256') {
-    return crypto.sign('sha256', Buffer.from(canonical), privateKeyPem).toString('base64url');
-  }
-  throw new Error('CRYPTO_ALGORITHM_IMPLEMENTATION_MISSING');
-}
-
 export function verifyEvidencePackage(
   pkg: CanonicalEvidencePackage,
-  publicKeyPem: string,
+  verifier: SignatureVerifier,
   nowMs = Date.now()
 ): EvidenceState {
   try {
@@ -137,6 +127,7 @@ export function verifyEvidencePackage(
     }
     requireActiveCryptoAlgorithm(pkg.payloadDigestAlgorithm, 'hash');
     requireActiveCryptoAlgorithm(pkg.signatureAlgorithm, 'signature');
+    if (verifier.algorithmId !== pkg.signatureAlgorithm || verifier.keyId !== pkg.signingKeyId) return 'FAILED';
     const created = Date.parse(pkg.createdAt);
     if (!Number.isFinite(created) || created > nowMs + 5 * 60_000) return 'FAILED';
     if (pkg.expiresAt) {
@@ -165,13 +156,7 @@ export function verifyEvidencePackage(
       signingKeyId: pkg.signingKeyId,
     };
     const canonicalSignedMetadata = canonicalJson(signedMetadata);
-    const sig = Buffer.from(pkg.signature, 'base64url');
-    const valid = pkg.signatureAlgorithm === 'ed25519'
-      ? crypto.verify(null, Buffer.from(canonicalSignedMetadata), publicKeyPem, sig)
-      : pkg.signatureAlgorithm === 'ecdsa-p256-sha256'
-        ? crypto.verify('sha256', Buffer.from(canonicalSignedMetadata), publicKeyPem, sig)
-        : false;
-    return valid ? 'VERIFIED' : 'FAILED';
+    return verifier.verify(Buffer.from(canonicalSignedMetadata, 'utf8'), pkg.signature) ? 'VERIFIED' : 'FAILED';
   } catch {
     return 'FAILED';
   }
