@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS spr_genesis_events (
   build_environment jsonb NOT NULL,
   policy_version text NOT NULL,
   evidence_references jsonb NOT NULL DEFAULT '[]'::jsonb,
-  signing_key_id text NOT NULL,
+  signing_key_id text NOT NULL REFERENCES spr_crypto_keys(key_id),
   signature_algorithm text NOT NULL REFERENCES spr_crypto_algorithms(algorithm_id),
   signature text NOT NULL,
   parent_genesis_id text REFERENCES spr_genesis_events(genesis_id),
