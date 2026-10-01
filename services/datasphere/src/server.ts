@@ -99,7 +99,7 @@ app.post('/v1/events',{config:{rateLimit:{max:60,timeWindow:'1 minute'}}},async(
         ) RETURNING id`;
       return{id:rows[0]!.id,eventHash,duplicate:false};
     });
-    if('conflict' in result&&result.conflict)return r.code(409).send({code:'ALTERED_REPLAY_REJECTED',id:result.id,eventHash:result.eventHash});
+    if(('conflict' in result) && result.conflict)return r.code(409).send({code:'ALTERED_REPLAY_REJECTED',id:result.id,eventHash:result.eventHash});
     return r.code(result.duplicate?200:201).send(result);
   }catch(error){
     q.log.error({error},'datasphere ingest failed');
