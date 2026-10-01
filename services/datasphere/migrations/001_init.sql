@@ -100,3 +100,7 @@ ALTER TABLE datasphere_events ADD CONSTRAINT datasphere_events_verification_stat
   CHECK (verification_state IN (
     'VERIFIED','OBSERVED','DECLARED','UNKNOWN','STALE','CONFLICTING','UNAVAILABLE','UNVERIFIED','INVALID'
   ));
+
+ALTER TABLE datasphere_events DROP CONSTRAINT IF EXISTS datasphere_events_source_system_check;
+ALTER TABLE datasphere_events ADD CONSTRAINT datasphere_events_source_system_check
+  CHECK (source_system IN ('SPR','CONSTELLATION','M2M','INFRASTRUCTURE'));
