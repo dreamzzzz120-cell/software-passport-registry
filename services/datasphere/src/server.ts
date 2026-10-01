@@ -77,8 +77,25 @@ const envelope=z.object({
 
 app.get('/health',async()=>({ok:true,service:'datasphere'}));
 app.get('/ready',async(_q,r)=>{
-  try{await sql`SELECT 1`;return{ready:true}}
-  catch{return r.code(503).send({ready:false,code:'DATABASE_UNAVAILABLE'})}
+  try{
+    const rows=await sql<{current_user:string,rolsuper:boolean,rolbypassrls:boolean,sel:boolean,ins:boolean,upd:boolean,del:boolean,trunc:boolean}[]>`
+      SELECT current_user,
+             pr.rolsuper,
+             pr.rolbypassrls,
+             has_table_privilege(current_user,'public.datasphere_events','SELECT') AS sel,
+             has_table_privilege(current_user,'public.datasphere_events','INSERT') AS ins,
+             has_table_privilege(current_user,'public.datasphere_events','UPDATE') AS upd,
+             has_table_privilege(current_user,'public.datasphere_events','DELETE') AS del,
+             has_table_privilege(current_user,'public.datasphere_events','TRUNCATE') AS trunc
+      FROM pg_roles pr WHERE pr.rolname=current_user`;
+    const x=rows[0];
+    if(!x || x.current_user!=='datasphere_runtime' || x.rolsuper || x.rolbypassrls || !x.sel || !x.ins || x.upd || x.del || x.trunc){
+      return r.code(503).send({ready:false,code:'RUNTIME_DB_ROLE_UNSAFE'});
+    }
+    return{ready:true,service:'datasphere',runtimeRole:'restricted'};
+  }catch{
+    return r.code(503).send({ready:false,code:'DATABASE_UNAVAILABLE'});
+  }
 });
 
 app.post('/v1/events',{config:{rateLimit:{max:60,timeWindow:'1 minute'}}},async(q,r)=>{
