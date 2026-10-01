@@ -1,0 +1,164 @@
+import { digestUtf8, parseDigest, requireActiveCryptoAlgorithm } from './algorithm-registry.ts';
+import type { SignatureSigner, SignatureVerifier } from './signature-provider.ts';
+
+const FORBIDDEN_PORTABLE_CONCLUSIONS = new Set([
+  'trustScore', 'safe', 'approved', 'compliant', 'authorized', 'trusted'
+]);
+
+export type EvidenceState = 'UNKNOWN' | 'UNVERIFIED' | 'VERIFIED' | 'CONFLICT' | 'EXPIRED' | 'FAILED';
+
+export interface EvidenceReference {
+  evidenceId: string;
+  artifactDigest: string;
+  state: EvidenceState;
+}
+
+export interface CanonicalEvidencePackage {
+  packageId: string;
+  schemaVersion: 'spr-evidence-package/v1';
+  issuer: string;
+  tenantId: string;
+  subject: string;
+  createdAt: string;
+  expiresAt?: string;
+  observations: readonly unknown[];
+  evidence: readonly EvidenceReference[];
+  payloadDigestAlgorithm: string;
+  payloadDigest: string;
+  signatureAlgorithm: string;
+  signingKeyId: string;
+  signature: string;
+}
+
+function assertNoPortableConclusions(value: unknown, path = '$'): void {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => assertNoPortableConclusions(item, `${path}[${index}]`));
+    return;
+  }
+  if (!value || typeof value !== 'object') return;
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (FORBIDDEN_PORTABLE_CONCLUSIONS.has(key)) {
+      throw new Error(`PORTABLE_CONCLUSION_FORBIDDEN:${path}.${key}`);
+    }
+    assertNoPortableConclusions(child, `${path}.${key}`);
+  }
+}
+
+export function canonicalJson(value: unknown): string {
+  if (value === null || typeof value === 'boolean' || typeof value === 'string') return JSON.stringify(value);
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new Error('NON_CANONICAL_NUMBER');
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) return '[' + value.map(canonicalJson).join(',') + ']';
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return '{' + Object.keys(record).sort().map(key => JSON.stringify(key) + ':' + canonicalJson(record[key])).join(',') + '}';
+  }
+  throw new Error('NON_CANONICAL_VALUE');
+}
+
+export interface EvidencePackageUnsigned {
+  packageId: string;
+  issuer: string;
+  tenantId: string;
+  subject: string;
+  createdAt: string;
+  expiresAt?: string;
+  observations: readonly unknown[];
+  evidence: readonly EvidenceReference[];
+}
+
+export function createEvidencePackage(
+  input: EvidencePackageUnsigned,
+  signing: { signer: SignatureSigner; digestAlgorithmId?: string }
+): CanonicalEvidencePackage {
+  assertNoPortableConclusions(input);
+  if (!input.packageId || !input.issuer || !input.tenantId || !input.subject) throw new Error('EVIDENCE_PACKAGE_REQUIRED_FIELD_MISSING');
+  for (const reference of input.evidence) {
+    if (!reference.evidenceId) throw new Error('EVIDENCE_REFERENCE_ID_REQUIRED');
+    if (!reference.artifactDigest) throw new Error('EVIDENCE_ARTIFACT_BINDING_REQUIRED');
+    parseDigest(reference.artifactDigest);
+  }
+  const created = Date.parse(input.createdAt);
+  if (!Number.isFinite(created)) throw new Error('INVALID_CREATED_AT');
+  if (input.expiresAt && Date.parse(input.expiresAt) <= created) throw new Error('INVALID_EXPIRATION');
+  requireActiveCryptoAlgorithm(signing.signer.algorithmId, 'signature');
+  const digestAlgorithm = signing.digestAlgorithmId ?? 'sha2-256';
+  requireActiveCryptoAlgorithm(digestAlgorithm, 'hash');
+
+  const payload = {
+    schemaVersion: 'spr-evidence-package/v1' as const,
+    packageId: input.packageId,
+    issuer: input.issuer,
+    tenantId: input.tenantId,
+    subject: input.subject,
+    createdAt: input.createdAt,
+    ...(input.expiresAt ? { expiresAt: input.expiresAt } : {}),
+    observations: input.observations,
+    evidence: input.evidence,
+  };
+  const canonicalPayload = canonicalJson(payload);
+  const payloadDigest = digestUtf8(digestAlgorithm, canonicalPayload);
+  const signedMetadata = {
+    ...payload,
+    payloadDigestAlgorithm: digestAlgorithm,
+    payloadDigest,
+    signatureAlgorithm: signing.signer.algorithmId,
+    signingKeyId: signing.signer.keyId,
+  };
+  const signature = signing.signer.sign(Buffer.from(canonicalJson(signedMetadata), 'utf8'));
+  return {
+    ...signedMetadata,
+    signature,
+  };
+}
+
+export function verifyEvidencePackage(
+  pkg: CanonicalEvidencePackage,
+  verifier: SignatureVerifier,
+  nowMs = Date.now()
+): EvidenceState {
+  try {
+    assertNoPortableConclusions(pkg);
+    if (pkg.schemaVersion !== 'spr-evidence-package/v1' || !pkg.packageId || !pkg.issuer || !pkg.tenantId || !pkg.subject || !pkg.signingKeyId) return 'FAILED';
+    for (const reference of pkg.evidence) {
+      if (!reference.evidenceId || !reference.artifactDigest) return 'FAILED';
+      parseDigest(reference.artifactDigest);
+    }
+    requireActiveCryptoAlgorithm(pkg.payloadDigestAlgorithm, 'hash');
+    requireActiveCryptoAlgorithm(pkg.signatureAlgorithm, 'signature');
+    if (verifier.algorithmId !== pkg.signatureAlgorithm || verifier.keyId !== pkg.signingKeyId) return 'FAILED';
+    const created = Date.parse(pkg.createdAt);
+    if (!Number.isFinite(created) || created > nowMs + 5 * 60_000) return 'FAILED';
+    if (pkg.expiresAt) {
+      const expires = Date.parse(pkg.expiresAt);
+      if (!Number.isFinite(expires) || expires <= created) return 'FAILED';
+      if (expires <= nowMs) return 'EXPIRED';
+    }
+    const payload = {
+      schemaVersion: pkg.schemaVersion,
+      packageId: pkg.packageId,
+      issuer: pkg.issuer,
+      tenantId: pkg.tenantId,
+      subject: pkg.subject,
+      createdAt: pkg.createdAt,
+      ...(pkg.expiresAt ? { expiresAt: pkg.expiresAt } : {}),
+      observations: pkg.observations,
+      evidence: pkg.evidence,
+    };
+    const canonicalPayload = canonicalJson(payload);
+    if (digestUtf8(pkg.payloadDigestAlgorithm, canonicalPayload) !== pkg.payloadDigest) return 'FAILED';
+    const signedMetadata = {
+      ...payload,
+      payloadDigestAlgorithm: pkg.payloadDigestAlgorithm,
+      payloadDigest: pkg.payloadDigest,
+      signatureAlgorithm: pkg.signatureAlgorithm,
+      signingKeyId: pkg.signingKeyId,
+    };
+    const canonicalSignedMetadata = canonicalJson(signedMetadata);
+    return verifier.verify(Buffer.from(canonicalSignedMetadata, 'utf8'), pkg.signature) ? 'VERIFIED' : 'FAILED';
+  } catch {
+    return 'FAILED';
+  }
+}

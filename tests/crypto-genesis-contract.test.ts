@@ -1,0 +1,156 @@
+import crypto from 'node:crypto';
+import { describe, expect, it } from 'vitest';
+import { CRYPTO_ALGORITHMS, digestUtf8, getCryptoAlgorithm } from '../src/crypto/algorithm-registry.ts';
+import { createEvidencePackage, verifyEvidencePackage } from '../src/crypto/evidence-package.ts';
+import { assertArtifactBinding, createGenesisEvent, verifyGenesisEvent } from '../src/crypto/genesis-event.ts';
+import { createNodePemSigner, createNodePemVerifier } from '../src/crypto/signature-provider.ts';
+
+describe('SPR cryptographic agility and genesis contract', () => {
+  it('registers PQ and hybrid algorithms as planned, not falsely active', () => {
+    expect(getCryptoAlgorithm('ml-kem-768').implementationState).toBe('planned');
+    expect(getCryptoAlgorithm('ml-dsa-65').implementationState).toBe('planned');
+    expect(getCryptoAlgorithm('slh-dsa-sha2-128s').implementationState).toBe('planned');
+    expect(getCryptoAlgorithm('hybrid-ed25519-ml-dsa-65').implementationState).toBe('planned');
+    expect(Object.values(CRYPTO_ALGORITHMS).filter(a => a.family !== 'classical').every(a => a.implementationState !== 'active')).toBe(true);
+  });
+
+  it('supports versioned classical digest algorithms without a global SHA-256 assumption', () => {
+    expect(digestUtf8('sha2-256', 'x')).toHaveLength(64);
+    expect(digestUtf8('sha2-512', 'x')).toHaveLength(128);
+  });
+
+  it('rejects portable trust conclusions in signed evidence packages', () => {
+    const { privateKey } = crypto.generateKeyPairSync('ed25519');
+    expect(() => createEvidencePackage({
+      packageId: 'pkg-1',
+      issuer: 'spr',
+      tenantId: 'tenant-a',
+      subject: 'artifact-a',
+      createdAt: new Date().toISOString(),
+      observations: [{ safe: true }],
+      evidence: [],
+    }, {
+      signer: createNodePemSigner({
+        algorithmId: 'ed25519',
+        keyId: 'key-1',
+        privateKeyPem: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
+      }),
+    })).toThrow(/PORTABLE_CONCLUSION_FORBIDDEN/);
+  });
+
+  it('rejects evidence references that are not bound to an exact artifact', () => {
+    const { privateKey } = crypto.generateKeyPairSync('ed25519');
+    expect(() => createEvidencePackage({
+      packageId: 'pkg-unbound',
+      issuer: 'spr',
+      tenantId: 'tenant-a',
+      subject: 'artifact-a',
+      createdAt: new Date().toISOString(),
+      observations: [],
+      evidence: [{ evidenceId: 'ev-unbound', state: 'UNVERIFIED', artifactDigest: '' }],
+    }, {
+      signer: createNodePemSigner({
+        algorithmId: 'ed25519',
+        keyId: 'key-1',
+        privateKeyPem: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
+      }),
+    })).toThrow('EVIDENCE_ARTIFACT_BINDING_REQUIRED');
+  });
+
+  it('signs and verifies an evidence package, then fails closed after payload tampering', () => {
+    const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519');
+    const pkg = createEvidencePackage({
+      packageId: 'pkg-2',
+      issuer: 'spr',
+      tenantId: 'tenant-a',
+      subject: 'artifact-a',
+      createdAt: new Date().toISOString(),
+      observations: [{ kind: 'artifact', digest: `sha2-256:${'a'.repeat(64)}` }],
+      evidence: [{ evidenceId: 'ev-1', state: 'UNVERIFIED', artifactDigest: `sha2-256:${'a'.repeat(64)}` }],
+    }, {
+      signer: createNodePemSigner({
+        algorithmId: 'ed25519',
+        keyId: 'key-1',
+        privateKeyPem: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
+      }),
+    });
+    const verifier = createNodePemVerifier({
+      algorithmId: 'ed25519',
+      keyId: 'key-1',
+      publicKeyPem: publicKey.export({ type: 'spki', format: 'pem' }).toString(),
+    });
+    expect(verifyEvidencePackage(pkg, verifier)).toBe('VERIFIED');
+    expect(verifyEvidencePackage({ ...pkg, subject: 'artifact-b' }, verifier)).toBe('FAILED');
+    expect(verifyEvidencePackage({ ...pkg, signingKeyId: 'substituted-key' }, verifier)).toBe('FAILED');
+    expect(verifyEvidencePackage({ ...pkg, payloadDigestAlgorithm: 'sha2-512' }, verifier)).toBe('FAILED');
+  });
+
+  it('rejects self-created trust in Genesis Events', () => {
+    const { privateKey } = crypto.generateKeyPairSync('ed25519');
+    expect(() => createGenesisEvent({
+      genesisId: 'gen-1',
+      tenantId: 'tenant-a',
+      creatorIdentity: 'agent-a',
+      creatorType: 'ai-agent',
+      parentIdentity: null,
+      authorityChain: ['authority-1'],
+      creationTimestamp: new Date().toISOString(),
+      artifactDigest: `sha2-256:${'a'.repeat(64)}`,
+      buildEnvironment: {},
+      policyVersion: 'v1',
+      evidenceReferences: [],
+      signingKeyId: 'key-1',
+      signatureAlgorithm: 'ed25519',
+      childIdentity: 'agent-a',
+      creationReason: 'spawn',
+      authorizationReference: null,
+    }, createNodePemSigner({
+      algorithmId: 'ed25519',
+      keyId: 'key-1',
+      privateKeyPem: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
+    }))).toThrow('GENESIS_SELF_TRUST_FORBIDDEN');
+  });
+
+  it('creates a verifiable Genesis Event and rejects tampering', () => {
+    const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519');
+    const signer = createNodePemSigner({
+      algorithmId: 'ed25519',
+      keyId: 'key-1',
+      privateKeyPem: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
+    });
+    const verifier = createNodePemVerifier({
+      algorithmId: 'ed25519',
+      keyId: 'key-1',
+      publicKeyPem: publicKey.export({ type: 'spki', format: 'pem' }).toString(),
+    });
+    const event = createGenesisEvent({
+      genesisId: 'gen-2',
+      tenantId: 'tenant-a',
+      creatorIdentity: 'builder-1',
+      creatorType: 'service',
+      parentIdentity: 'parent-agent',
+      authorityChain: ['human-owner', 'parent-agent'],
+      creationTimestamp: new Date().toISOString(),
+      sourceDigest: null,
+      artifactDigest: `sha2-256:${'a'.repeat(64)}`,
+      buildDigest: null,
+      sbomDigest: null,
+      buildEnvironment: { builder: 'ci' },
+      policyVersion: 'v1',
+      evidenceReferences: [],
+      signingKeyId: 'key-1',
+      signatureAlgorithm: 'ed25519',
+      parentGenesisId: null,
+      childIdentity: 'service-child',
+      creationReason: 'generated workload',
+      authorizationReference: null,
+    }, signer);
+    expect(verifyGenesisEvent(event, verifier)).toBe(true);
+    expect(verifyGenesisEvent({ ...event, artifactDigest: `sha2-256:${'d'.repeat(64)}` }, verifier)).toBe(false);
+  });
+
+  it('fails exact artifact binding when evidence belongs to a different artifact', () => {
+    expect(() => assertArtifactBinding(`sha2-256:${'a'.repeat(64)}`, `sha2-256:${'b'.repeat(64)}`)).toThrow('ARTIFACT_BINDING_MISMATCH');
+    expect(() => assertArtifactBinding('', `sha2-256:${'b'.repeat(64)}`)).toThrow('ARTIFACT_BINDING_UNKNOWN');
+  });
+});
