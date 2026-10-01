@@ -43,8 +43,8 @@ describe('SPR cryptographic agility and genesis contract', () => {
       tenantId: 'tenant-a',
       subject: 'artifact-a',
       createdAt: new Date().toISOString(),
-      observations: [{ kind: 'artifact', digest: 'sha2-256:abc' }],
-      evidence: [{ evidenceId: 'ev-1', state: 'UNVERIFIED', artifactDigest: 'sha2-256:abc' }],
+      observations: [{ kind: 'artifact', digest: `sha2-256:${'a'.repeat(64)}` }],
+      evidence: [{ evidenceId: 'ev-1', state: 'UNVERIFIED', artifactDigest: `sha2-256:${'a'.repeat(64)}` }],
     }, {
       algorithmId: 'ed25519',
       keyId: 'key-1',
@@ -67,7 +67,7 @@ describe('SPR cryptographic agility and genesis contract', () => {
       parentIdentity: null,
       authorityChain: ['authority-1'],
       creationTimestamp: new Date().toISOString(),
-      artifactDigest: 'sha2-256:abc',
+      artifactDigest: `sha2-256:${'a'.repeat(64)}`,
       buildEnvironment: {},
       policyVersion: 'v1',
       evidenceReferences: [],
@@ -92,7 +92,7 @@ describe('SPR cryptographic agility and genesis contract', () => {
       authorityChain: ['human-owner', 'parent-agent'],
       creationTimestamp: new Date().toISOString(),
       sourceDigest: null,
-      artifactDigest: 'sha2-256:abc',
+      artifactDigest: `sha2-256:${'a'.repeat(64)}`,
       buildDigest: null,
       sbomDigest: null,
       buildEnvironment: { builder: 'ci' },
@@ -106,11 +106,11 @@ describe('SPR cryptographic agility and genesis contract', () => {
       authorizationReference: null,
     }, privatePem);
     expect(verifyGenesisEvent(event, publicPem)).toBe(true);
-    expect(verifyGenesisEvent({ ...event, artifactDigest: 'sha2-256:def' }, publicPem)).toBe(false);
+    expect(verifyGenesisEvent({ ...event, artifactDigest: `sha2-256:${'d'.repeat(64)}` }, publicPem)).toBe(false);
   });
 
   it('fails exact artifact binding when evidence belongs to a different artifact', () => {
-    expect(() => assertArtifactBinding('sha2-256:aaa', 'sha2-256:bbb')).toThrow('ARTIFACT_BINDING_MISMATCH');
-    expect(() => assertArtifactBinding('', 'sha2-256:bbb')).toThrow('ARTIFACT_BINDING_UNKNOWN');
+    expect(() => assertArtifactBinding(`sha2-256:${'a'.repeat(64)}`, `sha2-256:${'b'.repeat(64)}`)).toThrow('ARTIFACT_BINDING_MISMATCH');
+    expect(() => assertArtifactBinding('', `sha2-256:${'b'.repeat(64)}`)).toThrow('ARTIFACT_BINDING_UNKNOWN');
   });
 });
