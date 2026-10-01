@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { CRYPTO_ALGORITHMS, digestUtf8, getCryptoAlgorithm } from '../src/crypto/algorithm-registry.ts';
 import { createEvidencePackage, verifyEvidencePackage } from '../src/crypto/evidence-package.ts';
 import { assertArtifactBinding, createGenesisEvent, verifyGenesisEvent } from '../src/crypto/genesis-event.ts';
+import { createNodePemSigner, createNodePemVerifier } from '../src/crypto/signature-provider.ts';
 
 describe('SPR cryptographic agility and genesis contract', () => {
   it('registers PQ and hybrid algorithms as planned, not falsely active', () => {
@@ -29,9 +30,11 @@ describe('SPR cryptographic agility and genesis contract', () => {
       observations: [{ safe: true }],
       evidence: [],
     }, {
-      algorithmId: 'ed25519',
-      keyId: 'key-1',
-      privateKeyPem: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
+      signer: createNodePemSigner({
+        algorithmId: 'ed25519',
+        keyId: 'key-1',
+        privateKeyPem: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
+      }),
     })).toThrow(/PORTABLE_CONCLUSION_FORBIDDEN/);
   });
 
@@ -46,15 +49,21 @@ describe('SPR cryptographic agility and genesis contract', () => {
       observations: [{ kind: 'artifact', digest: `sha2-256:${'a'.repeat(64)}` }],
       evidence: [{ evidenceId: 'ev-1', state: 'UNVERIFIED', artifactDigest: `sha2-256:${'a'.repeat(64)}` }],
     }, {
+      signer: createNodePemSigner({
+        algorithmId: 'ed25519',
+        keyId: 'key-1',
+        privateKeyPem: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
+      }),
+    });
+    const verifier = createNodePemVerifier({
       algorithmId: 'ed25519',
       keyId: 'key-1',
-      privateKeyPem: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
+      publicKeyPem: publicKey.export({ type: 'spki', format: 'pem' }).toString(),
     });
-    const publicPem = publicKey.export({ type: 'spki', format: 'pem' }).toString();
-    expect(verifyEvidencePackage(pkg, publicPem)).toBe('VERIFIED');
-    expect(verifyEvidencePackage({ ...pkg, subject: 'artifact-b' }, publicPem)).toBe('FAILED');
-    expect(verifyEvidencePackage({ ...pkg, signingKeyId: 'substituted-key' }, publicPem)).toBe('FAILED');
-    expect(verifyEvidencePackage({ ...pkg, payloadDigestAlgorithm: 'sha2-512' }, publicPem)).toBe('FAILED');
+    expect(verifyEvidencePackage(pkg, verifier)).toBe('VERIFIED');
+    expect(verifyEvidencePackage({ ...pkg, subject: 'artifact-b' }, verifier)).toBe('FAILED');
+    expect(verifyEvidencePackage({ ...pkg, signingKeyId: 'substituted-key' }, verifier)).toBe('FAILED');
+    expect(verifyEvidencePackage({ ...pkg, payloadDigestAlgorithm: 'sha2-512' }, verifier)).toBe('FAILED');
   });
 
   it('rejects self-created trust in Genesis Events', () => {
