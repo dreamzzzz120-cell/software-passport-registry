@@ -9,7 +9,7 @@ export type EvidenceState = 'UNKNOWN' | 'UNVERIFIED' | 'VERIFIED' | 'CONFLICT' |
 
 export interface EvidenceReference {
   evidenceId: string;
-  artifactDigest?: string;
+  artifactDigest: string;
   state: EvidenceState;
 }
 
@@ -77,7 +77,8 @@ export function createEvidencePackage(
   if (!input.packageId || !input.issuer || !input.tenantId || !input.subject) throw new Error('EVIDENCE_PACKAGE_REQUIRED_FIELD_MISSING');
   for (const reference of input.evidence) {
     if (!reference.evidenceId) throw new Error('EVIDENCE_REFERENCE_ID_REQUIRED');
-    if (reference.artifactDigest) parseDigest(reference.artifactDigest);
+    if (!reference.artifactDigest) throw new Error('EVIDENCE_ARTIFACT_BINDING_REQUIRED');
+    parseDigest(reference.artifactDigest);
   }
   const created = Date.parse(input.createdAt);
   if (!Number.isFinite(created)) throw new Error('INVALID_CREATED_AT');
@@ -122,8 +123,8 @@ export function verifyEvidencePackage(
     assertNoPortableConclusions(pkg);
     if (pkg.schemaVersion !== 'spr-evidence-package/v1' || !pkg.packageId || !pkg.issuer || !pkg.tenantId || !pkg.subject || !pkg.signingKeyId) return 'FAILED';
     for (const reference of pkg.evidence) {
-      if (!reference.evidenceId) return 'FAILED';
-      if (reference.artifactDigest) parseDigest(reference.artifactDigest);
+      if (!reference.evidenceId || !reference.artifactDigest) return 'FAILED';
+      parseDigest(reference.artifactDigest);
     }
     requireActiveCryptoAlgorithm(pkg.payloadDigestAlgorithm, 'hash');
     requireActiveCryptoAlgorithm(pkg.signatureAlgorithm, 'signature');
