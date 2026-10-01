@@ -10,7 +10,7 @@ const sha=(s:string)=>createHash('sha256').update(s).digest('hex');
 const tenant='probe-'+randomUUID();
 const now=new Date().toISOString();
 const baseEvent={
-  eventId:randomUUID(),eventType:'probe.observation',schemaVersion:2,sourceSystem:'SPR',sourceIdentity:'probe-spr',
+  eventId:randomUUID(),eventType:'probe.observation',schemaVersion:2,sourceSystem:'SPR',sourceIdentity:'SPR',
   sourceEventId:randomUUID(),tenantId:tenant,galaxyId:null,subjectType:'software',subjectId:'probe-subject',
   correlationId:'corr-'+randomUUID(),causationId:null,parentEventId:null,timestamp:now,observedAt:now,
   evidenceHash:sha('probe-evidence'),verificationState:'UNVERIFIED',
@@ -39,12 +39,16 @@ await expect('altered_replay',409,'/v1/events',postInit({...baseEvent,payload:{o
 await expect('missing_auth',401,'/v1/events',postInit({...baseEvent,eventId:randomUUID(),sourceEventId:randomUUID()}));
 await expect('spr_wrong_source',401,'/v1/events',postInit({...baseEvent,eventId:randomUUID(),sourceEventId:randomUUID(),sourceSystem:'CONSTELLATION'},spr));
 await expect('con_wrong_source',401,'/v1/events',postInit({...baseEvent,eventId:randomUUID(),sourceEventId:randomUUID(),sourceSystem:'SPR'},con));
-await expect('m2m_valid',201,'/v1/events',postInit({...baseEvent,eventId:randomUUID(),sourceEventId:randomUUID(),sourceSystem:'M2M',sourceIdentity:'probe-m2m'},m2m));
-await expect('infra_valid',201,'/v1/events',postInit({...baseEvent,eventId:randomUUID(),sourceEventId:randomUUID(),sourceSystem:'INFRASTRUCTURE',sourceIdentity:'probe-infra'},infra));
+await expect('forged_source_identity',401,'/v1/events',postInit({...baseEvent,eventId:randomUUID(),sourceEventId:randomUUID(),sourceIdentity:'FORGED-SPR'},spr));
+await expect('m2m_valid',201,'/v1/events',postInit({...baseEvent,eventId:randomUUID(),sourceEventId:randomUUID(),sourceSystem:'M2M',sourceIdentity:'M2M'},m2m));
+await expect('infra_valid',201,'/v1/events',postInit({...baseEvent,eventId:randomUUID(),sourceEventId:randomUUID(),sourceSystem:'INFRASTRUCTURE',sourceIdentity:'INFRASTRUCTURE'},infra));
 await expect('portable_trustscore',400,'/v1/events',postInit({...baseEvent,eventId:randomUUID(),sourceEventId:randomUUID(),payload:{trustScore:100}},spr));
 await expect('portable_nested_approved',400,'/v1/events',postInit({...baseEvent,eventId:randomUUID(),sourceEventId:randomUUID(),payload:{nested:{approved:true}}},spr));
 await expect('bad_event_id',400,'/v1/events',postInit({...baseEvent,eventId:'not-a-uuid',sourceEventId:randomUUID()},spr));
 await expect('bad_state',400,'/v1/events',postInit({...baseEvent,eventId:randomUUID(),sourceEventId:randomUUID(),verificationState:'PASS'},spr));
+const future=new Date(Date.now()+60*60*1000).toISOString();
+await expect('future_timestamp',400,'/v1/events',postInit({...baseEvent,eventId:randomUUID(),sourceEventId:randomUUID(),timestamp:future},spr));
+await expect('future_observed_at',400,'/v1/events',postInit({...baseEvent,eventId:randomUUID(),sourceEventId:randomUUID(),observedAt:future},spr));
 const missingCorrelation:any={...baseEvent,eventId:randomUUID(),sourceEventId:randomUUID()}; delete missingCorrelation.correlationId;
 await expect('missing_correlation',400,'/v1/events',postInit(missingCorrelation,spr));
 await expect('owner_verify',200,'/v1/internal/tenants/'+tenant+'/verify',{headers:{authorization:'Bearer '+owner}});
