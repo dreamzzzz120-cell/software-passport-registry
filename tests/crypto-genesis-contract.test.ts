@@ -38,6 +38,25 @@ describe('SPR cryptographic agility and genesis contract', () => {
     })).toThrow(/PORTABLE_CONCLUSION_FORBIDDEN/);
   });
 
+  it('rejects evidence references that are not bound to an exact artifact', () => {
+    const { privateKey } = crypto.generateKeyPairSync('ed25519');
+    expect(() => createEvidencePackage({
+      packageId: 'pkg-unbound',
+      issuer: 'spr',
+      tenantId: 'tenant-a',
+      subject: 'artifact-a',
+      createdAt: new Date().toISOString(),
+      observations: [],
+      evidence: [{ evidenceId: 'ev-unbound', state: 'UNVERIFIED', artifactDigest: '' }],
+    }, {
+      signer: createNodePemSigner({
+        algorithmId: 'ed25519',
+        keyId: 'key-1',
+        privateKeyPem: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
+      }),
+    })).toThrow('EVIDENCE_ARTIFACT_BINDING_REQUIRED');
+  });
+
   it('signs and verifies an evidence package, then fails closed after payload tampering', () => {
     const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519');
     const pkg = createEvidencePackage({
