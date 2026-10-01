@@ -56,14 +56,19 @@ try{
       has_table_privilege('datasphere_runtime','public.datasphere_events','REFERENCES') AS ref,
       has_table_privilege('datasphere_runtime','public.datasphere_events','TRIGGER') AS trig`;
 
-  const r=role[0],p=privileges[0];
-  if(!r||!p||owner[0]?.runtime_is_owner||r.rolsuper||r.rolinherit||r.rolcreatedb||r.rolcreaterole||r.rolbypassrls||
-     !p.sel||!p.ins||p.upd||p.del||p.trunc||p.ref||p.trig){
+  const triggers=await sql<{mutation:boolean,truncation:boolean}[]>`
+    SELECT
+      EXISTS(SELECT 1 FROM pg_trigger WHERE tgrelid='public.datasphere_events'::regclass AND tgname='datasphere_events_no_update' AND tgenabled<>'D') AS mutation,
+      EXISTS(SELECT 1 FROM pg_trigger WHERE tgrelid='public.datasphere_events'::regclass AND tgname='datasphere_events_no_truncate' AND tgenabled<>'D') AS truncation`;
+  const r=role[0],p=privileges[0],t=triggers[0];
+  if(!r||!p||!t||owner[0]?.runtime_is_owner||r.rolsuper||r.rolinherit||r.rolcreatedb||r.rolcreaterole||r.rolbypassrls||
+     !p.sel||!p.ins||p.upd||p.del||p.trunc||p.ref||p.trig||!t.mutation||!t.truncation){
     throw new Error('DATASPHERE_RUNTIME_ROLE_VERIFICATION_FAILED');
   }
 
   console.log('DATASPHERE_MIGRATION_OK');
   console.log('DATASPHERE_RUNTIME_ROLE_OK');
+  console.log('DATASPHERE_APPEND_ONLY_TRIGGERS_OK');
 }finally{
   await sql.end({timeout:5});
 }
