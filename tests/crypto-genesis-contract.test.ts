@@ -85,13 +85,25 @@ describe('SPR cryptographic agility and genesis contract', () => {
       childIdentity: 'agent-a',
       creationReason: 'spawn',
       authorizationReference: null,
-    }, privateKey.export({ type: 'pkcs8', format: 'pem' }).toString())).toThrow('GENESIS_SELF_TRUST_FORBIDDEN');
+    }, createNodePemSigner({
+      algorithmId: 'ed25519',
+      keyId: 'key-1',
+      privateKeyPem: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
+    }))).toThrow('GENESIS_SELF_TRUST_FORBIDDEN');
   });
 
   it('creates a verifiable Genesis Event and rejects tampering', () => {
     const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519');
-    const privatePem = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
-    const publicPem = publicKey.export({ type: 'spki', format: 'pem' }).toString();
+    const signer = createNodePemSigner({
+      algorithmId: 'ed25519',
+      keyId: 'key-1',
+      privateKeyPem: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
+    });
+    const verifier = createNodePemVerifier({
+      algorithmId: 'ed25519',
+      keyId: 'key-1',
+      publicKeyPem: publicKey.export({ type: 'spki', format: 'pem' }).toString(),
+    });
     const event = createGenesisEvent({
       genesisId: 'gen-2',
       tenantId: 'tenant-a',
@@ -113,9 +125,9 @@ describe('SPR cryptographic agility and genesis contract', () => {
       childIdentity: 'service-child',
       creationReason: 'generated workload',
       authorizationReference: null,
-    }, privatePem);
-    expect(verifyGenesisEvent(event, publicPem)).toBe(true);
-    expect(verifyGenesisEvent({ ...event, artifactDigest: `sha2-256:${'d'.repeat(64)}` }, publicPem)).toBe(false);
+    }, signer);
+    expect(verifyGenesisEvent(event, verifier)).toBe(true);
+    expect(verifyGenesisEvent({ ...event, artifactDigest: `sha2-256:${'d'.repeat(64)}` }, verifier)).toBe(false);
   });
 
   it('fails exact artifact binding when evidence belongs to a different artifact', () => {
