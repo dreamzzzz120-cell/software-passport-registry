@@ -41,7 +41,7 @@ export function requireActiveCryptoAlgorithm(id: string, purpose?: CryptoPurpose
   return algorithm;
 }
 
-export function digestBytes(algorithmId: string, data: crypto.BinaryLike): string {
+export function digestBytes(algorithmId: string, data: string | Buffer): string {
   const algorithm = requireActiveCryptoAlgorithm(algorithmId, 'hash');
   if (!algorithm.nodeName) throw new Error('CRYPTO_ALGORITHM_IMPLEMENTATION_MISSING');
   return crypto.createHash(algorithm.nodeName).update(data).digest('hex');
