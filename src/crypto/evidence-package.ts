@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { digestUtf8, requireActiveCryptoAlgorithm } from './algorithm-registry.ts';
+import { digestUtf8, parseDigest, requireActiveCryptoAlgorithm } from './algorithm-registry.ts';
 
 const FORBIDDEN_PORTABLE_CONCLUSIONS = new Set([
   'trustScore', 'safe', 'approved', 'compliant', 'authorized', 'trusted'
@@ -74,6 +74,11 @@ export function createEvidencePackage(
   signing: { algorithmId: string; keyId: string; privateKeyPem: string; digestAlgorithmId?: string }
 ): CanonicalEvidencePackage {
   assertNoPortableConclusions(input);
+  if (!input.packageId || !input.issuer || !input.tenantId || !input.subject) throw new Error('EVIDENCE_PACKAGE_REQUIRED_FIELD_MISSING');
+  for (const reference of input.evidence) {
+    if (!reference.evidenceId) throw new Error('EVIDENCE_REFERENCE_ID_REQUIRED');
+    if (reference.artifactDigest) parseDigest(reference.artifactDigest);
+  }
   const created = Date.parse(input.createdAt);
   if (!Number.isFinite(created)) throw new Error('INVALID_CREATED_AT');
   if (input.expiresAt && Date.parse(input.expiresAt) <= created) throw new Error('INVALID_EXPIRATION');
@@ -125,9 +130,20 @@ export function verifyEvidencePackage(
 ): EvidenceState {
   try {
     assertNoPortableConclusions(pkg);
+    if (pkg.schemaVersion !== 'spr-evidence-package/v1' || !pkg.packageId || !pkg.issuer || !pkg.tenantId || !pkg.subject || !pkg.signingKeyId) return 'FAILED';
+    for (const reference of pkg.evidence) {
+      if (!reference.evidenceId) return 'FAILED';
+      if (reference.artifactDigest) parseDigest(reference.artifactDigest);
+    }
     requireActiveCryptoAlgorithm(pkg.payloadDigestAlgorithm, 'hash');
     requireActiveCryptoAlgorithm(pkg.signatureAlgorithm, 'signature');
-    if (pkg.expiresAt && Date.parse(pkg.expiresAt) <= nowMs) return 'EXPIRED';
+    const created = Date.parse(pkg.createdAt);
+    if (!Number.isFinite(created) || created > nowMs + 5 * 60_000) return 'FAILED';
+    if (pkg.expiresAt) {
+      const expires = Date.parse(pkg.expiresAt);
+      if (!Number.isFinite(expires) || expires <= created) return 'FAILED';
+      if (expires <= nowMs) return 'EXPIRED';
+    }
     const payload = {
       schemaVersion: pkg.schemaVersion,
       packageId: pkg.packageId,
