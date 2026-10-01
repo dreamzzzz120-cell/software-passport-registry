@@ -151,7 +151,7 @@ FOR EACH ROW EXECUTE FUNCTION spr_crypto_key_state_transition();
 CREATE OR REPLACE FUNCTION spr_record_crypto_key_state_event()
 RETURNS trigger
 LANGUAGE plpgsql
-AS $
+AS $$
 DECLARE prior_state text;
 BEGIN
   prior_state := CASE WHEN TG_OP = 'INSERT' THEN NULL ELSE OLD.state END;
