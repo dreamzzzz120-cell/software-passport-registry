@@ -134,16 +134,47 @@ BEGIN
     IF OLD.state IN ('REVOKED','COMPROMISED') AND NEW.state <> OLD.state THEN
       RAISE EXCEPTION 'terminal crypto key state cannot transition';
     END IF;
+    IF OLD.state = 'DEPRECATED' AND NEW.state = 'ACTIVE' THEN
+      RAISE EXCEPTION 'deprecated crypto key cannot return to active';
+    END IF;
   END IF;
   NEW.updated_at := CURRENT_TIMESTAMP;
   RETURN NEW;
 END;
-$$;
+$;
 
 DROP TRIGGER IF EXISTS spr_crypto_key_state_transition ON spr_crypto_keys;
 CREATE TRIGGER spr_crypto_key_state_transition
 BEFORE UPDATE ON spr_crypto_keys
 FOR EACH ROW EXECUTE FUNCTION spr_crypto_key_state_transition();
+
+CREATE OR REPLACE FUNCTION spr_record_crypto_key_state_event()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $
+DECLARE prior_state text;
+BEGIN
+  prior_state := CASE WHEN TG_OP = 'INSERT' THEN NULL ELSE OLD.state END;
+  IF TG_OP = 'INSERT' OR NEW.state IS DISTINCT FROM OLD.state THEN
+    INSERT INTO spr_crypto_key_state_events (
+      event_id, tenant_id, key_id, previous_state, new_state, reason
+    ) VALUES (
+      NEW.key_id || ':' || txid_current()::text || ':' || floor(extract(epoch FROM clock_timestamp()) * 1000000)::bigint::text,
+      NEW.tenant_id,
+      NEW.key_id,
+      prior_state,
+      NEW.state,
+      CASE WHEN TG_OP = 'INSERT' THEN 'key-created' ELSE 'state-transition' END
+    );
+  END IF;
+  RETURN NEW;
+END;
+$;
+
+DROP TRIGGER IF EXISTS spr_crypto_key_state_event ON spr_crypto_keys;
+CREATE TRIGGER spr_crypto_key_state_event
+AFTER INSERT OR UPDATE ON spr_crypto_keys
+FOR EACH ROW EXECUTE FUNCTION spr_record_crypto_key_state_event();
 
 ALTER TABLE spr_crypto_keys ENABLE ROW LEVEL SECURITY;
 ALTER TABLE spr_crypto_keys FORCE ROW LEVEL SECURITY;
