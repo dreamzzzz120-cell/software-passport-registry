@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import rateLimit from '@fastify/rate-limit';
 import postgres from 'postgres';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
@@ -6,10 +7,12 @@ import { z } from 'zod';
 const env=z.object({
   PORT:z.coerce.number().int().positive().default(8080),
   DATABASE_URL:z.string().min(1),
-  DATASPHERE_INGEST_TOKEN:z.string().min(32)
+  DATASPHERE_SPR_INGEST_TOKEN:z.string().min(32),
+  DATASPHERE_CONSTELLATION_INGEST_TOKEN:z.string().min(32)
 }).parse(process.env);
 
-const app=Fastify({logger:true,bodyLimit:2*1024*1024});
+const app=Fastify({logger:true,bodyLimit:2*1024*1024,requestTimeout:15000,connectionTimeout:10000});
+await app.register(rateLimit,{global:false,max:120,timeWindow:'1 minute'});
 const sql=postgres(env.DATABASE_URL,{prepare:false,max:10});
 const sha=(v:string)=>createHash('sha256').update(v).digest('hex');
 const stable=(v:unknown):string=>{
@@ -18,9 +21,19 @@ const stable=(v:unknown):string=>{
   return '{'+Object.entries(v as Record<string,unknown>).sort(([a],[b])=>a.localeCompare(b))
     .map(([k,x])=>JSON.stringify(k)+':'+stable(x)).join(',')+'}';
 };
-const authorized=(h?:string)=>{
-  const a=Buffer.from(h??''),b=Buffer.from('Bearer '+env.DATASPHERE_INGEST_TOKEN);
+const authorized=(source:'SPR'|'CONSTELLATION',h?:string)=>{
+  const expected=source==='SPR'?env.DATASPHERE_SPR_INGEST_TOKEN:env.DATASPHERE_CONSTELLATION_INGEST_TOKEN;
+  const a=Buffer.from(h??''),b=Buffer.from('Bearer '+expected);
   return a.length===b.length&&timingSafeEqual(a,b);
+};
+const forbiddenPortableConclusion=(payload:Record<string,unknown>)=>{
+  const forbidden=new Set(['trustScore','approved','safe','compliant','authorized']);
+  const walk=(v:unknown):boolean=>{
+    if(Array.isArray(v))return v.some(walk);
+    if(v&&typeof v==='object')return Object.entries(v as Record<string,unknown>).some(([k,x])=>forbidden.has(k)||walk(x));
+    return false;
+  };
+  return walk(payload);
 };
 const envelope=z.object({
   tenantId:z.string().min(1).max(200),
@@ -46,19 +59,26 @@ app.get('/ready',async(_q,r)=>{
   catch{return r.code(503).send({ready:false,code:'DATABASE_UNAVAILABLE'})}
 });
 
-app.post('/v1/events',async(q,r)=>{
-  if(!authorized(q.headers.authorization))return r.code(401).send({code:'UNAUTHORIZED'});
+app.post('/v1/events',{config:{rateLimit:{max:60,timeWindow:'1 minute'}}},async(q,r)=>{
   const parsed=envelope.safeParse(q.body);
   if(!parsed.success)return r.code(400).send({code:'INVALID_EVENT',issues:parsed.error.issues});
-  const e=parsed.data,payloadHash=sha(stable(e.payload));
+  const e=parsed.data;
+  if(!authorized(e.sourceSystem,q.headers.authorization))return r.code(401).send({code:'UNAUTHORIZED_SOURCE'});
+  if(forbiddenPortableConclusion(e.payload))return r.code(400).send({code:'PORTABLE_CONCLUSION_FORBIDDEN'});
+  const payloadHash=sha(stable(e.payload));
   try{
     const result=await sql.begin(async tx=>{
       await tx`SELECT pg_advisory_xact_lock(hashtext(${e.tenantId}))`;
-      const old=await tx<{id:string,event_hash:string}[]>`
-        SELECT id,event_hash FROM datasphere_events
+      const old=await tx<{id:string,event_hash:string,payload_hash:string,evidence_hash:string}[]>`
+        SELECT id,event_hash,payload_hash,evidence_hash FROM datasphere_events
         WHERE tenant_id=${e.tenantId} AND source_system=${e.sourceSystem}
         AND source_event_id=${e.sourceEventId} LIMIT 1`;
-      if(old[0])return{id:old[0].id,eventHash:old[0].event_hash,duplicate:true};
+      if(old[0]){
+        if(old[0].payload_hash!==payloadHash||old[0].evidence_hash!==e.evidenceHash){
+          return{id:old[0].id,eventHash:old[0].event_hash,conflict:true};
+        }
+        return{id:old[0].id,eventHash:old[0].event_hash,duplicate:true};
+      }
       const last=await tx<{event_hash:string}[]>`
         SELECT event_hash FROM datasphere_events WHERE tenant_id=${e.tenantId}
         ORDER BY received_at DESC,id DESC LIMIT 1`;
@@ -77,6 +97,7 @@ app.post('/v1/events',async(q,r)=>{
         ) RETURNING id`;
       return{id:rows[0]!.id,eventHash,duplicate:false};
     });
+    if('conflict' in result&&result.conflict)return r.code(409).send({code:'ALTERED_REPLAY_REJECTED',id:result.id,eventHash:result.eventHash});
     return r.code(result.duplicate?200:201).send(result);
   }catch(error){
     q.log.error({error},'datasphere ingest failed');
