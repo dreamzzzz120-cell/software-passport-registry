@@ -61,3 +61,36 @@ DROP TRIGGER IF EXISTS datasphere_events_no_truncate ON datasphere_events;
 CREATE TRIGGER datasphere_events_no_truncate
 BEFORE TRUNCATE ON datasphere_events
 FOR EACH STATEMENT EXECUTE FUNCTION datasphere_reject_truncate();
+
+ALTER TABLE datasphere_events ADD COLUMN IF NOT EXISTS event_id uuid;
+UPDATE datasphere_events SET event_id=id WHERE event_id IS NULL;
+ALTER TABLE datasphere_events ALTER COLUMN event_id SET NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS datasphere_events_event_id_uidx ON datasphere_events(event_id);
+
+ALTER TABLE datasphere_events ADD COLUMN IF NOT EXISTS source_identity text;
+UPDATE datasphere_events SET source_identity=source_system WHERE source_identity IS NULL;
+ALTER TABLE datasphere_events ALTER COLUMN source_identity SET NOT NULL;
+
+ALTER TABLE datasphere_events ADD COLUMN IF NOT EXISTS galaxy_id text;
+ALTER TABLE datasphere_events ADD COLUMN IF NOT EXISTS causation_id text;
+ALTER TABLE datasphere_events ADD COLUMN IF NOT EXISTS occurred_at timestamptz;
+UPDATE datasphere_events SET occurred_at=observed_at WHERE occurred_at IS NULL;
+ALTER TABLE datasphere_events ALTER COLUMN occurred_at SET NOT NULL;
+
+ALTER TABLE datasphere_events ADD COLUMN IF NOT EXISTS signing_algorithm text;
+ALTER TABLE datasphere_events ADD COLUMN IF NOT EXISTS signing_key_id text;
+ALTER TABLE datasphere_events ADD COLUMN IF NOT EXISTS signature text;
+ALTER TABLE datasphere_events ADD COLUMN IF NOT EXISTS signature_verified_at timestamptz;
+ALTER TABLE datasphere_events ADD COLUMN IF NOT EXISTS signature_verification_result text
+  CHECK (signature_verification_result IS NULL OR signature_verification_result IN ('VERIFIED','UNVERIFIED','CONFLICTING','INVALID','UNKNOWN'));
+ALTER TABLE datasphere_events ADD COLUMN IF NOT EXISTS crypto_metadata jsonb NOT NULL DEFAULT '{}'::jsonb;
+
+CREATE INDEX IF NOT EXISTS datasphere_events_algorithm_idx
+  ON datasphere_events(signing_algorithm)
+  WHERE signing_algorithm IS NOT NULL;
+CREATE INDEX IF NOT EXISTS datasphere_events_key_idx
+  ON datasphere_events(signing_key_id)
+  WHERE signing_key_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS datasphere_events_causation_idx
+  ON datasphere_events(tenant_id,causation_id)
+  WHERE causation_id IS NOT NULL;
