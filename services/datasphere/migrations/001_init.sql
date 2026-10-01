@@ -43,3 +43,15 @@ DROP TRIGGER IF EXISTS datasphere_events_no_update ON datasphere_events;
 CREATE TRIGGER datasphere_events_no_update
 BEFORE UPDATE OR DELETE ON datasphere_events
 FOR EACH ROW EXECUTE FUNCTION datasphere_reject_mutation();
+
+CREATE OR REPLACE FUNCTION datasphere_reject_truncate()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'DATASPHERE_APPEND_ONLY';
+END;
+$$;
+
+DROP TRIGGER IF EXISTS datasphere_events_no_truncate ON datasphere_events;
+CREATE TRIGGER datasphere_events_no_truncate
+BEFORE TRUNCATE ON datasphere_events
+FOR EACH STATEMENT EXECUTE FUNCTION datasphere_reject_truncate();
