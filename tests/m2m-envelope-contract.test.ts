@@ -15,6 +15,18 @@ class TestReplayStore implements M2MReplayStore {
 
 describe('SPR M2M envelope contract', () => {
   const keys = () => crypto.generateKeyPairSync('ed25519');
+  const verificationKey = (publicKeyPem: string, state: 'ACTIVE'|'DEPRECATED'|'REVOKED'|'COMPROMISED' = 'ACTIVE') => ({
+    record: {
+      keyId: 'key-1',
+      algorithmId: 'ed25519',
+      tenantId: 'tenant-a',
+      issuer: 'spr',
+      state,
+      ...(state === 'REVOKED' ? { revokedAt: new Date().toISOString() } : {}),
+      ...(state === 'COMPROMISED' ? { compromisedAt: new Date().toISOString() } : {}),
+    },
+    publicKeyPem,
+  });
   const base = (privateKeyPem: string) => createM2MEnvelope({
     envelopeId: 'env-1',
     issuer: 'spr',
@@ -38,7 +50,7 @@ describe('SPR M2M envelope contract', () => {
     const replayStore = new TestReplayStore();
     const args = {
       envelope,
-      publicKeyPem: publicKey.export({ type: 'spki', format: 'pem' }).toString(),
+      verificationKey: verificationKey(publicKey.export({ type: 'spki', format: 'pem' }).toString()),
       expectedTenantId: 'tenant-a',
       expectedRecipient: 'constellation',
       allowedIssuers: new Set(['spr']),
@@ -56,7 +68,7 @@ describe('SPR M2M envelope contract', () => {
 
     const verify = (overrides: Record<string, unknown>) => verifyM2MEnvelope({
       envelope,
-      publicKeyPem,
+      verificationKey: verificationKey(publicKeyPem),
       expectedTenantId: 'tenant-a',
       expectedRecipient: 'constellation',
       allowedIssuers: new Set(['spr']),
@@ -70,6 +82,9 @@ describe('SPR M2M envelope contract', () => {
     await expect(verify({ allowedIssuers: new Set(['other']) })).resolves.toMatchObject({ ok: false, reason: 'UNAUTHORIZED_ISSUER' });
     await expect(verify({ payload: 'tampered' })).resolves.toMatchObject({ ok: false, reason: 'ALTERED_PAYLOAD' });
     await expect(verify({ envelope: { ...envelope, subject: 'artifact-2' } })).resolves.toMatchObject({ ok: false, reason: 'INVALID_SIGNATURE' });
+    await expect(verify({ verificationKey: verificationKey(publicKeyPem, 'REVOKED') })).resolves.toMatchObject({ ok: false, reason: 'SIGNING_KEY_REVOKED' });
+    await expect(verify({ verificationKey: verificationKey(publicKeyPem, 'COMPROMISED') })).resolves.toMatchObject({ ok: false, reason: 'SIGNING_KEY_COMPROMISED' });
+    await expect(verify({ verificationKey: { ...verificationKey(publicKeyPem), record: { ...verificationKey(publicKeyPem).record, tenantId: 'tenant-b' } } })).resolves.toMatchObject({ ok: false, reason: 'SIGNING_KEY_MISMATCH' });
   });
 
   it('rejects expired and not-yet-valid envelopes', async () => {
@@ -84,7 +99,7 @@ describe('SPR M2M envelope contract', () => {
       nonce: 'n-expired', signingAlgorithm: 'ed25519', signingKeyId: 'key-1',
     }, pem);
     await expect(verifyM2MEnvelope({
-      envelope: expired, publicKeyPem: pub, expectedTenantId: 'tenant-a', expectedRecipient: 'constellation',
+      envelope: expired, verificationKey: verificationKey(pub), expectedTenantId: 'tenant-a', expectedRecipient: 'constellation',
       allowedIssuers: new Set(['spr']), replayStore: new TestReplayStore(), nowMs: now, payload: 'payload'
     })).resolves.toMatchObject({ ok: false, state: 'EXPIRED', reason: 'EXPIRED' });
 
@@ -95,7 +110,7 @@ describe('SPR M2M envelope contract', () => {
       nonce: 'n-future', signingAlgorithm: 'ed25519', signingKeyId: 'key-1',
     }, pem);
     await expect(verifyM2MEnvelope({
-      envelope: future, publicKeyPem: pub, expectedTenantId: 'tenant-a', expectedRecipient: 'constellation',
+      envelope: future, verificationKey: verificationKey(pub), expectedTenantId: 'tenant-a', expectedRecipient: 'constellation',
       allowedIssuers: new Set(['spr']), replayStore: new TestReplayStore(), nowMs: now, payload: 'payload'
     })).resolves.toMatchObject({ ok: false, reason: 'NOT_YET_VALID' });
   });
