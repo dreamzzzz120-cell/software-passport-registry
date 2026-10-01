@@ -141,7 +141,7 @@ BEGIN
   NEW.updated_at := CURRENT_TIMESTAMP;
   RETURN NEW;
 END;
-$;
+$$;
 
 DROP TRIGGER IF EXISTS spr_crypto_key_state_transition ON spr_crypto_keys;
 CREATE TRIGGER spr_crypto_key_state_transition
@@ -169,7 +169,7 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$;
+$$;
 
 DROP TRIGGER IF EXISTS spr_crypto_key_state_event ON spr_crypto_keys;
 CREATE TRIGGER spr_crypto_key_state_event
