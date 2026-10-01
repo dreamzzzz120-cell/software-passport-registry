@@ -92,15 +92,18 @@ export function createEvidencePackage(
     observations: input.observations,
     evidence: input.evidence,
   };
-  const canonical = canonicalJson(payload);
-  const payloadDigest = digestUtf8(digestAlgorithm, canonical);
-  const signature = signPayload(signing.algorithmId, canonical, signing.privateKeyPem);
-  return {
+  const canonicalPayload = canonicalJson(payload);
+  const payloadDigest = digestUtf8(digestAlgorithm, canonicalPayload);
+  const signedMetadata = {
     ...payload,
     payloadDigestAlgorithm: digestAlgorithm,
     payloadDigest,
     signatureAlgorithm: signing.algorithmId,
     signingKeyId: signing.keyId,
+  };
+  const signature = signPayload(signing.algorithmId, canonicalJson(signedMetadata), signing.privateKeyPem);
+  return {
+    ...signedMetadata,
     signature,
   };
 }
@@ -136,13 +139,21 @@ export function verifyEvidencePackage(
       observations: pkg.observations,
       evidence: pkg.evidence,
     };
-    const canonical = canonicalJson(payload);
-    if (digestUtf8(pkg.payloadDigestAlgorithm, canonical) !== pkg.payloadDigest) return 'FAILED';
+    const canonicalPayload = canonicalJson(payload);
+    if (digestUtf8(pkg.payloadDigestAlgorithm, canonicalPayload) !== pkg.payloadDigest) return 'FAILED';
+    const signedMetadata = {
+      ...payload,
+      payloadDigestAlgorithm: pkg.payloadDigestAlgorithm,
+      payloadDigest: pkg.payloadDigest,
+      signatureAlgorithm: pkg.signatureAlgorithm,
+      signingKeyId: pkg.signingKeyId,
+    };
+    const canonicalSignedMetadata = canonicalJson(signedMetadata);
     const sig = Buffer.from(pkg.signature, 'base64url');
     const valid = pkg.signatureAlgorithm === 'ed25519'
-      ? crypto.verify(null, Buffer.from(canonical), publicKeyPem, sig)
+      ? crypto.verify(null, Buffer.from(canonicalSignedMetadata), publicKeyPem, sig)
       : pkg.signatureAlgorithm === 'ecdsa-p256-sha256'
-        ? crypto.verify('sha256', Buffer.from(canonical), publicKeyPem, sig)
+        ? crypto.verify('sha256', Buffer.from(canonicalSignedMetadata), publicKeyPem, sig)
         : false;
     return valid ? 'VERIFIED' : 'FAILED';
   } catch {
