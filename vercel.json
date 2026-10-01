@@ -23,27 +23,27 @@
           "value": "(?<country>[A-Z]{2})"
         }
       ],
-      "destination": "https://spr-app-staging-production.up.railway.app/api/traffic/event?vc_country=:country"
+      "destination": "https://spr-app-production-production.up.railway.app/api/traffic/event?vc_country=:country"
     },
     {
       "source": "/api/:path*",
-      "destination": "https://spr-app-staging-production.up.railway.app/api/:path*"
+      "destination": "https://spr-app-production-production.up.railway.app/api/:path*"
     },
     {
       "source": "/health",
-      "destination": "https://spr-app-staging-production.up.railway.app/health"
+      "destination": "https://spr-app-production-production.up.railway.app/health"
     },
     {
       "source": "/ready",
-      "destination": "https://spr-app-staging-production.up.railway.app/ready"
+      "destination": "https://spr-app-production-production.up.railway.app/ready"
     },
     {
       "source": "/badge/v1/:path*",
-      "destination": "https://spr-app-staging-production.up.railway.app/badge/v1/:path*"
+      "destination": "https://spr-app-production-production.up.railway.app/badge/v1/:path*"
     },
     {
       "source": "/software",
-      "destination": "https://spr-app-staging-production.up.railway.app/software"
+      "destination": "https://spr-app-production-production.up.railway.app/software"
     },
     {
       "source": "/software/workspace",
@@ -51,19 +51,19 @@
     },
     {
       "source": "/software/:path*",
-      "destination": "https://spr-app-staging-production.up.railway.app/software/:path*"
+      "destination": "https://spr-app-production-production.up.railway.app/software/:path*"
     },
     {
       "source": "/whitepaper",
-      "destination": "https://spr-app-staging-production.up.railway.app/whitepaper"
+      "destination": "https://spr-app-production-production.up.railway.app/whitepaper"
     },
     {
       "source": "/roi",
-      "destination": "https://spr-app-staging-production.up.railway.app/roi"
+      "destination": "https://spr-app-production-production.up.railway.app/roi"
     },
     {
       "source": "/mcp",
-      "destination": "https://spr-app-staging-production.up.railway.app/mcp"
+      "destination": "https://spr-app-production-production.up.railway.app/mcp"
     },
     {
       "source": "/(.*)",
