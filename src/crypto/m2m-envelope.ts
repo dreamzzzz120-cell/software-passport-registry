@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { canonicalJson } from './evidence-package.ts';
 import { digestUtf8, requireActiveCryptoAlgorithm } from './algorithm-registry.ts';
+import { evaluateKeyForNewSignature, type CryptoKeyRecord } from './key-policy.ts';
 
 export interface M2MReplayStore {
   /**
@@ -43,7 +44,11 @@ export type EnvelopeVerificationFailure =
   | 'NOT_YET_VALID'
   | 'DUPLICATE_NONCE'
   | 'UNEXPECTED_ALGORITHM'
-  | 'ALTERED_PAYLOAD';
+  | 'ALTERED_PAYLOAD'
+  | 'SIGNING_KEY_MISMATCH'
+  | 'SIGNING_KEY_REVOKED'
+  | 'SIGNING_KEY_COMPROMISED'
+  | 'SIGNING_KEY_NOT_VALID';
 
 export type EnvelopeVerificationResult =
   | { ok: true; state: 'VERIFIED' }
@@ -86,9 +91,14 @@ export function createM2MEnvelope(
   return { ...unsigned, signature: sign(input.signingAlgorithm, message, signingPrivateKeyPem).toString('base64url') };
 }
 
+export interface M2MVerificationKey {
+  record: CryptoKeyRecord & { algorithmId: string; tenantId: string; issuer: string };
+  publicKeyPem: string;
+}
+
 export async function verifyM2MEnvelope(input: {
   envelope: M2MEnvelope;
-  publicKeyPem: string;
+  verificationKey: M2MVerificationKey;
   expectedTenantId: string;
   expectedRecipient: string;
   allowedIssuers: ReadonlySet<string>;
@@ -104,7 +114,20 @@ export async function verifyM2MEnvelope(input: {
     if (!input.allowedIssuers.has(envelope.issuer)) return { ok: false, state: 'FAILED', reason: 'UNAUTHORIZED_ISSUER' };
     requireActiveCryptoAlgorithm(envelope.payloadDigestAlgorithm, 'hash');
     requireActiveCryptoAlgorithm(envelope.signingAlgorithm, 'signature');
+    const key = input.verificationKey.record;
+    if (
+      key.keyId !== envelope.signingKeyId ||
+      key.algorithmId !== envelope.signingAlgorithm ||
+      key.tenantId !== envelope.tenantId ||
+      key.issuer !== envelope.issuer
+    ) return { ok: false, state: 'FAILED', reason: 'SIGNING_KEY_MISMATCH' };
     const now = input.nowMs ?? Date.now();
+    const keyDecision = evaluateKeyForNewSignature(key, now);
+    if (!keyDecision.allowed) {
+      if (keyDecision.state === 'REVOKED') return { ok: false, state: 'FAILED', reason: 'SIGNING_KEY_REVOKED' };
+      if (keyDecision.state === 'COMPROMISED') return { ok: false, state: 'FAILED', reason: 'SIGNING_KEY_COMPROMISED' };
+      return { ok: false, state: 'FAILED', reason: 'SIGNING_KEY_NOT_VALID' };
+    }
     const created = Date.parse(envelope.createdAt);
     const expires = Date.parse(envelope.expiresAt);
     if (!Number.isFinite(created) || !Number.isFinite(expires)) return { ok: false, state: 'FAILED', reason: 'MALFORMED' };
@@ -116,7 +139,7 @@ export async function verifyM2MEnvelope(input: {
     }
     const message = Buffer.from(canonicalJson(unsignedEnvelope(envelope)), 'utf8');
     const signature = Buffer.from(envelope.signature, 'base64url');
-    if (!verify(envelope.signingAlgorithm, message, signature, input.publicKeyPem)) {
+    if (!verify(envelope.signingAlgorithm, message, signature, input.verificationKey.publicKeyPem)) {
       return { ok: false, state: 'FAILED', reason: 'INVALID_SIGNATURE' };
     }
     const fresh = await input.replayStore.consumeNonce({
