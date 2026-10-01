@@ -8,8 +8,8 @@ if(!runtimePassword || runtimePassword.length<32)throw new Error('DATASPHERE_RUN
 
 const sql=postgres(migrationUrl,{prepare:false,max:1,connect_timeout:10});
 
-async function execFormatted(formatText:string,...args:string[]){
-  const rows=await sql<{ddl:string}[]>`SELECT format(${formatText}, ${args[0]??null}, ${args[1]??null}) AS ddl`;
+async function execFormatted(formatText:string,arg:string){
+  const rows=await sql<{ddl:string}[]>`SELECT format(${formatText}::text, ${arg}::text) AS ddl`;
   if(!rows[0]?.ddl)throw new Error('DDL_FORMAT_FAILED');
   await sql.unsafe(rows[0].ddl);
 }
