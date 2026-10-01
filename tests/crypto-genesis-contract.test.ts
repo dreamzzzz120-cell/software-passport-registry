@@ -53,6 +53,8 @@ describe('SPR cryptographic agility and genesis contract', () => {
     const publicPem = publicKey.export({ type: 'spki', format: 'pem' }).toString();
     expect(verifyEvidencePackage(pkg, publicPem)).toBe('VERIFIED');
     expect(verifyEvidencePackage({ ...pkg, subject: 'artifact-b' }, publicPem)).toBe('FAILED');
+    expect(verifyEvidencePackage({ ...pkg, signingKeyId: 'substituted-key' }, publicPem)).toBe('FAILED');
+    expect(verifyEvidencePackage({ ...pkg, payloadDigestAlgorithm: 'sha2-512' }, publicPem)).toBe('FAILED');
   });
 
   it('rejects self-created trust in Genesis Events', () => {
