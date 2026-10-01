@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS spr_crypto_inventory (
   tenant_id text NOT NULL,
   object_type text NOT NULL CHECK (object_type IN ('algorithm','key','certificate','protocol','signing-location','verification-location')),
   algorithm_id text REFERENCES spr_crypto_algorithms(algorithm_id),
-  key_id text,
+  key_id text REFERENCES spr_crypto_keys(key_id),
   certificate_id text,
   protocol_name text,
   signing_location text,
@@ -39,11 +39,12 @@ CREATE TABLE IF NOT EXISTS spr_evidence_packages (
   payload_digest_algorithm text NOT NULL REFERENCES spr_crypto_algorithms(algorithm_id),
   payload_digest text NOT NULL,
   signature_algorithm text NOT NULL REFERENCES spr_crypto_algorithms(algorithm_id),
-  signing_key_id text NOT NULL,
+  signing_key_id text NOT NULL REFERENCES spr_crypto_keys(key_id),
   signature text NOT NULL,
   persisted_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CHECK (jsonb_typeof(observations) = 'array'),
-  CHECK (jsonb_typeof(evidence_references) = 'array')
+  CHECK (jsonb_typeof(evidence_references) = 'array'),
+  CHECK (observations::text !~ '"(trustScore|safe|approved|compliant|authorized|trusted)"[[:space:]]*:')
 );
 
 CREATE INDEX IF NOT EXISTS spr_evidence_packages_subject_idx
