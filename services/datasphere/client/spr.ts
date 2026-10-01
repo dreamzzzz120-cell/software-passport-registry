@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 const config=z.object({
   DATASPHERE_URL:z.string().url(),
-  DATASPHERE_INGEST_TOKEN:z.string().min(32)
+  DATASPHERE_SPR_INGEST_TOKEN:z.string().min(32)
 });
 
 export type DatasphereState='VERIFIED'|'OBSERVED'|'DECLARED'|'UNKNOWN'|'STALE'|'CONFLICTING'|'UNAVAILABLE';
@@ -18,7 +18,7 @@ export async function emitSprDatasphereEvent(event:DatasphereEvent,env:NodeJS.Pr
   if(!c.success)return{delivered:false,code:'DATASPHERE_NOT_CONFIGURED' as const};
   const response=await fetch(new URL('/v1/events',c.data.DATASPHERE_URL),{
     method:'POST',
-    headers:{'content-type':'application/json','authorization':`Bearer ${c.data.DATASPHERE_INGEST_TOKEN}`},
+    headers:{'content-type':'application/json','authorization':`Bearer ${c.data.DATASPHERE_SPR_INGEST_TOKEN}`},
     body:JSON.stringify({...event,sourceSystem:'SPR'})
   });
   if(!response.ok)throw new Error(`DATASPHERE_INGEST_FAILED_${response.status}`);
