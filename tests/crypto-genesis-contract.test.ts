@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { CRYPTO_ALGORITHMS, digestUtf8, getCryptoAlgorithm } from '../src/crypto/algorithm-registry.ts';
 import { createEvidencePackage, verifyEvidencePackage } from '../src/crypto/evidence-package.ts';
-import { assertArtifactBinding, createGenesisEvent } from '../src/crypto/genesis-event.ts';
+import { assertArtifactBinding, createGenesisEvent, verifyGenesisEvent } from '../src/crypto/genesis-event.ts';
 
 describe('SPR cryptographic agility and genesis contract', () => {
   it('registers PQ and hybrid algorithms as planned, not falsely active', () => {
@@ -56,6 +56,7 @@ describe('SPR cryptographic agility and genesis contract', () => {
   });
 
   it('rejects self-created trust in Genesis Events', () => {
+    const { privateKey } = crypto.generateKeyPairSync('ed25519');
     expect(() => createGenesisEvent({
       genesisId: 'gen-1',
       tenantId: 'tenant-a',
@@ -70,11 +71,40 @@ describe('SPR cryptographic agility and genesis contract', () => {
       evidenceReferences: [],
       signingKeyId: 'key-1',
       signatureAlgorithm: 'ed25519',
-      signature: 'submitted-signature',
       childIdentity: 'agent-a',
       creationReason: 'spawn',
       authorizationReference: null,
-    })).toThrow('GENESIS_SELF_TRUST_FORBIDDEN');
+    }, privateKey.export({ type: 'pkcs8', format: 'pem' }).toString())).toThrow('GENESIS_SELF_TRUST_FORBIDDEN');
+  });
+
+  it('creates a verifiable Genesis Event and rejects tampering', () => {
+    const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519');
+    const privatePem = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
+    const publicPem = publicKey.export({ type: 'spki', format: 'pem' }).toString();
+    const event = createGenesisEvent({
+      genesisId: 'gen-2',
+      tenantId: 'tenant-a',
+      creatorIdentity: 'builder-1',
+      creatorType: 'service',
+      parentIdentity: 'parent-agent',
+      authorityChain: ['human-owner', 'parent-agent'],
+      creationTimestamp: new Date().toISOString(),
+      sourceDigest: null,
+      artifactDigest: 'sha2-256:abc',
+      buildDigest: null,
+      sbomDigest: null,
+      buildEnvironment: { builder: 'ci' },
+      policyVersion: 'v1',
+      evidenceReferences: [],
+      signingKeyId: 'key-1',
+      signatureAlgorithm: 'ed25519',
+      parentGenesisId: null,
+      childIdentity: 'service-child',
+      creationReason: 'generated workload',
+      authorizationReference: null,
+    }, privatePem);
+    expect(verifyGenesisEvent(event, publicPem)).toBe(true);
+    expect(verifyGenesisEvent({ ...event, artifactDigest: 'sha2-256:def' }, publicPem)).toBe(false);
   });
 
   it('fails exact artifact binding when evidence belongs to a different artifact', () => {
