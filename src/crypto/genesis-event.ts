@@ -1,6 +1,6 @@
-import crypto from 'node:crypto';
 import { canonicalJson } from './evidence-package.ts';
 import { digestUtf8, requireActiveCryptoAlgorithm } from './algorithm-registry.ts';
+import type { SignatureSigner, SignatureVerifier } from './signature-provider.ts';
 
 export type CreatorType = 'human' | 'ai-agent' | 'autonomous-agent' | 'service' | 'system';
 
@@ -38,20 +38,6 @@ function unsignedGenesis(input: GenesisEventInput) {
   return { schemaVersion: 'spr-genesis/v1' as const, ...input };
 }
 
-function signGenesis(algorithmId: string, message: Buffer, privateKeyPem: string): Buffer {
-  requireActiveCryptoAlgorithm(algorithmId, 'signature');
-  if (algorithmId === 'ed25519') return crypto.sign(null, message, privateKeyPem);
-  if (algorithmId === 'ecdsa-p256-sha256') return crypto.sign('sha256', message, privateKeyPem);
-  throw new Error('CRYPTO_ALGORITHM_IMPLEMENTATION_MISSING');
-}
-
-function verifyGenesisSignature(algorithmId: string, message: Buffer, signature: Buffer, publicKeyPem: string): boolean {
-  requireActiveCryptoAlgorithm(algorithmId, 'signature');
-  if (algorithmId === 'ed25519') return crypto.verify(null, message, publicKeyPem, signature);
-  if (algorithmId === 'ecdsa-p256-sha256') return crypto.verify('sha256', message, publicKeyPem, signature);
-  return false;
-}
-
 /**
  * Creation records identity and provenance only. It never implies authorization.
  * Missing source/build/SBOM observations remain explicit nulls.
@@ -59,11 +45,14 @@ function verifyGenesisSignature(algorithmId: string, message: Buffer, signature:
  */
 export function createGenesisEvent(
   input: GenesisEventInput,
-  signingPrivateKeyPem: string,
+  signer: SignatureSigner,
   digestAlgorithmId = 'sha2-256'
 ): GenesisEvent {
   requireActiveCryptoAlgorithm(digestAlgorithmId, 'hash');
   requireActiveCryptoAlgorithm(input.signatureAlgorithm, 'signature');
+  if (signer.algorithmId !== input.signatureAlgorithm || signer.keyId !== input.signingKeyId) {
+    throw new Error('GENESIS_SIGNING_KEY_MISMATCH');
+  }
   if (!input.genesisId || !input.tenantId || !input.creatorIdentity || !input.childIdentity || !input.artifactDigest) {
     throw new Error('GENESIS_REQUIRED_FIELD_MISSING');
   }
@@ -75,7 +64,7 @@ export function createGenesisEvent(
 
   const unsigned = unsignedGenesis(input);
   const canonical = canonicalJson(unsigned);
-  const signature = signGenesis(input.signatureAlgorithm, Buffer.from(canonical, 'utf8'), signingPrivateKeyPem).toString('base64url');
+  const signature = signer.sign(Buffer.from(canonical, 'utf8'));
   const signed = { ...unsigned, signature };
   return {
     ...signed,
@@ -84,10 +73,11 @@ export function createGenesisEvent(
   };
 }
 
-export function verifyGenesisEvent(event: GenesisEvent, publicKeyPem: string): boolean {
+export function verifyGenesisEvent(event: GenesisEvent, verifier: SignatureVerifier): boolean {
   try {
     requireActiveCryptoAlgorithm(event.eventDigestAlgorithm, 'hash');
     requireActiveCryptoAlgorithm(event.signatureAlgorithm, 'signature');
+    if (verifier.algorithmId !== event.signatureAlgorithm || verifier.keyId !== event.signingKeyId) return false;
     const {
       schemaVersion,
       signature,
@@ -97,12 +87,7 @@ export function verifyGenesisEvent(event: GenesisEvent, publicKeyPem: string): b
     } = event;
     if (schemaVersion !== 'spr-genesis/v1') return false;
     const canonicalUnsigned = canonicalJson({ schemaVersion, ...input });
-    const signatureValid = verifyGenesisSignature(
-      event.signatureAlgorithm,
-      Buffer.from(canonicalUnsigned, 'utf8'),
-      Buffer.from(signature, 'base64url'),
-      publicKeyPem
-    );
+    const signatureValid = verifier.verify(Buffer.from(canonicalUnsigned, 'utf8'), signature);
     if (!signatureValid) return false;
     const canonicalSigned = canonicalJson({ schemaVersion, ...input, signature });
     return digestUtf8(eventDigestAlgorithm, canonicalSigned) === eventDigest;
