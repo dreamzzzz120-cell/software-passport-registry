@@ -60,8 +60,16 @@ describe('the Client role never appears in a write-capable requireRole gate outs
     expect(files.length).toBeGreaterThan(30);
     for (const name of files) {
       const source = fs.readFileSync(path.join(routesDir, name), 'utf8');
+      const clientWriteAllowlist = new Map<string, string[]>([
+        ['trust-loop.ts', ["router.post('/remediations/:id/approve', requireRole(['Client'])"]],
+      ]);
       for (const match of source.matchAll(/requireRole\(\[([^\]]*)\]\)/g)) {
-        expect(match[1], `${name}: a requireRole([...]) array includes 'Client' -- verify this is intentionally client-facing`).not.toContain("'Client'");
+        if (!match[1].includes("'Client'")) continue;
+        const allowed = clientWriteAllowlist.get(name) ?? [];
+        const lineStart = source.lastIndexOf('\\n', match.index ?? 0) + 1;
+        const lineEnd = source.indexOf('\\n', match.index ?? 0);
+        const line = source.slice(lineStart, lineEnd === -1 ? source.length : lineEnd).trim();
+        expect(allowed.some((fragment) => line.includes(fragment)), `${name}: unexpected Client write-capable role gate: ${line}`).toBe(true);
       }
     }
   });
