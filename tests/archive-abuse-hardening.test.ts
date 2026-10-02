@@ -17,7 +17,7 @@ describe('archive entry path hardening', () => {
     ['C:/Windows/System32/config'],
     ['C:\\Windows\\System32\\config'],
   ])('rejects archive path escape %j', (entries) => {
-    expect(() => validateArchiveEntries(entries)).toThrow(/REPOSITORY_PATH_INVALID/);
+    expect(() => validateArchiveEntries([entries])).toThrow(/REPOSITORY_PATH_INVALID/);
   });
 
   it('rejects an archive whose member count exceeds the configured hard ceiling', () => {
