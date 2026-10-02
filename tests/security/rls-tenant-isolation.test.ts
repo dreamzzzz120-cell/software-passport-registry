@@ -176,3 +176,64 @@ describeIfConfigured('pooled runtime connections fail closed across tenant bound
     expect(owned.rows).toEqual([]);
   });
 });
+
+
+const workerDatabaseUrl = process.env.WORKER_DATABASE_URL;
+const describeWorkerIfConfigured = workerDatabaseUrl ? describe : describe.skip;
+
+describeWorkerIfConfigured('spr_worker_runtime cross-tenant authority is explicit and non-owner', () => {
+  let pool: Pool;
+
+  beforeAll(() => {
+    const url = new URL(workerDatabaseUrl!);
+    pool = new Pool({
+      host: url.hostname,
+      port: Number(url.port || 5432),
+      database: url.pathname.startsWith('/') ? url.pathname.slice(1) : url.pathname,
+      user: url.username,
+      password: url.password,
+      ssl: false,
+      max: 1,
+    });
+  });
+
+  afterAll(async () => { await pool.end(); });
+
+  it('connects as spr_worker_runtime without BYPASSRLS and owns no tenant table', async () => {
+    const identity = await pool.query('SELECT current_user');
+    expect(identity.rows[0]?.current_user).toBe('spr_worker_runtime');
+
+    const bypass = await pool.query('SELECT rolbypassrls FROM pg_roles WHERE rolname=current_user');
+    expect(bypass.rows[0]?.rolbypassrls).toBe(false);
+
+    const owned = await pool.query(`
+      SELECT DISTINCT c.table_name
+      FROM information_schema.columns c
+      JOIN pg_class cls ON cls.relname=c.table_name
+      JOIN pg_namespace ns ON ns.oid=cls.relnamespace AND ns.nspname='public'
+      JOIN pg_roles r ON r.oid=cls.relowner
+      WHERE c.table_schema='public' AND c.column_name='tenant_id'
+        AND r.rolname=current_user
+    `);
+    expect(owned.rows).toEqual([]);
+  });
+
+  it('has the explicit worker policy on every tenant-scoped base table', async () => {
+    const result = await pool.query(`
+      SELECT c.table_name
+      FROM information_schema.columns c
+      JOIN information_schema.tables t
+        ON t.table_schema=c.table_schema AND t.table_name=c.table_name
+      WHERE c.table_schema='public' AND c.column_name='tenant_id'
+        AND t.table_type='BASE TABLE'
+        AND NOT EXISTS (
+          SELECT 1 FROM pg_policies p
+          WHERE p.schemaname='public' AND p.tablename=c.table_name
+            AND p.policyname='spr_worker_cross_tenant'
+            AND 'spr_worker_runtime'=ANY(p.roles)
+        )
+      ORDER BY c.table_name
+    `);
+    expect(result.rows, `worker policy missing: ${result.rows.map((r) => r.table_name).join(', ')}`).toEqual([]);
+  });
+});
