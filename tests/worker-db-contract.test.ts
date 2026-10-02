@@ -81,3 +81,35 @@ describe('all cross-tenant workers use the hardened worker pool', () => {
     expect(s).not.toContain('new Pool({ connectionString: process.env.DATABASE_URL');
   });
 });
+
+
+describe('worker mutation tenant-binding guard', () => {
+  const workerFiles = [
+    'src/workers/distribution-worker.ts',
+    'src/workers/intake-scan-worker.ts',
+    'src/workers/notification-worker.ts',
+    'src/workers/osv-worker.ts',
+    'src/workers/registry-crawler-worker.ts',
+    'src/workers/registry-lineage-worker.ts',
+    'src/workers/report-schedule-worker.ts',
+    'src/workers/retention-worker.ts',
+    'src/workers/security-scanner-worker.ts',
+    'src/workers/trust-monitoring-worker.ts',
+    'src/workers/webhook-worker.ts',
+  ];
+
+  it('does not allow workers to open a direct owner DATABASE_URL connection', () => {
+    for (const file of workerFiles) {
+      const source = read(file);
+      expect(source, file).not.toContain('connectionString: process.env.DATABASE_URL');
+      expect(source, file).not.toContain('connectionString:process.env.DATABASE_URL');
+    }
+  });
+
+  it('requires the cross-tenant worker privilege to remain explicit and non-BYPASSRLS', () => {
+    const migration = read('migrations/0108_reassert_worker_cross_tenant_policies.sql');
+    expect(migration).toContain('CREATE POLICY spr_worker_cross_tenant');
+    expect(migration).toContain('TO spr_worker_runtime');
+    expect(migration).not.toMatch(/ALTER ROLE\s+spr_worker_runtime\s+.*BYPASSRLS/i);
+  });
+});
