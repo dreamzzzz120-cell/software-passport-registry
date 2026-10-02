@@ -59,3 +59,25 @@ describe('worker database URL must not carry TLS query parameters', () => {
     expect(s.indexOf('rejectTlsQueryParameters(connectionString)')).toBeLessThan(s.indexOf('new Pool({ connectionString'));
   });
 });
+
+
+describe('all cross-tenant workers use the hardened worker pool', () => {
+  it('webhook delivery never constructs an owner DATABASE_URL pool directly', () => {
+    const s = read('src/workers/webhook-worker.ts');
+    expect(s).toContain("import { createWorkerPool } from './worker-db.ts'");
+    expect(s).toContain('const pool = createWorkerPool();');
+    expect(s).not.toContain('new Pool({ connectionString: process.env.DATABASE_URL');
+  });
+
+  it('report schedules use the hardened worker pool', () => {
+    const s = read('src/workers/report-schedule-worker.ts');
+    expect(s).toContain("createWorkerPool");
+    expect(s).not.toContain('new Pool({ connectionString: process.env.DATABASE_URL');
+  });
+
+  it('trust monitoring uses the hardened worker pool', () => {
+    const s = read('src/workers/trust-monitoring-worker.ts');
+    expect(s).toContain("createWorkerPool");
+    expect(s).not.toContain('new Pool({ connectionString: process.env.DATABASE_URL');
+  });
+});
