@@ -2,7 +2,8 @@ import crypto from 'node:crypto';
 import dns from 'node:dns/promises';
 import net from 'node:net';
 import https from 'node:https';
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
+import { createWorkerPool } from './worker-db.ts';
 import { decryptCredential } from '../security/credential-vault.ts';
 import { buildWebhookSignatureHeader } from '../security/webhook-signing.ts';
 import { validateWebhookUrl } from '../security/webhook-url.ts';
@@ -172,7 +173,7 @@ export async function enqueueWebhookDelivery(pool: Pool, input: { tenantId: stri
 }
 
 export async function runWebhookWorkerLoop() {
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL, host: process.env.DATABASE_URL ? undefined : process.env.SQL_HOST, user: process.env.DATABASE_URL ? undefined : process.env.SQL_USER, password: process.env.DATABASE_URL ? undefined : process.env.SQL_PASSWORD, database: process.env.DATABASE_URL ? undefined : process.env.SQL_DB_NAME });
+  const pool = createWorkerPool();
   try {
     for (;;) {
       const due = await pool.query(`SELECT id FROM spr_webhook_deliveries WHERE status='queued' AND next_attempt_at::timestamptz <= CURRENT_TIMESTAMP ORDER BY next_attempt_at::timestamptz LIMIT 25`);
