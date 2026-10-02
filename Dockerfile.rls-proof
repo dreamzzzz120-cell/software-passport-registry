@@ -1,0 +1,13 @@
+FROM node:22-slim
+WORKDIR /app
+ENV NODE_ENV=development
+ENV NPM_CONFIG_UPDATE_NOTIFIER=false
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts --no-audit --no-fund
+COPY tests/security/rls-tenant-isolation.test.ts ./tests/security/rls-tenant-isolation.test.ts
+COPY migrations ./migrations
+COPY server.ts ./
+RUN test -f /app/tests/security/rls-tenant-isolation.test.ts \
+ && test -x /app/node_modules/.bin/vitest \
+ && /app/node_modules/.bin/vitest --version
+CMD ["/app/node_modules/.bin/vitest","run","/app/tests/security/rls-tenant-isolation.test.ts","--reporter=verbose"]
