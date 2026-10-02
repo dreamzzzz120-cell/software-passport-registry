@@ -63,6 +63,17 @@ export function validateFilePolicy(file: { name: string; size: number; contentTy
   if (file.kind === 'sbom' && !['json', 'xml', 'spdx'].includes(ext)) return 'SBOM type does not match its filename.';
   return null;
 }
+export function validateObservedFileSignature(name: string, bytes: Buffer): string | null {
+  const ext = extensionOf(name);
+  if (ext === 'pdf' && !bytes.subarray(0, 5).equals(Buffer.from('%PDF-'))) return 'Uploaded bytes do not match the declared PDF type.';
+  if (ext === 'zip' || ext === 'docx') {
+    const zip = bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b && ((bytes[2] === 0x03 && bytes[3] === 0x04) || (bytes[2] === 0x05 && bytes[3] === 0x06) || (bytes[2] === 0x07 && bytes[3] === 0x08));
+    if (!zip) return 'Uploaded bytes do not match the declared ZIP-based type.';
+  }
+  if ((ext === 'gz' || ext === 'tgz') && !(bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b)) return 'Uploaded bytes do not match the declared GZIP type.';
+  if (ext === 'tar' && !(bytes.length >= 262 && bytes.subarray(257, 262).equals(Buffer.from('ustar')))) return 'Uploaded bytes do not match the declared TAR type.';
+  return null;
+}
 function safeName(value: string) {
   const normalized = value.normalize('NFKC').replace(/[\\/\0]/g, '_').replace(/[^A-Za-z0-9._()\- ]/g, '_').trim();
   return (normalized || 'file').slice(0, MAX_FILENAME_LENGTH);
@@ -178,6 +189,8 @@ export function createUniversalIntakeRouter() {
       if (bytes.length !== Number(item.size)) {
         return res.status(422).json({ error: 'Uploaded object size does not match the declared size.' });
       }
+      const signatureError = validateObservedFileSignature(item.name, bytes);
+      if (signatureError) return res.status(415).json({ error: signatureError });
       const serverSha256 = crypto.createHash('sha256').update(bytes).digest('hex');
       if (parsed.data.sha256 && parsed.data.sha256 !== serverSha256) {
         console.warn(`[Intake] Client-reported sha256 for item ${parsed.data.itemId} did not match the server-computed hash; the server-computed value is what was persisted.`);
