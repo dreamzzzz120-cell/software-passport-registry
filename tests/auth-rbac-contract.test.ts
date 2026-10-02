@@ -65,3 +65,31 @@ describe('SPR authentication/RBAC/database release contracts', () => {
     expect(auth).toContain('overallScore: null');
   });
 });
+
+
+describe('asynchronous tenant-boundary contracts', () => {
+  it('report schedules never trust a caller-supplied tenant and bind foreign passport ids to the authenticated tenant', () => {
+    const source = read('src/routes/report-schedules.ts');
+    expect(source).toContain('tenant=req.user!.tenantId');
+    expect(source).toContain('SELECT id FROM passports WHERE id=${p.data.passportId} AND tenant_id=${tenant}');
+    expect(source).toContain('WHERE id=${req.params.id} AND tenant_id=${req.user!.tenantId}');
+    expect(source).not.toMatch(/req\.(body|query|params)\.tenantId/);
+  });
+
+  it('PSA webhooks resolve and mutate findings inside the signed endpoint tenant only', () => {
+    const source = read('src/routes/psa-webhooks.ts');
+    expect(source).toContain('const scoped = await attachTenantScope(tenantId, res)');
+    expect(source).toContain('WHERE tenant_id = ${tenantId} AND provider = ${provider}');
+    expect(source).toContain('WHERE tenant_id = ${tenantId} AND psa_ticket_id = ${event.ticketId}');
+    expect(source).toContain('WHERE tenant_id = ${tenantId} AND id = ${finding.id}');
+    expect(source).not.toMatch(/findingId\s*=\s*event/i);
+  });
+
+  it('report schedule mutation remains Owner/Admin only', () => {
+    const source = read('src/routes/report-schedules.ts');
+    expect(source).toContain("const roles = ['Owner', 'Admin']");
+    expect(source).toContain("router.post('/', requireRole(roles)");
+    expect(source).toContain("router.patch('/:id', requireRole(roles)");
+    expect(source).toContain("router.delete('/:id', requireRole(roles)");
+  });
+});
