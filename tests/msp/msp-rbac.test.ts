@@ -55,9 +55,11 @@ describe('PERMISSION_MATRIX rows genuinely match the requireRole gates on their 
 // its own MSP operator's -- administrative surface.
 describe('the Client role never appears in a write-capable requireRole gate outside its own approval path', () => {
   it('no requireRole array in security-sensitive admin routes includes Client', () => {
-    const files = ['auth.ts', 'billing.ts', 'connect.ts', 'monitoring.ts', 'scans.ts', 'msp.ts'];
+    const routesDir = path.join(process.cwd(), 'src/routes');
+    const files = fs.readdirSync(routesDir).filter((name) => name.endsWith('.ts'));
+    expect(files.length).toBeGreaterThan(30);
     for (const name of files) {
-      const source = fs.readFileSync(path.join(process.cwd(), 'src/routes', name), 'utf8');
+      const source = fs.readFileSync(path.join(routesDir, name), 'utf8');
       for (const match of source.matchAll(/requireRole\(\[([^\]]*)\]\)/g)) {
         expect(match[1], `${name}: a requireRole([...]) array includes 'Client' -- verify this is intentionally client-facing`).not.toContain("'Client'");
       }
