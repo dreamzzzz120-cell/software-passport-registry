@@ -1,0 +1,27 @@
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: spr
+      POSTGRES_DB: spr
+      POSTGRES_PASSWORD: ${SPR_LOCAL_DB_PASSWORD:?Set SPR_LOCAL_DB_PASSWORD in .env.local}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - spr_local_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U spr -d spr"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - spr_local_redis:/data
+    command: ["redis-server", "--appendonly", "yes"]
+volumes:
+  spr_local_postgres:
+  spr_local_redis:
