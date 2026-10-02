@@ -24,7 +24,7 @@ describe('expired anonymous intake retention boundary', () => {
   });
 
   it('worker-only RLS policy is restricted to expired anonymous OPEN sessions', async () => {
-    const migration = await readFile(path.resolve('migrations/0110_expired_intake_worker_cleanup.sql'), 'utf8');
+    const migration = await readFile(path.resolve('migrations/0124_expired_intake_worker_cleanup.sql'), 'utf8');
     expect(migration).toContain("TO spr_worker_runtime");
     expect(migration).toContain("tenant_id IS NULL AND status='OPEN' AND expires_at < CURRENT_TIMESTAMP");
     expect(migration).not.toContain('TO spr_app_runtime');
