@@ -93,3 +93,22 @@ describe('asynchronous tenant-boundary contracts', () => {
     expect(source).toContain("router.delete('/:id', requireRole(roles)");
   });
 });
+
+
+describe('persisted-role authorization invariants', () => {
+  it('re-reads tenant and role from the database on every authenticated request instead of trusting token role claims', () => {
+    const security = read('src/middleware/security.ts');
+    expect(security).toContain('const dbUser = await db.select().from(users).where(eq(users.uid, uid))');
+    expect(security).toContain('tenantId: dbUser.tenantId');
+    expect(security).toContain('role: dbUser.role');
+    expect(security).not.toMatch(/role:\s*decodedToken\./);
+    expect(security).not.toMatch(/tenantId:\s*decodedToken\./);
+  });
+
+  it('checks Firebase revocation status on every authenticated request', () => {
+    const security = read('src/middleware/security.ts');
+    expect(security).toContain('adminAuth.verifyIdToken(token, true)');
+    expect(security).toContain("code === 'auth/id-token-revoked'");
+    expect(security).toContain("code: 'SESSION_REVOKED'");
+  });
+});
