@@ -114,7 +114,7 @@ describeIfConfigured('pooled runtime connections fail closed across tenant bound
 
   beforeAll(() => {
     const url = new URL(appDatabaseUrl!);
-    pool = new Pool({ host: url.hostname, port: Number(url.port || 5432), database: url.pathname.replace(/^\\//, ''), user: url.username, password: url.password, ssl: false, max: 1 });
+    pool = new Pool({ host: url.hostname, port: Number(url.port || 5432), database: url.pathname.startsWith('/') ? url.pathname.slice(1) : url.pathname, user: url.username, password: url.password, ssl: false, max: 1 });
   });
   afterAll(async () => { await pool.end(); });
 
