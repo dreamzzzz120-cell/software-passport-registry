@@ -105,3 +105,74 @@ describe('readiness keeps asserting the tenant RLS invariant', () => {
     expect(migration).toContain('SELECT spr_assert_tenant_rls()');
   });
 });
+
+
+describeIfConfigured('pooled runtime connections fail closed across tenant boundaries', () => {
+  let pool: Pool;
+  const TENANT_A = `pool-regression-A-${Date.now()}`;
+  const TENANT_B = `pool-regression-B-${Date.now()}`;
+
+  beforeAll(() => {
+    const url = new URL(appDatabaseUrl!);
+    pool = new Pool({ host: url.hostname, port: Number(url.port || 5432), database: url.pathname.replace(/^\\//, ''), user: url.username, password: url.password, ssl: false, max: 1 });
+  });
+  afterAll(async () => { await pool.end(); });
+
+  it('LOCAL tenant context disappears after COMMIT on a reused physical connection', async () => {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SELECT set_config('app.tenant_id', $1, true)", [TENANT_A]);
+      expect((await client.query("SELECT current_setting('app.tenant_id', true) AS tenant")).rows[0]?.tenant).toBe(TENANT_A);
+      await client.query('COMMIT');
+
+      // max:1 guarantees the next transaction reuses this physical connection.
+      // set_config(..., true) is transaction-local and must not leak A into B.
+      expect((await client.query("SELECT current_setting('app.tenant_id', true) AS tenant")).rows[0]?.tenant ?? '').not.toBe(TENANT_A);
+
+      await client.query('BEGIN');
+      await client.query("SELECT set_config('app.tenant_id', $1, true)", [TENANT_B]);
+      expect((await client.query("SELECT current_setting('app.tenant_id', true) AS tenant")).rows[0]?.tenant).toBe(TENANT_B);
+      await client.query('ROLLBACK');
+    } finally {
+      client.release();
+    }
+  });
+
+  it('every current tenant-scoped base table has forced RLS and a tenant isolation policy', async () => {
+    const result = await pool.query(`
+      SELECT c.table_name,
+             cls.relrowsecurity AS rls_enabled,
+             cls.relforcerowsecurity AS rls_forced,
+             EXISTS (
+               SELECT 1 FROM pg_policies p
+               WHERE p.schemaname='public' AND p.tablename=c.table_name
+                 AND p.policyname='spr_tenant_isolation'
+             ) AS tenant_policy
+      FROM information_schema.columns c
+      JOIN pg_class cls ON cls.relname=c.table_name
+      JOIN pg_namespace ns ON ns.oid=cls.relnamespace AND ns.nspname='public'
+      JOIN information_schema.tables t ON t.table_schema=c.table_schema AND t.table_name=c.table_name
+      WHERE c.table_schema='public' AND c.column_name='tenant_id' AND t.table_type='BASE TABLE'
+      ORDER BY c.table_name
+    `);
+    expect(result.rows.length).toBeGreaterThan(0);
+    const unsafe = result.rows.filter((r) => !r.rls_enabled || !r.rls_forced || !r.tenant_policy);
+    expect(unsafe, `unsafe tenant tables: ${unsafe.map((r) => r.table_name).join(', ')}`).toEqual([]);
+  });
+
+  it('spr_app_runtime has no BYPASSRLS and owns no tenant-scoped base table', async () => {
+    const bypass = await pool.query("SELECT rolbypassrls FROM pg_roles WHERE rolname=current_user");
+    expect(bypass.rows[0]?.rolbypassrls).toBe(false);
+    const owned = await pool.query(`
+      SELECT DISTINCT c.table_name
+      FROM information_schema.columns c
+      JOIN pg_class cls ON cls.relname=c.table_name
+      JOIN pg_namespace ns ON ns.oid=cls.relnamespace AND ns.nspname='public'
+      JOIN pg_roles r ON r.oid=cls.relowner
+      WHERE c.table_schema='public' AND c.column_name='tenant_id'
+        AND r.rolname=current_user
+    `);
+    expect(owned.rows).toEqual([]);
+  });
+});
