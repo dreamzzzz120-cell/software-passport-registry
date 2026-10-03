@@ -15,6 +15,10 @@
   ],
   "rewrites": [
     {
+      "source": "/api/registry-public",
+      "destination": "https://gezmtnleoyrudxztegoj.supabase.co/functions/v1/registry-public"
+    },
+    {
       "source": "/api/traffic/event",
       "has": [
         {
