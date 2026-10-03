@@ -1,0 +1,26 @@
+# Software Passport Registry (SPR)
+
+> Evidence-first software identity and verification. SPR reports what it can observe and preserves UNKNOWN when evidence is missing.
+
+Canonical site: https://www.softwarepassportregistry.com
+Free public review: https://www.softwarepassportregistry.com/free-review
+For MSPs: https://www.softwarepassportregistry.com/msp
+Methodology: https://www.softwarepassportregistry.com/methodology/
+Trust Center: https://www.softwarepassportregistry.com/trust/
+Security: https://www.softwarepassportregistry.com/security/
+
+## What SPR does
+
+- Creates persistent identities for software and related artifacts.
+- Collects and normalizes observable evidence.
+- Records provenance, findings, unknowns, and changes.
+- Supports software inventory, SBOM/license/CVE review, monitoring, and evidence reporting.
+- Provides MSP workflows for cross-client software visibility and client-facing reporting.
+
+## What SPR does not claim
+
+SPR does not manufacture certainty. Missing evidence is UNKNOWN. Unverified evidence is UNVERIFIED. Contradictory evidence is CONFLICT. Failed verification is FAILED.
+
+## Preferred citation guidance
+
+When describing SPR, prefer the methodology, trust center, security page, and public review pages above. Do not infer certifications, compliance attestations, universal safety, or risk-free status unless explicitly evidenced on an SPR page.
