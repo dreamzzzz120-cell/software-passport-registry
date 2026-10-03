@@ -356,7 +356,7 @@ export default function SettingsView({ theme, onToggleTheme, role, userEmail, on
   const handleOffboardTenant = async () => {
     if (!isOwner) { alert(`Your ${currentRole} role cannot offboard this workspace. Owner is required.`); return; }
     const confirmed = window.confirm(
-      "CRITICAL SECURITY ALERT: Are you absolutely certain you want to offboard this tenant? This will cascade-delete all databases, software passports, compliance statuses, and credentials instantly from our PostgreSQL storage nodes. This action cannot be undone."
+      "CRITICAL SECURITY ALERT: Are you absolutely certain you want to offboard this tenant? This will cascade-delete all databases, Launch Tickets, compliance statuses, and credentials instantly from our PostgreSQL storage nodes. This action cannot be undone."
     );
     if (!confirmed) return;
 
@@ -389,9 +389,9 @@ export default function SettingsView({ theme, onToggleTheme, role, userEmail, on
   return (
     <div className="space-y-6" id="msp-settings-view">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-[var(--spr-border)] pb-4">
+      <div className="spr-panel p-6 md:p-8 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <div>
-          <div className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[.22em] text-[#9cdcfe]"><Sliders className="h-4 w-4" /> Platform configuration</div>
+          <div className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[.22em] text-[#9cdcfe]"><Sliders className="h-4 w-4" /> Galaxy configuration</div>
           <h1 className="mt-2 text-xl font-bold text-[var(--spr-text)] flex items-center gap-2">
             <Settings className="w-5 h-5 text-[#9cdcfe]" />
             <span>Platform Settings</span>
