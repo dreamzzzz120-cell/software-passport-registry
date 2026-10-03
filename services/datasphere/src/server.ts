@@ -1,0 +1,203 @@
+import Fastify from 'fastify';
+import rateLimit from '@fastify/rate-limit';
+import postgres from 'postgres';
+import { createHash, timingSafeEqual } from 'node:crypto';
+import { z } from 'zod';
+
+const env=z.object({
+  PORT:z.coerce.number().int().positive().default(8080),
+  DATABASE_URL:z.string().min(1),
+  DATASPHERE_SPR_INGEST_TOKEN:z.string().min(32),
+  DATASPHERE_CONSTELLATION_INGEST_TOKEN:z.string().min(32),
+  DATASPHERE_M2M_INGEST_TOKEN:z.string().min(32).optional(),
+  DATASPHERE_INFRA_INGEST_TOKEN:z.string().min(32).optional(),
+  DATASPHERE_SPR_SOURCE_IDENTITY:z.string().min(1).default('SPR'),
+  DATASPHERE_CONSTELLATION_SOURCE_IDENTITY:z.string().min(1).default('CONSTELLATION'),
+  DATASPHERE_M2M_SOURCE_IDENTITY:z.string().min(1).default('M2M'),
+  DATASPHERE_INFRA_SOURCE_IDENTITY:z.string().min(1).default('INFRASTRUCTURE'),
+  DATASPHERE_MAX_FUTURE_SKEW_SECONDS:z.coerce.number().int().min(0).max(3600).default(300),
+  DATASPHERE_OWNER_READ_TOKEN:z.string().min(32)
+}).parse(process.env);
+
+const app=Fastify({logger:true,bodyLimit:2*1024*1024,requestTimeout:15000,connectionTimeout:10000});
+await app.register(rateLimit,{global:false,max:120,timeWindow:'1 minute'});
+const sql=postgres(env.DATABASE_URL,{prepare:false,max:10});
+const sha=(v:string)=>createHash('sha256').update(v).digest('hex');
+const stable=(v:unknown):string=>{
+  if(v===null||typeof v!=='object')return JSON.stringify(v);
+  if(Array.isArray(v))return '['+v.map(stable).join(',')+']';
+  return '{'+Object.entries(v as Record<string,unknown>).sort(([a],[b])=>a.localeCompare(b))
+    .map(([k,x])=>JSON.stringify(k)+':'+stable(x)).join(',')+'}';
+};
+const sourceAuth=(source:'SPR'|'CONSTELLATION'|'M2M'|'INFRASTRUCTURE',h?:string)=>{
+  const expectedToken=
+    source==='SPR'?env.DATASPHERE_SPR_INGEST_TOKEN:
+    source==='CONSTELLATION'?env.DATASPHERE_CONSTELLATION_INGEST_TOKEN:
+    source==='M2M'?env.DATASPHERE_M2M_INGEST_TOKEN:
+    env.DATASPHERE_INFRA_INGEST_TOKEN;
+  const expectedIdentity=
+    source==='SPR'?env.DATASPHERE_SPR_SOURCE_IDENTITY:
+    source==='CONSTELLATION'?env.DATASPHERE_CONSTELLATION_SOURCE_IDENTITY:
+    source==='M2M'?env.DATASPHERE_M2M_SOURCE_IDENTITY:
+    env.DATASPHERE_INFRA_SOURCE_IDENTITY;
+  if(!expectedToken)return{authorized:false,expectedIdentity};
+  const a=Buffer.from(h??''),b=Buffer.from('Bearer '+expectedToken);
+  return{authorized:a.length===b.length&&timingSafeEqual(a,b),expectedIdentity};
+};
+const forbiddenPortableConclusion=(payload:Record<string,unknown>)=>{
+  const forbidden=new Set(['trustscore','approved','safe','compliant','authorized']);
+  const walk=(v:unknown):boolean=>{
+    if(Array.isArray(v))return v.some(walk);
+    if(v&&typeof v==='object')return Object.entries(v as Record<string,unknown>).some(([k,x])=>forbidden.has(k.toLowerCase().replace(/[^a-z0-9]/g,''))||walk(x));
+    return false;
+  };
+  return walk(payload);
+};
+const verificationState=z.enum(['OBSERVED','VERIFIED','UNVERIFIED','CONFLICTING','INVALID','UNKNOWN']);
+const envelope=z.object({
+  eventId:z.string().uuid(),
+  eventType:z.string().min(1).max(200),
+  schemaVersion:z.number().int().positive().max(1000),
+  sourceSystem:z.enum(['SPR','CONSTELLATION','M2M','INFRASTRUCTURE']),
+  sourceIdentity:z.string().min(1).max(300),
+  sourceEventId:z.string().min(1).max(300),
+  tenantId:z.string().min(1).max(200),
+  galaxyId:z.string().max(300).nullable().optional(),
+  subjectType:z.string().min(1).max(100),
+  subjectId:z.string().min(1).max(300),
+  correlationId:z.string().min(1).max(300),
+  causationId:z.string().max(300).nullable().optional(),
+  parentEventId:z.string().max(300).nullable().optional(),
+  timestamp:z.string().datetime({offset:true}),
+  observedAt:z.string().datetime({offset:true}),
+  evidenceHash:z.string().regex(/^[0-9a-f]{64}$/),
+  verificationState,
+  cryptography:z.object({
+    algorithm:z.string().min(1).max(100),
+    keyId:z.string().max(300).nullable(),
+    signature:z.string().max(20000).nullable(),
+    verificationTime:z.string().datetime({offset:true}),
+    verificationResult:verificationState,
+    metadata:z.record(z.string(),z.unknown()).default({})
+  }).strict(),
+  retentionClass:z.string().min(1).max(100).default('STANDARD'),
+  limitations:z.array(z.string().max(1000)).max(100).default([]),
+  payload:z.record(z.string(),z.unknown())
+}).strict();
+
+app.get('/health',async()=>({ok:true,service:'datasphere'}));
+app.get('/ready',async(_q,r)=>{
+  try{
+    const rows=await sql<{current_user:string,rolsuper:boolean,rolbypassrls:boolean,sel:boolean,ins:boolean,upd:boolean,del:boolean,trunc:boolean}[]>`
+      SELECT current_user,
+             pr.rolsuper,
+             pr.rolbypassrls,
+             has_table_privilege(current_user,'public.datasphere_events','SELECT') AS sel,
+             has_table_privilege(current_user,'public.datasphere_events','INSERT') AS ins,
+             has_table_privilege(current_user,'public.datasphere_events','UPDATE') AS upd,
+             has_table_privilege(current_user,'public.datasphere_events','DELETE') AS del,
+             has_table_privilege(current_user,'public.datasphere_events','TRUNCATE') AS trunc
+      FROM pg_roles pr WHERE pr.rolname=current_user`;
+    const x=rows[0];
+    if(!x || x.current_user!=='datasphere_runtime' || x.rolsuper || x.rolbypassrls || !x.sel || !x.ins || x.upd || x.del || x.trunc){
+      return r.code(503).send({ready:false,code:'RUNTIME_DB_ROLE_UNSAFE'});
+    }
+    return{ready:true,service:'datasphere',runtimeRole:'restricted'};
+  }catch{
+    return r.code(503).send({ready:false,code:'DATABASE_UNAVAILABLE'});
+  }
+});
+
+app.post('/v1/events',{config:{rateLimit:{max:60,timeWindow:'1 minute'}}},async(q,r)=>{
+  const parsed=envelope.safeParse(q.body);
+  if(!parsed.success)return r.code(400).send({code:'INVALID_EVENT',issues:parsed.error.issues});
+  const e=parsed.data;
+  const requestHash=sha(stable(e));
+  const auth=sourceAuth(e.sourceSystem,q.headers.authorization);
+  if(!auth.authorized)return r.code(401).send({code:'UNAUTHORIZED_SOURCE'});
+  if(e.sourceIdentity!==auth.expectedIdentity)return r.code(401).send({code:'SOURCE_IDENTITY_MISMATCH'});
+  const maxFuture=Date.now()+env.DATASPHERE_MAX_FUTURE_SKEW_SECONDS*1000;
+  if(Date.parse(e.timestamp)>maxFuture||Date.parse(e.observedAt)>maxFuture){
+    return r.code(400).send({code:'FUTURE_TIMESTAMP_REJECTED'});
+  }
+  if(forbiddenPortableConclusion(e.payload))return r.code(400).send({code:'PORTABLE_CONCLUSION_FORBIDDEN'});
+  const payloadHash=sha(stable(e.payload));
+  try{
+    const result=await sql.begin(async tx=>{
+      await tx`SELECT pg_advisory_xact_lock(hashtext(${e.tenantId}))`;
+      const old=await tx<{id:string,event_hash:string,request_hash:string|null}[]>`
+        SELECT id,event_hash,request_hash FROM datasphere_events
+        WHERE tenant_id=${e.tenantId} AND source_system=${e.sourceSystem}
+        AND source_event_id=${e.sourceEventId} LIMIT 1`;
+      if(old[0]){
+        if(old[0].request_hash!==requestHash){
+          return{id:old[0].id,eventHash:old[0].event_hash,conflict:true};
+        }
+        return{id:old[0].id,eventHash:old[0].event_hash,duplicate:true};
+      }
+      const last=await tx<{event_hash:string}[]>`
+        SELECT event_hash FROM datasphere_events WHERE tenant_id=${e.tenantId}
+        ORDER BY received_at DESC,id DESC LIMIT 1`;
+      const previousHash=last[0]?.event_hash??null;
+      const eventHash=sha(stable({...e,payloadHash,previousHash,payload:undefined}));
+      const rows=await tx<{id:string}[]>`
+        INSERT INTO datasphere_events(
+          event_id,tenant_id,source_system,source_identity,source_event_id,event_type,subject_type,subject_id,galaxy_id,
+          occurred_at,observed_at,evidence_hash,payload_hash,request_hash,previous_hash,event_hash,schema_version,verification_state,
+          correlation_id,causation_id,parent_event_id,retention_class,limitations,payload,
+          signing_algorithm,signing_key_id,signature,signature_verified_at,signature_verification_result,crypto_metadata
+        ) VALUES(
+          ${e.eventId},${e.tenantId},${e.sourceSystem},${e.sourceIdentity},${e.sourceEventId},${e.eventType},${e.subjectType},${e.subjectId},${e.galaxyId??null},
+          ${e.timestamp},${e.observedAt},${e.evidenceHash},${payloadHash},${requestHash},${previousHash},${eventHash},${e.schemaVersion},
+          ${e.verificationState},${e.correlationId},${e.causationId??null},${e.parentEventId??null},${e.retentionClass},
+          ${JSON.stringify(e.limitations)},${JSON.stringify(e.payload)},${e.cryptography.algorithm},${e.cryptography.keyId},${e.cryptography.signature},
+          ${e.cryptography.verificationTime},${e.cryptography.verificationResult},${JSON.stringify(e.cryptography.metadata)}
+        ) RETURNING id`;
+      return{id:rows[0]!.id,eventHash,duplicate:false};
+    });
+    if(('conflict' in result) && result.conflict)return r.code(409).send({code:'ALTERED_REPLAY_REJECTED',id:result.id,eventHash:result.eventHash});
+    return r.code(result.duplicate?200:201).send(result);
+  }catch(error){
+    q.log.error({error},'datasphere ingest failed');
+    return r.code(503).send({code:'INGEST_UNAVAILABLE'});
+  }
+});
+
+const ownerAuthorized=(h?:string)=>{
+  const a=Buffer.from(h??''),b=Buffer.from('Bearer '+env.DATASPHERE_OWNER_READ_TOKEN);
+  return a.length===b.length&&timingSafeEqual(a,b);
+};
+
+app.get('/v1/internal/tenants/:tenantId/verify',{config:{rateLimit:{max:10,timeWindow:'1 minute'}}},async(q,r)=>{
+  if(!ownerAuthorized(q.headers.authorization))return r.code(404).send({code:'NOT_FOUND'});
+  const params=z.object({tenantId:z.string().min(1).max(200)}).strict().safeParse(q.params);
+  if(!params.success)return r.code(400).send({code:'INVALID_TENANT'});
+  const rows=await sql<{id:string,event_hash:string,previous_hash:string|null,request_hash:string|null}[]>`
+    SELECT id,event_hash,previous_hash,request_hash FROM datasphere_events
+    WHERE tenant_id=${params.data.tenantId} ORDER BY received_at ASC,id ASC`;
+  let previous:string|null=null;
+  for(const row of rows){
+    if(row.previous_hash!==previous)return r.code(409).send({valid:false,code:'CHAIN_LINK_MISMATCH',id:row.id});
+    if(!row.request_hash)return r.code(409).send({valid:false,code:'MISSING_REQUEST_HASH',id:row.id});
+    previous=row.event_hash;
+  }
+  return{valid:true,count:rows.length,lastEventHash:previous};
+});
+
+app.get('/v1/internal/crypto/algorithms/:algorithm/events',{config:{rateLimit:{max:10,timeWindow:'1 minute'}}},async(q,r)=>{
+  if(!ownerAuthorized(q.headers.authorization))return r.code(404).send({code:'NOT_FOUND'});
+  const params=z.object({algorithm:z.string().min(1).max(100)}).strict().safeParse(q.params);
+  if(!params.success)return r.code(400).send({code:'INVALID_ALGORITHM'});
+  const rows=await sql`
+    SELECT event_id,tenant_id,source_system,source_identity,event_type,subject_type,subject_id,galaxy_id,
+           correlation_id,causation_id,parent_event_id,observed_at,received_at,signing_algorithm,
+           signing_key_id,signature_verification_result,event_hash
+    FROM datasphere_events
+    WHERE signing_algorithm=${params.data.algorithm}
+    ORDER BY received_at ASC,id ASC
+    LIMIT 10000`;
+  return{algorithm:params.data.algorithm,count:rows.length,events:rows};
+});
+
+process.on('SIGTERM',()=>void sql.end({timeout:5}));
+await app.listen({port:env.PORT,host:'0.0.0.0'});
