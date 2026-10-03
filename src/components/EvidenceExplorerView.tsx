@@ -86,14 +86,14 @@ export default function EvidenceExplorerView({ passports = [], selectedPassportI
 
   return (
     <section className="space-y-6" aria-labelledby="evidence-explorer-title">
-      <header className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6">
-        <div className="text-[12px] font-bold uppercase tracking-[.22em] text-[#4ec9b0]">Evidence explorer</div>
-        <h1 id="evidence-explorer-title" className="mt-2 text-3xl font-semibold tracking-tight">Every claim, traced to its evidence</h1>
+      <header className="spr-panel p-6 md:p-8 relative overflow-hidden">
+        <div className="text-[12px] font-bold uppercase tracking-[.22em] text-[#4ec9b0]">Evidence observatory</div>
+        <h1 id="evidence-explorer-title" className="mt-2 text-3xl font-semibold tracking-tight">See exactly what every Launch Ticket can prove</h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--spr-text-muted)]">{ledger?.trace || 'Claim → Evidence → Source → Timestamp → Hash → History. Select a finding to see exactly what backs it.'}</p>
         <div className="mt-5">
-          <label className="sr-only" htmlFor="evidence-explorer-passport">Passport</label>
+          <label className="sr-only" htmlFor="evidence-explorer-passport">Launch Ticket</label>
           <select id="evidence-explorer-passport" value={passportId} onChange={(event) => selectPassport(event.target.value)} className="min-w-[260px] rounded-xl border border-[var(--spr-border)] bg-[#0b101b] px-3 py-2.5 text-sm text-[var(--spr-text)]">
-            {!passports.length && <option value="">No passports loaded</option>}
+            {!passports.length && <option value="">No Launch Tickets loaded</option>}
             {passports.map((passport) => <option key={passport.id} value={passport.id}>{passport.name} · {passport.version}</option>)}
           </select>
         </div>
@@ -107,9 +107,9 @@ export default function EvidenceExplorerView({ passports = [], selectedPassportI
       )}
 
       <div className="grid gap-6 xl:grid-cols-[.9fr_1.4fr]">
-        <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5">
+        <div className="spr-panel p-5">
           <h2 className="text-sm font-semibold text-[var(--spr-text)]">Claims ({filteredFindings.length}{filteredFindings.length !== (ledger?.findings.length ?? 0) ? ` of ${ledger?.findings.length ?? 0}` : ''})</h2>
-          <p className="mt-1 text-xs text-[var(--spr-text-muted)]">Each finding is a claim about this passport. Select one to see its evidence chain.</p>
+          <p className="mt-1 text-xs text-[var(--spr-text-muted)]">Each finding is a claim about this Launch Ticket. Select one to see its evidence chain.</p>
 
           {(ledger?.findings.length ?? 0) > 0 && (
             <div className="mt-4 space-y-2.5">
@@ -123,7 +123,7 @@ export default function EvidenceExplorerView({ passports = [], selectedPassportI
           )}
 
           {loading && <div className="mt-4 space-y-2"><div className="h-14 animate-pulse rounded-xl bg-[var(--spr-surface-alt)]" /><div className="h-14 animate-pulse rounded-xl bg-[var(--spr-surface-alt)]" /></div>}
-          {!loading && ledger && ledger.findings.length === 0 && <p className="mt-4 text-xs text-[var(--spr-text-muted)]">No findings recorded for this passport.</p>}
+          {!loading && ledger && ledger.findings.length === 0 && <p className="mt-4 text-xs text-[var(--spr-text-muted)]">No findings recorded for this Launch Ticket.</p>}
           {!loading && ledger && ledger.findings.length > 0 && filteredFindings.length === 0 && <p className="mt-4 text-xs text-[var(--spr-text-muted)]">No claims match this search or filter.</p>}
           <ul className="mt-4 max-h-[560px] space-y-2 overflow-auto pr-1">
             {filteredFindings.map((finding) => (
@@ -178,8 +178,8 @@ export default function EvidenceExplorerView({ passports = [], selectedPassportI
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--spr-text-muted)]">Confidence</h3>
                 <p className="mt-2 text-xs leading-5 text-[var(--spr-text-muted)]">
                   {latestObservation
-                    ? <>SPR does not assign a per-claim confidence score. The passport's latest observation reports <strong className="text-[var(--spr-text)]">{(latestObservation.completeness_basis_points / 100).toFixed(1)}% evidence completeness</strong> across {latestObservation.open_finding_count} open finding{latestObservation.open_finding_count === 1 ? '' : 's'} and {latestObservation.unknown_dimension_count} unknown dimension{latestObservation.unknown_dimension_count === 1 ? '' : 's'} — treat individual evidence status (PASS/FAIL/UNKNOWN) above as the per-item signal.</>
-                    : 'No observation has been recorded for this passport yet, so no completeness figure is available.'}
+                    ? <>SPR does not assign a per-claim confidence score. The Launch Ticket's latest observation reports <strong className="text-[var(--spr-text)]">{(latestObservation.completeness_basis_points / 100).toFixed(1)}% evidence completeness</strong> across {latestObservation.open_finding_count} open finding{latestObservation.open_finding_count === 1 ? '' : 's'} and {latestObservation.unknown_dimension_count} unknown dimension{latestObservation.unknown_dimension_count === 1 ? '' : 's'} — treat individual evidence status (PASS/FAIL/UNKNOWN) above as the per-item signal.</>
+                    : 'No observation has been recorded for this Launch Ticket yet, so no completeness figure is available.'}
                 </p>
               </div>
 
