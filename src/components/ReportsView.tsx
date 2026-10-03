@@ -299,7 +299,7 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
   const reportText = useMemo(() => {
     if (!report) return '';
     return [
-      `SPR ${report.reportType || reportType} report: ${report.passport?.name || selectedPassport?.name || 'Passport'}`,
+      `SPR ${report.reportType || reportType} report: ${report.passport?.name || selectedPassport?.name || 'Launch Ticket'}`,
       `Generated: ${report.generatedAt || 'unknown'}`,
       `Report hash: ${report.reportHash || 'not returned'}`,
       `Evidence records: ${report.evidence?.length ?? 0}`,
@@ -317,8 +317,8 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
     <section className="space-y-6" aria-labelledby="reports-title">
       <header className="flex flex-col gap-4 spr-panel p-6 md:flex-row md:items-end md:justify-between">
         <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--spr-highlight)]">Reports center</div>
-          <h1 id="reports-title" className="mt-2 text-3xl font-semibold tracking-tight">Evidence-backed reporting</h1>
+          <div className="text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--spr-highlight)]">Reports observatory</div>
+          <h1 id="reports-title" className="mt-2 text-3xl font-semibold tracking-tight">Evidence-backed reports & exports</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--spr-text-muted)]">Exports contain records loaded from this tenant’s existing APIs. No trust score, compliance claim, or finding is inferred in this view.</p>
         </div>
         <button onClick={() => window.print()} className="inline-flex items-center justify-center gap-2 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-4 py-2.5 text-sm font-semibold text-[var(--spr-text)] hover:border-[var(--spr-accent)]/50 hover:text-[var(--spr-text)]"><Printer size={16} /> Print / save PDF</button>
@@ -327,8 +327,8 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[
           ['Clients', clients.length, 'Persisted client records'],
-          ['Passports', passports.length, 'Registered software identity'],
-          ['Evidence', evidenceCount, 'Nested passport evidence'],
+          ['Launch Tickets', passports.length, 'Evidence-backed software records'],
+          ['Evidence', evidenceCount, 'Nested Launch Ticket evidence'],
           ['Findings / vulnerabilities', findingCount + vulnerabilityCount, 'Loaded finding and vulnerability records'],
         ].map(([label, value, detail]) => (
           <div key={String(label)} className="spr-panel p-4">
