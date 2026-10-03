@@ -47,6 +47,16 @@ export function rejectTlsQueryParameters(connectionString: string | undefined): 
   throw new Error(`WORKER_DB_URL_TLS_PARAMS: ${variable} carries ${offending.map((key) => `?${key}=`).join(', ')}; remove it and configure TLS with SQL_SSL / SQL_SSL_CA instead`);
 }
 
+function applyWorkerRuntimePassword(connectionString: string | undefined): string | undefined {
+  const password = process.env.WORKER_RUNTIME_DB_PASSWORD?.trim();
+  if (!connectionString || !password) return connectionString;
+  if (password.length < 16) throw new Error('WORKER_RUNTIME_DB_PASSWORD must contain at least 16 characters.');
+  let url: URL;
+  try { url = new URL(connectionString); } catch { return connectionString; }
+  url.password = password;
+  return url.toString();
+}
+
 export function createWorkerPool(): Pool {
   const mode = (process.env.SQL_SSL ?? '').trim().toLowerCase();
   const production = process.env.NODE_ENV === 'production';
@@ -76,7 +86,8 @@ export function createWorkerPool(): Pool {
   // an operator has provisioned WORKER_DATABASE_URL; otherwise falls back to
   // the owner connection, matching appPool's fallback in src/db/index.ts.
   const rawConnectionString = (process.env.WORKER_DATABASE_URL || process.env.DATABASE_URL)?.trim();
-  const connectionString = normalizeWorkerConnectionString(rawConnectionString, mode);
+  const normalizedConnectionString = normalizeWorkerConnectionString(rawConnectionString, mode);
+  const connectionString = applyWorkerRuntimePassword(normalizedConnectionString);
   const pool = connectionString
     ? new Pool({ connectionString, ...base })
     : new Pool({ host: process.env.SQL_HOST, user: process.env.SQL_USER, password: process.env.SQL_PASSWORD, database: process.env.SQL_DB_NAME, ...base });
