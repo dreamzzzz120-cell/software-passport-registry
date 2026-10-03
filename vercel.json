@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npm run build",
+  "buildCommand": "npm run build && npm run build:vercel-api",
   "outputDirectory": "dist",
   "redirects": [
     {
@@ -30,16 +30,8 @@
       "destination": "https://spr-app-production-production.up.railway.app/api/traffic/event?vc_country=:country"
     },
     {
-      "source": "/api/probe-config",
-      "destination": "/api/probe-config"
-    },
-    {
-      "source": "/api/probe-db",
-      "destination": "/api/probe-db"
-    },
-    {
       "source": "/api/:path*",
-      "destination": "/api/vercel-handler"
+      "destination": "/api/vercel-handler.cjs"
     },
     {
       "source": "/health",
@@ -181,13 +173,7 @@
     "deploymentEnabled": true
   },
   "functions": {
-    "api/vercel-handler.ts": {
-      "maxDuration": 60
-    },
-    "api/probe-config.ts": {
-      "maxDuration": 60
-    },
-    "api/probe-db.ts": {
+    "api/vercel-handler.cjs": {
       "maxDuration": 60
     }
   }
