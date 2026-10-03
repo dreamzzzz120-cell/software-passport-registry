@@ -6,7 +6,7 @@ const INTAKE_BUCKET = process.env.SPR_INTAKE_BUCKET?.trim() || 'spr-intake';
 function intakeStorage() {
   const url = process.env.SUPABASE_URL?.trim();
   const key = process.env.SUPABASE_SECRET_KEY?.trim() || process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-  if (!url || !key) throw new Error('INTAKE_STORAGE_NOT_CONFIGURED');
+  if (!url || !key) return null;
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
@@ -14,6 +14,10 @@ export async function purgeExpiredAnonymousIntake(pool: ReturnType<typeof create
   const expired = await pool.query(`SELECT id FROM intake_sessions WHERE tenant_id IS NULL AND status='OPEN' AND expires_at < CURRENT_TIMESTAMP ORDER BY expires_at ASC LIMIT 100`);
   if (expired.rows.length === 0) return 0;
   const storage = intakeStorage();
+  if (!storage) {
+    console.info('[Retention] intake storage not configured; skipping anonymous intake object purge');
+    return 0;
+  }
   let purged = 0;
   for (const session of expired.rows) {
     const items = await pool.query(`SELECT id, storage_bucket, storage_path FROM intake_items WHERE session_id=$1 AND tenant_id IS NULL AND status IN ('AWAITING_UPLOAD','UPLOADED')`, [session.id]);
