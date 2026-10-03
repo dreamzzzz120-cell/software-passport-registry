@@ -58,12 +58,12 @@ export default function AlertsView({ alerts, onAlertAction, role = 'Viewer' }: A
 
   return (
     <section className="space-y-6" id="msp-alerts-hub">
-      <header className="rounded-[28px] border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6 md:p-8">
+      <header className="spr-panel p-6 md:p-8 relative overflow-hidden">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <div className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[.22em] text-[var(--spr-red)]"><Bell className="h-4 w-4" /> Attention queue</div>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight text-[var(--spr-text)]">Alerts that need a decision</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--spr-text-muted)]">Acknowledge, assign, escalate, or resolve server-backed trust findings. Every action updates the same remediation work item shown elsewhere in SPR.</p>
+            <div className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[.22em] text-[var(--spr-red)]"><Bell className="h-4 w-4" /> Risk lens</div>
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight text-[var(--spr-text)]">Risk & Alerts</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--spr-text-muted)]">Focus the galaxy on persisted findings that need attention. Acknowledge, assign, escalate or resolve server-backed records; every action updates the same remediation work item shown elsewhere in SPR.</p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
             <label className="flex min-w-56 items-center gap-2 rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-3 py-2.5"><Search className="h-4 w-4 text-[var(--spr-text-faint)]" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search alerts" aria-label="Search alerts" className="min-w-0 flex-1 bg-transparent text-xs text-[var(--spr-text)] outline-none placeholder:text-[var(--spr-text-faint)]" /></label>
@@ -78,8 +78,8 @@ export default function AlertsView({ alerts, onAlertAction, role = 'Viewer' }: A
         </div>
       </header>
 
-      <section className="rounded-[28px] border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4 md:p-5">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-sm font-semibold text-[var(--spr-text)]">Trust finding queue</h2><p className="mt-1 text-xs text-[var(--spr-text-muted)]">{filteredAlerts.length} of {alerts.length} alert records shown</p></div><label className="flex items-center gap-2 text-xs text-[var(--spr-text-muted)]">Category<select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} className="rounded-lg border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-2 py-1.5 text-xs text-[var(--spr-text)] outline-none"><option value="all">All categories</option>{categories.map((category) => <option key={category} value={category}>{category}</option>)}</select></label></div>
+      <section className="spr-panel p-4 md:p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-sm font-semibold text-[var(--spr-text)]">Observed risk queue</h2><p className="mt-1 text-xs text-[var(--spr-text-muted)]">{filteredAlerts.length} of {alerts.length} alert records shown</p></div><label className="flex items-center gap-2 text-xs text-[var(--spr-text-muted)]">Category<select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} className="rounded-lg border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-2 py-1.5 text-xs text-[var(--spr-text)] outline-none"><option value="all">All categories</option>{categories.map((category) => <option key={category} value={category}>{category}</option>)}</select></label></div>
         <div className="space-y-2">
           {filteredAlerts.map((alert) => <button key={alert.id} onClick={() => setSelectedAlertId(alert.id)} className={`group flex w-full flex-col gap-4 rounded-md border p-4 text-left transition hover:-translate-y-0.5 hover:border-[var(--spr-highlight)]/40 hover:bg-[var(--spr-surface-alt)] md:flex-row md:items-center ${alert.status === 'Resolved' || alert.status === 'Cancelled' ? 'border-[var(--spr-border)] opacity-60' : 'border-[var(--spr-border)] bg-black/10'}`}>
             <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl border ${alert.status === 'Resolved' ? 'border-[var(--spr-border)] bg-[var(--spr-surface-alt)] text-[var(--spr-text-muted)]' : severityStyles[alert.severity] || severityStyles.Low}`}>{alert.severity === 'Critical' ? <ShieldAlert className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}</span>
