@@ -70,9 +70,27 @@ export function createDistributionGrowthRouter() {
             citations: aeoRows.reduce((sum: number, row: any) => sum + Number(row.observedCitations || 0), 0),
           },
         };
+        const [funnelResult, referralResult, claimResult, experimentResult, contentResult, freeReviewResult] = await Promise.all([
+          client.query(`SELECT event_name AS "eventName", COUNT(*)::int AS events, COUNT(DISTINCT session_id)::int AS sessions FROM traffic_events WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '30 days' GROUP BY event_name`),
+          client.query(`SELECT COUNT(*)::int AS links, COALESCE(SUM(visits),0)::int AS visits, COALESCE(SUM(conversions),0)::int AS conversions FROM growth_referral_links WHERE tenant_id=$1 AND active=true`, [DISTRIBUTION_TENANT_ID]),
+          client.query(`SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE status IN ('lead_captured','claimed','customer'))::int AS engaged, COUNT(*) FILTER (WHERE status='customer')::int AS customers FROM growth_registry_claims WHERE tenant_id=$1`, [DISTRIBUTION_TENANT_ID]),
+          client.query(`SELECT COUNT(*) FILTER (WHERE status='running')::int AS running, COUNT(*)::int AS total FROM growth_experiments WHERE tenant_id=$1`, [DISTRIBUTION_TENANT_ID]),
+          client.query(`SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE status IN ('published','monitoring'))::int AS published, COALESCE(SUM(observed_clicks),0)::int AS clicks, COALESCE(SUM(observed_conversions),0)::int AS conversions FROM growth_content_opportunities WHERE tenant_id=$1`, [DISTRIBUTION_TENANT_ID]),
+          client.query(`SELECT COUNT(*)::int AS reviews, COUNT(*) FILTER (WHERE status='Completed')::int AS completed FROM free_review_submissions WHERE tenant_id=$1`, [DISTRIBUTION_TENANT_ID]),
+        ]);
         const contacts = contactsResult.rows ?? [];
         const pipeline = Object.fromEntries(stages.map((stage) => [stage, contacts.filter((c: any) => c.pipelineStage === stage).length]));
-        return { settings: settingsResult.rows?.[0] ?? null, pipeline, contacts, messages: messagesResult.rows?.[0] ?? { total: 0, sent: 0, failed: 0 }, aeo };
+        const funnelRows = funnelResult.rows ?? [];
+        const funnel = Object.fromEntries(funnelRows.map((row:any) => [String(row.eventName), { events: Number(row.events || 0), sessions: Number(row.sessions || 0) }]));
+        const growth = {
+          funnel,
+          referrals: referralResult.rows?.[0] ?? { links: 0, visits: 0, conversions: 0 },
+          registryClaims: claimResult.rows?.[0] ?? { total: 0, engaged: 0, customers: 0 },
+          experiments: experimentResult.rows?.[0] ?? { running: 0, total: 0 },
+          content: contentResult.rows?.[0] ?? { total: 0, published: 0, clicks: 0, conversions: 0 },
+          freeReviews: freeReviewResult.rows?.[0] ?? { reviews: 0, completed: 0 },
+        };
+        return { settings: settingsResult.rows?.[0] ?? null, pipeline, contacts, messages: messagesResult.rows?.[0] ?? { total: 0, sent: 0, failed: 0 }, aeo, growth };
       });
       return res.json({ ...payload, generatedAt: new Date().toISOString(), evidencePolicy: 'Pipeline stage is operational state, not trust evidence. Qualification and conversion claims remain observational until recorded.' });
     } catch (error) { return next(error); }
