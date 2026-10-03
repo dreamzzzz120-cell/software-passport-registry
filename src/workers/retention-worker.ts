@@ -32,7 +32,7 @@ export async function purgeExpiredAnonymousIntake(pool: ReturnType<typeof create
   return purged;
 }
 
-export async function runRetentionWorkerLoop(): Promise<void> {
+export async function runRetentionWorkerOnce(): Promise<void> {
   const pool = createWorkerPool();
   try {
     await pool.query(`DELETE FROM notification_outbox n USING retention_policies r WHERE n.tenant_id=r.tenant_id AND n.created_at < CURRENT_TIMESTAMP - (r.notification_days || ' days')::interval`);
@@ -47,5 +47,12 @@ export async function runRetentionWorkerLoop(): Promise<void> {
     await pool.query(`DELETE FROM contact_inquiries WHERE created_at < CURRENT_TIMESTAMP - interval '365 days'`);
     await purgeExpiredAnonymousIntake(pool);
   } finally { await pool.end(); }
-  await new Promise(resolve => setTimeout(resolve, Number(process.env.RETENTION_POLL_MS || 86400000)));
+}
+
+export async function runRetentionWorkerLoop(): Promise<void> {
+  const pollMs = Number(process.env.RETENTION_POLL_MS || 86400000);
+  for (;;) {
+    await runRetentionWorkerOnce();
+    await new Promise(resolve => setTimeout(resolve, pollMs));
+  }
 }
