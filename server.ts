@@ -134,7 +134,7 @@ if (mcpBearer) { const mcpTransport = createMcpTransport({ expectedBearer: mcpBe
 app.use('/api', createScanLedgerRouter());
 app.use('/api', createScansRouter());
 app.use('/api/compliance', createComplianceRouter());
-const apiOnlyRuntime = process.env.SPR_API_ONLY === 'true';
+const apiOnlyRuntime = process.env.VERCEL === '1' || process.env.SPR_API_ONLY === 'true';
 const distDir = path.join(process.cwd(), 'dist');
 const publicDir = fs.existsSync(path.join(distDir, 'index.html')) ? distDir : path.resolve(process.cwd());
 const spaShell = path.join(publicDir, 'index.html');
@@ -164,5 +164,5 @@ let server: ReturnType<typeof app.listen> | undefined; let shuttingDown = false;
 async function shutdown(signal: string) { if (shuttingDown) return; shuttingDown = true; console.info(`[SPR] ${signal} received; shutting down gracefully.`); const forceTimer = setTimeout(() => process.exit(1), 15_000); forceTimer.unref(); if (server) await new Promise<void>(resolve => server!.close(() => resolve())); await closeDatabase().catch(error => console.error('[SPR] Database shutdown error:', error)); if (config.sentry.dsn) await Sentry.close(2_000).catch(() => undefined); clearTimeout(forceTimer); process.exit(0); }
 export async function startServer() { validateConfiguration(); const host = process.env.HOST || '0.0.0.0'; server = app.listen(config.port, host, () => console.info(`[SPR] listening on http://${host}:${config.port}`)); rejectConnectTunnels(server); server.requestTimeout = Number.isFinite(requestTimeoutMs) && requestTimeoutMs > 0 ? requestTimeoutMs : 120_000; server.headersTimeout = Number.isFinite(requestHeaderTimeoutMs) && requestHeaderTimeoutMs > 0 ? requestHeaderTimeoutMs : 15_000; server.keepAliveTimeout = Number.isFinite(keepAliveTimeoutMs) && keepAliveTimeoutMs > 0 ? keepAliveTimeoutMs : 65_000; return server; }
 process.once('SIGTERM', () => void shutdown('SIGTERM')); process.once('SIGINT', () => void shutdown('SIGINT')); process.on('unhandledRejection', reason => console.error('[SPR] Unhandled rejection:', reason)); process.on('uncaughtException', error => { console.error('[SPR] Uncaught exception:', error); void shutdown('uncaughtException'); });
-if (process.env.SPR_SKIP_AUTOSTART !== 'true') void startServer().catch(error => { console.error('[SPR] Startup failed:', error); process.exit(1); });
+if (process.env.VERCEL !== '1' && process.env.SPR_SKIP_AUTOSTART !== 'true') void startServer().catch(error => { console.error('[SPR] Startup failed:', error); process.exit(1); });
 export { app };
