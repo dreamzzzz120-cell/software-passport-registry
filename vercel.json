@@ -31,7 +31,7 @@
     },
     {
       "source": "/api/:path*",
-      "destination": "/api/vercel-handler.cjs"
+      "destination": "/api/vercel-handler"
     },
     {
       "source": "/health",
@@ -173,7 +173,7 @@
     "deploymentEnabled": true
   },
   "functions": {
-    "api/vercel-handler.cjs": {
+    "api/vercel-handler.ts": {
       "maxDuration": 60
     }
   }
