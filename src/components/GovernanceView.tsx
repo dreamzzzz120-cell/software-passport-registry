@@ -34,10 +34,10 @@ export default function GovernanceView({ role = 'Viewer' }: { role?: string }) {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-10">
-      <header>
-        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.2em] text-[var(--spr-highlight)]"><ShieldCheck className="h-4 w-4" /> Governance & compliance</div>
-        <h1 className="mt-2 text-2xl font-bold tracking-tight text-[var(--spr-text)]">Governance</h1>
-        <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--spr-text-muted)]">Policies, controls, framework requirements, and risk decisions -- all backed by real records. A control existing does not prove it is effective; a policy existing does not prove it is followed. Evidence and test results remain the authority, not this registry.</p>
+      <header className="spr-panel p-6 md:p-8 relative overflow-hidden">
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.2em] text-[var(--spr-highlight)]"><ShieldCheck className="h-4 w-4" /> Govern lens</div>
+        <h1 className="mt-2 text-2xl font-bold tracking-tight text-[var(--spr-text)]">Governance constellation</h1>
+        <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--spr-text-muted)]">Policies, controls, framework requirements and risk decisions mapped around the evidence they depend on. A control existing does not prove it is effective; a policy existing does not prove it is followed. Evidence and test results remain the authority.</p>
       </header>
 
       <div className="flex flex-wrap gap-1 border-b border-[var(--spr-border)]">
