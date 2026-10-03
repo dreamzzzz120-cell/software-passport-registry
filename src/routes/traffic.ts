@@ -49,6 +49,17 @@ export function createTrafficRouter() {
       if (referralCode && eventName === 'referral_visit') {
         await db.execute(sql`UPDATE growth_referral_links SET visits = visits + 1, updated_at=CURRENT_TIMESTAMP WHERE code=${referralCode} AND active=true`);
       }
+      if (eventName === 'registry_claim_clicked') {
+        try {
+          const url = new URL(path, 'https://www.softwarepassportregistry.com');
+          const owner = (url.searchParams.get('owner') || '').slice(0,100);
+          const repository = (url.searchParams.get('repo') || '').slice(0,100);
+          if (owner && repository) {
+            await db.execute(sql`INSERT INTO growth_registry_claims (id,tenant_id,repository_owner,repository_name,source,status,session_id)
+              VALUES (${randomUUID()}, 'tenant-free-review-system', ${owner}, ${repository}, 'registry', 'clicked', ${sessionId})`);
+          }
+        } catch { /* malformed paths are already rejected by schema length; claim attribution is best-effort */ }
+      }
       return res.status(202).json({ accepted: true });
     } catch (error) {
       // Drizzle's message is only the failed SQL and its params; the real
