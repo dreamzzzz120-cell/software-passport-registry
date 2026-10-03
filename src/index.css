@@ -4,59 +4,14 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: #1e1e1e;
-  color: #d4d4d4;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
+  background: #020617; color: #e6f7ff; font-synthesis: none; text-rendering: optimizeLegibility;
   --spr-mono: "Cascadia Code", "Consolas", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --spr-accent: #0e639c;
-  --spr-accent-hover: #1177bb;
-  --spr-accent-soft: #094771;
-  --spr-highlight: #3794ff;
-  --spr-border: #3c3c3c;
-  --spr-surface: #1e1e1e;
-  --spr-surface-deep: #181818;
-  --spr-surface-alt: #252526;
-  --spr-surface-sunken: #2d2d2d;
-  --spr-surface-hover: #383838;
-  --spr-text: #d4d4d4;
-  --spr-text-muted: #9d9d9d;
-  --spr-text-faint: #6f6f6f;
-  --spr-radius: 3px;
-  --spr-green: #89d185;
-  --spr-amber: #cca700;
-  --spr-red: #f14c4c;
-  --spr-blue: #3794ff;
-  --spr-gray: #858585;
+  --spr-accent:#0891b2; --spr-accent-hover:#06b6d4; --spr-accent-soft:rgba(8,145,178,.16); --spr-highlight:#67e8f9;
+  --spr-border:rgba(125,211,252,.20); --spr-surface:#020617; --spr-surface-deep:#01040d; --spr-surface-alt:rgba(5,15,35,.82);
+  --spr-surface-sunken:rgba(7,18,43,.86); --spr-surface-hover:rgba(14,165,233,.10); --spr-text:#e6f7ff; --spr-text-muted:#9fc3d8; --spr-text-faint:#67879c;
+  --spr-radius:12px; --spr-green:#34d399; --spr-amber:#fbbf24; --spr-red:#fb7185; --spr-blue:#38bdf8; --spr-gray:#64748b;
 }
-
-/* Light theme — same variable set, applied via data-theme="light" on <html>.
-   Kept as a flat, high-contrast palette (not a glow/glass theme) to match
-   the existing enterprise-neutral design direction. */
-:root[data-theme="light"] {
-  color-scheme: light;
-  background: #faf9f8;
-  color: #242424;
-  --spr-accent: #0f6cbd;
-  --spr-accent-hover: #115ea3;
-  --spr-accent-soft: #e0f0ff;
-  --spr-highlight: #0f6cbd;
-  --spr-border: #e1dfdd;
-  --spr-surface: #faf9f8;
-  --spr-surface-deep: #f3f2f1;
-  --spr-surface-alt: #ffffff;
-  --spr-surface-sunken: #f3f2f1;
-  --spr-surface-hover: #eeecea;
-  --spr-text: #242424;
-  --spr-text-muted: #605e5c;
-  --spr-text-faint: #8a8886;
-  --spr-radius: 3px;
-  --spr-green: #107c10;
-  --spr-amber: #986f0b;
-  --spr-red: #d13438;
-  --spr-blue: #0f6cbd;
-  --spr-gray: #605e5c;
-}
+:root[data-theme="light"] { color-scheme:dark; }
 
 body { background: var(--spr-surface); color: var(--spr-text); transition: background .15s ease, color .15s ease; }
 
@@ -68,11 +23,11 @@ button { cursor: pointer; }
 
 .spr-app-bg { position: relative; min-height: 100vh; background: var(--spr-surface); }
 
-/* Flat neutral surface — replaces .spr-glass. No blur, no gradient. */
-.spr-panel { background: var(--spr-surface-alt); border: 1px solid var(--spr-border); border-radius: var(--spr-radius); }
-.spr-panel-alt { background: var(--spr-surface); border: 1px solid var(--spr-border); border-radius: var(--spr-radius); }
+/* Frosted operational surfaces: luminous, but information-first. */
+.spr-panel { background:linear-gradient(145deg,rgba(8,23,48,.82),rgba(4,11,29,.74)); border:1px solid var(--spr-border); border-radius:var(--spr-radius); backdrop-filter:blur(18px); box-shadow:0 18px 50px rgba(0,0,0,.25),inset 0 1px 0 rgba(255,255,255,.025); }
+.spr-panel-alt { background:rgba(3,12,29,.72); border:1px solid var(--spr-border); border-radius:var(--spr-radius); backdrop-filter:blur(14px); }
 
-.spr-nav { background: var(--spr-surface-alt); border-right: 1px solid var(--spr-border); }
+.spr-nav { background: rgba(3,12,29,.86); border-right: 1px solid var(--spr-border); backdrop-filter:blur(18px); }
 .spr-nav-item { transition: background .12s ease, color .12s ease; border-radius: var(--spr-radius); }
 .spr-nav-item:hover { background: var(--spr-surface-hover); }
 .spr-nav-item[data-active="true"] { background: var(--spr-accent-soft); color: #ffffff; box-shadow: inset 2px 0 0 var(--spr-blue); }
