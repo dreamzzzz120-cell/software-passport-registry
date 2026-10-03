@@ -221,7 +221,7 @@ export default function ClientsView({
     const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }));
     const link = document.createElement('a');
     link.href = url;
-    link.download = `software-passport-clients-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `spr-client-galaxies-${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -233,11 +233,11 @@ export default function ClientsView({
         <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-5">
           <div className="max-w-3xl">
             <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[.22em] text-[var(--spr-highlight)]">
-              <Building2 className="h-4 w-4" /> Client operations
+              <Building2 className="h-4 w-4" /> Client galaxies
             </div>
-            <h1 className="text-2xl font-display font-extrabold text-[var(--spr-text)] mt-2">A trust workspace for every client</h1>
+            <h1 className="text-2xl font-display font-extrabold text-[var(--spr-text)] mt-2">A living system map for every client</h1>
             <p className="text-sm text-[var(--spr-text-muted)] mt-2 max-w-2xl">
-              Move from portfolio signal to the exact client, software, evidence, or finding that needs action. Unknown means insufficient evidence—not a pass.
+              Each client is its own operational galaxy: software, evidence, findings and Launch Tickets stay connected to their real records. Unknown means insufficient evidence—not a pass.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -303,8 +303,8 @@ export default function ClientsView({
         <section className="spr-panel overflow-hidden">
           <div className="px-5 py-4 border-b border-[var(--spr-border)] flex items-center justify-between gap-3">
             <div>
-              <h2 className="text-sm font-bold text-[var(--spr-text)]">Client portfolio</h2>
-              <p className="text-[11px] text-[var(--spr-text-muted)] mt-1">Select a client to open its operating context.</p>
+              <h2 className="text-sm font-bold text-[var(--spr-text)]">Client galaxies</h2>
+              <p className="text-[11px] text-[var(--spr-text-muted)] mt-1">Select a client galaxy to inspect its software and evidence context.</p>
             </div>
             <span className="text-[10px] font-mono text-[var(--spr-text-faint)] uppercase tracking-wider">Live workspace</span>
           </div>
@@ -365,7 +365,7 @@ export default function ClientsView({
                   <div className="flex items-center gap-3 min-w-0">
                     <div className={`w-12 h-12 rounded-md flex items-center justify-center font-bold ${selectedClient.avatarColor}`}>{selectedClient.name.charAt(0)}</div>
                     <div className="min-w-0">
-                      <p className="text-[10px] font-mono uppercase tracking-[.18em] text-[var(--spr-highlight)]">Selected client</p>
+                      <p className="text-[10px] font-mono uppercase tracking-[.18em] text-[var(--spr-highlight)]">Selected galaxy</p>
                       <h2 className="text-lg font-bold text-[var(--spr-text)] truncate">{selectedClient.name}</h2>
                       <p className="text-[11px] font-mono text-[var(--spr-text-muted)] truncate">{selectedClient.domain}</p>
                     </div>
@@ -383,7 +383,7 @@ export default function ClientsView({
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-bold text-[var(--spr-text)]">Evidence posture</span>
-                    <span className="text-[10px] font-mono text-[var(--spr-text-muted)]">{selectedPassports.length} linked passports</span>
+                    <span className="text-[10px] font-mono text-[var(--spr-text-muted)]">{selectedPassports.length} linked Launch Tickets</span>
                   </div>
                   <div className="h-2 bg-[var(--spr-surface-sunken)] rounded-full overflow-hidden">
                     <div className="h-full bg-[var(--spr-highlight)] rounded-full" style={{ width: `${typeof selectedClient.complianceProgress === 'number' ? Math.max(0, Math.min(100, selectedClient.complianceProgress)) : 0}%` }} />
@@ -392,14 +392,14 @@ export default function ClientsView({
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
-                  <ActionButton icon={<FileCheck2 className="w-4 h-4" />} label="Open passports" onClick={() => onNavigateTab('passports')} />
+                  <ActionButton icon={<FileCheck2 className="w-4 h-4" />} label="Open Launch Tickets" onClick={() => onNavigateTab('passports')} />
                   <ActionButton icon={<Activity className="w-4 h-4" />} label="Open monitoring" onClick={() => onNavigateTab('monitoring')} />
                   <ActionButton icon={<ShieldAlert className="w-4 h-4" />} label="Review security" onClick={() => onNavigateTab('security')} />
                   <ActionButton icon={<Users className="w-4 h-4" />} label="Client team" onClick={() => onNavigateTab('clients', selectedClient.id)} />
                 </div>
 
                 <div className="border border-[var(--spr-border)] rounded-md overflow-hidden">
-                  <div className="px-3 py-2 bg-[var(--spr-surface-alt)] text-[10px] font-bold uppercase tracking-wider text-[var(--spr-text-muted)]">Client software</div>
+                  <div className="px-3 py-2 bg-[var(--spr-surface-alt)] text-[10px] font-bold uppercase tracking-wider text-[var(--spr-text-muted)]">Orbiting software</div>
                   {selectedPassports.slice(0, 5).map((passport) => (
                     <button key={passport.id} type="button" onClick={() => onNavigateTab('passports', passport.id)} className="w-full flex items-center justify-between gap-3 px-3 py-2.5 border-t border-[var(--spr-border)] hover:bg-[var(--spr-surface-alt)] text-left">
                       <div className="min-w-0"><p className="text-xs font-semibold text-[var(--spr-text)] truncate">{passport.name}</p><p className="text-[10px] font-mono text-[var(--spr-text-faint)] truncate">{passport.version || 'Version unknown'}</p></div>
