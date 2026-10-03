@@ -45,7 +45,11 @@ async function main() {
   const isWorker = process.env.PROCESS_ROLE?.trim() === 'worker';
   const runtimeRole = isWorker ? 'spr_worker_runtime' : 'spr_app_runtime';
   const runtimeUrlName = isWorker ? 'WORKER_DATABASE_URL' : 'APP_DATABASE_URL';
-  const runtimePassword = passwordFromUrl(process.env[runtimeUrlName], runtimeUrlName);
+  const explicitWorkerPassword = isWorker ? process.env.WORKER_RUNTIME_DB_PASSWORD?.trim() : undefined;
+  if (explicitWorkerPassword && explicitWorkerPassword.length < 16) {
+    throw new Error('WORKER_RUNTIME_DB_PASSWORD must contain at least 16 characters.');
+  }
+  const runtimePassword = explicitWorkerPassword ?? passwordFromUrl(process.env[runtimeUrlName], runtimeUrlName);
 
   const pool = new Pool({ connectionString: databaseUrl });
   try {
