@@ -196,7 +196,7 @@ export default function MonitoringView({ role = 'Viewer', passports = [], client
                   </div>
                   <p className="mt-2 text-xs leading-5 text-[var(--spr-text-muted)]">{message.detail}</p>
                   <div className="mt-2 text-xs tabular-nums text-[var(--spr-text-muted)]">
-                    {capacityLimit.activePassports} active Passport{capacityLimit.activePassports === 1 ? '' : 's'}
+                    {capacityLimit.activePassports} active Launch Ticket{capacityLimit.activePassports === 1 ? '' : 's'}
                     {capacityLimit.includedActivePassports > 0 ? ` of ${capacityLimit.includedActivePassports} included` : ''}
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -217,9 +217,9 @@ export default function MonitoringView({ role = 'Viewer', passports = [], client
               </select>
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-[12px] font-bold text-[var(--spr-text-muted)]">Software / Passport *</label>
+              <label className="text-[12px] font-bold text-[var(--spr-text-muted)]">Software / Launch Ticket *</label>
               <select required value={enrollPassportId} onChange={(e) => setEnrollPassportId(e.target.value)} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 text-xs text-[var(--spr-text)]">
-                <option value="">{passports.length ? 'Select passport…' : 'No passports yet'}</option>
+                <option value="">{passports.length ? 'Select Launch Ticket…' : 'No Launch Tickets yet'}</option>
                 {passports.map((p) => <option key={p.id} value={p.id}>{p.name} {p.version ? `· ${p.version}` : ''}</option>)}
               </select>
             </div>
