@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { sql } from 'drizzle-orm';
 import { appendAuditEntry } from '../security/audit-log.ts';
 import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/security.ts';
-import { enqueueRepositoryScan, enqueueSbomScan } from '../scanners/scan-submission.ts';
+import { enqueueRepositoryScan, enqueueSbomScan, enqueueUploadScan } from '../scanners/scan-submission.ts';
 
 const repositorySchema = z.object({
   passportId: z.string().min(1).max(200),
@@ -13,6 +13,22 @@ const repositorySchema = z.object({
   ref: z.string().min(1).max(200).default('main'),
   subdirectory: z.string().max(500).default(''),
 }).strict();
+
+const unifiedSubmitSchema = z.discriminatedUnion('source', [
+  z.object({
+    source: z.literal('github'),
+    owner: z.string().regex(/^[A-Za-z0-9_.-]{1,100}$/),
+    repository: z.string().regex(/^[A-Za-z0-9_.-]{1,100}$/),
+    clientId: z.string().min(1).max(200).optional(),
+    name: z.string().trim().min(1).max(200).optional(),
+  }).strict(),
+  z.object({
+    source: z.literal('upload'),
+    sessionId: z.string().regex(/^intake_[a-f0-9]{32}$/),
+    clientId: z.string().min(1).max(200).optional(),
+    name: z.string().trim().min(1).max(200).optional(),
+  }).strict(),
+]);
 
 const passportSchema = z.object({
   passportId: z.string().min(1).max(200),
@@ -58,6 +74,55 @@ export function createScansRouter() {
   // real 404 handler in server.ts.
   router.use('/scans', requireAuth);
   router.use('/agent-jobs', requireAuth);
+
+  router.post('/scans/submit', requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const parsed = unifiedSubmitSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: 'Invalid scan submission.', details: parsed.error.flatten() });
+      const db = req.db!;
+      const input = parsed.data;
+      let clientName = 'Unassigned';
+      if (input.clientId) {
+        const client = (await db.execute(sql`SELECT id, name FROM clients WHERE id=${input.clientId} AND tenant_id=${req.user!.tenantId} LIMIT 1`)).rows?.[0] as any;
+        if (!client) return res.status(404).json({ error: 'Client not found in this workspace.' });
+        clientName = String(client.name);
+      }
+
+      const passportId = id('passport');
+      const now = new Date().toISOString();
+      let targetName: string;
+      let publisher: string;
+      if (input.source === 'github') {
+        targetName = input.name || `${input.owner}/${input.repository}`;
+        publisher = input.owner;
+      } else {
+        const session = (await db.execute(sql`SELECT id, tenant_id AS "tenantId", status FROM intake_sessions WHERE id=${input.sessionId} LIMIT 1`)).rows?.[0] as any;
+        if (!session || session.tenantId !== req.user!.tenantId || session.status !== 'CLAIMED') return res.status(409).json({ error: 'Intake session must be claimed by this workspace before scanning.' });
+        const first = (await db.execute(sql`SELECT name FROM intake_items WHERE session_id=${input.sessionId} AND tenant_id=${req.user!.tenantId} AND status='QUEUED' ORDER BY created_at ASC LIMIT 1`)).rows?.[0] as any;
+        const count = Number(((await db.execute(sql`SELECT COUNT(*)::int AS count FROM intake_items WHERE session_id=${input.sessionId} AND tenant_id=${req.user!.tenantId} AND status='QUEUED'`)).rows?.[0] as any)?.count || 0);
+        if (!first || count < 1) return res.status(409).json({ error: 'Claimed intake contains no verified files ready to scan.' });
+        targetName = input.name || String(first.name);
+        publisher = 'Uploaded by workspace';
+      }
+
+      await db.execute(sql`INSERT INTO passports (id,tenant_id,client_id,name,version,publisher,category,release_date,file_hash,license_type,ai_summary,sbom,evidence,vulnerabilities,timeline) VALUES (${passportId},${req.user!.tenantId},${input.clientId ?? null},${targetName},'unknown',${publisher},${input.source === 'github' ? 'Repository' : 'Uploaded software'},${now},'unknown','Unknown','','[]','[]','[]','[]')`);
+
+      if (input.source === 'github') {
+        const submitted = await enqueueRepositoryScan(db, {
+          tenantId: req.user!.tenantId, clientId: input.clientId ?? null, passportId,
+          owner: input.owner, repository: input.repository, ref: null, subdirectory: '',
+          triggeredBy: req.user!.uid, targetName, clientName,
+        });
+        await appendAuditEntry(db, { tenantId: req.user!.tenantId, action: 'scan.queued', actor: req.user!.uid, payload: { scanId: submitted.scanId, passportId, clientId: input.clientId ?? null, source: 'github' } });
+        return res.status(202).json({ ...submitted, passportId, scanId: submitted.scanId, status: 'Pending' });
+      }
+
+      const itemCount = Number(((await db.execute(sql`SELECT COUNT(*)::int AS count FROM intake_items WHERE session_id=${input.sessionId} AND tenant_id=${req.user!.tenantId} AND status='QUEUED'`)).rows?.[0] as any)?.count || 0);
+      const submitted = await enqueueUploadScan(db, { tenantId: req.user!.tenantId, clientId: input.clientId ?? null, passportId, sessionId: input.sessionId, itemCount, triggeredBy: req.user!.uid, targetName, clientName });
+      await appendAuditEntry(db, { tenantId: req.user!.tenantId, action: 'scan.queued', actor: req.user!.uid, payload: { scanId: submitted.scanId, passportId, clientId: input.clientId ?? null, source: 'upload', sessionId: input.sessionId } });
+      return res.status(202).json({ ...submitted, passportId, scanId: submitted.scanId, status: 'Pending' });
+    } catch (error) { return next(error); }
+  });
 
   router.get('/scans', async (req: AuthenticatedRequest, res, next) => {
     try {

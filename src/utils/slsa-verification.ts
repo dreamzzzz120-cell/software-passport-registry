@@ -5,7 +5,7 @@
 
 import { verifyEvidenceIntegrity } from './evidence-integrity.ts';
 
-export type SlsaVerificationOutcome = 'VERIFIED' | 'FAILED';
+export type SlsaVerificationOutcome = 'OBSERVED' | 'FAILED';
 
 export interface SlsaVerificationResult {
   outcome: SlsaVerificationOutcome;
@@ -38,8 +38,7 @@ const emptyFields = { predicateType: null, builderId: null, buildType: null, sub
 // deliberately does NOT verify the attestation's Sigstore/DSSE signature
 // chain (certificate chain, Rekor transparency-log inclusion) -- that is a
 // distinct, stronger guarantee this function does not claim to provide.
-// Callers must never present a VERIFIED result here as full cryptographic
-// signature verification, and must never invent a SLSA "level" -- this
+// Callers must treat an OBSERVED result as unsigned and unverified, and must never invent a SLSA "level" -- this
 // function reports only what it actually checked.
 export function verifySlsaProvenance(rawStatement: string, declaredHash: string): SlsaVerificationResult {
   const integrity = verifyEvidenceIntegrity(rawStatement, declaredHash);
@@ -81,5 +80,5 @@ export function verifySlsaProvenance(rawStatement: string, declaredHash: string)
     return { outcome: 'FAILED', failureReason: 'MISSING_SUBJECT_DIGEST', ...fields };
   }
 
-  return { outcome: 'VERIFIED', failureReason: null, ...fields };
+  return { outcome: 'OBSERVED', failureReason: null, ...fields };
 }

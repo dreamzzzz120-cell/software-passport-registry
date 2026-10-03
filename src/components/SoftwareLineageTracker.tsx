@@ -59,16 +59,9 @@ export default function SoftwareLineageTracker({ passports, clients, assets, onU
   // 2. Map downstream assets for the selected passport
   const deployedAssets = useMemo(() => {
     if (!activePassport) return [];
-    return assets.filter(a => {
-      const pName = activePassport.name.toLowerCase();
-      const aPassport = (a.activePassport || '').toLowerCase();
-      return (
-        aPassport === pName ||
-        aPassport.includes(pName) ||
-        pName.includes(aPassport) ||
-        (a.activePassport === `Custom/Generic: ${activePassport.name}`)
-      );
-    });
+    // A name match is not a deployment link: different clients can run the
+    // same product. Show only an explicit passport association.
+    return assets.filter(a => String(a.passportId ?? '') === activePassport.id);
   }, [assets, activePassport]);
 
   // Real SLSA/in-toto provenance evidence for the active passport, if any was
@@ -137,16 +130,7 @@ export default function SoftwareLineageTracker({ passports, clients, assets, onU
       const foundComp = p.sbom.find(s => s.name.toLowerCase().includes(query) || s.purl.toLowerCase().includes(query));
       if (foundComp) {
         // Find hosting assets running this parent software
-        const hosts = assets.filter(a => {
-          const pName = p.name.toLowerCase();
-          const aPassport = (a.activePassport || '').toLowerCase();
-          return (
-            aPassport === pName ||
-            aPassport.includes(pName) ||
-            pName.includes(aPassport) ||
-            (a.activePassport === `Custom/Generic: ${p.name}`)
-          );
-        });
+        const hosts = assets.filter(a => String(a.passportId ?? '') === p.id);
 
         results.push({
           passport: p,
@@ -169,47 +153,17 @@ export default function SoftwareLineageTracker({ passports, clients, assets, onU
     );
   }, [activePassport, dependencySearchQuery]);
 
-  // Dynamic digital map description generator for storytelling
-  const getDigitalMnemonic = (name: string) => {
-    const nameLower = name.toLowerCase();
-    if (nameLower.includes('salesforce')) {
-      return {
-        whatItDoes: 'Manages customer interactions, deals pipelines, and account records.',
-        whoUsesit: '35 employees in sales & service',
-        businessImportance: 'Critical operations node',
-        connections: 'Slack alerts, payment logs, secure backup instances',
-        explanation: 'This software manages customer pipelines and sales communications. Removing or disabling it would freeze lead intake, affecting 40% of daily transactions and disconnecting client interactions.'
-      };
-    }
-    if (nameLower.includes('slack')) {
-      return {
-        whatItDoes: 'Primary communication hub, notifications router, and collaboration channel.',
-        whoUsesit: 'All staff / 120 active employees',
-        businessImportance: 'High (Ops critical)',
-        connections: 'Salesforce CRM, OpenAI API, AWS status logs',
-        explanation: 'This is the communication spine of your company. It routes direct messages and security notifications instantly. It integrates automated bots to manage system outages and triggers real-time responses.'
-      };
-    }
-    if (nameLower.includes('stripe')) {
-      return {
-        whatItDoes: 'Handles invoice charging, checkout systems, and financial gateway flows.',
-        whoUsesit: 'Billing admins & payment triggers',
-        businessImportance: 'Immediate revenue impact',
-        connections: 'Corporate banking, QuickBooks, accounting DB',
-        explanation: 'This handles all credit-card processing and active payment endpoints. Removing it instantly disables checkout, halting incoming streams and breaking invoicing operations.'
-      };
-    }
-    // Default fallback
-    return {
-      whatItDoes: 'Provides central system infrastructure, service integrations, or package dependencies.',
-      whoUsesit: 'Engineering & operations',
-      businessImportance: 'High technical dependency',
-      connections: 'Cloud security pipelines, active virtual instances',
-      explanation: 'This node sits directly in the processing path. If detached, dependent backend routines would fail, triggering cascading connection errors across operational services.'
-    };
+  // No client-specific business impact or integration relationship is inferred
+  // from a product name. Those fields need source-backed observations.
+  const activeMnemonic = {
+    whatItDoes: 'No verified functional description is available in this view.',
+    whoUsesit: 'Not observed',
+    businessImportance: 'Not assessed',
+    connections: 'No verified service relationships recorded here',
+    explanation: deployedAssets.length
+      ? `${deployedAssets.length} asset(s) explicitly reference this passport. Usage, business impact and downstream connections need separate evidence.`
+      : 'No asset explicitly references this passport in the current inventory. Usage and business impact remain unknown.',
   };
-
-  const activeMnemonic = activePassport ? getDigitalMnemonic(activePassport.name) : getDigitalMnemonic('');
 
   return (
     <div className="space-y-6" id="software-lineage-ledger-panel">
@@ -224,7 +178,7 @@ export default function SoftwareLineageTracker({ passports, clients, assets, onU
             <span>Interactive Software Lineage Map</span>
           </h1>
           <p className="text-xs text-[var(--spr-text-muted)] font-sans mt-1">
-            Explore your digital DNA. Trace any software asset from source code commits up to production cloud runtimes.
+            Inspect recorded software components, evidence, and explicitly linked assets.
           </p>
         </div>
 
@@ -376,14 +330,14 @@ export default function SoftwareLineageTracker({ passports, clients, assets, onU
                   </div>
                 )}
 
-                {slsaEvidence && slsaEvidence.status === 'VERIFIED' && (
+                {slsaEvidence && (slsaEvidence.status === 'OBSERVED' || slsaEvidence.status === 'VERIFIED') && (
                   <div className="space-y-3 font-sans">
                     <div className="p-2.5 bg-[var(--spr-accent-soft)] border border-[var(--spr-highlight)] rounded-md text-xs space-y-1">
                       <div className="flex items-center gap-1 text-[11px] font-bold text-[var(--spr-highlight)]">
                         <FileSignature className="w-3.5 h-3.5 shrink-0" />
-                        <span>SLSA Provenance — Verified</span>
+                        <span>SLSA Provenance — Signature Unverified</span>
                       </div>
-                      <p className="text-[11px] font-mono text-[var(--spr-highlight)] leading-tight">Structurally valid, hash-verified in-toto provenance statement</p>
+                      <p className="text-[11px] font-mono text-[var(--spr-highlight)] leading-tight">Format and submitted hash checked; signer and artifact unverified</p>
                     </div>
                     <div className="p-2.5 bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] rounded-md text-xs space-y-1">
                       <p className="text-[11px] font-mono uppercase font-bold tracking-wider text-[var(--spr-text-muted)]">Builder</p>
@@ -393,7 +347,7 @@ export default function SoftwareLineageTracker({ passports, clients, assets, onU
                       <p className="text-[11px] font-mono uppercase font-bold tracking-wider text-[var(--spr-text-muted)]">Predicate type</p>
                       <p className="text-[11px] text-[var(--spr-text-muted)] break-all">{slsaDetails?.predicateType || 'unknown'}</p>
                     </div>
-                    <p className="text-[11px] text-[var(--spr-text-faint)] leading-relaxed">SPR does not independently verify the attestation's Sigstore/DSSE signature chain.</p>
+                    <p className="text-[11px] text-[var(--spr-text-faint)] leading-relaxed">The submitted hash does not prove provenance. SPR has not verified the Sigstore/DSSE signature chain or artifact digest.</p>
                   </div>
                 )}
 
@@ -412,7 +366,7 @@ export default function SoftwareLineageTracker({ passports, clients, assets, onU
                   </div>
                 )}
 
-                {slsaEvidence && slsaEvidence.status !== 'VERIFIED' && slsaEvidence.status !== 'FAILED' && (
+                {slsaEvidence && slsaEvidence.status !== 'VERIFIED' && slsaEvidence.status !== 'OBSERVED' && slsaEvidence.status !== 'FAILED' && (
                   <div className="p-2.5 bg-[var(--spr-surface-sunken)] border border-[var(--spr-amber)] rounded-md text-xs space-y-1">
                     <p className="text-[12px] font-bold text-[var(--spr-amber)]">SLSA Provenance — Detected, Not Yet Verified</p>
                   </div>
@@ -760,7 +714,7 @@ export default function SoftwareLineageTracker({ passports, clients, assets, onU
           <div className="relative w-full max-w-lg bg-[var(--spr-surface-alt)] border border-[var(--spr-border)] rounded-md p-6 z-10 space-y-4">
             <h3 className="text-sm font-bold text-[var(--spr-text)]">Submit SLSA provenance attestation for {activePassport.name}</h3>
             <p className="text-[11px] text-[var(--spr-text-muted)] leading-relaxed">
-              Paste the raw in-toto/SLSA provenance statement JSON (e.g. produced by slsa-github-generator or <code className="bg-[var(--spr-surface-hover)] px-1 rounded font-mono">cosign attest</code>). SPR independently checks it is well-formed and hash-consistent before marking it Verified — it does not fabricate a result.
+              Paste the raw in-toto/SLSA provenance statement JSON (e.g. produced by slsa-github-generator or <code className="bg-[var(--spr-surface-hover)] px-1 rounded font-mono">cosign attest</code>). SPR checks the format and submitted hash. This does not authenticate the builder or artifact; the statement remains signature unverified.
             </p>
             <textarea
               value={slsaStatementText}
@@ -773,7 +727,7 @@ export default function SoftwareLineageTracker({ passports, clients, assets, onU
             <div className="flex justify-end gap-2">
               <button type="button" onClick={() => setSlsaModalOpen(false)} disabled={slsaSubmitting} className="rounded-md border border-[var(--spr-border)] px-4 py-2 text-xs text-[var(--spr-text-muted)] cursor-pointer disabled:opacity-50">Cancel</button>
               <button type="button" onClick={() => void submitSlsaProvenance()} disabled={slsaSubmitting || !slsaStatementText.trim()} className="bg-[var(--spr-accent)] hover:bg-[var(--spr-accent-hover)] disabled:opacity-40 text-white font-bold px-4 py-2 rounded-md text-xs cursor-pointer transition-colors">
-                {slsaSubmitting ? 'Verifying…' : 'Verify & submit'}
+                {slsaSubmitting ? 'Checking…' : 'Check & submit'}
               </button>
             </div>
           </div>

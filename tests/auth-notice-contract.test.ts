@@ -17,8 +17,8 @@ function installFakeSessionStorage() {
   return store;
 }
 
-// Regression test for the bug where a 401 (App.tsx's batch load) or a 403 on
-// /api/user/me (apiClient.ts, unprovisioned Firebase identity) signed the
+// Regression test for the bug where an authoritative /api/user/me 401 or a
+// provisioning 403 (apiClient.ts, unprovisioned identity) signed the
 // user out and navigated to /login with zero explanation: the failure was
 // detected while the authenticated shell was still mounted, so a live
 // window event fired before the fresh LoginView instance existed to hear
@@ -50,13 +50,19 @@ describe('auth notice survives the sign-out + navigate-to-login remount', () => 
 });
 
 describe('the notice is actually wired into both failure paths', () => {
-  it("App.tsx's batch-load 401 branch sets a notice before signing out and navigating away", () => {
+  it("App.tsx only lets the authoritative /api/user/me 401 invalidate the global session", () => {
     const source = read('src/App.tsx');
-    const branchStart = source.indexOf('response.status === 401');
+    const branchStart = source.indexOf('if (me.status === 401)');
     expect(branchStart).toBeGreaterThan(-1);
-    const branch = source.slice(branchStart, branchStart + 400);
+    const branch = source.slice(branchStart, branchStart + 500);
     expect(branch).toContain('setAuthNotice(');
+    expect(branch).toContain('await signOut(auth)');
     expect(branch.indexOf('setAuthNotice(')).toBeLessThan(branch.indexOf('navigate('));
+
+    // Regression guard: an auxiliary scans/findings/passports/clients/
+    // integrations/vendors 401 must never be treated as proof that the
+    // browser's authenticated identity is invalid.
+    expect(source).not.toContain('responses.some((response) => response.status === 401)');
   });
 
   it("apiClient.ts's provisioning-failure 403 branch sets a notice before signing out", () => {

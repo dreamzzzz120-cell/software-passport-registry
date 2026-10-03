@@ -2,15 +2,24 @@ import crypto from 'node:crypto';
 import { Router } from 'express';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
+import rateLimit from 'express-rate-limit';
 import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/security.ts';
 import { appendAuditEntry } from '../security/audit-log.ts';
 import { INTEGRATION_CATALOG } from '../integrations/catalog.ts';
 import { collectProviderEvidence, Provider, ProviderCredentials } from '../integrations/adapters.ts';
 import { decryptCredentials, encryptCredentials } from '../integrations/credential-vault.ts';
 import { discoverProviderCustomers, supportsCustomerDiscovery, type CustomerDiscoveryProvider } from '../integrations/customer-discovery.ts';
+import { collectProviderSoftwareInventory } from '../integrations/provider-software-inventory.ts';
+import { prepareSoftwareLineageObservation } from '../integrations/provider-software-lineage.ts';
 
 const PROVIDERS = new Set(INTEGRATION_CATALOG.map(item => item.provider));
 const credentialSchema = z.record(z.string().min(1).max(128), z.string().max(4096)).refine(v => Object.keys(v).length > 0, 'Credentials cannot be empty');
+const integrationDiscoveryRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false
+});
 const testSchema = z.object({ passportId: z.string().trim().min(1).max(255) }).strict();
 const mappingSchema = z.object({ clientId: z.string().trim().min(1).max(255).nullable() }).strict();
 function id(prefix: string) { return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`; }
@@ -113,7 +122,7 @@ export function createLiveIntegrationsRouter() {
     }
   });
 
-  router.post('/:provider/customers/discover', requireAuth, requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
+  router.post('/:provider/customers/discover', integrationDiscoveryRateLimiter, requireAuth, requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
     try {
       const provider = customerDiscoveryProviderFromParam(routeParam(req.params.provider));
       const db = req.db!;
@@ -126,6 +135,67 @@ export function createLiveIntegrationsRouter() {
       await db.transaction(async tx => { for (const customer of discovered) { await tx.execute(sql`INSERT INTO provider_customers (id, tenant_id, provider, external_customer_id, external_customer_name, raw_metadata, discovered_at, last_synced_at) VALUES (${id('provcust')}, ${tenantId}, ${provider}, ${customer.externalId}, ${customer.name}, ${JSON.stringify(customer.raw)}, ${now}, ${now}) ON CONFLICT (tenant_id, provider, external_customer_id) DO UPDATE SET external_customer_name = EXCLUDED.external_customer_name, raw_metadata = EXCLUDED.raw_metadata, last_synced_at = EXCLUDED.last_synced_at`); } });
       return res.json({ provider, discoveredCount: discovered.length, syncedAt: now });
     } catch (error: any) { const message = error instanceof Error ? error.message : String(error); if (/CREDENTIAL_|PROVIDER_|UNSUPPORTED_|HTTP_/.test(message)) return res.status(502).json({ error: message }); return next(error); }
+  });
+
+  router.post('/:provider/customers/:externalId/software/discover', integrationDiscoveryRateLimiter, requireAuth, requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const provider = customerDiscoveryProviderFromParam(routeParam(req.params.provider));
+      const externalId = routeParam(req.params.externalId);
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const customer = await db.execute(sql`SELECT id, client_id FROM provider_customers WHERE tenant_id = ${tenantId} AND provider = ${provider} AND external_customer_id = ${externalId} LIMIT 1`);
+      const customerRow = (customer as any).rows?.[0];
+      if (!customerRow) return res.status(404).json({ error: 'Discovered customer not found for this tenant.' });
+      const stored = await db.execute(sql`SELECT encrypted_payload FROM integration_credentials WHERE tenant_id = ${tenantId} AND provider = ${provider} LIMIT 1`);
+      const payload = (stored as any).rows?.[0]?.encrypted_payload;
+      if (!payload) return res.status(409).json({ error: 'CREDENTIAL_NOT_CONFIGURED' });
+
+      const runId = id('softdisc');
+      const startedAt = new Date().toISOString();
+      await db.execute(sql`INSERT INTO provider_software_inventory_runs (id, tenant_id, provider, provider_customer_id, status, observations_fetched, limitation_code, limitation, started_at, completed_at) VALUES (${runId}, ${tenantId}, ${provider}, ${customerRow.id}, 'RUNNING', 0, NULL, NULL, ${startedAt}, NULL)`);
+      try {
+        const inventory = await collectProviderSoftwareInventory(provider, decryptCredentials(payload) as ProviderCredentials, externalId);
+        const completedAt = new Date().toISOString();
+        const preparedObservations = inventory.observations.map((observation) => {
+          const prepared = prepareSoftwareLineageObservation(observation);
+          return {
+            id: id('softobs'),
+            clientId: customerRow.client_id ?? null,
+            externalDeviceId: observation.externalDeviceId,
+            externalSoftwareId: observation.externalSoftwareId ?? null,
+            observedName: observation.name,
+            observedPublisher: observation.publisher ?? null,
+            observedVersion: observation.version ?? null,
+            observedProductCode: observation.productCode ?? null,
+            observedPackageId: observation.packageId ?? null,
+            canonicalName: prepared.canonicalName,
+            canonicalPublisher: prepared.publisher ?? null,
+            canonicalVersion: prepared.version ?? null,
+            normalizationDisposition: prepared.disposition,
+            normalizationConfidence: prepared.confidence,
+            sourceObservedAt: prepared.sourceObservedAt,
+            freshnessState: prepared.freshnessState,
+            rawObservation: prepared.sanitizedRaw,
+            observationHash: prepared.observationHash,
+          };
+        });
+        const observationsJson = JSON.stringify(preparedObservations);
+        await db.execute(sql`SELECT finalize_provider_software_inventory_run(${runId}, ${tenantId}, ${inventory.status}, ${inventory.limitationCode}, ${inventory.limitation}, ${completedAt}, ${observationsJson}::jsonb)`);
+        if (inventory.status === 'COMPLETE') {
+          await db.execute(sql`SELECT reconcile_provider_software_inventory_lifecycle(${runId}, ${tenantId})`);
+        }
+        return res.json({ provider, externalCustomerId: externalId, runId, status: inventory.status, complete: inventory.complete, observationsFetched: preparedObservations.length, limitationCode: inventory.limitationCode, limitation: inventory.limitation, collectedAt: completedAt });
+      } catch (collectionError: any) {
+        const completedAt = new Date().toISOString();
+        const safeReason = /^([A-Z0-9_]{3,80})$/.test(collectionError?.message || '') ? collectionError.message : 'SOFTWARE_INVENTORY_COLLECTION_FAILED';
+        await db.execute(sql`UPDATE provider_software_inventory_runs SET status = 'FAILED', limitation_code = ${safeReason}, limitation = 'Software inventory collection failed.', completed_at = ${completedAt} WHERE id = ${runId} AND tenant_id = ${tenantId}`);
+        throw collectionError;
+      }
+    } catch (error: any) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/CREDENTIAL_|PROVIDER_|UNSUPPORTED_|HTTP_/.test(message)) return res.status(502).json({ error: message });
+      return next(error);
+    }
   });
 
   router.get('/:provider/customers', requireAuth, async (req: AuthenticatedRequest, res, next) => {

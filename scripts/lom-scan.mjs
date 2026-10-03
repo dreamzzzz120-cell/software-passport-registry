@@ -42,10 +42,15 @@ for(const file of files){
   if(/\.github\/workflows\//.test(file)&&/permissions:\s*write-all/i.test(content))add('high','workflow','Workflow requests write-all permissions',file,'Use least-privilege permissions.');
 }
 if(existsSync(resolve(root,'package-lock.json'))){
-  const audit=spawnSync('npm',['audit','--json'],{encoding:'utf8',maxBuffer:20*1024*1024});let parsed=null;try{parsed=JSON.parse(audit.stdout||'')}catch{}
+  const audit=spawnSync('npm',['audit','--json','--audit-level=high'],{encoding:'utf8',maxBuffer:20*1024*1024});let parsed=null;try{parsed=JSON.parse(audit.stdout||'')}catch{}
   const v=parsed?.metadata?.vulnerabilities;
-  if(v)for(const s of ['critical','high','moderate','low'])if(Number(v[s]||0)>0)add(s==='critical'?'critical':s==='high'?'high':'medium','dependency','npm audit reports '+v[s]+' '+s+' finding(s)','package-lock.json',JSON.stringify(v));
-  else if(audit.status!==0)add('high','dependency','npm audit failed to produce a usable report',null,audit.stderr||'npm audit failed');
+  if(v){
+    for(const s of ['critical','high','moderate','low']){
+      if(Number(v[s]||0)>0)add(s==='critical'?'critical':s==='high'?'high':'medium','dependency','npm audit reports '+v[s]+' '+s+' finding(s)','package-lock.json',JSON.stringify(v));
+    }
+  }else if(audit.status!==0){
+    add('high','dependency','npm audit failed to produce a usable report',null,audit.stderr||'npm audit failed');
+  }
 }
 try{const p=JSON.parse(readFileSync(resolve(root,'package.json'),'utf8'));const deps={...(p.dependencies||{}),...(p.devDependencies||{}),...(p.optionalDependencies||{})};for(const [name,version] of Object.entries(deps))inventory.push({program:name,declaredVersion:version});if(p.scripts?.preinstall||p.scripts?.install||p.scripts?.postinstall)add('medium','supply-chain','Package lifecycle install scripts are present','package.json','Review every lifecycle script.')}catch(e){add('high','inventory','package.json could not be parsed','package.json',String(e))}
 if(runtimeUrl){for(const p of ['/health','/ready']){const code="fetch(process.argv[1]).then(async r=>{console.log(JSON.stringify({status:r.status,body:(await r.text()).slice(0,2000)}));process.exit(r.ok?0:2)}).catch(e=>{console.error(String(e));process.exit(3)})";const r=spawnSync('node',['-e',code,runtimeUrl+p],{encoding:'utf8',timeout:25000});let x=null;try{x=JSON.parse(r.stdout||'')}catch{}if(!x)add('high','runtime','Runtime probe returned no valid response',runtimeUrl+p,r.stderr||'No response');else if(x.status>=500)add('critical','runtime','Runtime endpoint returned server error',runtimeUrl+p,JSON.stringify(x));else if(p==='/ready'&&x.status!==200)add('high','runtime','Production readiness endpoint is not ready',runtimeUrl+p,JSON.stringify(x));else if(x.status>=400)add('high','runtime','Runtime endpoint returned HTTP '+x.status,runtimeUrl+p,JSON.stringify(x));}}

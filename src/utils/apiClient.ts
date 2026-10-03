@@ -12,6 +12,25 @@ interface FetchOptions extends RequestInit {
   retries?: number;
 }
 
+// Multiple dashboard requests start in parallel. If an access token expires,
+// they can all receive 401 at nearly the same time. Share one Supabase refresh
+// across those requests so a transient expiry does not cascade into a global
+// sign-out from App.tsx.
+let sessionRefreshPromise: Promise<string | null> | null = null;
+
+async function refreshAccessToken(): Promise<string | null> {
+  if (!sessionRefreshPromise) {
+    sessionRefreshPromise = supabase.auth.refreshSession()
+      .then(({ data, error }) => {
+        if (error) return null;
+        return data.session?.access_token ?? null;
+      })
+      .catch(() => null)
+      .finally(() => { sessionRefreshPromise = null; });
+  }
+  return sessionRefreshPromise;
+}
+
 const normalizeClientDirectoryResponse = async (response: Response): Promise<Response> => {
   if (!response.ok) return response;
   let payload: unknown;
@@ -73,7 +92,20 @@ export const apiFetch = async (input: RequestInfo | URL, init?: FetchOptions): P
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const rawResponse = await fetch(resolvedUrl, { ...init, headers, signal: controller.signal });
+      let rawResponse = await fetch(resolvedUrl, { ...init, headers, signal: controller.signal });
+
+      // A first 401 can simply mean the short-lived Supabase access token
+      // expired between getSession() above and server verification. Refresh the
+      // session once and retry the same request before declaring auth expired.
+      // Only a second 401 is allowed to propagate to the app-level sign-out.
+      if (rawResponse.status === 401) {
+        const refreshedToken = await refreshAccessToken();
+        if (refreshedToken) {
+          headers.set('Authorization', `Bearer ${refreshedToken}`);
+          rawResponse = await fetch(resolvedUrl, { ...init, headers, signal: controller.signal });
+        }
+      }
+
       const response = resolvedUrl.pathname === '/api/user/clients' ? await normalizeClientDirectoryResponse(rawResponse) : rawResponse;
       if (response.status === 401) window.dispatchEvent(new CustomEvent('auth-expired'));
       if (response.status === 402) {

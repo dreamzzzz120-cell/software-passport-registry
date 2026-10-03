@@ -18,6 +18,81 @@ function id(p:string){return`${p}_${crypto.randomUUID().replaceAll('-','')}`;}
 // every other worker's, on top of the explicit tenant_id filters below.
 function pool(){return createWorkerPool();}
 
+async function bootstrapRepositoryMonitoring(p:Pool){
+  // Keep the bootstrap fail-closed, but make a zero eligible count diagnosable.
+  // These are counts only: no repository names, customer identifiers, tokens,
+  // or other tenant data are written to logs.
+  const gates=await p.query(`
+    SELECT
+      COUNT(DISTINCT CASE WHEN j.status='Completed' THEN j.id END)::int AS completed_repository_scans,
+      COUNT(DISTINCT CASE WHEN j.status='Completed' AND s.client_id IS NOT NULL THEN j.id END)::int AS completed_client_repository_scans,
+      COUNT(DISTINCT CASE WHEN j.status='Completed' AND s.client_id IS NOT NULL AND EXISTS (
+        SELECT 1 FROM integration_credentials ic
+        WHERE ic.tenant_id=j.tenant_id AND ic.provider='github'
+      ) THEN j.id END)::int AS completed_client_scans_with_github_credential
+    FROM repository_scan_sources rss
+    JOIN agent_jobs j ON j.id=rss.job_id AND j.tenant_id=rss.tenant_id
+    JOIN scans s ON s.id=j.scan_id AND s.tenant_id=j.tenant_id
+  `);
+  const gateCounts=gates.rows[0]??{};
+  console.info('[TrustMonitoring] bootstrap gates:',JSON.stringify({
+    completedRepositoryScans:Number(gateCounts.completed_repository_scans||0),
+    completedClientRepositoryScans:Number(gateCounts.completed_client_repository_scans||0),
+    completedClientScansWithGithubCredential:Number(gateCounts.completed_client_scans_with_github_credential||0),
+  }));
+  // Repository scans already prove the tenant/passport/repository relationship.
+  // Backfill continuous monitoring for completed customer scans when that tenant
+  // has a real GitHub integration credential. This makes monitoring automatic
+  // without inventing credentials or enabling it for anonymous/free-review data.
+  const eligible=await p.query(`
+    SELECT COUNT(DISTINCT (j.tenant_id || chr(31) || j.passport_id || chr(31) || rss.repository_owner || '/' || rss.repository_name))::int AS count
+    FROM repository_scan_sources rss
+    JOIN agent_jobs j ON j.id=rss.job_id AND j.tenant_id=rss.tenant_id
+    JOIN scans s ON s.id=j.scan_id AND s.tenant_id=j.tenant_id
+    WHERE j.status='Completed'
+      AND s.client_id IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM integration_credentials ic
+        WHERE ic.tenant_id=j.tenant_id AND ic.provider='github'
+      )
+  `);
+  const result=await p.query(`
+    INSERT INTO monitoring_configurations (
+      id,tenant_id,client_id,asset_id,passport_id,collector_id,subject_type,
+      subject_identifier,enabled,schedule_seconds,last_attempted_at,last_successful_at,
+      next_scheduled_at,credential_reference_id,failure_count,consecutive_failure_count,
+      last_status,freshness_policy_id,confidence_policy_id,created_by,updated_by,created_at,updated_at
+    )
+    SELECT
+      'monitor-auto-' || md5(j.tenant_id || chr(31) || j.passport_id || chr(31) || rss.repository_owner || '/' || rss.repository_name),
+      j.tenant_id,s.client_id,j.passport_id,j.passport_id,'repository','github_repository',
+      rss.repository_owner || '/' || rss.repository_name,1,21600,NULL,NULL,
+      CURRENT_TIMESTAMP::text,NULL,0,0,'unknown',
+      'repository.v1','observed.v1','repository-worker','repository-worker',
+      CURRENT_TIMESTAMP::text,CURRENT_TIMESTAMP::text
+    FROM repository_scan_sources rss
+    JOIN agent_jobs j ON j.id=rss.job_id AND j.tenant_id=rss.tenant_id
+    JOIN scans s ON s.id=j.scan_id AND s.tenant_id=j.tenant_id
+    WHERE j.status='Completed'
+      AND s.client_id IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM integration_credentials ic
+        WHERE ic.tenant_id=j.tenant_id AND ic.provider='github'
+      )
+    ON CONFLICT (tenant_id,asset_id,collector_id,subject_identifier) DO NOTHING
+  `);
+  return {eligible:Number(eligible.rows[0]?.count||0),created:result.rowCount ?? 0};
+}
+
+async function tenantGithubCredentials(p:Pool,tenantId:string){
+  const row=await p.query(`SELECT encrypted_payload FROM integration_credentials WHERE tenant_id=$1 AND provider='github' LIMIT 1`,[tenantId]);
+  if(!row.rows[0]?.encrypted_payload)return null;
+  try{
+    const credential=decryptCredentials(row.rows[0].encrypted_payload) as Record<string,string>;
+    return credential.accessToken||credential.token ? credential : null;
+  }catch{return null;}
+}
+
 async function scheduleDue(p:Pool){
   const now=new Date().toISOString();
   const due=await p.query(`SELECT id,tenant_id,client_id,asset_id,passport_id,collector_id,subject_type,subject_identifier,credential_reference_id,schedule_seconds FROM monitoring_configurations WHERE enabled=1 AND next_scheduled_at::timestamptz <= CURRENT_TIMESTAMP ORDER BY next_scheduled_at::timestamptz FOR UPDATE SKIP LOCKED LIMIT 50`);
@@ -28,22 +103,17 @@ async function scheduleDue(p:Pool){
     // than creating a retry storm. Never fall back to the worker's global
     // GITHUB_TOKEN: that would cross tenant boundaries.
     if(['repository','dependency','release'].includes(cfg.collector_id)){
-      if(!cfg.credential_reference_id){
-        await p.query(`UPDATE monitoring_configurations SET enabled=0,updated_at=$2,last_status='disabled_missing_credential' WHERE id=$1 AND tenant_id=$3`,[cfg.id,now,cfg.tenant_id]);
-        console.warn(`[TrustMonitoring] disabled monitoring configuration ${cfg.id}: missing credential reference`);
-        continue;
-      }
       try{
-        const credentialRow=await p.query(`SELECT encrypted_payload FROM credential_references WHERE id=$1 AND tenant_id=$2 AND state='active' LIMIT 1`,[cfg.credential_reference_id,cfg.tenant_id]);
-        if(!credentialRow.rows[0]){
-          await p.query(`UPDATE monitoring_configurations SET enabled=0,updated_at=$2,last_status='disabled_missing_credential' WHERE id=$1 AND tenant_id=$3`,[cfg.id,now,cfg.tenant_id]);
-          console.warn(`[TrustMonitoring] disabled monitoring configuration ${cfg.id}: credential reference unavailable`);
-          continue;
+        let credential:Record<string,string>|null=null;
+        if(cfg.credential_reference_id){
+          const credentialRow=await p.query(`SELECT encrypted_payload FROM credential_references WHERE id=$1 AND tenant_id=$2 AND state='active' LIMIT 1`,[cfg.credential_reference_id,cfg.tenant_id]);
+          if(credentialRow.rows[0])credential=decryptCredentials(credentialRow.rows[0].encrypted_payload) as Record<string,string>;
+        }else{
+          credential=await tenantGithubCredentials(p,cfg.tenant_id);
         }
-        const credential=decryptCredentials(credentialRow.rows[0].encrypted_payload) as Record<string,string>;
-        if(!credential.accessToken && !credential.token){
-          await p.query(`UPDATE monitoring_configurations SET enabled=0,updated_at=$2,last_status='disabled_invalid_credential' WHERE id=$1 AND tenant_id=$3`,[cfg.id,now,cfg.tenant_id]);
-          console.warn(`[TrustMonitoring] disabled monitoring configuration ${cfg.id}: credential has no access token`);
+        if(!credential?.accessToken && !credential?.token){
+          await p.query(`UPDATE monitoring_configurations SET enabled=0,updated_at=$2,last_status='disabled_missing_credential' WHERE id=$1 AND tenant_id=$3`,[cfg.id,now,cfg.tenant_id]);
+          console.warn(`[TrustMonitoring] disabled monitoring configuration ${cfg.id}: no tenant GitHub credential available`);
           continue;
         }
       }catch(error:any){
@@ -62,7 +132,7 @@ async function scheduleDue(p:Pool){
 }
 
 async function claim(p:Pool){const c=await p.connect();try{await c.query('BEGIN');const r=await c.query(`WITH candidate AS (SELECT id FROM collector_jobs WHERE state IN ('queued','failed') AND next_attempt_at::timestamptz <= CURRENT_TIMESTAMP AND attempt_number < maximum_attempts ORDER BY created_at::timestamptz FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE collector_jobs j SET state='running',lease_owner=$1,lease_expires_at=(CURRENT_TIMESTAMP+INTERVAL '5 minutes')::text,heartbeat_at=CURRENT_TIMESTAMP::text,started_at=COALESCE(started_at,CURRENT_TIMESTAMP::text),attempt_number=attempt_number+1 FROM candidate WHERE j.id=candidate.id RETURNING j.*`,[process.pid.toString()]);await c.query('COMMIT');return r.rows[0]||null;}catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}}
-async function credentials(p:Pool,job:any){if(!job.monitoring_configuration_id)return{};const r=await p.query(`SELECT credential_reference_id FROM monitoring_configurations WHERE id=$1 AND tenant_id=$2 LIMIT 1`,[job.monitoring_configuration_id,job.tenant_id]);const ref=r.rows[0]?.credential_reference_id;if(!ref)return{};const x=await p.query(`SELECT encrypted_payload FROM credential_references WHERE id=$1 AND tenant_id=$2 AND state='active' LIMIT 1`,[ref,job.tenant_id]);if(!x.rows[0])throw new Error('CREDENTIAL_REFERENCE_NOT_FOUND');await p.query(`UPDATE credential_references SET last_used_at=CURRENT_TIMESTAMP::text WHERE id=$1 AND tenant_id=$2`,[ref,job.tenant_id]);return decryptCredentials(x.rows[0].encrypted_payload) as Record<string,string>;}
+async function credentials(p:Pool,job:any){if(!job.monitoring_configuration_id)return{};const r=await p.query(`SELECT credential_reference_id FROM monitoring_configurations WHERE id=$1 AND tenant_id=$2 LIMIT 1`,[job.monitoring_configuration_id,job.tenant_id]);const ref=r.rows[0]?.credential_reference_id;if(!ref){if(['repository','dependency','release'].includes(job.collector_id))return(await tenantGithubCredentials(p,job.tenant_id))??{};return{};}const x=await p.query(`SELECT encrypted_payload FROM credential_references WHERE id=$1 AND tenant_id=$2 AND state='active' LIMIT 1`,[ref,job.tenant_id]);if(!x.rows[0])throw new Error('CREDENTIAL_REFERENCE_NOT_FOUND');await p.query(`UPDATE credential_references SET last_used_at=CURRENT_TIMESTAMP::text WHERE id=$1 AND tenant_id=$2`,[ref,job.tenant_id]);return decryptCredentials(x.rows[0].encrypted_payload) as Record<string,string>;}
 async function networkObservation(job:any):Promise<ControlObservation>{const url=job.subject_identifier;try{const r=await safeNetworkFetch(url,{timeoutMs:15000,maxBytes:1048576,maxRedirects:3});return{provider:'network',controlId:job.collector_id,title:`${job.collector_id} endpoint observation`,severity:'medium',subject:url,sourceUrl:r.finalUrl,observedAt:new Date().toISOString(),verificationMethod:`SPR ${job.collector_id} collector`,value:{status:r.response.status,contentType:r.response.headers.get('content-type')||null},status:r.response.ok?'PASS':'FAIL'};}catch(e:any){return{provider:'network',controlId:job.collector_id,title:`${job.collector_id} endpoint observation`,severity:'medium',subject:url,sourceUrl:url,observedAt:new Date().toISOString(),verificationMethod:`SPR ${job.collector_id} collector`,value:{error:e?.message||'NETWORK_COLLECTION_FAILED'},status:'UNKNOWN',limitation:'Network collection failed; SPR does not infer a pass or failure.'};}}
 async function execute(p:Pool,job:any){const c=await credentials(p,job);if(PROVIDERS.has(job.collector_id))return job.collector_id==='github'?collectGitHubDeepEvidence(c):collectDeepProviderEvidence(job.collector_id,c);if(['tls','domain_dns','uptime'].includes(job.collector_id))return[await networkObservation(job)];if(job.collector_id==='repository'||job.collector_id==='dependency'||job.collector_id==='release'){const token=c.accessToken||c.token;if(!token)throw new Error('CREDENTIAL_MISSING_ACCESS_TOKEN');const repo=job.subject_identifier;const api=`https://api.github.com/repos/${repo}`;const h={accept:'application/vnd.github+json',authorization:`Bearer ${token}`,'x-github-api-version':'2026-03-10'};const r=await fetch(api,{headers:h});if(!r.ok)throw new Error(`GITHUB_HTTP_${r.status}`);const body=await r.json();return[{provider:'github',controlId:job.collector_id,title:`GitHub ${job.collector_id} observation`,severity:'medium',subject:repo,sourceUrl:api,observedAt:new Date().toISOString(),verificationMethod:`GitHub REST ${job.collector_id} collector`,value:body,status:'PASS'} as ControlObservation];}throw new Error('COLLECTOR_UNSUPPORTED');}
 // A collector job queued by POST /api/remediation-tasks/:id/verify carries no
@@ -106,4 +176,4 @@ async function fail(p:Pool,job:any,error:any){const now=new Date().toISOString()
 // nothing was due, so a production log can prove the loop ran (or show it
 // idle) rather than being silent in both cases. Counts only.
 const SUMMARY_MS=5*60*1000;
-export async function runTrustMonitoringWorkerLoop(){const p=pool();let lastSchedule=0,lastSummary=Date.now();const tally={scheduled:0,claimed:0,completed:0,failed:0};console.info('[TrustMonitoring] loop started');for(;;){try{if(Date.now()-lastSchedule>=30000){const due=await scheduleDue(p);tally.scheduled+=due??0;if(due)console.info(`[TrustMonitoring] scheduled ${due} due configuration(s)`);lastSchedule=Date.now();}}catch(e){console.error('TRUST_SCHEDULER_ERROR',e);}if(Date.now()-lastSummary>=SUMMARY_MS){console.info('[TrustMonitoring] last 5m:',JSON.stringify(tally));tally.scheduled=tally.claimed=tally.completed=tally.failed=0;lastSummary=Date.now();}const job=await claim(p);if(!job){await new Promise(r=>setTimeout(r,1500));continue;}tally.claimed++;try{const observations=await execute(p,job);await complete(p,job,observations);tally.completed++;console.info(`[TrustMonitoring] job ${job.id} completed collector=${job.collector_id} observations=${observations.length}`);}catch(e){tally.failed++;console.error(`[TrustMonitoring] job ${job.id} failed collector=${job.collector_id}:`,e instanceof Error?e.message:String(e));await fail(p,job,e);}}}
+export async function runTrustMonitoringWorkerLoop(){const p=pool();let lastSchedule=0,lastBootstrap=0,lastSummary=Date.now();const tally={scheduled:0,claimed:0,completed:0,failed:0};console.info('[TrustMonitoring] loop started');for(;;){try{if(Date.now()-lastBootstrap>=300000){const bootstrap=await bootstrapRepositoryMonitoring(p);console.info('[TrustMonitoring] bootstrap:',JSON.stringify(bootstrap));lastBootstrap=Date.now();}if(Date.now()-lastSchedule>=30000){const due=await scheduleDue(p);tally.scheduled+=due??0;if(due)console.info(`[TrustMonitoring] scheduled ${due} due configuration(s)`);lastSchedule=Date.now();}}catch(e){console.error('TRUST_SCHEDULER_ERROR',e);}if(Date.now()-lastSummary>=SUMMARY_MS){console.info('[TrustMonitoring] last 5m:',JSON.stringify(tally));tally.scheduled=tally.claimed=tally.completed=tally.failed=0;lastSummary=Date.now();}const job=await claim(p);if(!job){await new Promise(r=>setTimeout(r,1500));continue;}tally.claimed++;try{const observations=await execute(p,job);await complete(p,job,observations);tally.completed++;console.info(`[TrustMonitoring] job ${job.id} completed collector=${job.collector_id} observations=${observations.length}`);}catch(e){tally.failed++;console.error(`[TrustMonitoring] job ${job.id} failed collector=${job.collector_id}:`,e instanceof Error?e.message:String(e));await fail(p,job,e);}}}
