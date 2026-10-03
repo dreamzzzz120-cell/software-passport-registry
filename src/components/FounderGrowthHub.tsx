@@ -54,6 +54,39 @@ export default function FounderGrowthHub() {
       <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><div className="text-[11px] uppercase tracking-[.18em] text-[var(--spr-text-muted)]">Observed response-stage rate</div><div className="mt-2 text-2xl font-bold">{conversion === null ? 'Not verified' : `${conversion}%`}</div></div>
       <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><div className="text-[11px] uppercase tracking-[.18em] text-[var(--spr-text-muted)]">Campaign</div><div className="mt-2 flex items-center gap-2"><button onClick={() => void saveCampaign({ outreachEnabled: !settings.outreachEnabled })} disabled={busy} className="spr-btn spr-btn-secondary inline-flex items-center gap-2">{settings.outreachEnabled ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}{settings.outreachEnabled ? 'Pause outreach' : 'Enable outreach'}</button></div></div>
     </div>
+    <div className="mt-6 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2"><div><div className="text-[11px] uppercase tracking-[.18em] text-[var(--spr-text-muted)]">Acquisition funnel</div><div className="mt-1 text-sm text-[var(--spr-text-muted)]">Observed growth events only. These metrics never affect software trust or verification.</div></div></div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
+        {[
+          ['Free reviews', data?.growth?.freeReviews?.reviews],
+          ['Completed reviews', data?.growth?.freeReviews?.completed],
+          ['Leads captured', data?.growth?.funnel?.lead_captured?.sessions],
+          ['Referral visits', data?.growth?.referrals?.visits],
+          ['Registry claims', data?.growth?.registryClaims?.total],
+          ['Customers', data?.pipeline?.customer],
+        ].map(([label,value]) => <div key={String(label)} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3"><div className="text-[10px] uppercase tracking-[.16em] text-[var(--spr-text-muted)]">{label}</div><div className="mt-1 text-xl font-bold text-[var(--spr-text)]">{value ?? '—'}</div></div>)}
+      </div>
+    </div>
+    <div className="mt-6 grid gap-4 lg:grid-cols-2">
+      <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4">
+        <div className="text-[11px] uppercase tracking-[.18em] text-[var(--spr-text-muted)]">Answer Engine Optimization</div>
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div><div className="text-xs text-[var(--spr-text-muted)]">Questions tracked</div><div className="text-xl font-bold">{data?.aeo?.totals?.tracked ?? '—'}</div></div>
+          <div><div className="text-xs text-[var(--spr-text-muted)]">Published</div><div className="text-xl font-bold">{data?.aeo?.totals?.published ?? '—'}</div></div>
+          <div><div className="text-xs text-[var(--spr-text-muted)]">AI mentions</div><div className="text-xl font-bold">{data?.aeo?.totals?.mentions ?? '—'}</div></div>
+          <div><div className="text-xs text-[var(--spr-text-muted)]">AI citations</div><div className="text-xl font-bold">{data?.aeo?.totals?.citations ?? '—'}</div></div>
+        </div>
+      </div>
+      <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4">
+        <div className="text-[11px] uppercase tracking-[.18em] text-[var(--spr-text-muted)]">Growth loops</div>
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div><div className="text-xs text-[var(--spr-text-muted)]">Referral links</div><div className="text-xl font-bold">{data?.growth?.referrals?.links ?? '—'}</div></div>
+          <div><div className="text-xs text-[var(--spr-text-muted)]">Registry claims</div><div className="text-xl font-bold">{data?.growth?.registryClaims?.engaged ?? '—'}</div></div>
+          <div><div className="text-xs text-[var(--spr-text-muted)]">Experiments running</div><div className="text-xl font-bold">{data?.growth?.experiments?.running ?? '—'}</div></div>
+          <div><div className="text-xs text-[var(--spr-text-muted)]">Content published</div><div className="text-xl font-bold">{data?.growth?.content?.published ?? '—'}</div></div>
+        </div>
+      </div>
+    </div>
     <div className="mt-6 overflow-x-auto rounded-md border border-[var(--spr-border)]">
       <table className="w-full text-left text-sm"><thead><tr className="border-b border-[var(--spr-border)] text-[11px] uppercase tracking-[.16em] text-[var(--spr-text-muted)]"><th className="p-3">Company</th><th className="p-3">Email</th><th className="p-3">Stage</th><th className="p-3">Observed</th></tr></thead><tbody>
         {contacts.slice(0,50).map((contact:any) => <tr key={contact.id} className="border-b border-[var(--spr-border)] last:border-0"><td className="p-3 text-[var(--spr-text)]">{contact.company || 'Unknown'}</td><td className="p-3 font-mono text-xs text-[var(--spr-text-muted)]">{contact.email}</td><td className="p-3"><select value={contact.pipelineStage} onChange={(event) => void setStage(String(contact.id), event.target.value as Stage)} disabled={busy} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] px-2 py-1 text-[var(--spr-text)]">{STAGES.map(stage => <option key={stage} value={stage}>{LABELS[stage]}</option>)}</select></td><td className="p-3 text-xs text-[var(--spr-text-muted)]">{contact.updatedAt ? new Date(contact.updatedAt).toLocaleString() : 'Not verified'}</td></tr>)}
