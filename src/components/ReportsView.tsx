@@ -342,7 +342,7 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
       <div className="grid gap-6 xl:grid-cols-[1.1fr_.9fr]">
         <div className="spr-panel p-6">
           <div className="flex items-center gap-2"><ShieldCheck size={18} className="text-[var(--spr-highlight)]" /><h2 className="text-lg font-semibold">Tenant registry exports</h2></div>
-          <p className="mt-2 text-sm text-[var(--spr-text-muted)]">CSV includes the loaded client, passport, evidence, vulnerability, finding, scan, and alert records.</p>
+          <p className="mt-2 text-sm text-[var(--spr-text-muted)]">CSV includes the loaded client, Launch Ticket, evidence, vulnerability, finding, scan, and alert records.</p>
           {clients.length > 0 && (
             <div className="mt-4 flex items-center gap-2">
               <Users size={14} className="text-[var(--spr-text-muted)]" />
@@ -362,7 +362,7 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
             <p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">Loads <code>/api/trust-loop/reports/:passportId</code>, which returns persisted findings, evidence, observations, remediation, verification, limitations, and a report hash.</p>
             <div className="mt-4 flex flex-col gap-3 sm:flex-row">
               <select value={selectedPassportId} onChange={(event) => setSelectedPassportId(event.target.value)} className="min-w-0 flex-1 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2.5 text-sm text-[var(--spr-text)]">
-                {!passports.length && <option value="">No passports loaded</option>}
+                {!passports.length && <option value="">No Launch Tickets loaded</option>}
                 {passports.map((passport) => <option key={passport.id} value={passport.id}>{passport.name} · {passport.version}</option>)}
               </select>
               <select value={reportType} onChange={(event) => setReportType(event.target.value)} className="min-w-0 flex-1 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2.5 text-sm text-[var(--spr-text)]">
@@ -386,7 +386,7 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
           <div className="mt-6 border-t border-[var(--spr-border)] pt-5">
             <div className="flex items-center gap-2"><History size={16} className="text-[var(--spr-text-muted)]" /><h3 className="text-sm font-semibold text-[var(--spr-text)]">Changes since last report</h3></div>
             {changesLoading && <p className="mt-3 text-xs text-[var(--spr-text-muted)]">Checking for changes…</p>}
-            {!changesLoading && changes?.insufficientData && <p className="mt-3 text-xs text-[var(--spr-text-muted)]">{changes.current ? 'Only one report snapshot exists for this passport and type — generate another later to compare.' : 'No report snapshots exist yet for this passport and type.'}</p>}
+            {!changesLoading && changes?.insufficientData && <p className="mt-3 text-xs text-[var(--spr-text-muted)]">{changes.current ? 'Only one report snapshot exists for this Launch Ticket and type — generate another later to compare.' : 'No report snapshots exist yet for this Launch Ticket and type.'}</p>}
             {!changesLoading && changes && !changes.insufficientData && changes.changes.length === 0 && (
               <p className="mt-3 flex items-center gap-1.5 text-xs text-[var(--spr-green)]"><ShieldCheck size={14} /> No change since the last report ({changes.previous && new Date(changes.previous.generatedAt).toLocaleString()}).</p>
             )}
@@ -404,9 +404,9 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
 
           <div className="mt-6 border-t border-[var(--spr-border)] pt-5">
             <div className="flex items-center gap-2"><History size={16} className="text-[var(--spr-text-muted)]" /><h3 className="text-sm font-semibold text-[var(--spr-text)]">Report history</h3></div>
-            <p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">Every generated report is hashed and versioned. Load a passport report above to populate history for the selected type.</p>
+            <p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">Every generated report is hashed and versioned. Load a Launch Ticket report above to populate history for the selected type.</p>
             {historyLoading && <p className="mt-3 text-xs text-[var(--spr-text-muted)]">Loading history…</p>}
-            {!historyLoading && history.length === 0 && <p className="mt-3 text-xs text-[var(--spr-text-muted)]">No prior snapshots for this passport and report type yet.</p>}
+            {!historyLoading && history.length === 0 && <p className="mt-3 text-xs text-[var(--spr-text-muted)]">No prior snapshots for this Launch Ticket and report type yet.</p>}
             {history.length > 0 && (
               <ul className="mt-3 max-h-48 space-y-2 overflow-auto pr-1">
                 {history.map((snapshot) => (
@@ -427,7 +427,7 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
 
         <div className="spr-panel p-6">
           <h2 className="text-lg font-semibold">Download loaded report</h2>
-          <p className="mt-2 text-sm text-[var(--spr-text-muted)]">JSON is the exact server response. PDF is generated client-side from the loaded passport's SBOM, evidence, and timeline.</p>
+          <p className="mt-2 text-sm text-[var(--spr-text-muted)]">JSON is the exact server response. PDF is generated client-side from the loaded Launch Ticket's SBOM, evidence, and timeline.</p>
           <div className="mt-5 flex flex-wrap gap-3">
             <button onClick={exportReportJson} disabled={!report} className="inline-flex items-center gap-2 rounded-md border border-[var(--spr-accent)]/50 bg-[var(--spr-accent-soft)] px-4 py-2.5 text-sm font-semibold text-[var(--spr-highlight)] disabled:opacity-40"><FileJson size={16} /> Export JSON</button>
             <button onClick={downloadPdf} disabled={!selectedPassport} className="inline-flex items-center gap-2 rounded-md border border-[var(--spr-accent)]/50 bg-[var(--spr-accent-soft)] px-4 py-2.5 text-sm font-semibold text-[var(--spr-highlight)] disabled:opacity-40"><FileText size={16} /> Download PDF</button>
@@ -457,19 +457,19 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
             {shareMessage && <p className="mt-2 text-xs text-[var(--spr-text-muted)]" role="status">{shareMessage}</p>}
           </div>
 
-          <pre className="mt-6 max-h-64 overflow-auto rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] p-4 text-xs leading-5 text-[var(--spr-text-muted)] whitespace-pre-wrap">{reportText || 'Load a passport report to preview its persisted traceability and limitations.'}</pre>
+          <pre className="mt-6 max-h-64 overflow-auto rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] p-4 text-xs leading-5 text-[var(--spr-text-muted)] whitespace-pre-wrap">{reportText || 'Load a Launch Ticket report to preview its persisted traceability and limitations.'}</pre>
         </div>
       </div>
 
       {report?.sbom && (
         <div className="spr-panel p-6">
           <div className="flex items-center gap-2"><Package size={18} className="text-[var(--spr-highlight)]" /><h2 className="text-lg font-semibold">SBOM components</h2></div>
-          <p className="mt-2 text-sm text-[var(--spr-text-muted)]">Each component is cross-referenced against this passport's recorded vulnerabilities by name.</p>
+          <p className="mt-2 text-sm text-[var(--spr-text-muted)]">Each component is cross-referenced against this Launch Ticket's recorded vulnerabilities by name.</p>
           <div className="mt-4 overflow-auto">
             <table className="w-full min-w-[560px] text-left text-xs">
               <thead className="text-[var(--spr-text-muted)]"><tr><th className="pb-2 pr-4">Component</th><th className="pb-2 pr-4">Version</th><th className="pb-2 pr-4">License</th><th className="pb-2 pr-4">Vulnerabilities</th><th className="pb-2">Critical/High</th></tr></thead>
               <tbody className="text-[var(--spr-text)]">
-                {report.sbom.length === 0 && <tr><td colSpan={5} className="py-3 text-[var(--spr-text-muted)]">No SBOM components recorded for this passport.</td></tr>}
+                {report.sbom.length === 0 && <tr><td colSpan={5} className="py-3 text-[var(--spr-text-muted)]">No SBOM components recorded for this Launch Ticket.</td></tr>}
                 {report.sbom.map((component, index) => (
                   <tr key={`${component.name}-${index}`} className="border-t border-[var(--spr-border)]">
                     <td className="py-2 pr-4">{component.name || '—'}</td>
