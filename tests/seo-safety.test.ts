@@ -78,7 +78,8 @@ describe('the public route set matches the application itself', () => {
     const declared = app.match(/const PUBLIC_PATHS = new Set\(\[([^\]]+)\]\)/);
     const publicPaths = [...declared![1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
     expect(publicPaths).not.toContain('/registry');
-    expect(app).toContain("case '/passports': case '/registry':");
+    expect(app).toContain("case '/passports': view = <PassportsView");
+    expect(app).toContain("case '/registry': view = <PublicRegistryView />;");
   });
 });
 
