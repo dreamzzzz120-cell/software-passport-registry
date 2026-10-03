@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { rejectTlsQueryParameters } from '../src/workers/worker-db.ts';
+import { normalizeWorkerConnectionString, rejectTlsQueryParameters } from '../src/workers/worker-db.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -53,10 +53,21 @@ describe('worker database URL must not carry TLS query parameters', () => {
     }
   });
 
+  it('normalizes Railway sslmode=require only when SQL_SSL=require is independently enforced', () => {
+    const normalized = normalizeWorkerConnectionString(`${base}?sslmode=require&application_name=spr`, 'require');
+    expect(normalized).toBeDefined();
+    const parsed = new URL(normalized!);
+    expect(parsed.searchParams.has('sslmode')).toBe(false);
+    expect(parsed.searchParams.get('application_name')).toBe('spr');
+    expect(() => normalizeWorkerConnectionString(`${base}?sslmode=require`, 'verify-full')).toThrow(/WORKER_DB_URL_TLS_PARAMS/);
+    expect(() => normalizeWorkerConnectionString(`${base}?sslmode=disable`, 'require')).toThrow(/WORKER_DB_URL_TLS_PARAMS/);
+    expect(() => normalizeWorkerConnectionString(`${base}?ssl=require`, 'require')).toThrow(/WORKER_DB_URL_TLS_PARAMS/);
+  });
+
   it('is wired into createWorkerPool before the pool is built', () => {
     const s = read('src/workers/worker-db.ts');
-    expect(s.indexOf('rejectTlsQueryParameters(connectionString)')).toBeGreaterThan(0);
-    expect(s.indexOf('rejectTlsQueryParameters(connectionString)')).toBeLessThan(s.indexOf('new Pool({ connectionString'));
+    expect(s.indexOf('normalizeWorkerConnectionString(rawConnectionString, mode)')).toBeGreaterThan(0);
+    expect(s.indexOf('normalizeWorkerConnectionString(rawConnectionString, mode)')).toBeLessThan(s.indexOf('new Pool({ connectionString'));
   });
 });
 
