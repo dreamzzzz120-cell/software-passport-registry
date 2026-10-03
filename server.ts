@@ -48,6 +48,7 @@ import { createCommercialRouter } from './src/routes/commercial.ts';
 import { createDistributionRouter } from './src/routes/distribution.ts';
 import { createDistributionGrowthRouter } from './src/routes/distribution-growth.ts';
 import { createReportSchedulesRouter } from './src/routes/report-schedules.ts';
+import { createTrafficRouter } from './src/routes/traffic.ts';
 import { createMcpTransport } from './src/mcp/transport.ts';
 import { executePublicMcpTool } from './src/mcp/execute.ts';
 
@@ -92,6 +93,7 @@ app.get('/api/health', async (_req, res) => { const database = await checkDataba
 app.use('/api', rateLimiter);
 app.use('/api', createAuthRouter());
 app.use('/api', createFounderCommandCenterRouter());
+app.use('/api/traffic', createTrafficRouter());
 app.use('/api', createDistributionRouter());
 app.use('/api', createDistributionGrowthRouter());
 app.use('/api', createFeedbackRouter());

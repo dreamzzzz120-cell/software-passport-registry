@@ -20,9 +20,18 @@ function deviceType(): 'mobile' | 'tablet' | 'desktop' | 'unknown' {
   return 'desktop';
 }
 
-export function trackPageView(path = `${window.location.pathname}${window.location.search}`) {
+function attribution() {
+  const params = new URLSearchParams(window.location.search);
+  const source = params.get('utm_source') || params.get('src');
+  const medium = params.get('utm_medium');
+  const campaign = params.get('utm_campaign');
+  const referralCode = params.get('ref');
+  return { source: source?.slice(0,120) || null, medium: medium?.slice(0,120) || null, campaign: campaign?.slice(0,160) || null, referralCode: referralCode?.slice(0,80) || null };
+}
+
+function sendEvent(eventName: string, path: string) {
   if (!path || path.length > 500) return;
-  const payload = JSON.stringify({ sessionId: sessionId(), path, referrer: document.referrer || null, deviceType: deviceType() });
+  const payload = JSON.stringify({ sessionId: sessionId(), path, referrer: document.referrer || null, deviceType: deviceType(), eventName, ...attribution() });
   const body = new Blob([payload], { type: 'application/json' });
   if (navigator.sendBeacon) {
     navigator.sendBeacon('/api/traffic/event', body);
@@ -31,8 +40,19 @@ export function trackPageView(path = `${window.location.pathname}${window.locati
   void fetch('/api/traffic/event', { method: 'POST', headers: { 'content-type': 'application/json' }, body, keepalive: true }).catch(() => undefined);
 }
 
+export function trackPageView(path = `${window.location.pathname}${window.location.search}`) {
+  sendEvent('page_view', path);
+}
+
+export function trackGrowthEvent(eventName: 'free_review_started'|'free_review_completed'|'lead_captured'|'pricing_view'|'signup_started'|'signup_completed'|'pilot_started'|'customer_created'|'registry_claim_clicked'|'registry_share_clicked'|'referral_visit', path = `${window.location.pathname}${window.location.search}`) {
+  sendEvent(eventName, path);
+}
+
 export function installPageViewTracking() {
   trackPageView();
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('src') === 'registry-claim') trackGrowthEvent('registry_claim_clicked');
+  if (params.get('ref')) trackGrowthEvent('referral_visit');
   let last = window.location.href;
   const check = () => {
     if (window.location.href !== last) {
