@@ -37,6 +37,16 @@ export function normalizeWorkerConnectionString(connectionString: string | undef
   return url.toString();
 }
 
+export function rejectTlsQueryParameters(connectionString: string | undefined): void {
+  if (!connectionString) return;
+  let params: URLSearchParams;
+  try { params = new URL(connectionString).searchParams; } catch { return; }
+  const offending = ['ssl', 'sslmode', 'sslrootcert', 'sslcert', 'sslkey'].filter((key) => params.has(key));
+  if (!offending.length) return;
+  const variable = process.env.WORKER_DATABASE_URL?.trim() ? 'WORKER_DATABASE_URL' : 'DATABASE_URL';
+  throw new Error(`WORKER_DB_URL_TLS_PARAMS: ${variable} carries ${offending.map((key) => `?${key}=`).join(', ')}; remove it and configure TLS with SQL_SSL / SQL_SSL_CA instead`);
+}
+
 export function createWorkerPool(): Pool {
   const mode = (process.env.SQL_SSL ?? '').trim().toLowerCase();
   const production = process.env.NODE_ENV === 'production';
