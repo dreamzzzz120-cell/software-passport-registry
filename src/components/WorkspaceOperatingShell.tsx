@@ -5,7 +5,7 @@ type WorkspaceStage = 'software' | 'passports' | 'evidence' | 'monitoring' | 're
 
 const STAGES: Array<{ id: WorkspaceStage; label: string; path: string; icon: typeof Database }> = [
   { id: 'software', label: 'Software', path: '/assets', icon: Database },
-  { id: 'passports', label: 'Passports', path: '/passports', icon: FileCheck2 },
+  { id: 'passports', label: 'Launch Tickets', path: '/passports', icon: FileCheck2 },
   { id: 'evidence', label: 'Evidence', path: '/evidence-explorer', icon: ScanSearch },
   { id: 'monitoring', label: 'Monitoring', path: '/monitoring', icon: Radar },
   { id: 'reports', label: 'Reports', path: '/reports', icon: CircleCheck },
@@ -18,14 +18,14 @@ const COPY: Record<WorkspaceStage, { eyebrow: string; title: string; description
     description: 'Start with what SPR can actually observe. Inventory records are inputs to trust evaluation, not proof of verification.',
   },
   passports: {
-    eyebrow: 'Software passport',
-    title: 'Passport → authoritative decision',
-    description: 'A passport is the canonical software identity and trust record. Verification state comes from the authoritative evaluator.',
+    eyebrow: 'Launch ticket',
+    title: 'Launch Ticket → evidence-backed decision',
+    description: 'A Launch Ticket is the evidence-backed software identity and verification record. Verification state comes from the authoritative evaluator.',
   },
   evidence: {
     eyebrow: 'Evidence explorer',
     title: 'Evidence → coverage → gaps',
-    description: 'Inspect the raw and normalized evidence behind a passport. Coverage is shown separately from verification.',
+    description: 'Inspect the raw and normalized evidence behind a Launch Ticket. Coverage is shown separately from verification.',
   },
   monitoring: {
     eyebrow: 'Continuous monitoring',
