@@ -59,7 +59,7 @@ function objectAffected(entry: AuditEntry): string {
   const candidates: Array<[string, unknown]> = [
     ['Member', payload.targetEmail], ['Invitee', payload.invitedEmail],
     ['User #', payload.targetUserId], ['User #', payload.userId],
-    ['Session', payload.sessionId], ['Passport', payload.passportId],
+    ['Session', payload.sessionId], ['Launch Ticket', payload.passportId],
   ];
   for (const [label, value] of candidates) {
     if (value !== undefined && value !== null && value !== '') return `${label}${label.endsWith('#') ? '' : ' '}${value}`.trim();
@@ -164,11 +164,11 @@ export default function AuditLogView() {
 
   return (
     <section className="space-y-6" aria-labelledby="audit-log-title">
-      <div className="flex flex-col gap-4 border-b border-[var(--spr-border)] pb-5 lg:flex-row lg:items-end lg:justify-between">
+      <div className="spr-panel p-6 md:p-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[.06em] text-[#ce9178]">Governance ledger</div>
-          <h1 id="audit-log-title" className="mt-2 flex items-center gap-2 text-3xl font-semibold tracking-tight"><FileClock className="h-6 w-6 text-[#ce9178]" />Audit log</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--spr-text-muted)]">Tenant-scoped administrative events from the persisted hash-chained audit trail. No events are synthesized in this view.</p>
+          <div className="text-[11px] font-semibold uppercase tracking-[.06em] text-[#ce9178]">History lens</div>
+          <h1 id="audit-log-title" className="mt-2 flex items-center gap-2 text-3xl font-semibold tracking-tight"><FileClock className="h-6 w-6 text-[#ce9178]" />Immutable history</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--spr-text-muted)]">A chronological view of persisted, tenant-scoped activity from the hash-chained audit trail. No events are synthesized; History shows only what SPR actually recorded.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => void loadEntries()} disabled={loading} className="inline-flex items-center gap-2 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] px-3 py-2 text-xs font-semibold text-[var(--spr-text)] transition hover:border-[var(--spr-highlight)]/40 hover:text-[var(--spr-text)] disabled:cursor-not-allowed disabled:opacity-50" aria-label="Refresh audit log"><RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />Refresh</button>
