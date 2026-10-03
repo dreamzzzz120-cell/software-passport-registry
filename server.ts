@@ -134,26 +134,29 @@ if (mcpBearer) { const mcpTransport = createMcpTransport({ expectedBearer: mcpBe
 app.use('/api', createScanLedgerRouter());
 app.use('/api', createScansRouter());
 app.use('/api/compliance', createComplianceRouter());
+const apiOnlyRuntime = process.env.SPR_API_ONLY === 'true';
 const distDir = path.join(process.cwd(), 'dist');
 const publicDir = fs.existsSync(path.join(distDir, 'index.html')) ? distDir : path.resolve(process.cwd());
 const spaShell = path.join(publicDir, 'index.html');
-if (config.isProduction && publicDir !== distDir) { console.error('[SPR] FATAL: dist/index.html is missing. The client bundle was not built into this image; refusing to serve the source shell.'); process.exit(1); }
-app.use((req, res, next) => {
-  if (!['GET', 'HEAD'].includes(req.method) || req.path.startsWith('/api/') || req.path === '/mcp' || !req.accepts('html')) return next();
-  const relative = decodeURIComponent(req.path).replace(/^\/+/, '');
-  const candidate = path.resolve(publicDir, relative, 'index.html');
-  const withinPublicDir = candidate === spaShell || candidate.startsWith(path.resolve(publicDir) + path.sep);
-  const file = withinPublicDir && fs.existsSync(candidate) ? candidate : spaShell;
-  if (!fs.existsSync(file)) return next();
-  const html = fs.readFileSync(file, 'utf8').replaceAll('__SPR_CSP_NONCE__', String(res.locals.cspNonce));
-  res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
-  return res.send(html);
-});
-app.use(express.static(publicDir, { index: false, redirect: false, maxAge: config.isProduction ? '1y' : 0, setHeaders: (res, filePath) => { if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate'); } }));
-const sendSpaShell = (req: Request, res: Response, next: NextFunction) => { if (req.path.startsWith('/api/') || req.path === '/mcp') return next(); const relative = decodeURIComponent(req.path).replace(/^\/+/, ''); const candidate = path.resolve(publicDir, relative, 'index.html'); const withinPublicDir = candidate === spaShell || candidate.startsWith(path.resolve(publicDir) + path.sep); const file = withinPublicDir && fs.existsSync(candidate) ? candidate : spaShell; res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate'); return res.sendFile(file, error => error ? next(error) : undefined); };
-app.get('/', sendSpaShell);
-app.get('/*splat', sendSpaShell);
+if (!apiOnlyRuntime) {
+  if (config.isProduction && publicDir !== distDir) { console.error('[SPR] FATAL: dist/index.html is missing. The client bundle was not built into this image; refusing to serve the source shell.'); process.exit(1); }
+  app.use((req, res, next) => {
+    if (!['GET', 'HEAD'].includes(req.method) || req.path.startsWith('/api/') || req.path === '/mcp' || !req.accepts('html')) return next();
+    const relative = decodeURIComponent(req.path).replace(/^\/+/, '');
+    const candidate = path.resolve(publicDir, relative, 'index.html');
+    const withinPublicDir = candidate === spaShell || candidate.startsWith(path.resolve(publicDir) + path.sep);
+    const file = withinPublicDir && fs.existsSync(candidate) ? candidate : spaShell;
+    if (!fs.existsSync(file)) return next();
+    const html = fs.readFileSync(file, 'utf8').replaceAll('__SPR_CSP_NONCE__', String(res.locals.cspNonce));
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+    return res.send(html);
+  });
+  app.use(express.static(publicDir, { index: false, redirect: false, maxAge: config.isProduction ? '1y' : 0, setHeaders: (res, filePath) => { if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate'); } }));
+  const sendSpaShell = (req: Request, res: Response, next: NextFunction) => { if (req.path.startsWith('/api/') || req.path === '/mcp') return next(); const relative = decodeURIComponent(req.path).replace(/^\/+/, ''); const candidate = path.resolve(publicDir, relative, 'index.html'); const withinPublicDir = candidate === spaShell || candidate.startsWith(path.resolve(publicDir) + path.sep); const file = withinPublicDir && fs.existsSync(candidate) ? candidate : spaShell; res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate'); return res.sendFile(file, error => error ? next(error) : undefined); };
+  app.get('/', sendSpaShell);
+  app.get('/*splat', sendSpaShell);
+}
 app.use((req, res, next) => { if (req.path.startsWith('/api/') || req.path === '/mcp') return res.status(404).json({ error: 'Route not found.', code: 'NOT_FOUND', requestId: res.locals.requestId }); return next(); });
 app.use((err: any, req: Request, res: Response, next: NextFunction) => { if (res.headersSent) return next(err); const requestId = res.locals.requestId || `req_${randomUUID()}`; const status = Number.isInteger(err?.status) && err.status >= 400 && err.status < 600 ? err.status : 500; const errCause = (err as { cause?: unknown })?.cause as { code?: string; message?: string; detail?: string; table?: string; column?: string; constraint?: string } | undefined; console.error('[HTTP_ERROR]', { requestId, status, method: req.method, path: req.path, message: err?.message || String(err), causeCode: errCause?.code ?? null, causeMessage: errCause?.message ?? null, causeDetail: errCause?.detail ?? null, causeTable: errCause?.table ?? null, causeColumn: errCause?.column ?? null, causeConstraint: errCause?.constraint ?? null }); if (config.sentry.dsn && status >= 500) Sentry.captureException(err, { tags: { requestId } }); return res.status(status).json({ error: status === 500 ? 'An unexpected server error occurred.' : err?.message || 'Request failed.', code: status === 500 ? 'INTERNAL_SERVER_ERROR' : 'REQUEST_FAILED', requestId }); });
 export function rejectConnectTunnels(target: ReturnType<typeof app.listen>) { target.on('connect', (_req, socket) => { socket.end('HTTP/1.1 405 Method Not Allowed\r\nContent-Length: 0\r\nConnection: close\r\n\r\n'); }); return target; }
