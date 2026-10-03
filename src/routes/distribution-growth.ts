@@ -21,6 +21,26 @@ const aeoObservationSchema = z.object({
   observedCitations: z.number().int().min(0).max(1000000),
   status: z.enum(aeoStatus).optional(),
 }).strict();
+const referralSchema = z.object({
+  code: z.string().trim().regex(/^[A-Za-z0-9_-]{2,80}$/),
+  ownerType: z.enum(['founder','msp','consultant','vendor','partner']).default('founder'),
+  ownerLabel: z.string().trim().min(1).max(160),
+  destinationPath: z.string().trim().min(1).max(512),
+}).strict();
+const experimentSchema = z.object({
+  name: z.string().trim().min(3).max(160),
+  surface: z.string().trim().min(1).max(160),
+  metric: z.string().trim().min(1).max(160),
+  variants: z.array(z.object({ key:z.string().trim().min(1).max(40), label:z.string().trim().min(1).max(120) }).strict()).min(2).max(8),
+  status: z.enum(['draft','running','paused','completed']).default('draft'),
+}).strict();
+const contentOpportunitySchema = z.object({
+  kind: z.enum(['aeo','seo','faq','comparison','registry','case_study']),
+  topic: z.string().trim().min(4).max(300),
+  targetPath: z.string().trim().max(512).nullable().optional(),
+  sourceEvidence: z.array(z.string().trim().min(1).max(512)).max(50).default([]),
+  status: z.enum(['backlog','planned','published','monitoring','retired']).default('backlog'),
+}).strict();
 const settingsSchema = z.object({
   discoveryEnabled: z.boolean().optional(),
   outreachEnabled: z.boolean().optional(),
@@ -158,6 +178,53 @@ export function createDistributionGrowthRouter() {
       if (!result.rows?.[0]) return res.status(404).json({ error: 'AEO query not found.' });
       return res.json(result.rows[0]);
     } catch (error) { return next(error); }
+  });
+
+  router.post('/founder/distribution/referrals', ...founderOnly, async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const parsed=referralSchema.safeParse(req.body);
+      if(!parsed.success) return res.status(400).json({error:'Invalid referral link.'});
+      const v=parsed.data;
+      const result=await withTenant(async(client)=>client.query(
+        `INSERT INTO growth_referral_links (id,tenant_id,code,owner_type,owner_label,destination_path)
+         VALUES ($1,$2,$3,$4,$5,$6)
+         ON CONFLICT (tenant_id,code) DO UPDATE SET owner_type=EXCLUDED.owner_type,owner_label=EXCLUDED.owner_label,destination_path=EXCLUDED.destination_path,active=true,updated_at=CURRENT_TIMESTAMP
+         RETURNING id,code,owner_type AS "ownerType",owner_label AS "ownerLabel",destination_path AS "destinationPath",active,visits,conversions`,
+        [`ref-${crypto.randomUUID()}`,DISTRIBUTION_TENANT_ID,v.code,v.ownerType,v.ownerLabel,v.destinationPath]
+      ));
+      return res.status(201).json(result.rows?.[0]);
+    } catch(error){ return next(error); }
+  });
+
+  router.post('/founder/distribution/experiments', ...founderOnly, async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const parsed=experimentSchema.safeParse(req.body);
+      if(!parsed.success) return res.status(400).json({error:'Invalid growth experiment.'});
+      const v=parsed.data;
+      const result=await withTenant(async(client)=>client.query(
+        `INSERT INTO growth_experiments (id,tenant_id,name,surface,status,variants,metric,started_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,CASE WHEN $5='running' THEN CURRENT_TIMESTAMP ELSE NULL END)
+         RETURNING id,name,surface,status,variants,metric,started_at AS "startedAt",created_at AS "createdAt"`,
+        [`exp-${crypto.randomUUID()}`,DISTRIBUTION_TENANT_ID,v.name,v.surface,v.status,JSON.stringify(v.variants),v.metric]
+      ));
+      return res.status(201).json(result.rows?.[0]);
+    } catch(error){ return next(error); }
+  });
+
+  router.post('/founder/distribution/content-opportunities', ...founderOnly, async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const parsed=contentOpportunitySchema.safeParse(req.body);
+      if(!parsed.success) return res.status(400).json({error:'Invalid content opportunity.'});
+      const v=parsed.data;
+      const result=await withTenant(async(client)=>client.query(
+        `INSERT INTO growth_content_opportunities (id,tenant_id,kind,topic,target_path,source_evidence,status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)
+         ON CONFLICT (tenant_id,kind,lower(topic)) DO UPDATE SET target_path=EXCLUDED.target_path,source_evidence=EXCLUDED.source_evidence,status=EXCLUDED.status,updated_at=CURRENT_TIMESTAMP
+         RETURNING id,kind,topic,target_path AS "targetPath",status,observed_impressions AS "observedImpressions",observed_clicks AS "observedClicks",observed_conversions AS "observedConversions"`,
+        [`content-${crypto.randomUUID()}`,DISTRIBUTION_TENANT_ID,v.kind,v.topic,v.targetPath ?? null,JSON.stringify(v.sourceEvidence),v.status]
+      ));
+      return res.status(201).json(result.rows?.[0]);
+    } catch(error){ return next(error); }
   });
 
   router.patch('/founder/distribution/campaign', ...founderOnly, async (req: AuthenticatedRequest, res, next) => {
