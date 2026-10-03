@@ -1,4 +1,5 @@
-import { app } from '../server.ts';
+import serverModule from './vercel-server.cjs';
 
 export const config = { maxDuration: 60 };
-export default app;
+const mod = serverModule as any;
+export default mod.app ?? mod.default?.app ?? mod.default ?? mod;
