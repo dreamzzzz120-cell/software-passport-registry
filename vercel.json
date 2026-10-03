@@ -16,7 +16,7 @@
     {"source":"/software/workspace","destination":"/index.html"},
     {"source":"/software/:path*","destination":"https://spr-app-production-production.up.railway.app/software/:path*"},
     {"source":"/whitepaper","destination":"https://spr-app-production-production.up.railway.app/whitepaper"},
-    {"source":"/roi","destination":"https://spr-app-production-production.up.railway.app/roi"},
+    {"source": "/roi","destination":"https://spr-app-production-production.up.railway.app/roi"},
     {"source":"/mcp","destination":"https://spr-app-production-production.up.railway.app/mcp"},
     {"source":"/(.*)","destination":"/index.html"}
   ],
