@@ -50,7 +50,7 @@ interface TrustGraphViewProps {
 
 const STAGES: Stage[] = ['passport', 'identity', 'evidence', 'finding', 'verification'];
 const STAGE_META: Record<Stage, { label: string; description: string; icon: typeof Fingerprint }> = {
-  passport: { label: 'Passport', description: 'The persisted software passport record.', icon: FileCheck2 },
+  passport: { label: 'Launch Ticket', description: 'The persisted evidence-backed software record.', icon: FileCheck2 },
   identity: { label: 'Software Identity', description: 'Only an explicitly persisted identity is shown.', icon: Fingerprint },
   evidence: { label: 'Evidence', description: 'Observed or declared evidence attached to the passport or identity.', icon: GitBranch },
   finding: { label: 'Findings', description: 'Findings with an explicit passport or evidence reference.', icon: CircleHelp },
@@ -163,7 +163,7 @@ export default function TrustGraphView({ passports = [], findings = [] }: TrustG
       addNode({
         id: passportId,
         stage: 'passport',
-        label: short(passport.name, 'Passport'),
+        label: short(passport.name, 'Launch Ticket'),
         detail: `${text(passport.version, 'Version unavailable')} · ${text(passport.publisher, 'Publisher unavailable')}`,
         meta: [passport.fileHash && `hash ${String(passport.fileHash)}`, passport.category && String(passport.category)].filter(Boolean).join(' · ') || undefined,
         passportId: passport.id,
@@ -185,7 +185,7 @@ export default function TrustGraphView({ passports = [], findings = [] }: TrustG
           source: passportId,
           target: identityNodeId,
           label: 'identifies',
-          proof: 'The passport contains an explicit software identity reference.',
+          proof: 'The Launch Ticket contains an explicit software identity reference.',
         });
       }
 
@@ -227,8 +227,8 @@ export default function TrustGraphView({ passports = [], findings = [] }: TrustG
           target: evidenceNodeId,
           label: 'contains',
           proof: evidencePassportRef(evidence) === passport.id
-            ? 'The evidence record explicitly references this passport.'
-            : 'The evidence item is present in the passport’s persisted evidence collection.',
+            ? 'The evidence record explicitly references this Launch Ticket.'
+            : 'The evidence item is present in the Launch Ticket’s persisted evidence collection.',
         });
       });
 
@@ -242,7 +242,7 @@ export default function TrustGraphView({ passports = [], findings = [] }: TrustG
           id: verificationNodeId,
           stage: 'verification',
           label: verificationStatus ? short(verificationStatus.replace(/_/g, ' '), 'Verification') : 'Verification',
-          detail: verificationRawId ? 'Persisted verification record' : 'Persisted passport verification status',
+          detail: verificationRawId ? 'Persisted verification record' : 'Persisted Launch Ticket verification status',
           meta: verificationRawId ? `verification id ${verificationRawId}` : undefined,
           passportId: passport.id,
           verificationId,
@@ -251,7 +251,7 @@ export default function TrustGraphView({ passports = [], findings = [] }: TrustG
           source: passportId,
           target: verificationNodeId,
           label: 'evaluated as',
-          proof: verificationRawId ? 'The passport contains an explicit verification record reference.' : 'The passport contains a persisted verification status.',
+          proof: verificationRawId ? 'The Launch Ticket contains an explicit verification record reference.' : 'The Launch Ticket contains a persisted verification status.',
         });
       }
     });
@@ -293,7 +293,7 @@ export default function TrustGraphView({ passports = [], findings = [] }: TrustG
           source: `passport:${passportId}`,
           target: findingNodeId,
           label: 'has finding',
-          proof: 'The finding explicitly references this persisted passport ID.',
+          proof: 'The finding explicitly references this persisted Launch Ticket ID.',
         });
       }
       knownEvidence.forEach((evidenceNodeId) => {
@@ -348,9 +348,9 @@ export default function TrustGraphView({ passports = [], findings = [] }: TrustG
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[.06em] text-sky-300">
-              <GitBranch className="h-4 w-4" aria-hidden="true" /> Evidence lineage
+              <GitBranch className="h-4 w-4" aria-hidden="true" /> Living evidence galaxy
             </div>
-            <h1 id="trust-lineage-title" className="mt-2 text-3xl font-semibold tracking-tight">Passport → identity → evidence → findings → verification</h1>
+            <h1 id="trust-lineage-title" className="mt-2 text-3xl font-semibold tracking-tight">Launch Ticket → identity → evidence → findings → verification</h1>
             <p className="mt-2 max-w-4xl text-sm leading-6 text-[var(--spr-text-muted)]">
               This view is relationship-first. SPR renders only persisted identities, evidence memberships, explicit references, and recorded verification state. Missing data stays missing.
             </p>
@@ -361,7 +361,7 @@ export default function TrustGraphView({ passports = [], findings = [] }: TrustG
         </div>
         <label className="relative mt-5 block max-w-xl">
           <Search size={16} className="absolute left-3 top-3 text-[var(--spr-text-muted)]" aria-hidden="true" />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search lineage…" aria-label="Search evidence lineage" className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] py-2.5 pl-9 pr-9 text-sm text-[var(--spr-text)] outline-none placeholder:text-[var(--spr-text-faint)] focus:border-[var(--spr-highlight)]/50" />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search the galaxy…" aria-label="Search evidence galaxy" className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] py-2.5 pl-9 pr-9 text-sm text-[var(--spr-text)] outline-none placeholder:text-[var(--spr-text-faint)] focus:border-[var(--spr-highlight)]/50" />
           {query && <button type="button" onClick={() => setQuery('')} aria-label="Clear lineage search" className="absolute right-2 top-2 rounded-lg p-1 text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]"><X size={15} /></button>}
         </label>
       </header>
@@ -393,7 +393,7 @@ export default function TrustGraphView({ passports = [], findings = [] }: TrustG
                           key={node.id}
                           type="button"
                           onClick={() => { setSelectedId(node.id); setSelectedEdge(null); }}
-                          className={`w-full rounded-lg border p-3 text-left transition hover:border-[var(--spr-highlight)]/50 ${selectedNode ? 'border-[var(--spr-highlight)]/70 bg-[var(--spr-surface-deep)]' : 'border-[var(--spr-border)] bg-[var(--spr-surface)]'}`}
+                          className={`spr-orb-node w-full rounded-2xl border p-3 text-left transition hover:border-[var(--spr-highlight)]/50 ${selectedNode ? 'spr-orb-node--selected border-[var(--spr-highlight)]/70 bg-[var(--spr-surface-deep)]' : 'border-[var(--spr-border)] bg-[var(--spr-surface)]'}`}
                           style={{ opacity: dimmed ? 0.35 : 1 }}
                         >
                           <div className="text-sm font-semibold text-[var(--spr-text)]">{node.label}</div>
@@ -412,11 +412,11 @@ export default function TrustGraphView({ passports = [], findings = [] }: TrustG
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <section className="spr-panel p-5" aria-label="Recorded relationships">
+        <section className="spr-panel p-5" aria-label="Constellation connections">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-semibold">Recorded relationships</h2>
-              <p className="mt-1 text-xs text-[var(--spr-text-muted)]">Click a relationship to inspect exactly why SPR drew it.</p>
+              <p className="mt-1 text-xs text-[var(--spr-text-muted)]">Every luminous connection exists because SPR has a persisted relationship for it.</p>
             </div>
             <span className="text-xs text-[var(--spr-text-muted)]">{visibleEdges.length} shown</span>
           </div>
@@ -465,8 +465,8 @@ export default function TrustGraphView({ passports = [], findings = [] }: TrustG
           ) : (
             <div className="flex min-h-[260px] flex-col items-center justify-center text-center">
               <div className="rounded-full border border-sky-400/20 bg-sky-400/10 p-4"><GitBranch className="h-6 w-6 text-sky-300" aria-hidden="true" /></div>
-              <h2 className="mt-4 text-lg font-semibold">Lineage inspector</h2>
-              <p className="mt-2 max-w-xs text-sm leading-6 text-[var(--spr-text-muted)]">Select a record or relationship to inspect its source-backed lineage.</p>
+              <h2 className="mt-4 text-lg font-semibold">Galaxy inspector</h2>
+              <p className="mt-2 max-w-xs text-sm leading-6 text-[var(--spr-text-muted)]">Select a node or connection to inspect the persisted evidence behind it.</p>
             </div>
           )}
         </aside>
@@ -474,7 +474,7 @@ export default function TrustGraphView({ passports = [], findings = [] }: TrustG
 
       <footer className="spr-panel flex flex-col gap-3 p-4 text-xs text-[var(--spr-text-muted)] sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-2"><CircleHelp className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /><span>Absence of an edge is intentional. SPR does not infer identity, ownership, finding provenance, or verification linkage from names, versions, or proximity.</span></div>
-        <div className="flex items-center gap-2 whitespace-nowrap"><ShieldCheck size={14} aria-hidden="true" /> Evidence-first lineage</div>
+        <div className="flex items-center gap-2 whitespace-nowrap"><ShieldCheck size={14} aria-hidden="true" /> Evidence-first galaxy</div>
       </footer>
     </section>
   );
