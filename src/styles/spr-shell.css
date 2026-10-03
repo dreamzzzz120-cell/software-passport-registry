@@ -1,97 +1,36 @@
-/* SPR shell — global chrome layer. Flat VS Code Dark+ theme, no blur/gradient/glow. */
-:root{--spr-bg:#1e1e1e;--spr-panel:#252526;--spr-panel-strong:#252526;--spr-line:#3c3c3c;--spr-cyan:#3794ff;--spr-indigo:#3794ff;--spr-text:#d4d4d4;}
+/* SPR Galaxy shell — operational sci-fi chrome. Real application data remains authoritative. */
+:root{--spr-bg:#020617;--spr-panel:rgba(5,15,35,.82);--spr-panel-strong:rgba(7,18,43,.94);--spr-line:rgba(56,189,248,.22);--spr-cyan:#22d3ee;--spr-indigo:#818cf8;--spr-text:#e6f7ff}
 *{box-sizing:border-box}
 html{background:var(--spr-bg)}
-body{min-height:100vh;background:var(--spr-bg);color:var(--spr-text)}
+body{min-height:100vh;background:
+radial-gradient(circle at 18% 20%,rgba(76,29,149,.26),transparent 32rem),
+radial-gradient(circle at 72% 28%,rgba(14,165,233,.16),transparent 34rem),
+radial-gradient(circle at 62% 78%,rgba(147,51,234,.17),transparent 38rem),
+linear-gradient(145deg,#01040d 0%,#030a1d 46%,#08051d 100%);color:var(--spr-text);background-attachment:fixed}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.42;background-image:
+radial-gradient(circle,rgba(255,255,255,.8) 0 1px,transparent 1.3px),
+radial-gradient(circle,rgba(103,232,249,.75) 0 1px,transparent 1.4px);background-size:83px 83px,137px 137px;background-position:0 0,31px 47px;mask-image:linear-gradient(to bottom,black,rgba(0,0,0,.65))}
 button,input,select,textarea{font:inherit}
-.spr-shell-header{position:sticky;top:0;z-index:40;border-bottom:1px solid var(--spr-line);background:var(--spr-panel)}
-.spr-brand-mark{display:inline-flex;align-items:center;gap:.65rem}.spr-brand-dot{width:.62rem;height:.62rem;border-radius:999px;background:var(--spr-cyan)}
-.spr-shell-content{position:relative;z-index:1}.spr-section-label{font-size:.68rem;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--spr-cyan)}
-
-/* Authenticated command-center chrome. */
-body:has(aside){background:var(--spr-bg)}
-body:has(aside) header{background:var(--spr-panel)!important;border-color:var(--spr-line)!important}
-body:has(aside) header button:first-child{position:relative;transition:transform .15s ease}body:has(aside) header button:first-child:hover{transform:translateY(-1px)}
-body:has(aside) aside{background:var(--spr-panel);border-color:var(--spr-line)!important;position:relative}
+.spr-shell-header{position:sticky;top:0;z-index:40;border-bottom:1px solid rgba(34,211,238,.28);background:rgba(2,8,23,.78);backdrop-filter:blur(22px);box-shadow:0 10px 45px rgba(0,0,0,.35),0 1px 18px rgba(34,211,238,.08)}
+.spr-brand-mark{display:inline-flex;align-items:center;gap:.65rem}.spr-brand-dot{width:.62rem;height:.62rem;border-radius:999px;background:var(--spr-cyan);box-shadow:0 0 16px rgba(34,211,238,.95)}
+.spr-shell-content{position:relative;z-index:1}.spr-section-label{font-size:.68rem;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:#67e8f9;text-shadow:0 0 16px rgba(34,211,238,.45)}
+body:has(aside) header{background:rgba(2,8,23,.82)!important;border-color:rgba(34,211,238,.2)!important;backdrop-filter:blur(22px)}
+body:has(aside) header button:first-child{position:relative;transition:transform .18s ease,filter .18s ease}body:has(aside) header button:first-child:hover{transform:translateY(-1px);filter:drop-shadow(0 0 10px rgba(34,211,238,.32))}
+body:has(aside) aside{background:linear-gradient(180deg,rgba(3,11,28,.92),rgba(5,8,24,.84));border-color:rgba(34,211,238,.18)!important;position:relative;backdrop-filter:blur(18px);box-shadow:12px 0 40px rgba(0,0,0,.24)}
 body:has(aside) aside nav{display:flex;flex-direction:column;gap:.28rem;padding:.3rem}
-body:has(aside) aside nav button{position:relative;border:1px solid transparent;transition:background .12s ease,color .12s ease,border-color .12s ease}
-body:has(aside) aside nav button:hover{background:#383838!important;border-color:var(--spr-line)}
+body:has(aside) aside nav button{position:relative;border:1px solid transparent;transition:background .16s ease,color .16s ease,border-color .16s ease,box-shadow .16s ease}
+body:has(aside) aside nav button:hover{background:rgba(14,165,233,.09)!important;border-color:rgba(34,211,238,.24);box-shadow:inset 0 0 22px rgba(34,211,238,.04)}
 body:has(aside) main{position:relative;min-height:calc(100vh - 73px)}
 body:has(aside) main>*{position:relative;z-index:1}
-body:has(aside) main .bg-white,body:has(aside) main .bg-slate-50{background:var(--spr-panel)!important}
-
-/* Dashboard command-center controls. */
+body:has(aside) main .bg-white,body:has(aside) main .bg-slate-50{background:rgba(6,17,38,.78)!important;backdrop-filter:blur(16px)}
 #msp-dashboard-view{isolation:isolate}
-#msp-dashboard-view button{transition:transform .15s ease,background .15s ease,border-color .15s ease}
+#msp-dashboard-view button{transition:transform .15s ease,background .15s ease,border-color .15s ease,box-shadow .15s ease}
 #msp-dashboard-view button:hover:not(:disabled){transform:translateY(-1px)}
-#msp-dashboard-view > div:first-child{position:sticky;top:5.4rem;z-index:15;background:var(--spr-panel)!important;border:1px solid var(--spr-line)!important}
-
-/* Public cover surface (login / signup forms). */
-body:has(> div form),body:has(form){background:var(--spr-bg)}
-body:has(form) form{padding:2rem;border:1px solid var(--spr-line);border-radius:.5rem;background:var(--spr-panel)}
-body:has(form) form input{width:100%;border:1px solid var(--spr-line);border-radius:.4rem;background:#2d2d2d;color:var(--spr-text);padding:.8rem .9rem;outline:none;transition:border-color .15s,background .15s}
-body:has(form) form input:focus{border-color:var(--spr-cyan);background:#2d2d2d}
-body:has(form) form button{border-radius:.4rem;border:1px solid var(--spr-line);padding:.75rem 1rem;color:var(--spr-text);background:#2d2d2d;transition:background .15s,border-color .15s}
-body:has(form) form button:hover:not(:disabled){background:#383838;border-color:var(--spr-line)}
-body:has(form) form button[type="submit"]{background:#0e639c;color:#fff;border:0;font-weight:700}
-body:has(form) form button[type="submit"]:hover:not(:disabled){background:#1177bb}
-body:has(form) form [role="alert"],body:has(form) form [role="status"]{border-radius:.4rem;padding:.75rem;background:#2d2d2d;border:1px solid var(--spr-line)}
-
+#msp-dashboard-view > div:first-child{position:sticky;top:5.4rem;z-index:15;background:rgba(4,14,34,.86)!important;border:1px solid rgba(34,211,238,.2)!important;backdrop-filter:blur(18px);box-shadow:0 12px 35px rgba(0,0,0,.26)}
+body:has(form) form{padding:2rem;border:1px solid rgba(34,211,238,.24);border-radius:16px;background:rgba(4,14,34,.8);backdrop-filter:blur(22px);box-shadow:0 24px 80px rgba(0,0,0,.42),0 0 45px rgba(34,211,238,.05)}
+body:has(form) form input{width:100%;border:1px solid rgba(125,211,252,.2);border-radius:10px;background:rgba(7,18,43,.84);color:var(--spr-text);padding:.8rem .9rem;outline:none;transition:border-color .15s,box-shadow .15s}
+body:has(form) form input:focus{border-color:#22d3ee;box-shadow:0 0 0 3px rgba(34,211,238,.1),0 0 22px rgba(34,211,238,.08)}
+body:has(form) form button{border-radius:10px;border:1px solid rgba(125,211,252,.2);padding:.75rem 1rem;color:var(--spr-text);background:rgba(8,25,52,.9)}
+body:has(form) form button[type="submit"]{background:linear-gradient(135deg,#0891b2,#2563eb);color:#fff;border-color:rgba(103,232,249,.45);font-weight:700;box-shadow:0 0 24px rgba(34,211,238,.16)}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
-@media(max-width:767px){body:has(aside) aside{border-right:0!important;border-bottom:1px solid var(--spr-line)!important}body:has(aside) aside nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));max-height:15rem;overflow:auto}#msp-dashboard-view>div:first-child{position:relative;top:auto}}
-
-/* Safety net for the older workflow surfaces in case any literal light-theme
-   utility class slips through on a data-driven code path. Keeps them on the
-   same flat dark surface as the rest of the app. */
-body:has(aside) #msp-integrations-view,
-body:has(aside) #msp-clients-index,
-body:has(aside) #msp-vendors-view-dashboard,
-body:has(aside) #msp-founder-dashboard {
-  color: var(--spr-text);
-}
-body:has(aside) #msp-integrations-view .bg-white,
-body:has(aside) #msp-integrations-view .bg-slate-50,
-body:has(aside) #msp-clients-index .bg-white,
-body:has(aside) #msp-clients-index .bg-slate-50,
-body:has(aside) #msp-vendors-view-dashboard .bg-white,
-body:has(aside) #msp-vendors-view-dashboard .bg-slate-50 {
-  background: var(--spr-panel) !important;
-  border-color: var(--spr-line) !important;
-}
-body:has(aside) #msp-integrations-view .text-slate-900,
-body:has(aside) #msp-integrations-view .text-slate-800,
-body:has(aside) #msp-clients-index .text-slate-900,
-body:has(aside) #msp-clients-index .text-slate-800,
-body:has(aside) #msp-vendors-view-dashboard .text-slate-900,
-body:has(aside) #msp-vendors-view-dashboard .text-slate-800 {
-  color: var(--spr-text) !important;
-}
-body:has(aside) #msp-integrations-view .text-slate-700,
-body:has(aside) #msp-integrations-view .text-slate-600,
-body:has(aside) #msp-clients-index .text-slate-700,
-body:has(aside) #msp-clients-index .text-slate-600,
-body:has(aside) #msp-vendors-view-dashboard .text-slate-700,
-body:has(aside) #msp-vendors-view-dashboard .text-slate-600 {
-  color: #9d9d9d !important;
-}
-body:has(aside) #msp-integrations-view input,
-body:has(aside) #msp-integrations-view select,
-body:has(aside) #msp-clients-index input,
-body:has(aside) #msp-clients-index select,
-body:has(aside) #msp-vendors-view-dashboard input,
-body:has(aside) #msp-vendors-view-dashboard select {
-  color: var(--spr-text);
-  background-color: #2d2d2d;
-  border-color: var(--spr-line);
-}
-body:has(aside) #msp-integrations-view .border-slate-100,
-body:has(aside) #msp-integrations-view .border-slate-200,
-body:has(aside) #msp-clients-index .border-slate-100,
-body:has(aside) #msp-clients-index .border-slate-200,
-body:has(aside) #msp-vendors-view-dashboard .border-slate-100,
-body:has(aside) #msp-vendors-view-dashboard .border-slate-200 {
-  border-color: var(--spr-line) !important;
-}
-body:has(aside) #msp-integrations-view .bg-slate-900 {
-  background: var(--spr-panel) !important;
-}
+@media(max-width:767px){body:has(aside) aside{border-right:0!important;border-bottom:1px solid rgba(34,211,238,.18)!important}body:has(aside) aside nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));max-height:15rem;overflow:auto}#msp-dashboard-view>div:first-child{position:relative;top:auto}}
