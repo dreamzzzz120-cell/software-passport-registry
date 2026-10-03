@@ -15,7 +15,7 @@ describe('AEO growth engine contracts', () => {
   });
 
   it('stores observed citation metrics separately from trust evidence', () => {
-    const migration = read('migrations/0118_aeo_growth_engine.sql');
+    const migration = read('migrations/0125_aeo_growth_engine.sql');
     expect(migration).toContain('observed_mentions');
     expect(migration).toContain('observed_citations');
     expect(migration).toContain("status IN ('backlog','published','monitoring','retired')");
