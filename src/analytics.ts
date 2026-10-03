@@ -50,6 +50,9 @@ export function trackGrowthEvent(eventName: 'free_review_started'|'free_review_c
 
 export function installPageViewTracking() {
   trackPageView();
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('src') === 'registry-claim') trackGrowthEvent('registry_claim_clicked');
+  if (params.get('ref')) trackGrowthEvent('referral_visit');
   let last = window.location.href;
   const check = () => {
     if (window.location.href !== last) {
