@@ -30,6 +30,14 @@
       "destination": "https://spr-app-production-production.up.railway.app/api/traffic/event?vc_country=:country"
     },
     {
+      "source": "/api/probe-config",
+      "destination": "/api/probe-config"
+    },
+    {
+      "source": "/api/probe-db",
+      "destination": "/api/probe-db"
+    },
+    {
       "source": "/api/:path*",
       "destination": "/api/vercel-handler"
     },
@@ -174,6 +182,12 @@
   },
   "functions": {
     "api/vercel-handler.ts": {
+      "maxDuration": 60
+    },
+    "api/probe-config.ts": {
+      "maxDuration": 60
+    },
+    "api/probe-db.ts": {
       "maxDuration": 60
     }
   }
