@@ -13,6 +13,30 @@ const parsePositiveInt = (value: string | undefined, fallback: number) => {
 // deploys); `?sslmode=...` silently replaces the CA/verification settings.
 // Refuse both up front with a message that names the variable, instead of
 // failing deep inside pg with no hint of which setting caused it.
+export function normalizeWorkerConnectionString(connectionString: string | undefined, sqlSslMode: string): string | undefined {
+  if (!connectionString) return connectionString;
+  let url: URL;
+  try { url = new URL(connectionString); } catch { return connectionString; }
+
+  const variable = process.env.WORKER_DATABASE_URL?.trim() ? 'WORKER_DATABASE_URL' : 'DATABASE_URL';
+  const forbidden = ['ssl', 'sslrootcert', 'sslcert', 'sslkey'].filter((key) => url.searchParams.has(key));
+  if (forbidden.length) {
+    throw new Error(`WORKER_DB_URL_TLS_PARAMS: ${variable} carries ${forbidden.map((key) => `?${key}=`).join(', ')}; remove it and configure TLS with SQL_SSL / SQL_SSL_CA instead`);
+  }
+
+  const sslmode = url.searchParams.get('sslmode')?.trim().toLowerCase();
+  if (sslmode) {
+    // Railway/Postgres URLs commonly append sslmode=require. It is safe to
+    // remove only when the independently enforced SQL_SSL mode is also
+    // "require". Stronger or conflicting URL modes still fail closed.
+    if (sslmode !== 'require' || sqlSslMode !== 'require') {
+      throw new Error(`WORKER_DB_URL_TLS_PARAMS: ${variable} carries ?sslmode=${sslmode}; remove it and configure TLS with SQL_SSL / SQL_SSL_CA instead`);
+    }
+    url.searchParams.delete('sslmode');
+  }
+  return url.toString();
+}
+
 export function rejectTlsQueryParameters(connectionString: string | undefined): void {
   if (!connectionString) return;
   let params: URLSearchParams;
@@ -51,8 +75,8 @@ export function createWorkerPool(): Pool {
   // Prefers the least-privileged spr_worker_runtime role (migration 0020) when
   // an operator has provisioned WORKER_DATABASE_URL; otherwise falls back to
   // the owner connection, matching appPool's fallback in src/db/index.ts.
-  const connectionString = (process.env.WORKER_DATABASE_URL || process.env.DATABASE_URL)?.trim();
-  rejectTlsQueryParameters(connectionString);
+  const rawConnectionString = (process.env.WORKER_DATABASE_URL || process.env.DATABASE_URL)?.trim();
+  const connectionString = normalizeWorkerConnectionString(rawConnectionString, mode);
   const pool = connectionString
     ? new Pool({ connectionString, ...base })
     : new Pool({ host: process.env.SQL_HOST, user: process.env.SQL_USER, password: process.env.SQL_PASSWORD, database: process.env.SQL_DB_NAME, ...base });
