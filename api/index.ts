@@ -1,4 +1,5 @@
 process.env.SPR_SKIP_AUTOSTART = 'true';
+process.env.SPR_API_ONLY = 'true';
 
 const { app } = await import('../server.ts');
 
