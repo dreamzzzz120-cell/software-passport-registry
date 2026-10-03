@@ -33,8 +33,8 @@ function FounderSection({ title, hint, defaultOpen = false, children }: { title:
 interface SelfPassportSummary { id?: string; name?: string; version?: string; overallScore?: number; healthStatus?: string; releaseDate?: string; publisher?: string; scannedAt?: string; sbomComponentCount?: number | null; evidenceCount?: number; openFindings?: number; criticalOrHigh?: number; }
 
 export default function FounderDashboardView({ userRole }: FounderDashboardViewProps) {
-  const [launchTicket, setPassport] = useState<SelfPassportSummary | null>(null);
-  const [loadingPassport, setLoadingLaunchTicket] = useState(false);
+  const [passport, setPassport] = useState<SelfPassportSummary | null>(null);
+  const [loadingPassport, setLoadingPassport] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const ownerAccess = userRole === 'Owner';
 
@@ -43,7 +43,7 @@ export default function FounderDashboardView({ userRole }: FounderDashboardViewP
   useEffect(() => { if (ownerAccess) void fetchSelfPassport(); }, [ownerAccess]);
 
   const fetchSelfPassport = async () => {
-    setLoadingLaunchTicket(true); setError(null);
+    setLoadingPassport(true); setError(null);
     try {
       const response = await apiFetch('/api/passports/self-passport');
       const data = await response.json().catch(() => null);
@@ -51,7 +51,7 @@ export default function FounderDashboardView({ userRole }: FounderDashboardViewP
       if (!response.ok) throw new Error(data?.error || `Self passport request failed (${response.status})`);
       setPassport({ id:data.id, name:data.name, version:data.version, overallScore:data.overallScore, healthStatus:data.healthStatus, releaseDate:data.releaseDate, publisher:data.publisher, scannedAt:data.scannedAt, sbomComponentCount:data.sbomComponentCount, evidenceCount:data.evidenceCount, openFindings:data.openFindings, criticalOrHigh:data.criticalOrHigh });
     } catch (err: any) { setError(err?.message || 'Unable to fetch SPR self passport.'); }
-    finally { setLoadingLaunchTicket(false); }
+    finally { setLoadingPassport(false); }
   };
 
   if (!ownerAccess) return <div className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 p-8 text-[var(--spr-text)]"><div className="flex items-center gap-3 mb-4"><ShieldCheck className="w-6 h-6 text-[var(--spr-red)]" /><div><h1 className="text-xl font-semibold">Founder Admin Access Required</h1><p className="text-sm text-[var(--spr-text-muted)]">You must be signed in as an Owner to view the Founder/Admin Control Center.</p></div></div><div className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-surface)] p-6"><p className="text-sm text-[var(--spr-text-muted)]">This dashboard contains privileged SPR system telemetry, self-verification reports, and high-confidence executive controls. Please contact your administrator to request Owner role access.</p></div></div>;
