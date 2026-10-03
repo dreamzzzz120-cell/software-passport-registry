@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { Router } from 'express';
 import { z } from 'zod';
 import { appPool } from '../db/index.ts';
@@ -6,6 +7,20 @@ import { DISTRIBUTION_TENANT_ID } from '../lib/distribution-engine.ts';
 
 const stages = ['new','qualified','contacted','replied','demo','pilot','customer','lost'] as const;
 const stageSchema = z.object({ stage: z.enum(stages) }).strict();
+const aeoStatus = ['backlog','published','monitoring','retired'] as const;
+const aeoIntent = ['informational','commercial','comparison','navigational'] as const;
+const aeoUpsertSchema = z.object({
+  question: z.string().trim().min(8).max(500),
+  intent: z.enum(aeoIntent).default('informational'),
+  targetPath: z.string().trim().max(512).nullable().optional(),
+  status: z.enum(aeoStatus).default('backlog'),
+  answerEvidence: z.array(z.string().trim().min(1).max(512)).max(50).default([]),
+}).strict();
+const aeoObservationSchema = z.object({
+  observedMentions: z.number().int().min(0).max(1000000),
+  observedCitations: z.number().int().min(0).max(1000000),
+  status: z.enum(aeoStatus).optional(),
+}).strict();
 const settingsSchema = z.object({
   discoveryEnabled: z.boolean().optional(),
   outreachEnabled: z.boolean().optional(),
@@ -40,9 +55,24 @@ export function createDistributionGrowthRouter() {
         const settingsResult = await client.query(`SELECT discovery_enabled AS "discoveryEnabled", outreach_enabled AS "outreachEnabled", daily_send_cap AS "dailySendCap", followup_delay_days AS "followupDelayDays", max_followups AS "maxFollowups", demo_url AS "demoUrl", updated_at AS "updatedAt" FROM distribution_campaign_settings WHERE tenant_id=$1 LIMIT 1`, [DISTRIBUTION_TENANT_ID]);
         const contactsResult = await client.query(`SELECT id,email,company,source_url AS "sourceUrl",evidence,outreach_basis AS "outreachBasis",status,pipeline_stage AS "pipelineStage",last_contacted_at AS "lastContactedAt",next_followup_at AS "nextFollowupAt",followup_count AS "followupCount",replied_at AS "repliedAt",demo_at AS "demoAt",pilot_at AS "pilotAt",customer_at AS "customerAt",lost_at AS "lostAt",created_at AS "createdAt",updated_at AS "updatedAt" FROM distribution_contacts WHERE tenant_id=$1 ORDER BY updated_at DESC LIMIT 500`, [DISTRIBUTION_TENANT_ID]);
         const messagesResult = await client.query(`SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE status='sent')::int AS sent, COUNT(*) FILTER (WHERE status='failed')::int AS failed FROM distribution_messages WHERE tenant_id=$1`, [DISTRIBUTION_TENANT_ID]);
+        const aeoResult = await client.query(`SELECT id,question,intent,target_path AS "targetPath",status,answer_evidence AS "answerEvidence",observed_mentions AS "observedMentions",observed_citations AS "observedCitations",last_checked_at AS "lastCheckedAt",created_at AS "createdAt",updated_at AS "updatedAt" FROM distribution_aeo_queries WHERE tenant_id=$1 ORDER BY updated_at DESC LIMIT 250`, [DISTRIBUTION_TENANT_ID]);
+        const aeoRows = (aeoResult.rows ?? []).map((row: any) => {
+          let evidence: unknown = [];
+          try { evidence = JSON.parse(row.answerEvidence || '[]'); } catch { evidence = []; }
+          return { ...row, answerEvidence: Array.isArray(evidence) ? evidence : [] };
+        });
+        const aeo = {
+          queries: aeoRows,
+          totals: {
+            tracked: aeoRows.length,
+            published: aeoRows.filter((row: any) => row.status === 'published' || row.status === 'monitoring').length,
+            mentions: aeoRows.reduce((sum: number, row: any) => sum + Number(row.observedMentions || 0), 0),
+            citations: aeoRows.reduce((sum: number, row: any) => sum + Number(row.observedCitations || 0), 0),
+          },
+        };
         const contacts = contactsResult.rows ?? [];
         const pipeline = Object.fromEntries(stages.map((stage) => [stage, contacts.filter((c: any) => c.pipelineStage === stage).length]));
-        return { settings: settingsResult.rows?.[0] ?? null, pipeline, contacts, messages: messagesResult.rows?.[0] ?? { total: 0, sent: 0, failed: 0 } };
+        return { settings: settingsResult.rows?.[0] ?? null, pipeline, contacts, messages: messagesResult.rows?.[0] ?? { total: 0, sent: 0, failed: 0 }, aeo };
       });
       return res.json({ ...payload, generatedAt: new Date().toISOString(), evidencePolicy: 'Pipeline stage is operational state, not trust evidence. Qualification and conversion claims remain observational until recorded.' });
     } catch (error) { return next(error); }
@@ -56,6 +86,58 @@ export function createDistributionGrowthRouter() {
       if (contactId.length < 1 || contactId.length > 128) return res.status(400).json({ error: 'Invalid contact id.' });
       const result = await withTenant(async (client) => client.query(`UPDATE distribution_contacts SET pipeline_stage=$3, replied_at=CASE WHEN $3='replied' THEN COALESCE(replied_at,CURRENT_TIMESTAMP) ELSE replied_at END, demo_at=CASE WHEN $3='demo' THEN COALESCE(demo_at,CURRENT_TIMESTAMP) ELSE demo_at END, pilot_at=CASE WHEN $3='pilot' THEN COALESCE(pilot_at,CURRENT_TIMESTAMP) ELSE pilot_at END, customer_at=CASE WHEN $3='customer' THEN COALESCE(customer_at,CURRENT_TIMESTAMP) ELSE customer_at END, lost_at=CASE WHEN $3='lost' THEN COALESCE(lost_at,CURRENT_TIMESTAMP) ELSE lost_at END, updated_at=CURRENT_TIMESTAMP WHERE id=$1 AND tenant_id=$2 RETURNING id,pipeline_stage AS "pipelineStage",updated_at AS "updatedAt"`, [contactId, DISTRIBUTION_TENANT_ID, parsed.data.stage]));
       if (!result.rows?.[0]) return res.status(404).json({ error: 'Contact not found.' });
+      return res.json(result.rows[0]);
+    } catch (error) { return next(error); }
+  });
+
+  router.post('/founder/distribution/aeo', ...founderOnly, async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const parsed = aeoUpsertSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: 'Invalid AEO query.' });
+      const value = parsed.data;
+      const id = `aeo-${crypto.randomUUID()}`;
+      const result = await withTenant(async (client) => client.query(
+        `INSERT INTO distribution_aeo_queries (id,tenant_id,question,intent,target_path,status,answer_evidence,updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,CURRENT_TIMESTAMP)
+         ON CONFLICT (tenant_id, lower(question)) DO UPDATE SET
+           intent=EXCLUDED.intent,
+           target_path=EXCLUDED.target_path,
+           status=EXCLUDED.status,
+           answer_evidence=EXCLUDED.answer_evidence,
+           updated_at=CURRENT_TIMESTAMP
+         RETURNING id,question,intent,target_path AS "targetPath",status,answer_evidence AS "answerEvidence",
+                   observed_mentions AS "observedMentions",observed_citations AS "observedCitations",
+                   last_checked_at AS "lastCheckedAt",updated_at AS "updatedAt"`,
+        [id, DISTRIBUTION_TENANT_ID, value.question, value.intent, value.targetPath ?? null, value.status, JSON.stringify(value.answerEvidence)]
+      ));
+      const row = result.rows?.[0];
+      if (row) {
+        try { row.answerEvidence = JSON.parse(row.answerEvidence || '[]'); } catch { row.answerEvidence = []; }
+      }
+      return res.status(201).json(row);
+    } catch (error) { return next(error); }
+  });
+
+  router.patch('/founder/distribution/aeo/:queryId/observation', ...founderOnly, async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const parsed = aeoObservationSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: 'Invalid AEO observation.' });
+      const queryId = String(req.params.queryId || '').trim();
+      if (!queryId || queryId.length > 128) return res.status(400).json({ error: 'Invalid AEO query id.' });
+      const value = parsed.data;
+      const result = await withTenant(async (client) => client.query(
+        `UPDATE distribution_aeo_queries
+         SET observed_mentions=$3,
+             observed_citations=$4,
+             status=COALESCE($5,status),
+             last_checked_at=CURRENT_TIMESTAMP,
+             updated_at=CURRENT_TIMESTAMP
+         WHERE id=$1 AND tenant_id=$2
+         RETURNING id,question,status,observed_mentions AS "observedMentions",
+                   observed_citations AS "observedCitations",last_checked_at AS "lastCheckedAt"`,
+        [queryId, DISTRIBUTION_TENANT_ID, value.observedMentions, value.observedCitations, value.status ?? null]
+      ));
+      if (!result.rows?.[0]) return res.status(404).json({ error: 'AEO query not found.' });
       return res.json(result.rows[0]);
     } catch (error) { return next(error); }
   });
