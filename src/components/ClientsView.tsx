@@ -22,11 +22,13 @@ import {
   ShieldCheck,
   Users,
   X,
+  Orbit,
 } from 'lucide-react';
 import { fuzzyMatch } from '../utils/filter';
 import { toJsonArrayColumn } from '../lib/clientJsonColumns';
 import { Client, SoftwarePassport } from '../types';
 import { apiFetch } from '../utils/apiClient';
+import ClientGalaxyView from './ClientGalaxyView';
 
 interface ClientsViewProps {
   clients: Client[];
@@ -80,6 +82,7 @@ export default function ClientsView({
   const [creatingClient, setCreatingClient] = useState(false);
   const [addClientError, setAddClientError] = useState<string | null>(null);
   const [addClientSuccess, setAddClientSuccess] = useState<string | null>(null);
+  const [showGalaxy, setShowGalaxy] = useState(false);
 
   const canCreateClient = role === 'Owner' || role === 'Admin';
 
@@ -225,6 +228,10 @@ export default function ClientsView({
     link.click();
     URL.revokeObjectURL(url);
   };
+
+  if (showGalaxy && selectedClient) {
+    return <ClientGalaxyView client={selectedClient} passports={passports} onClose={() => setShowGalaxy(false)} onOpenLaunchTicket={(id) => onNavigateTab('passports', id)} />;
+  }
 
   return (
     <div className="space-y-6" id="msp-clients-index">
@@ -390,6 +397,8 @@ export default function ClientsView({
                   </div>
                   <p className="text-[11px] text-[var(--spr-text-muted)] mt-2">Coverage is based on available records. It should not be read as a certification by itself.</p>
                 </div>
+
+                <button type="button" onClick={() => setShowGalaxy(true)} className="spr-btn spr-btn-primary w-full"><Orbit className="w-4 h-4" /> View Client Galaxy →</button>
 
                 <div className="grid grid-cols-2 gap-2">
                   <ActionButton icon={<FileCheck2 className="w-4 h-4" />} label="Open Launch Tickets" onClick={() => onNavigateTab('passports')} />
