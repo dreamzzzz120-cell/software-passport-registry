@@ -75,6 +75,23 @@ await check('baseline security headers', async () => {
 });
 
 
+
+await check('production anonymous IP rate limit returns 429', async () => {
+  let limited = null;
+  for (let i = 0; i < 110; i += 1) {
+    const r = await fetch(API + '/api/vendors', {redirect:'manual'});
+    if (r.status === 429) {
+      limited = r;
+      break;
+    }
+    assert(r.status === 401 || r.status === 403, `expected protected-route rejection before limit, got ${r.status} at request ${i + 1}`);
+  }
+  assert(limited, 'no 429 observed for one anonymous source within 110 requests');
+  assert(Boolean(limited.headers.get('retry-after')), '429 missing Retry-After');
+  assert(Boolean(limited.headers.get('x-ratelimit-limit')), '429 missing X-RateLimit-Limit');
+  assert(Boolean(limited.headers.get('x-ratelimit-policy')), '429 missing X-RateLimit-Policy');
+});
+
 await check('production credential rate limit resists forwarding-header rotation', async () => {
   let limited = null;
   const syntheticKey = 'spr-smoke-rate-limit-proof-v1';
