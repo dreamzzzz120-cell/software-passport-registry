@@ -152,12 +152,12 @@ export function scoreLicensing(input: ScoringInput): CategoryResult {
   const unevaluated = Math.min(sbomTotal, Math.max(0, Math.floor(input.licenceUnevaluatedComponentCount ?? 0)));
   const total = sbomTotal - unevaluated;
   if (total <= 0) {
-    return { status: 'not_observed', reason: 'Every SBOM component is a CI workflow action reference, which carries no licence metadata, so licence coverage could not be measured.' };
+    return { status: 'not_observed', reason: 'No SBOM component had sufficient package/version metadata for licence evaluation. Unevaluable inputs can include unresolved dependency declarations, CI workflow references, and repository file components.' };
   }
   const withoutLicence = Math.min(total, openFindings(input.findings).filter(isLicenceFinding).length);
   const withLicence = total - withoutLicence;
   const percent = Math.round((withLicence / total) * 100);
-  const scopeNote = unevaluated > 0 ? ` ${unevaluated} CI workflow action reference${unevaluated === 1 ? '' : 's'} not evaluated.` : '';
+  const scopeNote = unevaluated > 0 ? ` ${unevaluated} SBOM component${unevaluated === 1 ? '' : 's'} outside licence evaluation scope.` : '';
   return {
     status: 'scored',
     score: clampScore(percent),
