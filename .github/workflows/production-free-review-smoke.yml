@@ -18,7 +18,7 @@ jobs:
         run: |
           set -euo pipefail
           BASE="https://www.softwarepassportregistry.com"
-          SUBMIT="$(curl --fail-with-body -sS -X POST "$BASE/api/free-review/scan"             -H 'content-type: application/json'             -H 'accept: application/json'             --data '{"owner":"octocat","repository":"Hello-World"}')"
+          SUBMIT="$(curl --fail-with-body -sS -X POST "$BASE/api/free-review/scan"             -H 'content-type: application/json'             -H 'accept: application/json'             --data '{"owner":"expressjs","repository":"express"}')"
           STATUS_URL="$(printf '%s' "$SUBMIT" | jq -r '.statusUrl // empty')"
           PASSPORT_ID="$(printf '%s' "$SUBMIT" | jq -r '.passportId // empty')"
           test -n "$STATUS_URL"
