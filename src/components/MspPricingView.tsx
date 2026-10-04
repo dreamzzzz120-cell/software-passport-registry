@@ -193,8 +193,12 @@ export default function MspPricingView({ isAuthenticated, onPrimaryAction }: Pro
                   </li>
                 ))}
               </ul>
-              <button onClick={onPrimaryAction} className="spr-btn spr-btn-primary mt-6 w-full">
-                {isAuthenticated ? 'Open billing' : plan.checkoutAvailable ? 'Get started' : 'Sign in'}
+              <button onClick={() => {
+                if (isAuthenticated) return onPrimaryAction();
+                if (plan.checkoutAvailable) return onPrimaryAction();
+                window.location.assign('/contact/');
+              }} className="spr-btn spr-btn-primary mt-6 w-full">
+                {isAuthenticated ? 'Open billing' : plan.checkoutAvailable ? 'Get started' : 'Contact sales'}
               </button>
             </div>
           );
@@ -227,7 +231,7 @@ export default function MspPricingView({ isAuthenticated, onPrimaryAction }: Pro
         <p>
           {plans?.some((plan) => plan.checkoutAvailable)
             ? 'Available checkout prices are read from Stripe. Recurring plans are billed through Stripe inside SPR Billing.'
-            : 'Online checkout is currently unavailable. Sign in to explore the workspace and billing options.'}
+            : 'Online checkout is currently unavailable. Contact sales for pilot or contract pricing, or sign in to explore the workspace.'}
           {' '}Enterprise pricing and limits are contractual. White-label and advanced capabilities are subject to the plan and configured account entitlements.
         </p>
       </div>
