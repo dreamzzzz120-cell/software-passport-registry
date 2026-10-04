@@ -1,3 +1,4 @@
+import https from 'node:https';
 const API = process.env.SPR_PRODUCTION_API || 'https://spr-app-production-production-4d46.up.railway.app';
 const WEB = process.env.SPR_PRODUCTION_WEB || 'https://softwarepassportregistry.com';
 
@@ -42,8 +43,23 @@ await check('anonymous mutation rejected', async () => {
 });
 
 await check('TRACE rejected', async () => {
-  const r = await fetch(API + '/health', {method:'TRACE',redirect:'manual'});
-  assert(r.status === 405, `expected 405 got ${r.status}`);
+  const status = await new Promise((resolve, reject) => {
+    const target = new URL(API + '/health');
+    const request = https.request({
+      protocol: target.protocol,
+      hostname: target.hostname,
+      port: target.port || 443,
+      path: target.pathname,
+      method: 'TRACE',
+      rejectUnauthorized: true,
+    }, response => {
+      response.resume();
+      resolve(response.statusCode);
+    });
+    request.once('error', reject);
+    request.end();
+  });
+  assert(status === 405, `expected 405 got ${status}`);
 });
 
 await check('hostile origin not reflected', async () => {
