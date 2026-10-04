@@ -12,6 +12,7 @@ import { decryptCredentials } from '../integrations/credential-vault.ts';
 import { credentialsFrom, onScanCompleted } from '../integrations/connectwise/scan-completion-hook.ts';
 import { applySecurityEngineOutcomes, buildRepositoryInventory, makeArchiveLister, type RepositoryInventory } from '../scanners/repository-inventory.ts';
 import { markScanRunRunning, persistInventory, pinScanCommit, recomputeCoverage, settleScanRun, type LedgerContext } from '../scanners/scan-ledger.ts';
+import { tryStoreArtifact } from '../integrations/artifact-store.ts';
 
 const WORKER_ID = `${os.hostname()}:${process.pid}:security`;
 const MAX_ARCHIVE_BYTES = 50 * 1024 * 1024;
@@ -120,6 +121,35 @@ async function processSecurityJob(pool: Pool, job: any) {
     await pool.query(`UPDATE agent_jobs SET progress=55,updated_at=NOW() WHERE id=$1 AND tenant_id=$2`, [job.id, job.tenant_id]);
     const scanned = await runRealRepositoryScanners(scanRoot, generated.document);
     const findings = scanned.findings;
+
+    // Heavy, immutable scanner artifacts live in Supabase Storage. Railway
+    // Postgres keeps only compact summaries/hashes/pointers so autonomous
+    // registry growth cannot consume the operational DB volume.
+    const [sbomArtifact, scannerArtifact] = await Promise.all([
+      tryStoreArtifact({
+        tenantId: job.tenant_id,
+        subjectId: job.scan_id ?? job.passport_id ?? job.id,
+        artifactType: 'cyclonedx-sbom',
+        extension: 'json',
+        contentType: 'application/vnd.cyclonedx+json',
+        body: JSON.stringify(generated.document),
+      }),
+      tryStoreArtifact({
+        tenantId: job.tenant_id,
+        subjectId: job.scan_id ?? job.passport_id ?? job.id,
+        artifactType: 'scanner-observation',
+        extension: 'json',
+        contentType: 'application/json',
+        body: JSON.stringify({
+          repository: `${source.repository_owner}/${source.repository_name}`,
+          requestedRef,
+          resolvedCommitSha: commitSha,
+          findings,
+          inspectionReports: scanned.inspectionReports,
+        }),
+      }),
+    ]);
+
     const persistedFindings: Array<{ id: string; filePath: string | null }> = [];
     for (const finding of findings) {
       const findingKey = sha256(scanFindingIdentity({ tenantId: job.tenant_id, passportId: job.passport_id, engineId: finding.engineId, category: finding.category, title: finding.title, component: finding.component }));
@@ -127,7 +157,23 @@ async function processSecurityJob(pool: Pool, job: any) {
       await pool.query(`INSERT INTO scan_findings (id,tenant_id,asset_id,job_id,severity,category,title,description,component,status,detected_at,engine_id,file_path,scan_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'Open',NOW(),$10,$11,$12) ON CONFLICT (id) DO UPDATE SET file_path = COALESCE(scan_findings.file_path, EXCLUDED.file_path), scan_id = COALESCE(scan_findings.scan_id, EXCLUDED.scan_id)`, [findingId, job.tenant_id, job.passport_id, job.id, finding.severity, finding.category, finding.title, finding.description, finding.component || null, finding.engineId, finding.filePath ?? null, job.scan_id ?? null]);
       persistedFindings.push({ id: findingId, filePath: finding.filePath ?? null });
     }
-    const evidencePayload = JSON.stringify({ repository: `${source.repository_owner}/${source.repository_name}`, requestedRef, resolvedCommitSha: commitSha, engines: ['Syft','OSV','spr-secret-scanner-v1','spr-iac-config-scanner-v1','spr-license-scanner-v1'], findingCount: findings.length, limitations: ['OSV results are provider observations, not cryptographic verification.','Secret/config rules are deterministic pattern scanners and can produce false positives/negatives.'] });
+    const evidencePayload = JSON.stringify({
+      repository: `${source.repository_owner}/${source.repository_name}`,
+      requestedRef,
+      resolvedCommitSha: commitSha,
+      engines: ['Syft','OSV','spr-secret-scanner-v1','spr-iac-config-scanner-v1','spr-license-scanner-v1'],
+      findingCount: findings.length,
+      artifacts: {
+        sbom: sbomArtifact,
+        scannerObservation: scannerArtifact,
+      },
+      artifactStorage: sbomArtifact || scannerArtifact ? 'supabase-storage' : 'unavailable',
+      limitations: [
+        'OSV results are provider observations, not cryptographic verification.',
+        'Secret/config rules are deterministic pattern scanners and can produce false positives/negatives.',
+        ...(sbomArtifact && scannerArtifact ? [] : ['One or more heavy scan artifacts could not be externalized; compact evidence metadata was still persisted.']),
+      ],
+    });
     const evidenceHash = sha256(evidencePayload);
     const evidenceId = `ev-security-${job.id}-${evidenceHash.slice(0,24)}`;
     await pool.query(`INSERT INTO evidence_items (id,tenant_id,asset_id,name,type,verified,status,signer,timestamp,hash,raw_content,engine_id,scan_id) VALUES ($1,$2,$3,'Multi-engine repository security scan','Security Scan',0,'OBSERVED','SPR scanner',NOW(),$4,$5,'spr-security-orchestrator-v1',$6) ON CONFLICT DO NOTHING`, [evidenceId, job.tenant_id, job.passport_id, `sha256:${evidenceHash}`, evidencePayload, job.scan_id ?? null]);
