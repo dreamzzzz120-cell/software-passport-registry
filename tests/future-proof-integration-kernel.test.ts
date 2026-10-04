@@ -22,7 +22,7 @@ describe('future-proof integration kernel', () => {
   });
 
   it('never upgrades planned capabilities into supported capabilities', () => {
-    const planned = UNIVERSAL_CONNECTORS.filter(c => c.state === 'planned').map(manifestFromConnector);
+    const planned = UNIVERSAL_CONNECTORS.filter(c => c.state === 'planned').map(connector => manifestFromConnector(connector));
     expect(planned.length).toBeGreaterThan(0);
     for (const manifest of planned) {
       expect(manifest.capabilities.every(capability => capability.support === 'unknown')).toBe(true);
@@ -30,7 +30,7 @@ describe('future-proof integration kernel', () => {
   });
 
   it('marks live connector declarations supported without claiming evidence exists', () => {
-    const live = UNIVERSAL_CONNECTORS.filter(c => c.state === 'live').map(manifestFromConnector);
+    const live = UNIVERSAL_CONNECTORS.filter(c => c.state === 'live').map(connector => manifestFromConnector(connector));
     for (const manifest of live) {
       expect(manifest.capabilities.every(capability => capability.support === 'supported')).toBe(true);
       expect(manifest.capabilities.every(capability => capability.evidenceTypes.length === 0)).toBe(true);
