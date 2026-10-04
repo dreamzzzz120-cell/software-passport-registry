@@ -184,9 +184,16 @@ export function createUniversalIntakeRouter() {
       if (!parsed.success) return res.status(400).json({ error: 'Invalid intake claim request.' });
       const session = await loadSession(parsed.data.sessionId);
       if (!session) return res.status(410).json({ error: 'Intake session expired or closed.' });
-      if (session.tenantId && session.tenantId !== req.user!.tenantId) return res.status(403).json({ error: 'Intake belongs to another workspace.' });
-      await db.execute(sql`UPDATE intake_sessions SET tenant_id=${req.user!.tenantId}, status='CLAIMED', claimed_by=${req.user!.uid}, claimed_at=NOW() WHERE id=${session.id} AND (tenant_id IS NULL OR tenant_id=${req.user!.tenantId})`);
-      await db.execute(sql`UPDATE intake_items SET tenant_id=${req.user!.tenantId}, status=CASE WHEN status='UPLOADED' THEN 'QUEUED' ELSE status END WHERE session_id=${session.id} AND (tenant_id IS NULL OR tenant_id=${req.user!.tenantId})`);
+      const claimed = await db.execute(sql`UPDATE intake_sessions
+        SET tenant_id=${req.user!.tenantId}, status='CLAIMED', claimed_by=${req.user!.uid}, claimed_at=NOW()
+        WHERE id=${session.id} AND status='OPEN' AND tenant_id IS NULL
+        RETURNING id`);
+      if (!((claimed as any).rows?.length)) {
+        const owner = (await db.execute(sql`SELECT tenant_id AS "tenantId", status FROM intake_sessions WHERE id=${session.id} LIMIT 1`) as any).rows?.[0];
+        if (owner?.tenantId && owner.tenantId !== req.user!.tenantId) return res.status(403).json({ error: 'Intake belongs to another workspace.' });
+        return res.status(409).json({ error: 'Intake session was already claimed or changed.' });
+      }
+      await db.execute(sql`UPDATE intake_items SET tenant_id=${req.user!.tenantId}, status=CASE WHEN status='UPLOADED' THEN 'QUEUED' ELSE status END WHERE session_id=${session.id} AND tenant_id IS NULL`);
       return res.status(200).json({ success: true, sessionId: session.id, tenantId: req.user!.tenantId });
     } catch (error) { return next(error); }
   });
