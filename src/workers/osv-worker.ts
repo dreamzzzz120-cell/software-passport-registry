@@ -2,7 +2,7 @@ import { decryptCredentials } from '../integrations/credential-vault.ts';
 import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, mkdir, open, readdir, lstat, rm, unlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, open, readFile, readdir, lstat, rm, unlink } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { appendAuditEntryViaPool } from '../security/audit-log.ts';
 import { calculateAndStoreTrustScore } from '../utils/scanner.ts';
@@ -33,7 +33,7 @@ type ClaimedJob = {
   scan_id: string | null;
 };
 
-type SbomComponent = { name?: string; version?: string; ecosystem?: string };
+type SbomComponent = { name?: string; version?: string; ecosystem?: string; purl?: string; declaredRange?: string; resolution?: 'resolved' | 'declared' };
 
 const WORKER_ID = `${os.hostname()}:${process.pid}`;
 const PROVIDER_TIMEOUT_MS = 15_000;
@@ -500,6 +500,54 @@ export async function runBounded(executable: string, args: string[], timeoutMs: 
   });
 }
 
+export type DeclaredNpmDependency = { name: string; ecosystem: 'npm'; declaredRange: string; resolution: 'declared' };
+
+export function declaredNpmDependenciesFromPackageJson(document: unknown): DeclaredNpmDependency[] {
+  if (!document || typeof document !== 'object' || Array.isArray(document)) return [];
+  const source = document as Record<string, unknown>;
+  const groups = ['dependencies', 'optionalDependencies', 'peerDependencies', 'devDependencies'] as const;
+  const seen = new Map<string, DeclaredNpmDependency>();
+  for (const group of groups) {
+    const entries = source[group];
+    if (!entries || typeof entries !== 'object' || Array.isArray(entries)) continue;
+    for (const [name, rawRange] of Object.entries(entries as Record<string, unknown>)) {
+      if (typeof rawRange !== 'string' || !name.trim() || !rawRange.trim()) continue;
+      if (!seen.has(name)) seen.set(name, { name, ecosystem: 'npm', declaredRange: rawRange.trim(), resolution: 'declared' });
+    }
+  }
+  return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function collectDeclaredNpmDependencies(scanRoot: string): Promise<DeclaredNpmDependency[]> {
+  const seen = new Map<string, DeclaredNpmDependency>();
+  async function walk(directory: string): Promise<void> {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      if (entry.isSymbolicLink()) continue;
+      if (entry.isDirectory()) {
+        if (!ignoredDirectories.has(entry.name)) await walk(path.join(directory, entry.name));
+        continue;
+      }
+      if (!entry.isFile() || entry.name !== 'package.json') continue;
+      try {
+        const parsed = JSON.parse(await readFile(path.join(directory, entry.name), 'utf8'));
+        for (const dep of declaredNpmDependenciesFromPackageJson(parsed)) if (!seen.has(dep.name)) seen.set(dep.name, dep);
+      } catch {
+        // Malformed manifests are handled by the normal scan/error path. This
+        // enrichment must never turn a valid Syft result into a false failure.
+      }
+    }
+  }
+  await walk(scanRoot);
+  return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export function mergeDeclaredNpmDependencies(components: SbomComponent[], declared: DeclaredNpmDependency[]): SbomComponent[] {
+  const resolvedNpmNames = new Set(components.filter((c) => c.ecosystem === 'npm' && typeof c.version === 'string' && c.version.length > 0).map((c) => c.name));
+  const merged = [...components.map((c) => ({ ...c, ...(c.version ? { resolution: 'resolved' as const } : {}) }))];
+  for (const dep of declared) if (!resolvedNpmNames.has(dep.name)) merged.push(dep);
+  return merged.sort((a, b) => `${a.ecosystem || ''}:${a.name || ''}@${a.version || a.declaredRange || ''}`.localeCompare(`${b.ecosystem || ''}:${b.name || ''}@${b.version || b.declaredRange || ''}`));
+}
+
 export async function generateRepositorySbom(scanRoot: string, syftPath: string, options: { timeoutMs?: number; executableArgsPrefix?: string[] } = {}) {
   const prefix = options.executableArgsPrefix || [];
   const versionResult = await runBounded(syftPath, [...prefix,'version','-o','json'], 15_000, 1024 * 1024);
@@ -516,7 +564,13 @@ export async function generateRepositorySbom(scanRoot: string, syftPath: string,
   // `raw` stays the untouched Syft output so rawSbomHash still attests to
   // exactly what the generator produced.
   const document = normalizeCycloneDxComponentNames(parsed, scanRoot);
-  return { document, components: normalizeCycloneDx(document), raw: result.stdout, exitCode: result.code };
+  let resolvedComponents: SbomComponent[] = [];
+  try { resolvedComponents = normalizeCycloneDx(document); }
+  catch (error: any) { if (error?.message !== 'SBOM_EMPTY') throw error; }
+  const declaredNpmDependencies = await collectDeclaredNpmDependencies(scanRoot);
+  const components = mergeDeclaredNpmDependencies(resolvedComponents, declaredNpmDependencies);
+  if (components.length === 0) throw new Error('SBOM_EMPTY');
+  return { document, components, declaredNpmDependencies, raw: result.stdout, exitCode: result.code };
 }
 
 export function validateArchiveEntries(entries: string[]) {
@@ -721,10 +775,10 @@ async function processRepositoryJob(pool: Pool, job: ClaimedJob) {
     const manifests = await inspectTree(scanRoot); mark('manifest_inspected', { manifestCount: manifests.length });
     const syftPath = await locateSyft(); mark('syft_located');
     const generated = await generateRepositorySbom(scanRoot,syftPath); const scannerEndedAt = new Date();
-    mark('sbom_generated', { componentCount: generated.components.length });
-    const sbom = generated.document; const components = generated.components; const osvComponents = components.filter(component => component.version); if (osvComponents.length === 0) throw new Error('SBOM_EMPTY');
+    mark('sbom_generated', { componentCount: generated.components.length, resolvedComponentCount: generated.components.filter(component => component.version).length, declaredUnresolvedComponentCount: generated.components.filter(component => component.resolution === 'declared').length });
+    const sbom = generated.document; const components = generated.components; const osvComponents = components.filter(component => component.version);
     const acquiredAt = new Date(); const sourceHash = sha256(JSON.stringify(descriptor)); const manifestHash = sha256(JSON.stringify(manifests)); const rawSbomHash = sha256(generated.raw); const componentsHash = sha256(JSON.stringify(components));
-    const sbomEvidencePayload = JSON.stringify({format:'CycloneDX JSON',componentCount:components.length,rawSbomHash,normalizedComponentsHash:componentsHash});
+    const sbomEvidencePayload = JSON.stringify({format:'CycloneDX JSON',componentCount:components.length,resolvedComponentCount:osvComponents.length,declaredUnresolvedComponentCount:components.filter(component => component.resolution === 'declared').length,rawSbomHash,normalizedComponentsHash:componentsHash,note:'Declared dependencies without a lockfile are preserved as unresolved evidence and are not submitted to OSV as installed versions.'});
     await pool.query(`UPDATE repository_scan_sources SET resolved_commit_sha=$2, default_branch=$3, visibility=$4, acquired_at=$5, source_descriptor_hash=$6, manifest_paths=$7, manifest_inventory_hash=$8, raw_sbom_hash=$9, sbom_document=$10, normalized_components=$11, normalized_components_hash=$12, scanner_name='Syft', scanner_version=$13, scanner_mode='directory CycloneDX JSON', scanner_started_at=$14, scanner_ended_at=$15, scanner_exit_code=0, scanner_error_category=NULL WHERE job_id=$1 AND tenant_id=$16`, [job.id,commitSha,descriptor.defaultBranch,descriptor.visibility,acquiredAt,sourceHash,JSON.stringify(manifests),manifestHash,rawSbomHash,JSON.stringify(sbom),JSON.stringify(components),componentsHash,SYFT_VERSION,scannerStartedAt,scannerEndedAt,job.tenant_id]);
     mark('sbom_persisted');
     const repoEvidenceId = deterministicId('ev-repo',`${job.id}|${sourceHash}`); const manifestEvidenceId = deterministicId('ev-manifest',`${job.id}|${manifestHash}`); const sbomEvidenceId = deterministicId('ev-sbom',`${job.id}|${rawSbomHash}|${componentsHash}`);
