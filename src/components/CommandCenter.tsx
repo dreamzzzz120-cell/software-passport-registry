@@ -2,7 +2,7 @@ import { useState, type Key, type ReactNode } from 'react';
 import {
   Activity, Bell, Bot, Boxes, Building, Building2, ClipboardCheck, CreditCard, Crown, FileBadge, FileText,
   Home, LayoutGrid, Lock, MessageSquareText, Network, PiggyBank, Plug, Puzzle, Scale, ScanLine, ScrollText,
-  Search, Settings, ShieldAlert, ShieldCheck, Sparkles, Store, TrendingUp, Users, Paintbrush, type LucideIcon,
+  Search, Settings, ShieldAlert, ShieldCheck, Sparkles, Store, TrendingUp, Users, Paintbrush, Share2, type LucideIcon,
 } from 'lucide-react';
 import { EXTENSIONS, type ExtensionDefinition } from '../workflows/extensionRegistry';
 import { AMBER, BLUE, CYAN, GREEN, ORANGE, PURPLE, RED, TEAL } from '../workflows/featureColors';
@@ -23,6 +23,7 @@ const CORE: NavItem[] = [
   { id: 'passports', label: 'Passports', icon: FileBadge, path: '/passports', color: AMBER, desc: 'Software Passports — structured records combining identity, security, and evidence for a piece of software.' },
   { id: 'coverage', label: 'Evidence coverage', icon: ShieldCheck, path: '/coverage', color: GREEN, desc: 'How much of your inventory has verifiable evidence versus self-attested claims.' },
   { id: 'evidence-explorer', label: 'Evidence Explorer', icon: Search, path: '/evidence-explorer', color: TEAL, desc: 'Browse and search the underlying evidence records collected for your passports.' },
+  { id: 'evidence-exchange', label: 'Evidence Exchange', icon: Share2, path: '/evidence-exchange', color: PURPLE, desc: 'Use the same evidence layer for buyers, vendors, operators, auditors, and executives — with decision trace and source guidance.' },
   { id: 'scans', label: 'Scans', icon: ScanLine, path: '/scans', color: ORANGE, desc: 'SBOM and vulnerability scans run against your assets.' },
   { id: 'monitoring', label: 'Monitoring', icon: Activity, path: '/monitoring', color: BLUE, desc: 'Live monitoring signals for tracked assets and integrations.' },
   { id: 'alerts', label: 'Alerts', icon: Bell, path: '/alerts', color: RED, desc: 'Active findings and notifications that need attention.' },
