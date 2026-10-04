@@ -143,23 +143,31 @@ export function createLegacyFreeReviewRouter() {
       // read for its LENGTH only -- the licence ratio needs a real denominator --
       // and the components themselves never leave this function.
       const passportRow = (await scopedDb.execute(sql`SELECT id, name, version, publisher, category, verification_status AS "verificationStatus", sbom FROM passports WHERE id=${passportId} AND tenant_id=${FREE_REVIEW_TENANT_ID} LIMIT 1`) as any).rows?.[0] || null;
-      const { sbomComponentCount, licenceUnevaluatedComponentCount } = (() => {
-        if (!passportRow?.sbom) return { sbomComponentCount: null, licenceUnevaluatedComponentCount: 0 };
+      const { sbomComponentCount, licenceUnevaluatedComponentCount, npmResolvedComponentCount } = (() => {
+        if (!passportRow?.sbom) return { sbomComponentCount: null, licenceUnevaluatedComponentCount: 0, npmResolvedComponentCount: 0 };
         try {
           const parsed = typeof passportRow.sbom === 'string' ? JSON.parse(passportRow.sbom) : passportRow.sbom;
-          if (!Array.isArray(parsed) || parsed.length === 0) return { sbomComponentCount: null, licenceUnevaluatedComponentCount: 0 };
+          if (!Array.isArray(parsed) || parsed.length === 0) return { sbomComponentCount: null, licenceUnevaluatedComponentCount: 0, npmResolvedComponentCount: 0 };
           // Same rule the licence scanner applies, so the denominator matches
           // the set the findings were drawn from.
-          return { sbomComponentCount: parsed.length, licenceUnevaluatedComponentCount: parsed.filter((c: any) => !isLicenceEvaluable(c)).length };
+          return { sbomComponentCount: parsed.length, licenceUnevaluatedComponentCount: parsed.filter((c: any) => !isLicenceEvaluable(c)).length, npmResolvedComponentCount: parsed.filter((c: any) => String(c?.ecosystem || '').toLowerCase() === 'npm' || String(c?.purl || '').startsWith('pkg:npm/')).length };
         } catch {
-          return { sbomComponentCount: null, licenceUnevaluatedComponentCount: 0 };
+          return { sbomComponentCount: null, licenceUnevaluatedComponentCount: 0, npmResolvedComponentCount: 0 };
         }
       })();
       const passport = passportRow
         ? { id: passportRow.id, name: passportRow.name, version: passportRow.version, publisher: passportRow.publisher, category: passportRow.category, verificationStatus: passportRow.verificationStatus }
         : null;
       const findings = (await scopedDb.execute(sql`SELECT id, severity, category, title, description, component, fixed_version AS "fixedVersion", status, detected_at AS "detectedAt", engine_id AS "engineId" FROM scan_findings WHERE tenant_id=${FREE_REVIEW_TENANT_ID} AND asset_id=${passportId} ORDER BY detected_at DESC`) as any).rows || [];
-      const evidence = (await scopedDb.execute(sql`SELECT id, name, type, verified, status, signer, timestamp, engine_id AS "engineId" FROM evidence_items WHERE tenant_id=${FREE_REVIEW_TENANT_ID} AND asset_id=${passportId} ORDER BY timestamp DESC`) as any).rows || [];
+      const evidence = (await scopedDb.execute(sql`SELECT id, name, type, verified, status, signer, timestamp, engine_id AS "engineId", raw_content AS "rawContent" FROM evidence_items WHERE tenant_id=${FREE_REVIEW_TENANT_ID} AND asset_id=${passportId} ORDER BY timestamp DESC`) as any).rows || [];
+      const declaredNpm = (() => {
+        const row = evidence.find((item: any) => item.name === 'Declared npm dependency inventory' && item.rawContent);
+        if (!row) return null;
+        try {
+          const parsed = typeof row.rawContent === 'string' ? JSON.parse(row.rawContent) : row.rawContent;
+          return { total: Number(parsed?.total || 0), production: Number(parsed?.production || 0), development: Number(parsed?.development || 0), peer: Number(parsed?.peer || 0), optional: Number(parsed?.optional || 0) };
+        } catch { return null; }
+      })();
       const openFindings = findings.filter((f: any) => !['resolved', 'closed', 'verified'].includes(String(f.status).toLowerCase()));
       const criticalOrHigh = openFindings.filter((f: any) => ['critical', 'high'].includes(String(f.severity).toLowerCase()));
       // Visible progress, taken from what the workers actually record. A Free
@@ -263,7 +271,7 @@ export function createLegacyFreeReviewRouter() {
         engineIds.has('osv-worker') && 'Dependency vulnerability analysis',
         engineIds.has('spr-security-orchestrator-v1') && 'Security analysis',
         Object.prototype.hasOwnProperty.call(evidenceByType, 'Attestation') && 'Attestation detection',
-        sbomComponentCount !== null && 'Licence analysis',
+        assessment.categories.licensing.status === 'scored' && 'Licence analysis',
       ].filter((entry): entry is string => typeof entry === 'string');
 
       res.setHeader('cache-control', 'private, max-age=0, no-store');
@@ -276,7 +284,7 @@ export function createLegacyFreeReviewRouter() {
         assessment,
         findings: { total: openFindings.length, elevated: criticalOrHigh.length, bySeverity, teasers },
         evidence: { total: evidence.length, verified: verifiedEvidence, unverified: evidence.length - verifiedEvidence, byType: evidenceByType },
-        sbom: { componentCount: sbomComponentCount },
+        sbom: { componentCount: sbomComponentCount, npmResolvedComponentCount, declaredNpmDependencyCount: declaredNpm?.total ?? null, declaredNpmProductionCount: declaredNpm?.production ?? null, exactVersionCoverageComplete: declaredNpm ? npmResolvedComponentCount >= declaredNpm.production : null },
         verifiedCapabilities,
         // The existence and count of what is withheld may be shown. The content
         // may not, and is not present in this payload to be un-hidden.
