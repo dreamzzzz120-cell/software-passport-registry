@@ -82,7 +82,7 @@ async function processSecurityJob(pool: Pool, job: any) {
       } else {
         if (!commitResponse.ok) throw new Error('REPOSITORY_REF_NOT_FOUND');
         const commit: any = await commitResponse.json();
-        commitSha = commitSha;
+        commitSha = commit.sha;
       }
     }
     if (typeof commitSha !== 'string' || !/^[a-f0-9]{40}$/i.test(commitSha)) throw new Error('REPOSITORY_REF_NOT_FOUND');
