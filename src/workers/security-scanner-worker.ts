@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, mkdir, readdir, rm } from 'node:fs/promises';
+import { gzipSync } from 'node:zlib';
 import { Pool } from 'pg';
 import { downloadArchive, fetchGitHubApi, generateRepositorySbom, githubHeaders, isRateLimited, resolvePublicGitHubRefViaGit, resolveTenantGitHubToken, rootErrorMessage, runBounded, validateArchiveEntries, type PublicGitHubRefResolution } from './osv-worker.ts';
 import { createWorkerPool, assertWorkerDatabase } from './worker-db.ts';
@@ -181,6 +182,72 @@ async function processSecurityJob(pool: Pool, job: any) {
       applySecurityEngineOutcomes(inventory, { inspectionReports: scanned.inspectionReports, cycloneDx: generated.document, syftVersion: '1.49.0', findings: persistedFindings, evidenceId });
       await persistInventory(pool, ledger, inventory.entries);
       const coverage = await recomputeCoverage(pool, ledger, { inventoryComplete: !inventory.truncated, limitations: inventory.limitations });
+
+      // scan_file_inventory is useful operational detail but is intentionally
+      // retained for a bounded period. Archive the complete normalized inventory
+      // to Supabase Storage first so database retention can reclaim the bulky
+      // per-file rows without destroying the historical evidence trail.
+      const inventoryArchive = gzipSync(Buffer.from(JSON.stringify({
+        schemaVersion: 'spr.scan-inventory.v1',
+        scanId: ledger.scanId,
+        tenantId: ledger.tenantId,
+        passportId: ledger.passportId,
+        clientId: ledger.clientId,
+        repository: `${source.repository_owner}/${source.repository_name}`,
+        requestedRef,
+        resolvedCommitSha: commitSha,
+        inventoryComplete: !inventory.truncated,
+        limitations: inventory.limitations,
+        coverage,
+        entries: inventory.entries,
+      }), 'utf8'));
+
+      const inventoryArtifact = await tryStoreArtifact({
+        tenantId: job.tenant_id,
+        subjectId: ledger.scanId,
+        artifactType: 'scan-file-inventory',
+        extension: 'gz',
+        contentType: 'application/gzip',
+        body: inventoryArchive,
+      });
+
+      if (inventoryArtifact) {
+        const inventoryEvidencePayload = JSON.stringify({
+          schemaVersion: 'spr.artifact-ref.v1',
+          artifactType: 'scan-file-inventory',
+          artifact: inventoryArtifact,
+          scanId: ledger.scanId,
+          repository: `${source.repository_owner}/${source.repository_name}`,
+          resolvedCommitSha: commitSha,
+          filesDiscovered: coverage.filesDiscovered,
+          inventoryComplete: coverage.inventoryComplete,
+        });
+        const inventoryEvidenceHash = sha256(inventoryEvidencePayload);
+        const inventoryEvidenceId = `ev-inventory-${job.id}-${inventoryEvidenceHash.slice(0,24)}`;
+        await pool.query(
+          `INSERT INTO evidence_items (id,tenant_id,asset_id,name,type,verified,status,signer,timestamp,hash,raw_content,engine_id,scan_id)
+           VALUES ($1,$2,$3,'Scan file inventory archive','Artifact Reference',0,'OBSERVED','SPR scanner',NOW(),$4,$5,'spr-artifact-store-v1',$6)
+           ON CONFLICT DO NOTHING`,
+          [inventoryEvidenceId, job.tenant_id, job.passport_id, inventoryArtifact.sha256, inventoryEvidencePayload, ledger.scanId],
+        );
+        console.info(JSON.stringify({
+          event: 'scan_inventory_archived',
+          workerId: WORKER_ID,
+          jobId: job.id,
+          tenantId: job.tenant_id,
+          scanId: ledger.scanId,
+          artifact: { provider: inventoryArtifact.provider, bucket: inventoryArtifact.bucket, path: inventoryArtifact.path, sha256: inventoryArtifact.sha256, bytes: inventoryArtifact.bytes },
+        }));
+      } else {
+        console.warn(JSON.stringify({
+          event: 'scan_inventory_archive_unavailable',
+          workerId: WORKER_ID,
+          jobId: job.id,
+          tenantId: job.tenant_id,
+          scanId: ledger.scanId,
+        }));
+      }
+
       console.info(JSON.stringify({ event: 'scan_coverage_computed', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, scanId: ledger.scanId, filesDiscovered: coverage.filesDiscovered, filesInspected: coverage.filesInspected, filesUnsupported: coverage.filesUnsupported, filesSkipped: coverage.filesSkipped, filesFailed: coverage.filesFailed, filesInaccessible: coverage.filesInaccessible, filesUnknown: coverage.filesUnknown }));
     }
     // A scan queued through the ledger already owns a scans row, which
