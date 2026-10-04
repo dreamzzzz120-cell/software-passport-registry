@@ -54,10 +54,12 @@ async function main() {
         [table]
       )).rows.map((row) => row.column_name);
 
-      const targetColumnSet = new Set((await target.query(
-        "select column_name from information_schema.columns where table_schema='public' and table_name=$1 and is_generated='NEVER' order by ordinal_position",
+      const targetColumnRows = (await target.query(
+        "select column_name,udt_name from information_schema.columns where table_schema='public' and table_name=$1 and is_generated='NEVER' order by ordinal_position",
         [table]
-      )).rows.map((row) => row.column_name));
+      )).rows;
+      const targetColumnSet = new Set(targetColumnRows.map((row) => row.column_name));
+      const targetTypes = new Map(targetColumnRows.map((row) => [row.column_name, row.udt_name]));
 
       const columns = sourceColumns.filter((column) => targetColumnSet.has(column));
       if (!columns.length) continue;
@@ -80,8 +82,77 @@ async function main() {
         const values = [];
         const groups = rows.map((row, rowIndex) => {
           const placeholders = columns.map((column, columnIndex) => {
-            values.push(row[column]);
-            return '$' + (rowIndex * columns.length + columnIndex + 1);
+            let value = row[column];
+            const targetType = targetTypes.get(column);
+            if ((targetType === 'json' || targetType === 'jsonb') && typeof value === 'string') {
+              try {
+                value = JSON.parse(value);
+              } catch {
+                value = JSON.stringify(value);
+              }
+            }
+            values.push(value);
+            return '
+          });
+          return '(' + placeholders.join(',') + ')';
+        });
+
+        await target.query(
+          'insert into public.' + q(table) +
+          ' (' + columns.map(q).join(', ') + ') values ' + groups.join(','),
+          values
+        );
+      }
+
+      const targetCount = Number((await target.query(
+        'select count(*)::bigint as count from public.' + q(table)
+      )).rows[0].count);
+
+      if (targetCount !== sourceCount) {
+        throw new Error(
+          'COUNT_MISMATCH ' + table + ' source=' + sourceCount + ' target=' + targetCount
+        );
+      }
+
+      totalRows += sourceCount;
+      console.log(JSON.stringify({ event: 'migration_table', table, rows: sourceCount }));
+    }
+
+    const serialColumns = (await target.query(
+      "select table_name,column_name from information_schema.columns where table_schema='public' and column_default like 'nextval(%'"
+    )).rows;
+
+    for (const { table_name: table, column_name: column } of serialColumns) {
+      if (!tables.includes(table)) continue;
+      const seq = (await target.query(
+        'select pg_get_serial_sequence($1,$2) as seq',
+        ['public.' + table, column]
+      )).rows[0]?.seq;
+      if (!seq) continue;
+      const row = (await target.query(
+        'select max(' + q(column) + ')::bigint as max_value from public.' + q(table)
+      )).rows[0];
+      if (row.max_value !== null) {
+        await target.query('select setval($1::regclass,$2,true)', [seq, row.max_value]);
+      }
+    }
+
+    await target.query('COMMIT');
+    console.log(JSON.stringify({ event: 'migration_complete', tables: tables.length, rows: totalRows }));
+  } catch (error) {
+    await target.query('ROLLBACK');
+    throw error;
+  } finally {
+    await source.end();
+    await target.end();
+  }
+}
+
+main().catch((error) => {
+  console.error(JSON.stringify({ event: 'migration_failed', error: error instanceof Error ? error.message : String(error) }));
+  process.exit(1);
+});
+ + (rowIndex * columns.length + columnIndex + 1);
           });
           return '(' + placeholders.join(',') + ')';
         });
