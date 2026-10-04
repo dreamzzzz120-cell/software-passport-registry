@@ -3,7 +3,7 @@
 Updated: 2026-10-04  
 Canonical repository: `dreamzzzz120-cell/software-passport-registry`  
 Production branch: `main`  
-Production commit observed: `420b82d07e5c82dfcdecc9a577d8ea5f8e64bad0`
+Production commit observed: `1ee3ea4545e2437a89873da818c9801d912093ad`
 
 Status vocabulary:
 - 🟢 PROVEN PASS — observed runtime/test evidence exists.
@@ -29,10 +29,10 @@ Status vocabulary:
 | SEC-002 | Security CI | Security gate passes on production commit | 🟢 PROVEN PASS | GitHub workflow | Completed success | Security Gate run 2707 | n/a | n/a |
 | OBS-001 | Observability | App distributed tracing enabled | 🟢 PROVEN PASS | Inspect/update Railway tracing state | tracing + auto-instrumentation enabled and active | Railway tracing state | Enabled tracing + OBI | Confirmed active |
 | OBS-002 | Observability | Worker distributed tracing enabled | 🟢 PROVEN PASS | Inspect/update Railway tracing state | tracing + auto-instrumentation enabled and active | Railway tracing state | Enabled tracing + OBI | Confirmed active |
-| STORE-001 | Artifact storage | Artifact/intake storage configuration present | 🟢 PROVEN PASS | Inspect production variable names | Supabase URL, intake/artifact buckets and artifact broker variables present on app/worker | Railway service configuration | n/a | Runtime upload proof still separate |
+| STORE-001 | Artifact storage | Private intake storage accepts broker-signed upload and SPR can re-read exact bytes | 🟢 PROVEN PASS | External production create-session → signed upload → PUT → complete/hash | Tiny production proof artifact uploaded through broker; completion returned SPR server-computed SHA-256 matching uploaded bytes | Production Runtime Smoke run 27 + Railway commit 1ee3ea4 | Railway holds broker token, not Supabase admin storage secret; spr-intake remains private | Repeated proof stays in production smoke |
 | SCAN-001 | Repository scanner | Scanner toolchain present in production image | 🟢 PROVEN PASS | Inspect image build | Syft 1.49.0 installed and version-checked; git/unzip/tar available | Railway build logs | n/a | n/a |
 | SCAN-002 | Real repository scan | Successful public-repo scan through current production commit | 🟡 UNPROVEN | Execute live public repo scan and verify persisted evidence | Not re-proven during this hardening run | — | — | REQUIRED |
-| UPLOAD-001 | Upload pipeline | Real upload → quarantine → scan → persist path | 🟡 UNPROVEN | Adversarial runtime upload tests | Not yet executed in this hardening run | — | — | REQUIRED |
+| UPLOAD-001 | Upload pipeline | Real upload → quarantine → scan → persist path | 🟡 PARTIALLY PROVEN | External runtime upload plus authenticated claim/queue/worker verification | Upload → private quarantine → observed-byte readback → server SHA-256 is proven; authenticated claim → QUEUED → worker scan → evidence persistence remains unproven in production | Production Runtime Smoke run 27 | Complete remaining authenticated worker path without weakening auth | REQUIRED |
 | AUTH-001 | Authentication | Anonymous and malformed bearer requests rejected on protected API | 🟢 PROVEN PASS | External GitHub runner called `/api/vendors` anonymously and with malformed bearer | Both rejected with 401/403; anonymous POST also rejected | Production Runtime Smoke run 2 | n/a | External rerun passed |
 | AUTH-002 | Authentication | Expiry/revocation/disabled-user/session matrix | 🟡 UNPROVEN | Direct production-safe tests with controlled identities | Not yet executed | — | — | REQUIRED |
 | AUTHZ-001 | Authorization | Role × action / IDOR/BOLA matrix | 🟡 UNPROVEN | Direct API attacks across roles | Not yet executed | — | — | REQUIRED |

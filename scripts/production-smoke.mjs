@@ -1,4 +1,5 @@
 import https from 'node:https';
+import crypto from 'node:crypto';
 const API = process.env.SPR_PRODUCTION_API || 'https://spr-app-production-production-4d46.up.railway.app';
 const WEB = process.env.SPR_PRODUCTION_WEB || 'https://softwarepassportregistry.com';
 
@@ -75,6 +76,62 @@ await check('baseline security headers', async () => {
 });
 
 
+
+
+await check('production intake signs uploads and hashes observed bytes', async () => {
+  const payload = Buffer.from('spr-intake-production-proof-v1\n', 'utf8');
+  const expectedSha = crypto.createHash('sha256').update(payload).digest('hex');
+
+  const sessionResponse = await fetch(API + '/api/intake/session', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  });
+  const sessionText = await sessionResponse.text();
+  assert(sessionResponse.status === 201, `session expected 201 got ${sessionResponse.status}: ${sessionText.slice(0, 300)}`);
+  const session = JSON.parse(sessionText);
+  assert(/^intake_[a-f0-9]{32}$/.test(session.sessionId || ''), 'invalid intake session id');
+
+  const signResponse = await fetch(API + '/api/intake/upload-url', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      sessionId: session.sessionId,
+      file: {
+        name: 'spr-production-proof.txt',
+        size: payload.length,
+        contentType: 'text/plain',
+        kind: 'document',
+      },
+    }),
+  });
+  const signedText = await signResponse.text();
+  assert(signResponse.status === 201, `upload-url expected 201 got ${signResponse.status}: ${signedText.slice(0, 300)}`);
+  const signed = JSON.parse(signedText);
+  assert(/^item_[a-f0-9]{32}$/.test(signed.itemId || ''), 'invalid intake item id');
+  assert(typeof signed.signedUrl === 'string' && signed.signedUrl.startsWith('https://'), 'missing signed upload URL');
+
+  const form = new FormData();
+  form.append('cacheControl', '3600');
+  form.append('', new Blob([payload], { type: 'text/plain' }), 'spr-production-proof.txt');
+  const uploadResponse = await fetch(signed.signedUrl, { method: 'PUT', body: form });
+  assert(uploadResponse.ok, `signed storage upload failed ${uploadResponse.status}: ${(await uploadResponse.text()).slice(0, 300)}`);
+
+  const completeResponse = await fetch(API + '/api/intake/complete', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      sessionId: session.sessionId,
+      itemId: signed.itemId,
+      sha256: expectedSha,
+    }),
+  });
+  const completeText = await completeResponse.text();
+  assert(completeResponse.status === 200, `complete expected 200 got ${completeResponse.status}: ${completeText.slice(0, 300)}`);
+  const completed = JSON.parse(completeText);
+  assert(completed.status === 'UPLOADED', `unexpected intake status ${completed.status}`);
+  assert(completed.sha256 === expectedSha, `server hash mismatch: expected ${expectedSha} got ${completed.sha256}`);
+});
 
 await check('production anonymous IP rate limit returns 429', async () => {
   let limited = null;
