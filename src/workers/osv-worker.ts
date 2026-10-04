@@ -620,6 +620,35 @@ async function recordPublicRegistryObservation(pool: Pool, job: ClaimedJob, sour
   }
 }
 
+
+export async function collectDeclaredNpmDependencies(scanRoot: string, manifests: string[]) {
+  const packageJson = manifests.find((manifest) => path.posix.basename(manifest.replaceAll('\\\\','/')).toLowerCase() === 'package.json');
+  if (!packageJson) return null;
+  const absolute = path.join(scanRoot, packageJson.replaceAll('/', path.sep));
+  let parsed: any;
+  try { parsed = JSON.parse(await readFile(absolute, 'utf8')); } catch { return null; }
+  const groups = ['dependencies','devDependencies','peerDependencies','optionalDependencies'] as const;
+  const records: Array<{ name: string; declaredRange: string; group: string }> = [];
+  for (const group of groups) {
+    const entries = parsed?.[group];
+    if (!entries || typeof entries !== 'object' || Array.isArray(entries)) continue;
+    for (const [name, declaredRange] of Object.entries(entries)) {
+      if (typeof declaredRange !== 'string' || !name.trim()) continue;
+      records.push({ name, declaredRange, group });
+    }
+  }
+  records.sort((a,b) => `${a.group}:${a.name}`.localeCompare(`${b.group}:${b.name}`));
+  return {
+    manifest: packageJson,
+    total: records.length,
+    production: records.filter((r) => r.group === 'dependencies').length,
+    development: records.filter((r) => r.group === 'devDependencies').length,
+    peer: records.filter((r) => r.group === 'peerDependencies').length,
+    optional: records.filter((r) => r.group === 'optionalDependencies').length,
+    records,
+  };
+}
+
 async function processRepositoryJob(pool: Pool, job: ClaimedJob) {
   const source = (await pool.query('SELECT * FROM repository_scan_sources WHERE job_id = $1 AND tenant_id = $2', [job.id, job.tenant_id])).rows[0];
   if (!source) throw new Error('REPOSITORY_CONNECTION_NOT_FOUND');
@@ -719,18 +748,24 @@ async function processRepositoryJob(pool: Pool, job: ClaimedJob) {
       mark('inventory_persisted', { files: inventory.entries.length, truncated: inventory.truncated });
     }
     const manifests = await inspectTree(scanRoot); mark('manifest_inspected', { manifestCount: manifests.length });
+    const declaredNpm = await collectDeclaredNpmDependencies(scanRoot, manifests);
+    if (declaredNpm) mark('declared_npm_dependencies_observed', { total: declaredNpm.total, production: declaredNpm.production, development: declaredNpm.development });
     const syftPath = await locateSyft(); mark('syft_located');
     const generated = await generateRepositorySbom(scanRoot,syftPath); const scannerEndedAt = new Date();
     mark('sbom_generated', { componentCount: generated.components.length });
     const sbom = generated.document; const components = generated.components; const osvComponents = components.filter(component => component.version); if (osvComponents.length === 0) throw new Error('SBOM_EMPTY');
     const acquiredAt = new Date(); const sourceHash = sha256(JSON.stringify(descriptor)); const manifestHash = sha256(JSON.stringify(manifests)); const rawSbomHash = sha256(generated.raw); const componentsHash = sha256(JSON.stringify(components));
     const sbomEvidencePayload = JSON.stringify({format:'CycloneDX JSON',componentCount:components.length,rawSbomHash,normalizedComponentsHash:componentsHash});
+    const declaredNpmEvidencePayload = declaredNpm ? JSON.stringify({ manifest: declaredNpm.manifest, total: declaredNpm.total, production: declaredNpm.production, development: declaredNpm.development, peer: declaredNpm.peer, optional: declaredNpm.optional, dependencies: declaredNpm.records }) : null;
     await pool.query(`UPDATE repository_scan_sources SET resolved_commit_sha=$2, default_branch=$3, visibility=$4, acquired_at=$5, source_descriptor_hash=$6, manifest_paths=$7, manifest_inventory_hash=$8, raw_sbom_hash=$9, sbom_document=$10, normalized_components=$11, normalized_components_hash=$12, scanner_name='Syft', scanner_version=$13, scanner_mode='directory CycloneDX JSON', scanner_started_at=$14, scanner_ended_at=$15, scanner_exit_code=0, scanner_error_category=NULL WHERE job_id=$1 AND tenant_id=$16`, [job.id,commitSha,descriptor.defaultBranch,descriptor.visibility,acquiredAt,sourceHash,JSON.stringify(manifests),manifestHash,rawSbomHash,JSON.stringify(sbom),JSON.stringify(components),componentsHash,SYFT_VERSION,scannerStartedAt,scannerEndedAt,job.tenant_id]);
     mark('sbom_persisted');
-    const repoEvidenceId = deterministicId('ev-repo',`${job.id}|${sourceHash}`); const manifestEvidenceId = deterministicId('ev-manifest',`${job.id}|${manifestHash}`); const sbomEvidenceId = deterministicId('ev-sbom',`${job.id}|${rawSbomHash}|${componentsHash}`);
+    const repoEvidenceId = deterministicId('ev-repo',`${job.id}|${sourceHash}`); const manifestEvidenceId = deterministicId('ev-manifest',`${job.id}|${manifestHash}`); const sbomEvidenceId = deterministicId('ev-sbom',`${job.id}|${rawSbomHash}|${componentsHash}`); const declaredNpmEvidenceId = declaredNpmEvidencePayload ? deterministicId('ev-npmdecl',`${job.id}|${sha256(declaredNpmEvidencePayload)}`) : null;
     // Evidence is persisted BEFORE the passport is touched: the scan's record
     // of what it observed must not depend on passport generation succeeding.
     await pool.query(`INSERT INTO evidence_items (id,tenant_id,asset_id,name,type,verified,signer,timestamp,hash,raw_content,engine_id,scan_id) VALUES ($1,$2,$3,'Repository source descriptor','Attestation',0,'github.com',$4,$5,$6,'repository-worker',$13),($7,$2,$3,'Manifest inventory','Build Log',0,'repository-worker',$4,$8,$9,'repository-worker',$13),($10,$2,$3,'Syft CycloneDX SBOM summary','Build Log',0,'Syft 1.49.0',$4,$11,$12,'repository-worker',$13) ON CONFLICT (id) DO NOTHING`, [repoEvidenceId,job.tenant_id,job.passport_id,acquiredAt.toISOString(),`sha256:${sourceHash}`,JSON.stringify(descriptor),manifestEvidenceId,`sha256:${manifestHash}`,JSON.stringify(manifests),sbomEvidenceId,`sha256:${sha256(sbomEvidencePayload)}`,sbomEvidencePayload,ledger?.scanId ?? null]);
+    if (declaredNpmEvidenceId && declaredNpmEvidencePayload) {
+      await pool.query(`INSERT INTO evidence_items (id,tenant_id,asset_id,name,type,verified,signer,timestamp,hash,raw_content,engine_id,scan_id) VALUES ($1,$2,$3,'Declared npm dependency inventory','Build Log',0,'package.json',$4,$5,$6,'repository-worker',$7) ON CONFLICT (id) DO NOTHING`, [declaredNpmEvidenceId,job.tenant_id,job.passport_id,acquiredAt.toISOString(),`sha256:${sha256(declaredNpmEvidencePayload)}`,declaredNpmEvidencePayload,ledger?.scanId ?? null]);
+    }
     mark('evidence_persisted');
     await appendAuditEntryViaPool(pool, { tenantId: job.tenant_id, action: 'evidence.created', actor: 'repository-worker', payload: { passportId: job.passport_id, jobId: job.id, scanId: ledger?.scanId ?? null, evidenceIds: [repoEvidenceId, manifestEvidenceId, sbomEvidenceId] } });
     if (ledger && inventory) {
