@@ -703,6 +703,37 @@ export default function FreeReviewView({
                     </div>
                   </section>
 
+                  <section id="findings-summary" className="rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6">
+                    <div className="text-[11px] font-semibold uppercase tracking-[.18em]">Findings summary</div>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                      <div className="rounded-xl border border-[var(--spr-border)] p-4">
+                        <div className="text-xs text-[var(--spr-text-muted)]">Open findings</div>
+                        <div className="mt-1 text-2xl font-bold">{result.findings?.total ?? result.summary.openFindings}</div>
+                      </div>
+                      <div className="rounded-xl border border-[var(--spr-border)] p-4">
+                        <div className="text-xs text-[var(--spr-text-muted)]">Critical / high</div>
+                        <div className="mt-1 text-2xl font-bold">{result.findings?.elevated ?? result.summary.criticalOrHigh}</div>
+                      </div>
+                      <div className="rounded-xl border border-[var(--spr-border)] p-4">
+                        <div className="text-xs text-[var(--spr-text-muted)]">Detail level</div>
+                        <div className="mt-1 text-sm font-semibold">Aggregate preview</div>
+                        <div className="mt-1 text-[10px] text-[var(--spr-text-faint)]">Titles, components and remediation stay in the full Launch Ticket.</div>
+                      </div>
+                    </div>
+                    {result.findings?.teasers?.length ? (
+                      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                        {result.findings.teasers.map((item) => (
+                          <div key={item.category} className="flex items-center justify-between gap-3 rounded-lg border border-[var(--spr-border)] p-3 text-sm">
+                            <span className="font-semibold">{item.category}</span>
+                            <span className="text-[var(--spr-text-muted)]">{item.count} · {item.severity}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-4 text-sm text-[var(--spr-text-muted)]">No finding category was returned by the engines that completed. This is not proof of safety.</p>
+                    )}
+                  </section>
+
                   <section id="evidence-summary" className="rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6">
                     <div className="text-[11px] font-semibold uppercase tracking-[.18em]">
                       Evidence breakdown
