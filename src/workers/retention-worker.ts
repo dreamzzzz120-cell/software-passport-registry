@@ -2,6 +2,17 @@ import { createClient } from '@supabase/supabase-js';
 import { createWorkerPool } from './worker-db.ts';
 
 const INTAKE_BUCKET = process.env.SPR_INTAKE_BUCKET?.trim() || 'spr-intake';
+const FREE_REVIEW_TENANT_ID = 'tenant-free-review-system';
+
+function positiveIntEnv(name: string, fallback: number, min = 1, max = Number.MAX_SAFE_INTEGER): number {
+  const raw = Number(process.env[name]);
+  if (!Number.isFinite(raw)) return fallback;
+  return Math.max(min, Math.min(max, Math.trunc(raw)));
+}
+
+const INVENTORY_RETENTION_BATCH = positiveIntEnv('SCAN_FILE_INVENTORY_RETENTION_BATCH', 5_000, 100, 50_000);
+const FREE_REVIEW_INVENTORY_HOURS = positiveIntEnv('FREE_REVIEW_INVENTORY_RETENTION_HOURS', 24, 2, 24 * 30);
+const RETENTION_POLL_MS = positiveIntEnv('RETENTION_POLL_MS', 60 * 60 * 1000, 60_000, 24 * 60 * 60 * 1000);
 
 function intakeStorage() {
   const url = process.env.SUPABASE_URL?.trim();
@@ -32,6 +43,67 @@ export async function purgeExpiredAnonymousIntake(pool: ReturnType<typeof create
   return purged;
 }
 
+/**
+ * scan_file_inventory is derived scan detail, not the evidence ledger.
+ *
+ * Keep it bounded independently from evidence/findings/passports:
+ * - anonymous Free Review inventory expires quickly because its signed result URL
+ *   is short lived and every review otherwise creates a new permanent passport;
+ * - tenant inventory follows that tenant's explicit evidence_days policy;
+ * - missing tenant policy means retain indefinitely (same fail-safe as object_files);
+ * - deletion is batched so retention cannot create a giant transaction/WAL spike.
+ *
+ * scan_coverage, scans, findings, evidence_items and passports are intentionally
+ * untouched. They remain the durable record of what the scan established.
+ */
+export async function purgeExpiredScanFileInventory(
+  pool: ReturnType<typeof createWorkerPool>,
+): Promise<{ deleted: number; remaining: number; inventoryBytes: number; databaseBytes: number }> {
+  const removed = await pool.query(
+    `WITH candidates AS (
+       SELECT i.id
+       FROM scan_file_inventory i
+       WHERE
+         (
+           i.tenant_id = $1
+           AND i.updated_at < CURRENT_TIMESTAMP - ($2::text || ' hours')::interval
+         )
+         OR
+         (
+           i.tenant_id <> $1
+           AND EXISTS (
+             SELECT 1
+             FROM retention_policies r
+             WHERE r.tenant_id = i.tenant_id
+               AND i.updated_at < CURRENT_TIMESTAMP - (r.evidence_days || ' days')::interval
+           )
+         )
+       LIMIT $3
+     )
+     DELETE FROM scan_file_inventory i
+     USING candidates c
+     WHERE i.id = c.id
+     RETURNING i.id`,
+    [FREE_REVIEW_TENANT_ID, FREE_REVIEW_INVENTORY_HOURS, INVENTORY_RETENTION_BATCH],
+  );
+
+  const stats = await pool.query(
+    `SELECT
+       (SELECT count(*)::int FROM scan_file_inventory) AS remaining,
+       pg_total_relation_size('public.scan_file_inventory')::bigint AS inventory_bytes,
+       pg_database_size(current_database())::bigint AS database_bytes`,
+  );
+  const row = stats.rows[0] || {};
+  const result = {
+    deleted: removed.rowCount || 0,
+    remaining: Number(row.remaining || 0),
+    inventoryBytes: Number(row.inventory_bytes || 0),
+    databaseBytes: Number(row.database_bytes || 0),
+  };
+  console.info('[Retention] scan file inventory capacity', JSON.stringify(result));
+  return result;
+}
+
 export async function runRetentionWorkerLoop(): Promise<void> {
   const pool = createWorkerPool();
   try {
@@ -46,6 +118,7 @@ export async function runRetentionWorkerLoop(): Promise<void> {
     // happens.
     await pool.query(`DELETE FROM contact_inquiries WHERE created_at < CURRENT_TIMESTAMP - interval '365 days'`);
     await purgeExpiredAnonymousIntake(pool);
+    await purgeExpiredScanFileInventory(pool);
   } finally { await pool.end(); }
-  await new Promise(resolve => setTimeout(resolve, Number(process.env.RETENTION_POLL_MS || 86400000)));
+  await new Promise(resolve => setTimeout(resolve, RETENTION_POLL_MS));
 }
