@@ -43,7 +43,7 @@ async function main() {
     await target.query(
       'TRUNCATE TABLE ' +
         tables.map((table) => 'public.' + q(table)).join(', ') +
-        ' RESTART IDENTITY'
+        ''
     );
 
     let totalRows = 0;
