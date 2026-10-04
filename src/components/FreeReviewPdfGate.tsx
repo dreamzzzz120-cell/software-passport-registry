@@ -62,13 +62,13 @@ function buildInterpretation(result: any): { label: string; text: string; tone: 
   const assessment = result.assessment;
 
   if (findings?.total > 0) {
-    rows.push({ label: 'Risk observed', text: `${findings.total} finding${findings.total === 1 ? '' : 's'} were detected by the engines that ran. ${findings.elevated > 0 ? `${findings.elevated} are elevated (critical or high).` : 'No critical or high findings were reported.'}`, tone: findings.elevated > 0 ? 'attention' : 'neutral' });
+    rows.push({ label: 'Risk observed', text: `${findings.total} finding${findings.total === 1 ? '' : 's'} ${findings.total === 1 ? 'was' : 'were'} detected by the engines that ran. ${findings.elevated > 0 ? `${findings.elevated} ${findings.elevated === 1 ? 'is' : 'are'} elevated (critical or high).` : 'No critical or high findings were reported.'}`, tone: findings.elevated > 0 ? 'attention' : 'neutral' });
   } else if (findings) {
     rows.push({ label: 'No findings observed', text: 'The completed engines reported no findings in the areas they examined. This is not a guarantee of safety.', tone: 'positive' });
   }
 
   if (evidence?.total > 0) {
-    rows.push({ label: 'Evidence collected', text: `${evidence.total} evidence item${evidence.total === 1 ? '' : 's'} were collected${evidence.verified > 0 ? `, including ${evidence.verified} cryptographically verified` : ', with no cryptographically verified items reported'}.`, tone: evidence.verified > 0 ? 'positive' : 'neutral' });
+    rows.push({ label: 'Evidence collected', text: `${evidence.total} evidence item${evidence.total === 1 ? '' : 's'} ${evidence.total === 1 ? 'was' : 'were'} collected${evidence.verified > 0 ? `, including ${evidence.verified} cryptographically verified` : ', with no cryptographically verified items reported'}.`, tone: evidence.verified > 0 ? 'positive' : 'neutral' });
   }
 
   if (assessment) {
@@ -134,7 +134,7 @@ export default function FreeReviewPdfGate({ passportId, statusUrl, result, repos
 
       <div className="mt-4 rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface)] p-5" id="free-review-pdf-gate">
         <div className="flex items-center gap-2 text-sm font-bold text-[var(--spr-text)]"><FileDown className="h-4 w-4" />Download this result as a PDF</div>
-        <p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">A one-page summary of exactly what is shown above, generated in your browser. Enter your email to download it.</p>
+        <p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">The free review above requires no account. This optional one-page PDF is lead-gated: enter your contact details and consent to follow-up email to download it.</p>
         {unlocked ? (
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <p className="text-xs text-[var(--spr-green)]">Thanks — your download has started.</p>
