@@ -2,7 +2,7 @@ import { decryptCredentials } from '../integrations/credential-vault.ts';
 import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, mkdir, open, readdir, lstat, rm, unlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, open, readdir, lstat, rm, unlink, readFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { appendAuditEntryViaPool } from '../security/audit-log.ts';
 import { calculateAndStoreTrustScore } from '../utils/scanner.ts';
@@ -622,7 +622,7 @@ async function recordPublicRegistryObservation(pool: Pool, job: ClaimedJob, sour
 
 
 export async function collectDeclaredNpmDependencies(scanRoot: string, manifests: string[]) {
-  const packageJson = manifests.find((manifest) => path.posix.basename(manifest.replaceAll('\\\\','/')).toLowerCase() === 'package.json');
+  const packageJson = manifests.find((manifest) => path.posix.basename(manifest.replaceAll('\\','/')).toLowerCase() === 'package.json');
   if (!packageJson) return null;
   const absolute = path.join(scanRoot, packageJson.replaceAll('/', path.sep));
   let parsed: any;
