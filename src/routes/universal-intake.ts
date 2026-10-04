@@ -1,10 +1,10 @@
 import crypto from 'node:crypto';
 import { Router } from 'express';
 import { sql } from 'drizzle-orm';
-import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { db } from '../db/index.ts';
 import { AuthenticatedRequest, requireAuth } from '../middleware/security.ts';
+import { createIntakeSignedUpload, deleteIntakeObject, downloadIntakeObject } from '../integrations/intake-storage.ts';
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
 const MAX_TOTAL_SIZE = 500 * 1024 * 1024;
@@ -78,33 +78,6 @@ function safeName(value: string) {
   const normalized = value.normalize('NFKC').replace(/[\\/\0]/g, '_').replace(/[^A-Za-z0-9._()\- ]/g, '_').trim();
   return (normalized || 'file').slice(0, MAX_FILENAME_LENGTH);
 }
-function supabaseAdmin() {
-  const url = process.env.SUPABASE_URL?.trim();
-  const key = process.env.SUPABASE_SECRET_KEY?.trim() || process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-  if (!url || !key) {
-    const missing = [!url && 'SUPABASE_URL', !key && 'SUPABASE_SECRET_KEY (or SUPABASE_SERVICE_ROLE_KEY)'].filter(Boolean).join(' and ');
-    console.error(`[Intake] Storage unavailable: ${missing} is not set.`);
-    throw Object.assign(new Error(`Universal intake storage is not configured: ${missing} is not set.`), { status: 503 });
-  }
-  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
-}
-async function ensureBucket() {
-  const client = supabaseAdmin();
-  const { data, error } = await client.storage.getBucket(BUCKET);
-  if (!data && error) {
-    const created = await client.storage.createBucket(BUCKET, { public: false, fileSizeLimit: MAX_FILE_SIZE });
-    if (created.error && !/already exists/i.test(created.error.message)) throw created.error;
-    return client;
-  }
-  const currentLimit = (data as { file_size_limit?: number | null } | null)?.file_size_limit ?? null;
-  if (data && currentLimit !== MAX_FILE_SIZE) {
-    try {
-      const updated = await client.storage.updateBucket(BUCKET, { public: false, fileSizeLimit: MAX_FILE_SIZE });
-      if (updated.error) console.error(`[Intake] Could not reconcile bucket size limit: ${updated.error.message}`);
-    } catch (err) { console.error(`[Intake] updateBucket threw while reconciling: ${err instanceof Error ? err.message : String(err)}`); }
-  }
-  return client;
-}
 async function loadSession(sessionId: string) {
   const result = await db.execute(sql`SELECT id, tenant_id AS "tenantId", status, expires_at AS "expiresAt" FROM intake_sessions WHERE id=${sessionId} LIMIT 1`);
   const row = (result as any).rows?.[0];
@@ -142,17 +115,15 @@ export function createUniversalIntakeRouter() {
       if (totalSize + file.data.size > MAX_TOTAL_SIZE) return res.status(413).json({ error: 'The intake has reached its 500 MB total size limit.' });
       const itemId = id('item');
       const storagePath = `${session.id}/${itemId}/${safeName(file.data.name)}`;
-      const client = await ensureBucket();
-      let signed: { data: { token: string; signedUrl: string } | null; error: { message: string } | null };
-      try {
-        signed = await client.storage.from(BUCKET).createSignedUploadUrl(storagePath);
-      } catch (err) {
-        console.error(`[Intake] createSignedUploadUrl threw: ${err instanceof Error ? err.message : String(err)}`);
-        throw err;
-      }
-      if (signed.error || !signed.data) throw signed.error || new Error('Could not create secure upload URL.');
-      await db.execute(sql`INSERT INTO intake_items (id,session_id,name,size,content_type,kind,storage_bucket,storage_path,status,created_at) VALUES (${itemId},${session.id},${file.data.name},${file.data.size},${file.data.contentType},${file.data.kind},${BUCKET},${storagePath},'AWAITING_UPLOAD',NOW())`);
-      return res.status(201).json({ itemId, path: storagePath, token: signed.data.token, signedUrl: signed.data.signedUrl, expiresAt: session.expiresAt });
+      const signed = await createIntakeSignedUpload({
+        sessionId: session.id,
+        itemId,
+        fileName: safeName(file.data.name),
+        contentType: file.data.contentType,
+      });
+      if (signed.bucket !== BUCKET || signed.path !== storagePath) throw new Error('INTAKE_BROKER_PATH_MISMATCH');
+      await db.execute(sql`INSERT INTO intake_items (id,session_id,name,size,content_type,kind,storage_bucket,storage_path,status,created_at) VALUES (${itemId},${session.id},${file.data.name},${file.data.size},${file.data.contentType},${file.data.kind},${signed.bucket},${signed.path},'AWAITING_UPLOAD',NOW())`);
+      return res.status(201).json({ itemId, path: signed.path, token: signed.token, signedUrl: signed.signedUrl, expiresAt: session.expiresAt });
     } catch (error) { return next(error); }
   });
 
@@ -165,32 +136,26 @@ export function createUniversalIntakeRouter() {
       const itemResult = await db.execute(sql`SELECT id, name, size, content_type AS "contentType", storage_bucket AS bucket, storage_path AS path, status FROM intake_items WHERE id=${parsed.data.itemId} AND session_id=${session.id} LIMIT 1`);
       const item = (itemResult as any).rows?.[0];
       if (!item || item.status !== 'AWAITING_UPLOAD') return res.status(404).json({ error: 'Intake item not found or already completed.' });
-      const client = await ensureBucket();
-      const folder = item.path.split('/').slice(0, -1).join('/');
-      const listed = await client.storage.from(item.bucket).list(folder, { limit: 10, search: item.path.split('/').pop() || undefined });
-      if (listed.error) throw listed.error;
-      const object = (listed.data || []).find((entry: any) => entry.name === item.path.split('/').pop());
-      if (!object) return res.status(422).json({ error: 'Uploaded object was not found in secure storage.' });
-      const observedSize = Number((object as any).metadata?.size ?? (object as any).metadata?.contentLength ?? -1);
-      if (!Number.isFinite(observedSize) || observedSize !== Number(item.size)) {
-        return res.status(422).json({ error: 'Uploaded object size does not match the declared size.' });
-      }
       // The client-reported sha256 (if any) is never trusted as the record of
-      // truth -- SPR's own evidence-integrity claim requires the hash to
-      // describe the bytes SPR itself observed, not a value the uploader
-      // could have miscomputed or falsified. Download the object and hash it
-      // server-side; log (but do not reject on) a mismatch against what the
-      // client reported, since that's a useful integrity signal on its own.
-      const downloaded = await client.storage.from(item.bucket).download(item.path);
-      if (downloaded.error || !downloaded.data) {
+      // truth. The broker returns a short-lived read URL and SPR hashes the
+      // exact bytes it observes before the item can become QUEUED.
+      let bytes: Buffer;
+      try {
+        bytes = await downloadIntakeObject({ bucket: item.bucket, path: item.path });
+      } catch {
         return res.status(422).json({ error: 'Could not read the uploaded object to verify its contents.' });
       }
-      const bytes = Buffer.from(await downloaded.data.arrayBuffer());
       if (bytes.length !== Number(item.size)) {
+        await deleteIntakeObject({ bucket: item.bucket, path: item.path }).catch(() => undefined);
+        await db.execute(sql`UPDATE intake_items SET status='FAILED' WHERE id=${parsed.data.itemId} AND session_id=${session.id} AND status='AWAITING_UPLOAD'`);
         return res.status(422).json({ error: 'Uploaded object size does not match the declared size.' });
       }
       const signatureError = validateObservedFileSignature(item.name, bytes);
-      if (signatureError) return res.status(415).json({ error: signatureError });
+      if (signatureError) {
+        await deleteIntakeObject({ bucket: item.bucket, path: item.path }).catch(() => undefined);
+        await db.execute(sql`UPDATE intake_items SET status='FAILED' WHERE id=${parsed.data.itemId} AND session_id=${session.id} AND status='AWAITING_UPLOAD'`);
+        return res.status(415).json({ error: signatureError });
+      }
       const serverSha256 = crypto.createHash('sha256').update(bytes).digest('hex');
       if (parsed.data.sha256 && parsed.data.sha256 !== serverSha256) {
         console.warn(`[Intake] Client-reported sha256 for item ${parsed.data.itemId} did not match the server-computed hash; the server-computed value is what was persisted.`);
@@ -219,9 +184,16 @@ export function createUniversalIntakeRouter() {
       if (!parsed.success) return res.status(400).json({ error: 'Invalid intake claim request.' });
       const session = await loadSession(parsed.data.sessionId);
       if (!session) return res.status(410).json({ error: 'Intake session expired or closed.' });
-      if (session.tenantId && session.tenantId !== req.user!.tenantId) return res.status(403).json({ error: 'Intake belongs to another workspace.' });
-      await db.execute(sql`UPDATE intake_sessions SET tenant_id=${req.user!.tenantId}, status='CLAIMED', claimed_by=${req.user!.uid}, claimed_at=NOW() WHERE id=${session.id} AND (tenant_id IS NULL OR tenant_id=${req.user!.tenantId})`);
-      await db.execute(sql`UPDATE intake_items SET tenant_id=${req.user!.tenantId}, status=CASE WHEN status='UPLOADED' THEN 'QUEUED' ELSE status END WHERE session_id=${session.id} AND (tenant_id IS NULL OR tenant_id=${req.user!.tenantId})`);
+      const claimed = await db.execute(sql`UPDATE intake_sessions
+        SET tenant_id=${req.user!.tenantId}, status='CLAIMED', claimed_by=${req.user!.uid}, claimed_at=NOW()
+        WHERE id=${session.id} AND status='OPEN' AND tenant_id IS NULL
+        RETURNING id`);
+      if (!((claimed as any).rows?.length)) {
+        const owner = (await db.execute(sql`SELECT tenant_id AS "tenantId", status FROM intake_sessions WHERE id=${session.id} LIMIT 1`) as any).rows?.[0];
+        if (owner?.tenantId && owner.tenantId !== req.user!.tenantId) return res.status(403).json({ error: 'Intake belongs to another workspace.' });
+        return res.status(409).json({ error: 'Intake session was already claimed or changed.' });
+      }
+      await db.execute(sql`UPDATE intake_items SET tenant_id=${req.user!.tenantId}, status=CASE WHEN status='UPLOADED' THEN 'QUEUED' ELSE status END WHERE session_id=${session.id} AND tenant_id IS NULL`);
       return res.status(200).json({ success: true, sessionId: session.id, tenantId: req.user!.tenantId });
     } catch (error) { return next(error); }
   });

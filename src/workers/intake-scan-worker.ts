@@ -17,7 +17,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, mkdir, readdir, rm, writeFile, lstat } from 'node:fs/promises';
 import { Pool } from 'pg';
-import { createClient } from '@supabase/supabase-js';
 import { createWorkerPool, assertWorkerDatabase } from './worker-db.ts';
 import { generateRepositorySbom, locateSyft, processJob, rootErrorMessage, runBounded, safeFailureReason, SYFT_VERSION, validateArchiveEntries } from './osv-worker.ts';
 import { runRealRepositoryScanners, contentUnsupportedReason } from '../scanners/real-repository-scanners.ts';
@@ -27,6 +26,7 @@ import { markScanRunRunning, persistInventory, recomputeCoverage, recordPassport
 import { calculateAndStoreTrustScore } from '../utils/scanner.ts';
 import { scanFindingIdentity } from '../security/scan-finding-identity.ts';
 import { appendAuditEntryViaPool } from '../security/audit-log.ts';
+import { downloadIntakeObject } from '../integrations/intake-storage.ts';
 
 const WORKER_ID = `${os.hostname()}:${process.pid}:intake`;
 const MAX_EXTRACTED_BYTES = 200 * 1024 * 1024;
@@ -38,13 +38,6 @@ const BUCKET_FALLBACK = 'spr-intake';
 
 function sha256(value: string | Buffer) { return crypto.createHash('sha256').update(value).digest('hex'); }
 function deterministicId(prefix: string, value: string) { return `${prefix}-${sha256(value).slice(0, 48)}`; }
-
-function supabaseAdmin() {
-  const url = process.env.SUPABASE_URL?.trim();
-  const key = process.env.SUPABASE_SECRET_KEY?.trim() || process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-  if (!url || !key) throw new Error('INTAKE_STORAGE_NOT_CONFIGURED');
-  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
-}
 
 async function claimJob(pool: Pool) {
   const client = await pool.connect();
@@ -174,7 +167,6 @@ async function processIntakeJob(pool: Pool, job: any) {
   const entries: InventoryEntry[] = [];
   const itemOutcome = new Map<string, 'COMPLETED' | 'COMPLETED_WITH_WARNINGS' | 'FAILED'>();
   try {
-    const storage = supabaseAdmin();
     const names = displayNames(items);
     let sequence = 0;
     const limitations: string[] = [];
@@ -188,9 +180,10 @@ async function processIntakeJob(pool: Pool, job: any) {
       if (Number(item.size) > MAX_ITEM_BYTES) { setOutcome(entry, { disposition: 'skipped', reasonCode: 'FILE_TOO_LARGE', reasonDetail: 'The uploaded item exceeds the per-file scan limit.', tool: INTAKE_TOOL }); itemOutcome.set(item.id, 'FAILED'); continue; }
       let bytes: Buffer;
       try {
-        const downloaded = await storage.storage.from(item.storage_bucket || process.env.SPR_INTAKE_BUCKET?.trim() || BUCKET_FALLBACK).download(item.storage_path);
-        if (downloaded.error || !downloaded.data) throw new Error(downloaded.error?.message || 'download failed');
-        bytes = Buffer.from(await downloaded.data.arrayBuffer());
+        bytes = await downloadIntakeObject({
+          bucket: item.storage_bucket || process.env.SPR_INTAKE_BUCKET?.trim() || BUCKET_FALLBACK,
+          path: item.storage_path,
+        });
       } catch (error) {
         setOutcome(entry, { disposition: 'inaccessible', reasonCode: 'STORAGE_OBJECT_UNAVAILABLE', reasonDetail: safeFailureReason(rootErrorMessage(error)), tool: INTAKE_TOOL });
         itemOutcome.set(item.id, 'FAILED');
