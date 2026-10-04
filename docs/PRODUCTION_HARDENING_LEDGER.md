@@ -3,7 +3,7 @@
 Updated: 2026-10-04  
 Canonical repository: `dreamzzzz120-cell/software-passport-registry`  
 Production branch: `main`  
-Production commit observed: `5c8c03dbf949c331e43732341b29993e053985ac`
+Production commit observed: `1f41058129c7598f5114cb39d496975aa57afaa4`
 
 Status vocabulary:
 - 🟢 PROVEN PASS — observed runtime/test evidence exists.
@@ -36,8 +36,12 @@ Status vocabulary:
 | AUTH-001 | Authentication | Anonymous and malformed bearer requests rejected on protected API | 🟢 PROVEN PASS | External GitHub runner called `/api/vendors` anonymously and with malformed bearer | Both rejected with 401/403; anonymous POST also rejected | Production Runtime Smoke run 2 | n/a | External rerun passed |
 | AUTH-002 | Authentication | Expiry/revocation/disabled-user/session matrix | 🟡 UNPROVEN | Direct production-safe tests with controlled identities | Not yet executed | — | — | REQUIRED |
 | AUTHZ-001 | Authorization | Role × action / IDOR/BOLA matrix | 🟡 UNPROVEN | Direct API attacks across roles | Not yet executed | — | — | REQUIRED |
-| TENANT-001 | Tenant isolation | Cross-tenant read/write/object substitution | 🟡 UNPROVEN | Two-tenant adversarial runtime suite | RLS readiness exists, but full cross-tenant suite not rerun in this hardening pass | — | — | REQUIRED |
-| RATE-001 | Rate limiting | Distributed production limits resist bypass | 🟡 UNPROVEN | Concurrent abuse tests | Redis-backed limiter is ready; bypass/load proof not yet executed | — | — | REQUIRED |
+| TENANT-001 | Tenant isolation | Cross-tenant read/update/delete/forged-insert at the RLS boundary | 🟢 PROVEN PASS | Real Postgres security suite with Tenant A/B and `spr_app_runtime` | Tenant A row invisible to Tenant B; cross-tenant UPDATE/DELETE affect zero rows; forged INSERT rejected by RLS | `tests/security/rls-tenant-isolation.test.ts` in release/security CI | n/a | Required workflows passed before ledger merge |
+| TENANT-002 | Tenant isolation | Pooled connection tenant context does not leak | 🟢 PROVEN PASS | Single-connection pool reuses physical connection across tenant transactions | transaction-local `app.tenant_id` cleared after COMMIT/ROLLBACK; Tenant B receives its own context | `tests/security/rls-tenant-isolation.test.ts` | n/a | Required workflows passed |
+| TENANT-003 | Tenant isolation | Full production route-level cross-tenant IDOR/BOLA using two real tenant identities | 🟠 BLOCKED | Production-safe two-tenant API attack | No disposable second production tenant identity is available; creating fake production customers would violate the no-fake-data rule | External dependency: controlled disposable production tenant/users or approved staging environment with production-equivalent config | Complete DB/RLS and anonymous API attacks remain proven | Resume with cross-tenant route matrix once controlled identities exist |
+| RATE-001 | Rate limiting | Redis-backed credential limiter returns 429 and resists forwarded-IP rotation | 🟢 PROVEN PASS | Bounded external burst using stable synthetic X-API-Key while rotating X-Forwarded-For | Production emitted 429 with Retry-After and rate-limit headers despite forwarding-header rotation | Production Runtime Smoke run 8 | n/a | External rerun passed |
+| RATE-002 | Rate limiting | Pure IP limiter remains stable through Railway proxy chain | 🔴 FAIL | 110 anonymous requests from one external runner source IP | Railway edge showed one source IP, but app did not emit 429 within 110 requests | Production Runtime Smoke run 6 + Railway HTTP logs | Root cause under investigation: app-level req.ip/proxy identity is not yet proven stable | REQUIRED |
+| RATE-003 | Rate limiting | Distributed/multi-instance bypass resistance | 🟡 UNPROVEN | Multi-source concurrent abuse test | Single production replica currently observed; distributed bypass not yet proven | — | — | REQUIRED when scaled beyond one replica |
 | BILL-001 | Billing | Checkout/webhook/idempotency/entitlement end-to-end | 🟡 UNPROVEN | Real Stripe test/production-safe flow | Not executed in this hardening pass | — | — | REQUIRED if billing is launch-critical |
 | WEBHOOK-001 | Webhooks | Signature/replay/idempotency/crash recovery | 🟡 UNPROVEN | Adversarial webhook suite | Worker webhook loop starts, but behavior not runtime-proven here | — | — | REQUIRED |
 | CONC-001 | Concurrency | Critical race conditions tested | 🟡 UNPROVEN | Concurrent signup/evidence/billing/job tests | Not yet executed | — | — | REQUIRED |
@@ -57,6 +61,6 @@ Status vocabulary:
 
 ### NOT PRODUCTION READY
 
-Reason: several release-critical requirements remain unproven under the Master Production Hardening Directive, including full authentication session/revocation behavior, authorization role-matrix attacks, two-tenant isolation tests, upload/scanner adversarial proof, backup restore, concurrency/failure injection, performance thresholds, and full browser interaction consistency.
+Reason: several release-critical requirements remain unproven under the Master Production Hardening Directive, including full authentication session/revocation behavior, production route-level authorization/IDOR attacks with controlled identities, upload/scanner adversarial proof, backup restore, concurrency/failure injection, performance thresholds, and full browser interaction consistency.
 
 This classification is intentionally stricter than “deployed and healthy.” A healthy deployment is evidence for deployment/health gates only; it does not prove every production-security property.
