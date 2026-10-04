@@ -3,7 +3,7 @@
 Updated: 2026-10-04  
 Canonical repository: `dreamzzzz120-cell/software-passport-registry`  
 Production branch: `main`  
-Production commit observed: `1f41058129c7598f5114cb39d496975aa57afaa4`
+Production commit observed: `420b82d07e5c82dfcdecc9a577d8ea5f8e64bad0`
 
 Status vocabulary:
 - 🟢 PROVEN PASS — observed runtime/test evidence exists.
@@ -40,7 +40,7 @@ Status vocabulary:
 | TENANT-002 | Tenant isolation | Pooled connection tenant context does not leak | 🟢 PROVEN PASS | Single-connection pool reuses physical connection across tenant transactions | transaction-local `app.tenant_id` cleared after COMMIT/ROLLBACK; Tenant B receives its own context | `tests/security/rls-tenant-isolation.test.ts` | n/a | Required workflows passed |
 | TENANT-003 | Tenant isolation | Full production route-level cross-tenant IDOR/BOLA using two real tenant identities | 🟠 BLOCKED | Production-safe two-tenant API attack | No disposable second production tenant identity is available; creating fake production customers would violate the no-fake-data rule | External dependency: controlled disposable production tenant/users or approved staging environment with production-equivalent config | Complete DB/RLS and anonymous API attacks remain proven | Resume with cross-tenant route matrix once controlled identities exist |
 | RATE-001 | Rate limiting | Redis-backed credential limiter returns 429 and resists forwarded-IP rotation | 🟢 PROVEN PASS | Bounded external burst using stable synthetic X-API-Key while rotating X-Forwarded-For | Production emitted 429 with Retry-After and rate-limit headers despite forwarding-header rotation | Production Runtime Smoke run 8 | n/a | External rerun passed |
-| RATE-002 | Rate limiting | Pure IP limiter remains stable through Railway proxy chain | 🔴 FAIL | 110 anonymous requests from one external runner source IP | Railway edge showed one source IP, but app did not emit 429 within 110 requests | Production Runtime Smoke run 6 + Railway HTTP logs | Root cause under investigation: app-level req.ip/proxy identity is not yet proven stable | REQUIRED |
+| RATE-002 | Rate limiting | Pure IP limiter remains stable through Railway proxy chain | 🟢 PROVEN PASS | 110-request bounded anonymous burst from one external GitHub runner | Production returned 429 within the bounded run and supplied Retry-After, X-RateLimit-Limit, and X-RateLimit-Policy | Production Runtime Smoke run 20 | Production limiter keys validated Railway X-Real-IP with safe fallback | External rerun passed |
 | RATE-003 | Rate limiting | Distributed/multi-instance bypass resistance | 🟡 UNPROVEN | Multi-source concurrent abuse test | Single production replica currently observed; distributed bypass not yet proven | — | — | REQUIRED when scaled beyond one replica |
 | BILL-001 | Billing | Checkout/webhook/idempotency/entitlement end-to-end | 🟡 UNPROVEN | Real Stripe test/production-safe flow | Not executed in this hardening pass | — | — | REQUIRED if billing is launch-critical |
 | WEBHOOK-001 | Webhooks | Signature/replay/idempotency/crash recovery | 🟡 UNPROVEN | Adversarial webhook suite | Worker webhook loop starts, but behavior not runtime-proven here | — | — | REQUIRED |
