@@ -81,6 +81,67 @@ export function isRateLimited(response: { status: number; headers: { get(name: s
   if (response.status !== 403 && response.status !== 429) return false;
   return response.headers.get('x-ratelimit-remaining') === '0' || Boolean(response.headers.get('retry-after'));
 }
+
+export type PublicGitHubRefResolution = { defaultBranch: string; commitSha: string };
+
+function assertSafeGitHubPathSegment(value: string, label: string): string {
+  const trimmed = String(value || '').trim();
+  if (!/^[A-Za-z0-9_.-]{1,100}$/.test(trimmed) || trimmed === '.' || trimmed === '..') throw new Error(`REPOSITORY_${label}_INVALID`);
+  return trimmed;
+}
+
+function assertSafeGitRef(value: string): string {
+  const trimmed = String(value || '').trim();
+  if (!trimmed || trimmed.length > 200 || trimmed.startsWith('-') || trimmed.includes('..') || trimmed.includes('@{') || trimmed.includes('//') || /[\\~^:?*\[\]\s]/.test(trimmed)) {
+    throw new Error('REPOSITORY_REF_NOT_FOUND');
+  }
+  return trimmed;
+}
+
+export function parseGitLsRemoteHead(output: string): PublicGitHubRefResolution | null {
+  const lines = output.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const symref = lines.find((line) => line.startsWith('ref: refs/heads/') && /\sHEAD$/.test(line));
+  const head = lines.find((line) => /^[a-f0-9]{40}\s+HEAD$/i.test(line));
+  if (!symref || !head) return null;
+  const defaultBranch = symref.replace(/^ref: refs\/heads\//, '').replace(/\s+HEAD$/, '').trim();
+  const commitSha = head.split(/\s+/)[0].toLowerCase();
+  if (!defaultBranch || !/^[a-f0-9]{40}$/i.test(commitSha)) return null;
+  return { defaultBranch, commitSha };
+}
+
+export function parseGitLsRemoteRef(output: string, requestedRef: string): string | null {
+  const safeRef = assertSafeGitRef(requestedRef);
+  const rows = output.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
+    const [sha, ref] = line.split(/\s+/, 2);
+    return { sha, ref };
+  }).filter((row) => /^[a-f0-9]{40}$/i.test(row.sha || ''));
+  const peeled = rows.find((row) => row.ref === `refs/tags/${safeRef}^{}`);
+  const branch = rows.find((row) => row.ref === `refs/heads/${safeRef}`);
+  const tag = rows.find((row) => row.ref === `refs/tags/${safeRef}`);
+  const direct = rows.find((row) => row.ref === safeRef);
+  return (peeled || branch || tag || direct)?.sha?.toLowerCase() || null;
+}
+
+export async function resolvePublicGitHubRefViaGit(owner: string, repository: string, requestedRef?: string | null): Promise<PublicGitHubRefResolution> {
+  const safeOwner = assertSafeGitHubPathSegment(owner, 'OWNER');
+  const safeRepository = assertSafeGitHubPathSegment(repository, 'NAME');
+  const remote = `https://github.com/${safeOwner}/${safeRepository}.git`;
+  const headResult = await runBounded('git', ['ls-remote', '--symref', remote, 'HEAD'], ACQUISITION_TIMEOUT_MS, 64 * 1024);
+  if (headResult.code !== 0) throw new Error('REPOSITORY_ACCESS_DENIED');
+  const head = parseGitLsRemoteHead(headResult.stdout.toString('utf8'));
+  if (!head) throw new Error('REPOSITORY_REF_NOT_FOUND');
+
+  if (!requestedRef) return head;
+  if (/^[a-f0-9]{40}$/i.test(requestedRef)) return { defaultBranch: head.defaultBranch, commitSha: requestedRef.toLowerCase() };
+
+  const safeRef = assertSafeGitRef(requestedRef);
+  if (safeRef === head.defaultBranch) return head;
+  const refResult = await runBounded('git', ['ls-remote', remote, safeRef, `refs/heads/${safeRef}`, `refs/tags/${safeRef}`, `refs/tags/${safeRef}^{}`], ACQUISITION_TIMEOUT_MS, 64 * 1024);
+  if (refResult.code !== 0) throw new Error('REPOSITORY_ACCESS_DENIED');
+  const commitSha = parseGitLsRemoteRef(refResult.stdout.toString('utf8'), safeRef);
+  if (!commitSha) throw new Error('REPOSITORY_REF_NOT_FOUND');
+  return { defaultBranch: head.defaultBranch, commitSha };
+}
 const OSV_ORIGIN = 'https://api.osv.dev';
 
 async function claimJob(pool: Pool): Promise<ClaimedJob | null> {
@@ -591,22 +652,48 @@ async function processRepositoryJob(pool: Pool, job: ClaimedJob) {
     const suppliedImmutableSha = pinnedSha !== null || (typeof source.requested_ref === 'string' && /^[a-f0-9]{40}$/i.test(source.requested_ref));
     const tenantToken = await resolveTenantGitHubToken(pool, job.tenant_id);
     const gitHubToken = tenantToken ?? githubToken();
-    const metadata = (!pinnedSha && suppliedImmutableSha) ? null : await fetchJson(repoUrl, 'REPOSITORY_NOT_FOUND', gitHubToken);
-    mark('metadata_fetched', { hasMetadata: !!metadata, credential: tenantToken ? 'tenant' : 'server' });
-    // A private repository is acquired only with the tenant's own credential.
+    let gitFallback: PublicGitHubRefResolution | null = null;
+    let metadata: any = null;
+    if (!pinnedSha && !suppliedImmutableSha) {
+      try {
+        metadata = await fetchJson(repoUrl, 'REPOSITORY_NOT_FOUND', gitHubToken);
+      } catch (error) {
+        if (!tenantToken && rootErrorMessage(error) === 'REPOSITORY_RATE_LIMITED') {
+          gitFallback = await resolvePublicGitHubRefViaGit(source.repository_owner, source.repository_name, source.requested_ref);
+          mark('github_api_rate_limit_fallback', { fallback: 'git-ls-remote' });
+        } else {
+          throw error;
+        }
+      }
+    }
+    mark('metadata_fetched', { hasMetadata: !!metadata, credential: tenantToken ? 'tenant' : (gitHubToken ? 'server' : 'anonymous'), fallback: gitFallback ? 'git-ls-remote' : null });
     if (metadata?.private && !tenantToken) throw new Error('REPOSITORY_PRIVATE_REQUIRES_CREDENTIAL');
-    const requestedRef = pinnedSha ?? source.requested_ref ?? metadata?.default_branch; if (!requestedRef) throw new Error('REPOSITORY_REF_NOT_FOUND');
-    // A renamed/transferred repository reports its current name in the
-    // metadata; use that for the commit lookup and archive download so the
-    // acquisition matches what GitHub actually serves.
+    const requestedRef = pinnedSha ?? source.requested_ref ?? metadata?.default_branch ?? gitFallback?.defaultBranch; if (!requestedRef) throw new Error('REPOSITORY_REF_NOT_FOUND');
     const canonicalOwner = typeof metadata?.owner?.login === 'string' && metadata.owner.login ? metadata.owner.login : source.repository_owner;
     const canonicalName = typeof metadata?.name === 'string' && metadata.name ? metadata.name : source.repository_name;
     const canonicalRepoUrl = `${GITHUB_API_ORIGIN}/repos/${encodeURIComponent(canonicalOwner)}/${encodeURIComponent(canonicalName)}`;
-    let commitSha: string = suppliedImmutableSha ? requestedRef.toLowerCase() : (await fetchJson(`${canonicalRepoUrl}/commits/${encodeURIComponent(requestedRef)}`, 'REPOSITORY_REF_NOT_FOUND', gitHubToken))?.sha;
+    let commitSha: string;
+    if (suppliedImmutableSha) {
+      commitSha = requestedRef.toLowerCase();
+    } else if (gitFallback) {
+      commitSha = gitFallback.commitSha;
+    } else {
+      try {
+        commitSha = (await fetchJson(`${canonicalRepoUrl}/commits/${encodeURIComponent(requestedRef)}`, 'REPOSITORY_REF_NOT_FOUND', gitHubToken))?.sha;
+      } catch (error) {
+        if (!tenantToken && rootErrorMessage(error) === 'REPOSITORY_RATE_LIMITED') {
+          gitFallback = await resolvePublicGitHubRefViaGit(canonicalOwner, canonicalName, requestedRef);
+          commitSha = gitFallback.commitSha;
+          mark('github_api_rate_limit_fallback', { fallback: 'git-ls-remote', stage: 'commit' });
+        } else {
+          throw error;
+        }
+      }
+    }
     if (typeof commitSha !== 'string' || !/^[a-f0-9]{40}$/i.test(commitSha)) throw new Error('REPOSITORY_REF_NOT_FOUND');
     if (ledger) commitSha = await pinScanCommit(pool, job.tenant_id, ledger.scanId, commitSha);
     mark('commit_resolved', { pinned: Boolean(pinnedSha) });
-    const descriptor = { provider:'github', owner:source.repository_owner, repository:source.repository_name, requestedRef: source.requested_ref ?? metadata?.default_branch ?? requestedRef, resolvedCommitSha:commitSha, subdirectory:source.repository_subdirectory, defaultBranch:metadata?.default_branch || null, visibility:metadata?.visibility || 'public', connectionId:source.connection_id, tenantId:job.tenant_id };
+    const descriptor = { provider:'github', owner:source.repository_owner, repository:source.repository_name, requestedRef: source.requested_ref ?? metadata?.default_branch ?? requestedRef, resolvedCommitSha:commitSha, subdirectory:source.repository_subdirectory, defaultBranch:metadata?.default_branch || gitFallback?.defaultBranch || null, visibility:metadata?.visibility || 'public', connectionId:source.connection_id, tenantId:job.tenant_id };
     const archivePath = path.join(tempRoot,'repository.zip'); const extractPath = path.join(tempRoot,'extracted'); const archiveExecutable = process.platform === 'win32' ? 'tar.exe' : 'unzip';
     await mkdir(extractPath);
     await downloadArchive(`${GITHUB_CODELOAD_ORIGIN}/${encodeURIComponent(canonicalOwner)}/${encodeURIComponent(canonicalName)}/zip/${commitSha}`, archivePath, { token: gitHubToken });

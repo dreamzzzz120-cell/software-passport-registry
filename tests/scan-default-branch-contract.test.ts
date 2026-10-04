@@ -12,21 +12,26 @@ const worker = read('src/workers/security-scanner-worker.ts');
 // scanStatus "partial" with no evidence and no passport. The ref defaulted to
 // the literal string 'main', so every repository not on 'main' was unscannable.
 describe('repository scans resolve the real default branch', () => {
-  it('prefers an explicit ref, then the repository default branch, before falling back', () => {
+  it('prefers an explicit ref, then the observed repository default branch, before any literal fallback', () => {
     expect(worker).toContain('metadata.default_branch');
+    expect(worker).toContain('gitFallback?.defaultBranch');
     expect(worker).toContain("source.requested_ref || defaultBranch || 'main'");
     // The old unconditional fallback must not come back.
     expect(worker).not.toContain("source.requested_ref || 'main'");
   });
 
-  it('reads the default branch from metadata already fetched, without an extra request', () => {
-    const metadataIdx = worker.indexOf('const metadata: any = await metadataResponse.json()');
-    const refIdx = worker.indexOf("source.requested_ref || defaultBranch || 'main'");
-    expect(metadataIdx).toBeGreaterThan(-1);
-    // The ref must be computed after metadata is available, not before it.
-    expect(refIdx).toBeGreaterThan(metadataIdx);
-    // Exactly two GitHub API calls: repository metadata, then the commit.
-    expect([...worker.matchAll(/await (?:fetch|fetchGitHubApi)\(/g)]).toHaveLength(2);
+  it('uses fetched metadata when available and a Git-observed default branch only when the API is rate limited', () => {
+    const metadataParseIdx = worker.indexOf('metadata = await metadataResponse.json()');
+    const defaultBranchIdx = worker.indexOf('const defaultBranch = ');
+    expect(metadataParseIdx).toBeGreaterThan(-1);
+    expect(defaultBranchIdx).toBeGreaterThan(metadataParseIdx);
+
+    expect(worker).toContain('if (isRateLimited(metadataResponse))');
+    expect(worker).toContain('resolvePublicGitHubRefViaGit');
+    expect(worker).toContain("event: 'github_api_rate_limit_fallback'");
+    // Normal acquisition still uses the two REST observations (metadata and
+    // commit); the fallback is a separate Git protocol path, not a guessed ref.
+    expect([...worker.matchAll(/await fetchGitHubApi\(/g)]).toHaveLength(2);
   });
 
   it('still distinguishes a missing repository from a missing ref', () => {
