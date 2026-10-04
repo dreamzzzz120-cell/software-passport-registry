@@ -15,7 +15,7 @@ describe('intake broker storage client', () => {
   });
 
   it('requests a signed intake upload without a Supabase service key', async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+    const fetchMock: any = vi.fn(async (..._args: any[]) => new Response(JSON.stringify({
       bucket: 'spr-intake',
       path: 'intake_' + 'a'.repeat(32) + '/item_' + 'b'.repeat(32) + '/package.json',
       token: 'signed-token',
@@ -33,7 +33,7 @@ describe('intake broker storage client', () => {
 
     expect(result.bucket).toBe('spr-intake');
     expect(result.signedUrl).toContain('https://');
-    const body = JSON.parse(String((fetchMock.mock.calls[0]?.[1] as RequestInit)?.body));
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
     expect(body.action).toBe('intake-upload');
     expect(body.sessionId).toMatch(/^intake_[a-f0-9]{32}$/);
   });
