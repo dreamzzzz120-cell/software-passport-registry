@@ -75,17 +75,24 @@ await check('baseline security headers', async () => {
 });
 
 
-await check('production API rate limit fails closed at configured threshold', async () => {
+await check('production credential rate limit resists forwarding-header rotation', async () => {
   let limited = null;
+  const syntheticKey = 'spr-smoke-rate-limit-proof-v1';
   for (let i = 0; i < 110; i += 1) {
-    const r = await fetch(API + '/api/vendors', {redirect:'manual'});
+    const r = await fetch(API + '/api/vendors', {
+      redirect:'manual',
+      headers:{
+        'x-api-key': syntheticKey,
+        'x-forwarded-for': `198.51.100.${(i % 200) + 1}`,
+      },
+    });
     if (r.status === 429) {
       limited = r;
       break;
     }
     assert(r.status === 401 || r.status === 403, `expected protected-route rejection before limit, got ${r.status} at request ${i + 1}`);
   }
-  assert(limited, 'no 429 observed within 110 requests');
+  assert(limited, 'no 429 observed for a stable credential within 110 requests');
   assert(Boolean(limited.headers.get('retry-after')), '429 missing Retry-After');
   assert(Boolean(limited.headers.get('x-ratelimit-limit')), '429 missing X-RateLimit-Limit');
   assert(Boolean(limited.headers.get('x-ratelimit-policy')), '429 missing X-RateLimit-Policy');
