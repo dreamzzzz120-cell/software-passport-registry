@@ -363,12 +363,29 @@ export default function FreeReviewView({
     result?.passport?.name || displayName || result?.passportId || 'Repository review';
 
   const shareReview = async () => {
+    const url = window.location.href;
     try {
-      await navigator.clipboard.writeText(window.location.href);
+      if (navigator.share) {
+        await navigator.share({ title: 'SPR Free Review', url });
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = url;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        const copied = document.execCommand('copy');
+        textarea.remove();
+        if (!copied) throw new Error('copy failed');
+      }
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 1800);
-    } catch {
-      setError('Could not copy the review link. Copy the browser address instead.');
+      window.setTimeout(() => setCopied(false), 2500);
+    } catch (error: any) {
+      if (error?.name === 'AbortError') return;
+      setError('Could not share the review link. Copy the browser address instead.');
     }
   };
 
@@ -771,10 +788,11 @@ export default function FreeReviewView({
                         onClick={() => document.getElementById('findings-summary')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
                       />
                       <ActionButton
-                        label={copied ? 'Link copied' : 'Share review'}
+                        label={copied ? 'Shared / copied' : 'Share review'}
                         icon={<Clipboard className="inline h-4 w-4" />}
                         onClick={() => void shareReview()}
                       />
+                      <span aria-live="polite" className="self-center text-xs text-[var(--spr-green)]">{copied ? 'Review link ready to share.' : ''}</span>
                       <ActionButton
                         label="Start monitoring"
                         icon={<Monitor className="inline h-4 w-4" />}
