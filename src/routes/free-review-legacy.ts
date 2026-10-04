@@ -139,18 +139,26 @@ export function createLegacyFreeReviewRouter() {
           : unfinished.length > 0
             ? 'The scan did not finish in time. No result was produced, so nothing here should be read as a clean review.'
             : null;
-      // sbom is the Syft component array the repository worker persists. It is
-      // read for its LENGTH only -- the licence ratio needs a real denominator --
-      // and the components themselves never leave this function.
+      // The public summary must use the repository worker's authoritative
+      // normalized component set, not passports.sbom. passports.sbom is kept
+      // version-resolved for the OSV query path, so repositories without a
+      // lockfile would otherwise lose their declared-but-unresolved dependencies
+      // from the Free Review summary even though the worker observed them.
       const passportRow = (await scopedDb.execute(sql`SELECT id, name, version, publisher, category, verification_status AS "verificationStatus", sbom FROM passports WHERE id=${passportId} AND tenant_id=${FREE_REVIEW_TENANT_ID} LIMIT 1`) as any).rows?.[0] || null;
+      const repositoryJob = jobs.find((j: any) => String(j.job_type) === 'repository_scan');
+      const normalizedRow = repositoryJob
+        ? (await scopedDb.execute(sql`SELECT normalized_components AS "normalizedComponents" FROM repository_scan_sources WHERE job_id=${repositoryJob.id} AND tenant_id=${FREE_REVIEW_TENANT_ID} LIMIT 1`) as any).rows?.[0] || null
+        : null;
       const { sbomComponentCount, licenceUnevaluatedComponentCount } = (() => {
-        if (!passportRow?.sbom) return { sbomComponentCount: null, licenceUnevaluatedComponentCount: 0 };
+        const raw = normalizedRow?.normalizedComponents ?? passportRow?.sbom;
+        if (!raw) return { sbomComponentCount: null, licenceUnevaluatedComponentCount: 0 };
         try {
-          const parsed = typeof passportRow.sbom === 'string' ? JSON.parse(passportRow.sbom) : passportRow.sbom;
+          const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
           if (!Array.isArray(parsed) || parsed.length === 0) return { sbomComponentCount: null, licenceUnevaluatedComponentCount: 0 };
-          // Same rule the licence scanner applies, so the denominator matches
-          // the set the findings were drawn from.
-          return { sbomComponentCount: parsed.length, licenceUnevaluatedComponentCount: parsed.filter((c: any) => !isLicenceEvaluable(c)).length };
+          return {
+            sbomComponentCount: parsed.length,
+            licenceUnevaluatedComponentCount: parsed.filter((component: any) => !isLicenceEvaluable(component)).length,
+          };
         } catch {
           return { sbomComponentCount: null, licenceUnevaluatedComponentCount: 0 };
         }
