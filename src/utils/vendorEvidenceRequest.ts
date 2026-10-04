@@ -21,10 +21,10 @@ export type VendorRequestReport = {
   generatedAt?: string;
   reportHash?: string;
   evidenceQuality?: { completenessBasisPoints?: number | null; unknownDimensions?: number; latestObservationAt?: string | null };
-  evidence?: VendorEvidenceRecord[];
-  findings?: VendorEvidenceRecord[];
+  evidence?: unknown[];
+  findings?: unknown[];
   limitations?: Array<{ evidenceId?: string; limitation?: string }>;
-  repositoryScan?: { sbomComponentCount?: number; sbomComponents?: unknown[]; findings?: VendorEvidenceRecord[]; evidence?: VendorEvidenceRecord[] };
+  repositoryScan?: { sbomComponentCount?: number; sbomComponents?: unknown[]; findings?: unknown[]; evidence?: unknown[] };
   sbom?: unknown[];
 };
 
@@ -56,13 +56,17 @@ function uniqueRecords(records: VendorEvidenceRecord[]) {
   });
 }
 
+function asRecord(value: unknown): VendorEvidenceRecord | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as VendorEvidenceRecord : null;
+}
+
 function recordsFor(report: VendorRequestReport, pattern: RegExp) {
   const all = [
     ...(report.evidence || []),
     ...(report.findings || []),
     ...(report.repositoryScan?.evidence || []),
     ...(report.repositoryScan?.findings || []),
-  ];
+  ].map(asRecord).filter((record): record is VendorEvidenceRecord => Boolean(record));
   return uniqueRecords(all.filter((record) => pattern.test(text(record))));
 }
 
