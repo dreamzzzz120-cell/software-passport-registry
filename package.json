@@ -29,7 +29,8 @@
     "zip:full": "node scripts/make-full-zip.js",
     "seed:registry": "node dist/seed-software-registry.cjs",
     "lom:scan": "node scripts/lom-scan.mjs",
-    "worker:once": "cross-env NODE_ENV=production node dist/worker-once.cjs"
+    "worker:once": "cross-env NODE_ENV=production node dist/worker-once.cjs",
+    "postrelease": "node migrations/migrate-railway-to-supabase.cjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",
