@@ -1,0 +1,24 @@
+name: Production Runtime Smoke
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/production-smoke.mjs'
+      - '.github/workflows/production-smoke.yml'
+      - 'docs/PRODUCTION_HARDENING_LEDGER.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  external-production-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Probe live production from outside Railway
+        run: node scripts/production-smoke.mjs
