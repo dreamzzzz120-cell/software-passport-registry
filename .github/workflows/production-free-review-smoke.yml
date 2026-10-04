@@ -1,0 +1,57 @@
+name: Production Free Review Smoke
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/production-free-review-smoke.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Submit and verify public Free Review
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://www.softwarepassportregistry.com"
+          SUBMIT="$(curl --fail-with-body -sS -X POST "$BASE/api/free-review/scan"             -H 'content-type: application/json'             -H 'accept: application/json'             --data '{"owner":"octocat","repository":"Hello-World"}')"
+          STATUS_URL="$(printf '%s' "$SUBMIT" | jq -r '.statusUrl // empty')"
+          PASSPORT_ID="$(printf '%s' "$SUBMIT" | jq -r '.passportId // empty')"
+          test -n "$STATUS_URL"
+          test -n "$PASSPORT_ID"
+          echo "submission accepted: passport=$PASSPORT_ID"
+
+          final=""
+          for attempt in $(seq 1 48); do
+            body="$(curl --fail-with-body -sS "$BASE$STATUS_URL" -H 'accept: application/json')"
+            state="$(printf '%s' "$body" | jq -r '.scanStatus // empty')"
+            progress="$(printf '%s' "$body" | jq -r '.progress.percent // 0')"
+            echo "attempt=$attempt state=$state progress=$progress"
+            case "$state" in
+              complete|partial|failed)
+                final="$body"
+                break
+                ;;
+            esac
+            sleep 5
+          done
+
+          test -n "$final"
+          state="$(printf '%s' "$final" | jq -r '.scanStatus')"
+          evidence="$(printf '%s' "$final" | jq -r '.summary.evidenceCount // 0')"
+          components="$(printf '%s' "$final" | jq -r '.sbom.componentCount // 0')"
+          findings="$(printf '%s' "$final" | jq -r '.summary.openFindings // 0')"
+          reason="$(printf '%s' "$final" | jq -r '.failureReason // ""')"
+          echo "FINAL state=$state evidence=$evidence components=$components findings=$findings"
+          if [ "$state" = "failed" ]; then
+            echo "failureReason=$reason"
+            exit 1
+          fi
+          if [ "$evidence" -lt 1 ]; then
+            echo "Expected persisted evidence but received $evidence"
+            exit 1
+          fi
