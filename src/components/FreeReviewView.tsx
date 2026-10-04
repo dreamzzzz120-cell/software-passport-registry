@@ -67,7 +67,7 @@ interface FreeReviewStatus {
     unverified: number;
     byType: Record<string, number>;
   } | null;
-  sbom?: { componentCount: number | null } | null;
+  sbom?: { componentCount: number | null; npmResolvedComponentCount?: number; declaredNpmDependencyCount?: number | null; declaredNpmProductionCount?: number | null; exactVersionCoverageComplete?: boolean | null } | null;
   verifiedCapabilities?: string[] | null;
   locked?: {
     detailedFindings: number;
@@ -386,8 +386,7 @@ export default function FreeReviewView({
           </div>
           <h1 className="mt-3 text-3xl font-semibold">Free software review</h1>
           <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-[var(--spr-text-muted)]">
-            SPR turns a public repository into an evidence-led software trust review.
-            You see what was observed, what was verified, and where evidence is still missing.
+            SPR turns a public repository into an evidence-led software trust review. No account is needed to run the review. You see what was observed, what was verified, and where evidence is still missing; the optional PDF asks for contact details.
           </p>
         </div>
 
@@ -554,22 +553,22 @@ export default function FreeReviewView({
                         <div className="mt-1 break-all text-sm font-bold">{reviewedName}</div>
                       </div>
                       <div className="rounded-xl border border-[var(--spr-border)] p-4">
-                        <div className="text-xs text-[var(--spr-text-muted)]">Version</div>
-                        <div className="mt-1 text-sm font-bold">
+                        <div className="text-xs text-[var(--spr-text-muted)]">{/^[a-f0-9]{40}$/i.test(result.passport?.version || '') ? 'Commit' : 'Version'}</div>
+                        <div className="mt-1 break-all text-sm font-bold">
                           {result.passport?.version || 'UNKNOWN'}
                         </div>
                       </div>
                       <div className="rounded-xl border border-[var(--spr-border)] p-4">
                         <div className="text-xs text-[var(--spr-text-muted)]">Publisher</div>
-                        <div className="mt-1 text-sm font-bold">
+                        <div className="mt-1 break-words text-sm font-bold">
                           {result.passport?.publisher || 'UNKNOWN'}
                         </div>
                       </div>
                       <div className="rounded-xl border border-[var(--spr-border)] p-4">
-                        <div className="text-xs text-[var(--spr-text-muted)]">Commit / ref</div>
-                        <div className="mt-1 text-sm font-bold">UNKNOWN</div>
+                        <div className="text-xs text-[var(--spr-text-muted)]">Reference</div>
+                        <div className="mt-1 text-sm font-bold">{/^[a-f0-9]{40}$/i.test(result.passport?.version || '') ? 'Pinned commit' : 'UNKNOWN'}</div>
                         <div className="mt-1 text-[10px] text-[var(--spr-text-faint)]">
-                          Not exposed in free preview
+                          {result.passport?.version && /^[a-f0-9]{40}$/i.test(result.passport.version) ? 'Exact commit observed' : 'Exact ref not exposed in free preview'}
                         </div>
                       </div>
                     </div>
@@ -621,7 +620,7 @@ export default function FreeReviewView({
                               {result.assessment.totalAreas - result.assessment.observedAreas}
                             </div>
                             <div className="text-xs text-[var(--spr-text-muted)]">
-                              areas without enough evidence
+                              Areas without enough evidence
                             </div>
                           </div>
                         </div>
@@ -687,7 +686,7 @@ export default function FreeReviewView({
                     </div>
                   </section>
 
-                  <section className="rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6">
+                  <section id="evidence-summary" className="rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6">
                     <div className="text-[11px] font-semibold uppercase tracking-[.18em]">
                       Evidence breakdown
                     </div>
@@ -721,10 +720,16 @@ export default function FreeReviewView({
                         </div>
                       </div>
                       <div className="rounded-xl border border-[var(--spr-border)] p-4">
-                        <div className="text-xs text-[var(--spr-text-muted)]">SBOM</div>
+                        <div className="text-xs text-[var(--spr-text-muted)]">Dependency coverage</div>
                         <div className="mt-1 text-sm font-semibold">
-                          {result.sbom?.componentCount ?? 'UNKNOWN'} components
+                          {result.sbom?.componentCount ?? 'UNKNOWN'} resolved SBOM components
                         </div>
+                        {result.sbom?.declaredNpmDependencyCount != null && (
+                          <div className="mt-1 text-[10px] leading-4 text-[var(--spr-text-faint)]">
+                            {result.sbom.declaredNpmDependencyCount} npm dependencies declared in package.json
+                            {result.sbom.exactVersionCoverageComplete === false ? ' · exact-version coverage incomplete' : ''}
+                          </div>
+                        )}
                       </div>
                       <div className="rounded-xl border border-[var(--spr-border)] p-4">
                         <div className="text-xs text-[var(--spr-text-muted)]">Freshness</div>
@@ -735,26 +740,35 @@ export default function FreeReviewView({
                     </div>
                   </section>
 
+                  {result.sbom?.declaredNpmDependencyCount != null && result.sbom.exactVersionCoverageComplete === false && (
+                    <section className="rounded-2xl border border-[var(--spr-amber)]/30 bg-[var(--spr-amber)]/5 p-5">
+                      <div className="text-sm font-semibold text-[var(--spr-text)]">Dependency versions are only partially resolved</div>
+                      <p className="mt-2 text-xs leading-5 text-[var(--spr-text-muted)]">
+                        SPR observed {result.sbom.declaredNpmDependencyCount} npm dependencies declared by the repository, but only {result.sbom.npmResolvedComponentCount ?? 0} npm components were resolved to exact versions in the generated SBOM. Vulnerability coverage for unresolved declarations remains UNKNOWN rather than being treated as clean.
+                      </p>
+                    </section>
+                  )}
+
                   <section className="rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6">
                     <div className="text-[11px] font-semibold uppercase tracking-[.18em] text-[var(--spr-highlight)]">
                       One-click outputs
                     </div>
                     <div className="mt-4 flex flex-wrap gap-3">
                       <ActionButton
-                        label="Open Passport"
+                        label="Claim full Launch Ticket"
                         icon={<ExternalLink className="inline h-4 w-4" />}
-                        onClick={() => loginTarget('/passports')}
+                        onClick={onSignUp}
                         primary
                       />
                       <ActionButton
-                        label="Evidence Explorer"
+                        label="See evidence summary"
                         icon={<ExternalLink className="inline h-4 w-4" />}
-                        onClick={() => loginTarget('/evidence-explorer')}
+                        onClick={() => document.getElementById('evidence-summary')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
                       />
                       <ActionButton
-                        label="Findings"
+                        label="See findings summary"
                         icon={<ExternalLink className="inline h-4 w-4" />}
-                        onClick={() => loginTarget('/dashboard')}
+                        onClick={() => document.getElementById('findings-summary')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
                       />
                       <ActionButton
                         label={copied ? 'Link copied' : 'Share review'}
