@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, mkdir, readdir, rm } from 'node:fs/promises';
 import { Pool } from 'pg';
-import { downloadArchive, fetchGitHubApi, generateRepositorySbom, githubHeaders, isRateLimited, resolveTenantGitHubToken, rootErrorMessage, runBounded, validateArchiveEntries } from './osv-worker.ts';
+import { downloadArchive, fetchGitHubApi, generateRepositorySbom, githubHeaders, isRateLimited, resolvePublicGitHubRefViaGit, resolveTenantGitHubToken, rootErrorMessage, runBounded, validateArchiveEntries, type PublicGitHubRefResolution } from './osv-worker.ts';
 import { createWorkerPool, assertWorkerDatabase } from './worker-db.ts';
 import { runRealRepositoryScanners } from '../scanners/real-repository-scanners.ts';
 import { calculateAndStoreTrustScore } from '../utils/scanner.ts';
@@ -53,29 +53,45 @@ async function processSecurityJob(pool: Pool, job: any) {
     const repoApi = `https://api.github.com/repos/${encodeURIComponent(source.repository_owner)}/${encodeURIComponent(source.repository_name)}`;
     const tenantToken = await resolveTenantGitHubToken(pool, job.tenant_id);
     const headers = (extra: Record<string, string>) => tenantToken ? githubHeaders(extra, tenantToken) : githubHeaders(extra);
+    let gitFallback: PublicGitHubRefResolution | null = null;
+    let metadata: any = null;
     const metadataResponse = await fetchGitHubApi(repoApi, { headers: headers({ accept: 'application/vnd.github+json', 'user-agent': 'spr-security-worker/1.0' }) });
-    if (isRateLimited(metadataResponse)) throw new Error('REPOSITORY_RATE_LIMITED');
-    if (!metadataResponse.ok) throw new Error(metadataResponse.status === 404 ? 'REPOSITORY_NOT_FOUND' : 'REPOSITORY_ACCESS_DENIED');
-    const metadata: any = await metadataResponse.json();
+    if (isRateLimited(metadataResponse)) {
+      if (tenantToken) throw new Error('REPOSITORY_RATE_LIMITED');
+      gitFallback = await resolvePublicGitHubRefViaGit(source.repository_owner, source.repository_name, source.requested_ref);
+      metadata = { owner: { login: source.repository_owner }, name: source.repository_name, default_branch: gitFallback.defaultBranch, private: false, visibility: 'public' };
+      console.info(JSON.stringify({ event: 'github_api_rate_limit_fallback', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, fallback: 'git-ls-remote', stage: 'metadata' }));
+    } else {
+      if (!metadataResponse.ok) throw new Error(metadataResponse.status === 404 ? 'REPOSITORY_NOT_FOUND' : 'REPOSITORY_ACCESS_DENIED');
+      metadata = await metadataResponse.json();
+    }
     if (metadata.private && !tenantToken) throw new Error('REPOSITORY_PRIVATE_REQUIRES_CREDENTIAL');
-    const defaultBranch = typeof metadata.default_branch === 'string' && metadata.default_branch.trim() ? metadata.default_branch.trim() : '';
-    // A commit the other half of this scan already pinned is authoritative.
+    const defaultBranch = typeof metadata.default_branch === 'string' && metadata.default_branch.trim() ? metadata.default_branch.trim() : gitFallback?.defaultBranch || '';
     const requestedRef = pinnedSha || source.requested_ref || defaultBranch || 'main';
-    // Renamed/transferred repositories: use the canonical name GitHub reports.
     const canonicalOwner = typeof metadata.owner?.login === 'string' && metadata.owner.login ? metadata.owner.login : source.repository_owner;
     const canonicalName = typeof metadata.name === 'string' && metadata.name ? metadata.name : source.repository_name;
     const canonicalRepoApi = `https://api.github.com/repos/${encodeURIComponent(canonicalOwner)}/${encodeURIComponent(canonicalName)}`;
-    const commitResponse = await fetchGitHubApi(`${canonicalRepoApi}/commits/${encodeURIComponent(requestedRef)}`, { headers: headers({ accept: 'application/vnd.github+json', 'user-agent': 'spr-security-worker/1.0' }) });
-    if (isRateLimited(commitResponse)) throw new Error('REPOSITORY_RATE_LIMITED');
-    if (!commitResponse.ok) throw new Error('REPOSITORY_REF_NOT_FOUND');
-    const commit: any = await commitResponse.json();
-    if (typeof commit.sha !== 'string' || !/^[a-f0-9]{40}$/i.test(commit.sha)) throw new Error('REPOSITORY_REF_NOT_FOUND');
-    if (ledger) commit.sha = await pinScanCommit(pool, job.tenant_id, ledger.scanId, commit.sha);
+    let commitSha = gitFallback?.commitSha || '';
+    if (!commitSha) {
+      const commitResponse = await fetchGitHubApi(`${canonicalRepoApi}/commits/${encodeURIComponent(requestedRef)}`, { headers: headers({ accept: 'application/vnd.github+json', 'user-agent': 'spr-security-worker/1.0' }) });
+      if (isRateLimited(commitResponse)) {
+        if (tenantToken) throw new Error('REPOSITORY_RATE_LIMITED');
+        gitFallback = await resolvePublicGitHubRefViaGit(canonicalOwner, canonicalName, requestedRef);
+        commitSha = gitFallback.commitSha;
+        console.info(JSON.stringify({ event: 'github_api_rate_limit_fallback', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, fallback: 'git-ls-remote', stage: 'commit' }));
+      } else {
+        if (!commitResponse.ok) throw new Error('REPOSITORY_REF_NOT_FOUND');
+        const commit: any = await commitResponse.json();
+        commitSha = commitSha;
+      }
+    }
+    if (typeof commitSha !== 'string' || !/^[a-f0-9]{40}$/i.test(commitSha)) throw new Error('REPOSITORY_REF_NOT_FOUND');
+    if (ledger) commitSha = await pinScanCommit(pool, job.tenant_id, ledger.scanId, commitSha);
 
     const archivePath = path.join(tempRoot, 'repository.zip');
     const extractPath = path.join(tempRoot, 'extracted');
     await mkdir(extractPath);
-    await downloadArchive(`https://codeload.github.com/${encodeURIComponent(canonicalOwner)}/${encodeURIComponent(canonicalName)}/zip/${commit.sha}`, archivePath, { maxBytes: MAX_ARCHIVE_BYTES, ...(tenantToken ? { token: tenantToken } : {}) });
+    await downloadArchive(`https://codeload.github.com/${encodeURIComponent(canonicalOwner)}/${encodeURIComponent(canonicalName)}/zip/${commitSha}`, archivePath, { maxBytes: MAX_ARCHIVE_BYTES, ...(tenantToken ? { token: tenantToken } : {}) });
     const archiveExecutable = process.platform === 'win32' ? 'tar.exe' : 'unzip';
     const listing = await runBounded(archiveExecutable, process.platform === 'win32' ? ['-tf', archivePath] : ['-Z1', archivePath], 30_000, 10 * 1024 * 1024);
     if (listing.code !== 0) throw new Error('REPOSITORY_ACQUISITION_FAILED');
@@ -98,7 +114,7 @@ async function processSecurityJob(pool: Pool, job: any) {
       console.info(JSON.stringify({ event: 'scan_inventory_persisted', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, scanId: ledger.scanId, files: inventory.entries.length, truncated: inventory.truncated }));
     }
 
-    await pool.query(`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES ($1,$2,$3,'Info')`, [job.id, 'security-scanner', `Acquired GitHub commit ${commit.sha}`]);
+    await pool.query(`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES ($1,$2,$3,'Info')`, [job.id, 'security-scanner', `Acquired GitHub commit ${commitSha}`]);
     await pool.query(`UPDATE agent_jobs SET progress=25,updated_at=NOW() WHERE id=$1 AND tenant_id=$2`, [job.id, job.tenant_id]);
     const generated = await generateRepositorySbom(scanRoot, process.env.SYFT_PATH || 'syft');
     await pool.query(`UPDATE agent_jobs SET progress=55,updated_at=NOW() WHERE id=$1 AND tenant_id=$2`, [job.id, job.tenant_id]);
@@ -111,7 +127,7 @@ async function processSecurityJob(pool: Pool, job: any) {
       await pool.query(`INSERT INTO scan_findings (id,tenant_id,asset_id,job_id,severity,category,title,description,component,status,detected_at,engine_id,file_path,scan_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'Open',NOW(),$10,$11,$12) ON CONFLICT (id) DO UPDATE SET file_path = COALESCE(scan_findings.file_path, EXCLUDED.file_path), scan_id = COALESCE(scan_findings.scan_id, EXCLUDED.scan_id)`, [findingId, job.tenant_id, job.passport_id, job.id, finding.severity, finding.category, finding.title, finding.description, finding.component || null, finding.engineId, finding.filePath ?? null, job.scan_id ?? null]);
       persistedFindings.push({ id: findingId, filePath: finding.filePath ?? null });
     }
-    const evidencePayload = JSON.stringify({ repository: `${source.repository_owner}/${source.repository_name}`, requestedRef, resolvedCommitSha: commit.sha, engines: ['Syft','OSV','spr-secret-scanner-v1','spr-iac-config-scanner-v1','spr-license-scanner-v1'], findingCount: findings.length, limitations: ['OSV results are provider observations, not cryptographic verification.','Secret/config rules are deterministic pattern scanners and can produce false positives/negatives.'] });
+    const evidencePayload = JSON.stringify({ repository: `${source.repository_owner}/${source.repository_name}`, requestedRef, resolvedCommitSha: commitSha, engines: ['Syft','OSV','spr-secret-scanner-v1','spr-iac-config-scanner-v1','spr-license-scanner-v1'], findingCount: findings.length, limitations: ['OSV results are provider observations, not cryptographic verification.','Secret/config rules are deterministic pattern scanners and can produce false positives/negatives.'] });
     const evidenceHash = sha256(evidencePayload);
     const evidenceId = `ev-security-${job.id}-${evidenceHash.slice(0,24)}`;
     await pool.query(`INSERT INTO evidence_items (id,tenant_id,asset_id,name,type,verified,status,signer,timestamp,hash,raw_content,engine_id,scan_id) VALUES ($1,$2,$3,'Multi-engine repository security scan','Security Scan',0,'OBSERVED','SPR scanner',NOW(),$4,$5,'spr-security-orchestrator-v1',$6) ON CONFLICT DO NOTHING`, [evidenceId, job.tenant_id, job.passport_id, `sha256:${evidenceHash}`, evidencePayload, job.scan_id ?? null]);
@@ -123,8 +139,8 @@ async function processSecurityJob(pool: Pool, job: any) {
     }
     // A scan queued through the ledger already owns a scans row, which
     // settleScanRun completes; only legacy jobs insert their own summary row.
-    if (!job.scan_id) await pool.query(`INSERT INTO scans (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name) VALUES ($1,$2,$3,'Multi-engine repository security scan',$4,'Completed',0,$5,NOW(),$6) ON CONFLICT DO NOTHING`, [`scan-security-${job.id}-${commit.sha.slice(0,16)}`, job.tenant_id, `${source.repository_owner}/${source.repository_name}@${commit.sha.slice(0,12)}`, WORKER_ID, findings.length, source.repository_owner]);
-    await pool.query(`UPDATE agent_jobs SET status='Completed',progress=100,result=$2,error=NULL,completed_at=NOW(),locked_at=NULL,locked_by=NULL,updated_at=NOW() WHERE id=$1 AND tenant_id=$3 AND status='Running' AND locked_by=$4`, [job.id, JSON.stringify({ engines: ['Syft','OSV','Secret','IaC/Config','License'], findings: findings.length, commitSha: commit.sha, evidenceHash: `sha256:${evidenceHash}` }), job.tenant_id, WORKER_ID]);
+    if (!job.scan_id) await pool.query(`INSERT INTO scans (id,tenant_id,target_name,scan_type,triggered_by,status,duration_ms,findings_count,timestamp,client_name) VALUES ($1,$2,$3,'Multi-engine repository security scan',$4,'Completed',0,$5,NOW(),$6) ON CONFLICT DO NOTHING`, [`scan-security-${job.id}-${commitSha.slice(0,16)}`, job.tenant_id, `${source.repository_owner}/${source.repository_name}@${commitSha.slice(0,12)}`, WORKER_ID, findings.length, source.repository_owner]);
+    await pool.query(`UPDATE agent_jobs SET status='Completed',progress=100,result=$2,error=NULL,completed_at=NOW(),locked_at=NULL,locked_by=NULL,updated_at=NOW() WHERE id=$1 AND tenant_id=$3 AND status='Running' AND locked_by=$4`, [job.id, JSON.stringify({ engines: ['Syft','OSV','Secret','IaC/Config','License'], findings: findings.length, commitSha: commitSha, evidenceHash: `sha256:${evidenceHash}` }), job.tenant_id, WORKER_ID]);
     // Same reason as osv-worker.scorePassportAfterScan: the passport's score and
     // verification_status are outcomes of this scan and were never recomputed.
     try {
