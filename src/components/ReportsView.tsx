@@ -4,6 +4,7 @@ import type { Alert, Client, Scan, SoftwarePassport } from '../types';
 import { apiFetch } from '../utils/apiClient';
 import { generateCoBrandedTrustReport, generatePassportEvidenceReport } from '../utils/pdfGenerator';
 import PlainEnglishReport from './PlainEnglishReport';
+import VendorEvidenceRequestPanel from './VendorEvidenceRequestPanel';
 
 type ReportPayload = {
   schemaVersion?: string;
@@ -460,6 +461,15 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
           <pre className="mt-6 max-h-64 overflow-auto rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] p-4 text-xs leading-5 text-[var(--spr-text-muted)] whitespace-pre-wrap">{reportText || 'Load a passport report to preview its persisted traceability and limitations.'}</pre>
         </div>
       </div>
+
+      {report && selectedPassport && (
+        <VendorEvidenceRequestPanel
+          report={report}
+          passport={selectedPassport}
+          clientName={clientName(selectedPassport, clients)}
+          organization={mspName || undefined}
+        />
+      )}
 
       {report?.sbom && (
         <div className="spr-panel p-6">
