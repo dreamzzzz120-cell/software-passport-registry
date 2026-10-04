@@ -90,7 +90,13 @@ export function createLegacyFreeReviewRouter() {
         return Number.isFinite(started) && started < oldest ? started : oldest;
       }, Date.now());
       const pastDeadline = Date.now() - oldestStartedAt > FREE_REVIEW_DEADLINE_MS;
-      const pending = !pastDeadline && jobs.some((j: any) => ['Pending', 'Running'].includes(j.status));
+      const deterministicPublicFailureCodes = new Set([
+        'REPOSITORY_NOT_FOUND','REPOSITORY_REF_NOT_FOUND','REPOSITORY_ACCESS_DENIED',
+        'REPOSITORY_PRIVATE_REQUIRES_CREDENTIAL','REPOSITORY_PATH_INVALID',
+        'NO_SUPPORTED_MANIFESTS','SBOM_EMPTY',
+      ]);
+      const terminalPublicFailure = jobs.find((j: any) => j.status === 'Failed' && deterministicPublicFailureCodes.has(String(j.error || '').trim()));
+      const pending = !pastDeadline && !terminalPublicFailure && jobs.some((j: any) => ['Pending', 'Running'].includes(j.status));
       // 'Completed' is the workers' terminal success status. A job left Pending or
       // Running past the deadline did not succeed, so it is counted as unfinished
       // rather than silently folded into a clean result.
