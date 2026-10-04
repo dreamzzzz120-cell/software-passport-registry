@@ -22,12 +22,12 @@ const BUYER_QUESTIONS = [
 
 const STEPS = [
   { n: '1', title: 'Paste a GitHub repository', body: 'Any public repo one of your clients depends on. No account, no install.' },
-  { n: '2', title: 'SPR scans it', body: 'Builds an SBOM of its dependencies and checks every component against the OSV vulnerability database.' },
+  { n: '2', title: 'SPR builds the evidence record', body: 'Resolves exact package versions where evidence permits, preserves declared dependency ranges when it does not, and checks only resolved components against OSV.' },
   { n: '3', title: 'Download the PDF', body: 'A report you can put in front of a client: components, known vulnerabilities, and what could not be verified.' },
 ];
 
 const REPORT_CONTENTS = [
-  'Software Bill of Materials (SBOM) — every dependency observed',
+  'Resolved SBOM components plus declared-but-unresolved dependencies, clearly separated',
   'Known vulnerabilities matched from OSV, with severity',
   'Evidence status for each finding: verified, observed or UNKNOWN',
   'Timestamp and source for everything in the report',
@@ -66,8 +66,8 @@ export default function HomePage({ onCreatePassport, onExploreTrustNetwork }: Pr
         </div>
         <h1 className="text-4xl font-semibold leading-[1.08] tracking-[-.02em] md:text-5xl">Show your clients what’s inside their software.</h1>
         <p className="mx-auto mt-6 max-w-2xl text-base leading-7 text-[var(--spr-text-muted)]">
-          SBOM and vulnerability reports your MSP can hand to clients — built from what was actually observed, with nothing invented.
-          Clients are starting to ask for SBOMs as new rules like the EU’s CRA make SBOMs and vulnerability handling a requirement for software. Be the MSP that already has the answer.
+          SPR is the evidence and accountability layer around software scanners: a client-ready record of what was observed, what was resolved, what remains UNKNOWN, and what evidence supports every claim.
+          Use the free review to inspect a repository, then turn that evidence into a repeatable MSP service with monitoring, history, reporting, and white-label delivery.
         </p>
         <div className="mt-9 flex flex-col items-center gap-3">
           <PrimaryCta onClick={onExploreTrustNetwork} className="px-8 py-3.5 text-base" />
@@ -107,6 +107,23 @@ export default function HomePage({ onCreatePassport, onExploreTrustNetwork }: Pr
                 <li key={q} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] px-4 py-3 text-sm">{q}</li>
               ))}
             </ul>
+          </div>
+        </div>
+      </section>
+
+      <section className="border-t border-[var(--spr-border)] px-6 py-16">
+        <div className="mx-auto max-w-5xl">
+          <div className="text-[12px] font-bold uppercase tracking-[.18em] text-[var(--spr-highlight)]">Why not just use a free scanner?</div>
+          <h2 className="mt-2 text-2xl font-semibold">Scanners find issues. SPR preserves the evidence around the decision.</h2>
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+            <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5">
+              <h3 className="text-sm font-semibold">Dependabot / Trivy / Grype / Socket</h3>
+              <p className="mt-2 text-sm leading-6 text-[var(--spr-text-muted)]">Excellent inputs for dependency and vulnerability findings. They are not the client evidence record, the historical Launch Ticket, the MSP portfolio workflow, or the white-label managed service.</p>
+            </div>
+            <div className="rounded-md border border-[var(--spr-highlight)]/40 bg-[var(--spr-accent-soft)]/15 p-5">
+              <h3 className="text-sm font-semibold">Software Passport Registry</h3>
+              <p className="mt-2 text-sm leading-6 text-[var(--spr-text-muted)]">Combines observed evidence, preserves UNKNOWN and unresolved states, tracks provenance and change over time, and turns the result into something an MSP can monitor, explain, deliver, and sell.</p>
+            </div>
           </div>
         </div>
       </section>
