@@ -33,7 +33,7 @@ type ClaimedJob = {
   scan_id: string | null;
 };
 
-type SbomComponent = { name?: string; version?: string; ecosystem?: string; purl?: string; declaredRange?: string; resolution?: 'resolved' | 'declared' };
+type SbomComponent = { name: string; version?: string; ecosystem?: string; purl?: string; declaredRange?: string; resolution?: 'resolved' | 'declared' };
 
 const WORKER_ID = `${os.hostname()}:${process.pid}`;
 const PROVIDER_TIMEOUT_MS = 15_000;
