@@ -87,8 +87,9 @@ await check('production intake signs uploads and hashes observed bytes', async (
     headers: { 'content-type': 'application/json' },
     body: '{}',
   });
-  assert(sessionResponse.status === 201, `session expected 201 got ${sessionResponse.status}: ${(await sessionResponse.text()).slice(0, 300)}`);
-  const session = await sessionResponse.json();
+  const sessionText = await sessionResponse.text();
+  assert(sessionResponse.status === 201, `session expected 201 got ${sessionResponse.status}: ${sessionText.slice(0, 300)}`);
+  const session = JSON.parse(sessionText);
   assert(/^intake_[a-f0-9]{32}$/.test(session.sessionId || ''), 'invalid intake session id');
 
   const signResponse = await fetch(API + '/api/intake/upload-url', {
