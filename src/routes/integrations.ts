@@ -4,6 +4,8 @@ import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/security.ts';
 import { INTEGRATION_CATALOG } from '../integrations/catalog.ts';
+import { UNIVERSAL_CONNECTORS } from '../integrations/universal-fabric.ts';
+import { manifestFromConnector, SPR_ADAPTER_PROTOCOL_VERSION, SPR_EVIDENCE_ENVELOPE_VERSION, SPR_EVENT_VERSION, SPR_POLICY_PLUGIN_VERSION } from '../integrations/capability-manifest.ts';
 
 const githubScanSchema = z.object({
   passportId: z.string().trim().min(1).max(255),
@@ -27,6 +29,24 @@ function tenantIntegrationId(tenantId: string, provider: string) { return `int_$
 
 export function createIntegrationsRouter() {
   const router = Router();
+
+  router.get('/capabilities', requireAuth, (_req: AuthenticatedRequest, res) => {
+    return res.json({
+      protocolVersions: {
+        adapter: SPR_ADAPTER_PROTOCOL_VERSION,
+        evidence: SPR_EVIDENCE_ENVELOPE_VERSION,
+        policy: SPR_POLICY_PLUGIN_VERSION,
+        event: SPR_EVENT_VERSION,
+      },
+      rules: {
+        unknownByDefault: true,
+        evidenceIsImmutableInput: true,
+        scoringIsReplaceableDerivedOutput: true,
+        providerClaimsRequireObservedEvidence: true,
+      },
+      adapters: UNIVERSAL_CONNECTORS.map(connector => manifestFromConnector(connector)),
+    });
+  });
 
   router.get('/', requireAuth, async (req: AuthenticatedRequest, res, next) => {
     try {
