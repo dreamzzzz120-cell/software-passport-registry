@@ -12,6 +12,7 @@ import LoginView from './components/LoginView';
 import EvidenceDashboardView from './components/EvidenceDashboardView';
 import EvidenceExplorerView from './components/EvidenceExplorerView';
 import EvidenceExchangeView from './components/EvidenceExchangeView';
+import ProcurementGateView from './components/ProcurementGateView';
 import AITrustCenterView from './components/AITrustCenterView';
 import CoverageView from './components/CoverageView';
 import AssetsView from './components/AssetsView';
@@ -558,6 +559,7 @@ export default function App() {
     case '/coverage': view = <CoverageView clients={clients} scans={scans} passports={passports} onNavigateTab={onNavigateTab} />; break;
     case '/evidence-explorer': view = <EvidenceExplorerView passports={passports} />; break;
     case '/evidence-exchange': view = <EvidenceExchangeView clients={clients} passports={passports} vendors={vendors} onNavigate={navigate} />; break;
+    case '/procurement-gate': view = <ProcurementGateView passports={passports} onNavigate={navigate} />; break;
     case '/assets': view = <AssetsView clients={clients} searchQuery="" assets={assets} />; break;
     case '/passports': view = <PassportsView verificationDecisions={verificationDecisions} verificationDetails={verificationDetails} passports={passports} selectedPassportId={selectedPassportId} setSelectedPassportId={setSelectedPassportId} searchQuery="" clients={clients} assets={assets} role={role} onNavigateTab={onNavigateTab} onUpdatePassport={(passport) => setPassports((current) => current.map((item) => item.id === passport.id ? passport : item))} onReload={() => setReloadKey((n) => n + 1)} />; break;
     case '/registry': view = <PublicRegistryView />; break;
