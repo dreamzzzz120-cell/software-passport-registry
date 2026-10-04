@@ -12,7 +12,7 @@ startCommand = "npm start"
 # spr_worker_runtime's password drifted out of sync.
 # "npm run release" is one entry, and npm runs its script through a shell, so
 # the chain works. Both steps are idempotent.
-preDeployCommand = ["node migrations/migrate-railway-to-supabase.cjs"]
+preDeployCommand = ["npm run release"]
 # /health is deliberately shallow -- it returns 200 on uptime alone and checks
 # nothing. Pointing Railway at it meant the platform kept routing traffic to an
 # application that was telling anyone who asked that it was NOT ready: production
