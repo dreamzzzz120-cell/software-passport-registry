@@ -44,5 +44,5 @@ describe('universal intake storage configuration', () => {
     const example = read('.env.example');
     expect(example).toContain('SPR_ARTIFACT_BROKER_URL');
     expect(example).toContain('SPR_ARTIFACT_BROKER_TOKEN');
-  });
+  });\n  it('serializes intake quota reservation before minting a signed upload URL', () => {\n    const transactionAt = route.indexOf('db.transaction(async (tx)');\n    const lockAt = route.indexOf('FOR UPDATE');\n    const insertAt = route.indexOf('INSERT INTO intake_items');\n    const brokerAt = route.indexOf('createIntakeSignedUpload({');\n    expect(transactionAt).toBeGreaterThanOrEqual(0);\n    expect(lockAt).toBeGreaterThan(transactionAt);\n    expect(insertAt).toBeGreaterThan(lockAt);\n    expect(brokerAt).toBeGreaterThan(insertAt);\n    expect(route).toContain("status <> 'FAILED'");\n  });\n\n  it('releases quota when broker signing fails', () => {\n    expect(route).toContain("SET status='FAILED'");\n    expect(route).toContain("status='AWAITING_UPLOAD'");\n    expect(route).toContain('A broker failure must not permanently consume');\n  });\n
 });
