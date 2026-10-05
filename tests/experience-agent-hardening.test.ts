@@ -60,6 +60,26 @@ function fakeDb() {
       if (/COUNT\(\*\)::int AS count FROM passports WHERE tenant_id=\$1/.test(sql)) return rows([{ count: tenantOf(passports, tenantId).length }]);
       if (/FROM trust_findings WHERE tenant_id=\$1$/.test(sql.trim()) || /AS open FROM trust_findings WHERE tenant_id=\$1/.test(sql)) { const t = tenantOf(findings, tenantId); const open = t.filter((f) => f.status === 'open'); return rows([{ total: t.length, critical_high: open.filter((f) => ['critical', 'high'].includes(String(f.severity))).length, open: open.length }]); }
       if (/FROM alerts WHERE tenant_id=\$1/.test(sql)) return rows([{ active: 0 }]);
+      if (/SELECT p\.id, p\.name, p\.client_id, c\.name AS client_name/.test(sql)) {
+        const query = String(params[params.length - 1] ?? '').toLowerCase();
+        const match = tenantOf(passports, tenantId).find((p) => String(p.id).toLowerCase() === query || String(p.name).toLowerCase() === query);
+        if (!match) return rows([]);
+        return rows([{ id: match.id, name: match.name, client_id: match.client_id, client_name: tenantId === 'tenant-a' ? 'Client A' : 'Client B' }]);
+      }
+      if (/FROM passports p\s+LEFT JOIN clients c/.test(sql)) return rows(tenantOf(passports, tenantId).map((p) => {
+        const observedEvidence = tenantOf(evidence, tenantId).filter((e) => e.passport_id === p.id);
+        const open = tenantOf(findings, tenantId).filter((f) => f.passport_id === p.id && !['resolved','closed','verified'].includes(String(f.status).toLowerCase()));
+        return {
+          passport_id: p.id,
+          passport_name: p.name,
+          client_id: p.client_id,
+          client_name: tenantId === 'tenant-a' ? 'Client A' : 'Client B',
+          evidence_count: observedEvidence.length,
+          open_findings: open.length,
+          critical_high: open.filter((f) => ['critical', 'high'].includes(String(f.severity).toLowerCase())).length,
+          monitoring_enabled: false,
+        };
+      }));
       if (/FROM passports p LEFT JOIN trust_findings f/.test(sql)) return rows(tenantOf(passports, tenantId).map((p) => { const open = tenantOf(findings, tenantId).filter((f) => f.passport_id === p.id && f.status === 'open'); return { passport_id: p.id, name: p.name, client_id: p.client_id, open_findings: open.length, critical_high: open.filter((f) => ['critical', 'high'].includes(String(f.severity))).length, finding_ids: open.map((f) => f.id) }; }));
       if (/SELECT id,name FROM clients WHERE tenant_id=\$1/.test(sql)) return rows(tenantId === 'tenant-a' ? [{ id: 'client-a', name: 'Client A' }] : []);
       throw new Error(`fake db: unhandled statement: ${sql}`);
@@ -98,7 +118,7 @@ afterAll(async () => { await new Promise<void>((resolve) => server.close(() => r
 
 const post = (path: string, body: unknown, token?: string, raw = false) => fetch(`${baseUrl}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: raw ? (body as string) : JSON.stringify(body) });
 const command = (input: string, token = 'tenant-a-token') => post('/api/agent/v1/command', { input }, token);
-const FRONTEND_ALLOWLIST = ['/dashboard', '/clients', '/passports', '/vendors', '/monitoring', '/compliance', '/reports', '/billing', '/settings'];
+const FRONTEND_ALLOWLIST = ['/dashboard', '/clients', '/passports', '/vendors', '/monitoring', '/compliance', '/reports', '/billing', '/settings', '/founder'];
 const TRUST_WORDS = /\b(VERIFIED|INVESTIGATE|AVOID)\b/;
 
 describe('authentication and input boundaries', () => {
@@ -161,6 +181,43 @@ describe('tenant scoping', () => {
     expect(a.data.topPassports.map((p: any) => p.passport_id)).toEqual(['pass-a']);
     expect(b.data.topPassports.map((p: any) => p.passport_id)).toEqual(['pass-b']);
     expect(a.provenance.tenantScoped).toBe(true);
+  });
+
+  it('derives revenue opportunities only from the authenticated tenant and does not invent money or founder pipeline data', async () => {
+    recorded.length = 0;
+    const a = await (await command('What revenue opportunity should I work next?', 'tenant-a-token')).json();
+    const b = await (await command('What revenue opportunity should I work next?', 'tenant-b-token')).json();
+
+    expect(a.intent).toBe('conversation');
+    expect(a.data.portfolioCommercial.opportunities[0]).toMatchObject({
+      passportId: 'pass-a',
+      clientName: 'Client A',
+      kind: 'REMEDIATION',
+    });
+    expect(b.data.portfolioCommercial.opportunities[0]).toMatchObject({
+      passportId: 'pass-b',
+      clientName: 'Client B',
+      kind: 'REMEDIATION',
+    });
+    expect(JSON.stringify(a.data.portfolioCommercial)).not.toContain('pass-b');
+    expect(JSON.stringify(b.data.portfolioCommercial)).not.toContain('pass-a');
+    expect(a.data.commercial).toBeUndefined();
+    expect(b.data.commercial).toBeUndefined();
+    expect(JSON.stringify(a.data.portfolioCommercial)).not.toMatch(/\$|revenueValue|budget|willingnessToPay/i);
+    for (const q of recorded) expect(q.sql).not.toMatch(/\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE)\b/i);
+  });
+
+  it('detects a looping user and returns one executable next move instead of asking what to do', async () => {
+    const response = await post('/api/agent/v1/command', {
+      input: 'what next',
+      context: { path: '/dashboard', history: [{ role: 'user', text: 'what next' }, { role: 'agent', text: 'Review the highest observed risk.' }] },
+    }, 'tenant-a-token');
+    expect(response.status).toBe(200);
+    const json = await response.json();
+    expect(json.stuck).toBe(true);
+    expect(json.nextMove).toBeTruthy();
+    expect(json.nextMove.label).toEqual(expect.any(String));
+    expect(json.reply).not.toMatch(/what would you like/i);
   });
 
   it('tenant A cannot retrieve tenant B passport data by name, id, or vendor-risk', async () => {
@@ -242,6 +299,34 @@ describe('observed software: evidence, provenance and no invented trust decision
     expect(json.agent).toBe('vendor-risk');
     expect(json.provenance).toMatchObject({ kind: 'tenant_scoped_database_records', passportId: 'pass-a', findingIds: ['f-a-1', 'f-a-2'], evidenceIds: ['e-a-1'] });
     for (const q of recorded) expect(q.params[0]).toBe('tenant-a');
+  });
+});
+
+describe('confirmed action proposals', () => {
+  it('proposes a tenant-scoped scan without executing a write', async () => {
+    recorded.length = 0;
+    const json = await (await command('scan alpha app', 'tenant-a-token')).json();
+    expect(json.intent).toBe('scan_proposal');
+    expect(json.proposedAction).toMatchObject({
+      type: 'scan',
+      endpoint: '/api/scans',
+      method: 'POST',
+      requiresConfirmation: true,
+      payload: { targetName: 'alpha app', scanType: 'SBOM Verify', clientName: 'Client A' },
+      evidence: { tenantScoped: true, passportId: 'pass-a', clientId: 'client-a' },
+    });
+    expect(json.reply).toMatch(/have not started it/i);
+    for (const q of recorded) expect(q.sql).not.toMatch(/\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE)\b/i);
+  });
+
+  it('cannot propose a scan for another tenant software record', async () => {
+    recorded.length = 0;
+    const response = await command('scan beta app', 'tenant-a-token');
+    expect(response.status).toBe(404);
+    const json = await response.json();
+    expect(json.intent).toBe('scan_proposal_unknown');
+    expect(json.proposedAction).toBeUndefined();
+    expect(JSON.stringify(json)).not.toContain('pass-b');
   });
 });
 
