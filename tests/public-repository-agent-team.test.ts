@@ -8,7 +8,8 @@ describe('public repository agent team', () => {
       language: 'TypeScript', default_branch: 'main', pushed_at: '2026-09-13T00:00:00Z',
       license: { spdx_id: 'MIT' }, archived: false, fork: false,
     });
-    expect(result).toMatchObject({ owner: 'octocat', repository: 'hello-world', stars: 123, language: 'TypeScript', licenseSpdx: 'MIT', defaultBranch: 'main', archived: false, fork: false });
+    expect(result).toMatchObject({ owner: 'octocat', repository: 'hello-world', stars: 123, language: 'TypeScript', licenseSpdx: 'MIT', defaultBranch: 'main', pushedAt: '2026-09-13T00:00:00Z', archived: false, fork: false });
+    expect((result as any).headSha).toBeUndefined();
     expect(result?.url).toBe('https://github.com/octocat/hello-world');
   });
 
