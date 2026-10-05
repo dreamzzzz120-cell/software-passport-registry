@@ -17,6 +17,17 @@ type RepairTask = {
   updatedAt?: string | null;
 };
 
+type MonitoringConfiguration = {
+  id: string;
+  passportId?: string | null;
+  clientId?: string | null;
+  collectorId: string;
+  subjectType?: string | null;
+  subjectIdentifier?: string | null;
+  enabled?: boolean;
+  lastStatus?: string | null;
+};
+
 type Campaign = {
   discoveryEnabled?: boolean;
   outreachEnabled?: boolean;
@@ -133,6 +144,8 @@ export default function FounderControlPlane() {
   const [reality, setReality] = useState<RealityData | null>(null);
   const [command, setCommand] = useState<FounderCommand | null>(null);
   const [billing, setBilling] = useState<BillingState | null>(null);
+  const [monitoringConfigs, setMonitoringConfigs] = useState<MonitoringConfiguration[]>([]);
+  const [verificationChoice, setVerificationChoice] = useState<Record<string,string>>({});
   const [loading, setLoading] = useState(false);
   const [working, setWorking] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -142,12 +155,13 @@ export default function FounderControlPlane() {
     setLoading(true);
     setError(null);
     try {
-      const [tasksRes, growthRes, realityRes, commandRes, billingRes] = await Promise.all([
+      const [tasksRes, growthRes, realityRes, commandRes, billingRes, monitoringRes] = await Promise.all([
         apiFetch('/api/remediation-tasks'),
         apiFetch('/api/founder/distribution/growth'),
         apiFetch('/api/founder/reality'),
         apiFetch('/api/founder/command-center'),
         apiFetch('/api/billing'),
+        apiFetch('/api/monitoring/monitoring-configurations'),
       ]);
       if (!tasksRes.ok) throw new Error(`Repair queue unavailable (${tasksRes.status})`);
       const taskBody = await tasksRes.json().catch(() => []);
@@ -156,6 +170,10 @@ export default function FounderControlPlane() {
       if (realityRes.ok) setReality(await realityRes.json().catch(() => null));
       if (commandRes.ok) setCommand(await commandRes.json().catch(() => null));
       if (billingRes.ok) setBilling(await billingRes.json().catch(() => null));
+      if (monitoringRes.ok) {
+        const body = await monitoringRes.json().catch(() => []);
+        setMonitoringConfigs(Array.isArray(body) ? body : []);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Founder control data could not be verified.');
     } finally {
@@ -223,6 +241,26 @@ export default function FounderControlPlane() {
     }
   };
 
+  const queueVerification = async (task: RepairTask, monitoringConfigurationId: string) => {
+    if (!monitoringConfigurationId) return;
+    setWorking(`verify:${task.id}`); setNotice(null); setError(null);
+    try {
+      const res = await apiFetch(`/api/remediation-tasks/${encodeURIComponent(task.id)}/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ monitoringConfigurationId }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.error || `Unable to queue verification (${res.status})`);
+      setNotice(`${task.title}: verification queued with real monitoring evidence. SPR will only mark this verified if the collector produces linked PASS evidence.`);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to queue verification.');
+    } finally {
+      setWorking(null);
+    }
+  };
+
   const saveCampaign = async (patch: Record<string, unknown>) => {
     setWorking('campaign'); setNotice(null); setError(null);
     try {
@@ -246,6 +284,7 @@ export default function FounderControlPlane() {
   const pipeline = growth?.pipeline ?? {};
   const incidents = Array.isArray(reality?.incidents) ? reality!.incidents!.filter((i) => !['PROVEN_FIXED','FAILED'].includes(i.status)) : [];
   const autoRepairable = (i: RealityIncident) => ['worker_queue_flow','scan_terminality'].includes(i.contractId);
+  const verificationOptions = (task: RepairTask) => monitoringConfigs.filter((m) => m.enabled !== false && m.passportId === task.passportId && (!task.clientId || !m.clientId || m.clientId === task.clientId));
   const metrics = command?.businessMetrics ?? {};
   const stripeConnection = command?.connections?.find((x) => x.key === 'stripe');
   const money = (cents?: number | null) => cents == null ? 'Not verified' : new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:2}).format(cents/100);
@@ -370,7 +409,34 @@ export default function FounderControlPlane() {
                 <td className="p-3 max-w-[22rem]"><div className="text-[10px] font-bold uppercase tracking-wide text-[var(--spr-highlight)]">{decision.automation}</div><div className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">{decision.next}</div></td>
                 <td className="p-3 text-xs text-[var(--spr-text-muted)]">{decision.proof}</td>
                 <td className="p-3 text-right">
-                  {task.status === 'OPEN' || task.status === 'IN_PROGRESS' ? <button onClick={() => void advanceTask(task)} disabled={working !== null} className="spr-btn spr-btn-secondary text-xs">{task.status === 'OPEN' ? 'Start repair' : 'Send to verification'}</button> : <span className="text-xs text-[var(--spr-text-muted)]">{task.status === 'READY_FOR_VERIFICATION' ? 'Choose monitoring evidence to verify' : 'Awaiting system evidence'}</span>}
+                  {task.status === 'OPEN' || task.status === 'IN_PROGRESS'
+                    ? <button onClick={() => void advanceTask(task)} disabled={working !== null} className="spr-btn spr-btn-secondary text-xs">{task.status === 'OPEN' ? 'Start repair' : 'Send to verification'}</button>
+                    : task.status === 'READY_FOR_VERIFICATION'
+                      ? (() => {
+                          const options = verificationOptions(task);
+                          const selected = verificationChoice[task.id] || (options.length === 1 ? options[0].id : '');
+                          return <div className="flex min-w-[16rem] flex-col items-end gap-2">
+                            {options.length > 0 ? <>
+                              <select
+                                value={selected}
+                                onChange={(e) => setVerificationChoice((current) => ({...current,[task.id]:e.target.value}))}
+                                className="w-full rounded border border-[var(--spr-border)] bg-[var(--spr-surface)] px-2 py-1 text-xs text-[var(--spr-text)]"
+                              >
+                                {options.length > 1 && <option value="">Choose evidence source</option>}
+                                {options.map((option) => <option key={option.id} value={option.id}>{option.collectorId} · {option.subjectIdentifier || option.subjectType || option.id}</option>)}
+                              </select>
+                              <button
+                                onClick={() => void queueVerification(task, selected)}
+                                disabled={working !== null || !selected}
+                                className="spr-btn spr-btn-primary text-xs"
+                              >{working === `verify:${task.id}` ? 'Queuing…' : 'Verify repair'}</button>
+                            </> : <>
+                              <span className="text-xs text-[var(--spr-amber)]">No enabled monitoring source matches this passport.</span>
+                              <a href="/monitoring" className="text-xs text-[var(--spr-highlight)] underline">Create monitoring source</a>
+                            </>}
+                          </div>;
+                        })()
+                      : <span className="text-xs text-[var(--spr-text-muted)]">Awaiting system evidence</span>}
                 </td>
               </tr>;
             })}
