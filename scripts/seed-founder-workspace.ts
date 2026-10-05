@@ -71,11 +71,31 @@ async function main() {
     } else console.log('client exists', clientRow.id);
 
     // 4. scans, one passport per repository
-    let connection = (await db.execute(sql`SELECT id FROM repository_connections WHERE tenant_id = ${tenantId} AND provider = 'github' AND status = 'Active' ORDER BY created_at ASC LIMIT 1`) as any).rows?.[0];
+    // Repository workers deliberately require an explicit public acquisition
+    // connection. Keep this separate from any private/credential-backed GitHub
+    // integration already configured in the tenant so the founder demo never
+    // mutates or steals a real customer connection.
+    let connection = (await db.execute(sql`
+      SELECT id FROM repository_connections
+      WHERE tenant_id = ${tenantId}
+        AND provider = 'github'
+        AND access_mode = 'public'
+        AND status = 'Active'
+      ORDER BY created_at ASC
+      LIMIT 1
+    `) as any).rows?.[0];
     if (!connection) {
       const connectionId = id('repo');
-      await db.execute(sql`INSERT INTO repository_connections (id, tenant_id, provider, installation_id, label, access_mode, status) VALUES (${connectionId}, ${tenantId}, 'github', 'tenant-credential', 'GitHub (tenant credential)', 'private', 'Active')`);
+      await db.execute(sql`
+        INSERT INTO repository_connections
+          (id, tenant_id, provider, installation_id, label, access_mode, status)
+        VALUES
+          (${connectionId}, ${tenantId}, 'github', 'public', 'GitHub (public)', 'public', 'Active')
+      `);
       connection = { id: connectionId };
+      console.log('public github connection created', connectionId);
+    } else {
+      console.log('public github connection exists', connection.id);
     }
     for (const full of repos) {
       const [owner, repository] = full.split('/');
@@ -86,19 +106,64 @@ async function main() {
         LEFT JOIN passports p ON p.id = j.passport_id AND p.tenant_id = j.tenant_id
         WHERE j.tenant_id = ${tenantId}
           AND j.job_type = 'repository_scan'
-          AND j.status IN ('Pending','Running','Completed')
+          AND j.status IN ('Pending','Running','Completed','Failed')
           AND lower(s.repository_owner) = ${owner.toLowerCase()}
           AND lower(s.repository_name) = ${repository.toLowerCase()}
-        ORDER BY CASE j.status WHEN 'Completed' THEN 1 WHEN 'Running' THEN 2 ELSE 3 END, j.updated_at DESC
+        ORDER BY CASE j.status WHEN 'Completed' THEN 1 WHEN 'Running' THEN 2 WHEN 'Pending' THEN 3 ELSE 4 END, j.updated_at DESC
         LIMIT 1
       `) as any).rows?.[0];
 
       if (already?.passportId && already.clientId === clientRow.id) {
-        console.log('skip (already linked to demo client)', full, already.passportId, already.status);
+        if (already.status === 'Failed') {
+          const related = (await db.execute(sql`
+            SELECT id
+            FROM agent_jobs
+            WHERE tenant_id=${tenantId}
+              AND passport_id=${already.passportId}
+              AND job_type IN ('repository_scan','repository_security_scan')
+          `) as any).rows ?? [];
+          const relatedIds = related.map((row: any) => String(row.id)).filter(Boolean);
+          for (const jobId of relatedIds) {
+            await db.execute(sql`
+              UPDATE repository_scan_sources
+              SET connection_id=${connection.id}
+              WHERE tenant_id=${tenantId} AND job_id=${jobId}
+            `);
+            await db.execute(sql`
+              UPDATE agent_jobs
+              SET status='Pending', progress=0, error=NULL, attempt_count=0,
+                  next_attempt_at=NOW(), locked_at=NULL, locked_by=NULL,
+                  completed_at=NULL, updated_at=NOW()
+              WHERE tenant_id=${tenantId} AND id=${jobId}
+            `);
+          }
+          console.log('requeued failed demo scan', full, already.passportId, relatedIds.join(','));
+        } else {
+          console.log('skip (already linked to demo client)', full, already.passportId, already.status);
+        }
         continue;
       }
       if (already?.passportId && !already.clientId) {
         await db.execute(sql`UPDATE passports SET client_id=${clientRow.id} WHERE id=${already.passportId} AND tenant_id=${tenantId} AND client_id IS NULL`);
+        if (already.status === 'Failed') {
+          const related = (await db.execute(sql`
+            SELECT id FROM agent_jobs
+            WHERE tenant_id=${tenantId}
+              AND passport_id=${already.passportId}
+              AND job_type IN ('repository_scan','repository_security_scan')
+          `) as any).rows ?? [];
+          for (const row of related) {
+            const jobId = String((row as any).id);
+            await db.execute(sql`UPDATE repository_scan_sources SET connection_id=${connection.id} WHERE tenant_id=${tenantId} AND job_id=${jobId}`);
+            await db.execute(sql`
+              UPDATE agent_jobs
+              SET status='Pending', progress=0, error=NULL, attempt_count=0,
+                  next_attempt_at=NOW(), locked_at=NULL, locked_by=NULL,
+                  completed_at=NULL, updated_at=NOW()
+              WHERE tenant_id=${tenantId} AND id=${jobId}
+            `);
+          }
+        }
         console.log('linked existing unassigned passport to demo client', full, already.passportId, already.status);
         continue;
       }
@@ -111,10 +176,10 @@ async function main() {
       await db.execute(sql`INSERT INTO agent_jobs (id, tenant_id, agent_id, passport_id, job_type, status, progress, next_attempt_at, created_at, updated_at) VALUES (${repositoryJobId}, ${tenantId}, 'repository-worker', ${passportId}, 'repository_scan', 'Pending', 0, NOW(), NOW(), NOW()), (${securityJobId}, ${tenantId}, 'security-scanner', ${passportId}, 'repository_security_scan', 'Pending', 0, NOW(), NOW(), NOW())`);
       await db.execute(sql`INSERT INTO repository_scan_sources (id, job_id, tenant_id, connection_id, provider, repository_owner, repository_name, requested_ref, repository_subdirectory, scanner_configuration, created_at) VALUES (${id('source')}, ${repositoryJobId}, ${tenantId}, ${connection.id}, 'github', ${owner}, ${repository}, NULL, '', 'syft:1.49.0:cyclonedx-json+osv:v1', NOW())`);
       await db.execute(sql`INSERT INTO repository_scan_sources (id, job_id, tenant_id, connection_id, provider, repository_owner, repository_name, requested_ref, repository_subdirectory, scanner_configuration, created_at) VALUES (${id('source')}, ${securityJobId}, ${tenantId}, ${connection.id}, 'github', ${owner}, ${repository}, NULL, '', 'syft:1.49.0:cyclonedx-json+osv:v1', NOW())`);
-      await db.execute(sql`INSERT INTO agent_logs (job_id, agent_id, message, level) VALUES (${repositoryJobId}, 'repository-worker', 'Queued GitHub acquisition + Syft SBOM + OSV dependency scan (tenant credential).', 'Info'), (${securityJobId}, 'security-scanner', 'Queued secret, IaC/configuration, license and OSV scan (tenant credential).', 'Info')`);
+      await db.execute(sql`INSERT INTO agent_logs (job_id, agent_id, message, level) VALUES (${repositoryJobId}, 'repository-worker', 'Queued GitHub acquisition + Syft SBOM + OSV dependency scan (public acquisition).', 'Info'), (${securityJobId}, 'security-scanner', 'Queued secret, IaC/configuration, license and OSV scan (public acquisition).', 'Info')`);
       console.log('queued', full, 'passport', passportId);
     }
-    await db.execute(sql`INSERT INTO integrations (id, tenant_id, name, category, icon, connected, description, api_key_hint, last_sync_date) VALUES (${'int_' + crypto.createHash('sha256').update(`${tenantId}:github`).digest('hex').slice(0, 32)}, ${tenantId}, 'GitHub', 'DEVOPS', 'github', 1, 'Live repository evidence connector.', 'tenant-credential', ${new Date().toISOString()}) ON CONFLICT (id) DO UPDATE SET connected = 1, last_sync_date = EXCLUDED.last_sync_date`);
+    await db.execute(sql`INSERT INTO integrations (id, tenant_id, name, category, icon, connected, description, api_key_hint, last_sync_date) VALUES (${'int_' + crypto.createHash('sha256').update(`${tenantId}:github`).digest('hex').slice(0, 32)}, ${tenantId}, 'GitHub', 'DEVOPS', 'github', 1, 'Live repository evidence connector.', 'public', ${new Date().toISOString()}) ON CONFLICT (id) DO UPDATE SET connected = 1, last_sync_date = EXCLUDED.last_sync_date`);
     await client.query('COMMIT');
     console.log('done');
   } catch (error) {
