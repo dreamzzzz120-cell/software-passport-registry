@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Activity, AlertTriangle, Bot, Bug, ChevronRight, Database, Globe2,
-  Megaphone, Play, RefreshCw, ShieldCheck, Wrench,
+  CreditCard, Megaphone, Play, RefreshCw, ShieldCheck, Wrench,
 } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
 
@@ -40,6 +40,31 @@ type RealityIncident = {
 type RealityData = {
   systemState?: { healthy?: number; degrading?: number; failed?: number; unknown?: number; activeIncidents?: number; observabilityCompromised?: boolean };
   incidents?: RealityIncident[];
+};
+
+type FounderBusinessMetrics = {
+  organizationCount?: number | null;
+  userCount?: number | null;
+  mrrCents?: number | null;
+  stripeCustomerCount?: number | null;
+  activeSubscriptionCount?: number | null;
+  successfulPaymentCount30d?: number | null;
+  successfulPaymentAmount30dCents?: number | null;
+};
+
+type FounderCommand = {
+  businessMetrics?: FounderBusinessMetrics;
+  connections?: Array<{ key:string; name:string; status:'ok'|'error'|'not_configured'; detail?:string }>;
+};
+
+type BillingState = {
+  billingConfigured?: boolean;
+  billingConfigurationError?: string | null;
+  subscription?: { plan?: string | null; status?: string | null; clientLimit?: number | null; currentPeriodEnd?: string | null };
+  clientCount?: number;
+  availablePlans?: string[];
+  availableProducts?: string[];
+  availableAddons?: string[];
 };
 
 type Growth = {
@@ -106,6 +131,8 @@ export default function FounderControlPlane() {
   const [tasks, setTasks] = useState<RepairTask[]>([]);
   const [growth, setGrowth] = useState<Growth | null>(null);
   const [reality, setReality] = useState<RealityData | null>(null);
+  const [command, setCommand] = useState<FounderCommand | null>(null);
+  const [billing, setBilling] = useState<BillingState | null>(null);
   const [loading, setLoading] = useState(false);
   const [working, setWorking] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -115,16 +142,20 @@ export default function FounderControlPlane() {
     setLoading(true);
     setError(null);
     try {
-      const [tasksRes, growthRes, realityRes] = await Promise.all([
+      const [tasksRes, growthRes, realityRes, commandRes, billingRes] = await Promise.all([
         apiFetch('/api/remediation-tasks'),
         apiFetch('/api/founder/distribution/growth'),
         apiFetch('/api/founder/reality'),
+        apiFetch('/api/founder/command-center'),
+        apiFetch('/api/billing'),
       ]);
       if (!tasksRes.ok) throw new Error(`Repair queue unavailable (${tasksRes.status})`);
       const taskBody = await tasksRes.json().catch(() => []);
       setTasks(Array.isArray(taskBody) ? taskBody : []);
       if (growthRes.ok) setGrowth(await growthRes.json().catch(() => null));
       if (realityRes.ok) setReality(await realityRes.json().catch(() => null));
+      if (commandRes.ok) setCommand(await commandRes.json().catch(() => null));
+      if (billingRes.ok) setBilling(await billingRes.json().catch(() => null));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Founder control data could not be verified.');
     } finally {
@@ -215,6 +246,9 @@ export default function FounderControlPlane() {
   const pipeline = growth?.pipeline ?? {};
   const incidents = Array.isArray(reality?.incidents) ? reality!.incidents!.filter((i) => !['PROVEN_FIXED','FAILED'].includes(i.status)) : [];
   const autoRepairable = (i: RealityIncident) => ['worker_queue_flow','scan_terminality'].includes(i.contractId);
+  const metrics = command?.businessMetrics ?? {};
+  const stripeConnection = command?.connections?.find((x) => x.key === 'stripe');
+  const money = (cents?: number | null) => cents == null ? 'Not verified' : new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:2}).format(cents/100);
 
   return <section className="space-y-5 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-5" id="founder-control-plane">
     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -233,7 +267,7 @@ export default function FounderControlPlane() {
     {error && <div className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 p-3 text-sm text-[var(--spr-red)]">{error}</div>}
     {notice && <div className="rounded-md border border-[var(--spr-green)]/30 bg-[var(--spr-green)]/10 p-3 text-sm text-[var(--spr-text)]">{notice}</div>}
 
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
       <a href="#founder-repair" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4 hover:border-[var(--spr-highlight)]">
         <Wrench className="h-5 w-5 text-[var(--spr-highlight)]" /><div className="mt-3 font-semibold text-[var(--spr-text)]">Repair system</div><div className="mt-1 text-xs text-[var(--spr-text-muted)]">{activeRepairs.length} active repair tasks</div>
       </a>
@@ -246,6 +280,47 @@ export default function FounderControlPlane() {
       <a href="#founder-agents" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4 hover:border-[var(--spr-highlight)]">
         <Bot className="h-5 w-5 text-[var(--spr-highlight)]" /><div className="mt-3 font-semibold text-[var(--spr-text)]">Agents & automation</div><div className="mt-1 text-xs text-[var(--spr-text-muted)]">Inspect runtime state and automation evidence</div>
       </a>
+      <a href="#founder-billing-control" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4 hover:border-[var(--spr-highlight)]">
+        <CreditCard className="h-5 w-5 text-[var(--spr-highlight)]" /><div className="mt-3 font-semibold text-[var(--spr-text)]">Billing & revenue</div><div className="mt-1 text-xs text-[var(--spr-text-muted)]">{money(metrics.mrrCents)} observed MRR</div>
+      </a>
+    </div>
+
+
+    <div id="founder-billing-control" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="flex items-center gap-2"><CreditCard className="h-4 w-4 text-[var(--spr-highlight)]" /><h3 className="font-semibold text-[var(--spr-text)]">Billing & revenue control</h3></div>
+          <p className="mt-1 text-xs text-[var(--spr-text-muted)]">Observed Stripe/business truth plus this workspace's plan state. Purchases and plan changes remain explicit customer-approved actions.</p>
+        </div>
+        <a href="/billing" className="spr-btn spr-btn-secondary text-xs">Open full billing</a>
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3"><div className="text-[10px] uppercase tracking-wide text-[var(--spr-text-muted)]">MRR</div><div className="mt-1 text-lg font-semibold text-[var(--spr-text)]">{money(metrics.mrrCents)}</div></div>
+        <div className="rounded border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3"><div className="text-[10px] uppercase tracking-wide text-[var(--spr-text-muted)]">Active subscriptions</div><div className="mt-1 text-lg font-semibold text-[var(--spr-text)]">{metrics.activeSubscriptionCount ?? 'Not verified'}</div></div>
+        <div className="rounded border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3"><div className="text-[10px] uppercase tracking-wide text-[var(--spr-text-muted)]">30d successful payments</div><div className="mt-1 text-lg font-semibold text-[var(--spr-text)]">{metrics.successfulPaymentCount30d ?? 'Not verified'}</div><div className="text-xs text-[var(--spr-text-muted)]">{money(metrics.successfulPaymentAmount30dCents)}</div></div>
+        <div className="rounded border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3"><div className="text-[10px] uppercase tracking-wide text-[var(--spr-text-muted)]">Stripe connection</div><div className={`mt-1 text-sm font-semibold ${stripeConnection?.status === 'ok' ? 'text-[var(--spr-green)]' : stripeConnection?.status === 'error' ? 'text-[var(--spr-red)]' : 'text-[var(--spr-amber)]'}`}>{stripeConnection?.status ?? 'Not verified'}</div><div className="mt-1 text-xs text-[var(--spr-text-muted)]">{stripeConnection?.detail || 'No connection detail observed.'}</div></div>
+      </div>
+      <div className="mt-3 grid gap-3 lg:grid-cols-2">
+        <div className="rounded border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3">
+          <div className="text-xs font-semibold text-[var(--spr-text)]">This workspace</div>
+          <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+            <div><span className="text-[var(--spr-text-muted)]">Plan</span><div className="font-medium text-[var(--spr-text)]">{billing?.subscription?.plan || 'No active plan observed'}</div></div>
+            <div><span className="text-[var(--spr-text-muted)]">Status</span><div className="font-medium text-[var(--spr-text)]">{billing?.subscription?.status || 'Not verified'}</div></div>
+            <div><span className="text-[var(--spr-text-muted)]">Clients</span><div className="font-medium text-[var(--spr-text)]">{billing?.clientCount ?? 'Not verified'} / {billing?.subscription?.clientLimit ?? 'Unlimited / not set'}</div></div>
+            <div><span className="text-[var(--spr-text-muted)]">Period end</span><div className="font-medium text-[var(--spr-text)]">{billing?.subscription?.currentPeriodEnd ? new Date(billing.subscription.currentPeriodEnd).toLocaleDateString() : 'Not verified'}</div></div>
+          </div>
+        </div>
+        <div className="rounded border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3">
+          <div className="text-xs font-semibold text-[var(--spr-text)]">Sellable catalogue</div>
+          <div className="mt-2 text-xs text-[var(--spr-text-muted)]">Billing configured: <span className="font-semibold text-[var(--spr-text)]">{billing?.billingConfigured === true ? 'Yes' : billing?.billingConfigured === false ? 'No' : 'Not verified'}</span></div>
+          {billing?.billingConfigurationError && <div className="mt-1 text-xs text-[var(--spr-red)]">{billing.billingConfigurationError}</div>}
+          <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+            <div className="rounded bg-[var(--spr-surface-alt)] p-2"><div className="text-lg font-semibold text-[var(--spr-text)]">{billing?.availablePlans?.length ?? '—'}</div><div className="text-[10px] text-[var(--spr-text-muted)]">plans</div></div>
+            <div className="rounded bg-[var(--spr-surface-alt)] p-2"><div className="text-lg font-semibold text-[var(--spr-text)]">{billing?.availableProducts?.length ?? '—'}</div><div className="text-[10px] text-[var(--spr-text-muted)]">products</div></div>
+            <div className="rounded bg-[var(--spr-surface-alt)] p-2"><div className="text-lg font-semibold text-[var(--spr-text)]">{billing?.availableAddons?.length ?? '—'}</div><div className="text-[10px] text-[var(--spr-text-muted)]">add-ons</div></div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4">
