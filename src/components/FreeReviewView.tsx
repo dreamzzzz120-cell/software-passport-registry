@@ -823,6 +823,11 @@ export default function FreeReviewView({
                         primary
                       />
                       <ActionButton
+                        label="See plans & start with SPR"
+                        icon={<ExternalLink className="inline h-4 w-4" />}
+                        onClick={() => window.location.assign('/pricing?utm_source=free_review&utm_medium=product&utm_campaign=review_result')}
+                      />
+                      <ActionButton
                         label="See evidence summary"
                         icon={<ExternalLink className="inline h-4 w-4" />}
                         onClick={() => document.getElementById('evidence-summary')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
@@ -871,6 +876,13 @@ export default function FreeReviewView({
                           >
                             Claim this Passport
                             <ArrowRight className="ml-1 inline h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => window.location.assign('/pricing?utm_source=free_review&utm_medium=product&utm_campaign=continuous_verification')}
+                            className="rounded-xl border border-[var(--spr-highlight)] px-4 py-3 text-sm font-semibold text-[var(--spr-highlight)]"
+                          >
+                            See plans & pricing
                           </button>
                           <button
                             type="button"
