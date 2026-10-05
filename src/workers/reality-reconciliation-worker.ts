@@ -23,6 +23,17 @@ function safeDiagnostic(contractId: string, observed: Record<string, unknown>) {
     case 'scan_terminality': return allow(['active', 'staleActive']);
     case 'registry_freshness': return allow(['enabled', 'runObserved', 'lastStartedAt', 'lastFinishedAt', 'ageHours']);
     case 'reconciler_self_watch': return allow(['priorObservation', 'lastObservationAt', 'ageMinutes']);
+    case 'worker_runtime_identity': return allow(['role', 'tls']);
+    case 'tenant_isolation_integrity': return allow(['assertion']);
+    case 'auth_backend_reachable': return allow(['configured', 'status']);
+    case 'billing_backend_reachable': return allow(['configured', 'activeSubscriptions', 'status']);
+    case 'intake_storage_readiness': return allow(['configured', 'pendingItems', 'recentFailures']);
+    case 'sbom_evidence_completeness': return allow(['completedScans', 'scansWithSbom', 'missingSbom']);
+    case 'report_delivery_flow': return allow(['enabledSchedules', 'overdueSchedules', 'erroredSchedules']);
+    case 'integration_delivery_health': return allow(['enabledConfigurations', 'repeatedFailures']);
+    case 'malware_coverage': return allow(['recentScans', 'malwareEvidence']);
+    case 'public_deployment_ready': return allow(['configured', 'status', 'https']);
+    case 'backup_restore_evidence': return allow(['configured', 'verifiedAt', 'ageHours']);
     default: return {};
   }
 }
@@ -336,6 +347,218 @@ async function probeRegistry(pool: Pool): Promise<ProbeResult> {
   }
 }
 
+
+async function probeWorkerRuntimeIdentity(pool: Pool): Promise<ProbeResult> {
+  try {
+    const row = (await pool.query("SELECT current_user AS role, (SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid()) AS tls")).rows[0] ?? {};
+    const role = String(row.role ?? '');
+    const tls = row.tls === true;
+    const healthy = role === 'spr_worker_runtime' && tls;
+    return {
+      state: healthy ? 'HEALTHY' : 'FAILED',
+      observed: { role, tls },
+      evidence: [{ source: 'postgres-session' }],
+      explanation: healthy ? 'Worker is connected as the least-privileged runtime role over TLS.' : 'Worker runtime identity or transport does not match the least-privilege contract.',
+      severity: 'CRITICAL',
+      rootCauseState: healthy ? 'UNKNOWN' : 'PROVEN',
+      rootCause: healthy ? null : role !== 'spr_worker_runtime' ? 'Worker is not using spr_worker_runtime.' : 'Worker database transport is not using TLS.',
+      impact: healthy ? {} : { tenantIsolation: 'at risk', databasePrivilege: 'at risk' },
+    };
+  } catch (error) {
+    return { state: 'UNKNOWN', observed: {}, evidence: [{ source: 'postgres-session', error: error instanceof Error ? error.message : String(error) }], explanation: 'Worker runtime identity could not be observed.', severity: 'CRITICAL' };
+  }
+}
+
+async function probeTenantIsolation(pool: Pool): Promise<ProbeResult> {
+  try {
+    await pool.query('SELECT spr_assert_tenant_rls()');
+    return { state: 'HEALTHY', observed: { assertion: true }, evidence: [{ source: 'spr_assert_tenant_rls' }], explanation: 'The database tenant-isolation invariant assertion passed.', severity: 'CRITICAL' };
+  } catch (error) {
+    const code = error && typeof error === 'object' && 'code' in error ? String((error as { code?: unknown }).code ?? '') : '';
+    const visibilityFailure = code === '42501' || code === '42883';
+    return {
+      state: visibilityFailure ? 'UNKNOWN' : 'FAILED',
+      observed: { assertion: false },
+      evidence: [{ source: 'spr_assert_tenant_rls', error: error instanceof Error ? error.message : String(error), code: code || null }],
+      explanation: visibilityFailure ? 'Worker cannot execute the tenant-isolation assertion; isolation remains unproven rather than failed.' : 'The database tenant-isolation invariant assertion failed.',
+      severity: 'CRITICAL',
+      rootCauseState: visibilityFailure ? 'UNKNOWN' : 'SUPPORTED',
+      rootCause: visibilityFailure ? null : 'RLS assertion executed but did not succeed.',
+      impact: { tenantIsolation: 'unproven', observability: visibilityFailure ? 'insufficient privilege or missing assertion' : 'assertion failure' },
+    };
+  }
+}
+
+async function probeAuthBackend(): Promise<ProbeResult> {
+  const base = process.env.SUPABASE_URL?.trim();
+  if (!base) return { state: 'UNKNOWN', observed: { configured: false }, evidence: [{ source: 'environment', key: 'SUPABASE_URL' }], explanation: 'Authentication backend URL is not configured in this runtime, so live auth health is unknown.', severity: 'HIGH' };
+  try {
+    const response = await fetch(new URL('/auth/v1/health', base), { signal: AbortSignal.timeout(10_000) });
+    return {
+      state: response.ok ? 'HEALTHY' : 'FAILED',
+      observed: { configured: true, status: response.status },
+      evidence: [{ source: 'supabase-auth-health', origin: new URL(base).origin }],
+      explanation: response.ok ? 'Authentication backend answered a live health request.' : 'Authentication backend health request returned a non-success status.',
+      severity: 'HIGH',
+      rootCauseState: response.ok ? 'UNKNOWN' : 'SUPPORTED',
+      rootCause: response.ok ? null : 'Configured authentication backend did not return a successful health response.',
+      impact: response.ok ? {} : { authentication: 'unavailable or degraded' },
+    };
+  } catch (error) {
+    return { state: 'FAILED', observed: { configured: true }, evidence: [{ source: 'supabase-auth-health', error: error instanceof Error ? error.message : String(error) }], explanation: 'Authentication backend could not be reached.', severity: 'HIGH', rootCauseState: 'SUPPORTED', rootCause: 'Authentication health request failed.', impact: { authentication: 'unavailable or degraded' } };
+  }
+}
+
+async function probeBilling(pool: Pool): Promise<ProbeResult> {
+  const secret = process.env.STRIPE_SECRET_KEY?.trim();
+  let activeSubscriptions = 0;
+  try {
+    activeSubscriptions = Number((await pool.query("SELECT count(*)::int AS count FROM tenant_subscriptions WHERE lower(coalesce(status,'')) IN ('active','trialing')")).rows[0]?.count ?? 0);
+  } catch {}
+  if (!secret) {
+    const state: State = activeSubscriptions > 0 ? 'FAILED' : 'UNKNOWN';
+    return { state, observed: { configured: false, activeSubscriptions }, evidence: [{ source: 'tenant_subscriptions' }, { source: 'environment', key: 'STRIPE_SECRET_KEY' }], explanation: activeSubscriptions > 0 ? 'Active subscriptions exist but Stripe is not configured in the worker runtime.' : 'No live Stripe configuration is visible and no active subscription requires it here.', severity: activeSubscriptions > 0 ? 'CRITICAL' : 'MEDIUM', rootCauseState: activeSubscriptions > 0 ? 'PROVEN' : 'UNKNOWN', rootCause: activeSubscriptions > 0 ? 'Stripe secret is unavailable while active subscriptions exist.' : null, impact: activeSubscriptions > 0 ? { billing: 'cannot be reconciled' } : {} };
+  }
+  try {
+    const response = await fetch('https://api.stripe.com/v1/account', { headers: { authorization: `Bearer ${secret}` }, signal: AbortSignal.timeout(10_000) });
+    return { state: response.ok ? 'HEALTHY' : 'FAILED', observed: { configured: true, activeSubscriptions, status: response.status }, evidence: [{ source: 'stripe-account-api' }], explanation: response.ok ? 'Stripe accepted a live authenticated account request.' : 'Stripe rejected the live account request.', severity: 'CRITICAL', rootCauseState: response.ok ? 'UNKNOWN' : 'SUPPORTED', rootCause: response.ok ? null : 'Stripe credentials or connectivity failed live verification.', impact: response.ok ? {} : { checkout: 'at risk', entitlements: 'at risk', webhooks: 'at risk' } };
+  } catch (error) {
+    return { state: 'FAILED', observed: { configured: true, activeSubscriptions }, evidence: [{ source: 'stripe-account-api', error: error instanceof Error ? error.message : String(error) }], explanation: 'Stripe could not be reached for live verification.', severity: 'CRITICAL', rootCauseState: 'SUPPORTED', rootCause: 'Stripe live verification failed.', impact: { billing: 'at risk' } };
+  }
+}
+
+async function probeIntakeStorage(pool: Pool): Promise<ProbeResult> {
+  const configured = Boolean(process.env.SPR_ARTIFACT_BROKER_URL?.trim() && process.env.SPR_ARTIFACT_BROKER_TOKEN?.trim());
+  try {
+    const row = (await pool.query(`
+      SELECT
+        count(*) FILTER (WHERE status IN ('QUEUED','PROCESSING','UPLOADED'))::int AS pending_items,
+        count(*) FILTER (WHERE status='FAILED' AND created_at > now() - interval '24 hours')::int AS recent_failures
+      FROM intake_items
+    `)).rows[0] ?? {};
+    const pendingItems = Number(row.pending_items ?? 0);
+    const recentFailures = Number(row.recent_failures ?? 0);
+    const state: State = !configured && pendingItems > 0 ? 'FAILED' : configured && recentFailures > 0 ? 'DEGRADING' : configured ? 'HEALTHY' : 'UNKNOWN';
+    return { state, observed: { configured, pendingItems, recentFailures }, evidence: [{ source: 'intake_items' }, { source: 'artifact-broker-config' }], explanation: state === 'HEALTHY' ? 'Intake storage is configured and no recent failed intake items were observed.' : state === 'FAILED' ? 'Intake work is waiting but storage broker configuration is unavailable.' : state === 'DEGRADING' ? 'Intake storage is configured but recent intake failures were observed.' : 'No storage broker is configured and no pending intake work proves it is currently required.', severity: state === 'FAILED' ? 'HIGH' : 'MEDIUM', rootCauseState: state === 'FAILED' ? 'PROVEN' : 'UNKNOWN', rootCause: state === 'FAILED' ? 'Artifact broker configuration is unavailable while intake work is pending.' : null, impact: state === 'HEALTHY' ? {} : { uploadScans: pendingItems > 0 ? 'blocked or at risk' : 'unproven' } };
+  } catch (error) {
+    return { state: 'UNKNOWN', observed: { configured }, evidence: [{ source: 'intake_items', error: error instanceof Error ? error.message : String(error) }], explanation: 'Intake storage readiness could not be fully observed.', severity: 'HIGH' };
+  }
+}
+
+async function probeSbomEvidence(pool: Pool): Promise<ProbeResult> {
+  try {
+    const row = (await pool.query(`
+      WITH recent AS (
+        SELECT id, scan_id FROM agent_jobs
+         WHERE job_type='repository_security_scan'
+           AND status='Completed'
+           AND completed_at > now() - interval '24 hours'
+      )
+      SELECT
+        count(*)::int AS completed_scans,
+        count(*) FILTER (
+          WHERE EXISTS (
+            SELECT 1 FROM evidence_items e
+             WHERE e.scan_id=recent.scan_id
+               AND e.name='Syft CycloneDX SBOM summary'
+          )
+        )::int AS scans_with_sbom
+      FROM recent
+    `)).rows[0] ?? {};
+    const completedScans = Number(row.completed_scans ?? 0);
+    const scansWithSbom = Number(row.scans_with_sbom ?? 0);
+    const missingSbom = Math.max(0, completedScans - scansWithSbom);
+    const state: State = completedScans === 0 ? 'UNKNOWN' : missingSbom === 0 ? 'HEALTHY' : 'DEGRADING';
+    return { state, observed: { completedScans, scansWithSbom, missingSbom }, evidence: [{ source: 'agent_jobs+evidence_items', windowHours: 24 }], explanation: completedScans === 0 ? 'No recent completed repository security scan exists to prove SBOM persistence.' : missingSbom === 0 ? 'Every recent completed repository security scan has SBOM evidence.' : `${missingSbom} recent completed repository security scan(s) have no SBOM evidence record.`, severity: missingSbom > 0 ? 'HIGH' : 'MEDIUM', impact: missingSbom > 0 ? { vulnerabilityCoverage: 'incomplete', launchTickets: 'may omit dependency evidence' } : {} };
+  } catch (error) {
+    return { state: 'UNKNOWN', observed: {}, evidence: [{ source: 'agent_jobs+evidence_items', error: error instanceof Error ? error.message : String(error) }], explanation: 'SBOM evidence completeness could not be observed.', severity: 'HIGH' };
+  }
+}
+
+async function probeReportDelivery(pool: Pool): Promise<ProbeResult> {
+  try {
+    const row = (await pool.query(`
+      SELECT
+        count(*) FILTER (WHERE enabled=true)::int AS enabled_schedules,
+        count(*) FILTER (WHERE enabled=true AND next_run_at < now() - interval '15 minutes')::int AS overdue_schedules,
+        count(*) FILTER (WHERE enabled=true AND last_error IS NOT NULL AND length(trim(last_error))>0)::int AS errored_schedules
+      FROM report_schedules
+    `)).rows[0] ?? {};
+    const enabledSchedules = Number(row.enabled_schedules ?? 0);
+    const overdueSchedules = Number(row.overdue_schedules ?? 0);
+    const erroredSchedules = Number(row.errored_schedules ?? 0);
+    const state: State = enabledSchedules === 0 ? 'UNKNOWN' : overdueSchedules > 0 ? 'FAILED' : erroredSchedules > 0 ? 'DEGRADING' : 'HEALTHY';
+    return { state, observed: { enabledSchedules, overdueSchedules, erroredSchedules }, evidence: [{ source: 'report_schedules' }], explanation: enabledSchedules === 0 ? 'No enabled report schedule exists to prove delivery flow.' : overdueSchedules > 0 ? 'One or more enabled report schedules are materially overdue.' : erroredSchedules > 0 ? 'Report schedules are running but one or more retain an error.' : 'Enabled report schedules are current and have no recorded errors.', severity: overdueSchedules > 0 ? 'HIGH' : 'MEDIUM', impact: state === 'HEALTHY' ? {} : { clientReports: state === 'UNKNOWN' ? 'unproven' : 'delayed or failed' } };
+  } catch (error) {
+    return { state: 'UNKNOWN', observed: {}, evidence: [{ source: 'report_schedules', error: error instanceof Error ? error.message : String(error) }], explanation: 'Report delivery state could not be observed.', severity: 'MEDIUM' };
+  }
+}
+
+async function probeIntegrations(pool: Pool): Promise<ProbeResult> {
+  try {
+    const row = (await pool.query(`
+      SELECT
+        count(*) FILTER (WHERE enabled=1)::int AS enabled_configurations,
+        count(*) FILTER (WHERE enabled=1 AND consecutive_failure_count >= 3)::int AS repeated_failures
+      FROM monitoring_configurations
+    `)).rows[0] ?? {};
+    const enabledConfigurations = Number(row.enabled_configurations ?? 0);
+    const repeatedFailures = Number(row.repeated_failures ?? 0);
+    const state: State = enabledConfigurations === 0 ? 'UNKNOWN' : repeatedFailures > 0 ? 'DEGRADING' : 'HEALTHY';
+    return { state, observed: { enabledConfigurations, repeatedFailures }, evidence: [{ source: 'monitoring_configurations' }], explanation: enabledConfigurations === 0 ? 'No enabled monitoring integration exists to prove external collection health.' : repeatedFailures > 0 ? `${repeatedFailures} enabled monitoring configuration(s) have repeated failures.` : 'Enabled monitoring integrations have not accumulated repeated failures.', severity: repeatedFailures > 0 ? 'HIGH' : 'MEDIUM', impact: repeatedFailures > 0 ? { evidenceFreshness: 'degrading', integrations: 'partial failure' } : {} };
+  } catch (error) {
+    return { state: 'UNKNOWN', observed: {}, evidence: [{ source: 'monitoring_configurations', error: error instanceof Error ? error.message : String(error) }], explanation: 'Integration health could not be observed.', severity: 'MEDIUM' };
+  }
+}
+
+async function probeMalwareCoverage(pool: Pool): Promise<ProbeResult> {
+  try {
+    const row = (await pool.query(`
+      SELECT
+        (SELECT count(*)::int FROM scans WHERE NULLIF(timestamp,'')::timestamptz > now() - interval '24 hours' AND status='Completed') AS recent_scans,
+        (SELECT count(*)::int FROM evidence_items WHERE NULLIF(timestamp,'')::timestamptz > now() - interval '24 hours' AND (lower(coalesce(engine_id,'')) LIKE '%malware%' OR lower(coalesce(engine_id,'')) LIKE '%clam%' OR lower(coalesce(name,'')) LIKE '%malware%')) AS malware_evidence
+    `)).rows[0] ?? {};
+    const recentScans = Number(row.recent_scans ?? 0);
+    const malwareEvidence = Number(row.malware_evidence ?? 0);
+    const state: State = recentScans === 0 ? 'UNKNOWN' : malwareEvidence > 0 ? 'HEALTHY' : 'UNKNOWN';
+    return { state, observed: { recentScans, malwareEvidence }, evidence: [{ source: 'scans+evidence_items', windowHours: 24 }], explanation: recentScans === 0 ? 'No recent completed scan exists to test malware coverage.' : malwareEvidence > 0 ? 'Recent malware scan evidence is present.' : 'Recent scans exist but no malware-engine evidence is observable; SPR will not claim malware coverage.', severity: 'HIGH', impact: malwareEvidence > 0 ? {} : { malwareCoverage: 'unproven' } };
+  } catch (error) {
+    return { state: 'UNKNOWN', observed: {}, evidence: [{ source: 'scans+evidence_items', error: error instanceof Error ? error.message : String(error) }], explanation: 'Malware coverage could not be observed.', severity: 'HIGH' };
+  }
+}
+
+function configuredPublicOrigin(): string | null {
+  const explicit = process.env.APP_URL?.trim() || process.env.PUBLIC_APP_URL?.trim();
+  if (explicit) {
+    try { return new URL(explicit).origin; } catch { return null; }
+  }
+  const domain = process.env.RAILWAY_PUBLIC_DOMAIN?.trim();
+  return domain ? `https://${domain}` : null;
+}
+
+async function probePublicDeployment(): Promise<ProbeResult> {
+  const origin = configuredPublicOrigin();
+  if (!origin) return { state: 'UNKNOWN', observed: { configured: false, https: false }, evidence: [{ source: 'environment', keys: ['APP_URL','PUBLIC_APP_URL','RAILWAY_PUBLIC_DOMAIN'] }], explanation: 'No public application origin is configured in the worker runtime.', severity: 'HIGH' };
+  const https = origin.startsWith('https://');
+  try {
+    const response = await fetch(new URL('/ready', origin), { redirect: 'manual', signal: AbortSignal.timeout(10_000) });
+    const state: State = response.status === 200 && https ? 'HEALTHY' : 'FAILED';
+    return { state, observed: { configured: true, status: response.status, https }, evidence: [{ source: 'public-ready', origin }], explanation: state === 'HEALTHY' ? 'Public DNS/TLS path resolved and /ready passed.' : 'Public deployment did not satisfy HTTPS and readiness together.', severity: 'CRITICAL', rootCauseState: state === 'HEALTHY' ? 'UNKNOWN' : 'SUPPORTED', rootCause: state === 'HEALTHY' ? null : 'Public origin readiness check failed.', impact: state === 'HEALTHY' ? {} : { publicApp: 'unready', customerJourneys: 'at risk' } };
+  } catch (error) {
+    return { state: 'FAILED', observed: { configured: true, https }, evidence: [{ source: 'public-ready', origin, error: error instanceof Error ? error.message : String(error) }], explanation: 'Public SPR origin could not be reached over its configured URL.', severity: 'CRITICAL', rootCauseState: 'SUPPORTED', rootCause: 'DNS, TLS, routing, or deployment connectivity failed.', impact: { publicApp: 'unreachable or unready' } };
+  }
+}
+
+async function probeBackupEvidence(): Promise<ProbeResult> {
+  const raw = process.env.DATABASE_BACKUP_VERIFIED_AT?.trim();
+  if (!raw) return { state: 'UNKNOWN', observed: { configured: false }, evidence: [{ source: 'environment', key: 'DATABASE_BACKUP_VERIFIED_AT' }], explanation: 'No operator-verified backup/restore timestamp is recorded; backup recoverability remains unknown.', severity: 'CRITICAL', impact: { recoverability: 'unproven' } };
+  const time = Date.parse(raw);
+  if (!Number.isFinite(time)) return { state: 'UNKNOWN', observed: { configured: true, verifiedAt: raw }, evidence: [{ source: 'environment', key: 'DATABASE_BACKUP_VERIFIED_AT' }], explanation: 'Backup verification timestamp is present but invalid.', severity: 'CRITICAL' };
+  const ageHours = (Date.now() - time) / 3_600_000;
+  const healthy = ageHours <= 168;
+  return { state: healthy ? 'HEALTHY' : 'DEGRADING', observed: { configured: true, verifiedAt: new Date(time).toISOString(), ageHours: Math.round(ageHours * 10) / 10 }, evidence: [{ source: 'operator-backup-proof' }], explanation: healthy ? 'A backup/restore verification timestamp exists within the last seven days.' : 'The last recorded backup/restore verification is older than seven days.', severity: 'CRITICAL', impact: healthy ? {} : { recoverability: 'stale proof' } };
+}
+
 async function probeSelf(pool: Pool): Promise<ProbeResult> {
   try {
     const row = (await pool.query("SELECT observed_at FROM reality_observations WHERE contract_id <> 'reconciler_self_watch' ORDER BY observed_at DESC LIMIT 1")).rows[0];
@@ -362,6 +585,17 @@ export async function runRealityReconciliationCycle(pool: Pool) {
     ['worker_queue_flow', probeQueue],
     ['scan_terminality', probeScans],
     ['registry_freshness', probeRegistry],
+    ['worker_runtime_identity', probeWorkerRuntimeIdentity],
+    ['tenant_isolation_integrity', probeTenantIsolation],
+    ['auth_backend_reachable', async () => probeAuthBackend()],
+    ['billing_backend_reachable', probeBilling],
+    ['intake_storage_readiness', probeIntakeStorage],
+    ['sbom_evidence_completeness', probeSbomEvidence],
+    ['report_delivery_flow', probeReportDelivery],
+    ['integration_delivery_health', probeIntegrations],
+    ['malware_coverage', probeMalwareCoverage],
+    ['public_deployment_ready', async () => probePublicDeployment()],
+    ['backup_restore_evidence', async () => probeBackupEvidence()],
   ];
   const cycleId = id('cycle');
   const startedAt = Date.now();
@@ -373,7 +607,7 @@ export async function runRealityReconciliationCycle(pool: Pool) {
     if (initial.state === 'FAILED' && observed.incidentId && repairer) {
       const incidentId = observed.incidentId;
       const c = await contract(pool, contractId);
-      if ((c?.repair_class ?? 0) >= 1) {
+      if (c && c.repair_class >= 0 && c.repair_class <= 1) {
         try {
           await setIncidentRepairState(pool, incidentId, 'REPAIRING', 'Bounded stale-state recovery using existing retry budget and lease ownership rules.');
           const repair = await repairer(pool);
@@ -382,6 +616,15 @@ export async function runRealityReconciliationCycle(pool: Pool) {
         } catch {
           await setIncidentRepairState(pool, incidentId, 'INVESTIGATING', 'Bounded recovery attempt failed; incident remains open and no success is claimed.').catch(() => undefined);
         }
+      } else if (c && c.repair_class >= 2) {
+        await setIncidentRepairState(
+          pool,
+          incidentId,
+          'INVESTIGATING',
+          c.repair_class === 2
+            ? 'Repair requires explicit Owner approval; autonomous execution blocked by authority policy.'
+            : 'Repair is Class 3 and may never execute autonomously; diagnosis only.',
+        ).catch(() => undefined);
       }
     }
     results.push(observed);
