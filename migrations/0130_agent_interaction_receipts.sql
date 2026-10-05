@@ -1,7 +1,19 @@
 BEGIN;
 
--- 0129: Durable tenant-scoped receipts for SPR Agent recommendations and confirmed actions.
+-- 0130: Durable tenant-scoped receipts for SPR Agent recommendations and confirmed actions.
 -- Append-only audit evidence: what was proposed, who approved it, what route ran, and what outcome was observed.
+-- Forward-reassert main's 0129 operational self-heal because an earlier preview build may have
+-- recorded a different 0129 before main advanced. This is idempotent on clean databases and
+-- repairs that migration-ledger collision if it happened.
+UPDATE reality_contracts
+   SET repair_class = 1,
+       updated_at = now()
+ WHERE id IN ('worker_queue_flow', 'scan_terminality');
+
+UPDATE schema_migrations
+   SET description = 'reality reconciliation self heal'
+ WHERE version = '0129'
+   AND description = 'agent interaction receipts';
 
 CREATE TABLE IF NOT EXISTS agent_interaction_receipts (
   id TEXT PRIMARY KEY,
