@@ -16,7 +16,7 @@ describe('Settings "Getting Started" guide stays honest about real gaps', () => 
   it('is wired as a real tab, not dead markup', () => {
     const s = source();
     expect(s).toContain("setActiveSubTab('guide')");
-    expect(s).toContain('<GettingStartedGuide />');
+    expect(s).toContain('<GettingStartedGuide role={currentRole} />');
   });
 
   // Billing was listed here as having no backend. It has one -- real Stripe
@@ -28,7 +28,7 @@ describe('Settings "Getting Started" guide stays honest about real gaps', () => 
   it('describes the billing backend that exists, and no longer claims there is none', () => {
     const s = source();
     expect(s).not.toContain('no backend exists yet');
-    expect(s).toContain('Billing</h4>');
+    expect(s).toContain("title: 'Billing'");
     expect(s).toContain('Real Stripe Checkout');
   });
 
@@ -36,7 +36,7 @@ describe('Settings "Getting Started" guide stays honest about real gaps', () => 
     // src/routes/custom-domains.ts registers the hostname with the hosting
     // provider and only marks it active on the provider's own answer.
     expect(source()).not.toContain('Custom domains</strong> — not implemented');
-    expect(source()).toContain('Custom domains</h4>');
+    expect(source()).toContain("title: 'Custom domains & white-label branding'");
     expect(source()).toContain('provider itself reports the domain verified');
   });
 
