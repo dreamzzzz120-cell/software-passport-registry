@@ -12,6 +12,7 @@ import FounderGrowthHub from './FounderGrowthHub';
 import FounderAgentsPanel from './FounderAgentsPanel';
 import FounderOverview from './FounderOverview';
 import FounderMissionControl from './FounderMissionControl';
+import FounderFeatureControlMatrix from './FounderFeatureControlMatrix';
 
 interface FounderDashboardViewProps { userRole: string; }
 
@@ -60,6 +61,7 @@ export default function FounderDashboardView({ userRole }: FounderDashboardViewP
   <FounderMissionControl />
     <div className="space-y-8">
       <FounderOverview />
+      <FounderFeatureControlMatrix />
     {error && <div className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 p-4 text-sm text-[var(--spr-red)]">{error}</div>}
     <FounderAgentsPanel />
     <FounderCommandCenterPanel />
