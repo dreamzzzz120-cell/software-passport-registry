@@ -17,6 +17,7 @@
 // deliberately platform-wide, not tenant-scoped.
 
 import { Router } from 'express';
+import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import rateLimit from 'express-rate-limit';
 const founderReadLimiter = rateLimit({ windowMs: 60_000, limit: 60, standardHeaders: 'draft-7', legacyHeaders: false, validate: { trustProxy: false } });
@@ -396,6 +397,116 @@ export function createFounderCommandCenterRouter() {
         incidents: (incidents as any).rows ?? [],
         receipts: (receipts as any).rows ?? [],
         generatedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  // Bounded self-healing executors. These mutate only states for which the
+  // platform already has deterministic lease/age semantics. They never mark
+  // an incident fixed: the reality reconciler must observe HEALTHY afterward
+  // and writes the PROVEN_FIXED receipt itself.
+  router.post('/founder/reality/incidents/:id/repair', requireAuth, requireRole('Owner'), requireFounder, rateLimiter, async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const incidentId = String(req.params.id || '').trim();
+      if (!/^inc_[a-f0-9]{32}$/i.test(incidentId)) return res.status(400).json({ error: 'INVALID_INCIDENT_ID' });
+
+      const incident = (await db.execute(sql`
+        SELECT id, contract_id AS "contractId", component, status, observed, evidence,
+               root_cause AS "rootCause", impact, repair_class AS "repairClass"
+        FROM reality_incidents
+        WHERE id = ${incidentId} AND status NOT IN ('PROVEN_FIXED','FAILED')
+        LIMIT 1
+      `) as any).rows?.[0];
+      if (!incident) return res.status(404).json({ error: 'ACTIVE_INCIDENT_NOT_FOUND' });
+
+      let changed = 0;
+      let repair = '';
+      let executor = '';
+
+      if (incident.contractId === 'worker_queue_flow') {
+        executor = 'recover_expired_agent_job_leases';
+        const running = await db.execute(sql`
+          UPDATE agent_jobs
+          SET status = CASE WHEN attempt_count < max_attempts THEN 'Pending' ELSE 'Failed' END,
+              error = CASE WHEN attempt_count < max_attempts THEN NULL ELSE 'FOUNDER_REPAIR_LEASE_EXHAUSTED' END,
+              next_attempt_at = CASE WHEN attempt_count < max_attempts THEN CURRENT_TIMESTAMP ELSE next_attempt_at END,
+              locked_at = NULL, locked_by = NULL, updated_at = CURRENT_TIMESTAMP,
+              completed_at = CASE WHEN attempt_count >= max_attempts THEN CURRENT_TIMESTAMP ELSE completed_at END
+          WHERE status = 'Running'
+            AND locked_at IS NOT NULL
+            AND locked_at < CURRENT_TIMESTAMP - INTERVAL '30 minutes'
+          RETURNING id
+        `);
+        const pending = await db.execute(sql`
+          UPDATE agent_jobs
+          SET next_attempt_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+          WHERE status = 'Pending'
+            AND updated_at < CURRENT_TIMESTAMP - INTERVAL '10 minutes'
+            AND attempt_count < max_attempts
+            AND (next_attempt_at IS NULL OR next_attempt_at > CURRENT_TIMESTAMP)
+          RETURNING id
+        `);
+        changed = Number((running as any).rows?.length ?? 0) + Number((pending as any).rows?.length ?? 0);
+        repair = `Recovered ${Number((running as any).rows?.length ?? 0)} expired running lease(s) and nudged ${Number((pending as any).rows?.length ?? 0)} delayed pending job(s).`;
+      } else if (incident.contractId === 'scan_terminality') {
+        executor = 'recover_stale_scan_jobs';
+        const recovered = await db.execute(sql`
+          UPDATE agent_jobs j
+          SET status = CASE WHEN j.attempt_count < j.max_attempts THEN 'Pending' ELSE 'Failed' END,
+              error = CASE WHEN j.attempt_count < j.max_attempts THEN NULL ELSE 'FOUNDER_REPAIR_SCAN_JOB_EXHAUSTED' END,
+              next_attempt_at = CASE WHEN j.attempt_count < j.max_attempts THEN CURRENT_TIMESTAMP ELSE j.next_attempt_at END,
+              locked_at = NULL, locked_by = NULL, updated_at = CURRENT_TIMESTAMP,
+              completed_at = CASE WHEN j.attempt_count >= j.max_attempts THEN CURRENT_TIMESTAMP ELSE j.completed_at END
+          WHERE j.scan_id IN (
+            SELECT s.id FROM scans s
+            WHERE s.status IN ('Queued','Scanning')
+              AND s.updated_at < CURRENT_TIMESTAMP - INTERVAL '30 minutes'
+          )
+            AND (
+              (j.status='Running' AND j.locked_at IS NOT NULL AND j.locked_at < CURRENT_TIMESTAMP - INTERVAL '10 minutes')
+              OR (j.status='Pending' AND j.updated_at < CURRENT_TIMESTAMP - INTERVAL '10 minutes')
+            )
+          RETURNING j.id
+        `);
+        changed = Number((recovered as any).rows?.length ?? 0);
+        repair = `Recovered ${changed} stale scan job(s); scan status remains unproven until the worker and reconciliation cycle observe terminal progress.`;
+      } else {
+        return res.status(409).json({
+          error: 'NO_SAFE_AUTOMATIC_EXECUTOR',
+          contractId: incident.contractId,
+          message: 'This incident requires infrastructure access, configuration change, or human approval. SPR will not fabricate an automatic repair.',
+        });
+      }
+
+      const receiptId = `receipt_${randomUUID().replace(/-/g, '')}`;
+      await db.execute(sql`
+        UPDATE reality_incidents
+        SET status='VERIFYING', repair_action=${repair}, last_seen_at=CURRENT_TIMESTAMP
+        WHERE id=${incidentId}
+      `);
+      await db.execute(sql`
+        INSERT INTO reality_repair_receipts
+          (id,incident_id,authority_class,before_state,evidence,cause,impact,repair,verification,after_state,result)
+        VALUES (
+          ${receiptId}, ${incidentId}, ${Number(incident.repairClass ?? 0)}, ${JSON.stringify(incident.observed ?? {})}::jsonb,
+          ${JSON.stringify([{ source: 'founder_control_plane', executor, changed }])}::jsonb,
+          ${incident.rootCause ?? null}, ${JSON.stringify(incident.impact ?? {})}::jsonb, ${repair},
+          ${JSON.stringify({ method: 'automatic_reconciliation', requiredState: 'HEALTHY' })}::jsonb,
+          NULL, 'UNKNOWN'
+        )
+      `);
+
+      return res.status(202).json({
+        incidentId,
+        executor,
+        changed,
+        repair,
+        status: 'VERIFYING',
+        receiptId,
+        verification: 'automatic_reconciliation',
+        fixed: false,
       });
     } catch (error) {
       return next(error);
