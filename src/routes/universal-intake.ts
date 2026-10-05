@@ -105,25 +105,74 @@ export function createUniversalIntakeRouter() {
       if (!sessionId.success || !file.success) return res.status(400).json({ error: 'Invalid intake upload request.' });
       const policyError = validateFilePolicy(file.data);
       if (policyError) return res.status(415).json({ error: policyError });
-      const session = await loadSession(sessionId.data);
-      if (!session) return res.status(410).json({ error: 'Intake session expired or closed.' });
-      const countResult = await db.execute(sql`SELECT COUNT(*)::int AS count, COALESCE(SUM(size),0)::bigint AS total_size FROM intake_items WHERE session_id=${session.id}`);
-      const row = (countResult as any).rows?.[0] || {};
-      const count = Number(row.count || 0);
-      const totalSize = Number(row.total_size || 0);
-      if (count >= MAX_FILES_PER_SESSION) return res.status(413).json({ error: 'The intake has reached its 100-file limit.' });
-      if (totalSize + file.data.size > MAX_TOTAL_SIZE) return res.status(413).json({ error: 'The intake has reached its 500 MB total size limit.' });
       const itemId = id('item');
-      const storagePath = `${session.id}/${itemId}/${safeName(file.data.name)}`;
-      const signed = await createIntakeSignedUpload({
-        sessionId: session.id,
-        itemId,
-        fileName: safeName(file.data.name),
-        contentType: file.data.contentType,
+      const cleanName = safeName(file.data.name);
+
+      const reservation = await db.transaction(async (tx) => {
+        // Serialize allocation within one intake session so concurrent
+        // upload-url requests cannot both observe the same pre-insert count
+        // or total size and overrun the hard session caps.
+        const sessionResult = await tx.execute(sql`SELECT id, tenant_id AS "tenantId", status, expires_at AS "expiresAt"
+          FROM intake_sessions
+          WHERE id=${sessionId.data}
+          FOR UPDATE`);
+        const session = (sessionResult as any).rows?.[0];
+        if (!session || session.status !== 'OPEN' || new Date(session.expiresAt).getTime() <= Date.now()) {
+          return { ok: false as const, status: 410 as const, error: 'Intake session expired or closed.' };
+        }
+
+        const countResult = await tx.execute(sql`SELECT COUNT(*)::int AS count, COALESCE(SUM(size),0)::bigint AS total_size
+          FROM intake_items
+          WHERE session_id=${session.id} AND status <> 'FAILED'`);
+        const row = (countResult as any).rows?.[0] || {};
+        const count = Number(row.count || 0);
+        const totalSize = Number(row.total_size || 0);
+        if (count >= MAX_FILES_PER_SESSION) {
+          return { ok: false as const, status: 413 as const, error: 'The intake has reached its 100-file limit.' };
+        }
+        if (totalSize + file.data.size > MAX_TOTAL_SIZE) {
+          return { ok: false as const, status: 413 as const, error: 'The intake has reached its 500 MB total size limit.' };
+        }
+
+        const storagePath = `${session.id}/${itemId}/${cleanName}`;
+        await tx.execute(sql`INSERT INTO intake_items
+          (id,session_id,name,size,content_type,kind,storage_bucket,storage_path,status,created_at)
+          VALUES
+          (${itemId},${session.id},${file.data.name},${file.data.size},${file.data.contentType},${file.data.kind},${BUCKET},${storagePath},'AWAITING_UPLOAD',NOW())`);
+        return { ok: true as const, session, storagePath };
       });
-      if (signed.bucket !== BUCKET || signed.path !== storagePath) throw new Error('INTAKE_BROKER_PATH_MISMATCH');
-      await db.execute(sql`INSERT INTO intake_items (id,session_id,name,size,content_type,kind,storage_bucket,storage_path,status,created_at) VALUES (${itemId},${session.id},${file.data.name},${file.data.size},${file.data.contentType},${file.data.kind},${signed.bucket},${signed.path},'AWAITING_UPLOAD',NOW())`);
-      return res.status(201).json({ itemId, path: signed.path, token: signed.token, signedUrl: signed.signedUrl, expiresAt: session.expiresAt });
+
+      if (!reservation.ok) return res.status(reservation.status).json({ error: reservation.error });
+
+      let signed;
+      try {
+        signed = await createIntakeSignedUpload({
+          sessionId: reservation.session.id,
+          itemId,
+          fileName: cleanName,
+          contentType: file.data.contentType,
+        });
+      } catch (error) {
+        // A broker failure must not permanently consume one of the session's
+        // file/byte reservations. FAILED rows are excluded from quota totals.
+        await db.execute(sql`UPDATE intake_items
+          SET status='FAILED'
+          WHERE id=${itemId} AND session_id=${reservation.session.id} AND status='AWAITING_UPLOAD'`).catch(() => undefined);
+        throw error;
+      }
+
+      if (signed.bucket !== BUCKET || signed.path !== reservation.storagePath) {
+        await db.execute(sql`UPDATE intake_items SET status='FAILED' WHERE id=${itemId} AND status='AWAITING_UPLOAD'`).catch(() => undefined);
+        throw new Error('INTAKE_BROKER_PATH_MISMATCH');
+      }
+
+      return res.status(201).json({
+        itemId,
+        path: signed.path,
+        token: signed.token,
+        signedUrl: signed.signedUrl,
+        expiresAt: reservation.session.expiresAt,
+      });
     } catch (error) { return next(error); }
   });
 
