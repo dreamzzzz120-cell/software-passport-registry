@@ -25,6 +25,23 @@ type Campaign = {
   maxFollowups?: number;
 };
 
+type RealityIncident = {
+  id: string;
+  contractId: string;
+  component: string;
+  severity: string;
+  status: string;
+  rootCause?: string | null;
+  repairClass?: number;
+  repairAction?: string | null;
+  lastSeenAt?: string | null;
+};
+
+type RealityData = {
+  systemState?: { healthy?: number; degrading?: number; failed?: number; unknown?: number; activeIncidents?: number; observabilityCompromised?: boolean };
+  incidents?: RealityIncident[];
+};
+
 type Growth = {
   settings?: Campaign;
   pipeline?: Record<string, number>;
@@ -88,6 +105,7 @@ function badge(status: string) {
 export default function FounderControlPlane() {
   const [tasks, setTasks] = useState<RepairTask[]>([]);
   const [growth, setGrowth] = useState<Growth | null>(null);
+  const [reality, setReality] = useState<RealityData | null>(null);
   const [loading, setLoading] = useState(false);
   const [working, setWorking] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -97,14 +115,16 @@ export default function FounderControlPlane() {
     setLoading(true);
     setError(null);
     try {
-      const [tasksRes, growthRes] = await Promise.all([
+      const [tasksRes, growthRes, realityRes] = await Promise.all([
         apiFetch('/api/remediation-tasks'),
         apiFetch('/api/founder/distribution/growth'),
+        apiFetch('/api/founder/reality'),
       ]);
       if (!tasksRes.ok) throw new Error(`Repair queue unavailable (${tasksRes.status})`);
       const taskBody = await tasksRes.json().catch(() => []);
       setTasks(Array.isArray(taskBody) ? taskBody : []);
       if (growthRes.ok) setGrowth(await growthRes.json().catch(() => null));
+      if (realityRes.ok) setReality(await realityRes.json().catch(() => null));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Founder control data could not be verified.');
     } finally {
@@ -157,6 +177,21 @@ export default function FounderControlPlane() {
     }
   };
 
+  const repairIncident = async (incident: RealityIncident) => {
+    setWorking(`incident:${incident.id}`); setNotice(null); setError(null);
+    try {
+      const res = await apiFetch(`/api/founder/reality/incidents/${encodeURIComponent(incident.id)}/repair`, { method: 'POST' });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.message || body?.error || `Repair executor failed (${res.status})`);
+      setNotice(`${incident.component}: ${body?.repair || 'repair accepted'} Verification is now required; SPR has not claimed success yet.`);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to execute incident repair.');
+    } finally {
+      setWorking(null);
+    }
+  };
+
   const saveCampaign = async (patch: Record<string, unknown>) => {
     setWorking('campaign'); setNotice(null); setError(null);
     try {
@@ -178,6 +213,8 @@ export default function FounderControlPlane() {
 
   const settings = growth?.settings ?? {};
   const pipeline = growth?.pipeline ?? {};
+  const incidents = Array.isArray(reality?.incidents) ? reality!.incidents!.filter((i) => !['PROVEN_FIXED','FAILED'].includes(i.status)) : [];
+  const autoRepairable = (i: RealityIncident) => ['worker_queue_flow','scan_terminality'].includes(i.contractId);
 
   return <section className="space-y-5 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-5" id="founder-control-plane">
     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -209,6 +246,31 @@ export default function FounderControlPlane() {
       <a href="#founder-agents" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4 hover:border-[var(--spr-highlight)]">
         <Bot className="h-5 w-5 text-[var(--spr-highlight)]" /><div className="mt-3 font-semibold text-[var(--spr-text)]">Agents & automation</div><div className="mt-1 text-xs text-[var(--spr-text-muted)]">Inspect runtime state and automation evidence</div>
       </a>
+    </div>
+
+    <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4">
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div>
+          <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-[var(--spr-highlight)]" /><h3 className="font-semibold text-[var(--spr-text)]">Reality self-healing</h3></div>
+          <p className="mt-1 text-xs text-[var(--spr-text-muted)]">Live incidents from SPR's reconciliation system. Safe executors repair bounded queue/scan failures; everything else stays approval-gated.</p>
+        </div>
+        <div className="text-xs text-[var(--spr-text-muted)]">
+          {reality?.systemState ? `${reality.systemState.activeIncidents ?? incidents.length} active · ${reality.systemState.healthy ?? 0} healthy · ${reality.systemState.failed ?? 0} failed · ${reality.systemState.unknown ?? 0} unknown` : 'Reality state not verified'}
+        </div>
+      </div>
+      <div className="mt-4 space-y-2">
+        {incidents.slice(0,20).map((incident) => <div key={incident.id} className="flex flex-col gap-3 rounded border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3 lg:flex-row lg:items-center">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2"><span className="font-semibold text-[var(--spr-text)]">{incident.component}</span><span className="text-[10px] font-bold uppercase tracking-wide text-[var(--spr-amber)]">{incident.status}</span><span className="text-[10px] uppercase text-[var(--spr-text-muted)]">{incident.severity}</span></div>
+            <div className="mt-1 text-xs text-[var(--spr-text-muted)]">{incident.rootCause || 'Root cause not yet proven.'}</div>
+            <div className="mt-1 font-mono text-[10px] text-[var(--spr-text-faint)]">{incident.contractId} · {incident.id}</div>
+          </div>
+          {autoRepairable(incident)
+            ? <button onClick={() => void repairIncident(incident)} disabled={working !== null} className="spr-btn spr-btn-primary text-xs">{working === `incident:${incident.id}` ? 'Repairing…' : 'Repair now'}</button>
+            : <div className="max-w-xs text-xs text-[var(--spr-text-muted)]">Requires infrastructure/configuration access or approval. SPR will not auto-mutate this class.</div>}
+        </div>)}
+        {incidents.length === 0 && <div className="rounded border border-[var(--spr-border)] p-4 text-sm text-[var(--spr-text-muted)]">No active reality incidents are currently observed.</div>}
+      </div>
     </div>
 
     <div id="founder-repair" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4">
