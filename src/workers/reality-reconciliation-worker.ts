@@ -513,8 +513,8 @@ async function probeMalwareCoverage(pool: Pool): Promise<ProbeResult> {
   try {
     const row = (await pool.query(`
       SELECT
-        (SELECT count(*)::int FROM scans WHERE timestamp > now() - interval '24 hours' AND status='Completed') AS recent_scans,
-        (SELECT count(*)::int FROM evidence_items WHERE timestamp > now() - interval '24 hours' AND (lower(coalesce(engine_id,'')) LIKE '%malware%' OR lower(coalesce(engine_id,'')) LIKE '%clam%' OR lower(coalesce(name,'')) LIKE '%malware%')) AS malware_evidence
+        (SELECT count(*)::int FROM scans WHERE NULLIF(timestamp,'')::timestamptz > now() - interval '24 hours' AND status='Completed') AS recent_scans,
+        (SELECT count(*)::int FROM evidence_items WHERE NULLIF(timestamp,'')::timestamptz > now() - interval '24 hours' AND (lower(coalesce(engine_id,'')) LIKE '%malware%' OR lower(coalesce(engine_id,'')) LIKE '%clam%' OR lower(coalesce(name,'')) LIKE '%malware%')) AS malware_evidence
     `)).rows[0] ?? {};
     const recentScans = Number(row.recent_scans ?? 0);
     const malwareEvidence = Number(row.malware_evidence ?? 0);
