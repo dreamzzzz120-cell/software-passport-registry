@@ -144,6 +144,44 @@ export async function resolvePublicGitHubRefViaGit(owner: string, repository: st
 }
 const OSV_ORIGIN = 'https://api.osv.dev';
 
+async function recoverExhaustedStaleJobs(pool: Pool) {
+  const result = await pool.query<Pick<ClaimedJob, 'id' | 'tenant_id' | 'scan_id'>>(\`
+    UPDATE agent_jobs
+    SET status='Failed',
+        progress=100,
+        error='SCAN_WORKER_LEASE_EXHAUSTED',
+        locked_at=NULL,
+        locked_by=NULL,
+        completed_at=COALESCE(completed_at, NOW()),
+        updated_at=NOW()
+    WHERE job_type IN ('osv_manifest_scan', 'repository_scan')
+      AND status='Running'
+      AND locked_at IS NOT NULL
+      AND locked_at < NOW() - INTERVAL '10 minutes'
+      AND attempt_count >= max_attempts
+    RETURNING id, tenant_id, scan_id
+  \`);
+  for (const job of result.rows) {
+    console.error(JSON.stringify({
+      event: 'scan_job_lease_exhausted',
+      workerId: WORKER_ID,
+      jobId: job.id,
+      tenantId: job.tenant_id,
+      scanId: job.scan_id,
+      reason: 'SCAN_WORKER_LEASE_EXHAUSTED',
+    }));
+    if (job.scan_id) {
+      try {
+        const status = await settleScanRun(pool, job.tenant_id, job.scan_id);
+        console.log(JSON.stringify({ event: 'scan_run_settled_after_lease_exhaustion', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, scanId: job.scan_id, status }));
+      } catch (error) {
+        console.error(JSON.stringify({ event: 'scan_run_settle_failed', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, scanId: job.scan_id, reason: safeFailureReason(rootErrorMessage(error)) }));
+      }
+    }
+  }
+  return result.rowCount ?? 0;
+}
+
 async function claimJob(pool: Pool): Promise<ClaimedJob | null> {
   const client = await pool.connect();
   try {
@@ -929,6 +967,7 @@ async function failJob(pool: Pool, job: ClaimedJob, error: unknown) {
 }
 
 export async function runWorkerOnce(pool: Pool) {
+  await recoverExhaustedStaleJobs(pool);
   const job = await claimJob(pool); if (!job) return false;
   try { if (job.job_type === 'repository_scan') await processRepositoryJob(pool,job); else await processJob(pool,job); }
   catch (error) { await failJob(pool,job,error); }
