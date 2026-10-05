@@ -31,7 +31,9 @@ describe('the free preview response withholds paid detail server-side', () => {
 
   it('reads the SBOM for its counts only, and never returns the components', () => {
     const source = route();
-    expect(source).toContain(code`return { sbomComponentCount: parsed.length, licenceUnevaluatedComponentCount: parsed.filter((c: any) => !isLicenceEvaluable(c)).length };`);
+    expect(source).toContain(code`const raw = normalizedRow?.normalizedComponents ?? passportRow?.sbom;`);
+    expect(source).toContain(code`sbomComponentCount: parsed.length`);
+    expect(source).toContain(code`licenceUnevaluatedComponentCount: parsed.filter((component: any) => !isLicenceEvaluable(component)).length`);
     expect(source).not.toMatch(/sbomComponentss*:/);
     expect(source).toContain(code`sbom: { componentCount: sbomComponentCount }`);
     expect(source).toContain(code`const passport = passportRow ? { id: passportRow.id, name: passportRow.name, version: passportRow.version, publisher: passportRow.publisher, category: passportRow.category, verificationStatus: passportRow.verificationStatus } : null;`);
