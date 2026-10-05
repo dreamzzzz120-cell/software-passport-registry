@@ -40,6 +40,9 @@ const envSchema = z.object({
   SQL_SSL_CA: optionalTrimmedString,
   SQL_POOL_MAX: optionalPositiveIntegerString, SQL_CONNECTION_TIMEOUT_MS: optionalPositiveIntegerString, SQL_IDLE_TIMEOUT_MS: optionalPositiveIntegerString, SQL_QUERY_TIMEOUT_MS: optionalPositiveIntegerString,
   STRIPE_SECRET_KEY: optionalTrimmedString, STRIPE_WEBHOOK_SECRET: optionalTrimmedString,
+  STRIPE_PAYMENT_LINK_STARTER: optionalTrimmedUrl, STRIPE_PAYMENT_LINK_PROFESSIONAL: optionalTrimmedUrl, STRIPE_PAYMENT_LINK_GROWTH: optionalTrimmedUrl,
+  STRIPE_PAYMENT_LINK_STARTER_PRICE_LABEL: optionalTrimmedString, STRIPE_PAYMENT_LINK_PROFESSIONAL_PRICE_LABEL: optionalTrimmedString, STRIPE_PAYMENT_LINK_GROWTH_PRICE_LABEL: optionalTrimmedString,
+  STRIPE_PAYMENT_LINK_STARTER_UNIT_AMOUNT: optionalPositiveIntegerString, STRIPE_PAYMENT_LINK_PROFESSIONAL_UNIT_AMOUNT: optionalPositiveIntegerString, STRIPE_PAYMENT_LINK_GROWTH_UNIT_AMOUNT: optionalPositiveIntegerString,
   STRIPE_PRICE_PILOT: optionalTrimmedString, STRIPE_PRICE_STARTER: optionalTrimmedString, STRIPE_PRICE_PROFESSIONAL: optionalTrimmedString, STRIPE_PRICE_GROWTH: optionalTrimmedString, STRIPE_PRICE_ENTERPRISE: optionalTrimmedString,
   STRIPE_PRICE_MSP_PILOT: optionalTrimmedString, STRIPE_PRICE_MSP_GROWTH: optionalTrimmedString, STRIPE_PRICE_MSP_SCALE: optionalTrimmedString,
   STRIPE_PRICE_SOFTWARE_PASSPORT: optionalTrimmedString, STRIPE_PRICE_EVIDENCE_REPORT: optionalTrimmedString, STRIPE_PRICE_SECURITY_ASSESSMENT: optionalTrimmedString,
@@ -78,7 +81,7 @@ const parsedEnv = envSchema.parse(process.env);
 // credential (for example a Resend key) into STRIPE_SECRET_KEY. Treating any
 // non-empty string as Stripe-ready caused repeated live API failures and made
 // the catalogue look configured when checkout could never work.
-const stripeSecretKey = parsedEnv.STRIPE_SECRET_KEY && /^sk_(?:live|test)_[A-Za-z0-9]+$/.test(parsedEnv.STRIPE_SECRET_KEY)
+const stripeSecretKey = parsedEnv.STRIPE_SECRET_KEY && /^(?:sk|rk)_(?:live|test)_[A-Za-z0-9]+$/.test(parsedEnv.STRIPE_SECRET_KEY)
   ? parsedEnv.STRIPE_SECRET_KEY
   : undefined;
 export const stripeSecretKeyMisconfigured = Boolean(parsedEnv.STRIPE_SECRET_KEY && !stripeSecretKey);
@@ -109,6 +112,16 @@ export const config = {
   },
   stripe: {
     secretKey: stripeSecretKey, webhookSecret: parsedEnv.STRIPE_WEBHOOK_SECRET,
+    paymentLinks: {
+      starter: parsedEnv.STRIPE_PAYMENT_LINK_STARTER,
+      professional: parsedEnv.STRIPE_PAYMENT_LINK_PROFESSIONAL,
+      growth: parsedEnv.STRIPE_PAYMENT_LINK_GROWTH,
+    },
+    paymentLinkCatalog: {
+      starter: parsedEnv.STRIPE_PAYMENT_LINK_STARTER_PRICE_LABEL && parsedEnv.STRIPE_PAYMENT_LINK_STARTER_UNIT_AMOUNT ? { priceLabel: parsedEnv.STRIPE_PAYMENT_LINK_STARTER_PRICE_LABEL, unitAmount: Number(parsedEnv.STRIPE_PAYMENT_LINK_STARTER_UNIT_AMOUNT), currency: 'usd', interval: 'month', description: 'Software Passport Registry MSP Starter' } : undefined,
+      professional: parsedEnv.STRIPE_PAYMENT_LINK_PROFESSIONAL_PRICE_LABEL && parsedEnv.STRIPE_PAYMENT_LINK_PROFESSIONAL_UNIT_AMOUNT ? { priceLabel: parsedEnv.STRIPE_PAYMENT_LINK_PROFESSIONAL_PRICE_LABEL, unitAmount: Number(parsedEnv.STRIPE_PAYMENT_LINK_PROFESSIONAL_UNIT_AMOUNT), currency: 'usd', interval: 'month', description: 'Software Passport Registry MSP Professional' } : undefined,
+      growth: parsedEnv.STRIPE_PAYMENT_LINK_GROWTH_PRICE_LABEL && parsedEnv.STRIPE_PAYMENT_LINK_GROWTH_UNIT_AMOUNT ? { priceLabel: parsedEnv.STRIPE_PAYMENT_LINK_GROWTH_PRICE_LABEL, unitAmount: Number(parsedEnv.STRIPE_PAYMENT_LINK_GROWTH_UNIT_AMOUNT), currency: 'usd', interval: 'month', description: 'Software Passport Registry MSP Business' } : undefined,
+    },
     prices: {
       pilot: parsedEnv.STRIPE_PRICE_MSP_PILOT ?? parsedEnv.STRIPE_PRICE_PILOT,
       starter: parsedEnv.STRIPE_PRICE_STARTER,
