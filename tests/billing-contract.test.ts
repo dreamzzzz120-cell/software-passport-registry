@@ -288,7 +288,7 @@ describe('billing credential hardening', () => {
   it('rejects non-Stripe credentials before any Stripe API call', () => {
     const configSource = read('src/config.ts');
     const billingSource = read('src/routes/billing.ts');
-    expect(configSource).toContain("/^sk_(?:live|test)_[A-Za-z0-9]+$/");
+    expect(configSource).toContain("/^(?:sk|rk)_(?:live|test)_[A-Za-z0-9]+$/");
     expect(configSource).toContain('stripeSecretKeyMisconfigured');
     expect(billingSource).toContain("billingConfigurationError: stripeSecretKeyMisconfigured ? 'STRIPE_SECRET_KEY_INVALID' : null");
   });
