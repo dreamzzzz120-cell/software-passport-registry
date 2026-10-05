@@ -68,7 +68,7 @@ describe('the preview page renders only what the API sends', () => {
     const source = view();
     expect(source).toContain('What SPR could not verify');
     expect(source).toContain("value.status === 'not_observed'");
-    expect(source).toContain('areas without enough evidence');
+    expect(source).toContain('Areas without enough evidence');
   });
 
   it('states zero verification as zero verification', () => {
