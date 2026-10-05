@@ -3,12 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Settings, Shield, Sliders, KeyRound, HelpCircle, CheckCircle,
   Sun, Moon, RefreshCw, Trash2, Fingerprint, Lock, FileText, FileCode,
   PlusCircle, AlertTriangle, Check,
-  Layers, ShieldAlert, CheckCircle2, AlertCircle
+  Layers, ShieldAlert, CheckCircle2, AlertCircle, ArrowRight, Search, Circle, ExternalLink
 } from 'lucide-react';
 import { auth } from '../lib/supabase-auth';
 import { apiFetch } from '../utils/apiClient';
@@ -1149,7 +1149,7 @@ export default function SettingsView({ theme, onToggleTheme, role, userEmail, on
           </div>
         </div>
       ) : (
-        <GettingStartedGuide />
+        <GettingStartedGuide role={currentRole} />
       )}
       {role === 'Owner' && userEmail && <DeleteWorkspacePanel userEmail={userEmail} onWorkspaceDeleted={onWorkspaceDeleted} />}
     </div>
@@ -1160,114 +1160,106 @@ export default function SettingsView({ theme, onToggleTheme, role, userEmail, on
 // alongside any feature that changes what it describes, the same way code
 // comments describe the code next to them. Nothing here should claim a
 // capability exists before it's actually built and deployed.
-function GettingStartedGuide() {
-  const step = (title: string, children: React.ReactNode) => (
-    <li className="pl-1">
-      <span className="font-semibold text-[var(--spr-text)]">{title}</span>
-      <div className="mt-0.5 text-[var(--spr-text-muted)]">{children}</div>
-    </li>
-  );
+function GettingStartedGuide({ role }: { role: string }) {
+  type GuideStatus = 'ready' | 'action' | 'info';
+  type GuideItem = { id: string; title: string; summary: string; details: string[]; href?: string; action?: string; status: GuideStatus; ownerOnly?: boolean };
+  const [query, setQuery] = useState('');
+  const [expanded, setExpanded] = useState<string | null>('first-scan');
+  const [diagnosing, setDiagnosing] = useState(false);
+  const [diagnostic, setDiagnostic] = useState<{ api: 'PASS' | 'FAIL' | 'UNKNOWN'; database: 'PASS' | 'FAIL' | 'UNKNOWN'; detail: string } | null>(null);
+  const isOwner = role === 'Owner';
+  const canAdmin = isOwner || role === 'Admin';
+
+  const items: GuideItem[] = [
+    { id: 'first-scan', title: 'Run your first real software scan', summary: 'Create or select a Passport, connect a repository, then collect SBOM and vulnerability evidence.', details: ['Open Integrations and connect GitHub, or use a public repository that SPR can positively observe without a tenant token.', 'Select the software Passport that owns the evidence.', 'Discover a repository and run the software scan. SPR records observed evidence; unavailable evidence remains UNKNOWN.'], href: '/integrations', action: 'Open Integrations', status: 'action' },
+    { id: 'monitoring', title: 'Turn on continuous monitoring', summary: 'Re-check software over time and surface changes instead of relying on a one-time scan.', details: ['Open Monitoring after a repository has been enrolled.', 'Public GitHub repositories may run credential-free only when public visibility is positively observed.', 'Private or unproven repositories require a tenant GitHub credential. Missing or invalid credentials remain visibly blocked rather than silently falling back to a global token.'], href: '/monitoring', action: 'Open Monitoring', status: 'action' },
+    { id: 'evidence', title: 'Understand the evidence trail', summary: 'Trace Passport → observation → evidence → finding so you can explain where every conclusion came from.', details: ['Use Evidence Explorer for source records and provenance.', 'Use Trust Graph to inspect relationships across software, vendors, evidence and findings.', 'A missing observation is not converted into a PASS.'], href: '/evidence', action: 'Explore Evidence', status: 'ready' },
+    { id: 'connectors', title: 'Connect business and cloud systems', summary: 'Bring in provider evidence and MSP customer context through tenant-scoped integrations.', details: ['GitHub, GitLab, Bitbucket, Azure DevOps, AWS, Azure, Google Cloud, Microsoft 365, Jira, Confluence and Slack use provider-specific credential fields and a real live test.', 'MSP connectors such as ConnectWise, Autotask, NinjaOne and Hudu can discover provider customers for mapping to SPR Clients.', 'Credentials are tenant-scoped; a failed connection is shown as failed rather than inferred healthy.'], href: '/integrations', action: 'Manage Connectors', status: 'action' },
+    { id: 'team', title: 'Set up your team and client access', summary: 'Invite operators and clients with the minimum role they need.', details: ['Owner/Admin can invite members, change roles and revoke access.', 'Client invitations must be mapped to the client they are allowed to see.', 'Review active sessions in Settings and revoke sessions you do not recognize.'], action: canAdmin ? 'Use Team & Profile above' : 'Ask an Owner or Admin', status: canAdmin ? 'ready' : 'info' },
+    { id: 'branding', title: 'Make SPR client-facing', summary: 'Apply your MSP identity to the workspace, reports, public evidence links and account email.', details: ['Open White-label and set identity, logo, typography, colours, support details and favicon.', 'Generate a white-label client PDF from real loaded inventory and scores.', 'Custom domains become Active only after the hosting provider reports DNS verified.'], href: '/white-label', action: 'Open White-label', status: 'action' },
+    { id: 'billing', title: 'Activate billing and commercial controls', summary: 'Use Stripe-backed checkout, billing portal and server-enforced plan limits.', details: ['Checkout prices are read from Stripe; unreadable prices are shown unavailable rather than guessed.', 'Client limits are enforced server-side.', 'Use the billing portal for payment methods, invoices and cancellation.'], href: '/billing', action: 'Open Billing', status: 'action' },
+    { id: 'governance', title: 'Finish governance and retention', summary: 'Execute the DPA and set an explicit retention policy for the workspace.', details: ['The public DPA is versioned and hashed.', 'The execution record is signed by the server and can be verified.', 'Until a retention policy is saved, SPR does not claim scheduled purging is active.'], action: isOwner ? 'Use Data Governance above' : 'Owner action required', status: isOwner ? 'ready' : 'info', ownerOnly: true },
+    { id: 'public', title: 'Share evidence safely', summary: 'Generate a public Passport link without exposing the authoritative internal trust score.', details: ['Public views expose observed evidence and an evidence status such as AVOID, INVESTIGATE, VERIFIED or UNKNOWN.', 'Use Reports for client-facing PDF output.', 'Review the public view before sending it to a client.'], href: '/passports', action: 'Open Passports', status: 'ready' },
+  ];
+
+  const visible = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return items;
+    return items.filter((item) => [item.title, item.summary, ...item.details].join(' ').toLowerCase().includes(needle));
+  }, [query, role]);
+
+  const runLiveCheck = async () => {
+    setDiagnosing(true);
+    setDiagnostic(null);
+    try {
+      const res = await apiFetch('/api/ready');
+      const data = await res.json().catch(() => ({}));
+      const db = data?.checks?.database;
+      setDiagnostic({
+        api: res.ok ? 'PASS' : 'FAIL',
+        database: db?.ok === true ? 'PASS' : db?.ok === false ? 'FAIL' : 'UNKNOWN',
+        detail: db?.ok === true ? `Database responded in ${Number(db.latencyMs) || 0}ms.` : db?.error || `Readiness returned HTTP ${res.status}.`
+      });
+    } catch {
+      setDiagnostic({ api: 'FAIL', database: 'UNKNOWN', detail: 'The readiness request did not return. No database conclusion was inferred.' });
+    } finally { setDiagnosing(false); }
+  };
+
+  const statusLabel = (status: GuideStatus) => status === 'ready' ? 'Available' : status === 'action' ? 'Next action' : 'Role note';
   return (
-    <div className="space-y-6 animate-fadeIn text-xs" id="settings-getting-started-guide">
-      <div className="spr-panel p-5">
-        <h3 className="text-xs font-bold text-[var(--spr-text)] flex items-center gap-2 pb-2 border-b border-[var(--spr-border)]">
-          <HelpCircle className="w-4.5 h-4.5 text-[var(--spr-highlight)]" />
-          <span>Getting Started</span>
-        </h3>
-        <p className="mt-3 text-[var(--spr-text-muted)] leading-relaxed">
-          Every capability below is real and connected to the backend — nothing here is a UI-only mockup. Where a step depends on an outside system (DNS, the hosting provider, the identity provider, an email provider) the page shows that system’s actual answer rather than assuming success.
-        </p>
+    <div className="space-y-5 animate-fadeIn text-xs" id="settings-getting-started-guide">
+      <section className="spr-panel p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-2xl">
+            <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[.18em] text-[var(--spr-highlight)]"><HelpCircle className="h-4 w-4" /> Interactive setup center</div>
+            <h3 className="mt-2 text-lg font-bold text-[var(--spr-text)]">Know what to do next — and why</h3>
+            <p className="mt-2 leading-relaxed text-[var(--spr-text-muted)]">Use this page as the operating guide for SPR. It links directly to the real product surfaces, explains what each step proves, and keeps unavailable evidence UNKNOWN. Your current workspace role is <strong className="text-[var(--spr-text)]">{role}</strong>.</p>
+          </div>
+          <button type="button" onClick={() => void runLiveCheck()} disabled={diagnosing} className="spr-btn spr-btn-secondary inline-flex min-h-10 items-center justify-center gap-2 self-start">
+            <RefreshCw className={`h-4 w-4 ${diagnosing ? 'animate-spin' : ''}`} />{diagnosing ? 'Checking…' : 'Run live readiness check'}
+          </button>
+        </div>
+        {diagnostic && <div className="mt-4 grid gap-2 sm:grid-cols-3" role="status">
+          {[['API', diagnostic.api], ['Database', diagnostic.database]].map(([name, value]) => <div key={name} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] p-3"><div className="text-[10px] font-bold uppercase tracking-wider text-[var(--spr-text-faint)]">{name}</div><div className={`mt-1 font-bold ${value === 'PASS' ? 'text-[var(--spr-green)]' : value === 'FAIL' ? 'text-[var(--spr-red)]' : 'text-[var(--spr-amber)]'}`}>{value}</div></div>)}
+          <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] p-3 sm:col-span-1"><div className="text-[10px] font-bold uppercase tracking-wider text-[var(--spr-text-faint)]">Observed detail</div><div className="mt-1 leading-relaxed text-[var(--spr-text-muted)]">{diagnostic.detail}</div></div>
+        </div>}
+      </section>
+
+      <section className="spr-panel p-4">
+        <label htmlFor="settings-guide-search" className="mb-2 block text-[11px] font-bold uppercase tracking-wider text-[var(--spr-text-faint)]">Find an instruction</label>
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--spr-text-faint)]" />
+          <input id="settings-guide-search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Try: GitHub, monitoring, billing, client report, domain…" className="w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] py-2.5 pl-9 pr-3 text-sm text-[var(--spr-text)] outline-none focus:border-[var(--spr-highlight)]" />
+        </div>
+      </section>
+
+      <div className="grid gap-3">
+        {visible.map((item, index) => {
+          const open = expanded === item.id;
+          return <section key={item.id} className="spr-panel overflow-hidden">
+            <button type="button" onClick={() => setExpanded(open ? null : item.id)} aria-expanded={open} className="flex w-full items-start gap-3 p-4 text-left hover:bg-[var(--spr-surface-hover)]">
+              <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] font-mono text-[11px] font-bold text-[var(--spr-highlight)]">{index + 1}</span>
+              <span className="min-w-0 flex-1"><span className="flex flex-wrap items-center gap-2"><span className="font-bold text-[var(--spr-text)]">{item.title}</span><span className="rounded border border-[var(--spr-border)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--spr-text-faint)]">{statusLabel(item.status)}</span></span><span className="mt-1 block leading-relaxed text-[var(--spr-text-muted)]">{item.summary}</span></span>
+              <ArrowRight className={`mt-1 h-4 w-4 shrink-0 text-[var(--spr-text-faint)] transition-transform ${open ? 'rotate-90' : ''}`} />
+            </button>
+            {open && <div className="border-t border-[var(--spr-border)] px-4 pb-4 pt-3 sm:pl-14">
+              <ol className="space-y-2">
+                {item.details.map((detail, i) => <li key={detail} className="flex gap-2 leading-relaxed text-[var(--spr-text-muted)]"><span className="font-mono text-[var(--spr-text-faint)]">{i + 1}.</span><span>{detail}</span></li>)}
+              </ol>
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                {item.href ? <a href={item.href} className="spr-btn spr-btn-primary inline-flex min-h-9 items-center gap-2">{item.action}<ExternalLink className="h-3.5 w-3.5" /></a> : <span className="inline-flex min-h-9 items-center gap-2 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 font-semibold text-[var(--spr-text-muted)]"><Circle className="h-3 w-3" />{item.action}</span>}
+                {item.ownerOnly && !isOwner && <span className="text-[var(--spr-amber)]">This step cannot be completed with the {role} role.</span>}
+              </div>
+            </div>}
+          </section>;
+        })}
+        {visible.length === 0 && <div className="spr-panel p-8 text-center text-[var(--spr-text-muted)]">No setup instruction matches “{query}”. Try a feature name such as monitoring, GitHub, billing, branding or evidence.</div>}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <div className="spr-panel p-5 space-y-3">
-          <h4 className="text-[11px] font-bold text-[var(--spr-text)] uppercase tracking-wide">GitHub connector</h4>
-          <ol className="space-y-2.5 list-decimal list-inside leading-relaxed">
-            {step('Go to Integrations', 'Find the GitHub card, click Connect.')}
-            {step('Paste a personal access token', 'Create one on github.com under Settings → Developer settings → Personal access tokens, with read access to Contents, Metadata, Secret scanning alerts, and Code scanning alerts.')}
-            {step('Save credentials, then pick a passport', 'Use the selector at the top of the page.')}
-            {step('Click Test connection', 'Status turns Live on success, Error on failure with the real reason shown.')}
-            {step('Discover repositories → pick one → Run software scan', 'Queues a real Syft SBOM + OSV vulnerability scan.')}
-          </ol>
-        </div>
-
-        <div className="spr-panel p-5 space-y-3">
-          <h4 className="text-[11px] font-bold text-[var(--spr-text)] uppercase tracking-wide">Google Cloud connector</h4>
-          <ol className="space-y-2.5 list-decimal list-inside leading-relaxed">
-            {step('Integrations → Google Cloud → Connect', 'Paste the entire contents of a service-account JSON key file.')}
-            {step('Save credentials, pick a passport, Run live test', 'This signs a real JWT with your key and exchanges it for a Google access token, then queries your accessible Cloud projects.')}
-          </ol>
-        </div>
-
-        <div className="spr-panel p-5 space-y-3">
-          <h4 className="text-[11px] font-bold text-[var(--spr-text)] uppercase tracking-wide">Other connectors</h4>
-          <p className="leading-relaxed">GitLab, Bitbucket, Azure DevOps, Jira, Confluence, Slack, Microsoft 365, AWS, Azure: same pattern — Connect, fill in the fields shown for that provider, Save credentials, pick a passport, Run live test.</p>
-        </div>
-
-        <div className="spr-panel p-5 space-y-3">
-          <h4 className="text-[11px] font-bold text-[var(--spr-text)] uppercase tracking-wide">MSP connectors (ConnectWise, Autotask, NinjaOne, Hudu)</h4>
-          <ol className="space-y-2.5 list-decimal list-inside leading-relaxed">
-            {step('Connect and test', 'Same as above.')}
-            {step('Discover customers', 'Once Live, a customer-mapping panel appears on the card automatically — pulls the provider’s real customer list.')}
-            {step('Map each one to an SPR Client', 'Enforced server-side: you can only map to a client your own tenant owns.')}
-          </ol>
-        </div>
-
-        <div className="spr-panel p-5 space-y-3">
-          <h4 className="text-[11px] font-bold text-[var(--spr-text)] uppercase tracking-wide">Persistent white-label branding</h4>
-          <ol className="space-y-2.5 list-decimal list-inside leading-relaxed">
-            {step('Open White-label from the left rail', 'Its own page, with a live preview rendered from your real passports.')}
-            {step('Set identity, colours, typography, footer', 'Logo and favicon under 200 KB / 45 KB; every palette token for light and dark mode; font; corner radius; support email and URL.')}
-            {step('Save', 'Owner/Admin only — saved once for the whole tenant and applied to the workspace, PDF report exports, the public passport API (name, colour, product name, support URL), and the verification, password-reset and invitation emails sent to members of this workspace.')}
-          </ol>
-        </div>
-
-        <div className="spr-panel p-5 space-y-3">
-          <h4 className="text-[11px] font-bold text-[var(--spr-text)] uppercase tracking-wide">White-label PDF report export</h4>
-          <ol className="space-y-2.5 list-decimal list-inside leading-relaxed">
-            {step('Reports → "White-label client report"', 'Your saved branding pre-fills automatically; you can still override it just for this export.')}
-            {step('Pick the client and sections, Generate white-label PDF', 'Uses that client’s real, already-loaded inventory and scores — nothing is fabricated for the export.')}
-          </ol>
-        </div>
-
-        <div className="spr-panel p-5 space-y-3">
-          <h4 className="text-[11px] font-bold text-[var(--spr-text)] uppercase tracking-wide">Data Processing Agreement & retention</h4>
-          <ol className="space-y-2.5 list-decimal list-inside leading-relaxed">
-            {step('Read the DPA at /dpa', 'Public, versioned, and hashed: the page shows the SHA-256 of the exact wording.')}
-            {step('Owner executes it under Settings → Configurations', 'The execution record is signed by the server; download the PDF or open the verification link on any copy.')}
-            {step('Set a retention policy in the same panel', 'Until one is saved nothing is purged on a schedule; once saved, the retention worker enforces it.')}
-          </ol>
-        </div>
-
-        <div className="spr-panel p-5 space-y-3">
-          <h4 className="text-[11px] font-bold text-[var(--spr-text)] uppercase tracking-wide">Core evidence workflow</h4>
-          <p className="leading-relaxed"><strong className="text-[var(--spr-text)]">Passports</strong> — browse/search software passports. <strong className="text-[var(--spr-text)]">Evidence Explorer</strong> — underlying evidence records. <strong className="text-[var(--spr-text)]">Trust Graph</strong> — relationships across assets/vendors/evidence. <strong className="text-[var(--spr-text)]">Scans</strong> — SBOM/vulnerability history. <strong className="text-[var(--spr-text)]">Monitoring</strong> — scheduled re-collection status. <strong className="text-[var(--spr-text)]">Alerts</strong> — findings needing attention.</p>
-        </div>
-
-        <div className="spr-panel p-5 space-y-3">
-          <h4 className="text-[11px] font-bold text-[var(--spr-text)] uppercase tracking-wide">Public Passport</h4>
-          <p className="leading-relaxed">Generated from a passport's detail view — a signed public link. It never exposes your authoritative trust score publicly, only observed evidence and a status of AVOID / INVESTIGATE / VERIFIED / UNKNOWN.</p>
-        </div>
-
-        <div className="spr-panel p-5 space-y-3">
-          <h4 className="text-[11px] font-bold text-[var(--spr-text)] uppercase tracking-wide">Team & RBAC</h4>
-          <p className="leading-relaxed">Settings → Team & Profile → invite teammates by email and role (Owner/Admin/Technician/Viewer/Client). Only Owner/Admin can invite, change roles, or remove members.</p>
-        </div>
-
-        <div className="spr-panel p-5 space-y-3">
-          <h4 className="text-[11px] font-bold text-[var(--spr-text)] uppercase tracking-wide">Billing</h4>
-          <p className="leading-relaxed">Real Stripe Checkout for MSP plans, one-time reports and recurring add-ons, with the Stripe billing portal for payment methods, invoices and cancellation. Every price shown is read from the live Stripe price that checkout charges against — a price SPR cannot read is shown as unavailable rather than guessed. Your plan's client limit is enforced server-side when you add a client.</p>
-        </div>
-
-        <div className="spr-panel p-5 space-y-3">
-          <h4 className="text-[11px] font-bold text-[var(--spr-text)] uppercase tracking-wide">Custom domains</h4>
-          <ol className="space-y-2.5 list-decimal list-inside leading-relaxed">
-            {step('White-label → Custom domain → Add hostname', 'Owner only. The hostname is registered with the hosting provider and the DNS records it requires are shown.')}
-            {step('Create the DNS records at your registrar, then click Verify', 'Status becomes Active only when the provider itself reports the domain verified and correctly configured; the time of that answer is shown.')}
-            {step('Sign in on your hostname', 'On activation the hostname is added to the identity provider’s authorized domains. If that step fails the panel says so — pages are served but sign-in is refused until it succeeds.')}
-          </ol>
-        </div>
-      </div>
+      <section className="spr-panel p-5">
+        <div className="flex items-start gap-3"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-[var(--spr-amber)]" /><div><h4 className="font-bold text-[var(--spr-text)]">SPR evidence rule</h4><p className="mt-1 leading-relaxed text-[var(--spr-text-muted)]">This guide can navigate you to a capability and can query the real readiness endpoint, but it does not invent completion. A connection, scan, monitor, domain, payment or control is only complete when its authoritative backend/provider evidence says it is.</p></div></div>
+      </section>
     </div>
   );
 }
+
