@@ -92,6 +92,7 @@ function FounderDashboardContent({ userRole }: FounderDashboardViewProps) {
         </div>
         <p className="mt-3 text-sm text-[var(--spr-text-muted)]">{loadedAt ? `Last data refresh: ${new Date(loadedAt).toLocaleString()}` : 'Waiting for system data'} · Updates while this page is visible.</p>
       </header>
+      {error && <div role="alert" className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 p-4 text-sm text-[var(--spr-red)]">SPR self-scan could not be refreshed: {error}. Open Reports &amp; features to retry.</div>}
       <nav aria-label="Founder dashboard sections" className="flex flex-wrap gap-2">
         {sections.map(([key, label]) => <button key={key} type="button" aria-pressed={area === key} onClick={() => setArea(key)} className={`spr-btn ${area === key ? 'spr-btn-primary' : 'spr-btn-secondary'}`}>{label}</button>)}
       </nav>
@@ -118,7 +119,7 @@ function FounderDashboardContent({ userRole }: FounderDashboardViewProps) {
       </div>
       <div hidden={area !== 'operations'} className="space-y-6">
       <FounderControlPlane />
-    {error && <div className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 p-4 text-sm text-[var(--spr-red)]">{error}</div>}
+
     <FounderAgentsPanel />
     <FounderCommandCenterPanel />
     </div>
