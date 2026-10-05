@@ -9,4 +9,13 @@ describe('security scanner commit resolution contract', () => {
     expect(source).toContain('commitSha = commit.sha;');
     expect(source).not.toContain('commitSha = commitSha;');
   });
+
+  it('persists GitHub-verified commit signatures as VERIFIED provenance without treating the commit SHA as an artifact hash', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/workers/security-scanner-worker.ts'), 'utf8');
+    expect(source).toContain("verification?.verified === true && verification?.reason === 'valid'");
+    expect(source).toContain("'GitHub verified commit signature','Signature',1,'VERIFIED','github.com'");
+    expect(source).toContain("'github-commit-verification-v1'");
+    expect(source).toContain("schemaVersion: 'spr.github-commit-verification.v1'");
+    expect(source).not.toContain("artifactHash: commitSha");
+  });
 });
