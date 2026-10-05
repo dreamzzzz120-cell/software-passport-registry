@@ -90,7 +90,9 @@ describe('navigation and action allowlists on the client', () => {
     await mount(true);
     await openAndSend('show passports');
     await waitFor(() => expect(window.location.pathname).toBe('/passports'));
-    expect(calls[0]).toEqual({ url: '/api/agent/v1/command', body: { input: 'show passports', context: { path: '/dashboard' } } });
+    expect(calls[0].url).toBe('/api/agent/v1/command');
+    expect(calls[0].body).toMatchObject({ input: 'show passports', context: { path: '/dashboard' } });
+    expect((calls[0].body as any).context.history).toEqual(expect.any(Array));
   });
 
   it('ignores a non-allowlisted path even if the server returns one', async () => {
@@ -112,6 +114,162 @@ describe('navigation and action allowlists on the client', () => {
     await openAndSend('verify alpha app');
     await screen.findByText(/not in the agent’s approved action allowlist/);
     expect(calls.map((c) => c.url)).toEqual(['/api/agent/v1/command']);
+  });
+
+  it('never executes a proposed scan until the user explicitly confirms it', async () => {
+    responder = (url) => {
+      if (url === '/api/agent/v1/command') return ok({
+        intent: 'scan_proposal',
+        reply: 'I prepared a scan but have not started it.',
+        proposedAction: {
+          id: 'scan:pass-a:sbom',
+          type: 'scan',
+          endpoint: '/api/scans',
+          method: 'POST',
+          requiresConfirmation: true,
+          description: 'Run an SBOM verification scan for alpha app.',
+          payload: { targetName: 'alpha app', scanType: 'SBOM Verify', clientName: 'Client A' },
+          evidence: { tenantScoped: true, passportId: 'pass-a', clientId: 'client-a' },
+        },
+      });
+      if (url === '/api/agent/v1/receipts/confirmation') return ok({ receiptId: 'agentrcpt_confirm_scan', status: 'CONFIRMED' });
+      if (url === '/api/scans') return ok({ id: 'scan_123', jobId: 'job_123', status: 'Queued' });
+      if (url === '/api/agent/v1/receipts/outcome') return ok({ receiptId: 'agentrcpt_outcome_scan', status: 'EXECUTED' });
+      return ok({});
+    };
+    await mount(true);
+    await openAndSend('scan alpha app');
+    await screen.findByText('Run an SBOM verification scan for alpha app.');
+    expect(calls.map((c) => c.url)).toEqual(['/api/agent/v1/command']);
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm and run' }));
+    await screen.findByText(/Receipt: id scan_123 · job job_123 · status Queued/);
+    expect(calls.map((c) => c.url)).toEqual([
+      '/api/agent/v1/command',
+      '/api/agent/v1/receipts/confirmation',
+      '/api/scans',
+      '/api/agent/v1/receipts/outcome',
+    ]);
+    expect(calls[2].body).toEqual({ targetName: 'alpha app', scanType: 'SBOM Verify', clientName: 'Client A' });
+    expect((calls[3].body as any).parentReceiptId).toBe('agentrcpt_confirm_scan');
+  });
+
+  it('confirms an approved monitoring run only after the user clicks confirm', async () => {
+    responder = (url) => {
+      if (url === '/api/agent/v1/command') return ok({
+        intent: 'monitoring_run_proposal',
+        reply: 'Prepared, not run.',
+        proposedAction: {
+          id: 'monitor:mon-1:run',
+          type: 'monitoring_run',
+          endpoint: '/api/monitoring/monitoring-configurations/mon-1/run',
+          method: 'POST',
+          requiresConfirmation: true,
+          description: 'Run repository monitoring now.',
+          payload: {},
+        },
+      });
+      if (url === '/api/agent/v1/receipts/confirmation') return ok({ receiptId: 'agentrcpt_confirm_monitor', status: 'CONFIRMED' });
+      if (url === '/api/monitoring/monitoring-configurations/mon-1/run') return ok({ jobId: 'collector-job-1', state: 'queued', accepted: true });
+      if (url === '/api/agent/v1/receipts/outcome') return ok({ receiptId: 'agentrcpt_outcome_monitor', status: 'EXECUTED' });
+      return ok({});
+    };
+    await mount(true);
+    await openAndSend('run monitoring alpha app');
+    expect(calls.map((c) => c.url)).toEqual(['/api/agent/v1/command']);
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm and run' }));
+    await screen.findByText(/job collector-job-1 · state queued/);
+    expect(calls.map((c) => c.url)).toEqual([
+      '/api/agent/v1/command',
+      '/api/agent/v1/receipts/confirmation',
+      '/api/monitoring/monitoring-configurations/mon-1/run',
+      '/api/agent/v1/receipts/outcome',
+    ]);
+  });
+
+  it('confirms a report schedule only after showing recipient and cadence', async () => {
+    responder = (url) => {
+      if (url === '/api/agent/v1/command') return ok({
+        intent: 'report_schedule_proposal',
+        reply: 'Prepared, not created.',
+        proposedAction: {
+          id: 'report-schedule:pass-a:weekly',
+          type: 'report_schedule',
+          endpoint: '/api/report-schedules',
+          method: 'POST',
+          requiresConfirmation: true,
+          description: 'Create a weekly executive report schedule for alpha app, delivered to a@example.test.',
+          payload: { passportId: 'pass-a', reportType: 'executive', cadence: 'weekly', recipientEmails: ['a@example.test'] },
+        },
+      });
+      if (url === '/api/agent/v1/receipts/confirmation') return ok({ receiptId: 'agentrcpt_confirm_report', status: 'CONFIRMED' });
+      if (url === '/api/report-schedules') return ok({ id: 'rptsch_1', cadence: 'weekly', nextRunAt: '2026-10-12T00:00:00.000Z' });
+      if (url === '/api/agent/v1/receipts/outcome') return ok({ receiptId: 'agentrcpt_outcome_report', status: 'EXECUTED' });
+      return ok({});
+    };
+    await mount(true);
+    await openAndSend('schedule weekly report for alpha app');
+    await screen.findByText(/delivered to a@example.test/);
+    expect(calls.map((c) => c.url)).toEqual(['/api/agent/v1/command']);
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm and run' }));
+    await screen.findByText(/id rptsch_1 · cadence weekly · next 2026-10-12T00:00:00.000Z/);
+    expect(calls.map((c) => c.url)).toEqual([
+      '/api/agent/v1/command',
+      '/api/agent/v1/receipts/confirmation',
+      '/api/report-schedules',
+      '/api/agent/v1/receipts/outcome',
+    ]);
+  });
+
+  it('confirms founder discovery and pipeline actions through approved endpoints', async () => {
+    let mode: 'discovery' | 'stage' = 'discovery';
+    responder = (url) => {
+      if (url === '/api/agent/v1/command' && mode === 'discovery') return ok({
+        intent: 'founder_discovery_proposal',
+        reply: 'Prepared discovery.',
+        proposedAction: {
+          id: 'founder-discovery:kelowna',
+          type: 'founder_discovery',
+          endpoint: '/api/founder/distribution/discovery/run',
+          method: 'POST',
+          requiresConfirmation: true,
+          description: 'Discover MSP candidates for Kelowna.',
+          payload: { query: 'Kelowna', limit: 25 },
+        },
+      });
+      if (url === '/api/agent/v1/receipts/confirmation') return ok({ receiptId: mode === 'discovery' ? 'agentrcpt_confirm_discovery' : 'agentrcpt_confirm_stage', status: 'CONFIRMED' });
+      if (url === '/api/founder/distribution/discovery/run') return ok({ status: 'queued', provider: 'search', discovered: 5, queued: 5 });
+      if (url === '/api/agent/v1/command' && mode === 'stage') return ok({
+        intent: 'founder_pipeline_stage_proposal',
+        reply: 'Prepared stage update.',
+        proposedAction: {
+          id: 'founder-stage:dc_1:qualified',
+          type: 'founder_pipeline_stage',
+          endpoint: '/api/founder/distribution/contacts/dc_1/stage',
+          method: 'PATCH',
+          requiresConfirmation: true,
+          description: 'Move contact dc_1 to the qualified pipeline stage.',
+          payload: { stage: 'qualified' },
+        },
+      });
+      if (url === '/api/founder/distribution/contacts/dc_1/stage') return ok({ id: 'dc_1', pipelineStage: 'qualified' });
+      if (url === '/api/agent/v1/receipts/outcome') return ok({ receiptId: mode === 'discovery' ? 'agentrcpt_outcome_discovery' : 'agentrcpt_outcome_stage', status: 'EXECUTED' });
+      return ok({});
+    };
+
+    await mount(true);
+    await openAndSend('find MSPs in Kelowna');
+    expect(calls.map((c) => c.url)).toEqual(['/api/agent/v1/command']);
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm and run' }));
+    await waitFor(() => expect(calls.map((c) => c.url)).toContain('/api/founder/distribution/discovery/run'));
+
+    mode = 'stage';
+    await openAndSend('move contact dc_1 to qualified');
+    await screen.findByText('Prepared stage update.');
+    const stageButtons = screen.getAllByRole('button', { name: 'Confirm and run' });
+    fireEvent.click(stageButtons[stageButtons.length - 1]);
+    await waitFor(() => expect(calls.map((c) => c.url)).toContain('/api/founder/distribution/contacts/dc_1/stage'));
+    const stageActionCall = calls.find((call) => call.url === '/api/founder/distribution/contacts/dc_1/stage');
+    expect(stageActionCall?.body).toEqual({ stage: 'qualified' });
   });
 
   it('action buttons returned by the server only navigate within the allowlist', async () => {
