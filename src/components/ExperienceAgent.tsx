@@ -63,6 +63,7 @@ export default function ExperienceAgent() {
   const handsFreeRef = useRef(false);
   const launcherRef = useRef<HTMLButtonElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const wasOpenRef = useRef(false);
   const [messages, setMessages] = useState<Message[]>([STARTER_MESSAGE]);
   const [lastCommand, setLastCommand] = useState('');
   const [copied, setCopied] = useState(false);
@@ -126,9 +127,11 @@ export default function ExperienceAgent() {
     if (!open) {
       recognitionRef.current?.abort();
       window.speechSynthesis?.cancel();
-      window.setTimeout(() => launcherRef.current?.focus(), 0);
+      if (wasOpenRef.current) window.setTimeout(() => launcherRef.current?.focus(), 0);
+      wasOpenRef.current = false;
       return;
     }
+    wasOpenRef.current = true;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     window.setTimeout(() => inputRef.current?.focus(), 0);
@@ -137,7 +140,7 @@ export default function ExperienceAgent() {
 
   useEffect(() => {
     if (!open) return;
-    messagesEndRef.current?.scrollIntoView({ block: 'end' });
+    messagesEndRef.current?.scrollIntoView?.({ block: 'end' });
   }, [messages, busy, open]);
 
   if (!signedIn) return null;
