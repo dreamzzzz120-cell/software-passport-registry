@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Database, ExternalLink, RefreshCw } from 'lucide-react';
+import { Database, ExternalLink, RefreshCw, ScanSearch } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
 
 type RegistryItem = {
@@ -25,9 +25,12 @@ type RegistryResponse = {
   };
 };
 
-export default function PublicRegistryView() {
+export default function PublicRegistryView({ role = 'Viewer', onInvestigationStarted }: { role?: string; onInvestigationStarted?: (passportId: string) => void }) {
   const [data, setData] = useState<RegistryResponse | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [startingId, setStartingId] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState('');
+  const canInvestigate = ['Owner', 'Admin', 'Operator'].includes(role);
 
   const load = async () => {
     setState('loading');
@@ -43,6 +46,31 @@ export default function PublicRegistryView() {
   };
 
   useEffect(() => { void load(); }, []);
+
+  const investigate = async (item: RegistryItem) => {
+    if (!canInvestigate || startingId) return;
+    setStartingId(item.id);
+    setActionMessage('');
+    try {
+      const response = await apiFetch('/api/scans/submit', {
+        method: 'POST',
+        body: JSON.stringify({
+          source: 'github',
+          owner: item.repository_owner,
+          repository: item.repository_name,
+          name: `${item.repository_owner}/${item.repository_name}`,
+        }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload?.passportId) throw new Error(payload?.error || 'SPR could not start this repository investigation.');
+      setActionMessage(payload.existing ? 'Existing active investigation opened.' : 'Repository investigation queued. Opening its Launch Ticket…');
+      onInvestigationStarted?.(String(payload.passportId));
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : 'SPR could not start this repository investigation.');
+    } finally {
+      setStartingId(null);
+    }
+  };
 
   const languages = useMemo(() => {
     const counts = new Map<string, number>();
@@ -66,9 +94,12 @@ export default function PublicRegistryView() {
               Public repositories SPR has observed from GitHub. Discovery is not verification. Missing evidence remains UNKNOWN until SPR runs evidence collection and verification.
             </p>
           </div>
-          <button type="button" onClick={() => void load()} className="inline-flex items-center gap-2 rounded-md border border-[var(--spr-border)] px-3 py-2 text-sm text-[var(--spr-text)] hover:bg-[var(--spr-surface-raised)]">
-            <RefreshCw className="h-4 w-4" /> Refresh
-          </button>
+          <div className="text-right">
+            <button type="button" onClick={() => void load()} className="inline-flex items-center gap-2 rounded-md border border-[var(--spr-border)] px-3 py-2 text-sm text-[var(--spr-text)] hover:bg-[var(--spr-surface-raised)]">
+              <RefreshCw className="h-4 w-4" /> Refresh
+            </button>
+            {!canInvestigate && <p className="mt-2 text-[11px] text-[var(--spr-text-faint)]">Viewer/Client roles can browse discovery records but cannot start investigations.</p>}
+          </div>
         </div>
 
         {data && (
@@ -82,6 +113,8 @@ export default function PublicRegistryView() {
       {state === 'loading' && <div className="rounded-lg border border-[var(--spr-border)] bg-[var(--spr-surface)] p-6 text-sm text-[var(--spr-text-muted)]">Loading public registry…</div>}
       {state === 'error' && <div role="alert" className="rounded-lg border border-[var(--spr-red)]/40 bg-[var(--spr-surface)] p-6 text-sm text-[var(--spr-red)]">Public registry could not be loaded.</div>}
 
+      {actionMessage && <div role="status" className="rounded-lg border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3 text-sm text-[var(--spr-text-muted)]">{actionMessage}</div>}
+
       {state === 'ready' && data && (
         <div className="overflow-x-auto rounded-lg border border-[var(--spr-border)] bg-[var(--spr-surface)]">
           <table className="w-full min-w-[780px] text-sm">
@@ -93,6 +126,7 @@ export default function PublicRegistryView() {
                 <th className="px-4 py-3">License</th>
                 <th className="px-4 py-3">Evidence state</th>
                 <th className="px-4 py-3">Last observed</th>
+                <th className="px-4 py-3">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -113,6 +147,17 @@ export default function PublicRegistryView() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-[var(--spr-text-muted)]">{new Date(item.last_observed_at).toLocaleString()}</td>
+                  <td className="px-4 py-3">
+                    <button
+                      type="button"
+                      disabled={!canInvestigate || Boolean(startingId)}
+                      onClick={() => void investigate(item)}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-[var(--spr-border)] px-2.5 py-1.5 text-xs font-semibold text-[var(--spr-text)] hover:bg-[var(--spr-surface-raised)] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <ScanSearch className="h-3.5 w-3.5" />
+                      {startingId === item.id ? 'Starting…' : 'Investigate → Launch Ticket'}
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
