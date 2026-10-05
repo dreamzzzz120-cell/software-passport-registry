@@ -35,6 +35,15 @@ describe('homepage presents the product without evaluating anything', () => {
     expect(home).toContain('does not invent');
   });
 
+  it('describes the no-account result, optional PDF gate, and investigation trail truthfully', () => {
+    expect(home).toContain('see the evidence summary with no account');
+    expect(home).toContain('PDF download is optional and contact-gated');
+    expect(home).toContain('where the signal came from, how it was observed, when it was observed');
+    expect(home).toContain('Unsupported detail stays UNKNOWN');
+    expect(home).not.toContain('get a PDF report. No account needed');
+    expect(home).not.toContain('You keep the PDF either way');
+  });
+
   it('declares limited early access rather than production readiness', () => {
     expect(home).toContain('Limited early access');
     for (const claim of ['Production Ready', 'Certified', 'Guaranteed', 'SOC 2', 'ISO 27001']) {

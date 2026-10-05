@@ -703,6 +703,35 @@ export default function FreeReviewView({
                     </div>
                   </section>
 
+                  <section id="investigation-context" className="rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6">
+                    <div className="text-[11px] font-semibold uppercase tracking-[.18em]">Investigation context</div>
+                    <p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">
+                      SPR separates what can be shown now from what remains locked or UNKNOWN. The full Launch Ticket carries the evidence trail behind the decision.
+                    </p>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      <div className="rounded-xl border border-[var(--spr-border)] p-4">
+                        <div className="text-xs font-semibold text-[var(--spr-highlight)]">Where</div>
+                        <div className="mt-2 text-sm font-semibold">{reviewedName}</div>
+                        <div className="mt-1 text-[10px] text-[var(--spr-text-faint)]">Repository and finding categories observed in this review.</div>
+                      </div>
+                      <div className="rounded-xl border border-[var(--spr-border)] p-4">
+                        <div className="text-xs font-semibold text-[var(--spr-highlight)]">How</div>
+                        <div className="mt-2 text-sm font-semibold">{result.verifiedCapabilities?.length ? result.verifiedCapabilities.join(', ') : 'UNKNOWN'}</div>
+                        <div className="mt-1 text-[10px] text-[var(--spr-text-faint)]">Only completed evidence-producing capabilities are named.</div>
+                      </div>
+                      <div className="rounded-xl border border-[var(--spr-border)] p-4">
+                        <div className="text-xs font-semibold text-[var(--spr-highlight)]">When</div>
+                        <div className="mt-2 text-sm font-semibold">{result.passport?.version && /^[a-f0-9]{40}$/i.test(result.passport.version) ? 'Pinned to observed commit' : 'UNKNOWN'}</div>
+                        <div className="mt-1 text-[10px] text-[var(--spr-text-faint)]">Exact evidence timestamps are not exposed in this aggregate preview unless supplied by the result.</div>
+                      </div>
+                      <div className="rounded-xl border border-[var(--spr-border)] p-4">
+                        <div className="text-xs font-semibold text-[var(--spr-highlight)]">Why</div>
+                        <div className="mt-2 text-sm font-semibold">{result.findings?.elevated ? 'Elevated evidence requires investigation' : result.findings?.total ? 'Observed findings require review' : 'No elevated reason exposed'}</div>
+                        <div className="mt-1 text-[10px] text-[var(--spr-text-faint)]">Detailed finding basis and remediation stay in the full Launch Ticket.</div>
+                      </div>
+                    </div>
+                  </section>
+
                   <section id="findings-summary" className="rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6">
                     <div className="text-[11px] font-semibold uppercase tracking-[.18em]">Findings summary</div>
                     <div className="mt-4 grid gap-3 sm:grid-cols-3">

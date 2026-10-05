@@ -81,6 +81,14 @@ describe('SPR MSP pricing — packaging separated from live billing', () => {
     expect(s).not.toContain(code`stripe.checkout.sessions.create`);
   });
 
+  it('uses Launch Ticket naming and evidence-first investigation language', () => {
+    const s = source();
+    expect(s).toContain('Launch Tickets and evidence');
+    expect(s).toContain('Evidence-based assessment with explicit UNKNOWNs and investigation context');
+    expect(s).toContain('Investigate where, how, when and why');
+    expect(s).not.toContain('BUY / INVESTIGATE / AVOID');
+  });
+
   it('routes both authenticated and unauthenticated /pricing to the same real MSP pricing view', () => {
     const app = readCode('src/App.tsx');
     expect(app).toContain(code`if (!user && path === '/pricing') return <MspPricingView isAuthenticated={false}`);

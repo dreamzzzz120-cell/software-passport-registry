@@ -23,14 +23,14 @@ const BUYER_QUESTIONS = [
 const STEPS = [
   { n: '1', title: 'Paste a GitHub repository', body: 'Any public repo one of your clients depends on. No account, no install.' },
   { n: '2', title: 'SPR builds the evidence record', body: 'Resolves exact package versions where evidence permits, preserves declared dependency ranges when it does not, and checks only resolved components against OSV.' },
-  { n: '3', title: 'Download the PDF', body: 'A report you can put in front of a client: components, known vulnerabilities, and what could not be verified.' },
+  { n: '3', title: 'Investigate the evidence', body: 'See the result with no account, then follow the evidence trail: where the signal came from, how it was observed, when it was observed where timestamps exist, and why it matters. Unsupported detail stays UNKNOWN.' },
 ];
 
 const REPORT_CONTENTS = [
   'Resolved SBOM components plus declared-but-unresolved dependencies, clearly separated',
   'Known vulnerabilities matched from OSV, with severity',
   'Evidence status for each finding: verified, observed or UNKNOWN',
-  'Timestamp and source for everything in the report',
+  'Where, how, when and why for each claim where the supporting evidence contains those facts',
 ];
 
 const PAID_ADDS = [
@@ -71,7 +71,7 @@ export default function HomePage({ onCreatePassport, onExploreTrustNetwork }: Pr
         </p>
         <div className="mt-9 flex flex-col items-center gap-3">
           <PrimaryCta onClick={onExploreTrustNetwork} className="px-8 py-3.5 text-base" />
-          <p className="text-xs text-[var(--spr-text-muted)]">Free. Paste a GitHub repo, get a PDF report. No account needed.</p>
+          <p className="text-xs text-[var(--spr-text-muted)]">Free. Paste a public GitHub repo and see the evidence summary with no account. PDF download is optional and contact-gated.</p>
         </div>
       </section>
 
@@ -155,7 +155,7 @@ export default function HomePage({ onCreatePassport, onExploreTrustNetwork }: Pr
 
       <section className="border-t border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-6 py-16 text-center">
         <h2 className="text-2xl font-semibold">Try it on one of your clients’ apps.</h2>
-        <p className="mt-2 text-sm text-[var(--spr-text-muted)]">Takes a couple of minutes. You keep the PDF either way.</p>
+        <p className="mt-2 text-sm text-[var(--spr-text-muted)]">See the evidence summary without an account. Downloading the optional PDF requires contact details and consent.</p>
         <PrimaryCta onClick={onExploreTrustNetwork} className="mt-6" />
         <div className="mx-auto max-w-5xl">
           <LegalFooterLinks className="mt-8" />
