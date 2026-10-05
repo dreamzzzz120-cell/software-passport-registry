@@ -63,3 +63,14 @@ describe('processRepositoryJob reports its progress instead of going silent on a
     expect(stageLine![0]).toContain('tenantId: job.tenant_id');
   });
 });
+
+
+describe('exhausted stale scan leases', () => {
+  it('terminalizes expired running repository jobs and settles their scan ledger', () => {
+    expect(worker).toContain("SCAN_WORKER_LEASE_EXHAUSTED");
+    expect(worker).toContain("attempt_count >= max_attempts");
+    expect(worker).toContain("status='Failed'");
+    expect(worker).toContain("scan_run_settled_after_lease_exhaustion");
+    expect(worker).toContain("await recoverExhaustedStaleJobs(pool)");
+  });
+});
