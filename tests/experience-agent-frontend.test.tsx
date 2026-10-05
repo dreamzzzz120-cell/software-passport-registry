@@ -133,7 +133,7 @@ describe('mounting and authentication gate', () => {
 });
 
 async function openAndSend(text: string) {
-  keyK({ ctrlKey: true });
+  if (!screen.queryByRole('dialog')) keyK({ ctrlKey: true });
   await screen.findByRole('dialog');
   fireEvent.change(screen.getByLabelText('Ask SPR Agent'), { target: { value: text } });
   fireEvent.click(screen.getByRole('button', { name: 'Send' }));
