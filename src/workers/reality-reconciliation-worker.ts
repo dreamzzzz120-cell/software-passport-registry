@@ -4,6 +4,15 @@ import { createWorkerPool } from './worker-db.ts';
 
 type State = 'HEALTHY' | 'DEGRADING' | 'FAILED' | 'UNKNOWN';
 type Severity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+type Transition = 'NONE' | 'OPENED' | 'UPDATED' | 'PROVEN_FIXED';
+type ObservationResult = {
+  contractId: string;
+  state: State;
+  transition: Transition;
+  observationId: string | null;
+  incidentId: string | null;
+  receiptId?: string;
+};
 
 type ProbeResult = {
   state: State;
@@ -26,8 +35,8 @@ async function contract(pool: Pool, contractId: string) {
     | undefined;
 }
 
-async function observe(pool: Pool, contractId: string, result: ProbeResult) {
-  let transition: 'NONE' | 'OPENED' | 'UPDATED' | 'PROVEN_FIXED' = 'NONE';
+async function observe(pool: Pool, contractId: string, result: ProbeResult): Promise<ObservationResult> {
+  let transition: Transition = 'NONE';
   const c = await contract(pool, contractId);
   if (!c) return { contractId, state: result.state, transition: 'NONE' as const, observationId: null, incidentId: null };
 
@@ -240,7 +249,7 @@ export async function runRealityReconciliationCycle(pool: Pool) {
   ];
   const cycleId = id('cycle');
   const startedAt = Date.now();
-  const results = [];
+  const results: ObservationResult[] = [];
   for (const [contractId, probe] of probes) {
     results.push(await observe(pool, contractId, await probe(pool)));
   }
