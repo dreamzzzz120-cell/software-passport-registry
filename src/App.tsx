@@ -564,7 +564,7 @@ export default function App() {
     case '/vendor-evidence-exchange': view = <VendorEvidenceExchangeView vendors={vendors} role={role} onNavigate={navigate} />; break;
     case '/assets': view = <AssetsView clients={clients} searchQuery="" assets={assets} />; break;
     case '/passports': view = <PassportsView verificationDecisions={verificationDecisions} verificationDetails={verificationDetails} passports={passports} selectedPassportId={selectedPassportId} setSelectedPassportId={setSelectedPassportId} searchQuery="" clients={clients} assets={assets} role={role} onNavigateTab={onNavigateTab} onUpdatePassport={(passport) => setPassports((current) => current.map((item) => item.id === passport.id ? passport : item))} onReload={() => setReloadKey((n) => n + 1)} />; break;
-    case '/registry': view = <PublicRegistryView />; break;
+    case '/registry': view = <PublicRegistryView role={role} onInvestigationStarted={(passportId) => { setSelectedPassportId(passportId); setReloadKey((n) => n + 1); navigate('/passports'); }} />; break;
     case '/scans': view = <ScansView scans={scans} clients={clients} assets={assets} passports={passports} role={role} onTriggerNewScan={(scan) => setScans((current) => [scan, ...current.filter((item) => item.id !== scan.id)].slice(0, 100))} />; break;
     case '/alerts': view = <AlertsView alerts={alerts} onAlertAction={performAlertAction} role={role} />; break;
     case '/reports': view = <ReportsView clients={clients} passports={passports} scans={scans} alerts={alerts} findings={findings} role={role} />; break;
