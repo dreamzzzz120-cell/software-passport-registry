@@ -81,12 +81,25 @@ describe('licensing score', () => {
     const result = scoreLicensing({ ...base, sbomComponentCount: 491, licenceUnevaluatedComponentCount: 19, findings: [finding('medium', 'License')] });
     expect(result).toMatchObject({ status: 'scored', score: 100 });
     expect(result.status === 'scored' && result.facts).toMatchObject({ components: 472, withLicence: 471, withoutLicence: 1, unevaluated: 19 });
-    expect(result.status === 'scored' && result.detail).toBe('471 of 472 package components carry an observed licence. 19 CI workflow action references not evaluated.');
+    expect(result.status === 'scored' && result.detail).toBe('471 of 472 package components carry an observed licence. 19 components outside the licence scanner scope not evaluated (CI action references, file records, or dependencies without a resolved version).');
   });
 
   it('is not observed, not 100, when every component is an unevaluated action reference', () => {
     const result = scoreLicensing({ ...base, sbomComponentCount: 3, licenceUnevaluatedComponentCount: 3, findings: [] });
     expect(result.status).toBe('not_observed');
+  });
+
+  it('does not mislabel unresolved npm dependencies as CI action references', () => {
+    // Production Express review: 58 observed components, none eligible for
+    // versioned-package licence evaluation. The count cannot identify their kind.
+    const result = scoreLicensing({ ...base, sbomComponentCount: 58, licenceUnevaluatedComponentCount: 58, findings: [] });
+    expect(result.status).toBe('not_observed');
+    expect(result).not.toHaveProperty('score');
+    if (result.status === 'not_observed') {
+      expect(result.reason).toContain('without a resolved version');
+      expect(result.reason).toContain('UNKNOWN');
+      expect(result.reason).not.toContain('Every SBOM component is a CI');
+    }
   });
 
   it('is 100 when every component declares a licence', () => {

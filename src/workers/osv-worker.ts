@@ -943,10 +943,14 @@ export async function runWorkerOnce(pool: Pool) {
 
 export async function runWorkerLoop() {
   const pool = createWorkerPool();
-  await pool.query('SELECT 1');
   let stopping = false; const stop = () => { stopping = true; };
   process.once('SIGINT',stop); process.once('SIGTERM',stop);
   console.log(JSON.stringify({event:'worker_started',workerId:WORKER_ID}));
-  try { while (!stopping) { const processed = await runWorkerOnce(pool); if (!processed) await new Promise(resolve => setTimeout(resolve,2_000)); } }
-  finally { await pool.end(); console.log(JSON.stringify({event:'worker_stopped',workerId:WORKER_ID})); }
+  try { await pool.query('SELECT 1'); while (!stopping) { const processed = await runWorkerOnce(pool); if (!processed) await new Promise(resolve => setTimeout(resolve,2_000)); } }
+  finally {
+    process.removeListener('SIGINT', stop);
+    process.removeListener('SIGTERM', stop);
+    await pool.end();
+    console.log(JSON.stringify({event:'worker_stopped',workerId:WORKER_ID}));
+  }
 }

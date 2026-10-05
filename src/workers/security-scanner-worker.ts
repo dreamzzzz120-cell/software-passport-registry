@@ -307,11 +307,14 @@ export async function runSecurityScannerOnce(pool: Pool) {
 
 export async function runSecurityScannerLoop() {
   const pool = createWorkerPool();
-  await assertWorkerDatabase(pool);
   let stopping = false;
   const stop = () => { stopping = true; };
   process.once('SIGINT', stop); process.once('SIGTERM', stop);
   console.log(JSON.stringify({ event: 'security_scanner_started', workerId: WORKER_ID, leaseMs: JOB_LEASE_MS }));
-  try { while (!stopping) { await recoverStaleJobs(pool); const processed = await runSecurityScannerOnce(pool); if (!processed) await new Promise(resolve => setTimeout(resolve, 2000)); } }
-  finally { await pool.end(); }
+  try { await assertWorkerDatabase(pool); while (!stopping) { await recoverStaleJobs(pool); const processed = await runSecurityScannerOnce(pool); if (!processed) await new Promise(resolve => setTimeout(resolve, 2000)); } }
+  finally {
+    process.removeListener('SIGINT', stop);
+    process.removeListener('SIGTERM', stop);
+    await pool.end();
+  }
 }

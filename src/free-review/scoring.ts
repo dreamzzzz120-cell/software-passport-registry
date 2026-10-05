@@ -64,7 +64,7 @@ export interface ScoringInput {
   sbomComponentCount: number | null;
   /**
    * SBOM components the licence scanner does not evaluate (CI workflow action
-   * references, which carry no licence metadata). Subtracted from the licence
+   * references, file records, and dependencies without a resolved version). Subtracted from the licence
    * denominator so the ratio is over components that were actually assessed,
    * and named in the detail so nobody reads the ratio as covering them.
    */
@@ -152,12 +152,12 @@ export function scoreLicensing(input: ScoringInput): CategoryResult {
   const unevaluated = Math.min(sbomTotal, Math.max(0, Math.floor(input.licenceUnevaluatedComponentCount ?? 0)));
   const total = sbomTotal - unevaluated;
   if (total <= 0) {
-    return { status: 'not_observed', reason: 'Every SBOM component is a CI workflow action reference, which carries no licence metadata, so licence coverage could not be measured.' };
+    return { status: 'not_observed', reason: 'No SBOM components were eligible for licence evaluation. CI action references, file records, and dependencies without a resolved version are excluded; their licence status remains UNKNOWN.' };
   }
   const withoutLicence = Math.min(total, openFindings(input.findings).filter(isLicenceFinding).length);
   const withLicence = total - withoutLicence;
   const percent = Math.round((withLicence / total) * 100);
-  const scopeNote = unevaluated > 0 ? ` ${unevaluated} CI workflow action reference${unevaluated === 1 ? '' : 's'} not evaluated.` : '';
+  const scopeNote = unevaluated > 0 ? ` ${unevaluated} component${unevaluated === 1 ? '' : 's'} outside the licence scanner scope not evaluated (CI action references, file records, or dependencies without a resolved version).` : '';
   return {
     status: 'scored',
     score: clampScore(percent),
