@@ -84,6 +84,17 @@ async function bootstrapRepositoryMonitoring(p:Pool){
   return {eligible:Number(eligible.rows[0]?.count||0),created:result.rowCount ?? 0};
 }
 
+
+async function githubRepositoryIsPublic(repository:string){
+  if(!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository))return false;
+  try{
+    const response=await fetch(`https://api.github.com/repos/${repository}`,{
+      headers:{accept:'application/vnd.github+json','x-github-api-version':'2026-03-10'}
+    });
+    return response.status===200;
+  }catch{return false;}
+}
+
 async function tenantGithubCredentials(p:Pool,tenantId:string){
   const row=await p.query(`SELECT encrypted_payload FROM integration_credentials WHERE tenant_id=$1 AND provider='github' LIMIT 1`,[tenantId]);
   if(!row.rows[0]?.encrypted_payload)return null;
@@ -112,9 +123,15 @@ async function scheduleDue(p:Pool){
           credential=await tenantGithubCredentials(p,cfg.tenant_id);
         }
         if(!credential?.accessToken && !credential?.token){
-          await p.query(`UPDATE monitoring_configurations SET enabled=0,updated_at=$2,last_status='disabled_missing_credential' WHERE id=$1 AND tenant_id=$3`,[cfg.id,now,cfg.tenant_id]);
-          console.warn(`[TrustMonitoring] disabled monitoring configuration ${cfg.id}: no tenant GitHub credential available`);
-          continue;
+          const publicRepository = cfg.subject_type==='github_repository'
+            ? await githubRepositoryIsPublic(cfg.subject_identifier)
+            : false;
+          if(!publicRepository){
+            await p.query(`UPDATE monitoring_configurations SET enabled=0,updated_at=$2,last_status='disabled_missing_credential' WHERE id=$1 AND tenant_id=$3`,[cfg.id,now,cfg.tenant_id]);
+            console.warn(`[TrustMonitoring] disabled monitoring configuration ${cfg.id}: no tenant GitHub credential available`);
+            continue;
+          }
+          console.info(`[TrustMonitoring] allowing credential-free public repository monitoring for configuration ${cfg.id}`);
         }
       }catch(error:any){
         await p.query(`UPDATE monitoring_configurations SET enabled=0,updated_at=$2,last_status='disabled_invalid_credential' WHERE id=$1 AND tenant_id=$3`,[cfg.id,now,cfg.tenant_id]);
@@ -134,7 +151,7 @@ async function scheduleDue(p:Pool){
 async function claim(p:Pool){const c=await p.connect();try{await c.query('BEGIN');const r=await c.query(`WITH candidate AS (SELECT id FROM collector_jobs WHERE state IN ('queued','failed') AND next_attempt_at::timestamptz <= CURRENT_TIMESTAMP AND attempt_number < maximum_attempts ORDER BY created_at::timestamptz FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE collector_jobs j SET state='running',lease_owner=$1,lease_expires_at=(CURRENT_TIMESTAMP+INTERVAL '5 minutes')::text,heartbeat_at=CURRENT_TIMESTAMP::text,started_at=COALESCE(started_at,CURRENT_TIMESTAMP::text),attempt_number=attempt_number+1 FROM candidate WHERE j.id=candidate.id RETURNING j.*`,[process.pid.toString()]);await c.query('COMMIT');return r.rows[0]||null;}catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}}
 async function credentials(p:Pool,job:any){if(!job.monitoring_configuration_id)return{};const r=await p.query(`SELECT credential_reference_id FROM monitoring_configurations WHERE id=$1 AND tenant_id=$2 LIMIT 1`,[job.monitoring_configuration_id,job.tenant_id]);const ref=r.rows[0]?.credential_reference_id;if(!ref){if(['repository','dependency','release'].includes(job.collector_id))return(await tenantGithubCredentials(p,job.tenant_id))??{};return{};}const x=await p.query(`SELECT encrypted_payload FROM credential_references WHERE id=$1 AND tenant_id=$2 AND state='active' LIMIT 1`,[ref,job.tenant_id]);if(!x.rows[0])throw new Error('CREDENTIAL_REFERENCE_NOT_FOUND');await p.query(`UPDATE credential_references SET last_used_at=CURRENT_TIMESTAMP::text WHERE id=$1 AND tenant_id=$2`,[ref,job.tenant_id]);return decryptCredentials(x.rows[0].encrypted_payload) as Record<string,string>;}
 async function networkObservation(job:any):Promise<ControlObservation>{const url=job.subject_identifier;try{const r=await safeNetworkFetch(url,{timeoutMs:15000,maxBytes:1048576,maxRedirects:3});return{provider:'network',controlId:job.collector_id,title:`${job.collector_id} endpoint observation`,severity:'medium',subject:url,sourceUrl:r.finalUrl,observedAt:new Date().toISOString(),verificationMethod:`SPR ${job.collector_id} collector`,value:{status:r.response.status,contentType:r.response.headers.get('content-type')||null},status:r.response.ok?'PASS':'FAIL'};}catch(e:any){return{provider:'network',controlId:job.collector_id,title:`${job.collector_id} endpoint observation`,severity:'medium',subject:url,sourceUrl:url,observedAt:new Date().toISOString(),verificationMethod:`SPR ${job.collector_id} collector`,value:{error:e?.message||'NETWORK_COLLECTION_FAILED'},status:'UNKNOWN',limitation:'Network collection failed; SPR does not infer a pass or failure.'};}}
-async function execute(p:Pool,job:any){const c=await credentials(p,job);if(PROVIDERS.has(job.collector_id))return job.collector_id==='github'?collectGitHubDeepEvidence(c):collectDeepProviderEvidence(job.collector_id,c);if(['tls','domain_dns','uptime'].includes(job.collector_id))return[await networkObservation(job)];if(job.collector_id==='repository'||job.collector_id==='dependency'||job.collector_id==='release'){const token=c.accessToken||c.token;if(!token)throw new Error('CREDENTIAL_MISSING_ACCESS_TOKEN');const repo=job.subject_identifier;const api=`https://api.github.com/repos/${repo}`;const h={accept:'application/vnd.github+json',authorization:`Bearer ${token}`,'x-github-api-version':'2026-03-10'};const r=await fetch(api,{headers:h});if(!r.ok)throw new Error(`GITHUB_HTTP_${r.status}`);const body=await r.json();return[{provider:'github',controlId:job.collector_id,title:`GitHub ${job.collector_id} observation`,severity:'medium',subject:repo,sourceUrl:api,observedAt:new Date().toISOString(),verificationMethod:`GitHub REST ${job.collector_id} collector`,value:body,status:'PASS'} as ControlObservation];}throw new Error('COLLECTOR_UNSUPPORTED');}
+async function execute(p:Pool,job:any){const c=await credentials(p,job);if(PROVIDERS.has(job.collector_id))return job.collector_id==='github'?collectGitHubDeepEvidence(c):collectDeepProviderEvidence(job.collector_id,c);if(['tls','domain_dns','uptime'].includes(job.collector_id))return[await networkObservation(job)];if(job.collector_id==='repository'||job.collector_id==='dependency'||job.collector_id==='release'){const token=c.accessToken||c.token;const repo=job.subject_identifier;const api=`https://api.github.com/repos/${repo}`;const h:Record<string,string>={accept:'application/vnd.github+json','x-github-api-version':'2026-03-10'};if(token)h.authorization=`Bearer ${token}`;const r=await fetch(api,{headers:h});if(!r.ok)throw new Error(`GITHUB_HTTP_${r.status}`);const body=await r.json();return[{provider:'github',controlId:job.collector_id,title:`GitHub ${job.collector_id} observation`,severity:'medium',subject:repo,sourceUrl:api,observedAt:new Date().toISOString(),verificationMethod:`GitHub REST ${job.collector_id} collector`,value:body,status:'PASS'} as ControlObservation];}throw new Error('COLLECTOR_UNSUPPORTED');}
 // A collector job queued by POST /api/remediation-tasks/:id/verify carries no
 // marker of its own -- it is discovered here purely by matching
 // trust_remediation_work_items.verification_job_id back to this job.id, so a
