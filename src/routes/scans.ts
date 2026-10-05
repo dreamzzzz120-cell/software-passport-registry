@@ -98,6 +98,24 @@ export function createScansRouter() {
       } else {
         const session = (await db.execute(sql`SELECT id, tenant_id AS "tenantId", status FROM intake_sessions WHERE id=${input.sessionId} LIMIT 1`)).rows?.[0] as any;
         if (!session || session.tenantId !== req.user!.tenantId || session.status !== 'CLAIMED') return res.status(409).json({ error: 'Intake session must be claimed by this workspace before scanning.' });
+
+        // Retrying the UI handoff must not create duplicate Launch Tickets,
+        // scan rows, or worker jobs for the same claimed intake session.
+        const existing = (await db.execute(sql`SELECT id AS "scanId", intake_job_id AS "intakeJobId", passport_id AS "passportId", status
+          FROM scans
+          WHERE tenant_id=${req.user!.tenantId} AND intake_session_id=${input.sessionId}
+          ORDER BY created_at DESC
+          LIMIT 1`)).rows?.[0] as any;
+        if (existing?.scanId && existing?.intakeJobId && existing?.passportId) {
+          return res.status(existing.status === 'Completed' ? 200 : 202).json({
+            scanId: existing.scanId,
+            intakeJobId: existing.intakeJobId,
+            passportId: existing.passportId,
+            status: existing.status || 'Pending',
+            existing: true,
+          });
+        }
+
         const first = (await db.execute(sql`SELECT name FROM intake_items WHERE session_id=${input.sessionId} AND tenant_id=${req.user!.tenantId} AND status='QUEUED' ORDER BY created_at ASC LIMIT 1`)).rows?.[0] as any;
         const count = Number(((await db.execute(sql`SELECT COUNT(*)::int AS count FROM intake_items WHERE session_id=${input.sessionId} AND tenant_id=${req.user!.tenantId} AND status='QUEUED'`)).rows?.[0] as any)?.count || 0);
         if (!first || count < 1) return res.status(409).json({ error: 'Claimed intake contains no verified files ready to scan.' });
