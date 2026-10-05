@@ -72,11 +72,7 @@ function planPaymentLink(plan: PlanId): string | undefined {
   return undefined;
 }
 
-const VERIFIED_PAYMENT_LINK_PRICES: Partial<Record<PlanId, ResolvedPrice>> = {
-  starter: { priceLabel: '$149/month', unitAmount: 14900, currency: 'usd', interval: 'month', description: 'Software Passport Registry MSP Starter' },
-  professional: { priceLabel: '$399/month', unitAmount: 39900, currency: 'usd', interval: 'month', description: 'Software Passport Registry MSP Professional' },
-  growth: { priceLabel: '$799/month', unitAmount: 79900, currency: 'usd', interval: 'month', description: 'Software Passport Registry MSP Business' },
-};
+
 
 function oneTimePriceId(product: OneTimeProductId): string | undefined {
   return config.stripe.prices[ONE_TIME_CONFIG[product].priceKey as keyof typeof config.stripe.prices];
@@ -193,10 +189,10 @@ export async function buildCatalog() {
   const hasPaymentLinkCheckout = PLAN_IDS.some((id) => Boolean(planPaymentLink(id)));
   return {
     billingConfigured: Boolean(config.stripe.secretKey) || hasPaymentLinkCheckout,
-    billingConfigurationError: stripeSecretKeyMisconfigured && !hasPaymentLinkCheckout ? 'STRIPE_SECRET_KEY_INVALID' : null,
+    billingConfigurationError: stripeSecretKeyMisconfigured ? 'STRIPE_SECRET_KEY_INVALID' : null,
     plans: PLAN_IDS.map((id) => {
       const stripeEntry = catalogEntry(id, PLAN_CONFIG[id].label, planPriceId(id), prices);
-      const fallback = planPaymentLink(id) ? VERIFIED_PAYMENT_LINK_PRICES[id] : undefined;
+      const fallback = planPaymentLink(id) ? config.stripe.paymentLinkCatalog[id as keyof typeof config.stripe.paymentLinkCatalog] : undefined;
       return {
         ...stripeEntry,
         ...(fallback && !stripeEntry.checkoutAvailable ? {
