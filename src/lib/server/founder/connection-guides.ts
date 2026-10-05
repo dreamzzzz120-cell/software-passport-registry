@@ -50,14 +50,14 @@ export function connectionGuides(): Record<ConnectionKey, ConnectionGuide> {
       statusMeaning: {
         ok: 'Railway answered the query and listed the project\'s services.',
         error: 'Both settings are present but Railway rejected or failed the query. HTTP 401/403 means the token is invalid, expired, or not allowed to see this project; a timeout means Railway did not answer within 8 seconds.',
-        not_configured: 'RAILWAY_API_TOKEN and/or RAILWAY_PROJECT_ID is not set on the API service, so no check was attempted.',
+        not_configured: 'RAILWAY_PROJECT_ID is unavailable, so the API cannot prove which Railway project it is running in. When the injected project identity exists, SPR reports Railway as runtime-verified even if the optional management API token is absent.',
       },
       configuredAt: RAILWAY_SERVICE,
       steps: [
         'Open railway.com, click your avatar (top right) → Account Settings → Tokens → Create Token. Give it a name such as "spr-founder-page". If Railway asks for a scope, choose the workspace that owns software-passport-registry. Copy the token once; Railway will not show it again.',
         `Go to ${RAILWAY_SERVICE} and add RAILWAY_API_TOKEN with that value.`,
-        'RAILWAY_PROJECT_ID is injected by Railway automatically and should already show as set below.',
-        'Railway redeploys the service when a variable changes. When it is back, click a card here or press Refresh; the status should read "N services reachable".',
+        'RAILWAY_PROJECT_ID is injected by Railway automatically and is sufficient to prove the running SPR service is on Railway.',
+        'RAILWAY_API_TOKEN is optional deeper telemetry. Without it the Founder page reports runtime verification; with it, Refresh also lists the Railway project services.',
       ],
       settings: [
         { name: 'RAILWAY_API_TOKEN', secret: true, set: present(config.railway.apiToken), purpose: 'Authenticates the Founder page to the Railway API (read).', whereToGet: 'railway.com → avatar → Account Settings → Tokens → Create Token' },
@@ -95,12 +95,12 @@ export function connectionGuides(): Record<ConnectionKey, ConnectionGuide> {
       statusMeaning: {
         ok: 'The most recent workflow run concluded "success".',
         error: 'Either the most recent run did not succeed (failure, cancelled, startup_failure — for example when GitHub Actions is blocked by a billing problem), or GitHub rejected the request (HTTP 401/403: token invalid or lacking Actions read access to the repository).',
-        not_configured: 'GITHUB_TOKEN, GITHUB_OWNER and/or GITHUB_REPO is not set, or the repository has no workflow runs at all.',
+        not_configured: 'GITHUB_OWNER and/or GITHUB_REPO is not set, or the repository has no workflow runs. Public repositories are checked without a token; GITHUB_TOKEN is optional for higher rate limits or private repositories.',
       },
       configuredAt: RAILWAY_SERVICE,
       steps: [
         'GITHUB_OWNER (dreamzzzz120-cell) and GITHUB_REPO (software-passport-registry) are already set on the service.',
-        'GITHUB_TOKEN on the API service is a reference to the scan worker\'s GITHUB_TOKEN. If this card shows HTTP 401/403, that token lacks access: on github.com go to avatar → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token, choose repository "software-passport-registry", grant Actions: Read-only (and Contents: Read-only if the worker also uses it), and set the new value as GITHUB_TOKEN on the worker service (the API service follows the reference).',
+        'Because software-passport-registry is public, the Founder page can read its latest Actions run without GITHUB_TOKEN. A token is optional for higher API rate limits or if the repository later becomes private.',
         'If the status is "error" with "latest run: failure/startup_failure", CI itself is failing — open github.com → repository → Actions and read the newest run. A run that "was not started because recent account payments have failed" is fixed at github.com → Settings → Billing and plans.',
       ],
       settings: [
@@ -138,12 +138,12 @@ export function connectionGuides(): Record<ConnectionKey, ConnectionGuide> {
       statusMeaning: {
         ok: 'The Supabase auth admin API answered with the service-role key.',
         error: 'The key or URL is present but Supabase rejected the call or did not answer within 8 seconds.',
-        not_configured: 'SUPABASE_URL and/or SUPABASE_SERVICE_ROLE_KEY is not set on the API service.',
+        not_configured: 'SUPABASE_URL is not set on the API service. Normal customer authentication can be verified from the public Auth health endpoint; the service-role/secret key is optional founder admin telemetry.',
       },
       configuredAt: RAILWAY_SERVICE,
       steps: [
-        'Open supabase.com/dashboard → project gezmtnleoyrudxztegoj → Project Settings → API keys. SUPABASE_URL is the Project URL; the service-role (secret) key is under "Secret keys"; the publishable key is under "Publishable keys".',
-        `Set them at ${RAILWAY_SERVICE}. The service-role key must never be placed in Vercel or in the browser bundle.`,
+        'Open supabase.com/dashboard → project gezmtnleoyrudxztegoj → Project Settings → API keys. SUPABASE_URL is the Project URL and the publishable key is under "Publishable keys". Those two are enough for normal customer authentication.',
+        `Set the optional service-role/secret key at ${RAILWAY_SERVICE} only if founder-only admin-user telemetry is needed. It must never be placed in Vercel or in the browser bundle.`,
         'Sign-up email delivery is a separate Supabase setting: Authentication → Emails → SMTP Settings. Without a custom SMTP server Supabase only delivers auth emails to addresses on the project\'s own team and only a few per hour, so real customers cannot complete sign-up.',
       ],
       settings: [
