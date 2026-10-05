@@ -42,6 +42,109 @@ const id = (prefix: string) => `${prefix}_${randomUUID().replace(/-/g, '')}`;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const intervalMs = () => Math.max(60_000, Number.parseInt(process.env.REALITY_RECONCILIATION_INTERVAL_MS ?? '300000', 10) || 300000);
 
+
+type RepairResult = { attempted: number; requeued?: number; failed?: number; scanRequeued?: number; scanFailed?: number };
+
+async function setIncidentRepairState(pool: Pool, incidentId: string, status: 'REPAIRING' | 'VERIFYING' | 'INVESTIGATING', action: string) {
+  await pool.query('UPDATE reality_incidents SET status=$2, repair_action=$3, last_seen_at=now() WHERE id=$1', [incidentId, status, action]);
+}
+
+async function repairStaleQueue(pool: Pool): Promise<RepairResult> {
+  const client = await pool.connect();
+  let requeued = 0;
+  let failed = 0;
+  let scanRequeued = 0;
+  let scanFailed = 0;
+  try {
+    await client.query('BEGIN');
+    const rows = (await client.query(`
+      SELECT id, tenant_id, scan_id, attempt_count, max_attempts
+        FROM agent_jobs
+       WHERE status='Running'
+         AND updated_at < now() - interval '30 minutes'
+         AND (locked_at IS NULL OR locked_at < now() - interval '30 minutes')
+       ORDER BY updated_at ASC
+       FOR UPDATE SKIP LOCKED
+       LIMIT 25
+    `)).rows as Array<{ id: string; tenant_id: string; scan_id: string | null; attempt_count: number; max_attempts: number }>;
+
+    for (const row of rows) {
+      const retry = Number(row.attempt_count) < Number(row.max_attempts);
+      const nextStatus = retry ? 'Pending' : 'Failed';
+      await client.query(`
+        UPDATE agent_jobs
+           SET status=$2,
+               progress=CASE WHEN $2='Failed' THEN 100 ELSE progress END,
+               error=CASE WHEN $2='Failed' THEN COALESCE(error,'REALITY_RECONCILIATION_LEASE_EXPIRED') ELSE NULL END,
+               next_attempt_at=CASE WHEN $2='Pending' THEN now() ELSE next_attempt_at END,
+               locked_at=NULL,
+               locked_by=NULL,
+               completed_at=CASE WHEN $2='Failed' THEN COALESCE(completed_at,now()) ELSE completed_at END,
+               updated_at=now()
+         WHERE id=$1 AND tenant_id=$3 AND status='Running'
+      `, [row.id, nextStatus, row.tenant_id]);
+      if (retry) requeued += 1;
+      else failed += 1;
+
+      if (row.scan_id) {
+        const scan = await client.query(`
+          UPDATE scans
+             SET status=$2,
+                 updated_at=now(),
+                 completed_at=CASE WHEN $2='Failed' THEN COALESCE(completed_at,now()) ELSE completed_at END,
+                 error_state=CASE WHEN $2='Failed' THEN 'failed' ELSE NULL END,
+                 error_code=CASE WHEN $2='Failed' THEN 'WORKER_LEASE_EXPIRED' ELSE NULL END
+           WHERE id=$1
+             AND tenant_id=$3
+             AND status IN ('Queued','Scanning')
+        `, [row.scan_id, retry ? 'Queued' : 'Failed', row.tenant_id]);
+        if ((scan.rowCount ?? 0) > 0) {
+          if (retry) scanRequeued += 1;
+          else scanFailed += 1;
+        }
+      }
+    }
+    await client.query('COMMIT');
+    return { attempted: rows.length, requeued, failed, scanRequeued, scanFailed };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function repairOrphanedScans(pool: Pool): Promise<RepairResult> {
+  const result = await pool.query(`
+    WITH stale AS (
+      SELECT s.id, s.tenant_id
+        FROM scans s
+       WHERE s.status IN ('Queued','Scanning')
+         AND s.updated_at < now() - interval '30 minutes'
+         AND NOT EXISTS (
+           SELECT 1
+             FROM agent_jobs j
+            WHERE j.scan_id=s.id
+              AND j.tenant_id=s.tenant_id
+              AND j.status IN ('Pending','Running')
+         )
+       ORDER BY s.updated_at ASC
+       FOR UPDATE SKIP LOCKED
+       LIMIT 25
+    )
+    UPDATE scans s
+       SET status='Failed',
+           completed_at=COALESCE(s.completed_at,now()),
+           updated_at=now(),
+           error_state='failed',
+           error_code=COALESCE(s.error_code,'STALE_SCAN_NO_ACTIVE_JOB')
+      FROM stale
+     WHERE s.id=stale.id AND s.tenant_id=stale.tenant_id
+    RETURNING s.id
+  `);
+  return { attempted: result.rowCount ?? 0, scanFailed: result.rowCount ?? 0 };
+}
+
 async function contract(pool: Pool, contractId: string) {
   return (await pool.query('SELECT id, component, expected, repair_class FROM reality_contracts WHERE id=$1 AND enabled=TRUE', [contractId])).rows[0] as
     | { id: string; component: string; expected: Record<string, unknown>; repair_class: number }
@@ -264,7 +367,23 @@ export async function runRealityReconciliationCycle(pool: Pool) {
   const startedAt = Date.now();
   const results: ObservationResult[] = [];
   for (const [contractId, probe] of probes) {
-    results.push(await observe(pool, contractId, await probe(pool)));
+    const initial = await probe(pool);
+    let observed = await observe(pool, contractId, initial);
+    const repairer = contractId === 'worker_queue_flow' ? repairStaleQueue : contractId === 'scan_terminality' ? repairOrphanedScans : null;
+    if (initial.state === 'FAILED' && observed.incidentId && repairer) {
+      const c = await contract(pool, contractId);
+      if ((c?.repair_class ?? 0) >= 1) {
+        try {
+          await setIncidentRepairState(pool, observed.incidentId, 'REPAIRING', 'Bounded stale-state recovery using existing retry budget and lease ownership rules.');
+          const repair = await repairer(pool);
+          await setIncidentRepairState(pool, observed.incidentId, 'VERIFYING', `Bounded recovery attempted=${repair.attempted}; requeued=${repair.requeued ?? 0}; failed=${repair.failed ?? 0}; scanRequeued=${repair.scanRequeued ?? 0}; scanFailed=${repair.scanFailed ?? 0}.`);
+          observed = await observe(pool, contractId, await probe(pool));
+        } catch {
+          await setIncidentRepairState(pool, observed.incidentId, 'INVESTIGATING', 'Bounded recovery attempt failed; incident remains open and no success is claimed.').catch(() => undefined);
+        }
+      }
+    }
+    results.push(observed);
   }
   results.push(await observe(pool, 'reconciler_self_watch', await probeSelf(pool)));
   const counts = results.reduce<Record<State, number>>((acc, item) => {
