@@ -79,8 +79,29 @@ async function main() {
     }
     for (const full of repos) {
       const [owner, repository] = full.split('/');
-      const already = (await db.execute(sql`SELECT j.id FROM agent_jobs j JOIN repository_scan_sources s ON s.job_id = j.id AND s.tenant_id = j.tenant_id WHERE j.tenant_id = ${tenantId} AND j.job_type = 'repository_scan' AND j.status IN ('Pending','Running','Completed') AND lower(s.repository_owner) = ${owner.toLowerCase()} AND lower(s.repository_name) = ${repository.toLowerCase()} LIMIT 1`) as any).rows?.[0];
-      if (already) { console.log('skip (already queued or scanned)', full); continue; }
+      const already = (await db.execute(sql`
+        SELECT j.id, j.passport_id AS "passportId", j.status, p.client_id AS "clientId"
+        FROM agent_jobs j
+        JOIN repository_scan_sources s ON s.job_id = j.id AND s.tenant_id = j.tenant_id
+        LEFT JOIN passports p ON p.id = j.passport_id AND p.tenant_id = j.tenant_id
+        WHERE j.tenant_id = ${tenantId}
+          AND j.job_type = 'repository_scan'
+          AND j.status IN ('Pending','Running','Completed')
+          AND lower(s.repository_owner) = ${owner.toLowerCase()}
+          AND lower(s.repository_name) = ${repository.toLowerCase()}
+        ORDER BY CASE j.status WHEN 'Completed' THEN 1 WHEN 'Running' THEN 2 ELSE 3 END, j.updated_at DESC
+        LIMIT 1
+      `) as any).rows?.[0];
+
+      if (already?.passportId && already.clientId === clientRow.id) {
+        console.log('skip (already linked to demo client)', full, already.passportId, already.status);
+        continue;
+      }
+      if (already?.passportId && !already.clientId) {
+        await db.execute(sql`UPDATE passports SET client_id=${clientRow.id} WHERE id=${already.passportId} AND tenant_id=${tenantId} AND client_id IS NULL`);
+        console.log('linked existing unassigned passport to demo client', full, already.passportId, already.status);
+        continue;
+      }
       const passportId = id('passport');
       const repositoryJobId = id('job');
       const securityJobId = id('job');
