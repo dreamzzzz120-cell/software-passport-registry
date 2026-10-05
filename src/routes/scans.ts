@@ -95,6 +95,28 @@ export function createScansRouter() {
       if (input.source === 'github') {
         targetName = input.name || `${input.owner}/${input.repository}`;
         publisher = input.owner;
+
+        // Do not duplicate a still-active investigation when the operator
+        // double-clicks or the browser retries after a network interruption.
+        const existing = (await db.execute(sql`SELECT id AS "scanId", passport_id AS "passportId",
+            job_id AS "repositoryJobId", worker_job_id AS "securityJobId", status
+          FROM scans
+          WHERE tenant_id=${req.user!.tenantId}
+            AND source='github'
+            AND LOWER(software_identity)=LOWER(${`${input.owner}/${input.repository}`})
+            AND status IN ('Queued','Pending','Running','Processing')
+          ORDER BY created_at DESC
+          LIMIT 1`)).rows?.[0] as any;
+        if (existing?.scanId && existing?.passportId) {
+          return res.status(202).json({
+            scanId: existing.scanId,
+            passportId: existing.passportId,
+            repositoryJobId: existing.repositoryJobId ?? null,
+            securityJobId: existing.securityJobId ?? null,
+            status: existing.status || 'Pending',
+            existing: true,
+          });
+        }
       } else {
         const session = (await db.execute(sql`SELECT id, tenant_id AS "tenantId", status FROM intake_sessions WHERE id=${input.sessionId} LIMIT 1`)).rows?.[0] as any;
         if (!session || session.tenantId !== req.user!.tenantId || session.status !== 'CLAIMED') return res.status(409).json({ error: 'Intake session must be claimed by this workspace before scanning.' });
