@@ -79,7 +79,10 @@ describe('the public route set matches the application itself', () => {
     const publicPaths = [...declared![1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
     expect(publicPaths).not.toContain('/registry');
     expect(app).toContain("case '/passports': view = <PassportsView");
-    expect(app).toContain("case '/registry': view = <PublicRegistryView />;");
+    expect(app).toContain("case '/registry': view = <PublicRegistryView");
+    const registryCase = app.indexOf("case '/registry':");
+    const authGuard = app.indexOf("if (!user) return <AuthLoading />;");
+    expect(registryCase).toBeGreaterThan(authGuard);
   });
 });
 
