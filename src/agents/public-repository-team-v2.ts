@@ -5,7 +5,7 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import * as schema from '../db/schema.ts';
 import { enqueueFreeReview, FREE_REVIEW_TENANT_ID } from '../routes/free-review-submit.ts';
 
-const VERSION = 'public-repository-team/1.0.0';
+const VERSION = 'public-repository-team/1.1.0';
 export const LANGUAGES = ['JavaScript','TypeScript','Python','Go','Java','Rust','C#','Ruby','PHP','Kotlin','Swift','C++','Scala','Dart','Elixir'];
 // GitHub repository search: `topic:<name>` filters by topic name; `topics:<n>`
 // is a numeric count qualifier, so `topics:security` is rejected with
@@ -25,7 +25,8 @@ const DEFAULT_REFRESH_HOURS = 168;
 const MAX_PAGES = 10;
 
 export type TeamCursor = { strategyIndex:number; queryIndex:number; page:number; languageIndex:number };
-export type Candidate = { owner:string; repository:string; url:string; stars:number; language:string|null; licenseSpdx:string|null; defaultBranch:string|null; headSha:string|null; archived:boolean; fork:boolean };
+export type Candidate = { owner:string; repository:string; url:string; stars:number; language:string|null; licenseSpdx:string|null; defaultBranch:string|null; pushedAt:string|null; archived:boolean; fork:boolean };
+export type RepositoryReality = { commitSha:string|null; manifestPresent:boolean|null; treeComplete:boolean; treeEntries:number|null; checkedAt:string; sourceStatus:'verified'|'partial' };
 
 type IngestionRow = { id:string; passport_id:string|null; status:string; next_refresh_at:Date|string|null };
 
@@ -59,7 +60,7 @@ export function advanceCursor(cur:TeamCursor,itemCount:number,queryCount:number)
 export function normalizeCandidate(item:any):Candidate|null {
   const owner=String(item?.owner?.login??''); const repository=String(item?.name??'');
   if(!/^[A-Za-z0-9_.-]{1,100}$/.test(owner)||!/^[A-Za-z0-9_.-]{1,100}$/.test(repository)) return null;
-  return { owner, repository, url:repoUrl(owner,repository), stars:Math.max(0,Number(item?.stargazers_count??0)||0), language:typeof item?.language==='string'?item.language.slice(0,80):null, licenseSpdx:typeof item?.license?.spdx_id==='string'&&item.license.spdx_id!=='NOASSERTION'?item.license.spdx_id.slice(0,100):null, defaultBranch:typeof item?.default_branch==='string'?item.default_branch.slice(0,255):null, headSha:typeof item?.pushed_at==='string'?item.pushed_at:null, archived:item?.archived===true, fork:item?.fork===true };
+  return { owner, repository, url:repoUrl(owner,repository), stars:Math.max(0,Number(item?.stargazers_count??0)||0), language:typeof item?.language==='string'?item.language.slice(0,80):null, licenseSpdx:typeof item?.license?.spdx_id==='string'&&item.license.spdx_id!=='NOASSERTION'?item.license.spdx_id.slice(0,100):null, defaultBranch:typeof item?.default_branch==='string'?item.default_branch.slice(0,255):null, pushedAt:typeof item?.pushed_at==='string'?item.pushed_at:null, archived:item?.archived===true, fork:item?.fork===true };
 }
 
 type SearchResult = { outcome:SearchOutcome; items:any[]; reason?:string };
@@ -87,17 +88,35 @@ export function treeHasSupportedManifest(tree: Array<{path?:string;type?:string}
   return tree.some(item => item.type === 'blob' && typeof item.path === 'string' &&
     (SUPPORTED_MANIFESTS.has(item.path.split('/').at(-1) ?? '') || item.path.endsWith('.csproj')));
 }
-async function hasSupportedManifest(c:Candidate,token:string):Promise<boolean>{
-  if(!c.defaultBranch)return true;
-  const u=new URL(`https://api.github.com/repos/${encodeURIComponent(c.owner)}/${encodeURIComponent(c.repository)}/git/trees/${encodeURIComponent(c.defaultBranch)}`);
-  u.searchParams.set('recursive','1');
+const githubHeaders = (token:string) => ({Accept:'application/vnd.github+json','User-Agent':'software-passport-registry-public-repository-team/1.1',...(token?{Authorization:`Bearer ${token}`}:{})});
+
+export async function inspectRepositoryReality(c:Candidate,token:string):Promise<RepositoryReality>{
+  const checkedAt=new Date().toISOString();
+  if(!c.defaultBranch)return {commitSha:null,manifestPresent:null,treeComplete:false,treeEntries:null,checkedAt,sourceStatus:'partial'};
+  const owner=encodeURIComponent(c.owner), repo=encodeURIComponent(c.repository), branch=encodeURIComponent(c.defaultBranch);
+  const commitUrl=`https://api.github.com/repos/${owner}/${repo}/commits/${branch}`;
+  const treeUrl=new URL(`https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}`);
+  treeUrl.searchParams.set('recursive','1');
+  let commitSha:string|null=null, manifestPresent:boolean|null=null, treeComplete=false, treeEntries:number|null=null;
   try{
-    const r=await fetch(u,{headers:{Accept:'application/vnd.github+json','User-Agent':'software-passport-registry-public-repository-team/1.0',...(token?{Authorization:`Bearer ${token}`}:{})}});
-    if(!r.ok)return true;
-    const body:any=await r.json();
-    if(body?.truncated===true || !Array.isArray(body?.tree))return true;
-    return treeHasSupportedManifest(body.tree);
-  }catch{return true;}
+    const [commitResponse,treeResponse]=await Promise.all([
+      fetch(commitUrl,{headers:githubHeaders(token)}),
+      fetch(treeUrl,{headers:githubHeaders(token)}),
+    ]);
+    if(commitResponse.ok){
+      const commit:any=await commitResponse.json();
+      if(typeof commit?.sha==='string' && /^[a-f0-9]{40}$/i.test(commit.sha))commitSha=commit.sha.toLowerCase();
+    }
+    if(treeResponse.ok){
+      const body:any=await treeResponse.json();
+      if(Array.isArray(body?.tree)){
+        treeEntries=body.tree.length;
+        treeComplete=body?.truncated!==true;
+        if(treeComplete)manifestPresent=treeHasSupportedManifest(body.tree);
+      }
+    }
+  }catch{}
+  return {commitSha,manifestPresent,treeComplete,treeEntries,checkedAt,sourceStatus:commitSha!==null&&manifestPresent!==null?'verified':'partial'};
 }
 async function saveCursor(pool:Pool,next:TeamCursor){ await pool.query(`INSERT INTO registry_crawl_state (id,strategy_index,query_index,page,language_index,updated_at) VALUES ('default',$1,$2,$3,$4,CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET strategy_index=EXCLUDED.strategy_index,query_index=EXCLUDED.query_index,page=EXCLUDED.page,language_index=EXCLUDED.language_index,updated_at=CURRENT_TIMESTAMP`,[next.strategyIndex,next.queryIndex,next.page,next.languageIndex]); }
 
@@ -107,7 +126,18 @@ async function connection(pool:Pool){ return tenant(pool,async c=>{const x=(awai
 
 async function refresh(pool:Pool,passportId:string,owner:string,repository:string,connectionId:string){ return tenant(pool,async c=>{const j1=`job_${crypto.randomUUID().replaceAll('-','')}`,j2=`job_${crypto.randomUUID().replaceAll('-','')}`,s1=`source_${crypto.randomUUID().replaceAll('-','')}`,s2=`source_${crypto.randomUUID().replaceAll('-','')}`;await c.query(`INSERT INTO agent_jobs (id,tenant_id,agent_id,passport_id,job_type,status,progress,next_attempt_at,created_at,updated_at) VALUES ($1,$2,'repository-scanner',$3,'repository_scan','Pending',0,NOW(),NOW(),NOW()),($4,$2,'security-scanner',$3,'repository_security_scan','Pending',0,NOW(),NOW())`,[j1,FREE_REVIEW_TENANT_ID,passportId,j2]);await c.query(`INSERT INTO repository_scan_sources (id,job_id,tenant_id,connection_id,provider,repository_owner,repository_name,requested_ref,repository_subdirectory,created_at) VALUES ($1,$2,$3,$4,'github',$5,$6,NULL,'',NOW()),($7,$8,$3,$4,'github',$5,$6,NULL,'',NOW())`,[s1,j1,FREE_REVIEW_TENANT_ID,connectionId,owner,repository,s2,j2]);await c.query(`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES ($1,'repository-scanner','Public repository refresh queued by evidence-first ingestion team.','Info'),($2,'security-scanner','Public repository security refresh queued by ingestion team.','Info')`,[j1,j2]);return j1;}); }
 
-async function upsert(pool:Pool,c:Candidate):Promise<IngestionRow>{ const id=ledgerId(c); return tenant(pool,async db=>{const old=(await db.query(`SELECT id,passport_id,status,next_refresh_at FROM registry_ingestion_items WHERE provider='github' AND lower(repository_owner)=lower($1) AND lower(repository_name)=lower($2) LIMIT 1`,[c.owner,c.repository])).rows[0] as IngestionRow|undefined;if(old){await db.query(`UPDATE registry_ingestion_items SET last_observed_at=CURRENT_TIMESTAMP,stars=$2,language=$3,license_spdx=$4,default_branch=$5,head_sha=$6,updated_at=CURRENT_TIMESTAMP,discovery_agent=$7 WHERE id=$1`,[old.id,c.stars,c.language,c.licenseSpdx,c.defaultBranch,c.headSha,VERSION]);return old;}await db.query(`INSERT INTO registry_ingestion_items (id,provider,repository_owner,repository_name,canonical_url,status,discovery_agent,identity_agent,quality_agent,next_refresh_at,default_branch,head_sha,stars,language,license_spdx) VALUES ($1,'github',$2,$3,$4,'discovered',$5,$5,$5,CURRENT_TIMESTAMP + ($6 * INTERVAL '1 hour'),$7,$8,$9,$10,$11)`,[id,c.owner,c.repository,c.url,VERSION,DEFAULT_REFRESH_HOURS,c.defaultBranch,c.headSha,c.stars,c.language,c.licenseSpdx]);return {id,passport_id:null,status:'discovered',next_refresh_at:new Date(0)};}); }
+function identityId(c:Candidate){return `reg_${crypto.createHash('sha256').update(`github:${c.owner.toLowerCase()}/${c.repository.toLowerCase()}`).digest('hex').slice(0,40)}`;}
+function observationHash(c:Candidate,r:RepositoryReality){return crypto.createHash('sha256').update(JSON.stringify({provider:'github',owner:c.owner.toLowerCase(),repository:c.repository.toLowerCase(),commitSha:r.commitSha,stars:c.stars,language:c.language,licenseSpdx:c.licenseSpdx,defaultBranch:c.defaultBranch,manifestPresent:r.manifestPresent,treeComplete:r.treeComplete,treeEntries:r.treeEntries,pushedAt:c.pushedAt})).digest('hex');}
+async function recordRegistryReality(pool:Pool,c:Candidate,r:RepositoryReality,run:string){
+  return tenant(pool,async db=>{
+    const iid=identityId(c), canonicalKey=`github:${c.owner.toLowerCase()}/${c.repository.toLowerCase()}`, oid=`regobs_${crypto.randomUUID().replaceAll('-','')}`;
+    await db.query(`INSERT INTO software_registry_identities (id,provider,canonical_key,canonical_name,repository_owner,repository_name,canonical_url,identity_status,last_observed_at,latest_commit_sha,default_branch,stars,language,license_spdx,next_refresh_at,observation_count,updated_at) VALUES ($1,'github',$2,$3,$4,$5,$6,'observed',CURRENT_TIMESTAMP,$7,$8,$9,$10,$11,CURRENT_TIMESTAMP + INTERVAL '7 days',1,CURRENT_TIMESTAMP) ON CONFLICT (provider,canonical_key) DO UPDATE SET canonical_name=EXCLUDED.canonical_name,repository_owner=EXCLUDED.repository_owner,repository_name=EXCLUDED.repository_name,canonical_url=EXCLUDED.canonical_url,last_observed_at=CURRENT_TIMESTAMP,latest_commit_sha=COALESCE(EXCLUDED.latest_commit_sha,software_registry_identities.latest_commit_sha),default_branch=COALESCE(EXCLUDED.default_branch,software_registry_identities.default_branch),stars=EXCLUDED.stars,language=EXCLUDED.language,license_spdx=EXCLUDED.license_spdx,next_refresh_at=EXCLUDED.next_refresh_at,observation_count=software_registry_identities.observation_count+1,updated_at=CURRENT_TIMESTAMP`,[iid,canonicalKey,`${c.owner}/${c.repository}`,c.owner,c.repository,c.url,r.commitSha,c.defaultBranch,c.stars,c.language,c.licenseSpdx]);
+    await db.query(`INSERT INTO software_registry_observations (id,identity_id,source_type,source_locator,observed_at,commit_sha,payload_hash,outcome,evidence) VALUES ($1,$2,'github-reality',$3,CURRENT_TIMESTAMP,$4,$5,$6,$7::jsonb) ON CONFLICT (identity_id,source_type,source_locator,commit_sha,payload_hash) DO NOTHING`,[oid,iid,c.url,r.commitSha,observationHash(c,r),r.sourceStatus==='verified'?'verified':'partial',JSON.stringify({crawlerRunId:run,checkedAt:r.checkedAt,manifestPresent:r.manifestPresent,treeComplete:r.treeComplete,treeEntries:r.treeEntries,pushedAt:c.pushedAt,defaultBranch:c.defaultBranch,stars:c.stars,language:c.language,licenseSpdx:c.licenseSpdx,agent:VERSION})]);
+    return iid;
+  });
+}
+
+async function upsert(pool:Pool,c:Candidate,r:RepositoryReality,identity:string):Promise<IngestionRow>{ const id=ledgerId(c); return tenant(pool,async db=>{const old=(await db.query(`SELECT id,passport_id,status,next_refresh_at FROM registry_ingestion_items WHERE provider='github' AND lower(repository_owner)=lower($1) AND lower(repository_name)=lower($2) LIMIT 1`,[c.owner,c.repository])).rows[0] as IngestionRow|undefined;if(old){await db.query(`UPDATE registry_ingestion_items SET last_observed_at=CURRENT_TIMESTAMP,stars=$2,language=$3,license_spdx=$4,default_branch=$5,head_sha=COALESCE($6,head_sha),updated_at=CURRENT_TIMESTAMP,discovery_agent=$7,identity_id=COALESCE(identity_id,$8),canonical_key=COALESCE(canonical_key,$9),quality_status=$10,observation_count=observation_count+1 WHERE id=$1`,[old.id,c.stars,c.language,c.licenseSpdx,c.defaultBranch,r.commitSha,VERSION,identity,`github:${c.owner.toLowerCase()}/${c.repository.toLowerCase()}`,r.sourceStatus==='verified'?'good':'partial']);return old;}await db.query(`INSERT INTO registry_ingestion_items (id,provider,repository_owner,repository_name,canonical_url,status,discovery_agent,identity_agent,quality_agent,next_refresh_at,default_branch,head_sha,stars,language,license_spdx,identity_id,canonical_key,quality_status,observation_count,refresh_reason) VALUES ($1,'github',$2,$3,$4,'discovered',$5,$5,$5,CURRENT_TIMESTAMP + ($6 * INTERVAL '1 hour'),$7,$8,$9,$10,$11,$12,$13,$14,1,'initial_discovery')`,[id,c.owner,c.repository,c.url,VERSION,DEFAULT_REFRESH_HOURS,c.defaultBranch,r.commitSha,c.stars,c.language,c.licenseSpdx,identity,`github:${c.owner.toLowerCase()}/${c.repository.toLowerCase()}`,r.sourceStatus==='verified'?'good':'partial']);return {id,passport_id:null,status:'discovered',next_refresh_at:new Date(0)};}); }
 
 async function setStatus(pool:Pool,id:string,status:string,passportId?:string){await pool.query(`UPDATE registry_ingestion_items SET status=$2,passport_id=COALESCE($3,passport_id),updated_at=CURRENT_TIMESTAMP,last_success_at=CASE WHEN $2 IN ('queued','refresh_queued') THEN last_success_at ELSE CURRENT_TIMESTAMP END WHERE id=$1`,[id,status,passportId??null]);}
 
@@ -125,7 +155,7 @@ export async function runPublicRepositoryAgentTeamOnce(pool:Pool){
       if(r.outcome==='invalid_query'){out.failed++;console.error('[PublicRepositoryTeam] invalid search query skipped',JSON.stringify({query,reason:r.reason}));cur2=advanceCursor(cur2,0,q.length);await saveCursor(pool,cur2);continue;}
       found=r;break;
     }
-    if(!found)return out;const conn=await connection(pool);for(const raw of found.items){if(out.queued>=batch)break;out.discovered++;const c=normalizeCandidate(raw);if(!c||c.archived||c.fork){out.quarantined++;continue;}let row:IngestionRow|undefined;try{if(!await hasSupportedManifest(c,token)){out.quarantined++;continue;}row=await upsert(pool,c);const due=!row.next_refresh_at||new Date(row.next_refresh_at).getTime()<=Date.now();if(!row.passport_id){const db=drizzle(pool,{schema});const x=await enqueueFreeReview(db as any,{owner:c.owner,repository:c.repository,ref:null,ipHash:`registry-team:${run}`});await setStatus(pool,row.id,'queued',x.passportId);out.queued++;}else if(due){await refresh(pool,String(row.passport_id),c.owner,c.repository,conn);await pool.query(`UPDATE registry_ingestion_items SET status='refresh_queued',evidence_agent=$2,verification_agent=$2,next_refresh_at=CURRENT_TIMESTAMP + ($3 * INTERVAL '1 hour'),updated_at=CURRENT_TIMESTAMP WHERE id=$1`,[row.id,VERSION,envInt('REGISTRY_CRAWL_REFRESH_HOURS',DEFAULT_REFRESH_HOURS,8760)]);out.refreshed++;}}catch(e){out.failed++;if(row?.id)await setStatus(pool,row.id,'failed').catch(()=>undefined);console.error('[PublicRepositoryTeam] item failed',c.url,e instanceof Error?e.message:String(e));}}
+    if(!found)return out;const conn=await connection(pool);for(const raw of found.items){if(out.queued>=batch)break;out.discovered++;const c=normalizeCandidate(raw);if(!c||c.archived||c.fork){out.quarantined++;continue;}let row:IngestionRow|undefined;try{const reality=await inspectRepositoryReality(c,token);if(reality.manifestPresent===false){out.quarantined++;continue;}const identity=await recordRegistryReality(pool,c,reality,run);row=await upsert(pool,c,reality,identity);const due=!row.next_refresh_at||new Date(row.next_refresh_at).getTime()<=Date.now();if(!row.passport_id){const db=drizzle(pool,{schema});const x=await enqueueFreeReview(db as any,{owner:c.owner,repository:c.repository,ref:null,ipHash:`registry-team:${run}`});await setStatus(pool,row.id,'queued',x.passportId);out.queued++;}else if(due){await refresh(pool,String(row.passport_id),c.owner,c.repository,conn);await pool.query(`UPDATE registry_ingestion_items SET status='refresh_queued',evidence_agent=$2,verification_agent=$2,next_refresh_at=CURRENT_TIMESTAMP + ($3 * INTERVAL '1 hour'),updated_at=CURRENT_TIMESTAMP WHERE id=$1`,[row.id,VERSION,envInt('REGISTRY_CRAWL_REFRESH_HOURS',DEFAULT_REFRESH_HOURS,8760)]);out.refreshed++;}}catch(e){out.failed++;if(row?.id)await setStatus(pool,row.id,'failed').catch(()=>undefined);console.error('[PublicRepositoryTeam] item failed',c.url,e instanceof Error?e.message:String(e));}}
     await saveCursor(pool,advanceCursor(cur2,found.items.length,q.length));
   }finally{await pool.query(`UPDATE registry_crawl_runs SET finished_at=CURRENT_TIMESTAMP,discovered=$2,enqueued=$3,skipped=0,refreshed=$4,quarantined=$5,failed=$6 WHERE id=$1`,[run,out.discovered,out.queued,out.refreshed,out.quarantined,out.failed]).catch(()=>undefined);}return out;
 }
