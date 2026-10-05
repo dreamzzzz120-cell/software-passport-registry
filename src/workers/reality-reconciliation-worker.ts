@@ -374,15 +374,17 @@ async function probeTenantIsolation(pool: Pool): Promise<ProbeResult> {
     await pool.query('SELECT spr_assert_tenant_rls()');
     return { state: 'HEALTHY', observed: { assertion: true }, evidence: [{ source: 'spr_assert_tenant_rls' }], explanation: 'The database tenant-isolation invariant assertion passed.', severity: 'CRITICAL' };
   } catch (error) {
+    const code = error && typeof error === 'object' && 'code' in error ? String((error as { code?: unknown }).code ?? '') : '';
+    const visibilityFailure = code === '42501' || code === '42883';
     return {
-      state: 'FAILED',
+      state: visibilityFailure ? 'UNKNOWN' : 'FAILED',
       observed: { assertion: false },
-      evidence: [{ source: 'spr_assert_tenant_rls', error: error instanceof Error ? error.message : String(error) }],
-      explanation: 'The database tenant-isolation invariant assertion failed.',
+      evidence: [{ source: 'spr_assert_tenant_rls', error: error instanceof Error ? error.message : String(error), code: code || null }],
+      explanation: visibilityFailure ? 'Worker cannot execute the tenant-isolation assertion; isolation remains unproven rather than failed.' : 'The database tenant-isolation invariant assertion failed.',
       severity: 'CRITICAL',
-      rootCauseState: 'SUPPORTED',
-      rootCause: 'RLS assertion did not succeed from the worker runtime.',
-      impact: { tenantIsolation: 'unproven', crossTenantExposure: 'must be treated as possible until disproven' },
+      rootCauseState: visibilityFailure ? 'UNKNOWN' : 'SUPPORTED',
+      rootCause: visibilityFailure ? null : 'RLS assertion executed but did not succeed.',
+      impact: { tenantIsolation: 'unproven', observability: visibilityFailure ? 'insufficient privilege or missing assertion' : 'assertion failure' },
     };
   }
 }
