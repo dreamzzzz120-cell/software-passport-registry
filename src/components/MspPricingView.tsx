@@ -33,9 +33,9 @@ const PLAN_COPY: Record<PlanId, { tagline: string; features: string[]; highlight
   pilot: {
     tagline: 'Run a white-label pilot before committing',
     features: [
-      'Software Passports and evidence',
+      'Launch Tickets and evidence',
       'SBOM + vulnerability evidence',
-      'Trust scoring and BUY / INVESTIGATE / AVOID',
+      'Evidence-based assessment with explicit UNKNOWNs and investigation context',
       'White-label reports and MSP branding',
       'Client-ready reporting',
     ],
@@ -44,9 +44,9 @@ const PLAN_COPY: Record<PlanId, { tagline: string; features: string[]; highlight
     tagline: 'Start offering software trust as an MSP service',
     features: [
       'Up to 50 software assets',
-      'Software Passports and evidence',
+      'Launch Tickets and evidence',
       'SBOM + vulnerability evidence',
-      'Trust scoring and BUY / INVESTIGATE / AVOID',
+      'Evidence-based assessment with explicit UNKNOWNs and investigation context',
       'Evidence Explorer and evidence history',
       'Client-ready reports',
       'Monitoring and email alerts',
@@ -104,7 +104,8 @@ const FREE_TIER = {
     '1 software review',
     'Basic software identity and risk assessment',
     'Limited evidence view',
-    'BUY / INVESTIGATE / AVOID result',
+    'Investigate where, how, when and why from the evidence trail where those facts are observable',
+    'Evidence-based result with explicit UNKNOWNs',
     'Sample client-ready report',
   ],
 };
