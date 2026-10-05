@@ -160,7 +160,7 @@ async function recoverExhaustedStaleJobs(pool: Pool) {
       AND locked_at < NOW() - INTERVAL '10 minutes'
       AND attempt_count >= max_attempts
     RETURNING id, tenant_id, scan_id
-  \`);
+  `);
   for (const job of result.rows) {
     console.error(JSON.stringify({
       event: 'scan_job_lease_exhausted',
