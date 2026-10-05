@@ -26,7 +26,7 @@ const OWNER_PATTERN = /^[A-Za-z0-9_.-]{1,100}$/;
 
 type Entry = {
   owner: string; repository: string; passportId: string; commitSha: string | null; acquiredAt: string | null; defaultBranch: string | null;
-  componentCount: number | null; evidenceCount: number; findings: Record<string, number>; openFindings: number;
+  componentCount: number | null; evidenceCount: number; verifiedEvidenceCount: number; signatureEvidenceCount: number; findings: Record<string, number>; openFindings: number;
   identityStatus: string; lastObservedAt: string | null; nextRefreshAt: string | null;
 };
 
@@ -71,7 +71,7 @@ async function listCompleted(scopedDb: any, limit = 5000, offset = 0, only?: { o
   for (const row of rows) {
     let componentCount: number | null = null;
     try { const parsed = typeof row.sbom === 'string' ? JSON.parse(row.sbom) : row.sbom; componentCount = Array.isArray(parsed) ? parsed.length : null; } catch { componentCount = null; }
-    entries.push({ owner: row.owner, repository: row.repository, passportId: row.passportId, commitSha: row.commitSha ?? null, acquiredAt: row.acquiredAt ? new Date(row.acquiredAt).toISOString() : null, defaultBranch: row.defaultBranch ?? null, componentCount, evidenceCount: 0, findings: {}, openFindings: 0,
+    entries.push({ owner: row.owner, repository: row.repository, passportId: row.passportId, commitSha: row.commitSha ?? null, acquiredAt: row.acquiredAt ? new Date(row.acquiredAt).toISOString() : null, defaultBranch: row.defaultBranch ?? null, componentCount, evidenceCount: 0, verifiedEvidenceCount: 0, signatureEvidenceCount: 0, findings: {}, openFindings: 0,
       identityStatus: String(row.identityStatus ?? 'observed'),
       lastObservedAt: row.lastObservedAt ? new Date(row.lastObservedAt).toISOString() : null,
       nextRefreshAt: row.nextRefreshAt ? new Date(row.nextRefreshAt).toISOString() : null });
@@ -79,10 +79,10 @@ async function listCompleted(scopedDb: any, limit = 5000, offset = 0, only?: { o
   if (entries.length === 0) return entries;
   const ids = entries.map((e) => e.passportId);
   const findingRows = (await scopedDb.execute(sql`SELECT asset_id AS "passportId", lower(severity) AS severity, count(*)::int AS count FROM scan_findings WHERE tenant_id = ${FREE_REVIEW_TENANT_ID} AND asset_id IN ${ids} AND lower(status) NOT IN ('resolved','closed','verified') GROUP BY asset_id, lower(severity)`) as any).rows ?? [];
-  const evidenceRows = (await scopedDb.execute(sql`SELECT asset_id AS "passportId", count(*)::int AS count FROM evidence_items WHERE tenant_id = ${FREE_REVIEW_TENANT_ID} AND asset_id IN ${ids} GROUP BY asset_id`) as any).rows ?? [];
+  const evidenceRows = (await scopedDb.execute(sql`SELECT asset_id AS "passportId", count(*)::int AS count, count(*) FILTER (WHERE verified IS TRUE)::int AS "verifiedCount", count(*) FILTER (WHERE lower(type) = 'signature')::int AS "signatureCount" FROM evidence_items WHERE tenant_id = ${FREE_REVIEW_TENANT_ID} AND asset_id IN ${ids} GROUP BY asset_id`) as any).rows ?? [];
   const byId = new Map(entries.map((e) => [e.passportId, e]));
   for (const f of findingRows) { const e = byId.get(f.passportId); if (!e) continue; e.findings[f.severity] = Number(f.count); e.openFindings += Number(f.count); }
-  for (const ev of evidenceRows) { const e = byId.get(ev.passportId); if (e) e.evidenceCount = Number(ev.count); }
+  for (const ev of evidenceRows) { const e = byId.get(ev.passportId); if (!e) continue; e.evidenceCount = Number(ev.count); e.verifiedEvidenceCount = Number(ev.verifiedCount ?? 0); e.signatureEvidenceCount = Number(ev.signatureCount ?? 0); }
   return entries;
 }
 
@@ -163,9 +163,9 @@ export function createSoftwareRegistryRouter() {
       const name = `${entry.owner}/${entry.repository}`;
       const desc = `SPR observed ${entry.componentCount ?? 'an unknown number of'} SBOM components, ${entry.openFindings} open findings (${sev('critical')} critical, ${sev('high')} high) and ${entry.evidenceCount} evidence items for ${name} at commit ${entry.commitSha ? entry.commitSha.slice(0, 7) : 'n/a'}.`;
       const body = `<p class="k">Software Passport · public repository</p><h1>${escapeHtml(name)}</h1><p>Observed by SPR on ${entry.acquiredAt ? escapeHtml(entry.acquiredAt.slice(0, 10)) : 'an unknown date'} at commit <code>${escapeHtml(entry.commitSha ?? 'n/a')}</code>${entry.defaultBranch ? ` (${escapeHtml(entry.defaultBranch)})` : ''}. Source: <a rel="nofollow" href="https://github.com/${escapeHtml(entry.owner)}/${escapeHtml(entry.repository)}">github.com/${escapeHtml(name)}</a>.</p>
-<div class="grid"><div class="tile"><span class="k">SBOM components</span><b>${entry.componentCount ?? '—'}</b></div><div class="tile"><span class="k">Open findings</span><b>${entry.openFindings}</b></div><div class="tile"><span class="k">Critical / high</span><b>${sev('critical')} / ${sev('high')}</b></div><div class="tile"><span class="k">Evidence items</span><b>${entry.evidenceCount}</b></div></div>
+<div class="grid"><div class="tile"><span class="k">SBOM components</span><b>${entry.componentCount ?? '—'}</b></div><div class="tile"><span class="k">Open findings</span><b>${entry.openFindings}</b></div><div class="tile"><span class="k">Critical / high</span><b>${sev('critical')} / ${sev('high')}</b></div><div class="tile"><span class="k">Evidence items</span><b>${entry.evidenceCount}</b></div><div class="tile"><span class="k">Verified evidence</span><b>${entry.verifiedEvidenceCount}</b></div><div class="tile"><span class="k">Signature evidence</span><b>${entry.signatureEvidenceCount}</b></div></div>
 <div class="claim"><b>Maintain ${escapeHtml(name)}?</b><p>Claim this passport: run your own review of the latest commit and get an SBOM and vulnerability report you can hand to customers who ask for one. Free to start.</p><a class="cta" href="${PUBLIC_ORIGIN}/free-review?owner=${encodeURIComponent(entry.owner)}&amp;repo=${encodeURIComponent(entry.repository)}&amp;src=registry-claim">Claim this passport</a></div>
-<h2>What was observed</h2><p>Syft generated the software bill of materials from the repository's manifests; each component was checked against the OSV vulnerability database; the tree was scanned for secrets, infrastructure-as-code issues and licence signals. Vendor-supplied attestations: none — this page contains only independent observation.</p>
+<h2>What was observed</h2><p>Syft generated the software bill of materials from the repository's manifests; each component was checked against the OSV vulnerability database; the tree was scanned for secrets, infrastructure-as-code issues and licence signals. SPR also records cryptographic provenance when the repository provider exposes verifiable signature metadata. This observation contains ${entry.verifiedEvidenceCount} verified evidence item(s), including ${entry.signatureEvidenceCount} signature evidence item(s). Vendor statements never replace direct observation.</p>
 <h2>Open findings</h2><p class="note">SPR observed ${entry.openFindings} open findings at this commit, including ${sev('critical')} critical and ${sev('high')} high. Individual finding titles, affected components, remediation details and the evidence trail are part of the full customer workspace rather than the public registry.</p>
 <h2>Get the full passport</h2><p>Continuous verification, evidence ledger, finding details, remediation context, plain-English and auditor reports, and a shareable signed passport are available to SPR customers.</p><a class="cta" href="${PUBLIC_ORIGIN}/pricing">See plans</a> &nbsp; <a class="cta" style="background:transparent;color:var(--accent);border:1px solid var(--accent)" href="${PUBLIC_ORIGIN}/free-review">Review your own repository free</a>`;
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
