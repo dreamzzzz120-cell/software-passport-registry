@@ -420,6 +420,9 @@ export function createFounderCommandCenterRouter() {
         LIMIT 1
       `) as any).rows?.[0];
       if (!incident) return res.status(404).json({ error: 'ACTIVE_INCIDENT_NOT_FOUND' });
+      const repairClass = Number(incident.repairClass ?? 3);
+      if (!Number.isInteger(repairClass) || repairClass < 0 || repairClass > 3) return res.status(409).json({ error: 'INVALID_REPAIR_AUTHORITY', message: 'Incident repair authority is invalid; execution is blocked.' });
+      if (repairClass === 3) return res.status(409).json({ error: 'REPAIR_EXECUTION_FORBIDDEN', repairClass, message: 'Class 3 incidents are diagnosis-only and may never execute a repair.' });
 
       let changed = 0;
       let repair = '';
@@ -490,7 +493,7 @@ export function createFounderCommandCenterRouter() {
         INSERT INTO reality_repair_receipts
           (id,incident_id,authority_class,before_state,evidence,cause,impact,repair,verification,after_state,result)
         VALUES (
-          ${receiptId}, ${incidentId}, ${Number(incident.repairClass ?? 0)}, ${JSON.stringify(incident.observed ?? {})}::jsonb,
+          ${receiptId}, ${incidentId}, ${repairClass}, ${JSON.stringify(incident.observed ?? {})}::jsonb,
           ${JSON.stringify([{ source: 'founder_control_plane', executor, changed }])}::jsonb,
           ${incident.rootCause ?? null}, ${JSON.stringify(incident.impact ?? {})}::jsonb, ${repair},
           ${JSON.stringify({ method: 'automatic_reconciliation', requiredState: 'HEALTHY' })}::jsonb,
@@ -507,6 +510,7 @@ export function createFounderCommandCenterRouter() {
         receiptId,
         verification: 'automatic_reconciliation',
         fixed: false,
+        authority: repairClass === 2 ? 'OWNER_APPROVED' : 'BOUNDED_SAFE_REPAIR',
       });
     } catch (error) {
       return next(error);
