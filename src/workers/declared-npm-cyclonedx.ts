@@ -5,7 +5,7 @@
 export function includeUnresolvedNpmDeclarations<T extends { components?: any[] }>(
   document: T,
   declared: Array<{ name: string; declaredRange: string }>,
-): T {
+): T & { components: any[] } {
   const existing = Array.isArray(document.components) ? document.components : [];
   const resolved = new Set(existing.filter((c) => typeof c?.purl === 'string' &&
     c.purl.startsWith('pkg:npm/') && typeof c.version === 'string' && c.version.length > 0)
