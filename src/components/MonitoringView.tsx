@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Activity, AlertCircle, CheckCircle2, Clock3, Loader2, Lock, Play, Plus, RefreshCw, XCircle } from 'lucide-react';
+import { Activity, AlertCircle, CheckCircle2, Clock3, KeyRound, Loader2, Lock, Play, Plus, RefreshCw, XCircle } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
 import { capacityLimitFrom, capacityMessage, type CapacityLimit } from '../lib/capacityLimit.ts';
 import type { Client, SoftwarePassport } from '../types';
@@ -172,7 +172,30 @@ export default function MonitoringView({ role = 'Viewer', passports = [], client
     )}
 
     {loading ? <div className="grid gap-4 md:grid-cols-2">{[1, 2].map(item => <div key={item} className="h-52 animate-pulse rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)]" />)}</div>
-      : configurations.length ? <section className="grid gap-4 md:grid-cols-2">{configurations.map(config => { const job = latest(config.id); return <article key={config.id} className="spr-panel p-5"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-wider text-[var(--spr-text-faint)]">{config.collectorId.replace('_', ' ')} collector</p><h2 className="mt-2 break-all font-semibold text-[var(--spr-text)]">{config.subjectIdentifier}</h2></div><span className={`inline-flex items-center gap-1.5 rounded-sm border border-[var(--spr-border)] px-2.5 py-1 text-xs font-semibold ${config.enabled ? 'text-[var(--spr-green)]' : 'text-[var(--spr-text-muted)]'}`}><span className={`spr-status-dot ${config.enabled ? 'spr-status-dot--green' : 'spr-status-dot--gray'}`} />{config.enabled ? 'Watching' : 'Paused'}</span></div><dl className="mt-5 space-y-3 text-sm"><Row icon={<Clock3 />} label="Last observed" value={readable(config.lastObservedAt)} /><Row icon={<Activity />} label="Last run" value={job ? `${job.state} · ${readable(job.completedAt || job.createdAt)}` : 'No run recorded'} /><Row icon={<CheckCircle2 />} label="Next check" value={readable(config.nextScheduledAt)} /></dl><button onClick={() => void run(config.id)} disabled={!canRun || !config.enabled || running === config.id} title={!canRun ? `Your ${role} role cannot run verifications.` : undefined} className="spr-btn spr-btn-primary mt-6 inline-flex w-full items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"><Play className="h-4 w-4" />{running === config.id ? 'Queueing check…' : 'Re-verify now'}</button></article>; })}</section>
+      : configurations.length ? <section className="grid gap-4 md:grid-cols-2">{configurations.map(config => {
+          const job = latest(config.id);
+          const missingCredential = config.lastStatus === 'disabled_missing_credential';
+          const invalidCredential = config.lastStatus === 'disabled_invalid_credential';
+          const credentialBlocked = missingCredential || invalidCredential;
+          return <article key={config.id} className="spr-panel p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div><p className="text-xs font-semibold uppercase tracking-wider text-[var(--spr-text-faint)]">{config.collectorId.replace('_', ' ')} collector</p><h2 className="mt-2 break-all font-semibold text-[var(--spr-text)]">{config.subjectIdentifier}</h2></div>
+              <span className={`inline-flex items-center gap-1.5 rounded-sm border border-[var(--spr-border)] px-2.5 py-1 text-xs font-semibold ${config.enabled ? 'text-[var(--spr-green)]' : credentialBlocked ? 'text-[var(--spr-amber)]' : 'text-[var(--spr-text-muted)]'}`}><span className={`spr-status-dot ${config.enabled ? 'spr-status-dot--green' : 'spr-status-dot--gray'}`} />{config.enabled ? 'Watching' : credentialBlocked ? 'Needs connection' : 'Paused'}</span>
+            </div>
+            {credentialBlocked && <div role="status" className="mt-4 rounded-md border border-[var(--spr-amber)]/30 bg-[var(--spr-amber)]/10 p-3">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-[var(--spr-amber)]" />
+                <div>
+                  <p className="text-sm font-semibold text-[var(--spr-text)]">{missingCredential ? 'GitHub credential required' : 'GitHub credential needs attention'}</p>
+                  <p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">{missingCredential ? 'SPR disabled this repository monitor because this tenant has no usable GitHub credential. The worker did not fall back to a global token or cross tenant boundaries.' : 'SPR could not validate the tenant GitHub credential, so this monitor was disabled instead of retrying with untrusted access.'}</p>
+                  <a href="/integrations" className="spr-btn spr-btn-secondary mt-3 inline-flex items-center gap-2 text-xs"><KeyRound className="h-3.5 w-3.5" />Connect GitHub</a>
+                </div>
+              </div>
+            </div>}
+            <dl className="mt-5 space-y-3 text-sm"><Row icon={<Clock3 />} label="Last observed" value={readable(config.lastObservedAt)} /><Row icon={<Activity />} label="Last run" value={job ? `${job.state} · ${readable(job.completedAt || job.createdAt)}` : 'No run recorded'} /><Row icon={<CheckCircle2 />} label="Next check" value={credentialBlocked ? 'Blocked until GitHub is connected' : readable(config.nextScheduledAt)} /></dl>
+            <button onClick={() => void run(config.id)} disabled={!canRun || !config.enabled || running === config.id} title={!canRun ? `Your ${role} role cannot run verifications.` : credentialBlocked ? 'Connect a tenant GitHub credential first.' : undefined} className="spr-btn spr-btn-primary mt-6 inline-flex w-full items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"><Play className="h-4 w-4" />{running === config.id ? 'Queueing check…' : credentialBlocked ? 'Blocked — connect GitHub' : 'Re-verify now'}</button>
+          </article>;
+        })}</section>
       : <section className="spr-panel px-6 py-16 text-center"><XCircle className="mx-auto h-8 w-8 text-[var(--spr-text-faint)]" /><h2 className="mt-3 font-semibold text-[var(--spr-text)]">No verification sources configured</h2><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[var(--spr-text-muted)]">SPR cannot claim continuous coverage until an administrator configures a monitored source for this tenant.</p>{canEnroll && <button onClick={() => setShowEnroll(true)} className="spr-btn spr-btn-primary mt-5 inline-flex items-center gap-2"><Plus className="h-4 w-4" />Enable monitoring</button>}</section>}
 
     {showEnroll && (
