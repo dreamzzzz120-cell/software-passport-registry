@@ -152,7 +152,7 @@ export function scoreLicensing(input: ScoringInput): CategoryResult {
   const unevaluated = Math.min(sbomTotal, Math.max(0, Math.floor(input.licenceUnevaluatedComponentCount ?? 0)));
   const total = sbomTotal - unevaluated;
   if (total <= 0) {
-    return { status: 'not_observed', reason: 'Every SBOM component is a CI workflow action reference, which carries no licence metadata, so licence coverage could not be measured.' };
+    return { status: 'not_observed', reason: 'None of the observed SBOM components carried licence metadata that SPR could evaluate, so licence coverage could not be measured.' };
   }
   const withoutLicence = Math.min(total, openFindings(input.findings).filter(isLicenceFinding).length);
   const withLicence = total - withoutLicence;
