@@ -11,8 +11,21 @@ type ObservationResult = {
   transition: Transition;
   observationId: string | null;
   incidentId: string | null;
+  diagnostic?: Record<string, unknown>;
   receiptId?: string;
 };
+
+function safeDiagnostic(contractId: string, observed: Record<string, unknown>) {
+  const allow = (keys: string[]) => Object.fromEntries(keys.filter((key) => key in observed).map((key) => [key, observed[key]]));
+  switch (contractId) {
+    case 'database_reachable': return allow(['reachable', 'latencyMs']);
+    case 'worker_queue_flow': return allow(['stalePending', 'staleRunning', 'oldestPending']);
+    case 'scan_terminality': return allow(['active', 'staleActive']);
+    case 'registry_freshness': return allow(['enabled', 'runObserved', 'lastStartedAt', 'lastFinishedAt', 'ageHours']);
+    case 'reconciler_self_watch': return allow(['priorObservation', 'lastObservationAt', 'ageMinutes']);
+    default: return {};
+  }
+}
 
 type ProbeResult = {
   state: State;
@@ -38,7 +51,7 @@ async function contract(pool: Pool, contractId: string) {
 async function observe(pool: Pool, contractId: string, result: ProbeResult): Promise<ObservationResult> {
   let transition: Transition = 'NONE';
   const c = await contract(pool, contractId);
-  if (!c) return { contractId, state: result.state, transition: 'NONE' as const, observationId: null, incidentId: null };
+  if (!c) return { contractId, state: result.state, transition: 'NONE' as const, observationId: null, incidentId: null, diagnostic: safeDiagnostic(contractId, result.observed) };
 
   const observationId = id('obs');
   await pool.query(
@@ -52,7 +65,7 @@ async function observe(pool: Pool, contractId: string, result: ProbeResult): Pro
   )).rows[0];
 
   if (result.state === 'HEALTHY') {
-    if (!open) return { contractId, state: result.state, transition, observationId, incidentId: null };
+    if (!open) return { contractId, state: result.state, transition, observationId, incidentId: null, diagnostic: safeDiagnostic(contractId, result.observed) };
     const receiptId = id('receipt');
     await pool.query('BEGIN');
     try {
@@ -81,7 +94,7 @@ async function observe(pool: Pool, contractId: string, result: ProbeResult): Pro
       await pool.query('ROLLBACK');
       throw error;
     }
-    return { contractId, state: result.state, transition, observationId, incidentId: open.id, receiptId };
+    return { contractId, state: result.state, transition, observationId, incidentId: open.id, diagnostic: safeDiagnostic(contractId, result.observed), receiptId };
   }
 
   if (open) {
@@ -99,7 +112,7 @@ async function observe(pool: Pool, contractId: string, result: ProbeResult): Pro
       ],
     );
     transition = 'UPDATED';
-    return { contractId, state: result.state, transition, observationId, incidentId: open.id };
+    return { contractId, state: result.state, transition, observationId, incidentId: open.id, diagnostic: safeDiagnostic(contractId, result.observed) };
   }
 
   const incidentId = id('inc');
@@ -121,7 +134,7 @@ async function observe(pool: Pool, contractId: string, result: ProbeResult): Pro
     ],
   );
   transition = 'OPENED';
-  return { contractId, state: result.state, transition, observationId, incidentId };
+  return { contractId, state: result.state, transition, observationId, incidentId, diagnostic: safeDiagnostic(contractId, result.observed) };
 }
 
 async function probeDatabase(pool: Pool): Promise<ProbeResult> {
@@ -263,7 +276,7 @@ export async function runRealityReconciliationCycle(pool: Pool) {
     durationMs: Date.now() - startedAt,
     counts,
     transitions: results.filter((item) => item.transition !== 'NONE'),
-    contracts: results.map((item) => ({ contractId: item.contractId, state: item.state, transition: item.transition, incidentId: item.incidentId ?? null })),
+    contracts: results.map((item) => ({ contractId: item.contractId, state: item.state, transition: item.transition, incidentId: item.incidentId ?? null, diagnostic: item.diagnostic ?? {} })),
   }));
 }
 
