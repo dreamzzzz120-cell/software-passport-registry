@@ -179,3 +179,34 @@ describe('automatic repository monitoring bootstrap', () => {
     expect(s).toContain("console.info('[TrustMonitoring] bootstrap:',JSON.stringify(bootstrap));");
   });
 });
+
+
+describe('public repository monitoring without a tenant GitHub credential', () => {
+  const source = () => read('src/workers/trust-monitoring-worker.ts');
+
+  it('allows only a positively-observed public GitHub repository to proceed without a token', () => {
+    const worker = source();
+    expect(worker).toContain('async function githubRepositoryIsPublic(repository:string)');
+    expect(worker).toContain('return response.status===200;');
+    expect(worker).toContain("cfg.subject_type==='github_repository'");
+    expect(worker).toContain('await githubRepositoryIsPublic(cfg.subject_identifier)');
+  });
+
+  it('still disables missing-credential monitoring when public visibility cannot be proven', () => {
+    const worker = source();
+    expect(worker).toContain("last_status='disabled_missing_credential'");
+    expect(worker).toContain('if(!publicRepository)');
+  });
+
+  it('never falls back to a worker-global GitHub token', () => {
+    const worker = source();
+    expect(worker).not.toContain('process.env.GITHUB_TOKEN');
+    expect(worker).not.toContain('config.github');
+  });
+
+  it('adds Authorization only when a tenant token exists', () => {
+    const worker = source();
+    expect(worker).toContain("const h:Record<string,string>={accept:'application/vnd.github+json'");
+    expect(worker).toContain('if(token)h.authorization=');
+  });
+});
