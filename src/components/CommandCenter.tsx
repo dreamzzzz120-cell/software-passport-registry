@@ -18,18 +18,18 @@ type NavItem = { id: string; label: string; icon: LucideIcon; path: string; colo
 
 const CORE: NavItem[] = [
   { id: 'msp', label: 'MSP Command', icon: LayoutGrid, path: '/msp', color: PURPLE, desc: 'Cross-client oversight for managed service providers — your primary entry point.' },
-  { id: 'dashboard', label: 'Overview', icon: Home, path: '/dashboard', color: BLUE, desc: 'Workspace summary — key metrics across passports, evidence, and alerts at a glance.' },
+  { id: 'dashboard', label: 'Overview', icon: Home, path: '/dashboard', color: BLUE, desc: 'Workspace summary — key metrics across Launch Tickets, evidence, and alerts at a glance.' },
   { id: 'assets', label: 'Assets', icon: Boxes, path: '/assets', color: CYAN, desc: 'The software assets you track — services, applications, and components under management.' },
-  { id: 'passports', label: 'Passports', icon: FileBadge, path: '/passports', color: AMBER, desc: 'Software Passports — structured records combining identity, security, and evidence for a piece of software.' },
+  { id: 'passports', label: 'Launch Tickets', icon: FileBadge, path: '/passports', color: AMBER, desc: 'Launch Tickets — evidence-backed software records combining identity, security observations, and unresolved unknowns.' },
   { id: 'coverage', label: 'Evidence coverage', icon: ShieldCheck, path: '/coverage', color: GREEN, desc: 'How much of your inventory has verifiable evidence versus self-attested claims.' },
-  { id: 'evidence-explorer', label: 'Evidence Explorer', icon: Search, path: '/evidence-explorer', color: TEAL, desc: 'Browse and search the underlying evidence records collected for your passports.' },
+  { id: 'evidence-explorer', label: 'Evidence Explorer', icon: Search, path: '/evidence-explorer', color: TEAL, desc: 'Browse and search the underlying evidence records collected for your Launch Tickets.' },
   { id: 'evidence-exchange', label: 'Evidence Exchange', icon: Share2, path: '/evidence-exchange', color: PURPLE, desc: 'Use the same evidence layer for buyers, vendors, operators, auditors, and executives — with decision trace and source guidance.' },
   { id: 'procurement-gate', label: 'Procurement Gate', icon: ShoppingCart, path: '/procurement-gate', color: AMBER, desc: 'Evidence-backed software buying decisions with explicit unknowns, conditions, and decision trace.' },
   { id: 'vendor-evidence-exchange', label: 'Vendor Evidence Exchange', icon: Inbox, path: '/vendor-evidence-exchange', color: TEAL, desc: 'Persist reusable vendor evidence as unverified intake until SPR or an authorized reviewer validates what it proves.' },
   { id: 'scans', label: 'Scans', icon: ScanLine, path: '/scans', color: ORANGE, desc: 'SBOM and vulnerability scans run against your assets.' },
   { id: 'monitoring', label: 'Monitoring', icon: Activity, path: '/monitoring', color: BLUE, desc: 'Live monitoring signals for tracked assets and integrations.' },
   { id: 'alerts', label: 'Alerts', icon: Bell, path: '/alerts', color: RED, desc: 'Active findings and notifications that need attention.' },
-  { id: 'clients', label: 'Clients', icon: Building2, path: '/clients', color: PURPLE, desc: 'Organizations and teams you manage passports and evidence for.' },
+  { id: 'clients', label: 'Clients', icon: Building2, path: '/clients', color: PURPLE, desc: 'Organizations and teams you manage Launch Tickets and evidence for.' },
   { id: 'trust-graph', label: 'Trust Graph', icon: Network, path: '/trust-graph', color: CYAN, desc: 'A relationship graph connecting assets, vendors, and evidence.' },
 ];
 const GOVERNANCE: NavItem[] = [
@@ -41,7 +41,7 @@ const GOVERNANCE: NavItem[] = [
   { id: 'governance', label: 'Governance', icon: Scale, path: '/governance', color: AMBER, desc: 'Policies, controls, framework requirements, and risk decisions, backed by real evidence and audit records.' },
   { id: 'privacy', label: 'Privacy', icon: Lock, path: '/privacy', color: CYAN, desc: 'Personal information inventory, privacy requests, and privacy impact assessments.' },
   { id: 'integrations', label: 'Integrations', icon: Plug, path: '/integrations', color: TEAL, desc: 'Connected tools and data sources feeding evidence into SPR.' },
-  { id: 'reports', label: 'Reports Center', icon: FileText, path: '/reports', color: BLUE, desc: 'Generated reports summarizing trust, compliance, and evidence.' },
+  { id: 'reports', label: 'Reports Center', icon: FileText, path: '/reports', color: BLUE, desc: 'Generated reports summarizing evidence, findings, unknowns, and verification state.' },
 ];
 const EXECUTIVE: NavItem[] = [
   { id: 'savings', label: 'Time & Savings', icon: PiggyBank, path: '/savings', color: GREEN, desc: 'Estimated time and cost savings from SPR activity, from a baseline you provide.' },
@@ -56,7 +56,7 @@ const SYSTEM: NavItem[] = [
   { id: 'extensions', label: 'Extension Marketplace', icon: Puzzle, path: '/extensions', color: PURPLE, desc: 'Optional workflow extensions you can add to SPR.' },
   { id: 'pricing', label: 'Pricing & Plans', icon: CreditCard, path: '/pricing', color: AMBER, desc: 'Compare SPR plans, pricing and MSP service options.' },
   { id: 'billing', label: 'Billing', icon: CreditCard, path: '/billing', color: AMBER, desc: 'Subscription plan and billing details.' },
-  { id: 'white-label', label: 'White-label', icon: Paintbrush, path: '/white-label', color: PURPLE, desc: 'Your logo, colours, typography and support details across the workspace, reports and public passports.' },
+  { id: 'white-label', label: 'White-label', icon: Paintbrush, path: '/white-label', color: PURPLE, desc: 'Your logo, colours, typography and support details across the workspace, reports and public Launch Tickets.' },
   { id: 'settings', label: 'Settings', icon: Settings, path: '/settings', color: CYAN, desc: 'Workspace configuration and preferences.' },
 ];
 
