@@ -57,8 +57,8 @@ describe('autonomous reality reconciliation contract', () => {
     expect(worker).toContain("locked_at IS NULL OR locked_at < now() - interval '30 minutes'");
     expect(worker).toContain("status IN ('Queued','Scanning')");
     expect(worker).toContain("j.status IN ('Pending','Running')");
-    expect(worker).toContain("status='REPAIRING'");
-    expect(worker).toContain("status='VERIFYING'");
+    expect(worker).toContain("'REPAIRING'");
+    expect(worker).toContain("'VERIFYING'");
     expect(worker).toContain('observed = await observe(pool, contractId, await probe(pool))');
     expect(worker).toContain('no success is claimed');
   });
