@@ -51,6 +51,18 @@ describe('autonomous reality reconciliation contract', () => {
     expect(worker).not.toContain("case 'registry_freshness': return allow(['lastError']");
   });
 
+  it('self-heals only expired or orphaned operational state and re-verifies before closure', () => {
+    expect(worker).toContain('repairStaleQueue');
+    expect(worker).toContain('repairOrphanedScans');
+    expect(worker).toContain("locked_at IS NULL OR locked_at < now() - interval '30 minutes'");
+    expect(worker).toContain("status IN ('Queued','Scanning')");
+    expect(worker).toContain("j.status IN ('Pending','Running')");
+    expect(worker).toContain("'REPAIRING'");
+    expect(worker).toContain("'VERIFYING'");
+    expect(worker).toContain('observed = await observe(pool, contractId, await probe(pool))');
+    expect(worker).toContain('no success is claimed');
+  });
+
   it('keeps cross-platform telemetry behind the founder gate', () => {
     expect(founder).toContain("router.get('/founder/reality'");
     expect(founder).toContain("requireRole('Owner')");
