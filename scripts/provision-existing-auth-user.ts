@@ -4,6 +4,9 @@
  * Provisions an existing, already-authenticated identity into an explicit SPR
  * tenant when the authentication provider contains the user but the SPR
  * membership row is missing. This is intentionally not exposed over HTTP.
+ *
+ * Pass --tenant=existing to preserve and use the tenant already bound to the
+ * verified UID. This mode never moves an identity between tenants.
  */
 import { pool } from '../src/db/index.ts';
 
@@ -16,11 +19,11 @@ function arg(name: string): string {
 async function main() {
   const uid = arg('uid');
   const email = arg('email').toLowerCase();
-  const tenantId = arg('tenant');
+  const tenantArg = arg('tenant');
 
   if (!/^[0-9a-f-]{20,64}$/i.test(uid)) throw new Error('Invalid auth uid');
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 255) throw new Error('Invalid email');
-  if (!/^tenant-[A-Za-z0-9-]{8,}$/.test(tenantId) || tenantId === 'tenant-default') throw new Error('Invalid tenant id');
+  if (tenantArg !== 'existing' && (!/^tenant-[A-Za-z0-9-]{8,}$/.test(tenantArg) || tenantArg === 'tenant-default')) throw new Error('Invalid tenant id');
 
   const client = await pool.connect();
   try {
@@ -42,32 +45,39 @@ async function main() {
 
     if (byUid) {
       if (byUid.email !== email) throw new Error('Refusing provision: auth uid is already bound to a different email');
-      if (byUid.tenant_id !== tenantId) throw new Error('Refusing provision: auth uid already belongs to a different tenant');
       if (byUid.role !== 'Owner') throw new Error('Refusing provision: existing membership is not Owner');
+      const tenantId = String(byUid.tenant_id);
+      if (tenantArg !== 'existing' && tenantId !== tenantArg) throw new Error('Refusing provision: auth uid already belongs to a different tenant');
+      if (!/^tenant-[A-Za-z0-9-]{8,}$/.test(tenantId) || tenantId === 'tenant-default') throw new Error('Refusing provision: existing tenant id is invalid');
+
       await client.query(
         `UPDATE users
          SET onboarded = 1,
-             company_name = COALESCE(company_name, 'Software Passport Registry Ltd.'),
-             role_title = COALESCE(role_title, 'Founder / Owner'),
-             display_name = COALESCE(display_name, 'Founder / Owner')
+             company_name = COALESCE(NULLIF(company_name, ''), 'Software Passport Registry Ltd.'),
+             role_title = COALESCE(NULLIF(role_title, ''), 'Founder / Owner'),
+             display_name = COALESCE(NULLIF(display_name, ''), 'Founder / Owner')
          WHERE uid = $1`,
         [uid],
       );
       await client.query('COMMIT');
-      console.log('[Existing Auth Provision] membership already present; profile ensured', tenantId);
+      console.log('[Existing Auth Provision] membership already present; profile ensured');
+      console.log(`SPR_TENANT_ID=${tenantId}`);
       return;
     }
+
+    if (tenantArg === 'existing') throw new Error('Refusing provision: no existing membership found for verified uid');
 
     await client.query(
       `INSERT INTO users
         (uid, email, tenant_id, role, onboarded, invited_by, company_name, role_title, display_name)
        VALUES ($1, $2, $3, 'Owner', 1, 'system:operator-provision',
                'Software Passport Registry Ltd.', 'Founder / Owner', 'Founder / Owner')`,
-      [uid, email, tenantId],
+      [uid, email, tenantArg],
     );
 
     await client.query('COMMIT');
-    console.log('[Existing Auth Provision] membership created', tenantId);
+    console.log('[Existing Auth Provision] membership created');
+    console.log(`SPR_TENANT_ID=${tenantArg}`);
   } catch (error) {
     await client.query('ROLLBACK').catch(() => undefined);
     throw error;
