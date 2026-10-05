@@ -8,6 +8,7 @@ import { apiFetch } from '../utils/apiClient';
 type RepairTask = {
   id: string;
   title: string;
+  description?: string | null;
   status: string;
   clientId?: string | null;
   passportId?: string | null;
@@ -35,6 +36,46 @@ const STATUS_ORDER = ['OPEN','IN_PROGRESS','READY_FOR_VERIFICATION','VERIFICATIO
 function statusRank(status: string) {
   const i = STATUS_ORDER.indexOf(status);
   return i < 0 ? 99 : i;
+}
+
+
+function repairDecision(task: RepairTask) {
+  if (task.status === 'OPEN') return {
+    automation: 'SAFE TO START',
+    why: task.description || 'SPR has an observed open finding with no completed remediation.',
+    next: 'Start the remediation workflow. This does not claim the issue is fixed.',
+    proof: 'Required before fixed',
+  };
+  if (task.status === 'IN_PROGRESS') return {
+    automation: 'IN PROGRESS',
+    why: task.description || 'A remediation task exists and is actively being worked.',
+    next: 'When the repair action is actually complete, move it to evidence verification.',
+    proof: 'Required before fixed',
+  };
+  if (task.status === 'READY_FOR_VERIFICATION') return {
+    automation: 'NEEDS EVIDENCE',
+    why: 'SPR will not convert a repair claim into a verified result without an enabled monitoring configuration.',
+    next: 'Choose the matching monitoring evidence and queue verification.',
+    proof: 'Collector evidence required',
+  };
+  if (task.status === 'VERIFICATION_QUEUED' || task.status === 'VERIFYING') return {
+    automation: 'AUTOMATIC VERIFY',
+    why: 'The repair is waiting on or running an evidence collector.',
+    next: 'No manual success claim. Wait for the collector result or investigate a failed verification.',
+    proof: 'Verification running',
+  };
+  if (task.status === 'BLOCKED') return {
+    automation: 'NEEDS APPROVAL / INPUT',
+    why: task.verificationFailureReason || 'SPR cannot safely complete this remediation automatically with the evidence currently available.',
+    next: 'Investigate the blocker, supply the missing access/evidence, then retry.',
+    proof: 'Still unverified',
+  };
+  return {
+    automation: 'OBSERVE',
+    why: task.verificationFailureReason || 'SPR is preserving the current workflow state.',
+    next: 'Open the task details and inspect its evidence before changing state.',
+    proof: 'State dependent',
+  };
 }
 
 function badge(status: string) {
@@ -182,17 +223,21 @@ export default function FounderControlPlane() {
       </div>
       <div className="mt-4 overflow-x-auto rounded border border-[var(--spr-border)]">
         <table className="w-full text-sm">
-          <thead><tr className="text-left text-[11px] uppercase tracking-wide text-[var(--spr-text-muted)]"><th className="p-3">Issue</th><th className="p-3">State</th><th className="p-3">Updated</th><th className="p-3 text-right">Action</th></tr></thead>
+          <thead><tr className="text-left text-[11px] uppercase tracking-wide text-[var(--spr-text-muted)]"><th className="p-3">Issue / why</th><th className="p-3">State</th><th className="p-3">SPR decision</th><th className="p-3">Proof</th><th className="p-3 text-right">Action</th></tr></thead>
           <tbody>
-            {activeRepairs.slice(0,25).map((task) => <tr key={task.id} className="border-t border-[var(--spr-border)]">
-              <td className="p-3"><div className="font-medium text-[var(--spr-text)]">{task.title}</div><div className="mt-0.5 font-mono text-[10px] text-[var(--spr-text-faint)]">{task.id}</div></td>
-              <td className={`p-3 text-xs font-semibold ${badge(task.status)}`}>{task.status}</td>
-              <td className="p-3 text-xs text-[var(--spr-text-muted)]">{task.updatedAt ? new Date(task.updatedAt).toLocaleString() : 'Not verified'}</td>
-              <td className="p-3 text-right">
-                {task.status === 'OPEN' || task.status === 'IN_PROGRESS' ? <button onClick={() => void advanceTask(task)} disabled={working !== null} className="spr-btn spr-btn-secondary text-xs">{task.status === 'OPEN' ? 'Start repair' : 'Send to verification'}</button> : <span className="text-xs text-[var(--spr-text-muted)]">{task.status === 'READY_FOR_VERIFICATION' ? 'Choose monitoring evidence to verify' : 'Awaiting system evidence'}</span>}
-              </td>
-            </tr>)}
-            {activeRepairs.length === 0 && <tr><td colSpan={4} className="p-6 text-center text-sm text-[var(--spr-text-muted)]">No active remediation tasks are currently observed.</td></tr>}
+            {activeRepairs.slice(0,25).map((task) => {
+              const decision = repairDecision(task);
+              return <tr key={task.id} className="border-t border-[var(--spr-border)] align-top">
+                <td className="p-3 max-w-[26rem]"><div className="font-medium text-[var(--spr-text)]">{task.title}</div><div className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">{decision.why}</div><div className="mt-1 font-mono text-[10px] text-[var(--spr-text-faint)]">{task.id}</div></td>
+                <td className={`p-3 text-xs font-semibold ${badge(task.status)}`}><div>{task.status}</div><div className="mt-1 font-normal text-[10px] text-[var(--spr-text-muted)]">{task.updatedAt ? new Date(task.updatedAt).toLocaleString() : 'Not verified'}</div></td>
+                <td className="p-3 max-w-[22rem]"><div className="text-[10px] font-bold uppercase tracking-wide text-[var(--spr-highlight)]">{decision.automation}</div><div className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">{decision.next}</div></td>
+                <td className="p-3 text-xs text-[var(--spr-text-muted)]">{decision.proof}</td>
+                <td className="p-3 text-right">
+                  {task.status === 'OPEN' || task.status === 'IN_PROGRESS' ? <button onClick={() => void advanceTask(task)} disabled={working !== null} className="spr-btn spr-btn-secondary text-xs">{task.status === 'OPEN' ? 'Start repair' : 'Send to verification'}</button> : <span className="text-xs text-[var(--spr-text-muted)]">{task.status === 'READY_FOR_VERIFICATION' ? 'Choose monitoring evidence to verify' : 'Awaiting system evidence'}</span>}
+                </td>
+              </tr>;
+            })}
+            {activeRepairs.length === 0 && <tr><td colSpan={5} className="p-6 text-center text-sm text-[var(--spr-text-muted)]">No active remediation tasks are currently observed.</td></tr>}
           </tbody>
         </table>
       </div>
