@@ -132,7 +132,7 @@ app.use('/api/ai-trust', requireAuth, createAiTrustRouter());
 app.use('/api/remediation-tasks', requireAuth, createRemediationTasksRouter());
 app.use('/api/report-schedules', requireAuth, createReportSchedulesRouter());
 const mcpBearer = process.env.SPR_MCP_BEARER_TOKEN;
-if (mcpBearer) { const mcpTransport = createMcpTransport({ expectedBearer: mcpBearer, executeTool: async (tool, args) => executePublicMcpTool(tool, args) }); app.post('/mcp', async (req, res) => { const response = await mcpTransport(new Request(`${config.appUrl || 'https://localhost'}/mcp`, { method: 'POST', headers: req.headers as Record<string, string>, body: JSON.stringify(req.body) })); res.status(response.status); response.headers.forEach((value, key) => res.setHeader(key, value)); res.send(Buffer.from(await response.arrayBuffer())); }); }
+if (mcpBearer) { const mcpTransport = createMcpTransport({ expectedBearer: mcpBearer, executeTool: async (tool, args) => executePublicMcpTool(tool, args) }); app.all('/mcp', async (req, res) => { const method = req.method.toUpperCase(); const init: RequestInit = { method, headers: req.headers as Record<string, string> }; if (!['GET', 'HEAD'].includes(method)) init.body = JSON.stringify(req.body); const response = await mcpTransport(new Request(`${config.appUrl || 'https://localhost'}/mcp`, init)); res.status(response.status); response.headers.forEach((value, key) => res.setHeader(key, value)); const body = Buffer.from(await response.arrayBuffer()); if (method === 'HEAD') return res.end(); return res.send(body); }); }
 app.use('/api', createScanLedgerRouter());
 app.use('/api', createScansRouter());
 app.use('/api/compliance', createComplianceRouter());
