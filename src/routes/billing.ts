@@ -274,7 +274,6 @@ export function createBillingRouter() {
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
       const priceId = planPriceId(parsed.data.plan);
       if (!priceId) return res.status(503).json({ error: 'This plan is not yet available for checkout.' });
-      const stripe = stripeClient();
       const tenantId = req.user!.tenantId;
       const scopedDb = req.db!;
       const existing = (await scopedDb.execute(sql`SELECT stripe_customer_id AS "stripeCustomerId", stripe_subscription_id AS "stripeSubscriptionId", plan, status FROM tenant_subscriptions WHERE tenant_id = ${tenantId} LIMIT 1`) as any).rows?.[0];
