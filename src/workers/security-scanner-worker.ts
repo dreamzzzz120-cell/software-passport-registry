@@ -74,6 +74,14 @@ async function processSecurityJob(pool: Pool, job: any) {
     const canonicalName = typeof metadata.name === 'string' && metadata.name ? metadata.name : source.repository_name;
     const canonicalRepoApi = `https://api.github.com/repos/${encodeURIComponent(canonicalOwner)}/${encodeURIComponent(canonicalName)}`;
     let commitSha = gitFallback?.commitSha || '';
+    let commitVerification: {
+      verified: boolean;
+      reason: string;
+      verifiedAt: string | null;
+      signature: string | null;
+      payload: string | null;
+      committerLogin: string | null;
+    } | null = null;
     if (!commitSha) {
       const commitResponse = await fetchGitHubApi(`${canonicalRepoApi}/commits/${encodeURIComponent(requestedRef)}`, { headers: headers({ accept: 'application/vnd.github+json', 'user-agent': 'spr-security-worker/1.0' }) });
       if (isRateLimited(commitResponse)) {
@@ -85,6 +93,17 @@ async function processSecurityJob(pool: Pool, job: any) {
         if (!commitResponse.ok) throw new Error('REPOSITORY_REF_NOT_FOUND');
         const commit: any = await commitResponse.json();
         commitSha = commit.sha;
+        const verification = commit?.commit?.verification;
+        if (verification?.verified === true && verification?.reason === 'valid') {
+          commitVerification = {
+            verified: true,
+            reason: 'valid',
+            verifiedAt: typeof verification.verified_at === 'string' ? verification.verified_at : null,
+            signature: typeof verification.signature === 'string' ? verification.signature : null,
+            payload: typeof verification.payload === 'string' ? verification.payload : null,
+            committerLogin: typeof commit?.committer?.login === 'string' ? commit.committer.login : null,
+          };
+        }
       }
     }
     if (typeof commitSha !== 'string' || !/^[a-f0-9]{40}$/i.test(commitSha)) throw new Error('REPOSITORY_REF_NOT_FOUND');
@@ -150,6 +169,46 @@ async function processSecurityJob(pool: Pool, job: any) {
         }),
       }),
     ]);
+
+    if (commitVerification?.verified) {
+      const provenancePayload = JSON.stringify({
+        schemaVersion: 'spr.github-commit-verification.v1',
+        repository: `${canonicalOwner}/${canonicalName}`,
+        resolvedCommitSha: commitSha,
+        verifier: 'github.com',
+        verificationReason: commitVerification.reason,
+        verifiedAt: commitVerification.verifiedAt,
+        committerLogin: commitVerification.committerLogin,
+        signature: commitVerification.signature,
+        signedPayload: commitVerification.payload,
+      });
+      const provenanceHash = sha256(provenancePayload);
+      const provenanceEvidenceId = `ev-github-signature-${job.id}-${provenanceHash.slice(0,24)}`;
+      await pool.query(
+        `INSERT INTO evidence_items (id,tenant_id,asset_id,name,type,verified,status,signer,timestamp,hash,raw_content,engine_id,scan_id)
+         VALUES ($1,$2,$3,'GitHub verified commit signature','Signature',1,'VERIFIED','github.com',COALESCE($4::timestamptz,NOW()),$5,$6,'github-commit-verification-v1',$7)
+         ON CONFLICT DO NOTHING`,
+        [
+          provenanceEvidenceId,
+          job.tenant_id,
+          job.passport_id,
+          commitVerification.verifiedAt,
+          `sha256:${provenanceHash}`,
+          provenancePayload,
+          job.scan_id ?? null,
+        ],
+      );
+      console.info(JSON.stringify({
+        event: 'github_commit_signature_verified',
+        workerId: WORKER_ID,
+        jobId: job.id,
+        tenantId: job.tenant_id,
+        passportId: job.passport_id,
+        repository: `${canonicalOwner}/${canonicalName}`,
+        commitSha,
+        evidenceId: provenanceEvidenceId,
+      }));
+    }
 
     const persistedFindings: Array<{ id: string; filePath: string | null }> = [];
     for (const finding of findings) {
