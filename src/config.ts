@@ -78,7 +78,7 @@ const parsedEnv = envSchema.parse(process.env);
 // credential (for example a Resend key) into STRIPE_SECRET_KEY. Treating any
 // non-empty string as Stripe-ready caused repeated live API failures and made
 // the catalogue look configured when checkout could never work.
-const stripeSecretKey = parsedEnv.STRIPE_SECRET_KEY && /^sk_(?:live|test)_[A-Za-z0-9]+$/.test(parsedEnv.STRIPE_SECRET_KEY)
+const stripeSecretKey = parsedEnv.STRIPE_SECRET_KEY && /^(?:sk|rk)_(?:live|test)_[A-Za-z0-9]+$/.test(parsedEnv.STRIPE_SECRET_KEY)
   ? parsedEnv.STRIPE_SECRET_KEY
   : undefined;
 export const stripeSecretKeyMisconfigured = Boolean(parsedEnv.STRIPE_SECRET_KEY && !stripeSecretKey);
