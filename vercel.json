@@ -8,6 +8,7 @@
   "rewrites": [
     {"source":"/api/registry-public","destination":"https://gezmtnleoyrudxztegoj.supabase.co/functions/v1/registry-public"},
     {"source":"/api/traffic/event","has":[{"type":"header","key":"x-vercel-ip-country","value":"(?<country>[A-Z]{2})"}],"destination":"https://spr-app-production-production-4d46.up.railway.app/api/traffic/event?vc_country=:country"},
+    {"source":"/api/billing/:path*","destination":"https://spr-app-production-production.up.railway.app/api/billing/:path*"},
     {"source":"/api/:path*","destination":"https://spr-app-production-production-4d46.up.railway.app/api/:path*"},
     {"source":"/health","destination":"https://spr-app-production-production-4d46.up.railway.app/health"},
     {"source":"/ready","destination":"https://spr-app-production-production-4d46.up.railway.app/ready"},
