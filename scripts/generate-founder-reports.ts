@@ -21,6 +21,7 @@ import { toPlainEnglish } from '../src/trust/plain-english-report.ts';
 const TYPES = ['executive', 'technical', 'msp', 'customer', 'compliance', 'vendor', 'auditor', 'evidence-ledger'] as const;
 
 async function main() {
+  const targetRepo = process.argv.slice(2).find((arg) => !arg.startsWith('--'))?.trim() || null;
   const founderEmail = (process.env.FOUNDER_EMAILS || process.env.SPR_INITIAL_OWNER_EMAIL || '').split(',')[0].trim().toLowerCase();
   if (!founderEmail) throw new Error('FOUNDER_EMAILS / SPR_INITIAL_OWNER_EMAIL not set');
   const client = await appPool.connect();
@@ -36,9 +37,13 @@ async function main() {
     const passports = (await db.execute(sql`
       SELECT DISTINCT p.id, p.name, p.version, p.publisher
       FROM passports p JOIN agent_jobs j ON j.passport_id = p.id AND j.tenant_id = p.tenant_id
-      WHERE p.tenant_id = ${tenantId} AND j.job_type = 'repository_scan' AND j.status = 'Completed'
+      WHERE p.tenant_id = ${tenantId}
+        AND j.job_type = 'repository_scan'
+        AND j.status = 'Completed'
+        AND (${targetRepo}::text IS NULL OR lower(p.name) = lower(${targetRepo}))
       ORDER BY p.name
     `) as any).rows ?? [];
+    if (targetRepo && passports.length === 0) throw new Error(`no completed repository scan for ${targetRepo}`);
     for (const passport of passports) {
       const reports: Record<string, unknown> = {};
       for (const type of TYPES) {
