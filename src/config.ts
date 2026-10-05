@@ -40,6 +40,7 @@ const envSchema = z.object({
   SQL_SSL_CA: optionalTrimmedString,
   SQL_POOL_MAX: optionalPositiveIntegerString, SQL_CONNECTION_TIMEOUT_MS: optionalPositiveIntegerString, SQL_IDLE_TIMEOUT_MS: optionalPositiveIntegerString, SQL_QUERY_TIMEOUT_MS: optionalPositiveIntegerString,
   STRIPE_SECRET_KEY: optionalTrimmedString, STRIPE_WEBHOOK_SECRET: optionalTrimmedString,
+  STRIPE_PAYMENT_LINK_STARTER: optionalTrimmedUrl, STRIPE_PAYMENT_LINK_PROFESSIONAL: optionalTrimmedUrl, STRIPE_PAYMENT_LINK_GROWTH: optionalTrimmedUrl,
   STRIPE_PRICE_PILOT: optionalTrimmedString, STRIPE_PRICE_STARTER: optionalTrimmedString, STRIPE_PRICE_PROFESSIONAL: optionalTrimmedString, STRIPE_PRICE_GROWTH: optionalTrimmedString, STRIPE_PRICE_ENTERPRISE: optionalTrimmedString,
   STRIPE_PRICE_MSP_PILOT: optionalTrimmedString, STRIPE_PRICE_MSP_GROWTH: optionalTrimmedString, STRIPE_PRICE_MSP_SCALE: optionalTrimmedString,
   STRIPE_PRICE_SOFTWARE_PASSPORT: optionalTrimmedString, STRIPE_PRICE_EVIDENCE_REPORT: optionalTrimmedString, STRIPE_PRICE_SECURITY_ASSESSMENT: optionalTrimmedString,
@@ -109,6 +110,11 @@ export const config = {
   },
   stripe: {
     secretKey: stripeSecretKey, webhookSecret: parsedEnv.STRIPE_WEBHOOK_SECRET,
+    paymentLinks: {
+      starter: parsedEnv.STRIPE_PAYMENT_LINK_STARTER,
+      professional: parsedEnv.STRIPE_PAYMENT_LINK_PROFESSIONAL,
+      growth: parsedEnv.STRIPE_PAYMENT_LINK_GROWTH,
+    },
     prices: {
       pilot: parsedEnv.STRIPE_PRICE_MSP_PILOT ?? parsedEnv.STRIPE_PRICE_PILOT,
       starter: parsedEnv.STRIPE_PRICE_STARTER,
