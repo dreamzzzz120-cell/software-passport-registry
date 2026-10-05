@@ -65,6 +65,19 @@ function planPriceId(plan: PlanId): string | undefined {
   return config.stripe.prices[PLAN_CONFIG[plan].priceKey as keyof typeof config.stripe.prices];
 }
 
+function planPaymentLink(plan: PlanId): string | undefined {
+  if (plan === 'starter') return config.stripe.paymentLinks.starter;
+  if (plan === 'professional') return config.stripe.paymentLinks.professional;
+  if (plan === 'growth') return config.stripe.paymentLinks.growth;
+  return undefined;
+}
+
+const VERIFIED_PAYMENT_LINK_PRICES: Partial<Record<PlanId, ResolvedPrice>> = {
+  starter: { priceLabel: '$149/month', unitAmount: 14900, currency: 'usd', interval: 'month', description: 'Software Passport Registry MSP Starter' },
+  professional: { priceLabel: '$399/month', unitAmount: 39900, currency: 'usd', interval: 'month', description: 'Software Passport Registry MSP Professional' },
+  growth: { priceLabel: '$799/month', unitAmount: 79900, currency: 'usd', interval: 'month', description: 'Software Passport Registry MSP Business' },
+};
+
 function oneTimePriceId(product: OneTimeProductId): string | undefined {
   return config.stripe.prices[ONE_TIME_CONFIG[product].priceKey as keyof typeof config.stripe.prices];
 }
@@ -177,13 +190,26 @@ function catalogEntry(id: string, label: string, priceId: string | undefined, pr
 
 export async function buildCatalog() {
   const prices = await loadPrices();
+  const hasPaymentLinkCheckout = PLAN_IDS.some((id) => Boolean(planPaymentLink(id)));
   return {
-    billingConfigured: Boolean(config.stripe.secretKey),
-    billingConfigurationError: stripeSecretKeyMisconfigured ? 'STRIPE_SECRET_KEY_INVALID' : null,
-    plans: PLAN_IDS.map((id) => ({
-      ...catalogEntry(id, PLAN_CONFIG[id].label, planPriceId(id), prices),
-      clientLimit: PLAN_CONFIG[id].clientLimit,
-    })),
+    billingConfigured: Boolean(config.stripe.secretKey) || hasPaymentLinkCheckout,
+    billingConfigurationError: stripeSecretKeyMisconfigured && !hasPaymentLinkCheckout ? 'STRIPE_SECRET_KEY_INVALID' : null,
+    plans: PLAN_IDS.map((id) => {
+      const stripeEntry = catalogEntry(id, PLAN_CONFIG[id].label, planPriceId(id), prices);
+      const fallback = planPaymentLink(id) ? VERIFIED_PAYMENT_LINK_PRICES[id] : undefined;
+      return {
+        ...stripeEntry,
+        ...(fallback && !stripeEntry.checkoutAvailable ? {
+          priceLabel: fallback.priceLabel,
+          unitAmount: fallback.unitAmount,
+          currency: fallback.currency,
+          interval: fallback.interval,
+          description: fallback.description,
+          checkoutAvailable: true,
+        } : {}),
+        clientLimit: PLAN_CONFIG[id].clientLimit,
+      };
+    }),
     products: ONE_TIME_IDS.map((id) => catalogEntry(id, ONE_TIME_CONFIG[id].label, oneTimePriceId(id), prices)),
     addons: ADDON_IDS.map((id) => catalogEntry(id, ADDON_CONFIG[id].label, addonPriceId(id), prices)),
   };
@@ -244,7 +270,6 @@ export function createBillingRouter() {
 
   router.post('/checkout', requireAuth, requireRole(['Owner']), async (req: AuthenticatedRequest, res, next) => {
     try {
-      if (!config.stripe.secretKey) return res.status(503).json({ error: 'BILLING_NOT_CONFIGURED' });
       const parsed = checkoutSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
       const priceId = planPriceId(parsed.data.plan);
@@ -265,25 +290,35 @@ export function createBillingRouter() {
           message: `This workspace already has an active ${existing.plan} plan. Use Manage billing to change plans; a second checkout would create a second subscription.`,
         });
       }
-      const session = await stripe.checkout.sessions.create({
-        mode: 'subscription',
-        ...(customerId ? { customer: customerId } : { customer_email: req.user!.email }),
-        line_items: [{ price: priceId, quantity: 1 }],
-        // Buyers can enter a Stripe promotion code on the hosted page; a code that
-        // brings the total to zero must not demand a card for a $0 subscription.
-        allow_promotion_codes: true,
-        // Founder decision 2026-09-11: prices are USD everywhere. Adaptive Pricing
-        // would otherwise localise the hosted page (a Canadian buyer saw CA$214.98
-        // for the $149 plan) and settle in that currency.
-        adaptive_pricing: { enabled: false },
-        payment_method_collection: 'if_required',
-        success_url: `${config.appUrl}/billing?checkout=success`,
-        cancel_url: `${config.appUrl}/billing?checkout=cancelled`,
-        client_reference_id: tenantId,
-        subscription_data: { metadata: { tenantId, plan: parsed.data.plan } },
-        metadata: { tenantId, plan: parsed.data.plan },
-      });
-      if (!session.url) throw new Error('STRIPE_CHECKOUT_SESSION_MISSING_URL');
+      let checkoutUrl: string;
+      let checkoutReference: string;
+      if (config.stripe.secretKey) {
+        const stripe = stripeClient();
+        const session = await stripe.checkout.sessions.create({
+          mode: 'subscription',
+          ...(customerId ? { customer: customerId } : { customer_email: req.user!.email }),
+          line_items: [{ price: priceId, quantity: 1 }],
+          allow_promotion_codes: true,
+          adaptive_pricing: { enabled: false },
+          payment_method_collection: 'if_required',
+          success_url: `${config.appUrl}/billing?checkout=success`,
+          cancel_url: `${config.appUrl}/billing?checkout=cancelled`,
+          client_reference_id: tenantId,
+          subscription_data: { metadata: { tenantId, plan: parsed.data.plan } },
+          metadata: { tenantId, plan: parsed.data.plan },
+        });
+        if (!session.url) throw new Error('STRIPE_CHECKOUT_SESSION_MISSING_URL');
+        checkoutUrl = session.url;
+        checkoutReference = session.id;
+      } else {
+        const paymentLink = planPaymentLink(parsed.data.plan);
+        if (!paymentLink) return res.status(503).json({ error: 'BILLING_NOT_CONFIGURED' });
+        const url = new URL(paymentLink);
+        url.searchParams.set('client_reference_id', tenantId);
+        if (req.user!.email) url.searchParams.set('prefilled_email', req.user!.email);
+        checkoutUrl = url.toString();
+        checkoutReference = 'payment-link';
+      }
       await scopedDb.execute(sql`
         INSERT INTO tenant_subscriptions (tenant_id, stripe_customer_id, plan, status)
         VALUES (${tenantId}, ${customerId ?? null}, ${parsed.data.plan}, 'incomplete')
@@ -293,8 +328,8 @@ export function createBillingRouter() {
           status = 'incomplete',
           updated_at = CURRENT_TIMESTAMP
       `);
-      await appendAuditEntry(scopedDb, { tenantId, action: 'billing.checkout.initiated', actor: req.user!.uid, payload: { plan: parsed.data.plan, checkoutSessionId: session.id } });
-      return res.json({ url: session.url });
+      await appendAuditEntry(scopedDb, { tenantId, action: 'billing.checkout.initiated', actor: req.user!.uid, payload: { plan: parsed.data.plan, checkoutSessionId: checkoutReference } });
+      return res.json({ url: checkoutUrl });
     } catch (error) { return next(error); }
   });
 
@@ -392,10 +427,13 @@ export function createBillingRouter() {
 }
 
 export async function stripeWebhookHandler(req: Request, res: Response) {
-  if (!config.stripe.webhookSecret || !config.stripe.secretKey) return res.status(503).json({ error: 'BILLING_NOT_CONFIGURED' });
+  if (!config.stripe.webhookSecret) return res.status(503).json({ error: 'BILLING_NOT_CONFIGURED' });
   const signature = req.headers['stripe-signature'];
   if (typeof signature !== 'string') return res.status(400).json({ error: 'MISSING_SIGNATURE' });
-  const stripe = stripeClient();
+  // Webhook signature verification is local HMAC validation and does not
+  // require Stripe API access. A placeholder-form key lets stripe-node expose
+  // its webhook verifier without weakening signature checks.
+  const stripe = config.stripe.secretKey ? stripeClient() : new Stripe('sk_test_webhook_verification_only');
   let event: Stripe.Event;
   try {
     event = stripe.webhooks.constructEvent(req.body, signature, config.stripe.webhookSecret);
