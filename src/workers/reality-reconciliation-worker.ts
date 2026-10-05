@@ -371,15 +371,16 @@ export async function runRealityReconciliationCycle(pool: Pool) {
     let observed = await observe(pool, contractId, initial);
     const repairer = contractId === 'worker_queue_flow' ? repairStaleQueue : contractId === 'scan_terminality' ? repairOrphanedScans : null;
     if (initial.state === 'FAILED' && observed.incidentId && repairer) {
+      const incidentId = observed.incidentId;
       const c = await contract(pool, contractId);
       if ((c?.repair_class ?? 0) >= 1) {
         try {
-          await setIncidentRepairState(pool, observed.incidentId, 'REPAIRING', 'Bounded stale-state recovery using existing retry budget and lease ownership rules.');
+          await setIncidentRepairState(pool, incidentId, 'REPAIRING', 'Bounded stale-state recovery using existing retry budget and lease ownership rules.');
           const repair = await repairer(pool);
-          await setIncidentRepairState(pool, observed.incidentId, 'VERIFYING', `Bounded recovery attempted=${repair.attempted}; requeued=${repair.requeued ?? 0}; failed=${repair.failed ?? 0}; scanRequeued=${repair.scanRequeued ?? 0}; scanFailed=${repair.scanFailed ?? 0}.`);
+          await setIncidentRepairState(pool, incidentId, 'VERIFYING', `Bounded recovery attempted=${repair.attempted}; requeued=${repair.requeued ?? 0}; failed=${repair.failed ?? 0}; scanRequeued=${repair.scanRequeued ?? 0}; scanFailed=${repair.scanFailed ?? 0}.`);
           observed = await observe(pool, contractId, await probe(pool));
         } catch {
-          await setIncidentRepairState(pool, observed.incidentId, 'INVESTIGATING', 'Bounded recovery attempt failed; incident remains open and no success is claimed.').catch(() => undefined);
+          await setIncidentRepairState(pool, incidentId, 'INVESTIGATING', 'Bounded recovery attempt failed; incident remains open and no success is claimed.').catch(() => undefined);
         }
       }
     }
