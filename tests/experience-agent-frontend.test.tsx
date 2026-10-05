@@ -85,14 +85,17 @@ async function openAndSend(text: string) {
 }
 
 describe('navigation and action allowlists on the client', () => {
-  it('navigates only to allowlisted paths returned by the server', async () => {
+  it('never auto-navigates from a conversational response; navigation requires a user click', async () => {
     responder = () => ok({ intent: 'navigation', path: '/passports', reply: 'Opening Passports.' });
     await mount(true);
     await openAndSend('show passports');
-    await waitFor(() => expect(window.location.pathname).toBe('/passports'));
+    await screen.findByText('Opening Passports.');
+    expect(window.location.pathname).toBe('/dashboard');
     expect(calls[0].url).toBe('/api/agent/v1/command');
     expect(calls[0].body).toMatchObject({ input: 'show passports', context: { path: '/dashboard' } });
     expect((calls[0].body as any).context.history).toEqual(expect.any(Array));
+    fireEvent.click(screen.getByRole('button', { name: 'Open suggested page' }));
+    expect(window.location.pathname).toBe('/passports');
   });
 
   it('ignores a non-allowlisted path even if the server returns one', async () => {

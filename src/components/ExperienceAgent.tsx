@@ -201,12 +201,14 @@ export default function ExperienceAgent() {
       const payload = await response.json().catch(() => ({})) as CommandResponse;
       if (!response.ok) throw new Error(typeof payload.reply === 'string' ? payload.reply : 'SPR Agent could not complete the request.');
       const replyText = payload.reply || 'The request completed without a factual response.';
-      setMessages((current) => [...current, { role: 'agent', text: replyText, data: payload.data, provenance: payload.provenance, actions: payload.actions, nextMove: payload.nextMove, proposedAction: payload.proposedAction, stuck: payload.stuck }]);
+      const responseActions = [
+        ...(payload.actions ?? []),
+        ...(payload.path && SAFE_NAV_PATHS.has(payload.path) ? [{ label: 'Open suggested page', path: payload.path }] : []),
+      ];
+      setMessages((current) => [...current, { role: 'agent', text: replyText, data: payload.data, provenance: payload.provenance, actions: responseActions, nextMove: payload.nextMove, proposedAction: payload.proposedAction, stuck: payload.stuck }]);
       speak(replyText);
-      if (payload.path) {
-        if (navigate(payload.path)) { setOpen(false); return; }
+      if (payload.path && !SAFE_NAV_PATHS.has(payload.path)) {
         setMessages((current) => [...current, { role: 'agent', text: REFUSED_PATH_MESSAGE }]);
-        return;
       }
       if (payload.action?.type === 'verify' && payload.action.endpoint && SAFE_ACTION_ENDPOINTS.has(payload.action.endpoint) && payload.action.payload) {
         const verify = await apiFetch(payload.action.endpoint, { method: 'POST', body: JSON.stringify(payload.action.payload), timeout: 30_000 });
