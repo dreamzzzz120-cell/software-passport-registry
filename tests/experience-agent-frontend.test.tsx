@@ -75,6 +75,61 @@ describe('mounting and authentication gate', () => {
     act(() => { authState.currentUser = null; for (const cb of listeners) cb(null); });
     expect(screen.queryByRole('button', { name: 'Open SPR Agent' })).toBeNull();
   });
+
+  it('supports keyboard close/toggle, locks background scroll, and restores launcher focus', async () => {
+    await mount(true);
+    const launcher = screen.getByRole('button', { name: 'Open SPR Agent' }) as HTMLButtonElement;
+    fireEvent.click(launcher);
+    expect(await screen.findByRole('dialog')).toBeTruthy();
+    expect(document.body.style.overflow).toBe('hidden');
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(launcher));
+    expect(document.body.style.overflow).not.toBe('hidden');
+    keyK({ ctrlKey: true });
+    expect(await screen.findByRole('dialog')).toBeTruthy();
+    keyK({ ctrlKey: true });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('clears the conversation and recalls the last command with ArrowUp', async () => {
+    responder = () => ok({ intent: 'help', reply: 'Observed answer.' });
+    await mount(true);
+    await openAndSend('show clients');
+    await screen.findByText('Observed answer.');
+    const input = screen.getByLabelText('Ask SPR Agent') as HTMLInputElement;
+    fireEvent.keyDown(input, { key: 'ArrowUp' });
+    expect(input.value).toBe('show clients');
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    expect(screen.queryByText('Observed answer.')).toBeNull();
+    expect(input.value).toBe('');
+  });
+
+  it('adds a retry control after a failed command and retries only on explicit click', async () => {
+    let failed = true;
+    responder = () => failed
+      ? ({ status: 500, ok: false, json: async () => ({}) })
+      : ok({ intent: 'help', reply: 'Recovered.' });
+    await mount(true);
+    await openAndSend('help me');
+    await screen.findByText('SPR Agent could not complete the request.');
+    expect(calls.map((call) => call.url)).toEqual(['/api/agent/v1/command']);
+    failed = false;
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await screen.findByText('Recovered.');
+    expect(calls.map((call) => call.url)).toEqual(['/api/agent/v1/command', '/api/agent/v1/command']);
+  });
+
+  it('exposes the transcript as a polite live log and character feedback', async () => {
+    await mount(true);
+    keyK({ ctrlKey: true });
+    const log = await screen.findByRole('log');
+    expect(log.getAttribute('aria-live')).toBe('polite');
+    const input = screen.getByLabelText('Ask SPR Agent') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'x'.repeat(451) } });
+    expect(screen.getByText('451/500')).toBeTruthy();
+    expect(screen.getByText(/Current page:/).textContent).toContain('/dashboard');
+  });
 });
 
 async function openAndSend(text: string) {
