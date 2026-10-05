@@ -363,12 +363,29 @@ export default function FreeReviewView({
     result?.passport?.name || displayName || result?.passportId || 'Repository review';
 
   const shareReview = async () => {
+    const url = window.location.href;
     try {
-      await navigator.clipboard.writeText(window.location.href);
+      if (navigator.share) {
+        await navigator.share({ title: 'SPR Free Review', url });
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = url;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        const copied = document.execCommand('copy');
+        textarea.remove();
+        if (!copied) throw new Error('copy failed');
+      }
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 1800);
-    } catch {
-      setError('Could not copy the review link. Copy the browser address instead.');
+      window.setTimeout(() => setCopied(false), 2500);
+    } catch (error: any) {
+      if (error?.name === 'AbortError') return;
+      setError('Could not share the review link. Copy the browser address instead.');
     }
   };
 
@@ -386,8 +403,7 @@ export default function FreeReviewView({
           </div>
           <h1 className="mt-3 text-3xl font-semibold">Free software review</h1>
           <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-[var(--spr-text-muted)]">
-            SPR turns a public repository into an evidence-led software trust review.
-            You see what was observed, what was verified, and where evidence is still missing.
+            SPR turns a public repository into an evidence-led software trust review. No account is needed to run the review. You see what was observed, what was verified, and where evidence is still missing; the optional PDF asks for contact details.
           </p>
         </div>
 
@@ -554,22 +570,22 @@ export default function FreeReviewView({
                         <div className="mt-1 break-all text-sm font-bold">{reviewedName}</div>
                       </div>
                       <div className="rounded-xl border border-[var(--spr-border)] p-4">
-                        <div className="text-xs text-[var(--spr-text-muted)]">Version</div>
-                        <div className="mt-1 text-sm font-bold">
+                        <div className="text-xs text-[var(--spr-text-muted)]">{/^[a-f0-9]{40}$/i.test(result.passport?.version || '') ? 'Commit' : 'Version'}</div>
+                        <div className="mt-1 break-all text-sm font-bold">
                           {result.passport?.version || 'UNKNOWN'}
                         </div>
                       </div>
                       <div className="rounded-xl border border-[var(--spr-border)] p-4">
                         <div className="text-xs text-[var(--spr-text-muted)]">Publisher</div>
-                        <div className="mt-1 text-sm font-bold">
+                        <div className="mt-1 break-words text-sm font-bold">
                           {result.passport?.publisher || 'UNKNOWN'}
                         </div>
                       </div>
                       <div className="rounded-xl border border-[var(--spr-border)] p-4">
-                        <div className="text-xs text-[var(--spr-text-muted)]">Commit / ref</div>
-                        <div className="mt-1 text-sm font-bold">UNKNOWN</div>
+                        <div className="text-xs text-[var(--spr-text-muted)]">Reference</div>
+                        <div className="mt-1 text-sm font-bold">{/^[a-f0-9]{40}$/i.test(result.passport?.version || '') ? 'Pinned commit' : 'UNKNOWN'}</div>
                         <div className="mt-1 text-[10px] text-[var(--spr-text-faint)]">
-                          Not exposed in free preview
+                          {result.passport?.version && /^[a-f0-9]{40}$/i.test(result.passport.version) ? 'Exact commit observed' : 'Exact ref not exposed in free preview'}
                         </div>
                       </div>
                     </div>
@@ -621,7 +637,7 @@ export default function FreeReviewView({
                               {result.assessment.totalAreas - result.assessment.observedAreas}
                             </div>
                             <div className="text-xs text-[var(--spr-text-muted)]">
-                              areas without enough evidence
+                              Areas without enough evidence
                             </div>
                           </div>
                         </div>
@@ -687,7 +703,38 @@ export default function FreeReviewView({
                     </div>
                   </section>
 
-                  <section className="rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6">
+                  <section id="findings-summary" className="rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6">
+                    <div className="text-[11px] font-semibold uppercase tracking-[.18em]">Findings summary</div>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                      <div className="rounded-xl border border-[var(--spr-border)] p-4">
+                        <div className="text-xs text-[var(--spr-text-muted)]">Open findings</div>
+                        <div className="mt-1 text-2xl font-bold">{result.findings?.total ?? result.summary.openFindings}</div>
+                      </div>
+                      <div className="rounded-xl border border-[var(--spr-border)] p-4">
+                        <div className="text-xs text-[var(--spr-text-muted)]">Critical / high</div>
+                        <div className="mt-1 text-2xl font-bold">{result.findings?.elevated ?? result.summary.criticalOrHigh}</div>
+                      </div>
+                      <div className="rounded-xl border border-[var(--spr-border)] p-4">
+                        <div className="text-xs text-[var(--spr-text-muted)]">Detail level</div>
+                        <div className="mt-1 text-sm font-semibold">Aggregate preview</div>
+                        <div className="mt-1 text-[10px] text-[var(--spr-text-faint)]">Titles, components and remediation stay in the full Launch Ticket.</div>
+                      </div>
+                    </div>
+                    {result.findings?.teasers?.length ? (
+                      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                        {result.findings.teasers.map((item) => (
+                          <div key={item.category} className="flex items-center justify-between gap-3 rounded-lg border border-[var(--spr-border)] p-3 text-sm">
+                            <span className="font-semibold">{item.category}</span>
+                            <span className="text-[var(--spr-text-muted)]">{item.count} · {item.severity}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-4 text-sm text-[var(--spr-text-muted)]">No finding category was returned by the engines that completed. This is not proof of safety.</p>
+                    )}
+                  </section>
+
+                  <section id="evidence-summary" className="rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6">
                     <div className="text-[11px] font-semibold uppercase tracking-[.18em]">
                       Evidence breakdown
                     </div>
@@ -741,26 +788,27 @@ export default function FreeReviewView({
                     </div>
                     <div className="mt-4 flex flex-wrap gap-3">
                       <ActionButton
-                        label="Open Passport"
+                        label="Claim full Launch Ticket"
                         icon={<ExternalLink className="inline h-4 w-4" />}
-                        onClick={() => loginTarget('/passports')}
+                        onClick={onSignUp}
                         primary
                       />
                       <ActionButton
-                        label="Evidence Explorer"
+                        label="See evidence summary"
                         icon={<ExternalLink className="inline h-4 w-4" />}
-                        onClick={() => loginTarget('/evidence-explorer')}
+                        onClick={() => document.getElementById('evidence-summary')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
                       />
                       <ActionButton
-                        label="Findings"
+                        label="See findings summary"
                         icon={<ExternalLink className="inline h-4 w-4" />}
-                        onClick={() => loginTarget('/dashboard')}
+                        onClick={() => document.getElementById('findings-summary')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
                       />
                       <ActionButton
-                        label={copied ? 'Link copied' : 'Share review'}
+                        label={copied ? 'Shared / copied' : 'Share review'}
                         icon={<Clipboard className="inline h-4 w-4" />}
                         onClick={() => void shareReview()}
                       />
+                      <span aria-live="polite" className="self-center text-xs text-[var(--spr-green)]">{copied ? 'Review link ready to share.' : ''}</span>
                       <ActionButton
                         label="Start monitoring"
                         icon={<Monitor className="inline h-4 w-4" />}
