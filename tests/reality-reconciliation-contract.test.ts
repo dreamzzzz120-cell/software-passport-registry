@@ -43,6 +43,14 @@ describe('autonomous reality reconciliation contract', () => {
     expect(worker).toContain('incidentId');
   });
 
+  it('logs only allow-listed reconciliation diagnostics', () => {
+    expect(worker).toContain('safeDiagnostic');
+    expect(worker).toContain("'stalePending'");
+    expect(worker).toContain("'staleActive'");
+    expect(worker).toContain("'ageHours'");
+    expect(worker).not.toContain("case 'registry_freshness': return allow(['lastError']");
+  });
+
   it('keeps cross-platform telemetry behind the founder gate', () => {
     expect(founder).toContain("router.get('/founder/reality'");
     expect(founder).toContain("requireRole('Owner')");
