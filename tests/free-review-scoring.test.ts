@@ -84,9 +84,13 @@ describe('licensing score', () => {
     expect(result.status === 'scored' && result.detail).toBe('471 of 472 package components carry an observed licence. 19 CI workflow action references not evaluated.');
   });
 
-  it('is not observed, not 100, when every component is an unevaluated action reference', () => {
+  it('is not observed, not 100, when every component is unevaluable, without inventing why', () => {
     const result = scoreLicensing({ ...base, sbomComponentCount: 3, licenceUnevaluatedComponentCount: 3, findings: [] });
     expect(result.status).toBe('not_observed');
+    expect(result).toEqual({
+      status: 'not_observed',
+      reason: 'None of the observed SBOM components carried licence metadata that SPR could evaluate, so licence coverage could not be measured.',
+    });
   });
 
   it('is 100 when every component declares a licence', () => {
