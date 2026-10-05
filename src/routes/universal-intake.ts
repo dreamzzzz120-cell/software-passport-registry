@@ -231,8 +231,22 @@ export function createUniversalIntakeRouter() {
     try {
       const parsed = z.object({ sessionId: z.string().regex(/^intake_[a-f0-9]{32}$/) }).strict().safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid intake claim request.' });
-      const session = await loadSession(parsed.data.sessionId);
-      if (!session) return res.status(410).json({ error: 'Intake session expired or closed.' });
+      const lookup = await db.execute(sql`SELECT id, tenant_id AS "tenantId", status, expires_at AS "expiresAt"
+        FROM intake_sessions WHERE id=${parsed.data.sessionId} LIMIT 1`);
+      const session = (lookup as any).rows?.[0];
+      if (!session || new Date(session.expiresAt).getTime() <= Date.now()) {
+        return res.status(410).json({ error: 'Intake session expired or closed.' });
+      }
+      if (session.tenantId && session.tenantId !== req.user!.tenantId) {
+        return res.status(403).json({ error: 'Intake belongs to another workspace.' });
+      }
+      if (session.status === 'CLAIMED' && session.tenantId === req.user!.tenantId) {
+        return res.status(200).json({ success: true, alreadyClaimed: true, sessionId: session.id, tenantId: req.user!.tenantId });
+      }
+      if (session.status !== 'OPEN' || session.tenantId) {
+        return res.status(409).json({ error: 'Intake session was already claimed or changed.' });
+      }
+
       const claimed = await db.execute(sql`UPDATE intake_sessions
         SET tenant_id=${req.user!.tenantId}, status='CLAIMED', claimed_by=${req.user!.uid}, claimed_at=NOW()
         WHERE id=${session.id} AND status='OPEN' AND tenant_id IS NULL
@@ -240,10 +254,13 @@ export function createUniversalIntakeRouter() {
       if (!((claimed as any).rows?.length)) {
         const owner = (await db.execute(sql`SELECT tenant_id AS "tenantId", status FROM intake_sessions WHERE id=${session.id} LIMIT 1`) as any).rows?.[0];
         if (owner?.tenantId && owner.tenantId !== req.user!.tenantId) return res.status(403).json({ error: 'Intake belongs to another workspace.' });
+        if (owner?.tenantId === req.user!.tenantId && owner?.status === 'CLAIMED') {
+          return res.status(200).json({ success: true, alreadyClaimed: true, sessionId: session.id, tenantId: req.user!.tenantId });
+        }
         return res.status(409).json({ error: 'Intake session was already claimed or changed.' });
       }
       await db.execute(sql`UPDATE intake_items SET tenant_id=${req.user!.tenantId}, status=CASE WHEN status='UPLOADED' THEN 'QUEUED' ELSE status END WHERE session_id=${session.id} AND tenant_id IS NULL`);
-      return res.status(200).json({ success: true, sessionId: session.id, tenantId: req.user!.tenantId });
+      return res.status(200).json({ success: true, alreadyClaimed: false, sessionId: session.id, tenantId: req.user!.tenantId });
     } catch (error) { return next(error); }
   });
 
