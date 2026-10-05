@@ -6,6 +6,9 @@
 import crypto from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import type { ScopedDb } from '../middleware/tenant-scope.ts';
+import { drizzle } from 'drizzle-orm/node-postgres';
+import { appPool } from '../db/index.ts';
+import * as schema from '../db/schema.ts';
 
 export function sessionFingerprint(uid: string, ip: string, userAgent: string): string {
   return crypto.createHash('sha256').update(`${uid}:${ip}:${userAgent}`).digest('hex').slice(0, 40);
@@ -48,4 +51,28 @@ export async function recordSession(db: ScopedDb, params: { tenantId: string; us
     `);
   }
   return { sessionId, fingerprint };
+}
+
+
+/**
+ * Records session telemetry on an independent tenant-scoped connection so an
+ * optional audit write can never stall or poison the caller's authenticated
+ * request transaction.
+ */
+export async function recordSessionDetached(params: { tenantId: string; userId: number; uid: string; ip: string; userAgent: string }) {
+  const client = await appPool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query("SELECT set_config('app.tenant_id', $1, true)", [params.tenantId]);
+    await client.query("SELECT set_config('app.user_id', $1, true)", [String(params.userId)]);
+    const scoped = drizzle(client, { schema }) as ScopedDb;
+    const result = await recordSession(scoped, params);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
 }
