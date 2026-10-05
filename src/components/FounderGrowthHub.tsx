@@ -37,7 +37,7 @@ export default function FounderGrowthHub() {
     catch (err) { setError(err instanceof Error ? err.message : 'Unable to update stage.'); setBusy(false); }
   };
 
-  return <section className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-6">
+  return <section id="founder-growth-hub" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-6">
     <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
       <div><div className="text-[11px] font-semibold uppercase tracking-[.2em] text-[var(--spr-text-faint)]">Founder-only</div><h2 className="mt-2 text-xl font-semibold text-[var(--spr-text)]">SPR Growth Hub</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--spr-text-muted)]">Operational pipeline on top of the distribution engine. It records observed outreach state; it does not change trust scores or invent customer outcomes.</p></div>
       <button onClick={() => void load()} disabled={busy} className="spr-btn spr-btn-secondary inline-flex items-center gap-2 disabled:opacity-60"><RefreshCw className="h-4 w-4" />Refresh</button>
