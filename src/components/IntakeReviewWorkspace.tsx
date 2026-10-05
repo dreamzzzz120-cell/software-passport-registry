@@ -19,6 +19,9 @@ type SessionResponse = {
   items: ReviewItem[];
 };
 
+type ScanHandoff = { scanId: string; intakeJobId: string; passportId: string; status: string };
+type AgentJob = { id?: string; jobType?: string; status?: string; progress?: number; result?: unknown; error?: string | null };
+
 type Props = {
   sessionId: string;
   createdAt: string;
@@ -58,6 +61,15 @@ export default function IntakeReviewWorkspace({ sessionId, createdAt, repo, onSt
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState('');
+  const [startingAnalysis, setStartingAnalysis] = useState(false);
+  const [analysisMessage, setAnalysisMessage] = useState('');
+  const [handoff, setHandoff] = useState<ScanHandoff | null>(() => {
+    try {
+      const raw = sessionStorage.getItem(`spr-intake-analysis:${sessionId}`);
+      return raw ? JSON.parse(raw) as ScanHandoff : null;
+    } catch { return null; }
+  });
+  const [job, setJob] = useState<AgentJob | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -72,14 +84,85 @@ export default function IntakeReviewWorkspace({ sessionId, createdAt, repo, onSt
     } finally { setLoading(false); }
   }, [sessionId]);
 
-  useEffect(() => { void refresh(); const timer = window.setInterval(() => void refresh(), 5000); return () => window.clearInterval(timer); }, [refresh]);
+  useEffect(() => {
+    if (handoff) return;
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 5000);
+    return () => window.clearInterval(timer);
+  }, [refresh, handoff]);
+
+  const refreshJob = useCallback(async () => {
+    if (!handoff?.intakeJobId) return;
+    try {
+      const response = await apiFetch(`/api/agent-jobs/${encodeURIComponent(handoff.intakeJobId)}`, { method: 'GET' });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.error || 'Analysis status could not be loaded.');
+      setJob(payload as AgentJob);
+      setAnalysisMessage('');
+      setLastUpdated(new Date().toLocaleTimeString());
+    } catch (err) {
+      setAnalysisMessage(err instanceof Error ? err.message : 'Analysis status could not be loaded.');
+    }
+  }, [handoff?.intakeJobId]);
+
+  useEffect(() => {
+    if (!handoff?.intakeJobId) return;
+    void refreshJob();
+    const timer = window.setInterval(() => void refreshJob(), 3000);
+    return () => window.clearInterval(timer);
+  }, [handoff?.intakeJobId, refreshJob]);
+
+  const startAnalysis = async () => {
+    if (startingAnalysis || !allUploaded) return;
+    setStartingAnalysis(true);
+    setAnalysisMessage('Claiming this evidence package for your workspace…');
+    try {
+      const claim = await apiFetch('/api/intake/claim', {
+        method: 'POST',
+        body: JSON.stringify({ sessionId }),
+      });
+      const claimData = await claim.json().catch(() => null);
+      if (!claim.ok) {
+        if (claim.status === 401 || claim.status === 403) {
+          throw new Error('Sign in with an Owner, Admin, or Operator workspace account to start evidence analysis.');
+        }
+        throw new Error(claimData?.error || 'SPR could not claim this intake for your workspace.');
+      }
+
+      setAnalysisMessage('Creating the evidence scan and worker job…');
+      const submit = await apiFetch('/api/scans/submit', {
+        method: 'POST',
+        body: JSON.stringify({ source: 'upload', sessionId }),
+      });
+      const submitData = await submit.json().catch(() => null);
+      if (!submit.ok || !submitData?.scanId || !submitData?.intakeJobId || !submitData?.passportId) {
+        throw new Error(submitData?.error || 'SPR could not queue the uploaded evidence for analysis.');
+      }
+      const next: ScanHandoff = {
+        scanId: String(submitData.scanId),
+        intakeJobId: String(submitData.intakeJobId),
+        passportId: String(submitData.passportId),
+        status: String(submitData.status || 'Pending'),
+      };
+      sessionStorage.setItem(`spr-intake-analysis:${sessionId}`, JSON.stringify(next));
+      setHandoff(next);
+      setAnalysisMessage('Evidence analysis is queued. SPR is now processing the uploaded files.');
+    } catch (err) {
+      setAnalysisMessage(err instanceof Error ? err.message : 'SPR could not start evidence analysis.');
+    } finally {
+      setStartingAnalysis(false);
+    }
+  };
 
   const items = data?.items ?? [];
   const counts = useMemo(() => items.reduce((acc, item) => { acc[item.kind] = (acc[item.kind] || 0) + 1; return acc; }, {} as Record<string, number>), [items]);
   const totalSize = useMemo(() => items.reduce((sum, item) => sum + Number(item.size || 0), 0), [items]);
   const integrityComplete = items.length > 0 && items.every(item => Boolean(item.sha256));
   const allUploaded = items.length > 0 && items.every(item => ['UPLOADED', 'QUEUED'].includes(item.status.toUpperCase()));
-  const analysisState = items.some(item => ['FAILED', 'ERROR'].includes(item.status.toUpperCase())) ? 'Attention required' : allUploaded ? 'Queued / awaiting analysis' : 'Pending intake completion';
+  const workerStatus = String(job?.status || handoff?.status || '').toUpperCase();
+  const workerDone = workerStatus === 'COMPLETED' || workerStatus === 'SUCCESS';
+  const workerFailed = workerStatus === 'FAILED' || Boolean(job?.error);
+  const analysisState = workerFailed ? 'Attention required' : workerDone ? 'Analysis complete' : handoff ? `Analysis ${workerStatus || 'QUEUED'}` : items.some(item => ['FAILED', 'ERROR'].includes(item.status.toUpperCase())) ? 'Attention required' : allUploaded ? 'Ready to start analysis' : 'Pending intake completion';
 
   const summaryCards: Array<[string, string, React.ComponentType<{ className?: string }>]> = [
     ['Review ID', shortId(sessionId), Fingerprint],
@@ -111,16 +194,20 @@ export default function IntakeReviewWorkspace({ sessionId, createdAt, repo, onSt
         <StatusRow label="Files received" state={items.length ? 'Complete' : 'Pending'} detail={items.length ? `${items.length} item(s) recorded in the session.` : 'Waiting for intake items.'} done={items.length > 0} icon={FileCheck2}/>
         <StatusRow label="Integrity" state={integrityComplete ? 'Verified' : 'Pending'} detail={integrityComplete ? 'Server-computed SHA-256 hashes are present.' : 'SPR will not treat client-side hashes as authoritative.'} done={integrityComplete} icon={Fingerprint}/>
         <StatusRow label="Evidence classification" state={items.length ? 'Recorded' : 'Pending'} detail={items.length ? 'Initial intake classification is visible; deeper classification may still be pending.' : undefined} done={items.length > 0} icon={CircleDashed}/>
-        <StatusRow label="Evidence analysis" state={analysisState} detail="No completion is asserted until an analysis worker produces evidence-backed results." icon={Loader}/>
-        <StatusRow label="Trust findings" state="Pending analysis" detail="Contradictions, unsupported claims, missing evidence and other findings will appear here when produced." icon={AlertTriangle}/>
-        <StatusRow label="Software Passport" state="Pending verification" detail="A passport is not marked verified from intake alone." icon={ShieldCheck}/>
-      </div></section>
+        <StatusRow label="Evidence analysis" state={analysisState} detail={handoff ? `Worker job ${shortId(handoff.intakeJobId)} • ${Number(job?.progress || 0)}% reported progress.` : 'Analysis does not begin until the intake is claimed by an authenticated workspace and a worker job is queued.'} done={workerDone} failed={workerFailed} icon={Loader}/>
+        <StatusRow label="Trust findings" state={workerDone ? 'Produced / review results' : 'Pending analysis'} detail="Contradictions, unsupported claims, missing evidence and other findings appear only when produced by the worker." done={workerDone} icon={AlertTriangle}/>
+        <StatusRow label="Launch Ticket" state={workerDone ? 'Prepared from observed evidence' : 'Pending verification'} detail="A Launch Ticket is not marked verified from intake alone." done={workerDone} icon={ShieldCheck}/>
+      </div>
+      {!handoff && <button disabled={!allUploaded || startingAnalysis} onClick={startAnalysis} className="mt-5 w-full rounded-xl bg-[var(--spr-accent)] px-5 py-3.5 text-sm font-bold text-white disabled:opacity-50">{startingAnalysis ? <><Loader className="mr-2 inline h-4 w-4 animate-spin"/>Starting analysis…</> : 'Start evidence analysis'}</button>}
+      {handoff && <div className="mt-5 rounded-xl border border-[var(--spr-border)] p-4 text-xs text-[var(--spr-text-muted)]"><div><span className="font-semibold text-[var(--spr-text)]">Scan:</span> {shortId(handoff.scanId)}</div><div className="mt-1"><span className="font-semibold text-[var(--spr-text)]">Launch Ticket:</span> {shortId(handoff.passportId)}</div>{workerDone && <button onClick={() => { window.location.href = '/passports'; }} className="mt-3 font-semibold text-[var(--spr-highlight)]">Open Launch Tickets</button>}</div>}
+      {analysisMessage && <div role="status" className="mt-4 rounded-xl border border-[var(--spr-border)] p-3 text-xs text-[var(--spr-text-muted)]">{analysisMessage}</div>}
+      </section>
     </div>
 
     <div className="mt-5 grid gap-5 lg:grid-cols-3">
       <section className="rounded-3xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6"><div className="text-[11px] font-bold uppercase tracking-[.16em] text-[var(--spr-text-faint)]">Observed evidence</div><h2 className="mt-2 text-lg font-semibold">Facts available now</h2><ul className="mt-4 space-y-3 text-sm text-[var(--spr-text-muted)]"><li>• Original file metadata is recorded.</li><li>• Server-computed SHA-256 is displayed per completed item.</li><li>• Intake classification is preserved as submitted.</li><li>• Session lifecycle is tracked separately from analysis.</li></ul></section>
       <section className="rounded-3xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6"><div className="text-[11px] font-bold uppercase tracking-[.16em] text-[var(--spr-text-faint)]">Findings</div><h2 className="mt-2 text-lg font-semibold">No findings asserted yet</h2><p className="mt-4 text-sm leading-6 text-[var(--spr-text-muted)]">This is an empty state, not a clean result. When analysis produces verified claims, contradictions, missing evidence or unsupported claims, they should be attached to their source evidence here.</p></section>
-      <section className="rounded-3xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6"><div className="text-[11px] font-bold uppercase tracking-[.16em] text-[var(--spr-text-faint)]">Passport preparation</div><h2 className="mt-2 text-lg font-semibold">Not ready for verification</h2><p className="mt-4 text-sm leading-6 text-[var(--spr-text-muted)]">The passport stage stays pending until the underlying evidence analysis has produced enough verified state to support a passport.</p>{repo && <div className="mt-4 flex items-center gap-2 rounded-xl border border-[var(--spr-border)] p-3 text-xs"><GitBranch className="h-4 w-4"/><span className="truncate font-mono">{repo}</span></div>}</section>
+      <section className="rounded-3xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6"><div className="text-[11px] font-bold uppercase tracking-[.16em] text-[var(--spr-text-faint)]">Launch Ticket preparation</div><h2 className="mt-2 text-lg font-semibold">{workerDone ? 'Analysis complete — review the Launch Ticket' : 'Not ready for verification'}</h2><p className="mt-4 text-sm leading-6 text-[var(--spr-text-muted)]">The Launch Ticket stays pending until the underlying evidence analysis has produced enough observed state to support it.</p>{repo && <div className="mt-4 flex items-center gap-2 rounded-xl border border-[var(--spr-border)] p-3 text-xs"><GitBranch className="h-4 w-4"/><span className="truncate font-mono">{repo}</span></div>}</section>
     </div>
 
     <div className="mt-6 flex flex-col gap-2 text-xs text-[var(--spr-text-faint)] sm:flex-row sm:items-center sm:justify-between"><span>Submitted {new Date(createdAt).toLocaleString()}</span><span>Review data is refreshed from the intake API; no analysis progress is fabricated.</span></div>
