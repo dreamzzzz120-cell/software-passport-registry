@@ -340,5 +340,67 @@ export function createFounderCommandCenterRouter() {
     }
   });
 
+  // Reality reconciliation: machine-observed platform state, active incidents,
+  // and immutable repair receipts. Founder-only because this is cross-platform
+  // operational telemetry rather than tenant data.
+  router.get('/founder/reality', founderReadLimiter, requireAuth, requireRole('Owner'), requireFounder, rateLimiter, async (_req: AuthenticatedRequest, res, next) => {
+    try {
+      const [states, incidents, receipts] = await Promise.all([
+        db.execute(sql`
+          SELECT DISTINCT ON (c.id)
+            c.id AS "contractId", c.component, c.description, c.expected,
+            o.state, o.observed, o.evidence, o.explanation, o.observed_at AS "observedAt"
+          FROM reality_contracts c
+          LEFT JOIN reality_observations o ON o.contract_id=c.id
+          WHERE c.enabled=TRUE
+          ORDER BY c.id, o.observed_at DESC NULLS LAST
+        `),
+        db.execute(sql`
+          SELECT id, contract_id AS "contractId", component, severity, status,
+                 expected, observed, evidence, root_cause_state AS "rootCauseState",
+                 root_cause AS "rootCause", impact, repair_class AS "repairClass",
+                 repair_action AS "repairAction", first_detected_at AS "firstDetectedAt",
+                 last_seen_at AS "lastSeenAt", resolved_at AS "resolvedAt"
+          FROM reality_incidents
+          ORDER BY
+            CASE status WHEN 'INVESTIGATING' THEN 0 WHEN 'REPAIRING' THEN 1 WHEN 'VERIFYING' THEN 2 WHEN 'UNKNOWN' THEN 3 ELSE 4 END,
+            last_seen_at DESC
+          LIMIT 200
+        `),
+        db.execute(sql`
+          SELECT id, incident_id AS "incidentId", authority_class AS "authorityClass",
+                 before_state AS "beforeState", evidence, cause, impact, repair,
+                 verification, after_state AS "afterState", result, created_at AS "createdAt"
+          FROM reality_repair_receipts
+          ORDER BY created_at DESC LIMIT 100
+        `),
+      ]);
+      const componentStates = (states as any).rows ?? [];
+      const activeIncidents = ((incidents as any).rows ?? []).filter((row: any) => !['PROVEN_FIXED','FAILED'].includes(String(row.status)));
+      const counts = componentStates.reduce((acc: Record<string, number>, row: any) => {
+        const state = row.state ?? 'UNKNOWN';
+        acc[state] = (acc[state] ?? 0) + 1;
+        return acc;
+      }, {});
+      return res.json({
+        systemState: {
+          observed: componentStates.length,
+          healthy: counts.HEALTHY ?? 0,
+          degrading: counts.DEGRADING ?? 0,
+          failed: counts.FAILED ?? 0,
+          unknown: counts.UNKNOWN ?? 0,
+          activeIncidents: activeIncidents.length,
+          observabilityCompromised: componentStates.some((row: any) => row.contractId === 'reconciler_self_watch' && row.state !== 'HEALTHY'),
+        },
+        components: componentStates,
+        incidents: (incidents as any).rows ?? [],
+        receipts: (receipts as any).rows ?? [],
+        generatedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
   return router;
 }
