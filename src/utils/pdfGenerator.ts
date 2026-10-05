@@ -233,8 +233,8 @@ export function generateClientCompliancePDF(client: Client) {
   const inventoryRows = client.softwareInventory.map(item => [
     item.name,
     item.version,
-    item.lastScanDate,
-    `${item.overallScore} / 100`,
+    item.lastScanDate || 'Not observed',
+    scoreDisplay(item.overallScore),
     item.riskStatus
   ]);
 
@@ -537,8 +537,8 @@ export function generateCoBrandedTrustReport(
     const inventoryRows = filteredInventory.length > 0 ? filteredInventory.map(item => [
       item.name,
       item.version,
-      item.lastScanDate,
-      `${item.overallScore} / 100`,
+      item.lastScanDate || 'Not observed',
+      scoreDisplay(item.overallScore),
       item.riskStatus
     ]) : [['No software items matched or selected', '-', '-', '-', '-']];
 

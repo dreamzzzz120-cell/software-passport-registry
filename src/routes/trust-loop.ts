@@ -28,7 +28,7 @@ const remediationUpdateSchema = z.object({ status: z.enum(['OPEN', 'IN_PROGRESS'
 const verifySchema = z.object({ findingId: z.string().trim().min(1), observationIds: z.array(z.string().min(1)).max(50), evidenceIds: z.array(z.string().min(1)).max(200) }).strict();
 const alertUpdateSchema = z.object({ status: z.enum(['ACKNOWLEDGED', 'RESOLVED', 'SUPPRESSED']) }).strict();
 const remediationNoteSchema = z.object({ body: z.string().trim().min(1).max(4000) }).strict();
-const reportTypes = z.enum(['executive', 'technical', 'msp', 'customer', 'compliance', 'vendor', 'auditor', 'evidence-ledger']);
+export const reportTypes = z.enum(['executive', 'technical', 'msp', 'customer', 'compliance', 'sbom', 'vendor', 'auditor', 'evidence-ledger']);
 function id(prefix: string) { return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`; }
 function parseJson(value: unknown, fallback: unknown = []) { try { return value ? JSON.parse(String(value)) : fallback; } catch { return fallback; } }
 

@@ -41,6 +41,25 @@ describe('explainFinding never claims more than the underlying data supports', (
 });
 
 describe('toPlainEnglish never fabricates a conclusion the score/findings do not support', () => {
+  it('includes repository findings and evidence when provider tables are empty', () => {
+    const result = toPlainEnglish(report({
+      risk: { overall: 91, security: 91, compliance: null, verificationStatus: 'partial' },
+      repositoryScan: { sbomComponentCount: 58, evidence: [{ id: 'e1' }], findings: [{ id: 'scan1',title: 'Credential pattern',severity: 'HIGH',status: 'Open',description: 'Observed in an example file' }] },
+    }));
+    expect(result.headline).toBe('1 item needs attention');
+    expect(result.situation).toContain('58 SBOM components');
+    expect(result.situation).not.toContain('nothing has been checked');
+    expect(result.findings[0].status).toBe('Needs Review');
+    expect(result.findings[0].whatToDoNext).toContain('does not prove exploitation');
+    expect(result.scoreExplanation.value).toBe(91);
+    expect(result.scoreExplanation.explanation).toContain('stored passport score');
+    expect(result.scoreExplanation.explanation).not.toContain('healthy');
+  });
+  it('does not call collected evidence an empty assessment when no findings exist', () => {
+    const result = toPlainEnglish(report({ repositoryScan: { sbomComponentCount: 58,evidence: [],findings: [] } }));
+    expect(result.headline).toBe('Evidence collected; coverage still needs review');
+    expect(result.scoreExplanation.value).toBeNull();
+  });
   it('reports "no checks have produced evidence yet" for an empty findings list, not a false-positive all-clear', () => {
     const result = toPlainEnglish(report({ findings: [] }));
     expect(result.headline).toContain('No checks');

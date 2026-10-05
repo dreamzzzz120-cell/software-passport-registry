@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { deriveReportRiskFields, type ReportPassportRow } from '../src/routes/trust-loop.ts';
+import { deriveReportRiskFields, reportTypes, type ReportPassportRow } from '../src/routes/trust-loop.ts';
+
+it('accepts every selectable report type including SBOM and rejects unknown types', () => {
+  for (const type of ['executive','technical','msp','customer','compliance','sbom','vendor','auditor','evidence-ledger']) expect(reportTypes.safeParse(type).success).toBe(true);
+  expect(reportTypes.safeParse('made-up').success).toBe(false);
+});
 
 // Regression coverage for the trust_report_snapshots integrity bug: a report
 // is a permanent historical record and must never claim a measurement was
