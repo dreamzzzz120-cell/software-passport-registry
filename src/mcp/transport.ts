@@ -93,15 +93,23 @@ export function createMcpTransport(options: { expectedBearer: string; executeToo
     if (!token || !constantTimeToken(options.expectedBearer, token)) return new Response(JSON.stringify(jsonRpcError(null, -32001, mcpUnauthorized().error.message)), { status: 401, headers });
     if (rateLimited(requestKey(request, token))) return new Response(JSON.stringify(jsonRpcError(null, -32029, 'Rate limit exceeded')), { status: 429, headers });
     const body = await readJson(request);
-    if (!isPlainRecord(body) || body.jsonrpc !== '2.0' || !('id' in body) || typeof body.method !== 'string' || body.method.length > MAX_ID_LENGTH) return new Response(JSON.stringify(jsonRpcError(null, -32600, 'Invalid JSON-RPC request')), { status: 400, headers });
+    if (!isPlainRecord(body) || body.jsonrpc !== '2.0' || typeof body.method !== 'string' || body.method.length > MAX_ID_LENGTH) return new Response(JSON.stringify(jsonRpcError(null, -32600, 'Invalid JSON-RPC request')), { status: 400, headers });
+    const isNotification = !('id' in body);
     const id = body.id;
+    if (body.method === 'notifications/initialized') {
+      if (!isNotification) return new Response(JSON.stringify(jsonRpcError(id, -32600, 'notifications/initialized must be a JSON-RPC notification without an id')), { status: 400, headers });
+      const sid = sessionId(request);
+      if (!sid || !sessions.has(sid)) return new Response(null, { status: 400, headers: { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } });
+      sessions.get(sid)!.lastSeen = Date.now();
+      return new Response(null, { status: 202, headers: { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } });
+    }
+    if (isNotification) return new Response(null, { status: 202, headers: { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } });
     if (body.method === 'initialize') {
       const sid = sessionId(request) ?? crypto.randomUUID();
       sessions.set(sid, { createdAt: Date.now(), lastSeen: Date.now() });
       headers.set('mcp-session-id', sid);
       return new Response(JSON.stringify({ jsonrpc: '2.0', id, result: { protocolVersion: MCP_SERVER_INFO.protocolVersion, serverInfo: { name: MCP_SERVER_INFO.name, version: MCP_SERVER_INFO.version }, capabilities: { tools: {} } } }), { status: 200, headers });
     }
-    if (body.method === 'notifications/initialized') return new Response(JSON.stringify({ jsonrpc: '2.0', id, result: {} }), { status: 200, headers });
     if (body.method === 'tools/list') return new Response(JSON.stringify({ jsonrpc: '2.0', id, result: { tools: MCP_TOOLS } }), { status: 200, headers });
     if (body.method !== 'tools/call') return new Response(JSON.stringify(jsonRpcError(id, -32601, 'Method not found')), { status: 404, headers });
     const sid = sessionId(request);
