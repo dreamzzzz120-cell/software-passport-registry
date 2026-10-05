@@ -373,7 +373,7 @@ export async function runRealityReconciliationCycle(pool: Pool) {
     if (initial.state === 'FAILED' && observed.incidentId && repairer) {
       const incidentId = observed.incidentId;
       const c = await contract(pool, contractId);
-      if ((c?.repair_class ?? 0) >= 1) {
+      if (c && c.repair_class >= 0 && c.repair_class <= 1) {
         try {
           await setIncidentRepairState(pool, incidentId, 'REPAIRING', 'Bounded stale-state recovery using existing retry budget and lease ownership rules.');
           const repair = await repairer(pool);
@@ -382,6 +382,15 @@ export async function runRealityReconciliationCycle(pool: Pool) {
         } catch {
           await setIncidentRepairState(pool, incidentId, 'INVESTIGATING', 'Bounded recovery attempt failed; incident remains open and no success is claimed.').catch(() => undefined);
         }
+      } else if (c && c.repair_class >= 2) {
+        await setIncidentRepairState(
+          pool,
+          incidentId,
+          'INVESTIGATING',
+          c.repair_class === 2
+            ? 'Repair requires explicit Owner approval; autonomous execution blocked by authority policy.'
+            : 'Repair is Class 3 and may never execute autonomously; diagnosis only.',
+        ).catch(() => undefined);
       }
     }
     results.push(observed);
