@@ -35,6 +35,14 @@ describe('autonomous reality reconciliation contract', () => {
     expect(ui).toContain('OBSERVABILITY COMPROMISED');
   });
 
+  it('emits one machine-readable runtime proof summary per reconciliation cycle', () => {
+    expect(worker).toContain("[RealityReconciliation] cycle complete");
+    expect(worker).toContain('cycleId');
+    expect(worker).toContain('counts');
+    expect(worker).toContain('transitions');
+    expect(worker).toContain('incidentId');
+  });
+
   it('keeps cross-platform telemetry behind the founder gate', () => {
     expect(founder).toContain("router.get('/founder/reality'");
     expect(founder).toContain("requireRole('Owner')");

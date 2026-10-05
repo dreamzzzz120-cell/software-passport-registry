@@ -4,6 +4,15 @@ import { createWorkerPool } from './worker-db.ts';
 
 type State = 'HEALTHY' | 'DEGRADING' | 'FAILED' | 'UNKNOWN';
 type Severity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+type Transition = 'NONE' | 'OPENED' | 'UPDATED' | 'PROVEN_FIXED';
+type ObservationResult = {
+  contractId: string;
+  state: State;
+  transition: Transition;
+  observationId: string | null;
+  incidentId: string | null;
+  receiptId?: string;
+};
 
 type ProbeResult = {
   state: State;
@@ -26,9 +35,10 @@ async function contract(pool: Pool, contractId: string) {
     | undefined;
 }
 
-async function observe(pool: Pool, contractId: string, result: ProbeResult) {
+async function observe(pool: Pool, contractId: string, result: ProbeResult): Promise<ObservationResult> {
+  let transition: Transition = 'NONE';
   const c = await contract(pool, contractId);
-  if (!c) return;
+  if (!c) return { contractId, state: result.state, transition: 'NONE' as const, observationId: null, incidentId: null };
 
   const observationId = id('obs');
   await pool.query(
@@ -42,7 +52,7 @@ async function observe(pool: Pool, contractId: string, result: ProbeResult) {
   )).rows[0];
 
   if (result.state === 'HEALTHY') {
-    if (!open) return;
+    if (!open) return { contractId, state: result.state, transition, observationId, incidentId: null };
     const receiptId = id('receipt');
     await pool.query('BEGIN');
     try {
@@ -66,11 +76,12 @@ async function observe(pool: Pool, contractId: string, result: ProbeResult) {
         ],
       );
       await pool.query('COMMIT');
+      transition = 'PROVEN_FIXED';
     } catch (error) {
       await pool.query('ROLLBACK');
       throw error;
     }
-    return;
+    return { contractId, state: result.state, transition, observationId, incidentId: open.id, receiptId };
   }
 
   if (open) {
@@ -87,13 +98,15 @@ async function observe(pool: Pool, contractId: string, result: ProbeResult) {
         JSON.stringify(result.impact ?? {}),
       ],
     );
-    return;
+    transition = 'UPDATED';
+    return { contractId, state: result.state, transition, observationId, incidentId: open.id };
   }
 
+  const incidentId = id('inc');
   await pool.query(
     'INSERT INTO reality_incidents (id,contract_id,component,severity,status,expected,observed,evidence,root_cause_state,root_cause,impact,repair_class) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8::jsonb,$9,$10,$11::jsonb,$12)',
     [
-      id('inc'),
+      incidentId,
       contractId,
       c.component,
       result.severity,
@@ -107,6 +120,8 @@ async function observe(pool: Pool, contractId: string, result: ProbeResult) {
       c.repair_class,
     ],
   );
+  transition = 'OPENED';
+  return { contractId, state: result.state, transition, observationId, incidentId };
 }
 
 async function probeDatabase(pool: Pool): Promise<ProbeResult> {
@@ -232,10 +247,24 @@ export async function runRealityReconciliationCycle(pool: Pool) {
     ['scan_terminality', probeScans],
     ['registry_freshness', probeRegistry],
   ];
+  const cycleId = id('cycle');
+  const startedAt = Date.now();
+  const results: ObservationResult[] = [];
   for (const [contractId, probe] of probes) {
-    await observe(pool, contractId, await probe(pool));
+    results.push(await observe(pool, contractId, await probe(pool)));
   }
-  await observe(pool, 'reconciler_self_watch', await probeSelf(pool));
+  results.push(await observe(pool, 'reconciler_self_watch', await probeSelf(pool)));
+  const counts = results.reduce<Record<State, number>>((acc, item) => {
+    acc[item.state] += 1;
+    return acc;
+  }, { HEALTHY: 0, DEGRADING: 0, FAILED: 0, UNKNOWN: 0 });
+  console.log('[RealityReconciliation] cycle complete', JSON.stringify({
+    cycleId,
+    durationMs: Date.now() - startedAt,
+    counts,
+    transitions: results.filter((item) => item.transition !== 'NONE'),
+    contracts: results.map((item) => ({ contractId: item.contractId, state: item.state, transition: item.transition, incidentId: item.incidentId ?? null })),
+  }));
 }
 
 export async function runRealityReconciliationLoop() {
