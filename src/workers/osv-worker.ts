@@ -145,7 +145,7 @@ export async function resolvePublicGitHubRefViaGit(owner: string, repository: st
 const OSV_ORIGIN = 'https://api.osv.dev';
 
 async function recoverExhaustedStaleJobs(pool: Pool) {
-  const result = await pool.query<Pick<ClaimedJob, 'id' | 'tenant_id' | 'scan_id'>>(\`
+  const result = await pool.query<Pick<ClaimedJob, 'id' | 'tenant_id' | 'scan_id'>>(`
     UPDATE agent_jobs
     SET status='Failed',
         progress=100,
