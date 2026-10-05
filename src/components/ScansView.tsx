@@ -393,7 +393,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
     if (!matchedPassport) {
       setScanLogs(l => [
         ...l,
-        `[ERROR] Select an exact Software Passport before starting a scan. No evidence was submitted.`,
+        `[ERROR] Select an exact Launch Ticket before starting a scan. No evidence was submitted.`,
       ]);
       setIsScanning(false);
       return;
@@ -401,7 +401,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
 
     setScanLogs(l => [
       ...l, 
-      `[INFO] Target matched to Passport record: ${matchedPassport.name} (v${matchedPassport.version})`,
+      `[INFO] Target matched to Launch Ticket record: ${matchedPassport.name} (v${matchedPassport.version})`,
       `[INFO] Submitting scan job to the background queue...`
     ]);
 
@@ -660,7 +660,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Software Passport Selector */}
                     <div className="space-y-1.5">
-                      <label className="text-[12px] font-bold text-[var(--spr-text-muted)] uppercase font-mono">Software Passport Target</label>
+                      <label className="text-[12px] font-bold text-[var(--spr-text-muted)] uppercase font-mono">Launch Ticket Target</label>
                       <select
                         value={selectedPassportId}
                         onChange={(e) => setSelectedPassportId(e.target.value)}
@@ -704,7 +704,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
                         <div className="flex items-center gap-2">
                           <span className="text-[12px] font-mono text-[var(--spr-text-muted)]">License: {activeP.licenseType}</span>
                           {activeP.verificationStatus === 'verified'
-                            ? <span className="px-2 py-0.5 rounded bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] text-[11px] font-bold font-mono">Verified Passport</span>
+                            ? <span className="px-2 py-0.5 rounded bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)] text-[11px] font-bold font-mono">Verified Launch Ticket</span>
                             : activeP.verificationStatus === 'partial'
                               ? <span className="px-2 py-0.5 rounded bg-[var(--spr-amber)]/15 text-[var(--spr-amber)] text-[11px] font-bold font-mono">Partially Verified</span>
                               : <span className="px-2 py-0.5 rounded border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] text-[var(--spr-text-muted)] text-[11px] font-bold font-mono">Unverified</span>}
@@ -885,7 +885,7 @@ export default function ScansView({ scans, onTriggerNewScan, clients, assets, pa
                     <Calendar className="w-10 h-10 text-[var(--spr-text)] mx-auto" />
                     <h3 className="text-sm font-bold text-[var(--spr-text-faint)]">No Scanning Schedules Configured</h3>
                     <p className="text-xs text-[var(--spr-text-muted)] max-w-sm mx-auto">
-                      Automate continuous software passport and vulnerability attestation audits on your clients' production nodes. Click "Configure Scan Schedule" above to begin.
+                      Automate continuous Launch Ticket and vulnerability attestation audits on your clients' production nodes. Click "Configure Scan Schedule" above to begin.
                     </p>
                   </div>
                 ) : (
