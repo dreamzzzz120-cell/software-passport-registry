@@ -295,6 +295,7 @@ export function createBillingRouter() {
           line_items: [{ price: priceId, quantity: 1 }],
           allow_promotion_codes: true,
           adaptive_pricing: { enabled: false },
+        managed_payments: { enabled: false },
           payment_method_collection: 'if_required',
           success_url: `${config.appUrl}/billing?checkout=success`,
           cancel_url: `${config.appUrl}/billing?checkout=cancelled`,
@@ -353,6 +354,7 @@ export function createBillingRouter() {
         // would otherwise localise the hosted page (a Canadian buyer saw CA$214.98
         // for the $149 plan) and settle in that currency.
         adaptive_pricing: { enabled: false },
+        managed_payments: { enabled: false },
         success_url: `${config.appUrl}/billing?purchase=success&product=${encodeURIComponent(parsed.data.product)}`,
         cancel_url: `${config.appUrl}/billing?purchase=cancelled`,
         client_reference_id: tenantId,
@@ -393,6 +395,7 @@ export function createBillingRouter() {
         // would otherwise localise the hosted page (a Canadian buyer saw CA$214.98
         // for the $149 plan) and settle in that currency.
         adaptive_pricing: { enabled: false },
+        managed_payments: { enabled: false },
         payment_method_collection: 'if_required',
         success_url: `${config.appUrl}/billing?addon=success&product=${encodeURIComponent(parsed.data.addon)}`,
         cancel_url: `${config.appUrl}/billing?addon=cancelled`,
