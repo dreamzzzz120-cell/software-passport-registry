@@ -5,7 +5,9 @@ describe('public software registry provenance visibility', () => {
   const src = readFileSync(new URL('../src/routes/software-registry.ts', import.meta.url), 'utf8');
 
   it('counts only persisted verified evidence and signature evidence', () => {
-    expect(src).toContain("count(*) FILTER (WHERE verified IS TRUE)");
+    expect(src).toContain("count(*) FILTER (WHERE verified = 1)");
+    const schema = readFileSync(new URL('../src/db/schema.ts', import.meta.url), 'utf8');
+    expect(schema).toContain("verified: integer('verified').notNull().default(0)");
     expect(src).toContain("count(*) FILTER (WHERE lower(type) = 'signature')");
   });
 
