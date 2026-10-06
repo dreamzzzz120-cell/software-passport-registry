@@ -146,7 +146,7 @@ export default function FounderMissionControl() {
           <TruthState label="Database" value={pulse?.database.ok == null ? 'UNKNOWN' : pulse.database.ok ? `OK · ${count(pulse.database.latencyMs)} ms` : 'UNREACHABLE'} ok={pulse?.database.ok ?? null} />
           <TruthState label="Tenant isolation" value={pulse?.tenantRls == null ? 'UNKNOWN' : pulse.tenantRls ? 'RLS ASSERTION PASSED' : 'RLS ASSERTION FAILED'} ok={pulse?.tenantRls ?? null} />
           <TruthState label="Runtime role" value={pulse?.runtimeRole ?? 'UNKNOWN'} ok={pulse?.leastPrivilege ?? null} />
-          <TruthState label="Worker evidence" value={workerAge == null ? 'UNKNOWN' : `${workerAge}m ago · ${pulse?.worker.lastSeenSource ?? 'source unknown'}`} ok={workerAge == null ? null : workerAge <= 30} />
+          <TruthState label="Last worker job activity" value={workerAge == null ? 'UNKNOWN' : `${workerAge}m ago · ${pulse?.worker.lastSeenSource ?? 'source unknown'}`} ok={null} />
           <TruthState label="Distribution dead-letter" value={count(pulse?.distributionQueue.deadLetter)} ok={pulse?.distributionQueue.deadLetter == null ? null : pulse.distributionQueue.deadLetter === 0} />
           <TruthState label="API uptime" value={pulse ? `${Math.floor(pulse.apiUptimeSeconds / 3600)}h ${Math.floor((pulse.apiUptimeSeconds % 3600) / 60)}m` : 'UNKNOWN'} ok={pulse ? true : null} />
         </div>
