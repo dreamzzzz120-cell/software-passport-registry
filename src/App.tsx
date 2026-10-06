@@ -33,6 +33,7 @@ import ComplianceView from './components/ComplianceView';
 import AgentTrustView from './components/AgentTrustView';
 import EnterpriseReadinessView from './components/EnterpriseReadinessView';
 import FounderDashboardView from './components/FounderDashboardView';
+import SocialScoutView from './components/SocialScoutView';
 import InvestorHomeView from './components/InvestorHomeView';
 import SettingsView from './components/SettingsView';
 import WhiteLabelView from './components/WhiteLabelView';
@@ -587,6 +588,10 @@ export default function App() {
     case '/investor': view = <InvestorHomeView passports={passports} clients={clients} alerts={alerts} onShowTelemetry={() => navigate('/scans')} onNavigateTab={onNavigateTab} />; break;
     // Hiding the tile is not enough: the path is still typeable. A non-founder
     // who navigates here gets the ordinary dashboard, not the founder shell.
+    case '/social-scout': view = isFounder
+      ? <SocialScoutView />
+      : <WorkflowBoundary title="Workflow" description="This authenticated capability is explicitly routed through the Command Center. Choose its owning workflow from the left rail." onNavigate={navigate} />;
+      break;
     case '/founder': view = isFounder
       ? <FounderDashboardView userRole={role} />
       : <WorkflowBoundary title="Workflow" description="This authenticated capability is explicitly routed through the Command Center. Choose its owning workflow from the left rail." onNavigate={navigate} />;
