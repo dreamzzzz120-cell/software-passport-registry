@@ -42,7 +42,12 @@ async function fetchWithTimeout(input: string | URL, init: RequestInit = {}): Pr
 export async function checkRailway(): Promise<ConnectionStatus> {
   const token = config.railway.apiToken;
   const projectId = config.railway.projectId;
-  if (!token || !projectId) return { key: 'railway', name: 'Railway', status: 'not_configured', detail: 'Railway connection is not configured', lastChecked: now() };
+  if (!projectId) return { key: 'railway', name: 'Railway', status: 'not_configured', detail: 'RAILWAY_PROJECT_ID is unavailable, so this process cannot prove which Railway project it belongs to.', lastChecked: now() };
+  // Railway injects RAILWAY_PROJECT_ID into running services. That is direct
+  // runtime evidence that SPR is deployed on Railway even when the optional
+  // management API token is not present. Do not call a live deployment
+  // "not configured" merely because deeper service-list telemetry is disabled.
+  if (!token) return { key: 'railway', name: 'Railway', status: 'ok', detail: 'Railway runtime verified from injected project identity; management API telemetry token is not configured.', lastChecked: now() };
   try {
     const query = `query ($projectId: String!) { project(id: $projectId) { services { edges { node { id name } } } } }`;
     const res = await fetchWithTimeout('https://backboard.railway.app/graphql/v2', {
@@ -81,11 +86,16 @@ export async function checkVercel(): Promise<ConnectionStatus> {
 // --- GitHub Actions (CI) --------------------------------------------------------
 export async function checkGithubCi(): Promise<ConnectionStatus> {
   const { token, owner, repo } = config.githubCi;
-  if (!token || !owner || !repo) return { key: 'github_ci', name: 'GitHub CI', status: 'not_configured', detail: 'GitHub CI connection is not configured', lastChecked: now() };
+  if (!owner || !repo) return { key: 'github_ci', name: 'GitHub CI', status: 'not_configured', detail: 'GITHUB_OWNER and/or GITHUB_REPO is not configured.', lastChecked: now() };
   try {
     const safeOwner = encodeURIComponent(owner);
     const safeRepo = encodeURIComponent(repo);
-    const res = await fetchWithTimeout(`https://api.github.com/repos/${safeOwner}/${safeRepo}/actions/runs?per_page=1`, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' } });
+    // Public repositories do not require a token for this read-only Actions
+    // endpoint. Use a token when supplied (higher rate limit/private repos),
+    // but do not falsely mark public CI as disconnected without one.
+    const headers: Record<string, string> = { Accept: 'application/vnd.github+json', 'User-Agent': 'software-passport-registry' };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const res = await fetchWithTimeout(`https://api.github.com/repos/${safeOwner}/${safeRepo}/actions/runs?per_page=1`, { headers });
     if (!res.ok) return { key: 'github_ci', name: 'GitHub CI', status: 'error', detail: `provider returned HTTP ${res.status}`, lastChecked: now() };
     const json: any = await res.json();
     const run = json?.workflow_runs?.[0];
@@ -145,7 +155,13 @@ export async function checkStripeAndMrr(): Promise<{ connection: ConnectionStatu
     }
 
     return {
-      connection: { key: 'stripe', name: 'Stripe', status: 'ok', detail: customerCount + ' customers, ' + activeSubscriptions + ' active subs, ' + successfulPaymentCount30d + ' successful payments in 30d', lastChecked: now() },
+      connection: {
+        key: 'stripe',
+        name: 'Stripe',
+        status: config.isProduction && /_(?:test)_/.test(config.stripe.secretKey) ? 'error' : 'ok',
+        detail: (config.isProduction && /_(?:test)_/.test(config.stripe.secretKey) ? 'TEST MODE key is configured in production; ' : 'LIVE MODE; ') + customerCount + ' customers, ' + activeSubscriptions + ' active subs, ' + successfulPaymentCount30d + ' successful payments in 30d',
+        lastChecked: now(),
+      },
       customerCount,
       mrrCents: Math.max(0, Math.round(mrrCents)),
       activeSubscriptionCount: activeSubscriptions,
@@ -162,17 +178,31 @@ export async function checkStripeAndMrr(): Promise<{ connection: ConnectionStatu
 // (auth.admin.listUsers, service-role key), so the label now says what it
 // actually reached.
 export async function checkSupabaseAuth(): Promise<ConnectionStatus> {
+  const supabaseUrl = process.env.SUPABASE_URL?.trim();
   const adminKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || process.env.SUPABASE_SECRET_KEY?.trim();
-  if (!process.env.SUPABASE_URL?.trim() || !adminKey) {
-    return { key: 'supabase_auth', name: 'Supabase Auth', status: 'not_configured', detail: 'SUPABASE_URL, or SUPABASE_SERVICE_ROLE_KEY / SUPABASE_SECRET_KEY, is not set', lastChecked: now() };
+  const publishableKey = process.env.SUPABASE_PUBLISHABLE_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim();
+  if (!supabaseUrl) {
+    return { key: 'supabase_auth', name: 'Supabase Auth', status: 'not_configured', detail: 'SUPABASE_URL is not configured.', lastChecked: now() };
   }
   try {
-    const { adminAuth } = await import('../../supabase-admin.ts');
-    await Promise.race([
-      adminAuth.listUsers(1),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), CHECK_TIMEOUT_MS)),
-    ]);
-    return { key: 'supabase_auth', name: 'Supabase Auth', status: 'ok', detail: 'auth admin API reachable (service role)', lastChecked: now() };
+    if (adminKey) {
+      const { adminAuth } = await import('../../supabase-admin.ts');
+      await Promise.race([
+        adminAuth.listUsers(1),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), CHECK_TIMEOUT_MS)),
+      ]);
+      return { key: 'supabase_auth', name: 'Supabase Auth', status: 'ok', detail: 'Auth admin API reachable (server secret configured).', lastChecked: now() };
+    }
+
+    // Normal customer authentication only needs the project URL and public
+    // publishable key. Verify that service directly instead of declaring the
+    // whole auth provider disconnected because founder-only admin telemetry
+    // is not enabled.
+    const headers: Record<string, string> = {};
+    if (publishableKey) headers.apikey = publishableKey;
+    const res = await fetchWithTimeout(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/health`, { headers });
+    if (!res.ok) return { key: 'supabase_auth', name: 'Supabase Auth', status: 'error', detail: `auth health endpoint returned HTTP ${res.status}`, lastChecked: now() };
+    return { key: 'supabase_auth', name: 'Supabase Auth', status: 'ok', detail: 'Auth service reachable; founder admin-user telemetry key is not configured.', lastChecked: now() };
   } catch (err) {
     return { key: 'supabase_auth', name: 'Supabase Auth', status: 'error', detail: safeErrorDetail(err), lastChecked: now() };
   }
