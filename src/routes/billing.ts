@@ -309,7 +309,7 @@ export function createBillingRouter() {
         const paymentLink = planPaymentLink(parsed.data.plan);
         if (!paymentLink) return res.status(503).json({ error: 'BILLING_NOT_CONFIGURED' });
         const url = new URL(paymentLink);
-        url.searchParams.set('client_reference_id', tenantId);
+        url.searchParams.set('client_reference_id', `${tenantId}__sprplan__${parsed.data.plan}`);
         if (req.user!.email) url.searchParams.set('prefilled_email', req.user!.email);
         checkoutUrl = url.toString();
         checkoutReference = 'payment-link';
@@ -461,8 +461,11 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
-        const tenantId = session.client_reference_id || session.metadata?.tenantId;
-        const plan = session.metadata?.plan as PlanId | undefined;
+        const paymentLinkMatch = session.client_reference_id?.match(/^(.*)__sprplan__(pilot|starter|professional|growth|enterprise)$/);
+        const tenantId = paymentLinkMatch?.[1] || session.client_reference_id || session.metadata?.tenantId;
+        const paymentLinkPlan = paymentLinkMatch?.[2] as PlanId | undefined;
+        const metadataPlan = session.metadata?.plan as PlanId | undefined;
+        const plan = metadataPlan && PLAN_CONFIG[metadataPlan] ? metadataPlan : paymentLinkPlan;
         if (tenantId && session.subscription && plan && PLAN_CONFIG[plan]) {
           const clientLimit = PLAN_CLIENT_LIMITS[plan];
           const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id;
