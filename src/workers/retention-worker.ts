@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { deleteIntakeObject, intakeBrokerConfigured } from '../integrations/intake-storage.ts';
 import { createWorkerPool } from './worker-db.ts';
 
 const INTAKE_BUCKET = process.env.SPR_INTAKE_BUCKET?.trim() || 'spr-intake';
@@ -14,27 +14,26 @@ const INVENTORY_RETENTION_BATCH = positiveIntEnv('SCAN_FILE_INVENTORY_RETENTION_
 const FREE_REVIEW_INVENTORY_HOURS = positiveIntEnv('FREE_REVIEW_INVENTORY_RETENTION_HOURS', 24, 2, 24 * 30);
 const RETENTION_POLL_MS = positiveIntEnv('RETENTION_POLL_MS', 60 * 60 * 1000, 60_000, 24 * 60 * 60 * 1000);
 
-function intakeStorage() {
-  const url = process.env.SUPABASE_URL?.trim();
-  const key = process.env.SUPABASE_SECRET_KEY?.trim() || process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-  if (!url || !key) return null;
-  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
-}
-
 export async function purgeExpiredAnonymousIntake(pool: ReturnType<typeof createWorkerPool>): Promise<number> {
   const expired = await pool.query(`SELECT id FROM intake_sessions WHERE tenant_id IS NULL AND status='OPEN' AND expires_at < CURRENT_TIMESTAMP ORDER BY expires_at ASC LIMIT 100`);
   if (expired.rows.length === 0) return 0;
-  const storage = intakeStorage();
-  if (!storage) {
-    console.info('[Retention] intake storage not configured; skipping anonymous intake object purge');
+  if (!intakeBrokerConfigured()) {
+    console.info('[Retention] intake broker not configured; skipping anonymous intake object purge');
     return 0;
   }
   let purged = 0;
   for (const session of expired.rows) {
     const items = await pool.query(`SELECT id, storage_bucket, storage_path FROM intake_items WHERE session_id=$1 AND tenant_id IS NULL AND status IN ('AWAITING_UPLOAD','UPLOADED')`, [session.id]);
     for (const item of items.rows) {
-      const removed = await storage.storage.from(item.storage_bucket || INTAKE_BUCKET).remove([item.storage_path]);
-      if (removed.error) throw new Error(`INTAKE_STORAGE_PURGE_FAILED:${removed.error.message}`);
+      try {
+        await deleteIntakeObject({
+          bucket: item.storage_bucket || INTAKE_BUCKET,
+          path: item.storage_path,
+        });
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        throw new Error(`INTAKE_STORAGE_PURGE_FAILED:${detail}`);
+      }
     }
     await pool.query(`UPDATE intake_items SET status='PURGED' WHERE session_id=$1 AND tenant_id IS NULL AND status IN ('AWAITING_UPLOAD','UPLOADED')`, [session.id]);
     await pool.query(`UPDATE intake_sessions SET status='EXPIRED' WHERE id=$1 AND tenant_id IS NULL AND status='OPEN' AND expires_at < CURRENT_TIMESTAMP`, [session.id]);
