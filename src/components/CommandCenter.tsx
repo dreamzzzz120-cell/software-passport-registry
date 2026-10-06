@@ -2,7 +2,7 @@ import { useState, type Key, type ReactNode } from 'react';
 import {
   Activity, Bell, Bot, Boxes, Building, Building2, ClipboardCheck, CreditCard, Crown, FileBadge, FileText,
   Home, LayoutGrid, Lock, MessageSquareText, Network, PiggyBank, Plug, Puzzle, Scale, ScanLine, ScrollText,
-  Search, Settings, ShieldAlert, ShieldCheck, Sparkles, Store, TrendingUp, Users, Paintbrush, Share2, ShoppingCart, Inbox, type LucideIcon,
+  Search, Settings, ShieldAlert, ShieldCheck, Sparkles, Store, TrendingUp, Users, Paintbrush, Share2, ShoppingCart, Inbox, Radar, type LucideIcon,
 } from 'lucide-react';
 import { EXTENSIONS, type ExtensionDefinition } from '../workflows/extensionRegistry';
 import { AMBER, BLUE, CYAN, GREEN, ORANGE, PURPLE, RED, TEAL } from '../workflows/featureColors';
@@ -50,6 +50,7 @@ const EXECUTIVE: NavItem[] = [
   { id: 'enterprise-readiness', label: 'Enterprise Readiness', icon: Building, path: '/enterprise-readiness', color: AMBER, desc: 'Readiness checklist for enterprise buyers and procurement.' },
   { id: 'investor', label: 'Investor View', icon: TrendingUp, path: '/investor', color: GREEN, desc: 'A read-only summary view built for investor updates.' },
   { id: 'founder', label: 'Founder Dashboard', icon: Crown, path: '/founder', color: RED, desc: 'Founder-only internal metrics and controls.' },
+  { id: 'social-scout', label: 'Social Scout', icon: Radar, path: '/social-scout', color: CYAN, desc: 'Founder-only opportunity scout for relevant public conversations and reply drafting.' },
 ];
 const SYSTEM: NavItem[] = [
   { id: 'team', label: 'Team', icon: Users, path: '/team', color: TEAL, desc: 'Manage teammates and their roles in this workspace.' },
