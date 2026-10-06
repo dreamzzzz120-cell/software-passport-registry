@@ -79,7 +79,7 @@ async function listCompleted(scopedDb: any, limit = 5000, offset = 0, only?: { o
   if (entries.length === 0) return entries;
   const ids = entries.map((e) => e.passportId);
   const findingRows = (await scopedDb.execute(sql`SELECT asset_id AS "passportId", lower(severity) AS severity, count(*)::int AS count FROM scan_findings WHERE tenant_id = ${FREE_REVIEW_TENANT_ID} AND asset_id IN ${ids} AND lower(status) NOT IN ('resolved','closed','verified') GROUP BY asset_id, lower(severity)`) as any).rows ?? [];
-  const evidenceRows = (await scopedDb.execute(sql`SELECT asset_id AS "passportId", count(*)::int AS count, count(*) FILTER (WHERE verified IS TRUE)::int AS "verifiedCount", count(*) FILTER (WHERE lower(type) = 'signature')::int AS "signatureCount" FROM evidence_items WHERE tenant_id = ${FREE_REVIEW_TENANT_ID} AND asset_id IN ${ids} GROUP BY asset_id`) as any).rows ?? [];
+  const evidenceRows = (await scopedDb.execute(sql`SELECT asset_id AS "passportId", count(*)::int AS count, count(*) FILTER (WHERE verified = 1)::int AS "verifiedCount", count(*) FILTER (WHERE lower(type) = 'signature')::int AS "signatureCount" FROM evidence_items WHERE tenant_id = ${FREE_REVIEW_TENANT_ID} AND asset_id IN ${ids} GROUP BY asset_id`) as any).rows ?? [];
   const byId = new Map(entries.map((e) => [e.passportId, e]));
   for (const f of findingRows) { const e = byId.get(f.passportId); if (!e) continue; e.findings[f.severity] = Number(f.count); e.openFindings += Number(f.count); }
   for (const ev of evidenceRows) { const e = byId.get(ev.passportId); if (!e) continue; e.evidenceCount = Number(ev.count); e.verifiedEvidenceCount = Number(ev.verifiedCount ?? 0); e.signatureEvidenceCount = Number(ev.signatureCount ?? 0); }
