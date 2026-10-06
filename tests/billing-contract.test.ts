@@ -339,3 +339,24 @@ describe('Stripe catalog price discovery fallback', () => {
     expect(s).toContain('target.recurring ? Boolean(price.recurring) : !price.recurring');
   });
 });
+
+
+describe('production Stripe mode safety', () => {
+  it('fails closed when a Stripe test key is present in production', () => {
+    const s = read('src/routes/billing.ts');
+    expect(s).toContain('STRIPE_TEST_MODE_IN_PRODUCTION');
+    expect(s).toContain('stripeTestModeInProduction');
+    expect(s).toContain('requireLiveStripeInProduction');
+  });
+
+  it('does not expose checkout as available while production is using test mode', () => {
+    const s = read('src/routes/billing.ts');
+    expect(s).toContain('productionTestMode ? { ...stripeEntryRaw, checkoutAvailable: false } : stripeEntryRaw');
+    expect(s).toContain('billingConfigured: (Boolean(config.stripe.secretKey) || hasPaymentLinkCheckout) && !stripeTestModeInProduction()');
+  });
+
+  it('does not leave temporary Stripe catalog diagnostics in production code', () => {
+    const s = read('src/routes/billing.ts');
+    expect(s).not.toContain('Active Stripe catalog snapshot');
+  });
+});
