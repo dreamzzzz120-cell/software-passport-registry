@@ -139,6 +139,7 @@ function badge(status: string) {
 }
 
 export default function FounderControlPlane() {
+  const [repairsObserved, setRepairsObserved] = useState(false);
   const [tasks, setTasks] = useState<RepairTask[]>([]);
   const [growth, setGrowth] = useState<Growth | null>(null);
   const [reality, setReality] = useState<RealityData | null>(null);
@@ -155,25 +156,22 @@ export default function FounderControlPlane() {
     setLoading(true);
     setError(null);
     try {
-      const [tasksRes, growthRes, realityRes, commandRes, billingRes, monitoringRes] = await Promise.all([
-        apiFetch('/api/remediation-tasks'),
-        apiFetch('/api/founder/distribution/growth'),
-        apiFetch('/api/founder/reality'),
-        apiFetch('/api/founder/command-center'),
-        apiFetch('/api/billing'),
-        apiFetch('/api/monitoring/monitoring-configurations'),
-      ]);
-      if (!tasksRes.ok) throw new Error(`Repair queue unavailable (${tasksRes.status})`);
-      const taskBody = await tasksRes.json().catch(() => []);
-      setTasks(Array.isArray(taskBody) ? taskBody : []);
-      if (growthRes.ok) setGrowth(await growthRes.json().catch(() => null));
-      if (realityRes.ok) setReality(await realityRes.json().catch(() => null));
-      if (commandRes.ok) setCommand(await commandRes.json().catch(() => null));
-      if (billingRes.ok) setBilling(await billingRes.json().catch(() => null));
-      if (monitoringRes.ok) {
-        const body = await monitoringRes.json().catch(() => []);
-        setMonitoringConfigs(Array.isArray(body) ? body : []);
-      }
+      const paths = ['/api/remediation-tasks', '/api/founder/distribution/growth', '/api/founder/reality', '/api/founder/command-center', '/api/billing', '/api/monitoring/monitoring-configurations'];
+      const results = await Promise.allSettled(paths.map(async (path) => {
+        const response = await apiFetch(path);
+        if (!response.ok) throw new Error(`${path} unavailable (${response.status})`);
+        return response.json();
+      }));
+      const data = results.map((result) => result.status === 'fulfilled' ? result.value : null);
+      setRepairsObserved(Array.isArray(data[0]));
+      setTasks(Array.isArray(data[0]) ? data[0] : []);
+      setGrowth(data[1]);
+      setReality(data[2]);
+      setCommand(data[3]);
+      setBilling(data[4]);
+      setMonitoringConfigs(Array.isArray(data[5]) ? data[5] : []);
+      const failures = results.filter((result) => result.status === 'rejected');
+      if (failures.length) setError(failures.map((result) => result.status === 'rejected' ? String(result.reason?.message || result.reason) : '').join('; '));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Founder control data could not be verified.');
     } finally {
@@ -284,7 +282,7 @@ export default function FounderControlPlane() {
   const pipeline = growth?.pipeline ?? {};
   const incidents = Array.isArray(reality?.incidents) ? reality!.incidents!.filter((i) => !['PROVEN_FIXED','FAILED'].includes(i.status)) : [];
   const autoRepairable = (i: RealityIncident) => ['worker_queue_flow','scan_terminality'].includes(i.contractId);
-  const verificationOptions = (task: RepairTask) => monitoringConfigs.filter((m) => m.enabled !== false && m.passportId === task.passportId && (!task.clientId || !m.clientId || m.clientId === task.clientId));
+  const verificationOptions = (task: RepairTask) => monitoringConfigs.filter((m) => m.enabled === true && Boolean(task.passportId) && m.passportId === task.passportId && (!task.clientId || !m.clientId || m.clientId === task.clientId));
   const metrics = command?.businessMetrics ?? {};
   const stripeConnection = command?.connections?.find((x) => x.key === 'stripe');
   const money = (cents?: number | null) => cents == null ? 'Not verified' : new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:2}).format(cents/100);
@@ -308,7 +306,7 @@ export default function FounderControlPlane() {
 
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
       <a href="#founder-repair" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4 hover:border-[var(--spr-highlight)]">
-        <Wrench className="h-5 w-5 text-[var(--spr-highlight)]" /><div className="mt-3 font-semibold text-[var(--spr-text)]">Repair system</div><div className="mt-1 text-xs text-[var(--spr-text-muted)]">{activeRepairs.length} active repair tasks</div>
+        <Wrench className="h-5 w-5 text-[var(--spr-highlight)]" /><div className="mt-3 font-semibold text-[var(--spr-text)]">Repair system</div><div className="mt-1 text-xs text-[var(--spr-text-muted)]">{repairsObserved ? `${activeRepairs.length} active repair tasks` : 'Repair queue not verified'}</div>
       </a>
       <a href="#founder-growth" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4 hover:border-[var(--spr-highlight)]">
         <Megaphone className="h-5 w-5 text-[var(--spr-highlight)]" /><div className="mt-3 font-semibold text-[var(--spr-text)]">Marketing & growth</div><div className="mt-1 text-xs text-[var(--spr-text-muted)]">{growth?.messages?.sent ?? 'Not verified'} observed messages sent</div>
@@ -343,9 +341,9 @@ export default function FounderControlPlane() {
         <div className="rounded border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3">
           <div className="text-xs font-semibold text-[var(--spr-text)]">This workspace</div>
           <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-            <div><span className="text-[var(--spr-text-muted)]">Plan</span><div className="font-medium text-[var(--spr-text)]">{billing?.subscription?.plan || 'No active plan observed'}</div></div>
+            <div><span className="text-[var(--spr-text-muted)]">Plan</span><div className="font-medium text-[var(--spr-text)]">{billing ? (billing.subscription?.plan || 'No active plan observed') : 'Not verified'}</div></div>
             <div><span className="text-[var(--spr-text-muted)]">Status</span><div className="font-medium text-[var(--spr-text)]">{billing?.subscription?.status || 'Not verified'}</div></div>
-            <div><span className="text-[var(--spr-text-muted)]">Clients</span><div className="font-medium text-[var(--spr-text)]">{billing?.clientCount ?? 'Not verified'} / {billing?.subscription?.clientLimit ?? 'Unlimited / not set'}</div></div>
+            <div><span className="text-[var(--spr-text-muted)]">Clients</span><div className="font-medium text-[var(--spr-text)]">{billing?.clientCount ?? 'Not verified'} / {billing?.subscription?.clientLimit ?? 'Limit not verified'}</div></div>
             <div><span className="text-[var(--spr-text-muted)]">Period end</span><div className="font-medium text-[var(--spr-text)]">{billing?.subscription?.currentPeriodEnd ? new Date(billing.subscription.currentPeriodEnd).toLocaleDateString() : 'Not verified'}</div></div>
           </div>
         </div>
@@ -373,6 +371,7 @@ export default function FounderControlPlane() {
         </div>
       </div>
       <div className="mt-4 space-y-2">
+        {!reality && <p role="status" className="text-sm text-[var(--spr-amber)]">Incident data unavailable. Refresh controls to retry.</p>}
         {incidents.slice(0,20).map((incident) => <div key={incident.id} className="flex flex-col gap-3 rounded border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3 lg:flex-row lg:items-center">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2"><span className="font-semibold text-[var(--spr-text)]">{incident.component}</span><span className="text-[10px] font-bold uppercase tracking-wide text-[var(--spr-amber)]">{incident.status}</span><span className="text-[10px] uppercase text-[var(--spr-text-muted)]">{incident.severity}</span></div>
@@ -383,7 +382,7 @@ export default function FounderControlPlane() {
             ? <button onClick={() => void repairIncident(incident)} disabled={working !== null} className="spr-btn spr-btn-primary text-xs">{working === `incident:${incident.id}` ? 'Repairing…' : 'Repair now'}</button>
             : <div className="max-w-xs text-xs text-[var(--spr-text-muted)]">Requires infrastructure/configuration access or approval. SPR will not auto-mutate this class.</div>}
         </div>)}
-        {incidents.length === 0 && <div className="rounded border border-[var(--spr-border)] p-4 text-sm text-[var(--spr-text-muted)]">No active reality incidents are currently observed.</div>}
+        {reality && incidents.length === 0 && <div className="rounded border border-[var(--spr-border)] p-4 text-sm text-[var(--spr-text-muted)]">No active reality incidents are currently observed.</div>}
       </div>
     </div>
 
@@ -394,21 +393,22 @@ export default function FounderControlPlane() {
           <p className="mt-1 text-xs text-[var(--spr-text-muted)]">Creates missing remediation work and starts what SPR can safely start. Verification remains a separate evidence-backed state.</p>
         </div>
         <button onClick={() => void runSafeRepair()} disabled={working !== null} className="spr-btn spr-btn-primary inline-flex items-center gap-2">
-          <Play className="h-4 w-4" /> {working === 'repair-all' ? 'Starting…' : 'Fix what SPR can safely fix'}
+          <Play className="h-4 w-4" /> {working === 'repair-all' ? 'Starting…' : 'Create and start repair tasks'}
         </button>
       </div>
       <div className="mt-4 overflow-x-auto rounded border border-[var(--spr-border)]">
-        <table className="w-full text-sm">
+        <table className="founder-repair-table w-full text-sm">
           <thead><tr className="text-left text-[11px] uppercase tracking-wide text-[var(--spr-text-muted)]"><th className="p-3">Issue / why</th><th className="p-3">State</th><th className="p-3">SPR decision</th><th className="p-3">Proof</th><th className="p-3 text-right">Action</th></tr></thead>
           <tbody>
+            {!repairsObserved && <tr><td colSpan={5} className="p-4 text-sm text-[var(--spr-amber)]">Repair queue unavailable. Refresh controls to retry.</td></tr>}
             {activeRepairs.slice(0,25).map((task) => {
               const decision = repairDecision(task);
               return <tr key={task.id} className="border-t border-[var(--spr-border)] align-top">
-                <td className="p-3 max-w-[26rem]"><div className="font-medium text-[var(--spr-text)]">{task.title}</div><div className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">{decision.why}</div><div className="mt-1 font-mono text-[10px] text-[var(--spr-text-faint)]">{task.id}</div></td>
-                <td className={`p-3 text-xs font-semibold ${badge(task.status)}`}><div>{task.status}</div><div className="mt-1 font-normal text-[10px] text-[var(--spr-text-muted)]">{task.updatedAt ? new Date(task.updatedAt).toLocaleString() : 'Not verified'}</div></td>
-                <td className="p-3 max-w-[22rem]"><div className="text-[10px] font-bold uppercase tracking-wide text-[var(--spr-highlight)]">{decision.automation}</div><div className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">{decision.next}</div></td>
-                <td className="p-3 text-xs text-[var(--spr-text-muted)]">{decision.proof}</td>
-                <td className="p-3 text-right">
+                <td data-label="Issue / why" className="p-3 max-w-[26rem]"><div className="font-medium text-[var(--spr-text)]">{task.title}</div><div className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">{decision.why}</div><div className="mt-1 font-mono text-[10px] text-[var(--spr-text-faint)]">{task.id}</div></td>
+                <td data-label="State" className={`p-3 text-xs font-semibold ${badge(task.status)}`}><div>{task.status}</div><div className="mt-1 font-normal text-[10px] text-[var(--spr-text-muted)]">{task.updatedAt ? new Date(task.updatedAt).toLocaleString() : 'Not verified'}</div></td>
+                <td data-label="SPR decision" className="p-3 max-w-[22rem]"><div className="text-[10px] font-bold uppercase tracking-wide text-[var(--spr-highlight)]">{decision.automation}</div><div className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">{decision.next}</div></td>
+                <td data-label="Proof" className="p-3 text-xs text-[var(--spr-text-muted)]">{decision.proof}</td>
+                <td data-label="Action" className="p-3 text-right">
                   {task.status === 'OPEN' || task.status === 'IN_PROGRESS'
                     ? <button onClick={() => void advanceTask(task)} disabled={working !== null} className="spr-btn spr-btn-secondary text-xs">{task.status === 'OPEN' ? 'Start repair' : 'Send to verification'}</button>
                     : task.status === 'READY_FOR_VERIFICATION'
@@ -418,6 +418,7 @@ export default function FounderControlPlane() {
                           return <div className="flex min-w-[16rem] flex-col items-end gap-2">
                             {options.length > 0 ? <>
                               <select
+                                aria-label={`Evidence source for ${task.title}`}
                                 value={selected}
                                 onChange={(e) => setVerificationChoice((current) => ({...current,[task.id]:e.target.value}))}
                                 className="w-full rounded border border-[var(--spr-border)] bg-[var(--spr-surface)] px-2 py-1 text-xs text-[var(--spr-text)]"
@@ -440,7 +441,7 @@ export default function FounderControlPlane() {
                 </td>
               </tr>;
             })}
-            {activeRepairs.length === 0 && <tr><td colSpan={5} className="p-6 text-center text-sm text-[var(--spr-text-muted)]">No active remediation tasks are currently observed.</td></tr>}
+            {repairsObserved && activeRepairs.length === 0 && <tr><td colSpan={5} className="p-6 text-center text-sm text-[var(--spr-text-muted)]">No active remediation tasks are currently observed.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -450,11 +451,11 @@ export default function FounderControlPlane() {
       <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4">
         <div className="flex items-center gap-2"><Megaphone className="h-4 w-4 text-[var(--spr-highlight)]" /><h3 className="font-semibold text-[var(--spr-text)]">Marketing & distribution controls</h3></div>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <button onClick={() => void saveCampaign({ discoveryEnabled: !settings.discoveryEnabled })} disabled={working !== null} className="spr-btn spr-btn-secondary justify-between">
-            <span>Opportunity discovery</span><strong>{settings.discoveryEnabled ? 'ON' : 'OFF'}</strong>
+          <button onClick={() => void saveCampaign({ discoveryEnabled: !settings.discoveryEnabled })} disabled={working !== null || !growth} className="spr-btn spr-btn-secondary flex items-center justify-between gap-3">
+            <span>Opportunity discovery</span><strong>{settings.discoveryEnabled == null ? 'UNKNOWN' : settings.discoveryEnabled ? 'ON' : 'OFF'}</strong>
           </button>
-          <button onClick={() => void saveCampaign({ outreachEnabled: !settings.outreachEnabled })} disabled={working !== null} className="spr-btn spr-btn-secondary justify-between">
-            <span>Outreach</span><strong>{settings.outreachEnabled ? 'ON' : 'OFF'}</strong>
+          <button onClick={() => void saveCampaign({ outreachEnabled: !settings.outreachEnabled })} disabled={working !== null || !growth} className="spr-btn spr-btn-secondary flex items-center justify-between gap-3">
+            <span>Outreach</span><strong>{settings.outreachEnabled == null ? 'UNKNOWN' : settings.outreachEnabled ? 'ON' : 'OFF'}</strong>
           </button>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
