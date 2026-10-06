@@ -186,17 +186,17 @@ export default function FounderFeatureControlMatrix() {
   const groups = useMemo(() => Array.from(new Set(rows.map(r => r.group))), [rows]);
   const counts = useMemo(() => rows.reduce((acc, row) => { acc[row.state]=(acc[row.state]||0)+1; return acc; }, {} as Record<FeatureState,number>), [rows]);
 
-  return <section id="founder-feature-matrix" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-5">
+  return <section id="founder-feature-matrix" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-4 sm:p-5">
     <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
       <div>
         <div className="text-[11px] font-bold uppercase tracking-[.2em] text-[var(--spr-highlight)]">Founder control plane</div>
         <h2 className="mt-1 text-lg font-semibold text-[var(--spr-text)]">Feature Control Matrix</h2>
         <p className="mt-1 max-w-3xl text-xs leading-5 text-[var(--spr-text-muted)]">Every major SPR surface in one place. Green means the capability is routed or live-tested as described; configuration, dependency failures and unknowns stay explicit. Security boundaries are shown, not removed.</p>
       </div>
-      <button type="button" onClick={() => void refresh()} disabled={loading} className="spr-btn spr-btn-secondary inline-flex items-center gap-2 text-xs"><RefreshCw className={loading ? 'h-3.5 w-3.5 animate-spin' : 'h-3.5 w-3.5'} />{loading ? 'Refreshing' : 'Refresh states'}</button>
+      <button type="button" onClick={() => void refresh()} disabled={loading} className="spr-btn spr-btn-secondary inline-flex w-full items-center justify-center gap-2 text-xs md:w-auto"><RefreshCw className={loading ? 'h-3.5 w-3.5 animate-spin' : 'h-3.5 w-3.5'} />{loading ? 'Refreshing' : 'Refresh states'}</button>
     </div>
 
-    <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+    <div className="mt-4 grid grid-cols-2 gap-2 xl:grid-cols-5">
       {(['AVAILABLE','CONFIG_REQUIRED','DEPENDENCY_DOWN','PERMISSION_BLOCKED','UNKNOWN'] as FeatureState[]).map(state => <div key={state} className={`rounded-md border px-3 py-2 ${stateClasses[state]}`}><div className="text-[10px] font-bold uppercase tracking-[.12em]">{state.replaceAll('_',' ')}</div><div className="mt-1 text-xl font-semibold">{counts[state] || 0}</div></div>)}
     </div>
 
@@ -209,7 +209,7 @@ export default function FounderFeatureControlMatrix() {
         const open = openGroups[group] ?? hasProblem;
         return <div key={group} className="overflow-hidden rounded-md border border-[var(--spr-border)]">
           <button type="button" onClick={() => setOpenGroups(current => ({...current,[group]:!open}))} className="flex w-full items-center justify-between gap-3 bg-[var(--spr-surface-alt)] px-3 py-2 text-left">
-            <span className="flex items-center gap-2 text-xs font-semibold text-[var(--spr-text)]">{hasProblem ? <ShieldAlert className="h-3.5 w-3.5 text-[var(--spr-amber)]" /> : <CheckCircle2 className="h-3.5 w-3.5 text-[var(--spr-green)]" />}{group}<span className="text-[11px] font-normal text-[var(--spr-text-muted)]">{groupRows.length} capabilities</span></span>
+            <span className="flex min-w-0 items-center gap-2 text-xs font-semibold text-[var(--spr-text)]">{hasProblem ? <ShieldAlert className="h-3.5 w-3.5 text-[var(--spr-amber)]" /> : <CheckCircle2 className="h-3.5 w-3.5 text-[var(--spr-green)]" />}<span className="truncate">{group}</span><span className="hidden text-[11px] font-normal text-[var(--spr-text-muted)] sm:inline">{groupRows.length} capabilities</span></span>
             {open ? <ChevronDown className="h-4 w-4 text-[var(--spr-text-muted)]" /> : <ChevronRight className="h-4 w-4 text-[var(--spr-text-muted)]" />}
           </button>
           {open && <div className="divide-y divide-[var(--spr-border)]">
@@ -217,7 +217,7 @@ export default function FounderFeatureControlMatrix() {
               <div><div className="text-sm font-semibold text-[var(--spr-text)]">{row.name}</div><div className="mt-0.5 text-[11px] text-[var(--spr-text-faint)]">{row.path || row.dependency || 'internal capability'}</div></div>
               <div><span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-bold uppercase tracking-[.08em] ${stateClasses[row.state]}`}>{row.state.replaceAll('_',' ')}</span></div>
               <div><p className="text-xs leading-5 text-[var(--spr-text-muted)]">{row.reason}</p><p className="mt-1 text-[11px] text-[var(--spr-text-faint)]"><CircleHelp className="mr-1 inline h-3 w-3" />Access: {row.access}</p></div>
-              <a href={row.actionPath} className="spr-btn spr-btn-secondary inline-flex items-center justify-center gap-1.5 text-xs"><Settings2 className="h-3.5 w-3.5" />{row.actionLabel}<ExternalLink className="h-3 w-3" /></a>
+              <a href={row.actionPath} className="spr-btn spr-btn-secondary inline-flex w-full items-center justify-center gap-1.5 text-xs lg:w-auto"><Settings2 className="h-3.5 w-3.5" />{row.actionLabel}<ExternalLink className="h-3 w-3" /></a>
             </div>)}
           </div>}
         </div>;
