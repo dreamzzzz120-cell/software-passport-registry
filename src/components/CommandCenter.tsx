@@ -215,16 +215,16 @@ export default function CommandCenter({ children, path, userEmail, role, isFound
               </button>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5 text-[11px] text-[var(--spr-text-faint)]">
-                  <span>Workspace</span>
-                  <span>/</span>
+                  <span className="hidden sm:inline">Workspace</span>
+                  <span className="hidden sm:inline">/</span>
                   <span className="font-medium text-[var(--spr-text)]">{currentLabel}</span>
                 </div>
               </div>
-              <span title="This session is connected to live workspace data." className="hidden items-center gap-1.5 rounded-sm border border-[var(--spr-border)] px-2 py-0.5 text-[11px] text-[var(--spr-text-muted)] md:flex">
+              <span title="This session is connected to live workspace data." className="hidden items-center gap-1.5 rounded-sm border border-[var(--spr-border)] px-2 py-0.5 text-[11px] text-[var(--spr-text-muted)] xl:flex">
                 <span className="spr-status-dot spr-status-dot--green" /> Live
               </span>
-              <span title="Your role in this workspace, which controls what you can view and change." className="hidden rounded-sm border border-[var(--spr-border)] px-2 py-0.5 text-[11px] text-[var(--spr-text-muted)] md:inline">{role}</span>
-              <button onClick={() => onNavigate('/pricing')} title="Compare SPR plans and pricing." className="spr-btn spr-btn-primary !hidden !py-1 !px-3 !text-[11px] md:!inline-flex">Pricing</button>
+              <span title="Your role in this workspace, which controls what you can view and change." className="hidden rounded-sm border border-[var(--spr-border)] px-2 py-0.5 text-[11px] text-[var(--spr-text-muted)] xl:inline">{role}</span>
+              <button onClick={() => onNavigate('/pricing')} title="Compare SPR plans and pricing." className="spr-btn spr-btn-primary !hidden !py-1 !px-3 !text-[11px] xl:!inline-flex">Pricing</button>
               <span title="The account you're signed in as." className="hidden max-w-[180px] truncate text-[11px] text-[var(--spr-text-faint)] xl:inline">{userEmail || 'Authenticated user'}</span>
               <button
                 onClick={() => setMobileMenuOpen((open) => !open)}
@@ -240,14 +240,14 @@ export default function CommandCenter({ children, path, userEmail, role, isFound
           </header>
 
           <div className="border-b border-[var(--spr-border)] bg-[var(--spr-surface-alt)] px-2 py-1.5 lg:hidden">
-            <div className="flex gap-1.5 overflow-x-auto pb-0.5">
-              {mobileItems.slice(0, 8).map((item) => (
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+              {mobileItems.slice(0, 4).map((item) => (
                 <button
                   key={item.id}
                   onClick={() => { onNavigate(item.path); setMobileMenuOpen(false); }}
                   data-active={active(item.path)}
                   title={'desc' in item && typeof item.desc === 'string' ? item.desc : undefined}
-                  className="spr-nav-item shrink-0 border border-[var(--spr-border)] px-2.5 py-1.5 text-[11px]"
+                  className="spr-nav-item min-w-0 border border-[var(--spr-border)] px-2.5 py-2 text-center text-[11px]"
                 >
                   {item.label}
                 </button>
@@ -257,8 +257,8 @@ export default function CommandCenter({ children, path, userEmail, role, isFound
               </button>
             </div>
             {mobileMenuOpen && (
-              <div className="mt-1.5 grid max-h-64 grid-cols-2 gap-1.5 overflow-y-auto border-t border-[var(--spr-border)] pt-1.5">
-                {mobileItems.slice(8).map((item) => (
+              <div className="mt-1.5 grid max-h-72 grid-cols-1 gap-1.5 overflow-y-auto border-t border-[var(--spr-border)] pt-1.5 sm:grid-cols-2">
+                {mobileItems.slice(4).map((item) => (
                   <button
                     key={item.id}
                     onClick={() => { onNavigate(item.path); setMobileMenuOpen(false); }}
@@ -273,7 +273,7 @@ export default function CommandCenter({ children, path, userEmail, role, isFound
             )}
           </div>
 
-          <div className="mx-auto max-w-[1600px] p-4 md:p-6">{children}</div>
+          <div className="mx-auto max-w-[1600px] p-3 sm:p-4 md:p-6">{children}</div>
         </main>
       </div>
       <FeedbackWidget currentPath={path} />
