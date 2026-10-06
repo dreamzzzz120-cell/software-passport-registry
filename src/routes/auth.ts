@@ -25,6 +25,7 @@ import { describeUserAgent, sessionFingerprint } from '../security/session-track
 import { offboardTenantData } from '../db/sync.ts';
 import { canCreateClient, PLAN_CONFIG } from './billing.ts';
 import { normalizeClientRecord, normalizeClientRecords, normalizePassportRecords } from '../lib/clientJsonColumns.ts';
+import { clientInventoryQuery } from '../lib/clientInventoryQuery.ts';
 import { adaptEvidenceForEvaluation } from '../lib/verification/evidenceAdapter.ts';
 import { FONT_CHOICES, RADIUS_MAX, RADIUS_MIN, THEME_COLOR_KEYS, type ThemeColorKey } from '../lib/brandingTheme.ts';
 
@@ -715,12 +716,7 @@ export function createAuthRouter() {
       // Every other role is unrestricted at the client level (tenant RLS is
       // still the structural backstop either way).
       const clientScope = req.user!.role === 'Client' ? req.user!.clientId : null;
-      const result = await db.execute(sql`
-        SELECT id, name, domain, industry, trust_score AS "trustScore", risk_level AS "riskLevel", avatar_color AS "avatarColor", subscription_tier AS "subscriptionTier", joined_date AS "joinedDate", team_count AS "teamCount", passport_count AS "passportCount", critical_risks_count AS "criticalRisksCount", compliance_progress AS "complianceProgress", software_inventory AS "softwareInventory", compliance_status AS "complianceStatus", team_members AS "teamMembers", activity_timeline AS "activityTimeline"
-        FROM clients
-        WHERE tenant_id=${req.user!.tenantId} AND (${clientScope}::text IS NULL OR id = ${clientScope})
-        ORDER BY joined_date DESC
-      `);
+      const result = await db.execute(clientInventoryQuery(req.user!.tenantId, clientScope));
       // software_inventory/compliance_status/team_members/activity_timeline
       // are JSON-stringified TEXT columns. Parse them here so the response
       // matches the Client type the browser is written against, instead of

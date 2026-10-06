@@ -12,6 +12,11 @@ export type CanonicalReport = {
   evidenceQuality: { completenessBasisPoints: number; unknownDimensions: number; latestObservationAt: string | null };
   findings: Array<{ id: string; control_id: string; title: string; severity: string; status: string; description: string; remediation: string; updated_at: string; resolved_at: string | null }>;
   evidence: Array<{ id: string; provider: string; control_id: string; observed_at: string; verification_method: string; status: string; limitation?: string | null }>;
+  repositoryScan?: {
+    sbomComponentCount: number;
+    evidence: Array<{ id: string }>;
+    findings: Array<{ id: string; title: string; severity: string; status: string; description: string; detectedAt?: string; engineId?: string }>;
+  };
   generatedAt: string;
 };
 
@@ -111,26 +116,41 @@ export function explainChange(change: { type: string; before: unknown; after: un
 // English -- called identically by both the executive and detailed report
 // routes, so they can never disagree about the underlying facts.
 export function toPlainEnglish(report: CanonicalReport): PlainEnglishReport {
-  const open = report.findings.filter((f) => f.status === 'OPEN');
-  const unknown = report.findings.filter((f) => f.status === 'UNKNOWN');
-  const resolved = report.findings.filter((f) => f.status === 'RESOLVED');
+  const scan = report.repositoryScan;
+  const scanFindings: CanonicalReport['findings'] = (scan?.findings ?? []).map((f) => ({
+    id: f.id, control_id: f.engineId || 'repository-scan', title: f.title,
+    severity: f.severity.toLowerCase(), description: f.description,
+    status: ['resolved', 'closed'].includes(f.status.toLowerCase()) ? 'RESOLVED'
+      : f.status.toLowerCase() === 'open' ? 'OPEN' : 'UNKNOWN',
+    remediation: 'Review the source and scanner scope, confirm whether the finding applies, and document the disposition. A scanner match does not prove exploitation.',
+    updated_at: f.detectedAt || report.generatedAt, resolved_at: null,
+  }));
+  const findings = [...report.findings, ...scanFindings];
+  const open = findings.filter((f) => f.status === 'OPEN');
+  const unknown = findings.filter((f) => f.status === 'UNKNOWN');
+  const resolved = findings.filter((f) => f.status === 'RESOLVED');
   const needsAttentionCount = open.length + unknown.length;
+  const hasEvidence = report.evidence.length > 0 || (scan?.evidence.length ?? 0) > 0 || (scan?.sbomComponentCount ?? 0) > 0;
+  const repositoryContext = scan && (scan.evidence.length || scan.sbomComponentCount || scan.findings.length)
+    ? ` Repository analysis recorded ${scan.sbomComponentCount} SBOM components, ${scan.evidence.length} evidence records and ${scan.findings.length} findings. Repository coverage does not establish deployment safety or compliance.` : '';
 
   const headline = needsAttentionCount === 0
-    ? (report.findings.length === 0 ? 'No checks have produced evidence yet' : 'Nothing currently needs attention')
+    ? (findings.length === 0 ? (hasEvidence ? 'Evidence collected; coverage still needs review' : 'No checks have produced evidence yet') : 'Nothing currently needs attention')
     : `${needsAttentionCount} item${needsAttentionCount === 1 ? '' : 's'} need${needsAttentionCount === 1 ? 's' : ''} attention`;
 
-  const situation = report.findings.length === 0
-    ? 'SPR has not yet collected enough evidence about this software to report a status. This is not the same as being unsafe -- it means nothing has been checked yet.'
+  const situation = (findings.length === 0
+    ? (hasEvidence ? 'SPR has collected evidence without recorded findings. This is not an all-clear; review the observed scope and remaining gaps.' : 'SPR has not yet collected enough evidence about this software to report a status. This is not the same as being unsafe -- it means nothing has been checked yet.')
     : needsAttentionCount === 0
-      ? `SPR checked ${report.findings.length} item${report.findings.length === 1 ? '' : 's'} for this software and found no unresolved issues in what it could verify. Nothing in this report should be read as a guarantee that the environment is completely secure -- SPR reports only what it can actually verify from the evidence available.`
-      : `SPR found ${needsAttentionCount} item${needsAttentionCount === 1 ? '' : 's'} that should be reviewed out of ${report.findings.length} checked. ${resolved.length ? `${resolved.length} other item${resolved.length === 1 ? '' : 's'} ${resolved.length === 1 ? 'is' : 'are'} already resolved.` : ''} Nothing in this report should be read as a guarantee that the environment is completely secure -- SPR reports only what it can actually verify from the evidence available.`;
+      ? `SPR recorded ${findings.length} resolved findings for this software. Nothing in this report should be read as a guarantee that the environment is completely secure -- SPR reports only what it can actually verify from the evidence available.`
+      : `SPR found ${needsAttentionCount} item${needsAttentionCount === 1 ? '' : 's'} that should be reviewed among ${findings.length} recorded findings. ${resolved.length ? `${resolved.length} other item${resolved.length === 1 ? '' : 's'} ${resolved.length === 1 ? 'is' : 'are'} already resolved.` : ''} Nothing in this report should be read as a guarantee that the environment is completely secure -- SPR reports only what it can actually verify from the evidence available.`) + repositoryContext;
 
   const scoreExplanation = {
     value: report.risk.overall,
     explanation: report.risk.overall === null
       ? 'SPR does not yet have enough resolved evidence to calculate a trust score for this software.'
-      : report.risk.overall >= 85
+      : report.evidenceQuality.latestObservationAt === null && hasEvidence
+        ? 'This is the stored passport score. No trust-loop provider observation supports a current environment assessment; review repository evidence and limitations before making a decision.'
+        : report.risk.overall >= 85
         ? 'Based on the evidence SPR currently has, this software has a generally healthy trust position.'
         : report.risk.overall >= 60
           ? 'Based on the evidence SPR currently has, this software has a generally healthy trust position, but there are areas that need attention.'
@@ -144,7 +164,7 @@ export function toPlainEnglish(report: CanonicalReport): PlainEnglishReport {
     whatIsGood: resolved.map((f) => `${f.title}: resolved`),
     whatNeedsAttention: [...open, ...unknown].map((f) => `${f.title}${f.status === 'UNKNOWN' ? ' (not enough evidence to confirm either way)' : ''}`),
     scoreExplanation,
-    findings: report.findings.map(explainFinding),
+    findings: findings.map(explainFinding),
     glossary: GLOSSARY,
     generatedAt: report.generatedAt,
   };
