@@ -72,6 +72,65 @@ function planPaymentLink(plan: PlanId): string | undefined {
   return undefined;
 }
 
+const ONE_TIME_PAYMENT_LINK_ENV: Record<OneTimeProductId, string> = {
+  softwarePassport: 'STRIPE_PAYMENT_LINK_SOFTWARE_PASSPORT',
+  evidenceReport: 'STRIPE_PAYMENT_LINK_EVIDENCE_REPORT',
+  securityAssessment: 'STRIPE_PAYMENT_LINK_SECURITY_ASSESSMENT',
+  verifiedSystemReport: 'STRIPE_PAYMENT_LINK_VERIFIED_SYSTEM_REPORT',
+  dueDiligenceReport: 'STRIPE_PAYMENT_LINK_DUE_DILIGENCE_REPORT',
+  vendorRiskAssessment: 'STRIPE_PAYMENT_LINK_VENDOR_RISK_ASSESSMENT',
+  sbomAnalysis: 'STRIPE_PAYMENT_LINK_SBOM_ANALYSIS',
+  portfolioAssessment: 'STRIPE_PAYMENT_LINK_PORTFOLIO_ASSESSMENT',
+  auditEvidencePackage: 'STRIPE_PAYMENT_LINK_AUDIT_EVIDENCE_PACKAGE',
+  customAssessment: 'STRIPE_PAYMENT_LINK_CUSTOM_ASSESSMENT',
+};
+
+const ADDON_PAYMENT_LINK_ENV: Record<AddonId, string> = {
+  continuousVerification: 'STRIPE_PAYMENT_LINK_CONTINUOUS_VERIFICATION',
+  trustBadge: 'STRIPE_PAYMENT_LINK_TRUST_BADGE',
+  publicPassport: 'STRIPE_PAYMENT_LINK_PUBLIC_PASSPORT',
+  api: 'STRIPE_PAYMENT_LINK_API',
+};
+
+const ONE_TIME_FALLBACK_PRICE: Record<OneTimeProductId, number> = {
+  softwarePassport: 4900,
+  evidenceReport: 9900,
+  securityAssessment: 19900,
+  verifiedSystemReport: 49900,
+  dueDiligenceReport: 79900,
+  vendorRiskAssessment: 99900,
+  sbomAnalysis: 19900,
+  portfolioAssessment: 149900,
+  auditEvidencePackage: 99900,
+  customAssessment: 150000,
+};
+
+const ADDON_FALLBACK_PRICE: Record<AddonId, number> = {
+  continuousVerification: 14900,
+  trustBadge: 4900,
+  publicPassport: 4900,
+  api: 19900,
+};
+
+function oneTimePaymentLink(product: OneTimeProductId): string | undefined {
+  return process.env[ONE_TIME_PAYMENT_LINK_ENV[product]]?.trim() || undefined;
+}
+
+function addonPaymentLink(addon: AddonId): string | undefined {
+  return process.env[ADDON_PAYMENT_LINK_ENV[addon]]?.trim() || undefined;
+}
+
+function paymentLinkFallback(unitAmount: number, recurring: boolean, description: string): ResolvedPrice {
+  const amount = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(unitAmount / 100);
+  return {
+    priceLabel: recurring ? `${amount}/month` : amount,
+    unitAmount,
+    currency: 'usd',
+    interval: recurring ? 'month' : null,
+    description,
+  };
+}
+
 
 
 const discoveredPriceIds = new Map<string, string>();
@@ -265,8 +324,20 @@ export async function buildCatalog() {
         clientLimit: PLAN_CONFIG[id].clientLimit,
       };
     }),
-    products: ONE_TIME_IDS.map((id) => catalogEntry(id, ONE_TIME_CONFIG[id].label, oneTimePriceId(id), prices)),
-    addons: ADDON_IDS.map((id) => catalogEntry(id, ADDON_CONFIG[id].label, addonPriceId(id), prices)),
+    products: ONE_TIME_IDS.map((id) => {
+      const stripeEntry = catalogEntry(id, ONE_TIME_CONFIG[id].label, oneTimePriceId(id), prices);
+      const link = oneTimePaymentLink(id);
+      return link && !stripeEntry.checkoutAvailable
+        ? { ...stripeEntry, ...paymentLinkFallback(ONE_TIME_FALLBACK_PRICE[id], false, ONE_TIME_CONFIG[id].label), checkoutAvailable: true }
+        : stripeEntry;
+    }),
+    addons: ADDON_IDS.map((id) => {
+      const stripeEntry = catalogEntry(id, ADDON_CONFIG[id].label, addonPriceId(id), prices);
+      const link = addonPaymentLink(id);
+      return link && !stripeEntry.checkoutAvailable
+        ? { ...stripeEntry, ...paymentLinkFallback(ADDON_FALLBACK_PRICE[id], true, ADDON_CONFIG[id].label), checkoutAvailable: true }
+        : stripeEntry;
+    }),
   };
 }
 
@@ -317,7 +388,10 @@ export function createBillingRouter() {
         availablePlans: catalog.plans.filter((plan) => plan.checkoutAvailable).map((plan) => plan.id),
         availableProducts: catalog.products.filter((product) => product.checkoutAvailable).map((product) => product.id),
         availableAddons: catalog.addons.filter((addon) => addon.checkoutAvailable).map((addon) => addon.id),
-        subscription: (subResult as any).rows?.[0] ?? null,
+        subscription: (() => {
+          const row = (subResult as any).rows?.[0] ?? null;
+          return row && ['active', 'trialing', 'past_due'].includes(String(row.status)) ? row : null;
+        })(),
         clientCount: (clientCountResult as any).rows?.[0]?.count ?? 0,
       });
     } catch (error) { return next(error); }
@@ -381,29 +455,29 @@ export function createBillingRouter() {
 
   router.post('/one-time-checkout', requireAuth, async (req: AuthenticatedRequest, res, next) => {
     try {
-      if (!config.stripe.secretKey) return res.status(503).json({ error: 'BILLING_NOT_CONFIGURED' });
       const parsed = oneTimeCheckoutSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+      const tenantId = req.user!.tenantId;
+      const paymentLink = oneTimePaymentLink(parsed.data.product);
+      if (paymentLink) {
+        const url = new URL(paymentLink);
+        url.searchParams.set('client_reference_id', `${tenantId}__sprproduct__${parsed.data.product}`);
+        if (req.user!.email) url.searchParams.set('prefilled_email', req.user!.email);
+        await appendAuditEntry(req.db!, { tenantId, action: 'billing.purchase.initiated', actor: req.user!.uid, payload: { product: parsed.data.product, checkoutSessionId: 'payment-link' } });
+        return res.json({ url: url.toString() });
+      }
+      if (!config.stripe.secretKey) return res.status(503).json({ error: 'BILLING_NOT_CONFIGURED' });
       const stripe = stripeClient();
       await discoverMissingCatalogPrices(stripe);
       const priceId = oneTimePriceId(parsed.data.product);
       if (!priceId) return res.status(503).json({ error: 'This product is not yet available for checkout.' });
-      const tenantId = req.user!.tenantId;
-      // Reuse the tenant's canonical Stripe customer when one already exists.
-      // This keeps one billing identity across subscriptions, add-ons, invoices,
-      // receipts and the Customer Portal instead of creating a second customer
-      // for every one-time purchase.
       const existingBilling = (await req.db!.execute(sql`SELECT stripe_customer_id AS "stripeCustomerId" FROM tenant_subscriptions WHERE tenant_id = ${tenantId} LIMIT 1`) as any).rows?.[0];
       const customerId: string | undefined = existingBilling?.stripeCustomerId;
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
         ...(customerId ? { customer: customerId } : { customer_email: req.user!.email }),
         line_items: [{ price: priceId, quantity: 1 }],
-        // Buyers can enter a Stripe promotion code on the hosted page.
         allow_promotion_codes: true,
-        // Founder decision 2026-09-11: prices are USD everywhere. Adaptive Pricing
-        // would otherwise localise the hosted page (a Canadian buyer saw CA$214.98
-        // for the $149 plan) and settle in that currency.
         adaptive_pricing: { enabled: false },
         managed_payments: { enabled: false },
         success_url: `${config.appUrl}/billing?purchase=success&product=${encodeURIComponent(parsed.data.product)}`,
@@ -419,33 +493,31 @@ export function createBillingRouter() {
 
   router.post('/addon-checkout', requireAuth, async (req: AuthenticatedRequest, res, next) => {
     try {
-      if (!config.stripe.secretKey) return res.status(503).json({ error: 'BILLING_NOT_CONFIGURED' });
       const parsed = addonCheckoutSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+      const tenantId = req.user!.tenantId;
+      const activeAddon = (await req.db!.execute(sql`SELECT stripe_subscription_id FROM tenant_addons WHERE tenant_id = ${tenantId} AND addon = ${parsed.data.addon} AND status IN ('active', 'trialing', 'past_due') LIMIT 1`) as any).rows?.[0];
+      if (activeAddon) return res.status(409).json({ error: 'ADDON_ALREADY_ACTIVE', code: 'ADDON_ALREADY_ACTIVE', addon: parsed.data.addon, billingPath: '/billing', message: `${ADDON_CONFIG[parsed.data.addon].label} is already active on this workspace. Manage it from Manage billing.` });
+      const paymentLink = addonPaymentLink(parsed.data.addon);
+      if (paymentLink) {
+        const url = new URL(paymentLink);
+        url.searchParams.set('client_reference_id', `${tenantId}__spraddon__${parsed.data.addon}`);
+        if (req.user!.email) url.searchParams.set('prefilled_email', req.user!.email);
+        await appendAuditEntry(req.db!, { tenantId, action: 'billing.addon.initiated', actor: req.user!.uid, payload: { addon: parsed.data.addon, checkoutSessionId: 'payment-link' } });
+        return res.json({ url: url.toString() });
+      }
+      if (!config.stripe.secretKey) return res.status(503).json({ error: 'BILLING_NOT_CONFIGURED' });
       const stripe = stripeClient();
       await discoverMissingCatalogPrices(stripe);
       const priceId = addonPriceId(parsed.data.addon);
       if (!priceId) return res.status(503).json({ error: 'This add-on is not yet available for checkout.' });
-      const tenantId = req.user!.tenantId;
-      // Add-ons belong to the same billing customer as the tenant's main plan.
-      // If the tenant has no customer yet, Checkout creates one and the
-      // checkout.session.completed webhook persists it for future purchases.
       const existingBilling = (await req.db!.execute(sql`SELECT stripe_customer_id AS "stripeCustomerId" FROM tenant_subscriptions WHERE tenant_id = ${tenantId} LIMIT 1`) as any).rows?.[0];
       const customerId: string | undefined = existingBilling?.stripeCustomerId;
-      // One active subscription per add-on per tenant; a second checkout would
-      // create a second live Stripe subscription for the same thing.
-      const activeAddon = (await req.db!.execute(sql`SELECT stripe_subscription_id FROM tenant_addons WHERE tenant_id = ${tenantId} AND addon = ${parsed.data.addon} AND status IN ('active', 'trialing', 'past_due') LIMIT 1`) as any).rows?.[0];
-      if (activeAddon) return res.status(409).json({ error: 'ADDON_ALREADY_ACTIVE', code: 'ADDON_ALREADY_ACTIVE', addon: parsed.data.addon, billingPath: '/billing', message: `${ADDON_CONFIG[parsed.data.addon].label} is already active on this workspace. Manage it from Manage billing.` });
       const session = await stripe.checkout.sessions.create({
         mode: 'subscription',
         ...(customerId ? { customer: customerId } : { customer_email: req.user!.email }),
         line_items: [{ price: priceId, quantity: 1 }],
-        // Buyers can enter a Stripe promotion code on the hosted page; a code that
-        // brings the total to zero must not demand a card for a $0 subscription.
         allow_promotion_codes: true,
-        // Founder decision 2026-09-11: prices are USD everywhere. Adaptive Pricing
-        // would otherwise localise the hosted page (a Canadian buyer saw CA$214.98
-        // for the $149 plan) and settle in that currency.
         adaptive_pricing: { enabled: false },
         managed_payments: { enabled: false },
         payment_method_collection: 'if_required',
@@ -463,6 +535,8 @@ export function createBillingRouter() {
 
   router.post('/portal', requireAuth, requireRole(['Owner', 'Admin']), async (req: AuthenticatedRequest, res, next) => {
     try {
+      const hostedPortal = process.env.STRIPE_BILLING_PORTAL_LOGIN_URL?.trim();
+      if (hostedPortal) return res.json({ url: hostedPortal });
       if (!config.stripe.secretKey) return res.status(503).json({ error: 'BILLING_NOT_CONFIGURED' });
       const scopedDb = req.db!;
       const existing = (await scopedDb.execute(sql`SELECT stripe_customer_id AS "stripeCustomerId" FROM tenant_subscriptions WHERE tenant_id = ${req.user!.tenantId} LIMIT 1`) as any).rows?.[0];
@@ -517,8 +591,12 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
         const paymentLinkMatch = session.client_reference_id?.match(/^(.*)__sprplan__(pilot|starter|professional|growth|enterprise)$/);
-        const tenantId = paymentLinkMatch?.[1] || session.client_reference_id || session.metadata?.tenantId;
+        const paymentLinkProductMatch = session.client_reference_id?.match(/^(.*)__sprproduct__([A-Za-z0-9]+)$/);
+        const paymentLinkAddonMatch = session.client_reference_id?.match(/^(.*)__spraddon__([A-Za-z0-9]+)$/);
+        const tenantId = paymentLinkMatch?.[1] || paymentLinkProductMatch?.[1] || paymentLinkAddonMatch?.[1] || session.client_reference_id || session.metadata?.tenantId;
         const paymentLinkPlan = paymentLinkMatch?.[2] as PlanId | undefined;
+        const paymentLinkProduct = paymentLinkProductMatch?.[2] as OneTimeProductId | undefined;
+        const paymentLinkAddon = paymentLinkAddonMatch?.[2] as AddonId | undefined;
         const metadataPlan = session.metadata?.plan as PlanId | undefined;
         const plan = metadataPlan && PLAN_CONFIG[metadataPlan] ? metadataPlan : paymentLinkPlan;
         if (tenantId && session.subscription && plan && PLAN_CONFIG[plan]) {
@@ -533,7 +611,7 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
           `);
           await appendAuditEntry(db, { tenantId, action: 'billing.subscription.activated', actor: 'stripe-webhook', payload: { plan, stripeEventId: event.id, stripeSubscriptionId: String(session.subscription), stripeCustomerId: customerId ?? null } });
         } else if (tenantId && session.mode === 'payment') {
-          const productId = session.metadata?.product ?? null;
+          const productId = session.metadata?.product ?? paymentLinkProduct ?? null;
           // A first purchase may create the tenant's Stripe customer. Persist
           // that customer immediately so every later purchase/add-on/portal
           // operation uses the same billing identity.
@@ -581,20 +659,21 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
           ].join('\n');
           await db.execute(sql`INSERT INTO notification_outbox (id, tenant_id, channel, destination, subject, body) VALUES (${`purchase_${event.id}_ops`}, ${tenantId}, 'email', ${config.fulfilmentEmail}, ${`[SPR sale] ${label} — ${amount ?? ''} — ref ${orderRef}`}, ${opsBody}) ON CONFLICT (id) DO NOTHING`);
           await appendAuditEntry(db, { tenantId, action: 'billing.purchase.notified', actor: 'stripe-webhook', payload: { product: productId, orderRef, amount: amount || null, stripeEventId: event.id, buyerNotified: Boolean(buyerEmail), fulfilmentEmail: config.fulfilmentEmail } });
-        } else if (tenantId && session.metadata?.addon) {
+        } else if (tenantId && (session.metadata?.addon || paymentLinkAddon)) {
           // An add-on checkout completing left no trace at all: it is a
           // subscription, so it missed the plan branch above, and it is not a
           // payment, so it missed the one-time branch. Only billing.addon.initiated
           // was ever recorded, which cannot distinguish an add-on somebody
           // bought from one they abandoned at the Stripe page.
+          const addonId = (session.metadata?.addon ?? paymentLinkAddon) as AddonId | undefined;
           const addonCustomerId = typeof session.customer === 'string' ? session.customer : session.customer?.id;
           if (addonCustomerId) {
             await db.execute(sql`UPDATE tenant_subscriptions SET stripe_customer_id = COALESCE(stripe_customer_id, ${addonCustomerId}), updated_at = CURRENT_TIMESTAMP WHERE tenant_id = ${tenantId}`);
           }
-          if (typeof session.subscription === 'string' && ADDON_CONFIG[session.metadata.addon as AddonId]) {
-            await db.execute(sql`INSERT INTO tenant_addons (stripe_subscription_id, tenant_id, addon, status) VALUES (${session.subscription}, ${tenantId}, ${session.metadata.addon}, 'active') ON CONFLICT (stripe_subscription_id) DO UPDATE SET status = 'active', updated_at = CURRENT_TIMESTAMP`);
+          if (typeof session.subscription === 'string' && addonId && ADDON_CONFIG[addonId]) {
+            await db.execute(sql`INSERT INTO tenant_addons (stripe_subscription_id, tenant_id, addon, status) VALUES (${session.subscription}, ${tenantId}, ${addonId}, 'active') ON CONFLICT (stripe_subscription_id) DO UPDATE SET status = 'active', updated_at = CURRENT_TIMESTAMP`);
           }
-          await appendAuditEntry(db, { tenantId, action: 'billing.addon.completed', actor: 'stripe-webhook', payload: { addon: session.metadata.addon, stripeEventId: event.id, checkoutSessionId: session.id, stripeSubscriptionId: session.subscription ? String(session.subscription) : null } });
+          await appendAuditEntry(db, { tenantId, action: 'billing.addon.completed', actor: 'stripe-webhook', payload: { addon: addonId ?? null, stripeEventId: event.id, checkoutSessionId: session.id, stripeSubscriptionId: session.subscription ? String(session.subscription) : null } });
         }
         break;
       }
