@@ -417,7 +417,6 @@ export function createBillingRouter() {
       const priceId = addonPriceId(parsed.data.addon);
       if (!priceId) return res.status(503).json({ error: 'This add-on is not yet available for checkout.' });
       const tenantId = req.user!.tenantId;
-      const stripe = stripeClient();
       // Add-ons belong to the same billing customer as the tenant's main plan.
       // If the tenant has no customer yet, Checkout creates one and the
       // checkout.session.completed webhook persists it for future purchases.
