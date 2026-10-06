@@ -74,12 +74,57 @@ function planPaymentLink(plan: PlanId): string | undefined {
 
 
 
+const discoveredPriceIds = new Map<string, string>();
+let discoveryRefreshedAt = 0;
+let discoveryInFlight: Promise<void> | null = null;
+const DISCOVERY_TTL_MS = 5 * 60 * 1000;
+
+function configuredPriceId(priceKey: keyof typeof config.stripe.prices): string | undefined {
+  return config.stripe.prices[priceKey] || discoveredPriceIds.get(priceKey);
+}
+
 function oneTimePriceId(product: OneTimeProductId): string | undefined {
-  return config.stripe.prices[ONE_TIME_CONFIG[product].priceKey as keyof typeof config.stripe.prices];
+  return configuredPriceId(ONE_TIME_CONFIG[product].priceKey as keyof typeof config.stripe.prices);
 }
 
 function addonPriceId(addon: AddonId): string | undefined {
-  return config.stripe.prices[ADDON_CONFIG[addon].priceKey as keyof typeof config.stripe.prices];
+  return configuredPriceId(ADDON_CONFIG[addon].priceKey as keyof typeof config.stripe.prices);
+}
+
+function normalizeProductName(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+async function discoverMissingCatalogPrices(stripe: Stripe): Promise<void> {
+  if (Date.now() - discoveryRefreshedAt < DISCOVERY_TTL_MS) return;
+  if (!discoveryInFlight) {
+    discoveryInFlight = (async () => {
+      const prices = await stripe.prices.list({ active: true, limit: 100, expand: ['data.product'] }).autoPagingToArray({ limit: 1000 });
+      const targets = [
+        ...ONE_TIME_IDS.map((id) => ({ priceKey: ONE_TIME_CONFIG[id].priceKey, label: ONE_TIME_CONFIG[id].label, recurring: false })),
+        ...ADDON_IDS.map((id) => ({ priceKey: ADDON_CONFIG[id].priceKey, label: ADDON_CONFIG[id].label, recurring: true })),
+      ];
+
+      for (const target of targets) {
+        if (config.stripe.prices[target.priceKey as keyof typeof config.stripe.prices]) continue;
+        const expected = normalizeProductName(target.label);
+        const matches = prices.filter((price) => {
+          const product = typeof price.product === 'object' && price.product && !('deleted' in price.product) ? price.product : null;
+          if (!product?.name || normalizeProductName(product.name) !== expected) return false;
+          return target.recurring ? Boolean(price.recurring) : !price.recurring;
+        });
+        if (matches.length === 1) {
+          discoveredPriceIds.set(target.priceKey, matches[0].id);
+          console.info(`[Billing] Discovered unique Stripe price for ${target.label}.`);
+        } else {
+          discoveredPriceIds.delete(target.priceKey);
+          if (matches.length > 1) console.warn(`[Billing] Stripe price discovery is ambiguous for ${target.label}; leaving checkout unavailable.`);
+        }
+      }
+      discoveryRefreshedAt = Date.now();
+    })().finally(() => { discoveryInFlight = null; });
+  }
+  await discoveryInFlight;
 }
 
 export async function getPlanLimits(tenantId: string, scopedDb: { execute: (query: any) => Promise<any> }): Promise<{ plan: PlanId | null; clientLimit: number | null }> {
@@ -131,7 +176,11 @@ function describePrice(price: Stripe.Price): ResolvedPrice | null {
 
 async function refreshPrices(): Promise<void> {
   const stripe = stripeClient();
-  const ids = [...new Set(Object.values(config.stripe.prices).filter((id): id is string => Boolean(id)))];
+  await discoverMissingCatalogPrices(stripe);
+  const ids = [...new Set([
+    ...Object.values(config.stripe.prices),
+    ...discoveredPriceIds.values(),
+  ].filter((id): id is string => Boolean(id)))];
   await Promise.all(ids.map(async (id) => {
     try {
       const described = describePrice(await stripe.prices.retrieve(id, { expand: ['product'] }));
@@ -325,10 +374,11 @@ export function createBillingRouter() {
       if (!config.stripe.secretKey) return res.status(503).json({ error: 'BILLING_NOT_CONFIGURED' });
       const parsed = oneTimeCheckoutSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+      const stripe = stripeClient();
+      await discoverMissingCatalogPrices(stripe);
       const priceId = oneTimePriceId(parsed.data.product);
       if (!priceId) return res.status(503).json({ error: 'This product is not yet available for checkout.' });
       const tenantId = req.user!.tenantId;
-      const stripe = stripeClient();
       // Reuse the tenant's canonical Stripe customer when one already exists.
       // This keeps one billing identity across subscriptions, add-ons, invoices,
       // receipts and the Customer Portal instead of creating a second customer
@@ -362,10 +412,11 @@ export function createBillingRouter() {
       if (!config.stripe.secretKey) return res.status(503).json({ error: 'BILLING_NOT_CONFIGURED' });
       const parsed = addonCheckoutSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+      const stripe = stripeClient();
+      await discoverMissingCatalogPrices(stripe);
       const priceId = addonPriceId(parsed.data.addon);
       if (!priceId) return res.status(503).json({ error: 'This add-on is not yet available for checkout.' });
       const tenantId = req.user!.tenantId;
-      const stripe = stripeClient();
       // Add-ons belong to the same billing customer as the tenant's main plan.
       // If the tenant has no customer yet, Checkout creates one and the
       // checkout.session.completed webhook persists it for future purchases.

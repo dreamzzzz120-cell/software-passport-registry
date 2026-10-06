@@ -317,3 +317,25 @@ describe('checkout state integrity', () => {
     expect(s).toContain('manageableStatuses.has(status.subscription.status)');
   });
 });
+
+
+describe('Stripe catalog price discovery fallback', () => {
+  it('discovers only unique exact Stripe catalog matches when explicit price IDs are absent', () => {
+    const s = read('src/routes/billing.ts');
+    expect(s).toContain('discoverMissingCatalogPrices');
+    expect(s).toContain("normalizeProductName(product.name) !== expected");
+    expect(s).toContain('matches.length === 1');
+    expect(s).toContain('Stripe price discovery is ambiguous');
+  });
+
+  it('keeps explicit environment price IDs authoritative over discovery', () => {
+    const s = read('src/routes/billing.ts');
+    expect(s).toContain('config.stripe.prices[priceKey] || discoveredPriceIds.get(priceKey)');
+    expect(s).toContain('if (config.stripe.prices[target.priceKey as keyof typeof config.stripe.prices]) continue;');
+  });
+
+  it('requires one-time products to use non-recurring prices and add-ons to use recurring prices', () => {
+    const s = read('src/routes/billing.ts');
+    expect(s).toContain('target.recurring ? Boolean(price.recurring) : !price.recurring');
+  });
+});
