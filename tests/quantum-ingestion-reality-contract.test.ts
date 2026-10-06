@@ -28,6 +28,19 @@ describe('quantum ingestion reality contract', () => {
     expect(source).toContain('observation_count=software_registry_identities.observation_count+1');
   });
 
+  it('keeps registry identity IDs distinct from ingestion work-item IDs', () => {
+    expect(source).toContain("const ledgerId = (c:Candidate) => \`reging_");
+    expect(source).toContain("function identityId(c:Candidate){return \`reg_");
+  });
+
+  it('records proven unsupported repositories before excluding them from scan scheduling', () => {
+    const recordIndex = source.indexOf('const identity=await recordRegistryReality(pool,c,reality,run)');
+    const excludeIndex = source.indexOf('if(reality.manifestPresent===false)');
+    expect(recordIndex).toBeGreaterThan(-1);
+    expect(excludeIndex).toBeGreaterThan(recordIndex);
+    expect(source).toContain('repository observed but excluded: complete tree contains no supported manifest');
+  });
+
   it('propagates reality quality into ingestion rather than fabricating certainty', () => {
     expect(source).toContain("r.sourceStatus==='verified'?'good':'partial'");
     expect(source).toContain('head_sha=COALESCE($6,head_sha)');
