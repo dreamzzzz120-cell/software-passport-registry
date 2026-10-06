@@ -69,8 +69,16 @@ export async function checkRailway(): Promise<ConnectionStatus> {
 export async function checkVercel(): Promise<ConnectionStatus> {
   const token = config.vercel.apiToken;
   const projectId = config.vercel.projectId;
-  if (!token || !projectId) return { key: 'vercel', name: 'Vercel', status: 'not_configured', detail: 'Vercel connection is not configured', lastChecked: now() };
+  if (!projectId) return { key: 'vercel', name: 'Vercel', status: 'not_configured', detail: 'VERCEL_PROJECT_ID is not configured.', lastChecked: now() };
   try {
+    if (!token) {
+      const publicUrl = config.vercel.publicUrl;
+      if (!publicUrl) return { key: 'vercel', name: 'Vercel', status: 'not_configured', detail: 'Vercel project identity is configured, but neither VERCEL_API_TOKEN nor VERCEL_PUBLIC_URL is available for a live check.', lastChecked: now() };
+      const res = await fetchWithTimeout(publicUrl, { method: 'HEAD', redirect: 'follow' });
+      if (!res.ok) return { key: 'vercel', name: 'Vercel', status: 'error', detail: `public Vercel deployment returned HTTP ${res.status}`, lastChecked: now() };
+      return { key: 'vercel', name: 'Vercel', status: 'ok', detail: 'Production Vercel deployment is publicly reachable; management API telemetry token is not configured.', lastChecked: now() };
+    }
+
     // A team-owned project is only visible when teamId accompanies the request.
     const teamParam = config.vercel.teamId ? `&teamId=${encodeURIComponent(config.vercel.teamId)}` : '';
     const res = await fetchWithTimeout(`https://api.vercel.com/v6/deployments?projectId=${encodeURIComponent(projectId)}&limit=1${teamParam}`, { headers: { Authorization: `Bearer ${token}` } });
