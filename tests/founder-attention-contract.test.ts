@@ -23,11 +23,24 @@ describe('Founder "needs attention" rules', () => {
     for (const i of items) expect(i.evidence.length).toBeGreaterThan(5);
   });
 
-  it('reports a stale worker from the newest worker-written row, and a never-seen worker separately', () => {
+  it('reports stale job activity with outstanding work, and missing worker evidence separately', () => {
     const stale = computeAttention({ overview: { ...healthyOverview, pulse: { ...healthyOverview.pulse, worker: { lastSeenAt: new Date(Date.now() - 45 * 60000).toISOString(), lastSeenSource: 'distribution_jobs' } } }, commandCenter: okCommandCenter, agents: [] });
-    expect(stale.map((i) => i.title)).toContainEqual(expect.stringMatching(/Worker last touched a job 4[45] minutes ago/));
+    expect(stale.map((i) => i.title)).toContainEqual(expect.stringMatching(/Last worker job activity: 4[45] minutes ago/));
+    expect(stale[0].severity).toBe('warning');
+    expect(stale[0].evidence).toContain('not a worker heartbeat');
     const never = computeAttention({ overview: { ...healthyOverview, pulse: { ...healthyOverview.pulse, worker: { lastSeenAt: null, lastSeenSource: null } } }, commandCenter: okCommandCenter, agents: [] });
     expect(never.map((i) => i.title)).toContain('No evidence of the worker ever running');
+  });
+
+  it('keeps idle activity informational and unknown queue state explicit', () => {
+    const now = Date.now();
+    const pulse = { ...healthyOverview.pulse, worker: { lastSeenAt: new Date(now - 272 * 60000).toISOString(), lastSeenSource: 'agent_jobs' }, scanQueue: { pending: 0, running: 0, failed24h: 0 } };
+    const idle = computeAttention({ overview: { ...healthyOverview, pulse }, commandCenter: okCommandCenter, agents: [] }, now);
+    expect(idle[0].severity).toBe('info');
+    expect(idle[0].evidence).toContain('no outstanding work observed');
+    const unknown = computeAttention({ overview: { ...healthyOverview, pulse: { ...pulse, scanQueue: { pending: null, running: null, failed24h: null } } }, commandCenter: okCommandCenter, agents: [] }, now);
+    expect(unknown[0].severity).toBe('warning');
+    expect(unknown[0].evidence).toContain('queue state is UNKNOWN');
   });
 
   it('surfaces broken and unconfigured connections, disabled agents, failed jobs and an unverified sender', () => {
