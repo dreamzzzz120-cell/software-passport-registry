@@ -200,27 +200,36 @@ export default function BillingView() {
               </ul>
             </section>
           )}
-          {currentPlan && (
-            <div className="flex flex-col justify-between gap-4 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] px-5 py-4 md:flex-row md:items-center">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm text-[var(--spr-text-muted)]">Current plan</span>
-                  <span className="text-base font-semibold text-[var(--spr-text)]">{currentPlanLabel}</span>
-                  <span className={`rounded-full border px-2 py-0.5 text-[12px] font-medium ${status.subscription!.status === 'active' ? 'border-[var(--spr-green)]/40 text-[var(--spr-green)]' : status.subscription!.status === 'past_due' ? 'border-[var(--spr-red)]/40 text-[var(--spr-red)]' : 'border-[var(--spr-amber)]/40 text-[var(--spr-amber)]'}`}>
-                    {status.subscription!.status.replace('_', ' ')}
-                  </span>
-                </div>
-                <p className="mt-1 text-sm text-[var(--spr-text-muted)]">
-                  {status.clientCount} client{status.clientCount === 1 ? '' : 's'} used{status.subscription!.clientLimit != null ? ` of ${status.subscription!.clientLimit}` : ' (unlimited)'}
-                  {status.subscription!.currentPeriodEnd && ` · renews ${new Date(status.subscription!.currentPeriodEnd).toLocaleDateString()}`}
-                </p>
-              </div>
-              <button onClick={handleManageBilling} disabled={openingPortal} className={BTN_OUTLINE}>
-                {openingPortal ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
-                Manage billing
-              </button>
+          <div className="flex flex-col justify-between gap-4 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] px-5 py-4 md:flex-row md:items-center">
+            <div className="min-w-0">
+              {currentPlan ? (
+                <>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm text-[var(--spr-text-muted)]">Current plan</span>
+                    <span className="text-base font-semibold text-[var(--spr-text)]">{currentPlanLabel}</span>
+                    <span className={`rounded-full border px-2 py-0.5 text-[12px] font-medium ${status.subscription!.status === 'active' ? 'border-[var(--spr-green)]/40 text-[var(--spr-green)]' : status.subscription!.status === 'past_due' ? 'border-[var(--spr-red)]/40 text-[var(--spr-red)]' : 'border-[var(--spr-amber)]/40 text-[var(--spr-amber)]'}`}>
+                      {status.subscription!.status.replace('_', ' ')}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-[var(--spr-text-muted)]">
+                    {status.clientCount} client{status.clientCount === 1 ? '' : 's'} used{status.subscription!.clientLimit != null ? ` of ${status.subscription!.clientLimit}` : ' (unlimited)'}
+                    {status.subscription!.currentPeriodEnd && ` · renews ${new Date(status.subscription!.currentPeriodEnd).toLocaleDateString()}`}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="text-sm font-semibold text-[var(--spr-text)]">Billing management</div>
+                  <p className="mt-1 text-sm text-[var(--spr-text-muted)]">
+                    Open Stripe to manage payment methods, invoices, and any active subscription tied to your billing email.
+                  </p>
+                </>
+              )}
             </div>
-          )}
+            <button onClick={handleManageBilling} disabled={openingPortal} className={BTN_OUTLINE}>
+              {openingPortal ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
+              Manage billing
+            </button>
+          </div>
 
           <section aria-labelledby="billing-plans">
             <h2 id="billing-plans" className="text-base font-semibold text-[var(--spr-text)]">Plans</h2>
