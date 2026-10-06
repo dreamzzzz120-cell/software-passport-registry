@@ -34,10 +34,15 @@ function sendEvent(eventName: string, path: string) {
   const payload = JSON.stringify({ sessionId: sessionId(), path, referrer: document.referrer || null, deviceType: deviceType(), eventName, ...attribution() });
   const body = new Blob([payload], { type: 'application/json' });
   if (navigator.sendBeacon) {
-    navigator.sendBeacon('/api/traffic/event', body);
-    return;
+    const queued = navigator.sendBeacon('/api/traffic/event', body);
+    if (queued) return;
   }
-  void fetch('/api/traffic/event', { method: 'POST', headers: { 'content-type': 'application/json' }, body, keepalive: true }).catch(() => undefined);
+  void fetch('/api/traffic/event', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: payload,
+    keepalive: true,
+  }).catch(() => undefined);
 }
 
 export function trackPageView(path = `${window.location.pathname}${window.location.search}`) {
