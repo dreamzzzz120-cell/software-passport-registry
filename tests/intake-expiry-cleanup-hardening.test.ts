@@ -12,15 +12,18 @@ describe('expired anonymous intake retention boundary', () => {
     expect(source).not.toMatch(/status IN \([^)]*COMPLETED[^)]*\)/);
   });
 
-  it('deletes storage before marking database rows PURGED/EXPIRED', async () => {
+  it('deletes storage through the artifact broker before marking database rows PURGED/EXPIRED', async () => {
     const source = await readFile(path.resolve('src/workers/retention-worker.ts'), 'utf8');
-    const removeAt = source.indexOf('.remove([item.storage_path])');
+    const removeAt = source.indexOf('await deleteIntakeObject');
     const purgedAt = source.indexOf("SET status='PURGED'");
     const expiredAt = source.indexOf("SET status='EXPIRED'");
     expect(removeAt).toBeGreaterThan(0);
     expect(purgedAt).toBeGreaterThan(removeAt);
     expect(expiredAt).toBeGreaterThan(purgedAt);
-    expect(source).toContain('if (removed.error) throw new Error');
+    expect(source).toContain('intakeBrokerConfigured()');
+    expect(source).toContain('INTAKE_STORAGE_PURGE_FAILED');
+    expect(source).not.toContain('SUPABASE_SECRET_KEY');
+    expect(source).not.toContain('SUPABASE_SERVICE_ROLE_KEY');
   });
 
   it('worker-only RLS policy is restricted to expired anonymous OPEN sessions', async () => {
