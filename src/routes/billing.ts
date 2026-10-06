@@ -711,6 +711,20 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
         if (canceled?.tenant_id) await appendAuditEntry(db, { tenantId: canceled.tenant_id, action: 'billing.subscription.canceled', actor: 'stripe-webhook', payload: { stripeEventId: event.id } });
         break;
       }
+      case 'invoice.paid': {
+        const invoice = event.data.object as Stripe.Invoice;
+        const invoiceSubscription = invoice.parent?.subscription_details?.subscription;
+        if (invoiceSubscription) {
+          const subscriptionId = typeof invoiceSubscription === 'string' ? invoiceSubscription : invoiceSubscription.id;
+          // Successful renewal payment restores the specific subscription
+          // that was paid. Keep add-ons isolated from the primary plan row.
+          const addonPaid = (await db.execute(sql`UPDATE tenant_addons SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE stripe_subscription_id = ${subscriptionId} RETURNING tenant_id, addon`) as any).rows?.[0];
+          const paid = addonPaid ? null : (await db.execute(sql`UPDATE tenant_subscriptions SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE stripe_subscription_id = ${subscriptionId} RETURNING tenant_id`) as any).rows?.[0];
+          const affectedTenantId = addonPaid?.tenant_id ?? paid?.tenant_id;
+          if (affectedTenantId) await appendAuditEntry(db, { tenantId: affectedTenantId, action: 'billing.payment.paid', actor: 'stripe-webhook', payload: { stripeEventId: event.id, stripeSubscriptionId: subscriptionId, addon: addonPaid?.addon ?? null } });
+        }
+        break;
+      }
       case 'invoice.payment_failed': {
         const invoice = event.data.object as Stripe.Invoice;
         const invoiceSubscription = invoice.parent?.subscription_details?.subscription;
