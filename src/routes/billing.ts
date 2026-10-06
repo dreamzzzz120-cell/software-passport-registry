@@ -100,16 +100,6 @@ async function discoverMissingCatalogPrices(stripe: Stripe): Promise<void> {
   if (!discoveryInFlight) {
     discoveryInFlight = (async () => {
       const prices = await stripe.prices.list({ active: true, limit: 100, expand: ['data.product'] }).autoPagingToArray({ limit: 1000 });
-      console.info('[Billing] Active Stripe catalog snapshot', prices.map((price) => {
-        const product = typeof price.product === 'object' && price.product && !('deleted' in price.product) ? price.product : null;
-        return {
-          product: product?.name ?? null,
-          priceId: price.id,
-          unitAmount: price.unit_amount,
-          currency: price.currency,
-          recurring: price.recurring?.interval ?? null,
-        };
-      }));
       const targets = [
         ...ONE_TIME_IDS.map((id) => ({ priceKey: ONE_TIME_CONFIG[id].priceKey, label: ONE_TIME_CONFIG[id].label, recurring: false })),
         ...ADDON_IDS.map((id) => ({ priceKey: ADDON_CONFIG[id].priceKey, label: ADDON_CONFIG[id].label, recurring: true })),
@@ -146,6 +136,20 @@ export async function getPlanLimits(tenantId: string, scopedDb: { execute: (quer
 function stripeClient(): Stripe {
   if (!config.stripe.secretKey) throw new Error('BILLING_NOT_CONFIGURED');
   return new Stripe(config.stripe.secretKey);
+}
+
+function stripeTestModeInProduction(): boolean {
+  const production = process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT_NAME === 'production';
+  return production && Boolean(config.stripe.secretKey && /_(?:test)_/.test(config.stripe.secretKey));
+}
+
+function requireLiveStripeInProduction(res: Response): boolean {
+  if (!stripeTestModeInProduction()) return true;
+  res.status(503).json({
+    error: 'STRIPE_TEST_MODE_IN_PRODUCTION',
+    message: 'Production billing is disabled until STRIPE_SECRET_KEY is a live-mode Stripe key.',
+  });
+  return false;
 }
 
 // --- Real prices, read from Stripe -----------------------------------------
@@ -246,15 +250,19 @@ function catalogEntry(id: string, label: string, priceId: string | undefined, pr
 export async function buildCatalog() {
   const prices = await loadPrices();
   const hasPaymentLinkCheckout = PLAN_IDS.some((id) => Boolean(planPaymentLink(id)));
+  const productionTestMode = stripeTestModeInProduction();
   return {
-    billingConfigured: Boolean(config.stripe.secretKey) || hasPaymentLinkCheckout,
-    billingConfigurationError: stripeSecretKeyMisconfigured ? 'STRIPE_SECRET_KEY_INVALID' : null,
+    billingConfigured: (Boolean(config.stripe.secretKey) || hasPaymentLinkCheckout) && !stripeTestModeInProduction(),
+    billingConfigurationError: stripeTestModeInProduction()
+      ? 'STRIPE_TEST_MODE_IN_PRODUCTION'
+      : stripeSecretKeyMisconfigured ? 'STRIPE_SECRET_KEY_INVALID' : null,
     plans: PLAN_IDS.map((id) => {
-      const stripeEntry = catalogEntry(id, PLAN_CONFIG[id].label, planPriceId(id), prices);
+      const stripeEntryRaw = catalogEntry(id, PLAN_CONFIG[id].label, planPriceId(id), prices);
+      const stripeEntry = productionTestMode ? { ...stripeEntryRaw, checkoutAvailable: false } : stripeEntryRaw;
       const fallback = planPaymentLink(id) ? config.stripe.paymentLinkCatalog[id as keyof typeof config.stripe.paymentLinkCatalog] : undefined;
       return {
         ...stripeEntry,
-        ...(fallback && !stripeEntry.checkoutAvailable ? {
+        ...(fallback && !stripeEntry.checkoutAvailable && !productionTestMode ? {
           priceLabel: fallback.priceLabel,
           unitAmount: fallback.unitAmount,
           currency: fallback.currency,
@@ -265,8 +273,14 @@ export async function buildCatalog() {
         clientLimit: PLAN_CONFIG[id].clientLimit,
       };
     }),
-    products: ONE_TIME_IDS.map((id) => catalogEntry(id, ONE_TIME_CONFIG[id].label, oneTimePriceId(id), prices)),
-    addons: ADDON_IDS.map((id) => catalogEntry(id, ADDON_CONFIG[id].label, addonPriceId(id), prices)),
+    products: ONE_TIME_IDS.map((id) => {
+      const entry = catalogEntry(id, ONE_TIME_CONFIG[id].label, oneTimePriceId(id), prices);
+      return productionTestMode ? { ...entry, checkoutAvailable: false } : entry;
+    }),
+    addons: ADDON_IDS.map((id) => {
+      const entry = catalogEntry(id, ADDON_CONFIG[id].label, addonPriceId(id), prices);
+      return productionTestMode ? { ...entry, checkoutAvailable: false } : entry;
+    }),
   };
 }
 
@@ -325,6 +339,7 @@ export function createBillingRouter() {
 
   router.post('/checkout', requireAuth, requireRole(['Owner']), async (req: AuthenticatedRequest, res, next) => {
     try {
+      if (!requireLiveStripeInProduction(res)) return;
       const parsed = checkoutSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
       const priceId = planPriceId(parsed.data.plan);
@@ -382,6 +397,7 @@ export function createBillingRouter() {
   router.post('/one-time-checkout', requireAuth, async (req: AuthenticatedRequest, res, next) => {
     try {
       if (!config.stripe.secretKey) return res.status(503).json({ error: 'BILLING_NOT_CONFIGURED' });
+      if (!requireLiveStripeInProduction(res)) return;
       const parsed = oneTimeCheckoutSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
       const stripe = stripeClient();
@@ -420,6 +436,7 @@ export function createBillingRouter() {
   router.post('/addon-checkout', requireAuth, async (req: AuthenticatedRequest, res, next) => {
     try {
       if (!config.stripe.secretKey) return res.status(503).json({ error: 'BILLING_NOT_CONFIGURED' });
+      if (!requireLiveStripeInProduction(res)) return;
       const parsed = addonCheckoutSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
       const stripe = stripeClient();
