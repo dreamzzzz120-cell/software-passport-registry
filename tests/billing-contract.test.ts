@@ -339,3 +339,14 @@ describe('Stripe catalog price discovery fallback', () => {
     expect(s).toContain('target.recurring ? Boolean(price.recurring) : !price.recurring');
   });
 });
+
+
+describe('Manage billing visibility', () => {
+  it('always renders Manage billing when billing is configured, even without a current plan', () => {
+    const s = read('src/components/BillingView.tsx');
+    expect(s).toContain('Billing management');
+    expect(s).toContain('Manage billing');
+    expect(s).not.toContain('{currentPlan && (');
+    expect(s).toContain("apiFetch('/api/billing/portal', { method: 'POST' })");
+  });
+});
