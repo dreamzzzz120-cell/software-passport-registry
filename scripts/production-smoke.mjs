@@ -173,6 +173,15 @@ await check('production credential rate limit resists forwarding-header rotation
   assert(Boolean(limited.headers.get('x-ratelimit-policy')), '429 missing X-RateLimit-Policy');
 });
 
+await check('public registry index returns JSON', async () => {
+  const r = await fetch(API + '/software/index.json', {redirect:'manual'});
+  const text = await r.text();
+  assert(r.status === 200, `expected 200 got ${r.status}: ${text.slice(0, 300)}`);
+  const body = JSON.parse(text);
+  assert(typeof body.total === 'number', 'registry total is not numeric');
+  assert(Array.isArray(body.entries), 'registry entries is not an array');
+});
+
 await check('public frontend reachable', async () => {
   const r = await fetch(WEB + '/', {redirect:'follow'});
   assert(r.status === 200, `expected 200 got ${r.status}`);
