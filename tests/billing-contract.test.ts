@@ -295,7 +295,8 @@ describe('billing credential hardening', () => {
     const billingSource = read('src/routes/billing.ts');
     expect(configSource).toContain("/^(?:sk|rk)_(?:live|test)_[A-Za-z0-9]+$/");
     expect(configSource).toContain('stripeSecretKeyMisconfigured');
-    expect(billingSource).toContain("billingConfigurationError: stripeSecretKeyMisconfigured ? 'STRIPE_SECRET_KEY_INVALID' : null");
+    expect(billingSource).toContain("'STRIPE_SECRET_KEY_INVALID'");
+    expect(billingSource).toContain("'STRIPE_TEST_MODE_IN_PRODUCTION'");
   });
 });
 
