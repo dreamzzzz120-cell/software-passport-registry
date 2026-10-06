@@ -106,8 +106,10 @@ export function computeAttention(data: { overview: Overview | null; commandCente
     const mins = minutesSince(p.worker.lastSeenAt, now);
     if (mins === null) items.push({ severity: 'warning', title: 'No evidence of the worker ever running', evidence: 'no rows in agent_jobs, distribution_jobs or registry_crawl_runs carry a worker mark', anchor: '#founder-pulse' });
     else if (mins > 30) {
+      const queueValues = [p.scanQueue.pending, p.scanQueue.running, p.distributionQueue.queued, p.distributionQueue.running];
+      const queueUnknown = queueValues.some((value) => value == null);
       const hasOutstandingWork = (p.scanQueue.pending ?? 0) + (p.scanQueue.running ?? 0) + (p.distributionQueue.queued ?? 0) + (p.distributionQueue.running ?? 0) > 0;
-      items.push({ severity: hasOutstandingWork ? 'warning' : 'info', title: `Last worker job activity: ${mins} minutes ago`, evidence: `newest job row: ${p.worker.lastSeenSource}; ${hasOutstandingWork ? 'work is outstanding; check worker logs' : 'no outstanding work observed'}; job activity is not a worker heartbeat`, anchor: '#founder-pulse' });
+      items.push({ severity: hasOutstandingWork || queueUnknown ? 'warning' : 'info', title: `Last worker job activity: ${mins} minutes ago`, evidence: `newest job row: ${p.worker.lastSeenSource}; ${hasOutstandingWork ? 'work is outstanding; check worker logs' : queueUnknown ? 'queue state is UNKNOWN; check worker logs' : 'no outstanding work observed'}; job activity is not a worker heartbeat`, anchor: '#founder-pulse' });
     }
     if ((p.scanQueue.pending ?? 0) > 25) items.push({ severity: 'warning', title: `${p.scanQueue.pending} scans waiting in the queue`, evidence: 'agent_jobs status=Pending', anchor: '#founder-agents' });
     if ((p.scanQueue.failed24h ?? 0) > 0) items.push({ severity: 'info', title: `${p.scanQueue.failed24h} scan job${p.scanQueue.failed24h === 1 ? '' : 's'} failed in the last 24h`, evidence: 'agent_jobs status=Failed, updated_at within 24h', anchor: '#founder-agents' });
