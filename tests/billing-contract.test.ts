@@ -297,7 +297,8 @@ describe('billing credential hardening', () => {
     const billingSource = read('src/routes/billing.ts');
     expect(configSource).toContain("/^(?:sk|rk)_(?:live|test)_[A-Za-z0-9]+$/");
     expect(configSource).toContain('stripeSecretKeyMisconfigured');
-    expect(billingSource).toContain("billingConfigurationError: stripeSecretKeyMisconfigured ? 'STRIPE_SECRET_KEY_INVALID' : null");
+    expect(billingSource).toContain('stripeSecretKeyMisconfigured');
+    expect(billingSource).toContain("'STRIPE_SECRET_KEY_INVALID'");
   });
 });
 
@@ -350,5 +351,31 @@ describe('Manage billing visibility', () => {
     expect(s).toContain('Manage billing');
     expect(s).not.toContain('{currentPlan && (');
     expect(s).toContain("apiFetch('/api/billing/portal', { method: 'POST' })");
+  });
+});
+
+
+describe('production Stripe mode safety', () => {
+  it('fails closed when a Stripe test key is present in production', () => {
+    const s = read('src/routes/billing.ts');
+    expect(s).toContain('STRIPE_TEST_MODE_IN_PRODUCTION');
+    expect(s).toContain('stripeTestModeInProduction');
+    expect(s).toContain('requireLiveStripeInProduction');
+  });
+
+  it('does not expose checkout as available while production is using test mode', () => {
+    const s = read('src/routes/billing.ts');
+    expect(s).toContain("billingConfigured: (Boolean(config.stripe.secretKey) || hasPaymentLinkCheckout) && !productionTestMode");
+    expect(s).toContain('if (productionTestMode) return { ...stripeEntry, checkoutAvailable: false }');
+    expect(s).toContain('fallback && !stripeEntry.checkoutAvailable && !productionTestMode');
+  });
+
+  it('guards plan, one-time, add-on, and billing portal routes in production', () => {
+    const s = read('src/routes/billing.ts');
+    for (const route of ['/checkout', '/one-time-checkout', '/addon-checkout', '/portal']) {
+      const start = s.indexOf(`router.post('${route}'`);
+      expect(start).toBeGreaterThan(-1);
+      expect(s.slice(start, start + 500)).toContain('requireLiveStripeInProduction(res)');
+    }
   });
 });
