@@ -136,7 +136,7 @@ function parseReport(stdout) {
   if (parsed && parsed.error) return { endpointError: parsed.error };
   const counts = parsed?.metadata?.vulnerabilities;
   if (!counts || typeof counts !== 'object') return null;
-  return { counts, vulnerabilities: parsed?.vulnerabilities ?? {} };
+  return { counts };
 }
 
 function atOrAboveLevel(counts) {
@@ -175,13 +175,7 @@ for (let attempt = 1; attempt <= attempts; attempt += 1) {
     if (failing > 0) {
       console.error(`Dependency audit FAILED: ${failing} advisory/advisories at or above "${level}".`);
       console.error(`  counts: ${summary}`);
-      for (const [name, finding] of Object.entries(report.vulnerabilities ?? {})) {
-        const severity = finding?.severity ?? 'unknown';
-        if (SEVERITIES.indexOf(severity) >= SEVERITIES.indexOf(level)) {
-          console.error(`  advisory: ${name} severity=${severity} range=${finding?.range ?? 'unknown'} fixAvailable=${JSON.stringify(finding?.fixAvailable ?? null)}`);
-        }
-      }
-      console.error('  This is a real finding, not a registry error.');
+      console.error('  Run `npm audit` locally for the advisory detail. This is a real finding, not a registry error.');
       process.exit(1);
     }
     console.log(`Dependency audit passed at level "${level}" on attempt ${attempt}.`);
