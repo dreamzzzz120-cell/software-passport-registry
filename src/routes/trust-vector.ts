@@ -31,7 +31,7 @@ export async function loadTrustVectorInput(db: any, tenantId: string, passportId
   const evidence = ((await db.execute(sql`SELECT id, type, verified, status, timestamp FROM evidence_items WHERE tenant_id=${tenantId} AND asset_id=${passportId}`)) as any).rows ?? [];
   const vendorRow = passport.publisher ? ((await db.execute(sql`SELECT v.id, v.last_audit_date AS "lastAuditDate", (SELECT count(*)::int FROM vendor_audits a WHERE a.tenant_id=v.tenant_id AND a.vendor_id=v.id) AS "auditCount", (SELECT max(a.created_at) FROM vendor_audits a WHERE a.tenant_id=v.tenant_id AND a.vendor_id=v.id) AS "lastAuditAt" FROM vendors v WHERE v.tenant_id=${tenantId} AND lower(v.name)=lower(${passport.publisher}) LIMIT 1`)) as any).rows?.[0] : null;
   const monitoring = ((await db.execute(sql`SELECT id, enabled, last_status AS "lastStatus", last_successful_at AS "lastSuccessfulAt" FROM monitoring_configurations WHERE tenant_id=${tenantId} AND passport_id=${passportId}`)) as any).rows ?? [];
-  const tasks = ((await db.execute(sql`SELECT rt.id, rt.status FROM remediation_tasks rt JOIN alerts a ON a.id = rt.alert_id AND a.tenant_id = rt.tenant_id WHERE rt.tenant_id=${tenantId} AND a.passport_id=${passportId}`)) as any).rows ?? [];
+  const tasks = ((await db.execute(sql`SELECT id, status FROM trust_remediation_work_items WHERE tenant_id=${tenantId} AND passport_id=${passportId}`)) as any).rows ?? [];
 
   const iso = (v: unknown) => (v ? new Date(v as string).toISOString() : null);
   return {
