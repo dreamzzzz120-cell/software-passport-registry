@@ -159,16 +159,6 @@ async function discoverMissingCatalogPrices(stripe: Stripe): Promise<void> {
   if (!discoveryInFlight) {
     discoveryInFlight = (async () => {
       const prices = await stripe.prices.list({ active: true, limit: 100, expand: ['data.product'] }).autoPagingToArray({ limit: 1000 });
-      console.info('[Billing] Active Stripe catalog snapshot', prices.map((price) => {
-        const product = typeof price.product === 'object' && price.product && !('deleted' in price.product) ? price.product : null;
-        return {
-          product: product?.name ?? null,
-          priceId: price.id,
-          unitAmount: price.unit_amount,
-          currency: price.currency,
-          recurring: price.recurring?.interval ?? null,
-        };
-      }));
       const targets = [
         ...ONE_TIME_IDS.map((id) => ({ priceKey: ONE_TIME_CONFIG[id].priceKey, label: ONE_TIME_CONFIG[id].label, recurring: false })),
         ...ADDON_IDS.map((id) => ({ priceKey: ADDON_CONFIG[id].priceKey, label: ADDON_CONFIG[id].label, recurring: true })),
