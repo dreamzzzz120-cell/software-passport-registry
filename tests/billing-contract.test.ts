@@ -293,3 +293,22 @@ describe('billing credential hardening', () => {
     expect(billingSource).toContain("billingConfigurationError: stripeSecretKeyMisconfigured ? 'STRIPE_SECRET_KEY_INVALID' : null");
   });
 });
+
+
+describe('checkout state integrity', () => {
+  it('does not persist an incomplete subscription before Stripe confirms payment', () => {
+    const s = read('src/routes/billing.ts');
+    const start = s.indexOf("router.post('/checkout'");
+    const end = s.indexOf("router.post('/one-time-checkout'");
+    const checkout = s.slice(start, end);
+    expect(checkout).not.toContain("status = 'incomplete'");
+    expect(checkout).not.toContain("'incomplete'");
+    expect(checkout).toContain("action: 'billing.checkout.initiated'");
+  });
+
+  it('only presents confirmed or billable Stripe states as the current plan', () => {
+    const s = read('src/components/BillingView.tsx');
+    expect(s).toContain("new Set(['active', 'trialing', 'past_due'])");
+    expect(s).toContain('manageableStatuses.has(status.subscription.status)');
+  });
+});
