@@ -315,15 +315,6 @@ export function createBillingRouter() {
         checkoutUrl = url.toString();
         checkoutReference = 'payment-link';
       }
-      await scopedDb.execute(sql`
-        INSERT INTO tenant_subscriptions (tenant_id, stripe_customer_id, plan, status)
-        VALUES (${tenantId}, ${customerId ?? null}, ${parsed.data.plan}, 'incomplete')
-        ON CONFLICT (tenant_id) DO UPDATE SET
-          stripe_customer_id = COALESCE(EXCLUDED.stripe_customer_id, tenant_subscriptions.stripe_customer_id),
-          plan = EXCLUDED.plan,
-          status = 'incomplete',
-          updated_at = CURRENT_TIMESTAMP
-      `);
       await appendAuditEntry(scopedDb, { tenantId, action: 'billing.checkout.initiated', actor: req.user!.uid, payload: { plan: parsed.data.plan, checkoutSessionId: checkoutReference } });
       return res.json({ url: checkoutUrl });
     } catch (error) { return next(error); }

@@ -96,10 +96,15 @@ describe('billing routes are real, authenticated, and role-gated', () => {
     expect(s).toContain("router.post('/portal', requireAuth, requireRole(['Owner', 'Admin'])");
   });
 
-  it('scopes every subscription read/write by the caller\'s own tenant', () => {
+  it('scopes subscription reads by tenant and only persists subscription state after Stripe confirmation', () => {
     const s = source();
     expect(s).toContain('WHERE tenant_id = ${tenantId}');
-    expect(s).toContain('VALUES (${tenantId}');
+    const checkoutStart = s.indexOf("router.post('/checkout'");
+    const checkoutEnd = s.indexOf("router.post('/one-time-checkout'");
+    const checkout = s.slice(checkoutStart, checkoutEnd);
+    expect(checkout).not.toContain('INSERT INTO tenant_subscriptions');
+    expect(s).toContain('UPDATE tenant_subscriptions');
+    expect(s).toContain("action: 'billing.subscription.activated'");
   });
 
   it('never subscribes/checks out a plan with no configured Stripe price', () => {
@@ -291,5 +296,24 @@ describe('billing credential hardening', () => {
     expect(configSource).toContain("/^(?:sk|rk)_(?:live|test)_[A-Za-z0-9]+$/");
     expect(configSource).toContain('stripeSecretKeyMisconfigured');
     expect(billingSource).toContain("billingConfigurationError: stripeSecretKeyMisconfigured ? 'STRIPE_SECRET_KEY_INVALID' : null");
+  });
+});
+
+
+describe('checkout state integrity', () => {
+  it('does not persist an incomplete subscription before Stripe confirms payment', () => {
+    const s = read('src/routes/billing.ts');
+    const start = s.indexOf("router.post('/checkout'");
+    const end = s.indexOf("router.post('/one-time-checkout'");
+    const checkout = s.slice(start, end);
+    expect(checkout).not.toContain("status = 'incomplete'");
+    expect(checkout).not.toContain("'incomplete'");
+    expect(checkout).toContain("action: 'billing.checkout.initiated'");
+  });
+
+  it('only presents confirmed or billable Stripe states as the current plan', () => {
+    const s = read('src/components/BillingView.tsx');
+    expect(s).toContain("new Set(['active', 'trialing', 'past_due'])");
+    expect(s).toContain('manageableStatuses.has(status.subscription.status)');
   });
 });
