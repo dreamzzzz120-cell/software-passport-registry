@@ -190,6 +190,10 @@ function AuthLoading() {
   return <div className="grid min-h-screen place-items-center bg-[var(--spr-surface)] text-[var(--spr-text)]"><div className="text-center"><img src="/brand/spr-icon.png" alt="SPR" className="mx-auto h-20 w-20 rounded-md border border-[var(--spr-border)] object-contain" /><div className="mt-4 text-xs font-semibold uppercase tracking-[.15em] text-[var(--spr-text-muted)]">Securing workspace</div><div className="mt-1 text-sm text-[var(--spr-text-faint)]">Checking authenticated session…</div></div></div>;
 }
 
+function SessionUnavailable({ onRetry, onSignOut }: { onRetry: () => void; onSignOut: () => void }) {
+  return <div className="grid min-h-screen place-items-center bg-[var(--spr-surface)] p-6 text-[var(--spr-text)]"><div className="w-full max-w-md rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6 text-center"><div className="text-sm font-semibold">Workspace session temporarily unavailable</div><p className="mt-2 text-sm leading-6 text-[var(--spr-text-muted)]">SPR could not confirm your workspace role. No lower role has been assumed and no empty workspace is being shown as fact.</p><div className="mt-5 flex justify-center gap-2"><button onClick={onRetry} className="spr-btn spr-btn-primary">Retry</button><button onClick={onSignOut} className="spr-btn spr-btn-secondary">Sign out</button></div></div></div>;
+}
+
 
 function WorkflowBoundary({ title, description, extensionId, onNavigate }: { title: string; description: string; extensionId?: string; onNavigate: (path: string) => void }) {
   const extension = extensionId ? EXTENSIONS.find((item) => item.id === extensionId) : undefined;
@@ -202,6 +206,12 @@ export default function App() {
   const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState('Viewer');
+  // Never present the default Viewer role as an authenticated fact. The role
+  // becomes usable only after /api/user/me confirms the current Supabase UID.
+  // This prevents a transient profile/API failure from making an Owner look
+  // like a Viewer with an empty workspace.
+  const [identityState, setIdentityState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [identityUid, setIdentityUid] = useState<string | null>(null);
   // Platform-operator identity, from the server's FOUNDER_EMAILS allowlist.
   // Never inferred from `role`: Owner is per-tenant and every customer has one.
   const [isFounder, setIsFounder] = useState(false);
@@ -333,6 +343,7 @@ export default function App() {
     if (!user) return;
     let cancelled = false;
     const load = async () => {
+      if (!cancelled) { setIdentityState('loading'); setIdentityUid(null); }
       // Ensure a verified identity has a workspace BEFORE the batch load runs.
       //
       // This is the only choke point that catches every way a session can
@@ -377,13 +388,28 @@ export default function App() {
       // kicked back to /login. apiFetch already refreshes and retries an
       // expired access token once before a 401 reaches this point.
       if (me.status === 401) {
+        if (!cancelled) setIdentityState('error');
         setUser(null);
         setAuthNotice('Your session could not be verified. Please sign in again.');
         await signOut(auth);
         navigate('/login');
         return;
       }
-      if (me.ok) { const data = await me.json().catch(() => null); if (!cancelled) { setRole(String(data?.role || 'Viewer')); setIsFounder(data?.isFounder === true); } }
+      if (me.ok) {
+        const data = await me.json().catch(() => null);
+        if (!cancelled) {
+          setRole(String(data?.role || 'Viewer'));
+          setIsFounder(data?.isFounder === true);
+          setIdentityUid(user.uid);
+          setIdentityState('ready');
+        }
+      } else {
+        // A 5xx/403/profile dependency failure is not evidence that the caller
+        // is a Viewer. Keep authenticated data hidden and offer a retry rather
+        // than silently degrading authorization in the UI.
+        if (!cancelled) { setIdentityState('error'); setDataStatus('error'); }
+        return;
+      }
       if (scansResponse.ok) { const data = await scansResponse.json().catch(() => []); if (!cancelled && Array.isArray(data)) setScans(data); }
       if (findingsResponse.ok) { const data = await findingsResponse.json().catch(() => []); const rows = Array.isArray(data) ? data : data?.findings; if (!cancelled && Array.isArray(rows)) { setFindings(rows); setAlerts(rows.map((row: any) => ({ id: String(row.id), title: String(row.title || row.control_id || 'Trust finding'), severity: String(row.severity || 'Low').replace(/^./, (s: string) => s.toUpperCase()), category: 'Trust finding', clientName: String(row.client_id || 'Tenant'), description: String(row.description || 'Evidence-backed finding'), timestamp: String(row.updated_at || ''), status: deriveAlertStatus(row.remediation_status, row.status), remediationId: row.remediation_id ? String(row.remediation_id) : null, ownerDisplay: row.remediation_owner_display || null, slaDueAt: row.remediation_sla_due_at || null })) as Alert[]); } }
       if (passportsResponse.ok) { const data = await passportsResponse.json().catch(() => []); const rows = Array.isArray(data) ? data : data?.passports; if (!cancelled && Array.isArray(rows)) { const normalized = rows.map((row: any) => ({ ...row, id: String(row.id), name: String(row.name || 'Unnamed software'), version: String(row.version || 'unknown'), publisher: String(row.publisher || 'unknown'), clientId: row.clientId ? String(row.clientId) : undefined, evidence: Array.isArray(row.evidence) ? row.evidence : [], vulnerabilities: Array.isArray(row.vulnerabilities) ? row.vulnerabilities : [], timeline: toJsonArrayColumn(row.timeline), sbom: toJsonArrayColumn(row.sbom), scores: null, scoreStatus: row.scoreStatus || 'not_authoritatively_scored' })) as SoftwarePassport[]; setPassports(normalized); setAssets(normalized.map((passport: any) => ({ id: passport.id, name: passport.name, hostName: passport.name, type: passport.category || 'software', clientId: passport.clientId, clientName: String(passport.clientId || 'Unobserved'), environment: String(passport.environment || 'Unobserved'), version: passport.version }))); } }
@@ -433,7 +459,7 @@ export default function App() {
     };
     void load().catch((error) => {
       console.warn('[SPR command center load]', error);
-      if (!cancelled) setDataStatus('error');
+      if (!cancelled) { setIdentityState('error'); setDataStatus('error'); }
     });
     return () => { cancelled = true; };
   }, [user, reloadKey]);
@@ -486,6 +512,8 @@ export default function App() {
   const signOutUser = async () => { await signOut(auth); navigate('/login'); };
 
   if (!authReady) return <AuthLoading />;
+  if (user && !isPublicPath(path) && (identityState === 'loading' || identityUid !== user.uid)) return <AuthLoading />;
+  if (user && !isPublicPath(path) && identityState === 'error') return <SessionUnavailable onRetry={() => setReloadKey((value) => value + 1)} onSignOut={() => void signOutUser()} />;
   // On a tenant's own hostname the root is that tenant's portal, not SPR's
   // marketing site: signed-out visitors get the branded sign-in page.
   if (path === '/' && hostBrand && !user) return <LoginView onLoginSuccess={() => navigate(returnPathFromLocation())} brand={hostBrand} />;
