@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
+import { PGlite } from '@electric-sql/pglite';
 import type { Server } from 'node:http';
 import { PgDialect } from 'drizzle-orm/pg-core';
 const scope = vi.hoisted(() => vi.fn());
@@ -53,4 +54,22 @@ describe('public evidence route boundaries', () => {
   expect(detailQueries).toHaveLength(2);
   for (const query of detailQueries) { expect(query.sql).toContain('asset_id IN ($2, $3)'); expect(query.params).toEqual(['tenant-free-review-system', 'p1', 'p2']); }
  });
+ it('counts integer verified evidence without counting another tenant', async () => {
+  const db = new PGlite();
+  await db.exec(`CREATE TABLE evidence_items (tenant_id text, asset_id text, type text, verified integer);
+    INSERT INTO evidence_items VALUES ('tenant-free-review-system','p1','signature',1), ('tenant-free-review-system','p1','sbom',0), ('other-tenant','p1','signature',1);`);
+  scope.mockResolvedValue({ execute: async (query: any) => {
+   const compiled = new PgDialect().sqlToQuery(query);
+   if (compiled.sql.includes('FROM evidence_items')) return db.query(compiled.sql, compiled.params);
+   if (compiled.sql.includes('count(*)::int AS n FROM')) return { rows: [{ n: 1 }] };
+   if (compiled.sql.includes('WITH completed')) return { rows: [{ owner: 'acme', repository: 'one', passportId: 'p1', sbom: [] }] };
+   return { rows: [] };
+  } });
+  try {
+   const response = await request('/index.json');
+   expect(response.status).toBe(200);
+   expect((await response.json()).entries[0]).toMatchObject({ evidenceCount: 2, verifiedEvidenceCount: 1, signatureEvidenceCount: 1 });
+  } finally { await db.close(); }
+ });
+
 });
