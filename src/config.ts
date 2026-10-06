@@ -66,7 +66,7 @@ const envSchema = z.object({
   // emails listed here may see cross-platform connection health/MRR/tasks).
   FOUNDER_EMAILS: optionalTrimmedString,
   RAILWAY_API_TOKEN: optionalTrimmedString, RAILWAY_PROJECT_ID: optionalTrimmedString,
-  VERCEL_API_TOKEN: optionalTrimmedString, VERCEL_PROJECT_ID: optionalTrimmedString, VERCEL_TEAM_ID: optionalTrimmedString,
+  VERCEL_API_TOKEN: optionalTrimmedString, VERCEL_PROJECT_ID: optionalTrimmedString, VERCEL_TEAM_ID: optionalTrimmedString, VERCEL_PUBLIC_URL: optionalTrimmedUrl,
   GITHUB_TOKEN: optionalTrimmedString, GITHUB_OWNER: optionalTrimmedString, GITHUB_REPO: optionalTrimmedString,
 });
 
@@ -160,7 +160,7 @@ export const config = {
     emails: parseCsv(parsedEnv.FOUNDER_EMAILS).map((email) => email.toLowerCase()),
   },
   railway: { apiToken: parsedEnv.RAILWAY_API_TOKEN, projectId: parsedEnv.RAILWAY_PROJECT_ID },
-  vercel: { apiToken: parsedEnv.VERCEL_API_TOKEN, projectId: parsedEnv.VERCEL_PROJECT_ID, teamId: parsedEnv.VERCEL_TEAM_ID },
+  vercel: { apiToken: parsedEnv.VERCEL_API_TOKEN, projectId: parsedEnv.VERCEL_PROJECT_ID, teamId: parsedEnv.VERCEL_TEAM_ID, publicUrl: parsedEnv.VERCEL_PUBLIC_URL },
   githubCi: { token: parsedEnv.GITHUB_TOKEN, owner: parsedEnv.GITHUB_OWNER, repo: parsedEnv.GITHUB_REPO },
 };
 
@@ -207,5 +207,5 @@ export const configurationCatalog = [
   { name: 'STRIPE_PRICE_SBOM_ANALYSIS', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_PORTFOLIO_ASSESSMENT', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_AUDIT_EVIDENCE_PACKAGE', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_CUSTOM_ASSESSMENT', category: 'featureSpecific', requiredInProduction: false },
   { name: 'STRIPE_PRICE_CONTINUOUS_VERIFICATION', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_TRUST_BADGE', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_PUBLIC_PASSPORT', category: 'featureSpecific', requiredInProduction: false }, { name: 'STRIPE_PRICE_API', category: 'featureSpecific', requiredInProduction: false },
   { name: 'GEMINI_API_KEY', category: 'featureSpecific', requiredInProduction: false }, { name: 'ANTHROPIC_API_KEY', category: 'featureSpecific', requiredInProduction: false }, { name: 'SENTRY_DSN', category: 'optional', requiredInProduction: false },
-  { name: 'SPR_DOCUMENT_SIGNING_SECRET', category: 'featureSpecific', requiredInProduction: false }, { name: 'VERCEL_API_TOKEN', category: 'featureSpecific', requiredInProduction: false }, { name: 'VERCEL_PROJECT_ID', category: 'featureSpecific', requiredInProduction: false }, { name: 'VERCEL_TEAM_ID', category: 'featureSpecific', requiredInProduction: false },
+  { name: 'SPR_DOCUMENT_SIGNING_SECRET', category: 'featureSpecific', requiredInProduction: false }, { name: 'VERCEL_API_TOKEN', category: 'featureSpecific', requiredInProduction: false }, { name: 'VERCEL_PROJECT_ID', category: 'featureSpecific', requiredInProduction: false }, { name: 'VERCEL_TEAM_ID', category: 'featureSpecific', requiredInProduction: false }, { name: 'VERCEL_PUBLIC_URL', category: 'featureSpecific', requiredInProduction: false },
 ] as const;
