@@ -118,3 +118,17 @@ button { cursor: pointer; }
 .spr-help-panel-body { padding: 12px 14px; font-size: 13px; line-height: 1.6; color: var(--spr-text-muted); }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+/* Keep repair evidence and actions readable without widening a phone viewport. */
+@media (max-width: 767px) {
+  #founder-control-plane { min-width: 0; padding: 12px; }
+  #founder-control-plane .founder-repair-table thead { display: none; }
+  #founder-control-plane .founder-repair-table,
+  #founder-control-plane .founder-repair-table tbody,
+  #founder-control-plane .founder-repair-table tr,
+  #founder-control-plane .founder-repair-table td { display: block; width: 100%; max-width: none; }
+  #founder-control-plane .founder-repair-table td { text-align: left; overflow-wrap: anywhere; }
+  #founder-control-plane .founder-repair-table td[data-label]::before { content: attr(data-label); display: block; margin-bottom: 6px; font-weight: 600; color: var(--spr-text); }
+  #founder-control-plane .founder-repair-table td > div { min-width: 0; align-items: stretch; }
+  #founder-control-plane button, #founder-control-plane select { min-height: 44px; }
+}
