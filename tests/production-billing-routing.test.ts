@@ -18,3 +18,15 @@ describe('production billing routing', () => {
     expect(new URL(billing!.destination).host).toBe(new URL(api!.destination).host);
   });
 });
+
+
+describe('Stripe Checkout compatibility', () => {
+  it('disables Stripe Managed Payments when adaptive pricing is disabled', () => {
+    const source = fs.readFileSync(path.join(root, 'src/routes/billing.ts'), 'utf8');
+    const adaptiveDisabled = source.match(/adaptive_pricing:\s*\{\s*enabled:\s*false\s*\}/g) ?? [];
+    const managedDisabled = source.match(/managed_payments:\s*\{\s*enabled:\s*false\s*\}/g) ?? [];
+
+    expect(adaptiveDisabled.length).toBeGreaterThan(0);
+    expect(managedDisabled.length).toBe(adaptiveDisabled.length);
+  });
+});
