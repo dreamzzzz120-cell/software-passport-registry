@@ -6,16 +6,15 @@ name: Dependency Remediation
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
   pull-requests: write
 
 concurrency:
-  group: dependency-remediation-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: false
+  group: dependency-remediation-main
+  cancel-in-progress: true
 
 jobs:
   remediate:
@@ -73,13 +72,21 @@ jobs:
             echo 'No dependency changes were necessary.'
             exit 0
           fi
-          BRANCH="dependency-remediation/$(date -u +%Y%m%d-%H%M%S)"
+          BRANCH="dependency-remediation/current"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git checkout -b "$BRANCH"
+          git fetch origin "$BRANCH" || true
+          git checkout -B "$BRANCH"
           git add package.json package-lock.json
           git commit -m 'security: remediate vulnerable dependencies'
-          git push origin "$BRANCH"
+          git push --force-with-lease origin "$BRANCH"
+
+          EXISTING_PR="$(gh pr list --base main --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$EXISTING_PR" ]; then
+            echo "Updated existing remediation PR #$EXISTING_PR."
+            exit 0
+          fi
+
           gh pr create \
             --base main \
             --head "$BRANCH" \
