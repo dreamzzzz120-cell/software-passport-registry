@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deriveReportRiskFields, type ReportPassportRow } from '../src/routes/trust-loop.ts';
+import { deriveReportRiskFields, reportTypes, type ReportPassportRow } from '../src/routes/trust-loop.ts';
 
 // Regression coverage for the trust_report_snapshots integrity bug: a report
 // is a permanent historical record and must never claim a measurement was
@@ -59,5 +59,13 @@ describe('deriveReportRiskFields', () => {
     const fields = deriveReportRiskFields(passport({ overall_score: 0, verification_status: 'verified', confidence_score: 90, evidence_completeness: 100 }));
     expect(fields.canonicalScore).toBe(0);
     expect(fields.verificationStatus).toBe('verified');
+  });
+});
+
+
+describe('selectable report types', () => {
+  it('accepts SBOM and the supported report types', () => {
+    for (const type of ['executive','technical','msp','customer','compliance','sbom','vendor','auditor','evidence-ledger']) expect(reportTypes.safeParse(type).success).toBe(true);
+    expect(reportTypes.safeParse('made-up').success).toBe(false);
   });
 });
