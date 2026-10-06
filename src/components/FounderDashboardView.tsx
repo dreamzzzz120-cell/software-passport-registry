@@ -77,7 +77,7 @@ function FounderDashboardContent({ userRole }: FounderDashboardViewProps) {
   if (!ownerAccess) return <div className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 p-8 text-[var(--spr-text)]"><div className="flex items-center gap-3 mb-4"><ShieldCheck className="w-6 h-6 text-[var(--spr-red)]" /><div><h1 className="text-xl font-semibold">Founder Admin Access Required</h1><p className="text-sm text-[var(--spr-text-muted)]">You must be signed in as an Owner to view the Founder/Admin Control Center.</p></div></div><div className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-surface)] p-6"><p className="text-sm text-[var(--spr-text-muted)]">This dashboard contains privileged SPR system telemetry, self-verification reports, and high-confidence executive controls. Please contact your administrator to request Owner role access.</p></div></div>;
 
   return <>
-    <div className="space-y-6" onClick={(event) => {
+    <div className="space-y-4 sm:space-y-6" onClick={(event) => {
       const link = (event.target as HTMLElement).closest('a');
       const anchor = link?.getAttribute('href');
       if (anchor === '#founder-agents' || anchor === '#founder-connections') {
@@ -85,19 +85,19 @@ function FounderDashboardContent({ userRole }: FounderDashboardViewProps) {
         window.setTimeout(() => document.querySelector(anchor)?.scrollIntoView({ behavior: 'smooth' }), 0);
       }
     }}>
-      <header className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-5">
+      <header className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-4 sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div><h1 className="text-2xl font-semibold">Founder dashboard</h1><p className="mt-2 text-sm text-[var(--spr-text-muted)]">Your daily review, business numbers and system controls in one place.</p></div>
-          <button className="spr-btn spr-btn-secondary" disabled={loading} onClick={() => { void refresh(); void fetchSelfPassport(); }}>{loading ? 'Checking…' : 'Run daily check'}</button>
+          <div className="min-w-0"><h1 className="text-xl font-semibold sm:text-2xl">Founder dashboard</h1><p className="mt-2 text-sm text-[var(--spr-text-muted)]">Your daily review, business numbers and system controls in one place.</p></div>
+          <button className="spr-btn spr-btn-secondary w-full sm:w-auto" disabled={loading} onClick={() => { void refresh(); void fetchSelfPassport(); }}>{loading ? 'Checking…' : 'Run daily check'}</button>
         </div>
         <p className="mt-3 text-sm text-[var(--spr-text-muted)]">{loadedAt ? `Last data refresh: ${new Date(loadedAt).toLocaleString()}` : 'Waiting for system data'} · Updates while this page is visible.</p>
       </header>
       {error && <div role="alert" className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 p-4 text-sm text-[var(--spr-red)]">SPR self-scan could not be refreshed: {error}. Open Reports &amp; features to retry.</div>}
-      <nav aria-label="Founder dashboard sections" className="flex flex-wrap gap-2">
-        {sections.map(([key, label]) => <button key={key} type="button" aria-pressed={area === key} onClick={() => setArea(key)} className={`spr-btn ${area === key ? 'spr-btn-primary' : 'spr-btn-secondary'}`}>{label}</button>)}
+      <nav aria-label="Founder dashboard sections" className="flex gap-2 overflow-x-auto pb-1">
+        {sections.map(([key, label]) => <button key={key} type="button" aria-pressed={area === key} onClick={() => setArea(key)} className={`spr-btn shrink-0 whitespace-nowrap ${area === key ? 'spr-btn-primary' : 'spr-btn-secondary'}`}>{label}</button>)}
       </nav>
       <div hidden={area !== 'overview'} className="space-y-6">
-        <section className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-5">
+        <section className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-4 sm:p-5">
           <h2 className="text-lg font-semibold">Daily review · {reviewDate}</h2>
           <p className="mt-2 text-sm text-[var(--spr-text-muted)]">{reviewed.length} of {dailyChecks.length} reviewed this session. Checkmarks record your review; system health is shown separately below.</p>
           <div className="mt-4 space-y-3">{dailyChecks.map(([key, label, target]) => <div key={key} className="flex flex-wrap items-center justify-between gap-3"><label className="flex items-center gap-3 text-sm"><input type="checkbox" checked={reviewed.includes(key)} onChange={(event) => setReviewed((items) => event.target.checked ? [...items, key] : items.filter((item) => item !== key))} />{label}</label><button className="spr-btn spr-btn-secondary" onClick={() => setArea(target)}>Open</button></div>)}</div>
