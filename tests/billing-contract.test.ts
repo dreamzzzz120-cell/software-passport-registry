@@ -96,10 +96,15 @@ describe('billing routes are real, authenticated, and role-gated', () => {
     expect(s).toContain("router.post('/portal', requireAuth, requireRole(['Owner', 'Admin'])");
   });
 
-  it('scopes every subscription read/write by the caller\'s own tenant', () => {
+  it('scopes subscription reads by tenant and only persists subscription state after Stripe confirmation', () => {
     const s = source();
     expect(s).toContain('WHERE tenant_id = ${tenantId}');
-    expect(s).toContain('VALUES (${tenantId}');
+    const checkoutStart = s.indexOf("router.post('/checkout'");
+    const checkoutEnd = s.indexOf("router.post('/one-time-checkout'");
+    const checkout = s.slice(checkoutStart, checkoutEnd);
+    expect(checkout).not.toContain('INSERT INTO tenant_subscriptions');
+    expect(s).toContain('UPDATE tenant_subscriptions');
+    expect(s).toContain("action: 'billing.subscription.activated'");
   });
 
   it('never subscribes/checks out a plan with no configured Stripe price', () => {
