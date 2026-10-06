@@ -134,6 +134,15 @@ await check('production intake signs uploads and hashes observed bytes', async (
   assert(completed.sha256 === expectedSha, `server hash mismatch: expected ${expectedSha} got ${completed.sha256}`);
 });
 
+await check('public registry index returns JSON', async () => {
+  const r = await fetch(API + '/software/index.json', {redirect:'manual'});
+  const text = await r.text();
+  assert(r.status === 200, `expected 200 got ${r.status}: ${text.slice(0, 300)}`);
+  const body = JSON.parse(text);
+  assert(typeof body.total === 'number', 'registry total is not numeric');
+  assert(Array.isArray(body.entries), 'registry entries is not an array');
+});
+
 await check('production anonymous IP rate limit returns 429', async () => {
   let limited = null;
   for (let i = 0; i < 110; i += 1) {
@@ -171,15 +180,6 @@ await check('production credential rate limit resists forwarding-header rotation
   assert(Boolean(limited.headers.get('retry-after')), '429 missing Retry-After');
   assert(Boolean(limited.headers.get('x-ratelimit-limit')), '429 missing X-RateLimit-Limit');
   assert(Boolean(limited.headers.get('x-ratelimit-policy')), '429 missing X-RateLimit-Policy');
-});
-
-await check('public registry index returns JSON', async () => {
-  const r = await fetch(API + '/software/index.json', {redirect:'manual'});
-  const text = await r.text();
-  assert(r.status === 200, `expected 200 got ${r.status}: ${text.slice(0, 300)}`);
-  const body = JSON.parse(text);
-  assert(typeof body.total === 'number', 'registry total is not numeric');
-  assert(Array.isArray(body.entries), 'registry entries is not an array');
 });
 
 await check('public frontend reachable', async () => {
