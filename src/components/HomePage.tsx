@@ -53,7 +53,8 @@ export default function HomePage({ onCreatePassport, onExploreTrustNetwork }: Pr
     <div className="min-h-screen bg-[var(--spr-surface)] text-[var(--spr-text)]">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
         <img src="/brand/spr-logo.jpg" alt="Software Passport Registry" className="h-10 w-auto" />
-        <nav className="flex items-center gap-5 text-sm">
+        <nav className="flex flex-wrap items-center justify-end gap-3 text-sm">
+          <a href="/registry" className="text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]">Registry</a>
           <a href="/pricing" className="text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]">Pricing</a>
           <button onClick={onCreatePassport} className="text-[var(--spr-text-muted)] hover:text-[var(--spr-text)]">Sign in</button>
         </nav>

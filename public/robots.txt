@@ -32,10 +32,8 @@ Allow: /subprocessors/
 
 # Authenticated application. These render tenant-scoped customer data and
 # are behind auth; they must never appear in search results.
-# Note /registry is an ALIAS of the authenticated /passports view, not a
-# public registry - it is deliberately disallowed.
 Disallow: /dashboard
-Disallow: /registry
+Allow: /registry
 Disallow: /passports
 Disallow: /clients
 Disallow: /assets

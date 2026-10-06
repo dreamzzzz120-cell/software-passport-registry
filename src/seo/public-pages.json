@@ -21,47 +21,47 @@
   "pages": [
     {
       "path": "/",
-      "title": "Software Passport Registry — Verify Software Before You Buy",
+      "title": "Software Passport Registry \u2014 Verify Software Before You Buy",
       "description": "Software trust and evidence verification for buyers and businesses. SPR gives software a persistent identity and reports observed evidence, not inferred safety."
     },
     {
       "path": "/free-review",
-      "title": "Free Software Review — Software Passport Registry",
+      "title": "Free Software Review \u2014 Software Passport Registry",
       "description": "Submit a public GitHub repository and see what SPR can actually observe about it. No account required, and the review reports observed evidence only."
     },
     {
       "path": "/passport/demo",
-      "title": "Sample Software Passport — Software Passport Registry",
+      "title": "Sample Software Passport \u2014 Software Passport Registry",
       "description": "A static sample Software Passport showing how SPR records identity, evidence and unknowns. Demo data only: it reads no customer or tenant data."
     },
     {
       "path": "/pricing",
-      "title": "Software Passport Registry Pricing — Software Verification",
+      "title": "Software Passport Registry Pricing \u2014 Software Verification",
       "description": "Pay for the software trust work you use. Compare SPR subscription plans, one-time verification reports and add-ons for MSPs and software teams."
     },
     {
       "path": "/msp",
-      "title": "Software Passport Registry for MSPs — Software Trust & Risk Visibility",
+      "title": "Software Passport Registry for MSPs \u2014 Software Trust & Risk Visibility",
       "description": "Software Passport Registry for MSPs. Track software inventory and evidence across every client, with risk visibility and client-facing trust reporting."
     },
     {
       "path": "/about/",
-      "title": "About Software Passport Registry — SPR",
+      "title": "About Software Passport Registry \u2014 SPR",
       "description": "Learn who builds Software Passport Registry and why SPR focuses on evidence-based software identity, verification, transparency and observable trust signals."
     },
     {
       "path": "/trust/",
-      "title": "Trust Center — Software Passport Registry",
+      "title": "Trust Center \u2014 Software Passport Registry",
       "description": "Explore Software Passport Registry company identity, verification methodology, security practices, dependencies and documented product boundaries."
     },
     {
       "path": "/methodology/",
-      "title": "Verification Methodology — Software Passport Registry",
+      "title": "Verification Methodology \u2014 Software Passport Registry",
       "description": "See how SPR moves from provider evidence through normalization and identity to an explainable verification decision, while preserving unknown states."
     },
     {
       "path": "/security/",
-      "title": "Security — Software Passport Registry",
+      "title": "Security \u2014 Software Passport Registry",
       "description": "The security controls implemented in Software Passport Registry: tenant isolation, authentication boundaries, evidence integrity and responsible disclosure."
     },
     {
@@ -71,28 +71,33 @@
     },
     {
       "path": "/data-retention/",
-      "title": "Data Retention & Deletion — Software Passport Registry",
+      "title": "Data Retention & Deletion \u2014 Software Passport Registry",
       "description": "Learn how Software Passport Registry approaches retention and deletion for account, repository, evidence, audit and operational data."
     },
     {
       "path": "/subprocessors/",
-      "title": "Subprocessors & Infrastructure — Software Passport Registry",
+      "title": "Subprocessors & Infrastructure \u2014 Software Passport Registry",
       "description": "Review the documented third-party infrastructure and subprocessors used to operate Software Passport Registry and support its evidence workflows."
     },
     {
       "path": "/terms",
-      "title": "Terms of Service — Software Passport Registry",
+      "title": "Terms of Service \u2014 Software Passport Registry",
       "description": "The terms governing use of Software Passport Registry, covering account responsibilities, acceptable use, and restrictions on accessing other tenants' data."
     },
     {
       "path": "/privacy",
-      "title": "Privacy Policy — Software Passport Registry",
+      "title": "Privacy Policy \u2014 Software Passport Registry",
       "description": "How Software Passport Registry collects and uses account, repository, evidence and log data, and how tenant and client data isolation is enforced."
     },
     {
       "path": "/dpa",
-      "title": "Data Processing Agreement — Software Passport Registry",
+      "title": "Data Processing Agreement \u2014 Software Passport Registry",
       "description": "The Data Processing Agreement under which Software Passport Registry processes personal data for customers, with its subprocessor annex and security measures."
+    },
+    {
+      "path": "/registry",
+      "title": "Public Software Registry \u2014 Software Passport Registry",
+      "description": "Discover observed public GitHub repositories. Metadata discovery is separate from scan evidence and verification; unsupported claims remain UNKNOWN."
     }
   ]
 }

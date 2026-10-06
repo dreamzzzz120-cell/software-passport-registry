@@ -42,7 +42,7 @@ const REQUIRED_ROUTES = ['/', '/pricing', '/msp', '/free-review'];
 // Never indexable, never prerendered: authenticated views over tenant-scoped
 // customer data, plus the API.
 const PRIVATE_ROUTES = [
-  '/dashboard', '/registry', '/passports', '/clients', '/evidence-explorer', '/reports',
+  '/dashboard', '/passports', '/clients', '/evidence-explorer', '/reports',
   '/monitoring', '/settings', '/team', '/billing', '/audit-log', '/trust-graph', '/vendors',
   '/governance', '/security', '/compliance', '/scans', '/alerts', '/integrations', '/login',
 ];
@@ -239,7 +239,7 @@ describe('private application routes are never made indexable', () => {
     for (const route of ['/free-review', '/pricing', '/msp']) {
       expect(robots).toContain(`Allow: ${route}`);
     }
-    for (const route of ['/dashboard', '/billing', '/settings', '/registry']) {
+    for (const route of ['/dashboard', '/billing', '/settings']) {
       expect(robots).toContain(`Disallow: ${route}`);
     }
     expect(robots).toContain('Disallow: /api/');

@@ -12,8 +12,8 @@ const app = read('src/App.tsx');
 const stripComments = (source: string) => source.replace(/<!--[\s\S]*?-->/g, '');
 const sitemapMarkup = stripComments(sitemap);
 const indexMarkup = stripComments(indexHtml);
-const PUBLIC_INDEXABLE = ['/', '/free-review', '/passport/demo', '/pricing', '/msp', '/about/', '/trust/', '/methodology/', '/security/', '/contact/', '/data-retention/', '/subprocessors/', '/terms', '/privacy', '/dpa'];
-const AUTHENTICATED_ROUTES = ['/dashboard', '/registry', '/passports', '/clients', '/evidence-explorer', '/reports', '/monitoring', '/settings', '/team', '/billing', '/audit-log', '/trust-graph', '/vendors', '/governance', '/compliance'];
+const PUBLIC_INDEXABLE = ['/', '/registry', '/free-review', '/passport/demo', '/pricing', '/msp', '/about/', '/trust/', '/methodology/', '/security/', '/contact/', '/data-retention/', '/subprocessors/', '/terms', '/privacy', '/dpa'];
+const AUTHENTICATED_ROUTES = ['/dashboard', '/passports', '/clients', '/evidence-explorer', '/reports', '/monitoring', '/settings', '/team', '/billing', '/audit-log', '/trust-graph', '/vendors', '/governance', '/compliance'];
 const SITE = (() => {
   const { origin } = JSON.parse(read('src/seo/public-pages.json')) as { origin?: string };
   if (!origin) throw new Error('src/seo/public-pages.json declares no canonical origin');
@@ -57,7 +57,7 @@ describe('sitemap contains only genuinely public URLs', () => {
 });
 
 describe('robots policy protects the authenticated application', () => {
-  it('disallows every authenticated route, including the misleadingly named /registry', () => { for (const route of AUTHENTICATED_ROUTES) expect(robots).toContain(`Disallow: ${route}`); });
+  it('disallows every authenticated route', () => { for (const route of AUTHENTICATED_ROUTES) expect(robots).toContain(`Disallow: ${route}`); });
   it('disallows the API, which includes signed public share links', () => { expect(robots).toContain('Disallow: /api/'); });
   it('allows the public marketing surfaces', () => { for (const route of ['/free-review', '/pricing', '/msp', '/terms', '/privacy']) expect(robots).toContain(`Allow: ${route}`); });
   it('points at the sitemap, and every indexed URL sits on that one origin', () => {
@@ -74,10 +74,11 @@ describe('the public route set matches the application itself', () => {
     const publicPaths = [...declared![1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
     for (const route of PUBLIC_INDEXABLE.filter((route) => !route.endsWith('/'))) expect(publicPaths).toContain(route);
   });
-  it('/registry is an authenticated view, not a public one', () => {
+  it('/registry is public while tenant passports remain authenticated', () => {
     const declared = app.match(/const PUBLIC_PATHS = new Set\(\[([^\]]+)\]\)/);
     const publicPaths = [...declared![1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
-    expect(publicPaths).not.toContain('/registry');
+    expect(publicPaths).toContain('/registry');
+    expect(app.indexOf("if (path === '/registry') return")).toBeLessThan(app.indexOf('if (!user) return <AuthLoading />'));
     expect(app).toContain("case '/passports': view = <PassportsView");
     expect(app).toContain("case '/registry': view = <PublicRegistryView />;");
   });

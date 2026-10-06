@@ -69,7 +69,7 @@ import { EXTENSIONS } from './workflows/extensionRegistry';
 // bounced every signed-out visitor to /login. It is a tab in the public Trust
 // Center nav (PublicTrustCenterView), so that was reachable by clicking.
 // Listing all four keeps them public whether or not a static page exists.
-const PUBLIC_PATHS = new Set(['/','/login','/free-review','/pricing','/msp','/terms','/privacy','/dpa','/passport/demo','/trust/','/about/','/methodology/','/security/','/security-center/','/contact/','/data-retention/','/subprocessors/']);
+const PUBLIC_PATHS = new Set(['/','/registry','/login','/free-review','/pricing','/msp','/terms','/privacy','/dpa','/passport/demo','/trust/','/about/','/methodology/','/security/','/security-center/','/contact/','/data-retention/','/subprocessors/']);
 
 // /dpa/verify/<executionId>/<signature>: public signature check for an
 // executed Data Processing Agreement. The signature is the only credential.
@@ -502,6 +502,7 @@ export default function App() {
     const dpaVerify = path.match(DPA_VERIFY_PATH);
     if (dpaVerify) return <DpaView verify={{ executionId: dpaVerify[1], signature: dpaVerify[2] }} />;
   }
+  if (path === '/registry') return <div className="min-h-screen bg-[var(--spr-surface)] p-4 text-[var(--spr-text)] sm:p-6"><div className="mx-auto max-w-6xl"><nav aria-label="Public navigation" className="mb-5 flex flex-wrap gap-5 text-sm"><a href="/">Home</a><a href="/free-review">Run a free review</a><a href="/pricing">Pricing</a></nav><PublicRegistryView /></div></div>;
   if (!user && path === '/privacy') return <PrivacyPolicyView />;
   // Public trust center. Always reachable regardless of auth state -- these
   // are the exact paths LegalFooterLinks has linked to from every public

@@ -78,8 +78,8 @@ async function listCompleted(scopedDb: any, limit = 5000, offset = 0, only?: { o
   }
   if (entries.length === 0) return entries;
   const ids = entries.map((e) => e.passportId);
-  const findingRows = (await scopedDb.execute(sql`SELECT asset_id AS "passportId", lower(severity) AS severity, count(*)::int AS count FROM scan_findings WHERE tenant_id = ${FREE_REVIEW_TENANT_ID} AND asset_id IN ${ids} AND lower(status) NOT IN ('resolved','closed','verified') GROUP BY asset_id, lower(severity)`) as any).rows ?? [];
-  const evidenceRows = (await scopedDb.execute(sql`SELECT asset_id AS "passportId", count(*)::int AS count, count(*) FILTER (WHERE verified IS TRUE)::int AS "verifiedCount", count(*) FILTER (WHERE lower(type) = 'signature')::int AS "signatureCount" FROM evidence_items WHERE tenant_id = ${FREE_REVIEW_TENANT_ID} AND asset_id IN ${ids} GROUP BY asset_id`) as any).rows ?? [];
+  const findingRows = (await scopedDb.execute(sql`SELECT asset_id AS "passportId", lower(severity) AS severity, count(*)::int AS count FROM scan_findings WHERE tenant_id = ${FREE_REVIEW_TENANT_ID} AND asset_id IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)}) AND lower(status) NOT IN ('resolved','closed','verified') GROUP BY asset_id, lower(severity)`) as any).rows ?? [];
+  const evidenceRows = (await scopedDb.execute(sql`SELECT asset_id AS "passportId", count(*)::int AS count, count(*) FILTER (WHERE verified IS TRUE)::int AS "verifiedCount", count(*) FILTER (WHERE lower(type) = 'signature')::int AS "signatureCount" FROM evidence_items WHERE tenant_id = ${FREE_REVIEW_TENANT_ID} AND asset_id IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)}) GROUP BY asset_id`) as any).rows ?? [];
   const byId = new Map(entries.map((e) => [e.passportId, e]));
   for (const f of findingRows) { const e = byId.get(f.passportId); if (!e) continue; e.findings[f.severity] = Number(f.count); e.openFindings += Number(f.count); }
   for (const ev of evidenceRows) { const e = byId.get(ev.passportId); if (!e) continue; e.evidenceCount = Number(ev.count); e.verifiedEvidenceCount = Number(ev.verifiedCount ?? 0); e.signatureEvidenceCount = Number(ev.signatureCount ?? 0); }
@@ -105,6 +105,14 @@ function layout(title: string, description: string, canonical: string, body: str
 // session across both. Crawlers that don't execute JS are excluded by design.
 export const TRACKER_JS = `(function(){try{var K='spr-analytics-session',R=/^[A-Za-z0-9_-]{16,80}$/,s;try{s=localStorage.getItem(K);if(!s||!R.test(s)){s=(crypto.randomUUID?crypto.randomUUID().replace(/-/g,''):Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2))+Date.now().toString(36);s=s.replace(/[^A-Za-z0-9_-]/g,'').slice(0,48);localStorage.setItem(K,s)}}catch(e){s=(Date.now().toString(36)+Math.random().toString(36).slice(2)).replace(/[^A-Za-z0-9_-]/g,'').slice(0,32);while(s.length<16)s+='0'}var p=location.pathname+location.search;if(!p||p.length>500)return;var w=innerWidth,d=w<768?'mobile':w<1024?'tablet':'desktop';var b=JSON.stringify({sessionId:s,path:p,referrer:document.referrer||null,deviceType:d});if(navigator.sendBeacon&&navigator.sendBeacon('/api/traffic/event',new Blob([b],{type:'application/json'})))return;fetch('/api/traffic/event',{method:'POST',headers:{'content-type':'application/json'},body:b,keepalive:true}).catch(function(){})}catch(e){}})();`;
 
+function evidenceUnavailable(req: Request, res: Response, error: unknown) {
+  console.error('[PublicRegistry] evidence read failed:', error instanceof Error ? error.message : String(error));
+  res.setHeader('Cache-Control', 'no-store');
+  if (req.path === '/index.json') return res.status(503).json({ error: 'EVIDENCE_UNAVAILABLE', semantics: 'Availability is UNKNOWN; this is not an empty registry.' });
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  return res.status(503).send(layout('Evidence temporarily unavailable — Software Passport Registry', 'SPR could not retrieve evidence.', `${PUBLIC_ORIGIN}/registry`, '<h1>Evidence temporarily unavailable</h1><p>SPR could not retrieve the public review records. Evidence availability is UNKNOWN; this does not mean the repository has no findings or evidence.</p><a href="/registry">Back to Registry</a> · <a href="/free-review">Run a free review</a>'));
+}
+
 export function createSoftwareRegistryRouter() {
   const router = Router();
 
@@ -114,7 +122,7 @@ export function createSoftwareRegistryRouter() {
     return res.send(TRACKER_JS);
   });
 
-  router.get('/sitemap.xml', async (_req: Request, res: Response, next) => {
+  router.get('/sitemap.xml', async (req: Request, res: Response, next) => {
     try {
       const scopedDb = await attachTenantScope(FREE_REVIEW_TENANT_ID, res);
       const entries = await listCompleted(scopedDb, 50000);
@@ -124,15 +132,15 @@ export function createSoftwareRegistryRouter() {
       res.setHeader('Content-Type', 'application/xml; charset=utf-8');
       res.setHeader('Cache-Control', 'public, max-age=3600');
       return res.send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((u) => `  <url><loc>${escapeHtml(u)}</loc></url>`).join('\n')}\n</urlset>\n`);
-    } catch (error) { return next(error); }
+    } catch (error) { return evidenceUnavailable(req, res, error); }
   });
 
-  router.get('/index.json', async (_req: Request, res: Response, next) => {
+  router.get('/index.json', async (req: Request, res: Response, next) => {
     try {
       const scopedDb = await attachTenantScope(FREE_REVIEW_TENANT_ID, res);
       res.setHeader('Cache-Control', 'public, max-age=300');
       return res.json({ generatedAt: new Date().toISOString(), total: await countCompleted(scopedDb), entries: await listCompleted(scopedDb) });
-    } catch (error) { return next(error); }
+    } catch (error) { return evidenceUnavailable(req, res, error); }
   });
 
   router.get('/', async (req: Request, res: Response, next) => {
@@ -149,7 +157,7 @@ export function createSoftwareRegistryRouter() {
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('Cache-Control', 'public, max-age=300');
       return res.send(layout(`Observed software passports${page > 1 ? ` (page ${page})` : ''} — Software Passport Registry`, `${total} public repositories reviewed with real SBOM, vulnerability and evidence data.`, `${PUBLIC_ORIGIN}/software${page > 1 ? `?page=${page}` : ''}`, body));
-    } catch (error) { return next(error); }
+    } catch (error) { return evidenceUnavailable(req, res, error); }
   });
 
   router.get('/:owner/:repository', async (req: Request, res: Response, next) => {
@@ -158,20 +166,20 @@ export function createSoftwareRegistryRouter() {
       if (!OWNER_PATTERN.test(owner) || !OWNER_PATTERN.test(repository)) return res.status(404).send('Not found');
       const scopedDb = await attachTenantScope(FREE_REVIEW_TENANT_ID, res);
       const entry = (await listCompleted(scopedDb, 1, 0, { owner, repository }))[0];
-      if (!entry) { res.setHeader('Cache-Control', 'no-store'); return res.status(404).send(layout('Not reviewed — Software Passport Registry', 'No completed review exists for this repository.', `${PUBLIC_ORIGIN}/software`, `<p class="k">Software Passport Registry</p><h1>${escapeHtml(owner)}/${escapeHtml(repository)}</h1><p>SPR has not completed a review of this repository, so there is nothing to show. No score or estimate is substituted.</p><a class="cta" href="${PUBLIC_ORIGIN}/free-review">Run a free review</a>`)); }
+      if (!entry) { res.setHeader('Cache-Control', 'no-store'); return res.status(404).send(layout('Not reviewed — Software Passport Registry', 'No completed review exists for this repository.', `${PUBLIC_ORIGIN}/software`, `<p class="k">Software Passport Registry</p><h1>${escapeHtml(owner)}/${escapeHtml(repository)}</h1><p>SPR has not completed a review of this repository, so there is nothing to show. No score or estimate is substituted.</p><a class="cta" href="${PUBLIC_ORIGIN}/free-review?owner=${encodeURIComponent(owner)}&amp;repo=${encodeURIComponent(repository)}">Run a free review</a> <a href="/registry">Back to Registry</a>`)); }
       const sev = (s: string) => entry.findings[s] ?? 0;
       const name = `${entry.owner}/${entry.repository}`;
       const desc = `SPR observed ${entry.componentCount ?? 'an unknown number of'} SBOM components, ${entry.openFindings} open findings (${sev('critical')} critical, ${sev('high')} high) and ${entry.evidenceCount} evidence items for ${name} at commit ${entry.commitSha ? entry.commitSha.slice(0, 7) : 'n/a'}.`;
       const body = `<p class="k">Software Passport · public repository</p><h1>${escapeHtml(name)}</h1><p>Observed by SPR on ${entry.acquiredAt ? escapeHtml(entry.acquiredAt.slice(0, 10)) : 'an unknown date'} at commit <code>${escapeHtml(entry.commitSha ?? 'n/a')}</code>${entry.defaultBranch ? ` (${escapeHtml(entry.defaultBranch)})` : ''}. Source: <a rel="nofollow" href="https://github.com/${escapeHtml(entry.owner)}/${escapeHtml(entry.repository)}">github.com/${escapeHtml(name)}</a>.</p>
 <div class="grid"><div class="tile"><span class="k">SBOM components</span><b>${entry.componentCount ?? '—'}</b></div><div class="tile"><span class="k">Open findings</span><b>${entry.openFindings}</b></div><div class="tile"><span class="k">Critical / high</span><b>${sev('critical')} / ${sev('high')}</b></div><div class="tile"><span class="k">Evidence items</span><b>${entry.evidenceCount}</b></div><div class="tile"><span class="k">Verified evidence</span><b>${entry.verifiedEvidenceCount}</b></div><div class="tile"><span class="k">Signature evidence</span><b>${entry.signatureEvidenceCount}</b></div></div>
 <div class="claim"><b>Maintain ${escapeHtml(name)}?</b><p>Claim this passport: run your own review of the latest commit and get an SBOM and vulnerability report you can hand to customers who ask for one. Free to start.</p><a class="cta" href="${PUBLIC_ORIGIN}/free-review?owner=${encodeURIComponent(entry.owner)}&amp;repo=${encodeURIComponent(entry.repository)}&amp;src=registry-claim">Claim this passport</a></div>
-<h2>What was observed</h2><p>Syft generated the software bill of materials from the repository's manifests; each component was checked against the OSV vulnerability database; the tree was scanned for secrets, infrastructure-as-code issues and licence signals. SPR also records cryptographic provenance when the repository provider exposes verifiable signature metadata. This observation contains ${entry.verifiedEvidenceCount} verified evidence item(s), including ${entry.signatureEvidenceCount} signature evidence item(s). Vendor statements never replace direct observation.</p>
+<h2>What was observed</h2><p>The counts above come from the persisted SBOM, findings and evidence records for this completed review. Completion does not establish complete dependency resolution or coverage of every scanner. OSV matching applies to resolved components only; unsupported scanner coverage remains UNKNOWN. SPR also records cryptographic provenance when the repository provider exposes verifiable signature metadata. This observation contains ${entry.verifiedEvidenceCount} verified evidence item(s), including ${entry.signatureEvidenceCount} signature evidence item(s). Vendor statements never replace direct observation.</p>
 <h2>Open findings</h2><p class="note">SPR observed ${entry.openFindings} open findings at this commit, including ${sev('critical')} critical and ${sev('high')} high. Individual finding titles, affected components, remediation details and the evidence trail are part of the full customer workspace rather than the public registry.</p>
 <h2>Get the full passport</h2><p>Continuous verification, evidence ledger, finding details, remediation context, plain-English and auditor reports, and a shareable signed passport are available to SPR customers.</p><a class="cta" href="${PUBLIC_ORIGIN}/pricing">See plans</a> &nbsp; <a class="cta" style="background:transparent;color:var(--accent);border:1px solid var(--accent)" href="${PUBLIC_ORIGIN}/free-review">Review your own repository free</a>`;
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('Cache-Control', 'public, max-age=600');
       return res.send(layout(`${name} — software passport, SBOM and vulnerabilities`, desc, `${PUBLIC_ORIGIN}/software/${encodeURIComponent(entry.owner)}/${encodeURIComponent(entry.repository)}`, body));
-    } catch (error) { return next(error); }
+    } catch (error) { return evidenceUnavailable(req, res, error); }
   });
 
   return router;
