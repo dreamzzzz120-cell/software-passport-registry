@@ -140,7 +140,8 @@ export default function BillingView() {
 
 
   const anyBusy = busyPlan !== null || busyProduct !== null || busyAddon !== null;
-  const currentPlan = status?.subscription?.plan && status.subscription.status !== 'canceled' ? status.subscription.plan : null;
+  const manageableStatuses = new Set(['active', 'trialing', 'past_due']);
+  const currentPlan = status?.subscription?.plan && manageableStatuses.has(status.subscription.status) ? status.subscription.plan : null;
   const currentPlanLabel = currentPlan ? status?.plans.find((p) => p.id === currentPlan)?.label ?? currentPlan : null;
 
   return (
