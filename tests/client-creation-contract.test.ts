@@ -57,7 +57,8 @@ describe('client-level data isolation for the Client role', () => {
   it('GET /user/clients scopes to a single client only when role is Client', () => {
     const s = authSource();
     expect(s).toContain("const clientScope = req.user!.role === 'Client' ? req.user!.clientId : null;");
-    expect(s).toContain('AND (${clientScope}::text IS NULL OR id = ${clientScope})');
+    expect(s).toContain('clientInventoryQuery(req.user!.tenantId, clientScope)');
+    expect(read('src/lib/clientInventoryQuery.ts')).toContain('AND (${clientScope}::text IS NULL OR c.id=${clientScope})');
   });
 
   it('GET /user/passports applies the same client scoping', () => {
