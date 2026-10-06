@@ -72,19 +72,20 @@ export function connectionGuides(): Record<ConnectionKey, ConnectionGuide> {
       statusMeaning: {
         ok: 'Vercel answered and the newest production deployment is READY.',
         error: 'Vercel answered but the newest deployment is not READY (building, errored, cancelled), or Vercel rejected the request. HTTP 403/404 usually means the token cannot see the team, or VERCEL_TEAM_ID is missing.',
-        not_configured: 'VERCEL_API_TOKEN and/or VERCEL_PROJECT_ID is not set on the API service, so no check was attempted.',
+        not_configured: 'VERCEL_PROJECT_ID is missing, or neither VERCEL_API_TOKEN nor VERCEL_PUBLIC_URL is available for a live verification check.',
       },
       configuredAt: RAILWAY_SERVICE,
       steps: [
         'Open vercel.com, click your avatar → Account Settings → Tokens → Create. Name it "spr-founder-page", scope it to the team "sprteam", choose an expiry you are comfortable with, and copy the token once.',
-        `Go to ${RAILWAY_SERVICE} and add VERCEL_API_TOKEN with that value.`,
-        'VERCEL_PROJECT_ID and VERCEL_TEAM_ID are not secret and are already set on the service (see below); the project is software-passport-registry-vercel in team sprteam.',
-        'After the redeploy, Refresh here; the status should read "latest deploy: READY".',
+        `Go to ${RAILWAY_SERVICE} and add VERCEL_API_TOKEN with that value if you want management-API deployment telemetry.`,
+        'VERCEL_PROJECT_ID and VERCEL_TEAM_ID identify the Vercel project. VERCEL_PUBLIC_URL provides a safe reachability fallback when no management token is configured.',
+        'After redeploy, Refresh here. With a token the card reports the latest deployment state; without one it reports whether the production Vercel deployment is publicly reachable.',
       ],
       settings: [
         { name: 'VERCEL_API_TOKEN', secret: true, set: present(config.vercel.apiToken), purpose: 'Authenticates the Founder page to the Vercel API (read).', whereToGet: 'vercel.com → avatar → Account Settings → Tokens → Create (scope: team sprteam)' },
         { name: 'VERCEL_PROJECT_ID', secret: false, set: present(config.vercel.projectId), purpose: 'The Vercel project to inspect.', whereToGet: 'Vercel → project software-passport-registry-vercel → Settings → General → Project ID' },
-        { name: 'VERCEL_TEAM_ID', secret: false, set: present(config.vercel.teamId), purpose: 'The team that owns the project; required for the API to return it.', whereToGet: 'Vercel → team sprteam → Settings → General → Team ID' },
+        { name: 'VERCEL_TEAM_ID', secret: false, set: present(config.vercel.teamId), purpose: 'The team that owns the project; required for management API telemetry.', whereToGet: 'Vercel → team sprteam → Settings → General → Team ID' },
+        { name: 'VERCEL_PUBLIC_URL', secret: false, set: present(config.vercel.publicUrl), purpose: 'Public production URL used to prove the frontend is reachable when no Vercel API token is configured.', whereToGet: 'A production alias such as https://softwarepassportregistry.com or the project vercel.app URL.' },
       ],
     },
     github_ci: {
