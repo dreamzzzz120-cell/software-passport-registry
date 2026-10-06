@@ -1,3 +1,4 @@
+// final production closure verification: behavior unchanged; this comment triggers the external smoke workflow.
 import https from 'node:https';
 import crypto from 'node:crypto';
 const API = process.env.SPR_PRODUCTION_API || 'https://spr-app-production-production-4d46.up.railway.app';
