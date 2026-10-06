@@ -250,12 +250,14 @@ describe('migration 0043 enforces the client limit at the database level, closin
 });
 
 describe('billing audit logging: material subscription events are recorded, not silently applied', () => {
-  it('checkout initiation, activation, status changes, cancellation, and payment failure all append a real audit entry', () => {
+  it('checkout initiation, activation, status changes, cancellation, and payment outcomes all append a real audit entry', () => {
     const s = read('src/routes/billing.ts');
     expect(s).toContain("action: 'billing.checkout.initiated'");
     expect(s).toContain("action: 'billing.subscription.activated'");
     expect(s).toContain("action: 'billing.subscription.status_changed'");
     expect(s).toContain("action: 'billing.subscription.canceled'");
+    expect(s).toContain("case 'invoice.paid':");
+    expect(s).toContain("action: 'billing.payment.paid'");
     expect(s).toContain("action: 'billing.payment.failed'");
   });
 });
