@@ -459,7 +459,8 @@ export default function App() {
     };
     void load().catch((error) => {
       console.warn('[SPR command center load]', error);
-      if (!cancelled) { setIdentityState('error'); setDataStatus('error'); }
+      if (!cancelled) setDataStatus('error');
+      if (!cancelled) setIdentityState('error');
     });
     return () => { cancelled = true; };
   }, [user, reloadKey]);
