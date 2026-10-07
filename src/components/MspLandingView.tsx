@@ -42,7 +42,7 @@ export default function MspLandingView({ onEnter, onViewPricing }: Props) {
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <button onClick={onEnter} className="inline-flex items-center gap-2 rounded-[3px] bg-[var(--spr-accent)] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[var(--spr-accent-hover)]">
-            Enter SPR <ArrowRight className="h-4 w-4" />
+            Run a free review <ArrowRight className="h-4 w-4" />
           </button>
           <button onClick={onViewPricing} className="rounded-[3px] border border-[var(--spr-border)] px-6 py-3 text-sm font-semibold text-[var(--spr-text)] transition-colors hover:bg-[var(--spr-surface-sunken)]">
             View plans & pricing
