@@ -72,7 +72,7 @@ import { EXTENSIONS } from './workflows/extensionRegistry';
 // bounced every signed-out visitor to /login. It is a tab in the public Trust
 // Center nav (PublicTrustCenterView), so that was reachable by clicking.
 // Listing all four keeps them public whether or not a static page exists.
-const PUBLIC_PATHS = new Set(['/','/login','/free-review','/pricing','/msp','/terms','/privacy','/dpa','/passport/demo','/trust/','/about/','/methodology/','/security/','/security-center/','/contact/','/data-retention/','/subprocessors/','/docs/']);
+const PUBLIC_PATHS = new Set(['/','/login','/free-review','/pricing','/msp','/terms','/privacy','/dpa','/passport/demo','/registry','/trust/','/about/','/methodology/','/security/','/security-center/','/contact/','/data-retention/','/subprocessors/','/docs/']);
 
 // /dpa/verify/<executionId>/<signature>: public signature check for an
 // executed Data Processing Agreement. The signature is the only credential.
@@ -584,6 +584,8 @@ export default function App() {
   // Static sample Passport. Reads no database and no tenant - see
   // DemoPassport.tsx. Public by design and explicitly labelled DEMO.
   if (path === '/passport/demo') return <DemoPassport onRunFreeReview={() => navigate('/free-review')} onHome={() => navigate('/')} />;
+  // Public evidence-first software registry. It reads only the public registry API and public review index.
+  if (path === '/registry') return <PublicRegistryView />;
   // The Free Review is public, and stays public even for a visitor who happens
   // to have a Firebase session in this browser. Gating it on `!user` meant that
   // Firebase silently restoring a saved session -- which needs no deliberate
