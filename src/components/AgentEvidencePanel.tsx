@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Bot, Cable, GitBranch, KeyRound, Network, ShieldCheck, TerminalSquare } from 'lucide-react';
+import { AlertTriangle, Bot, Cable, GitBranch, KeyRound, Network, ShieldCheck, Terminal } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
 import type { SoftwarePassport } from '../types';
 
@@ -58,7 +58,7 @@ export default function AgentEvidencePanel({ passports }: { passports: SoftwareP
   const cards = useMemo(() => summary ? [
     ['Agents', summary.coverage.agents, Bot],
     ['MCP servers', summary.coverage.mcpServers, Cable],
-    ['Capabilities', summary.coverage.capabilities, TerminalSquare],
+    ['Capabilities', summary.coverage.capabilities, Terminal],
     ['Trust boundaries', summary.coverage.boundaries, Network],
     ['Unknown boundaries', summary.coverage.unknownBoundaries, AlertTriangle],
     ['Unverified handoffs', summary.coverage.unverifiedHandoffs, GitBranch],
