@@ -161,6 +161,11 @@ describeIfDb('remediation task lifecycle against a real database', () => {
   beforeAll(async () => {
     pool = new Pool({ connectionString: databaseUrl });
     await pool.query(`
+      INSERT INTO tenant_subscriptions (tenant_id, plan, status, client_limit)
+      VALUES ($1, 'enterprise', 'active', NULL)
+      ON CONFLICT (tenant_id) DO UPDATE SET plan='enterprise', status='active', client_limit=NULL
+    `, [TENANT_A]);
+    await pool.query(`
       INSERT INTO clients (id,tenant_id,name,domain,industry,joined_date)
       VALUES ($1,$2,'Remediation Task Test Client','remtask.test','Security','2026-01-01')
       ON CONFLICT (id) DO NOTHING
@@ -202,6 +207,7 @@ describeIfDb('remediation task lifecycle against a real database', () => {
     await pool.query('DELETE FROM trust_findings WHERE tenant_id = $1', [TENANT_A]).catch(() => undefined);
     await pool.query('DELETE FROM passports WHERE tenant_id = $1', [TENANT_A]).catch(() => undefined);
     await pool.query('DELETE FROM clients WHERE tenant_id = $1', [TENANT_A]).catch(() => undefined);
+    await pool.query('DELETE FROM tenant_subscriptions WHERE tenant_id = $1', [TENANT_A]).catch(() => undefined);
     await pool.end();
   });
 
@@ -299,6 +305,11 @@ describeIfDb('resolveRemediationVerification: the worker-side hook that turns a 
 
   beforeAll(async () => {
     pool = new Pool({ connectionString: databaseUrl });
+    await pool.query(`
+      INSERT INTO tenant_subscriptions (tenant_id, plan, status, client_limit)
+      VALUES ($1, 'enterprise', 'active', NULL)
+      ON CONFLICT (tenant_id) DO UPDATE SET plan='enterprise', status='active', client_limit=NULL
+    `, [TENANT]);
     await pool.query(`INSERT INTO clients (id,tenant_id,name,domain,industry,joined_date) VALUES ($1,$2,'c','remverify.test','Security','2026-01-01')`, [CLIENT, TENANT]);
     await pool.query(`INSERT INTO passports (id,tenant_id,client_id,name,version,publisher,category,release_date,file_hash,license_type) VALUES ($1,$2,$3,'p','1.0.0','SPR','security','2026-01-01',$4,'MIT')`, [PASSPORT, TENANT, CLIENT, 'd'.repeat(64)]);
     await pool.query(`
@@ -319,6 +330,7 @@ describeIfDb('resolveRemediationVerification: the worker-side hook that turns a 
     await pool.query('DELETE FROM monitoring_configurations WHERE tenant_id = $1', [TENANT]).catch(() => undefined);
     await pool.query('DELETE FROM passports WHERE tenant_id = $1', [TENANT]).catch(() => undefined);
     await pool.query('DELETE FROM clients WHERE tenant_id = $1', [TENANT]).catch(() => undefined);
+    await pool.query('DELETE FROM tenant_subscriptions WHERE tenant_id = $1', [TENANT]).catch(() => undefined);
     await pool.end();
   });
 
