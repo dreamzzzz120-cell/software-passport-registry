@@ -15,6 +15,7 @@
 import { sql } from 'drizzle-orm';
 import { appPool, checkDatabaseHealth, db } from '../../../db/index.ts';
 import { DISTRIBUTION_TENANT_ID } from '../../distribution-engine.ts';
+import { FREE_REVIEW_TENANT_ID } from '../../../routes/free-review-submit.ts';
 
 export type FounderPulse = {
   database: { ok: boolean; latencyMs: number | null };
@@ -129,9 +130,9 @@ export async function founderFunnel(windowDays = 7): Promise<FounderFunnel> {
     windowDays,
     pageViews: await count(sql`SELECT COUNT(*)::int AS count FROM traffic_events WHERE occurred_at > ${since}`),
     visitors: await count(sql`SELECT COUNT(DISTINCT session_id)::int AS count FROM traffic_events WHERE occurred_at > ${since}`),
-    freeReviewsCompleted: await count(sql`SELECT COUNT(*)::int AS count FROM agent_jobs WHERE tenant_id=${DISTRIBUTION_TENANT_ID} AND job_type='repository_scan' AND status='Completed' AND completed_at > ${since}`),
-    freeReviewsFailed: await count(sql`SELECT COUNT(*)::int AS count FROM agent_jobs WHERE tenant_id=${DISTRIBUTION_TENANT_ID} AND job_type='repository_scan' AND status='Failed' AND updated_at > ${since}`),
-    leads: await count(sql`SELECT COUNT(*)::int AS count FROM free_review_leads WHERE tenant_id=${DISTRIBUTION_TENANT_ID} AND created_at > ${since}`),
+    freeReviewsCompleted: await count(sql`SELECT COUNT(*)::int AS count FROM agent_jobs WHERE tenant_id=${FREE_REVIEW_TENANT_ID} AND job_type='repository_scan' AND status='Completed' AND completed_at > ${since}`),
+    freeReviewsFailed: await count(sql`SELECT COUNT(*)::int AS count FROM agent_jobs WHERE tenant_id=${FREE_REVIEW_TENANT_ID} AND job_type='repository_scan' AND status='Failed' AND updated_at > ${since}`),
+    leads: await count(sql`SELECT COUNT(*)::int AS count FROM free_review_leads WHERE tenant_id=${FREE_REVIEW_TENANT_ID} AND created_at > ${since}`),
     leadsQualified: await count(sql`SELECT COUNT(*)::int AS count FROM distribution_jobs WHERE tenant_id=${DISTRIBUTION_TENANT_ID} AND kind='qualify_lead' AND status='succeeded' AND updated_at > ${since}`),
     contacts: await count(sql`SELECT COUNT(*)::int AS count FROM distribution_contacts WHERE tenant_id=${DISTRIBUTION_TENANT_ID} AND created_at > ${since}`),
     messagesSent: await count(sql`SELECT COUNT(*)::int AS count FROM distribution_messages WHERE tenant_id=${DISTRIBUTION_TENANT_ID} AND status='sent' AND sent_at > ${since}`),
