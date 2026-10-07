@@ -508,6 +508,15 @@ export function createBillingRouter() {
       const parsed = addonCheckoutSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
       const tenantId = req.user!.tenantId;
+      const activePlan = (await req.db!.execute(sql`SELECT plan FROM tenant_subscriptions WHERE tenant_id = ${tenantId} AND plan IS NOT NULL AND status = 'active' LIMIT 1`) as any).rows?.[0];
+      if (!activePlan) {
+        return res.status(402).json({
+          error: 'SUBSCRIPTION_REQUIRED',
+          code: 'SUBSCRIPTION_REQUIRED',
+          billingPath: '/billing',
+          message: 'An active SPR plan is required before purchasing add-ons.',
+        });
+      }
       const activeAddon = (await req.db!.execute(sql`SELECT stripe_subscription_id FROM tenant_addons WHERE tenant_id = ${tenantId} AND addon = ${parsed.data.addon} AND status IN ('active', 'trialing', 'past_due') LIMIT 1`) as any).rows?.[0];
       if (activeAddon) return res.status(409).json({ error: 'ADDON_ALREADY_ACTIVE', code: 'ADDON_ALREADY_ACTIVE', addon: parsed.data.addon, billingPath: '/billing', message: `${ADDON_CONFIG[parsed.data.addon].label} is already active on this workspace. Manage it from Manage billing.` });
       const paymentLink = addonPaymentLink(parsed.data.addon);
