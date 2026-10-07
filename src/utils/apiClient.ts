@@ -110,7 +110,10 @@ export const apiFetch = async (input: RequestInfo | URL, init?: FetchOptions): P
       if (response.status === 401) window.dispatchEvent(new CustomEvent('auth-expired'));
       if (response.status === 402) {
         const isBillingPage = window.location.pathname === '/billing' || window.location.pathname === '/pricing';
-        if (!isBillingPage) {
+        // Workspace requests can finish after a visitor opens the public registry.
+        // Preserve that public page while returning the paid API's denial intact.
+        const isPublicRegistry = window.location.pathname.replace(/\/+$/, '') === '/registry';
+        if (!isBillingPage && !isPublicRegistry) {
           let denial: any = null;
           try { denial = await response.clone().json(); } catch { denial = null; }
 

@@ -584,8 +584,12 @@ export default function App() {
   // Static sample Passport. Reads no database and no tenant - see
   // DemoPassport.tsx. Public by design and explicitly labelled DEMO.
   if (path === '/passport/demo') return <DemoPassport onRunFreeReview={() => navigate('/free-review')} onHome={() => navigate('/')} />;
-  // Public evidence-first software registry. It reads only the public registry API and public review index.
-  if (path === '/registry') return <PublicRegistryView />;
+  // Public evidence-first software registry. Signed-out visitors render it directly,
+  // with no account or subscription required. Signed-in visitors deliberately fall
+  // through to the authenticated Command Center switch below so the same registry
+  // is also available inside the app. The registry itself still reads only public
+  // registry/review APIs; paid actions remain gated at their owning action routes.
+  if (!user && path === '/registry') return <PublicRegistryView />;
   // The Free Review is public, and stays public even for a visitor who happens
   // to have a Firebase session in this browser. Gating it on `!user` meant that
   // Firebase silently restoring a saved session -- which needs no deliberate
