@@ -1,4 +1,6 @@
 const STORAGE_KEY = 'spr-analytics-session';
+const ATTRIBUTION_KEY = 'spr-growth-attribution-v1';
+const ATTRIBUTION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const SESSION_RE = /^[A-Za-z0-9_-]{16,80}$/;
 
 function sessionId(): string {
@@ -20,13 +22,48 @@ function deviceType(): 'mobile' | 'tablet' | 'desktop' | 'unknown' {
   return 'desktop';
 }
 
-function attribution() {
+type Attribution = { source: string | null; medium: string | null; campaign: string | null; referralCode: string | null; capturedAt: number };
+
+function readCurrentAttribution(): Attribution {
   const params = new URLSearchParams(window.location.search);
   const source = params.get('utm_source') || params.get('src');
   const medium = params.get('utm_medium');
   const campaign = params.get('utm_campaign');
   const referralCode = params.get('ref');
-  return { source: source?.slice(0,120) || null, medium: medium?.slice(0,120) || null, campaign: campaign?.slice(0,160) || null, referralCode: referralCode?.slice(0,80) || null };
+  return {
+    source: source?.slice(0,120) || null,
+    medium: medium?.slice(0,120) || null,
+    campaign: campaign?.slice(0,160) || null,
+    referralCode: referralCode?.slice(0,80) || null,
+    capturedAt: Date.now(),
+  };
+}
+
+function attribution() {
+  const current = readCurrentAttribution();
+  const hasCurrent = Boolean(current.source || current.medium || current.campaign || current.referralCode);
+  try {
+    if (hasCurrent) {
+      window.localStorage.setItem(ATTRIBUTION_KEY, JSON.stringify(current));
+      return current;
+    }
+    const raw = window.localStorage.getItem(ATTRIBUTION_KEY);
+    if (!raw) return current;
+    const saved = JSON.parse(raw) as Partial<Attribution>;
+    if (typeof saved.capturedAt !== 'number' || Date.now() - saved.capturedAt > ATTRIBUTION_TTL_MS) {
+      window.localStorage.removeItem(ATTRIBUTION_KEY);
+      return current;
+    }
+    return {
+      source: typeof saved.source === 'string' ? saved.source.slice(0,120) : null,
+      medium: typeof saved.medium === 'string' ? saved.medium.slice(0,120) : null,
+      campaign: typeof saved.campaign === 'string' ? saved.campaign.slice(0,160) : null,
+      referralCode: typeof saved.referralCode === 'string' ? saved.referralCode.slice(0,80) : null,
+      capturedAt: saved.capturedAt,
+    };
+  } catch {
+    return current;
+  }
 }
 
 function sendEvent(eventName: string, path: string) {
