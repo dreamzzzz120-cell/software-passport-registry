@@ -54,6 +54,7 @@ import ViewErrorBoundary from './components/ViewErrorBoundary';
 import { normalizeClientRecord, toJsonArrayColumn } from './lib/clientJsonColumns';
 import TermsView from './components/legal/TermsView';
 import PublicTrustCenterView from './components/PublicTrustCenterView';
+import PublicDocsView from './components/PublicDocsView';
 import PrivacyPolicyView from './components/legal/PrivacyPolicyView';
 import DpaView from './components/legal/DpaView';
 import ReportsView from './components/ReportsView';
@@ -70,7 +71,7 @@ import { EXTENSIONS } from './workflows/extensionRegistry';
 // bounced every signed-out visitor to /login. It is a tab in the public Trust
 // Center nav (PublicTrustCenterView), so that was reachable by clicking.
 // Listing all four keeps them public whether or not a static page exists.
-const PUBLIC_PATHS = new Set(['/','/login','/free-review','/pricing','/msp','/terms','/privacy','/dpa','/passport/demo','/trust/','/about/','/methodology/','/security/','/security-center/','/contact/','/data-retention/','/subprocessors/']);
+const PUBLIC_PATHS = new Set(['/','/login','/free-review','/pricing','/msp','/terms','/privacy','/dpa','/passport/demo','/trust/','/about/','/methodology/','/security/','/security-center/','/contact/','/data-retention/','/subprocessors/','/docs/']);
 
 // /dpa/verify/<executionId>/<signature>: public signature check for an
 // executed Data Processing Agreement. The signature is the only credential.
@@ -550,6 +551,7 @@ export default function App() {
   if (path === '/trust/') return <PublicTrustCenterView section="trust" onNavigate={navigate} />;
   if (path === '/about/') return <PublicTrustCenterView section="about" onNavigate={navigate} />;
   if (path === '/methodology/') return <PublicTrustCenterView section="methodology" onNavigate={navigate} />;
+  if (path === '/docs/') return <PublicDocsView onNavigate={navigate} />;
   // /security/ is the canonical public security page (it is what the sitemap
   // lists); /security-center/ stays as an alias for links already in the wild.
   if (path === '/security/' || path === '/security-center/') return <PublicTrustCenterView section="security" onNavigate={navigate} />;
