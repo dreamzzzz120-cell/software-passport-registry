@@ -597,7 +597,7 @@ export default function App() {
     case '/onboarding': view = <OnboardingView clientsCount={clients.length} passportsCount={passports.length} scansCount={scans.length} onOpenQuickAction={quickAction} onNavigateTab={onNavigateTab} onComplete={() => navigate('/dashboard')} />; break;
      case '/dashboard': view = <EvidenceDashboardView clients={clients} alerts={alerts} scans={scans} passports={passports} findings={findings} dataStatus={dataStatus} role={role} onNavigateTab={onNavigateTab} onOpenQuickAction={quickAction} />; break;
     case '/coverage': view = <CoverageView clients={clients} scans={scans} passports={passports} onNavigateTab={onNavigateTab} />; break;
-    case '/evidence-explorer': view = <EvidenceExplorerView passports={passports} />; break;
+    case '/evidence-explorer': view = <EvidenceExplorerView passports={passports} selectedPassportId={selectedPassportId} onSelectPassportId={setSelectedPassportId} />; break;
     case '/evidence-exchange': view = <EvidenceExchangeView clients={clients} passports={passports} vendors={vendors} onNavigate={navigate} />; break;
     case '/procurement-gate': view = <ProcurementGateView passports={passports} onNavigate={navigate} />; break;
     case '/vendor-evidence-exchange': view = <VendorEvidenceExchangeView vendors={vendors} role={role} onNavigate={navigate} />; break;
