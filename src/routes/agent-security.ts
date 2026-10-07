@@ -54,7 +54,7 @@ const eventSchema = z.object({
 }).strict();
 
 function makeId(prefix: string) {
-  return \`\${prefix}_\${crypto.randomUUID().replaceAll('-', '')}\`;
+  return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`;
 }
 
 const READ_ROLES = ['Owner','Admin','Operator'] as const;
@@ -67,7 +67,7 @@ export function createAgentSecurityRouter() {
       const tenantId = req.user!.tenantId;
       const db = req.db!;
       const [assetsResult, eventResult] = await Promise.all([
-        db.execute(sql\`
+        db.execute(sql`
           SELECT
             count(*)::int AS total,
             count(*) FILTER (WHERE asset_type='agent')::int AS agents,
@@ -75,16 +75,16 @@ export function createAgentSecurityRouter() {
             count(*) FILTER (WHERE asset_type='mcp_server' AND verification_state<>'VERIFIED')::int AS "unverifiedMcp",
             count(*) FILTER (WHERE asset_type='agent_config')::int AS "agentConfigs"
           FROM agent_assets
-          WHERE tenant_id=\${tenantId}
-        \`),
-        db.execute(sql\`
+          WHERE tenant_id=${tenantId}
+        `),
+        db.execute(sql`
           SELECT
             count(*) FILTER (WHERE event_type='agent_config_drift' AND observed_at >= now() - interval '30 days')::int AS "configDrift30d",
             count(*) FILTER (WHERE event_type='dangerous_tool_chain' AND observed_at >= now() - interval '30 days')::int AS "dangerousChains30d",
             count(*) FILTER (WHERE severity IN ('high','critical') AND outcome NOT IN ('BLOCKED','FAILED'))::int AS "openHighRiskSignals"
           FROM agent_security_events
-          WHERE tenant_id=\${tenantId}
-        \`),
+          WHERE tenant_id=${tenantId}
+        `),
       ]);
       const assets = (assetsResult as any).rows?.[0] || {};
       const events = (eventResult as any).rows?.[0] || {};
@@ -100,7 +100,7 @@ export function createAgentSecurityRouter() {
   router.get('/assets', requireRole([...READ_ROLES]), async (req: AuthenticatedRequest, res, next) => {
     try {
       const tenantId = req.user!.tenantId;
-      const rows = (await req.db!.execute(sql\`
+      const rows = (await req.db!.execute(sql`
         SELECT a.*,
           COALESCE((
             SELECT jsonb_agg(jsonb_build_object(
@@ -115,10 +115,10 @@ export function createAgentSecurityRouter() {
             WHERE c.tenant_id=a.tenant_id AND c.agent_asset_id=a.id
           ), '[]'::jsonb) AS capabilities
         FROM agent_assets a
-        WHERE a.tenant_id=\${tenantId}
+        WHERE a.tenant_id=${tenantId}
         ORDER BY a.last_seen_at DESC
         LIMIT 500
-      \`) as any).rows || [];
+      `) as any).rows || [];
       return res.json({ assets: rows });
     } catch (error) { return next(error); }
   });
@@ -130,21 +130,21 @@ export function createAgentSecurityRouter() {
       const tenantId = req.user!.tenantId;
       const db = req.db!;
       const p = parsed.data;
-      const existing = (await db.execute(sql\`
+      const existing = (await db.execute(sql`
         SELECT id FROM agent_assets
-        WHERE tenant_id=\${tenantId} AND source_type=\${p.sourceType} AND source_identifier=\${p.sourceIdentifier}
+        WHERE tenant_id=${tenantId} AND source_type=${p.sourceType} AND source_identifier=${p.sourceIdentifier}
         LIMIT 1
-      \`) as any).rows?.[0];
+      `) as any).rows?.[0];
       const assetId = existing?.id || makeId('aasset');
-      await db.execute(sql\`
+      await db.execute(sql`
         INSERT INTO agent_assets (
           id,tenant_id,ai_system_id,passport_id,asset_type,name,vendor,version,
           source_type,source_identifier,origin_trust,verification_state,evidence_hash,
           metadata,first_seen_at,last_seen_at,created_at,updated_at
         ) VALUES (
-          \${assetId},\${tenantId},\${p.aiSystemId ?? null},\${p.passportId ?? null},\${p.assetType},\${p.name},\${p.vendor},\${p.version},
-          \${p.sourceType},\${p.sourceIdentifier},\${p.originTrust},\${p.verificationState},\${p.evidenceHash},
-          \${JSON.stringify(p.metadata)},\${p.observedAt},\${p.observedAt},now(),now()
+          ${assetId},${tenantId},${p.aiSystemId ?? null},${p.passportId ?? null},${p.assetType},${p.name},${p.vendor},${p.version},
+          ${p.sourceType},${p.sourceIdentifier},${p.originTrust},${p.verificationState},${p.evidenceHash},
+          ${JSON.stringify(p.metadata)},${p.observedAt},${p.observedAt},now(),now()
         )
         ON CONFLICT (tenant_id, source_type, source_identifier)
         DO UPDATE SET
@@ -160,17 +160,17 @@ export function createAgentSecurityRouter() {
           metadata=EXCLUDED.metadata,
           last_seen_at=GREATEST(agent_assets.last_seen_at, EXCLUDED.last_seen_at),
           updated_at=now()
-      \`);
+      `);
       for (const c of p.capabilities) {
-        await db.execute(sql\`
+        await db.execute(sql`
           INSERT INTO agent_capabilities (
             id,tenant_id,agent_asset_id,capability,access_mode,target_type,target_identifier,observed_at,evidence_hash
           ) VALUES (
-            \${makeId('acap')},\${tenantId},\${assetId},\${c.capability},\${c.accessMode},\${c.targetType},\${c.targetIdentifier},\${p.observedAt},\${c.evidenceHash}
+            ${makeId('acap')},${tenantId},${assetId},${c.capability},${c.accessMode},${c.targetType},${c.targetIdentifier},${p.observedAt},${c.evidenceHash}
           )
           ON CONFLICT (tenant_id, agent_asset_id, capability, target_type, target_identifier)
           DO UPDATE SET access_mode=EXCLUDED.access_mode, observed_at=EXCLUDED.observed_at, evidence_hash=EXCLUDED.evidence_hash
-        \`);
+        `);
       }
       await appendAuditEntry(db, {
         tenantId,
@@ -190,19 +190,19 @@ export function createAgentSecurityRouter() {
       const db = req.db!;
       const p = parsed.data;
       if (p.agentAssetId) {
-        const owner = (await db.execute(sql\`SELECT id FROM agent_assets WHERE id=\${p.agentAssetId} AND tenant_id=\${tenantId} LIMIT 1\`) as any).rows?.[0];
+        const owner = (await db.execute(sql`SELECT id FROM agent_assets WHERE id=${p.agentAssetId} AND tenant_id=${tenantId} LIMIT 1`) as any).rows?.[0];
         if (!owner) return res.status(404).json({ error: 'AGENT_ASSET_NOT_FOUND' });
       }
       const eventId = makeId('asevt');
-      await db.execute(sql\`
+      await db.execute(sql`
         INSERT INTO agent_security_events (
           id,tenant_id,agent_asset_id,event_type,source_origin,source_ref,
           action_capability,target_ref,outcome,severity,evidence_ids,detail,observed_at
         ) VALUES (
-          \${eventId},\${tenantId},\${p.agentAssetId ?? null},\${p.eventType},\${p.sourceOrigin},\${p.sourceRef},
-          \${p.actionCapability},\${p.targetRef},\${p.outcome},\${p.severity},\${JSON.stringify(p.evidenceIds)},\${JSON.stringify(p.detail)},\${p.observedAt}
+          ${eventId},${tenantId},${p.agentAssetId ?? null},${p.eventType},${p.sourceOrigin},${p.sourceRef},
+          ${p.actionCapability},${p.targetRef},${p.outcome},${p.severity},${JSON.stringify(p.evidenceIds)},${JSON.stringify(p.detail)},${p.observedAt}
         )
-      \`);
+      `);
       await appendAuditEntry(db, {
         tenantId,
         action: 'agent_security.event_observed',
