@@ -111,10 +111,37 @@ CREATE TABLE IF NOT EXISTS agent_handoffs (
 );
 CREATE INDEX IF NOT EXISTS agent_handoffs_passport_idx ON agent_handoffs (tenant_id, passport_id, observed_at DESC);
 
-DO $$
+CREATE TABLE IF NOT EXISTS agent_trust_snapshots (
+  id text PRIMARY KEY,
+  tenant_id text NOT NULL,
+  passport_id text NOT NULL,
+  scan_id text,
+  source_ref text,
+  snapshot_hash text NOT NULL,
+  payload jsonb NOT NULL,
+  observed_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS agent_trust_snapshots_passport_idx ON agent_trust_snapshots (tenant_id, passport_id, observed_at DESC);
+
+CREATE TABLE IF NOT EXISTS agent_trust_changes (
+  id text PRIMARY KEY,
+  tenant_id text NOT NULL,
+  passport_id text NOT NULL,
+  scan_id text,
+  previous_snapshot_id text,
+  current_snapshot_id text NOT NULL,
+  change_type text NOT NULL,
+  subject text NOT NULL,
+  before_state jsonb,
+  after_state jsonb,
+  observed_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS agent_trust_changes_passport_idx ON agent_trust_changes (tenant_id, passport_id, observed_at DESC);
+
+DO $
 DECLARE table_name text;
 BEGIN
-  FOREACH table_name IN ARRAY ARRAY['agent_assets','agent_trust_boundaries','agent_capabilities','agent_mcp_servers','agent_mcp_tools','agent_handoffs']
+  FOREACH table_name IN ARRAY ARRAY['agent_assets','agent_trust_boundaries','agent_capabilities','agent_mcp_servers','agent_mcp_tools','agent_handoffs','agent_trust_snapshots','agent_trust_changes']
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', table_name);
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', table_name);
