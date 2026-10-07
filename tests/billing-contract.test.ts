@@ -104,7 +104,7 @@ describe('billing routes are real, authenticated, and role-gated', () => {
     const checkout = s.slice(checkoutStart, checkoutEnd);
     expect(checkout).not.toContain('INSERT INTO tenant_subscriptions');
     expect(s).toContain('UPDATE tenant_subscriptions');
-    expect(s).toContain("action: 'billing.subscription.activated'");
+    expect(s).toContain("'billing.subscription.activated'");
   });
 
   it('never subscribes/checks out a plan with no configured Stripe price', () => {
@@ -285,7 +285,8 @@ describe('billing audit logging: material subscription events are recorded, not 
   it('checkout initiation, activation, status changes, cancellation, and payment outcomes all append a real audit entry', () => {
     const s = read('src/routes/billing.ts');
     expect(s).toContain("action: 'billing.checkout.initiated'");
-    expect(s).toContain("action: 'billing.subscription.activated'");
+    expect(s).toContain("'billing.subscription.activated'");
+    expect(s).toContain("'billing.subscription.checkout_confirmed'");
     expect(s).toContain("action: 'billing.subscription.status_changed'");
     expect(s).toContain("action: 'billing.subscription.canceled'");
     expect(s).toContain("case 'invoice.paid':");
