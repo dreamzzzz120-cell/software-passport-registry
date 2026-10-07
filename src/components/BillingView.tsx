@@ -63,7 +63,7 @@ export default function BillingView() {
   const loadStatus = () => {
     setLoading(true);
     setError(null);
-    apiFetch('/api/billing')
+    apiFetch('/api/billing', { timeout: 12_000, retries: 1 })
       .then((res) => { if (!res.ok) throw new Error('Unable to load billing status.'); return res.json(); })
       .then((data: BillingStatus) => setStatus(data))
       .catch((err) => { setError(err instanceof Error ? err.message : 'Unable to load billing status.'); setStatus(null); })

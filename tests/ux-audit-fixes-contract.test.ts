@@ -33,8 +33,8 @@ describe('SPR live-audit bug-fix contracts', () => {
     const server = read('server.ts');
     expect(server).toContain("app.use('/api/monitoring', createMonitoringRouter());");
     const view = read('src/components/MonitoringView.tsx');
-    expect(view).toContain("apiFetch('/api/monitoring/monitoring-configurations')");
-    expect(view).toContain("apiFetch('/api/monitoring/collector-jobs')");
+    expect(view).toContain("apiFetch('/api/monitoring/monitoring-configurations', {");
+    expect(view).toContain("apiFetch('/api/monitoring/collector-jobs', {");
     expect(view).toContain('/api/monitoring/monitoring-configurations/${id}/run');
   });
 
