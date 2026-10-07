@@ -10,7 +10,7 @@ import {
   PlusCircle, AlertTriangle, Check,
   Layers, ShieldAlert, CheckCircle2, AlertCircle, ArrowRight, Search, Circle, ExternalLink
 } from 'lucide-react';
-import { auth } from '../lib/supabase-auth';
+import { auth, supabase } from '../lib/supabase-auth';
 import { apiFetch } from '../utils/apiClient';
 import DataGovernancePanel from './DataGovernancePanel';
 
@@ -246,6 +246,96 @@ export default function SettingsView({ theme, onToggleTheme, role, userEmail, on
   const [verifyingLedger, setVerifyingLedger] = useState(false);
   const [verificationResult, setVerificationResult] = useState<any | null>(null);
   const [runtimeStatus, setRuntimeStatus] = useState<{ service: string; uptimeSeconds: number } | null>(null);
+  const [mfaFactors, setMfaFactors] = useState<any[]>([]);
+  const [mfaLoading, setMfaLoading] = useState(false);
+  const [mfaError, setMfaError] = useState<string | null>(null);
+  const [mfaSuccess, setMfaSuccess] = useState<string | null>(null);
+  const [mfaEnrollment, setMfaEnrollment] = useState<{ factorId: string; qrCode: string; secret?: string | null } | null>(null);
+  const [mfaCode, setMfaCode] = useState('');
+
+  const refreshMfaFactors = async () => {
+    setMfaLoading(true);
+    setMfaError(null);
+    try {
+      const { data, error } = await supabase.auth.mfa.listFactors();
+      if (error) throw error;
+      const factors = [...(data?.totp || []), ...(data?.phone || [])];
+      setMfaFactors(factors);
+    } catch (error) {
+      setMfaFactors([]);
+      setMfaError(error instanceof Error ? error.message : 'Could not read multi-factor authentication status.');
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  const beginTotpEnrollment = async () => {
+    setMfaLoading(true);
+    setMfaError(null);
+    setMfaSuccess(null);
+    setMfaCode('');
+    try {
+      const { data, error } = await supabase.auth.mfa.enroll({
+        factorType: 'totp',
+        friendlyName: 'SPR authenticator',
+      });
+      if (error) throw error;
+      if (!data?.id || !data?.totp?.qr_code) throw new Error('Authenticator enrollment did not return a QR code.');
+      setMfaEnrollment({ factorId: data.id, qrCode: data.totp.qr_code, secret: data.totp.secret ?? null });
+    } catch (error) {
+      setMfaEnrollment(null);
+      setMfaError(error instanceof Error ? error.message : 'Could not start authenticator enrollment.');
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  const verifyTotpEnrollment = async () => {
+    if (!mfaEnrollment || !/^\d{6}$/.test(mfaCode.trim())) {
+      setMfaError('Enter the current 6-digit code from your authenticator app.');
+      return;
+    }
+    setMfaLoading(true);
+    setMfaError(null);
+    setMfaSuccess(null);
+    try {
+      const challenge = await supabase.auth.mfa.challenge({ factorId: mfaEnrollment.factorId });
+      if (challenge.error) throw challenge.error;
+      if (!challenge.data?.id) throw new Error('Authenticator challenge could not be created.');
+      const verification = await supabase.auth.mfa.verify({
+        factorId: mfaEnrollment.factorId,
+        challengeId: challenge.data.id,
+        code: mfaCode.trim(),
+      });
+      if (verification.error) throw verification.error;
+      setMfaEnrollment(null);
+      setMfaCode('');
+      setMfaSuccess('Authenticator MFA is enabled for this account.');
+      await refreshMfaFactors();
+    } catch (error) {
+      setMfaError(error instanceof Error ? error.message : 'Authenticator verification failed.');
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  const removeTotpFactor = async (factorId: string) => {
+    if (!window.confirm('Disable this authenticator factor? Your account will lose this MFA factor immediately.')) return;
+    setMfaLoading(true);
+    setMfaError(null);
+    setMfaSuccess(null);
+    try {
+      const { error } = await supabase.auth.mfa.unenroll({ factorId });
+      if (error) throw error;
+      setMfaSuccess('Authenticator factor removed.');
+      await refreshMfaFactors();
+    } catch (error) {
+      setMfaError(error instanceof Error ? error.message : 'Could not remove the authenticator factor.');
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
 
   useEffect(() => {
     let cancelled = false;
@@ -310,6 +400,7 @@ export default function SettingsView({ theme, onToggleTheme, role, userEmail, on
     fetchAuthDataLedgers();
     fetchProfileAndTeam();
     fetchClientsList();
+    void refreshMfaFactors();
   }, []);
 
   const handleRevokeSession = async (sessionId: string) => {
@@ -719,9 +810,51 @@ export default function SettingsView({ theme, onToggleTheme, role, userEmail, on
               </h3>
 
               <div className="space-y-3.5 text-xs">
-                <div>
-                  <span className="font-semibold text-[var(--spr-text)] block">Multi-Factor Authentication</span>
-                  <p className="text-[12px] text-[var(--spr-text-faint)]">Not available. SPR does not currently offer authenticator (TOTP) enrolment; sign-in is protected by your Supabase password and email confirmation only.</p>
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <span className="font-semibold text-[var(--spr-text)] block">Multi-Factor Authentication</span>
+                      <p className="text-[12px] text-[var(--spr-text-faint)]">Protect this account with a time-based one-time password (TOTP) authenticator. Enrollment is handled by the active Supabase identity session; SPR never stores your authenticator secret.</p>
+                    </div>
+                    <button type="button" disabled={mfaLoading || Boolean(mfaEnrollment)} onClick={() => void beginTotpEnrollment()} className="spr-btn spr-btn-secondary">
+                      {mfaLoading ? 'Checking…' : 'Add authenticator'}
+                    </button>
+                  </div>
+
+                  {mfaFactors.length > 0 && (
+                    <div className="space-y-2">
+                      {mfaFactors.map((factor: any) => (
+                        <div key={String(factor.id)} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] p-3">
+                          <div>
+                            <div className="font-semibold text-[var(--spr-text)]">{factor.friendly_name || 'Authenticator factor'}</div>
+                            <div className="mt-0.5 text-[11px] text-[var(--spr-text-faint)]">{String(factor.factor_type || 'totp').toUpperCase()} · {factor.status || 'unverified'}</div>
+                          </div>
+                          <button type="button" disabled={mfaLoading} onClick={() => void removeTotpFactor(String(factor.id))} className="spr-btn spr-btn-secondary">Remove</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {!mfaLoading && mfaFactors.length === 0 && !mfaEnrollment && (
+                    <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] p-3 text-[12px] text-[var(--spr-text-muted)]">No authenticator factor is enrolled for this account.</div>
+                  )}
+
+                  {mfaEnrollment && (
+                    <div className="rounded-md border border-[var(--spr-highlight)]/30 bg-[var(--spr-accent-soft)] p-4">
+                      <div className="font-semibold text-[var(--spr-text)]">Scan this QR code with your authenticator app</div>
+                      <p className="mt-1 text-[12px] text-[var(--spr-text-muted)]">Then enter the current 6-digit code to finish enrollment. Closing this panel without verification does not enable the factor.</p>
+                      <img src={mfaEnrollment.qrCode} alt="TOTP authenticator QR code" className="mt-3 h-44 w-44 rounded-md bg-white p-2" />
+                      {mfaEnrollment.secret && <details className="mt-3 text-[12px] text-[var(--spr-text-muted)]"><summary className="cursor-pointer">Can’t scan the QR code?</summary><div className="mt-2 break-all rounded bg-[var(--spr-surface-sunken)] p-2 font-mono select-all">{mfaEnrollment.secret}</div></details>}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <input inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={mfaCode} onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, '').slice(0, 6))} aria-label="Authenticator verification code" placeholder="123456" className="w-36 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2 font-mono text-sm text-[var(--spr-text)]" />
+                        <button type="button" disabled={mfaLoading || mfaCode.length !== 6} onClick={() => void verifyTotpEnrollment()} className="spr-btn spr-btn-primary">Verify and enable</button>
+                        <button type="button" disabled={mfaLoading} onClick={() => { setMfaEnrollment(null); setMfaCode(''); setMfaError(null); }} className="spr-btn spr-btn-secondary">Cancel</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {mfaError && <div role="alert" className="text-[12px] text-[var(--spr-red)]">{mfaError}</div>}
+                  {mfaSuccess && <div role="status" className="text-[12px] text-[var(--spr-green)]">{mfaSuccess}</div>}
                 </div>
 
                 <div className="flex justify-between items-center border-t border-[var(--spr-border)] pt-3">
