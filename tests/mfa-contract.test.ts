@@ -21,14 +21,18 @@ describe('SPR MFA contracts', () => {
     expect(panel).toContain('mfa.challenge({ factorId })');
     expect(panel).toContain('mfa.verify({ factorId, challengeId: challenge.data.id');
     expect(panel).toContain('mfa.unenroll({ factorId: id })');
+    expect(panel).toContain("apiFetch('/api/auth/mfa-state'");
   });
 
   it('requires AAL2 at the API when a verified MFA factor exists', () => {
     const security = read('src/middleware/security.ts');
-    expect(security).toContain('adminAuth.listMfaFactors(uid)');
-    expect(security).toContain("factor?.status === 'verified'");
+    expect(security).toContain('dbUser.mfaEnabled');
+    expect(security).toContain("mfaStatePath");
     expect(security).toContain("decodedToken.aal !== 'aal2'");
     expect(security).toContain("code: 'MFA_REQUIRED'");
+    const authRoute = read('src/routes/auth.ts');
+    expect(authRoute).toContain("router.post('/auth/mfa-state'");
+    expect(authRoute).toContain("req.user!.aal !== 'aal2'");
   });
 
   it('does not treat MFA_REQUIRED as an unprovisioned account or sign the user out', () => {
