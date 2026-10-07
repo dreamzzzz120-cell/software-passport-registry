@@ -63,27 +63,119 @@ export function extractPublicRoleEmails(html: string) {
   return [...found].slice(0, 5);
 }
 
-// The offer an MSP can resell: a white-label report on one of THEIR CLIENTS'
-// software, plus a short local walkthrough. The earlier copy asked MSPs to
-// review their own repo, which isn't what they buy (22 sends, 0 replies).
-// Every claim here is a product capability; nothing about the recipient is
-// asserted beyond the public signals research actually observed.
-export function makeCopy(company: string, evidence: Record<string, unknown>, followup: boolean) {
+export type QLegionOutreachStrategy = 'proof_first' | 'revenue_first' | 'compliance_first' | 'baseline';
+
+type QLegionAttribution = {
+  missionId: string | null;
+  strategyId: QLegionOutreachStrategy;
+  probability: number | null;
+};
+
+function strategyLabel(strategyId: QLegionOutreachStrategy) {
+  if (strategyId === 'proof_first') return 'Proof-first';
+  if (strategyId === 'revenue_first') return 'Recurring revenue';
+  if (strategyId === 'compliance_first') return 'Compliance evidence';
+  return 'Baseline';
+}
+
+async function resolveQLegionAttribution(client: any, sourceUrl: string | null): Promise<QLegionAttribution> {
+  if (!sourceUrl) return { missionId: null, strategyId: 'baseline', probability: null };
+  const enabled = await client.query(
+    `SELECT strategy_execution_enabled AS enabled FROM q_legion_settings WHERE tenant_id=$1 LIMIT 1`,
+    [DISTRIBUTION_TENANT_ID],
+  );
+  if (enabled.rows?.[0]?.enabled !== true) return { missionId: null, strategyId: 'baseline', probability: null };
+
+  const result = await client.query(
+    `SELECT q.id, q.advisory_strategy_id, q.strategies
+     FROM q_legion_missions q
+     JOIN distribution_jobs j ON j.id=q.source_id AND j.tenant_id=q.tenant_id
+     WHERE q.tenant_id=$1
+       AND q.source_kind='distribution_research'
+       AND q.advisory_strategy_id IS NOT NULL
+       AND COALESCE(j.result->>'url', j.payload->>'url')=$2
+       AND NOT EXISTS (
+         SELECT 1 FROM jsonb_array_elements(q.red_team_findings) finding
+         WHERE finding->>'severity'='BLOCKER'
+       )
+     ORDER BY q.updated_at DESC
+     LIMIT 1`,
+    [DISTRIBUTION_TENANT_ID, sourceUrl],
+  );
+  const row = result.rows?.[0];
+  if (!row) return { missionId: null, strategyId: 'baseline', probability: null };
+  const strategyId = ['proof_first','revenue_first','compliance_first'].includes(String(row.advisory_strategy_id))
+    ? String(row.advisory_strategy_id) as QLegionOutreachStrategy
+    : 'baseline';
+  const strategies = Array.isArray(row.strategies) ? row.strategies : [];
+  const strategy = strategies.find((item: any) => item && item.id === strategyId);
+  const probability = typeof strategy?.probability === 'number' && Number.isFinite(strategy.probability)
+    ? Math.max(0, Math.min(1, strategy.probability))
+    : null;
+  return { missionId: String(row.id), strategyId, probability };
+}
+
+export function makeCopy(
+  company: string,
+  evidence: Record<string, unknown>,
+  followup: boolean,
+  strategyId: QLegionOutreachStrategy = 'baseline',
+) {
   const signals = evidence.signals && typeof evidence.signals === 'object' ? evidence.signals as Record<string, unknown> : {};
   const name = company.trim();
   const greeting = name ? `Hi ${name} team,` : 'Hi there,';
   const theirClients = name ? `${name}'s clients` : 'your clients';
+  const cta = { label: 'See how SPR works', url: `${PUBLIC_ORIGIN}/` };
+
+  if (strategyId === 'revenue_first') {
+    if (followup) return {
+      subject: `A recurring software-assurance service for ${name || 'your MSP'}`,
+      intro: [greeting, 'Following up on SPR. The use case is not another scanner for your technicians; it is a repeatable client service you can deliver under your own brand: software inventory evidence, SBOM, vulnerability visibility, change monitoring, and a client-ready report.', 'I can run one free example so you can judge whether it is something your clients would pay you to deliver. Reply if you want me to set it up.'],
+      cta,
+    };
+    return {
+      subject: `Add a recurring software-assurance service for ${theirClients}`,
+      intro: [greeting, `I'm Keith, founder of Software Passport Registry. SPR is designed to let MSPs turn software trust and vendor-review work into a repeatable managed service instead of one-off manual effort.`, 'It produces evidence-backed software inventory, SBOM and vulnerability visibility, ongoing change monitoring, and white-label client reporting. Unknowns stay UNKNOWN rather than being presented as verified.', 'I can run one free example for a client stack you choose so you can judge the deliverable before spending anything.'],
+      cta,
+    };
+  }
+
+  if (strategyId === 'compliance_first') {
+    const observedFit = signals.compliance
+      ? 'Your public site mentions compliance work, which is why this evidence-first angle may be relevant.'
+      : signals.cybersecurity
+        ? 'Your public site mentions security services, which is why this evidence-first angle may be relevant.'
+        : 'SPR is designed for software-assurance and vendor-review workflows where evidence quality matters.';
+    if (followup) return {
+      subject: `SBOM and vendor-risk evidence for ${name || 'your MSP'}`,
+      intro: [greeting, 'Following up on SPR. It preserves the evidence behind software inventory, SBOM, vulnerabilities, provenance, and changes so a client or reviewer can see what was actually observed and what remains unknown.', 'I can run a free example and show you the evidence chain in 15 minutes. Reply if you want one.'],
+      cta,
+    };
+    return {
+      subject: `Client-ready SBOM and vendor-risk evidence for ${theirClients}`,
+      intro: [greeting, `I'm Keith, founder of Software Passport Registry. SPR gives MSPs an evidence-first way to produce software inventory, SBOM, vulnerability and vendor-risk reporting without turning missing evidence into a compliance claim.`, observedFit, 'The output can be white-labelled for the client, with provenance and UNKNOWN states preserved. I can run one free example so you can inspect the evidence yourself.'],
+      cta,
+    };
+  }
+
   const fit = signals.compliance
     ? 'Your site mentions compliance work, so this gives you the software evidence auditors and vendor-risk reviews ask for.'
     : signals.cybersecurity
       ? 'Your site mentions security services, so this adds software supply-chain evidence to what you already sell.'
       : 'It gives you a concrete, repeatable software-risk deliverable for every client.';
-  const cta = { label: 'See how SPR works', url: `${PUBLIC_ORIGIN}/` };
-  if (followup) {
-    return { subject: `Free client software report for ${name || 'your MSP'}`, intro: [greeting, `Following up on my earlier note. The offer stands: I'll run one free software risk report on a client stack you choose, white-labelled with your logo, and walk you through it in 15 minutes.`, 'Reply to this email to set it up. If it isn\'t a fit, the opt-out link below stops any further messages.'], cta };
-  }
-  return { subject: `White-label software risk reports for ${theirClients}`, intro: [greeting, 'I\'m Keith, founder of Software Passport Registry, a software-risk company in Kelowna, BC. SPR scans a client\'s code and applications, builds the software bill of materials, checks every component against known vulnerabilities, and produces a report under your logo that you can hand to the client.', fit, 'I\'ll run one free report on a client stack of your choice and walk you through it in 15 minutes, by call or in person. Reply to this email to set it up.'], cta };
+
+  if (followup) return {
+    subject: `Free client software report for ${name || 'your MSP'}`,
+    intro: [greeting, `Following up on my earlier note. The offer stands: I'll run one free software risk report on a client stack you choose, white-labelled with your logo, and walk you through it in 15 minutes.`, 'Reply to this email to set it up. If it isn\'t a fit, the opt-out link below stops any further messages.'],
+    cta,
+  };
+  return {
+    subject: `White-label software risk reports for ${theirClients}`,
+    intro: [greeting, `I'm Keith, founder of Software Passport Registry, a software-risk company in Kelowna, BC. SPR scans a client's code and applications, builds the software bill of materials, checks every component against known vulnerabilities, and produces a report under your logo that you can hand to the client.`, fit, `I'll run one free report on a client stack of your choice and walk you through it in 15 minutes, by call or in person. Reply to this email to set it up.`],
+    cta,
+  };
 }
+
 
 async function withTenant<T>(fn: (client: any) => Promise<T>) {
   const client = await appPool.connect();
@@ -161,7 +253,7 @@ export async function sendInitial(contactId: string) {
   return withTenant(async (client) => {
     // FOR UPDATE serialises concurrent sends to one contact: a second job waits
     // here, then sees the first one's 'initial' message and stops.
-    const contactResult = await client.query(`SELECT id,email,company,evidence,status,outreach_basis,consent_evidence_url FROM distribution_contacts WHERE id=$1 AND tenant_id=$2 LIMIT 1 FOR UPDATE`, [contactId,DISTRIBUTION_TENANT_ID]);
+    const contactResult = await client.query(`SELECT id,email,company,source_url,evidence,status,outreach_basis,consent_evidence_url FROM distribution_contacts WHERE id=$1 AND tenant_id=$2 LIMIT 1 FOR UPDATE`, [contactId,DISTRIBUTION_TENANT_ID]);
     const contact = contactResult.rows?.[0];
     if (!contact || contact.status !== 'active') throw new Error('DISTRIBUTION_CONTACT_NOT_ACTIVE');
     outreachAllowed(contact.outreach_basis);
@@ -169,15 +261,42 @@ export async function sendInitial(contactId: string) {
     const already = await client.query(`SELECT 1 FROM distribution_messages WHERE contact_id=$1 AND kind='initial' AND status='sent' LIMIT 1`, [contactId]);
     if (already.rows?.length) throw new Error('DISTRIBUTION_INITIAL_ALREADY_SENT');
     const evidence = contact.evidence && typeof contact.evidence === 'object' ? contact.evidence : {};
-    const copy = makeCopy(String(contact.company ?? ''), evidence, false);
+    const attribution = await resolveQLegionAttribution(client, typeof contact.source_url === 'string' ? contact.source_url : null);
+    const copy = makeCopy(String(contact.company ?? ''), evidence, false, attribution.strategyId);
     const brand = SPR_DEFAULT_BRAND;
     const rendered = renderBrandedEmail(brand, { heading: copy.subject, intro: copy.intro, cta: copy.cta, outro: [`You can opt out at any time: ${unsubscribeUrl(contact.email)}`] });
     const providerId = await sendBrandedEmail(contact.email, copy.subject, brand, { heading: copy.subject, intro: copy.intro, cta: copy.cta, outro: [`You can opt out at any time: ${unsubscribeUrl(contact.email)}`] }, outreachSender());
     const hash = crypto.createHash('sha256').update(rendered.text).digest('hex');
     const messageId = `dm_${crypto.randomUUID().replace(/-/g, '')}`;
-    await client.query(`INSERT INTO distribution_messages (id,tenant_id,contact_id,kind,subject,provider_message_id,status,body_hash,sent_at) VALUES ($1,$2,$3,'initial',$4,$5,'sent',$6,CURRENT_TIMESTAMP)`, [messageId,DISTRIBUTION_TENANT_ID,contactId,copy.subject,providerId,hash]);
-    await client.query(`UPDATE distribution_contacts SET last_contacted_at=CURRENT_TIMESTAMP,next_followup_at=CURRENT_TIMESTAMP + ($2 * INTERVAL '1 day'),updated_at=CURRENT_TIMESTAMP WHERE id=$1`, [contactId,FOLLOWUP_DAYS]);
-    return { messageId, providerId, email: contact.email };
+    await client.query(
+      `INSERT INTO distribution_messages
+       (id,tenant_id,contact_id,kind,subject,provider_message_id,status,body_hash,sent_at,q_legion_mission_id,q_legion_strategy_id,q_legion_strategy_probability)
+       VALUES ($1,$2,$3,'initial',$4,$5,'sent',$6,CURRENT_TIMESTAMP,$7,$8,$9)`,
+      [messageId,DISTRIBUTION_TENANT_ID,contactId,copy.subject,providerId,hash,attribution.missionId,attribution.strategyId,attribution.probability],
+    );
+    await client.query(
+      `UPDATE distribution_contacts
+       SET pipeline_stage=CASE WHEN pipeline_stage IN ('new','qualified') THEN 'contacted' ELSE pipeline_stage END,
+           last_contacted_at=CURRENT_TIMESTAMP,
+           next_followup_at=CURRENT_TIMESTAMP + ($2 * INTERVAL '1 day'),
+           updated_at=CURRENT_TIMESTAMP
+       WHERE id=$1`,
+      [contactId,FOLLOWUP_DAYS],
+    );
+    if (attribution.missionId) {
+      await client.query(`UPDATE q_legion_missions SET mode='ACTIVE',updated_at=CURRENT_TIMESTAMP WHERE id=$1 AND tenant_id=$2`, [attribution.missionId,DISTRIBUTION_TENANT_ID]);
+    }
+    return {
+      messageId,
+      providerId,
+      email: contact.email,
+      qLegion: {
+        missionId: attribution.missionId,
+        strategyId: attribution.strategyId,
+        strategyLabel: strategyLabel(attribution.strategyId),
+        probability: attribution.probability,
+      },
+    };
   });
 }
 
@@ -192,11 +311,27 @@ export async function sendDueFollowups() {
         const contact = result.rows?.[0]; if (!contact) return;
         outreachAllowed(contact.outreach_basis);
         if (await dailySendCount(client) >= DAILY_LIMIT) throw new Error('DISTRIBUTION_DAILY_SEND_LIMIT_REACHED');
-        const copy = makeCopy(String(contact.company ?? ''), contact.evidence ?? {}, true);
+        const initial = await client.query(
+          `SELECT q_legion_mission_id,q_legion_strategy_id,q_legion_strategy_probability
+           FROM distribution_messages
+           WHERE tenant_id=$1 AND contact_id=$2 AND kind='initial' AND status='sent'
+           ORDER BY sent_at ASC LIMIT 1`,
+          [DISTRIBUTION_TENANT_ID,contact.id],
+        );
+        const initialAttribution = initial.rows?.[0];
+        const strategyId = ['proof_first','revenue_first','compliance_first'].includes(String(initialAttribution?.q_legion_strategy_id))
+          ? String(initialAttribution.q_legion_strategy_id) as QLegionOutreachStrategy
+          : 'baseline';
+        const copy = makeCopy(String(contact.company ?? ''), contact.evidence ?? {}, true, strategyId);
         const brand = SPR_DEFAULT_BRAND;
         const providerId = await sendBrandedEmail(contact.email, copy.subject, brand, { heading: copy.subject, intro: copy.intro, cta: copy.cta, outro: [`You can opt out at any time: ${unsubscribeUrl(contact.email)}`] }, outreachSender());
         const messageId = `dm_${crypto.randomUUID().replace(/-/g, '')}`;
-        await client.query(`INSERT INTO distribution_messages (id,tenant_id,contact_id,kind,subject,provider_message_id,status,sent_at) VALUES ($1,$2,$3,'followup',$4,$5,'sent',CURRENT_TIMESTAMP)`, [messageId,DISTRIBUTION_TENANT_ID,contact.id,copy.subject,providerId]);
+        await client.query(
+          `INSERT INTO distribution_messages
+           (id,tenant_id,contact_id,kind,subject,provider_message_id,status,sent_at,q_legion_mission_id,q_legion_strategy_id,q_legion_strategy_probability)
+           VALUES ($1,$2,$3,'followup',$4,$5,'sent',CURRENT_TIMESTAMP,$6,$7,$8)`,
+          [messageId,DISTRIBUTION_TENANT_ID,contact.id,copy.subject,providerId,initialAttribution?.q_legion_mission_id ?? null,strategyId,initialAttribution?.q_legion_strategy_probability ?? null],
+        );
         const nextDays = FOLLOWUP_DAYS * (Number(contact.followup_count) + 1);
         await client.query(`UPDATE distribution_contacts SET followup_count=followup_count+1,last_contacted_at=CURRENT_TIMESTAMP,next_followup_at=CASE WHEN followup_count+1 >= $2 THEN NULL ELSE CURRENT_TIMESTAMP + ($3 * INTERVAL '1 day') END,updated_at=CURRENT_TIMESTAMP WHERE id=$1`, [contact.id,MAX_FOLLOWUPS,nextDays]);
         sent += 1;
