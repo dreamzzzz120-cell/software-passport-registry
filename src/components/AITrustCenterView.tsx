@@ -12,6 +12,7 @@ type AiSystem = {
 };
 type Observation = { id: string; observation_type: string; summary: string; detail: string; observed_by: string; created_at: string };
 type AgentSecuritySummary = { total: number; agents: number; mcpServers: number; unverifiedMcp: number; agentConfigs: number; writeCapableAssets: number; executeCapableAssets: number; relationships: number; configDrift30d: number; dangerousChains30d: number; openHighRiskSignals: number; authoritativeScope: string };
+type RuntimeSequence = { startedAt: string; endedAt: string; eventIds: string[]; capabilities: string[]; targets: string[]; classification: 'DANGEROUS_TOOL_CHAIN' | 'OBSERVED_SEQUENCE'; executionOutcome: 'SUCCEEDED_OBSERVED' | 'NO_SUCCESS_OBSERVED'; evidenceBacked: boolean };
 
 const STATUS_STYLES: Record<AiSystem['status'], string> = {
   active: 'border-[var(--spr-green)]/30 bg-[var(--spr-green)]/10 text-[var(--spr-green)]',
@@ -43,6 +44,7 @@ export default function AITrustCenterView({ role = 'Viewer', passports = [] }: {
   const [obsForm, setObsForm] = useState({ observationType: 'security', summary: '', detail: '' });
   const [loggingObservation, setLoggingObservation] = useState(false);
   const [agentSecurity, setAgentSecurity] = useState<AgentSecuritySummary | null>(null);
+  const [runtimeSequences, setRuntimeSequences] = useState<RuntimeSequence[]>([]);
 
   const canManage = role === 'Owner' || role === 'Admin' || role === 'Operator';
   const canDelete = role === 'Owner' || role === 'Admin';
@@ -57,6 +59,13 @@ export default function AITrustCenterView({ role = 'Viewer', passports = [] }: {
       if (!r.ok) return;
       const data = await r.json().catch(() => null);
       if (data && typeof data.total === 'number') setAgentSecurity(data);
+    }).catch(() => {});
+  }, []);
+  useEffect(() => {
+    apiFetch('/api/agent-security/sequences').then(async (r) => {
+      if (!r.ok) return;
+      const data = await r.json().catch(() => null);
+      if (Array.isArray(data?.sequences)) setRuntimeSequences(data.sequences.slice(0, 5));
     }).catch(() => {});
   }, []);
 
@@ -154,6 +163,27 @@ export default function AITrustCenterView({ role = 'Viewer', passports = [] }: {
         {agentSecurity && <div className="mt-3 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-3 py-2 text-xs text-[var(--spr-text-muted)]"><span className="font-semibold text-[var(--spr-text)]">Blast radius:</span> {agentSecurity.writeCapableAssets} write/admin-capable asset{agentSecurity.writeCapableAssets === 1 ? '' : 's'} · {agentSecurity.executeCapableAssets} execute-capable asset{agentSecurity.executeCapableAssets === 1 ? '' : 's'} · {agentSecurity.relationships} observed relationship{agentSecurity.relationships === 1 ? '' : 's'}.</div>}
         {agentSecurity && (agentSecurity.configDrift30d > 0 || agentSecurity.openHighRiskSignals > 0) && <div className="mt-3 rounded-md border border-[var(--spr-amber)]/30 bg-[var(--spr-amber)]/10 px-3 py-2 text-xs text-[var(--spr-amber)]">Attention: {agentSecurity.configDrift30d} agent configuration drift event{agentSecurity.configDrift30d === 1 ? '' : 's'} and {agentSecurity.openHighRiskSignals} unresolved high-risk signal{agentSecurity.openHighRiskSignals === 1 ? '' : 's'} observed.</div>}
       </section>
+
+      {runtimeSequences.length > 0 && <section className="spr-panel p-5" aria-label="Observed runtime sequences">
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--spr-highlight)]">Runtime evidence</div>
+            <h2 className="mt-1 text-lg font-semibold text-[var(--spr-text)]">Observed tool sequences</h2>
+            <p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">Derived only from stored execution receipts. Capability alone never counts as execution.</p>
+          </div>
+          <span className="text-[11px] text-[var(--spr-text-faint)]">Latest {runtimeSequences.length}</span>
+        </div>
+        <div className="mt-4 space-y-2">
+          {runtimeSequences.map((sequence) => <div key={sequence.eventIds.join(':')} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${sequence.classification === 'DANGEROUS_TOOL_CHAIN' ? 'border-[var(--spr-red)]/30 bg-[var(--spr-red)]/10 text-[var(--spr-red)]' : 'border-[var(--spr-border)] text-[var(--spr-text-muted)]'}`}>{sequence.classification === 'DANGEROUS_TOOL_CHAIN' ? 'Dangerous chain' : 'Observed sequence'}</span>
+              <span className={`text-[11px] font-semibold ${sequence.executionOutcome === 'SUCCEEDED_OBSERVED' ? 'text-[var(--spr-green)]' : 'text-[var(--spr-text-muted)]'}`}>{sequence.executionOutcome === 'SUCCEEDED_OBSERVED' ? 'Execution observed' : 'No successful execution observed'}</span>
+            </div>
+            <div className="mt-2 text-xs text-[var(--spr-text)]">{sequence.capabilities.filter(Boolean).join(' → ') || 'No named capabilities recorded'}</div>
+            <div className="mt-1 truncate text-[11px] text-[var(--spr-text-faint)]">{sequence.targets.filter(Boolean).join(' → ') || 'No target references recorded'}</div>
+          </div>)}
+        </div>
+      </section>}
 
       {error && <p role="alert" className="rounded-md border border-[var(--spr-red)]/30 bg-[var(--spr-red)]/10 px-4 py-3 text-sm text-[var(--spr-red)]">{error}</p>}
 
