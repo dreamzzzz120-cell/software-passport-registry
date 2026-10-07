@@ -215,6 +215,7 @@ export default function App() {
   const [identityState, setIdentityState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [identityUid, setIdentityUid] = useState<string | null>(null);
   const [mfaState, setMfaState] = useState<'checking' | 'ready' | 'required' | 'error'>('checking');
+  const [mfaCheckKey, setMfaCheckKey] = useState(0);
   // Platform-operator identity, from the server's FOUNDER_EMAILS allowlist.
   // Never inferred from `role`: Owner is per-tenant and every customer has one.
   const [isFounder, setIsFounder] = useState(false);
@@ -347,7 +348,7 @@ export default function App() {
       setMfaState(data.nextLevel === 'aal2' && data.currentLevel !== 'aal2' ? 'required' : 'ready');
     }).catch(() => { if (!cancelled) setMfaState('error'); });
     return () => { cancelled = true; };
-  }, [user?.uid]);
+  }, [user?.uid, mfaCheckKey]);
 
   useEffect(() => {
     if (!user || isFounder || dataStatus !== 'ready') return;
@@ -538,8 +539,8 @@ export default function App() {
 
   if (!authReady) return <AuthLoading />;
   if (user && !isPublicPath(path) && mfaState === 'checking') return <AuthLoading />;
-  if (user && !isPublicPath(path) && mfaState === 'error') return <SessionUnavailable onRetry={() => setMfaState('checking')} onSignOut={() => void signOutUser()} />;
-  if (user && !isPublicPath(path) && mfaState === 'required') return <MfaChallengeView onVerified={() => setMfaState('ready')} onSignOut={() => void signOutUser()} />;
+  if (user && !isPublicPath(path) && mfaState === 'error') return <SessionUnavailable onRetry={() => { setMfaState('checking'); setMfaCheckKey((value) => value + 1); }} onSignOut={() => void signOutUser()} />;
+  if (user && !isPublicPath(path) && mfaState === 'required') return <MfaChallengeView onVerified={() => { setMfaState('ready'); setReloadKey((value) => value + 1); }} onSignOut={() => void signOutUser()} />;
   if (user && !isPublicPath(path) && (identityState === 'loading' || identityUid !== user.uid)) return <AuthLoading />;
   if (user && !isPublicPath(path) && identityState === 'error') return <SessionUnavailable onRetry={() => setReloadKey((value) => value + 1)} onSignOut={() => void signOutUser()} />;
   if (user && !isPublicPath(path) && identityState === 'ready' && !role) return <SessionUnavailable onRetry={() => setReloadKey((value) => value + 1)} onSignOut={() => void signOutUser()} />;
