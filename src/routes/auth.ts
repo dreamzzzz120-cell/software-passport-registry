@@ -788,7 +788,10 @@ export function createAuthRouter() {
         // the check above -- the second one is correctly rejected here,
         // not silently allowed past its plan's real limit.
         if (error?.message?.includes('CLIENT_LIMIT_REACHED') || error?.cause?.message?.includes('CLIENT_LIMIT_REACHED')) {
-          return res.status(402).json({ error: 'CLIENT_LIMIT_REACHED', message: 'Your plan\'s Client limit was reached by a concurrent request.' });
+          return res.status(402).json({ error: 'CLIENT_LIMIT_REACHED', code: 'CLIENT_LIMIT_REACHED', billingPath: '/billing', message: 'Your plan\'s Client limit was reached by a concurrent request.' });
+        }
+        if (error?.message?.includes('SUBSCRIPTION_REQUIRED') || error?.cause?.message?.includes('SUBSCRIPTION_REQUIRED')) {
+          return res.status(402).json({ error: 'SUBSCRIPTION_REQUIRED', code: 'SUBSCRIPTION_REQUIRED', billingPath: '/billing', message: 'An active SPR subscription is required before creating clients.' });
         }
         throw error;
       }
