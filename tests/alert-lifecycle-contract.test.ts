@@ -34,4 +34,11 @@ describe('SPR alert lifecycle contracts', () => {
     expect(alertsView).toContain("run('escalate')");
     expect(alertsView).toContain("run('assign', assignee.trim())");
   });
+  it('uses the same unresolved-alert definition in Alerts and MSP Command', () => {
+    const alertsView = read('src/components/AlertsView.tsx');
+    const msp = read('src/components/MSPCommandCenter.tsx');
+    expect(alertsView).toContain("alert.status !== 'Resolved' && alert.status !== 'Cancelled'");
+    expect(msp).toContain("a.status !== 'Resolved' && a.status !== 'Cancelled'");
+  });
+
 });
