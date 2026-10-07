@@ -63,4 +63,52 @@ describe('SPR live-audit bug-fix contracts', () => {
     // also show '—' rather than averaging in fabricated/null scores.
     expect(view).toContain("scored.length === 0 ? '—' :");
   });
+  it('locks the upgraded trust operations surfaces to evidence-first behavior', () => {
+    const monitoring = read('src/components/MonitoringView.tsx');
+    expect(monitoring).toContain('Monitoring control plane');
+    expect(monitoring).toContain('Queueing a run is not proof; completed evidence is.');
+    expect(monitoring).toContain('Missing evidence remains UNKNOWN');
+    expect(monitoring).toContain('/api/monitoring/monitoring-configurations/');
+
+    const trust = read('src/components/PublicTrustCenterView.tsx');
+    expect(trust).toContain('Don’t trust the marketing. Inspect the evidence.');
+    expect(trust).toContain('Observed / verified / UNKNOWN');
+    expect(trust).toContain('Evidence infrastructure, not a certification badge.');
+    expect(trust).toContain('/api/public/contact');
+
+    const agents = read('src/components/AgentTrustView.tsx');
+    expect(agents).toContain('Unknown stays UNKNOWN. Agent output is not evidence.');
+    expect(agents).toContain('/api/agent/v1/verify-software');
+    expect(agents).toContain('/api/agent/v1/verify-claim');
+    expect(agents).toContain('/mcp');
+
+    const alerts = read('src/components/AlertsView.tsx');
+    expect(alerts).toContain('Resolution is not proof. New evidence is still required');
+    expect(alerts).toContain('/api/trust-loop/remediations/');
+    expect(alerts).toContain('/notes');
+    expect(alerts).toContain('/approve');
+
+    const msp = read('src/components/MSPCommandCenter.tsx');
+    expect(msp).toContain('One queue for trust, change, and client action.');
+    expect(msp).toContain('verificationDecisions?.[passport.id]');
+    expect(msp).toContain('else unknown += 1');
+    expect(msp).toContain('evidenceCoverage.pct == null');
+
+    const integrations = read('src/components/IntegrationsView.tsx');
+    expect(integrations).toContain('Signed webhooks');
+    expect(integrations).toContain('x-spr-signature');
+    expect(integrations).toContain('Destination URL (HTTPS only');
+    expect(integrations).toContain('your receiver still decides what action to take');
+  });
+
+  it('does not reintroduce a default Viewer role in upgraded operator surfaces', () => {
+    for (const relative of [
+      'src/components/MonitoringView.tsx',
+      'src/components/MSPCommandCenter.tsx',
+      'src/components/AITrustCenterView.tsx',
+    ]) {
+      expect(read(relative)).not.toContain("role = 'Viewer'");
+    }
+  });
+
 });
