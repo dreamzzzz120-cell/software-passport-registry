@@ -84,6 +84,7 @@ BEGIN
   FOREACH tbl IN ARRAY ARRAY['agent_assets','agent_capabilities','agent_relationships','agent_security_events']
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);
+    EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', tbl);
     IF NOT EXISTS (
       SELECT 1 FROM pg_policies
       WHERE schemaname = 'public' AND tablename = tbl AND policyname = 'spr_tenant_isolation'
