@@ -43,13 +43,9 @@ export const PLAN_ENTITLING_STATUSES = ['active', 'trialing', 'past_due'] as con
 // is treated exactly like having no plan on record at all.
 export const PRE_PAYMENT_STATUSES = ['incomplete'] as const;
 
-// Every plan in PLAN_CAPABILITY_MATRIX includes 'workspace', and
-// capabilityForPath() falls back to it for any route that is not one of the
-// specific paid capabilities. It is therefore the floor a lapsed tenant keeps:
-// they can still reach their own workspace and the billing surface to
-// resubscribe, while every paid capability is withheld. Their data is never
-// hidden from them, which is what docs/billing-paywall-inventory.md requires
-// of cancellation -- the webhook sets the status "without deleting any data".
+// capabilityForPath() falls back to workspace for normal authenticated app
+// routes. Billing and identity recovery are exempted before capability
+// evaluation; there is intentionally no free workspace capability at launch.
 export const BASELINE_CAPABILITY: Capability = 'workspace';
 
 const ENTITLING_STATUSES_SQL = sql.join(PLAN_ENTITLING_STATUSES.map(status => sql`${status}`), sql`, `);
@@ -84,8 +80,10 @@ export function resolveSubscriptionGate(subscription: { plan: string | null; sta
   return 'lapsed';
 }
 
-export function lapsedPlanAllows(capability: Capability): boolean {
-  return capability === BASELINE_CAPABILITY;
+export function lapsedPlanAllows(_capability: Capability): boolean {
+  // A canceled or unpaid subscription keeps identity + billing access through
+  // BILLING_EXEMPT_PATHS, but no paid workspace capability remains available.
+  return false;
 }
 
 export async function readSubscriptionState(db: ScopedDb, tenantId: string): Promise<SubscriptionState> {
