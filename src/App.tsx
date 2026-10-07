@@ -634,11 +634,11 @@ export default function App() {
     : '/free-review';
   const freeReviewSignUpTarget = user
     ? '/billing'
-    : `/login?next=${encodeURIComponent(freeReviewReturnPath)}`;
+    : `/login?mode=signup&next=${encodeURIComponent(freeReviewReturnPath)}`;
   if (path === '/free-review') return <FreeReviewView onSignUp={() => navigate(freeReviewSignUpTarget)} />;
   if (freeReviewResult) return <FreeReviewView onSignUp={() => navigate(freeReviewSignUpTarget)} initialResult={freeReviewResult} />;
   if (!user && path === '/pricing') return <MspPricingView isAuthenticated={false} onPrimaryAction={() => navigate('/free-review')} />;
-  if (!user && path === '/msp') return <MspLandingView onEnter={() => navigate('/login')} onViewPricing={() => navigate('/pricing')} />;
+  if (!user && path === '/msp') return <MspLandingView onEnter={() => navigate('/free-review')} onViewPricing={() => navigate('/pricing')} />;
   if (!user) return <AuthLoading />;
 
   let view: ReactNode;
