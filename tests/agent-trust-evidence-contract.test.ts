@@ -17,8 +17,11 @@ describe('agent trust evidence contract', () => {
     expect(migration).not.toContain('trusted boolean');
   });
 
-  it('forces RLS on all new agent-evidence tables', () => {
+  it('forces RLS on all new agent-evidence tables and explicitly authorizes the worker role', () => {
     expect(migration).toContain('FORCE ROW LEVEL SECURITY');
     expect(migration).toContain("current_setting(''app.tenant_id'', true)");
+    expect(migration).toContain('spr_worker_cross_tenant');
+    expect(migration).toContain('agent_trust_snapshots');
+    expect(migration).toContain('agent_trust_changes');
   });
 });
