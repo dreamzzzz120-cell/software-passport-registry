@@ -28,7 +28,7 @@ describe('Founder production hardening contracts', () => {
   });
 
   it('keeps the founder monitoring test event gated and fail-closed when Sentry is absent', () => {
-    const source = fs.readFileSync(path.join(root, 'src/routes/founder-command-center.ts'), 'utf8');
+    const source = readFileSync(resolve(process.cwd(), 'src/routes/founder-command-center.ts'), 'utf8');
     expect(source).toContain("router.post('/founder/monitoring/test-event', requireAuth, requireRole('Owner'), requireFounder, rateLimiter");
     expect(source).toContain("error: 'SENTRY_NOT_CONFIGURED'");
     expect(source).toContain("Sentry.captureMessage('SPR founder monitoring test event'");
