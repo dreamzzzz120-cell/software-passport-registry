@@ -3,7 +3,7 @@ import { workspaceIdentity } from './lib/workspaceIdentity';
 import { getRedirectResult, onAuthStateChanged, signOut, type User } from './lib/supabase-auth';
 import type { Alert, Client, Integration, Scan, SoftwarePassport, Vendor } from './types';
 import { apiFetch } from './utils/apiClient';
-import { auth } from './lib/supabase-auth';
+import { auth, supabase } from './lib/supabase-auth';
 import { setAuthNotice } from './lib/authNotice';
 import { isSignupTransitionActive, beginSignupTransition, endSignupTransition } from './lib/signupTransition';
 import CommandCenter from './components/CommandCenter';
@@ -51,6 +51,7 @@ import OnboardingView from './components/OnboardingView';
 import FreeReviewView from './components/FreeReviewView';
 import DemoPassport from './components/DemoPassport';
 import ViewErrorBoundary from './components/ViewErrorBoundary';
+import MfaChallengeView from './components/MfaChallengeView';
 import { normalizeClientRecord, toJsonArrayColumn } from './lib/clientJsonColumns';
 import TermsView from './components/legal/TermsView';
 import PublicTrustCenterView from './components/PublicTrustCenterView';
@@ -207,13 +208,15 @@ export default function App() {
   const freeReviewResult = useMemo(() => parseFreeReviewResultPath(path), [path]);
   const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState<User | null>(null);
-  const [role, setRole] = useState('Viewer');
+  const [role, setRole] = useState('');
   // Never present the default Viewer role as an authenticated fact. The role
   // becomes usable only after /api/user/me confirms the current Supabase UID.
   // This prevents a transient profile/API failure from making an Owner look
   // like a Viewer with an empty workspace.
   const [identityState, setIdentityState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [identityUid, setIdentityUid] = useState<string | null>(null);
+  const [mfaState, setMfaState] = useState<'checking' | 'ready' | 'required' | 'error'>('checking');
+  const [mfaCheckKey, setMfaCheckKey] = useState(0);
   // Platform-operator identity, from the server's FOUNDER_EMAILS allowlist.
   // Never inferred from `role`: Owner is per-tenant and every customer has one.
   const [isFounder, setIsFounder] = useState(false);
@@ -335,6 +338,22 @@ export default function App() {
     };
   }, []);
   useEffect(() => { if (authReady && !user && !isPublicPath(path)) navigate('/login'); }, [authReady, user, path]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!user) { setMfaState('ready'); return () => { cancelled = true; }; }
+    setMfaState('checking');
+    void supabase.auth.mfa.getAuthenticatorAssuranceLevel().then(async ({ data, error }) => {
+      if (cancelled) return;
+      if (error) { setMfaState('error'); return; }
+      if (data.nextLevel === 'aal2' && data.currentLevel !== 'aal2') { setMfaState('required'); return; }
+      setMfaState('ready');
+      if (data.currentLevel === 'aal2' && data.nextLevel === 'aal2') {
+        await apiFetch('/api/auth/mfa-state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: true }) }).catch(() => undefined);
+      }
+    }).catch(() => { if (!cancelled) setMfaState('error'); });
+    return () => { cancelled = true; };
+  }, [user?.uid, mfaCheckKey]);
 
   useEffect(() => {
     if (!user || isFounder || dataStatus !== 'ready') return;
@@ -524,8 +543,12 @@ export default function App() {
   const signOutUser = async () => { await signOut(auth); navigate('/login'); };
 
   if (!authReady) return <AuthLoading />;
+  if (user && !isPublicPath(path) && mfaState === 'checking') return <AuthLoading />;
+  if (user && !isPublicPath(path) && mfaState === 'error') return <SessionUnavailable onRetry={() => { setMfaState('checking'); setMfaCheckKey((value) => value + 1); }} onSignOut={() => void signOutUser()} />;
+  if (user && !isPublicPath(path) && mfaState === 'required') return <MfaChallengeView onVerified={() => { setMfaState('ready'); setReloadKey((value) => value + 1); }} onSignOut={() => void signOutUser()} />;
   if (user && !isPublicPath(path) && (identityState === 'loading' || identityUid !== user.uid)) return <AuthLoading />;
   if (user && !isPublicPath(path) && identityState === 'error') return <SessionUnavailable onRetry={() => setReloadKey((value) => value + 1)} onSignOut={() => void signOutUser()} />;
+  if (user && !isPublicPath(path) && identityState === 'ready' && !role) return <SessionUnavailable onRetry={() => setReloadKey((value) => value + 1)} onSignOut={() => void signOutUser()} />;
   // On a tenant's own hostname the root is that tenant's portal, not SPR's
   // marketing site: signed-out visitors get the branded sign-in page.
   if (path === '/' && hostBrand && !user) return <LoginView onLoginSuccess={() => navigate(returnPathFromLocation())} brand={hostBrand} />;

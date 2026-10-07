@@ -308,6 +308,11 @@ export default function SettingsView({ theme, onToggleTheme, role, userEmail, on
         code: mfaCode.trim(),
       });
       if (verification.error) throw verification.error;
+      const persisted = await apiFetch('/api/auth/mfa-state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: true }) });
+      if (!persisted.ok) {
+        await supabase.auth.mfa.unenroll({ factorId: mfaEnrollment.factorId }).catch(() => undefined);
+        throw new Error('SPR could not persist MFA enforcement, so the new factor was not kept.');
+      }
       setMfaEnrollment(null);
       setMfaCode('');
       setMfaSuccess('Authenticator MFA is enabled for this account.');
@@ -325,8 +330,14 @@ export default function SettingsView({ theme, onToggleTheme, role, userEmail, on
     setMfaError(null);
     setMfaSuccess(null);
     try {
+      const state = await apiFetch('/api/auth/mfa-state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: false }) });
+      if (!state.ok) throw new Error('SPR could not authorize disabling MFA enforcement.');
       const { error } = await supabase.auth.mfa.unenroll({ factorId });
-      if (error) throw error;
+      if (error) {
+        await apiFetch('/api/auth/mfa-state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: true }) }).catch(() => undefined);
+        throw error;
+      }
+      await supabase.auth.refreshSession();
       setMfaSuccess('Authenticator factor removed.');
       await refreshMfaFactors();
     } catch (error) {

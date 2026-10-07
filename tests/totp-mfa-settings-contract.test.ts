@@ -19,10 +19,9 @@ describe('TOTP MFA settings contract', () => {
   });
 
   it('never sends the authenticator secret to an SPR API endpoint', () => {
-    const start = settings.indexOf('const beginTotpEnrollment');
-    const end = settings.indexOf('const removeTotpFactor');
-    const flow = settings.slice(start, end);
-    expect(flow).not.toContain("apiFetch(");
+    expect(settings).toContain("apiFetch('/api/auth/mfa-state'");
+    expect(settings).not.toContain('JSON.stringify({ secret:');
+    expect(settings).not.toContain('mfaEnrollment.secret })');
     expect(settings).toContain('SPR never stores your authenticator secret');
   });
 });
