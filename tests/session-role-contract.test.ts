@@ -9,8 +9,10 @@ const source = fs.readFileSync(path.join(root, 'src/App.tsx'), 'utf8');
 describe('authenticated role resolution', () => {
   it('does not expose the default Viewer role until /api/user/me confirms the current UID', () => {
     expect(source).toContain("const [identityState, setIdentityState] = useState<'loading' | 'ready' | 'error'>('loading')");
+    expect(source).toContain('const [role, setRole] = useState<string | null>(null)');
     expect(source).toContain('setIdentityUid(user.uid);');
     expect(source).toContain("identityUid !== user.uid");
     expect(source).toContain('Workspace session temporarily unavailable');
+    expect(source).toContain("identityState === 'ready' && !role");
   });
 });
