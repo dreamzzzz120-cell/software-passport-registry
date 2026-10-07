@@ -196,7 +196,10 @@ export default function MspPricingView({ isAuthenticated, onPrimaryAction }: Pro
               </ul>
               <button onClick={() => {
                 if (isAuthenticated) return onPrimaryAction();
-                if (plan.checkoutAvailable) return window.location.assign('/login?next=%2Fbilling');
+                if (plan.checkoutAvailable) {
+                  const next = encodeURIComponent(`/billing?plan=${plan.id}`);
+                  return window.location.assign(`/login?mode=signup&next=${next}`);
+                }
                 window.location.assign('/contact/');
               }} className="spr-btn spr-btn-primary mt-6 w-full">
                 {isAuthenticated ? 'Open billing' : plan.checkoutAvailable ? 'Get started' : 'Contact sales'}
