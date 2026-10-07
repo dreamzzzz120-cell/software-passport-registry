@@ -91,10 +91,17 @@ describe('safeNetworkFetch SSRF short-circuit', () => {
   // since that's a property of the sandbox, not of the code under test --
   // but runs for real whenever network access is available, which is
   // exactly the gap that let the original bug ship.
-  it('actually completes a real request end-to-end through the DNS-pinned dispatcher', async () => {
+  it('actually completes a real request end-to-end through the DNS-pinned dispatcher', async (context) => {
+    // A proxy-backed global fetch can succeed even when this environment has
+    // no direct DNS. The pinned dispatcher deliberately uses direct DNS.
+    try { await (await import('node:dns/promises')).lookup('example.com', { all: true }); }
+    catch (error) {
+      if (['EAI_AGAIN', 'ENOTFOUND'].includes((error as NodeJS.ErrnoException).code ?? '')) { context.skip(); return; }
+      throw error;
+    }
     let reachable = true;
     try { await fetch('https://example.com/', { signal: AbortSignal.timeout(5000) }); } catch { reachable = false; }
-    if (!reachable) return; // no outbound network in this environment; nothing to prove either way
+    if (!reachable) { context.skip(); return; } // network unavailable; do not report an unexecuted check as passed
     const result = await safeNetworkFetch('https://example.com/', { timeoutMs: 10000 });
     expect(result.response.status).toBe(200);
   }, 15000);
