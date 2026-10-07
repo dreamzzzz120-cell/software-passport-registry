@@ -123,7 +123,7 @@ describe('monitoring enrollment UI', () => {
 
   it('renders real alerts from the trust-loop endpoint with an honest empty state', () => {
     const s = source();
-    expect(s).toContain("apiFetch('/api/trust-loop/monitoring')");
+    expect(s).toContain("apiFetch('/api/trust-loop/monitoring', {");
     expect(s).toContain('No changes have triggered an alert yet');
   });
 
