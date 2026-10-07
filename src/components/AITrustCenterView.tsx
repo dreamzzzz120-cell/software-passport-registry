@@ -11,6 +11,7 @@ type AiSystem = {
   tool_access: string[]; permissions: string[]; owner_display: string; created_by: string; created_at: string; updated_at: string;
 };
 type Observation = { id: string; observation_type: string; summary: string; detail: string; observed_by: string; created_at: string };
+type AgentSecuritySummary = { total: number; agents: number; mcpServers: number; unverifiedMcp: number; agentConfigs: number; configDrift30d: number; dangerousChains30d: number; openHighRiskSignals: number; authoritativeScope: string };
 
 const STATUS_STYLES: Record<AiSystem['status'], string> = {
   active: 'border-[var(--spr-green)]/30 bg-[var(--spr-green)]/10 text-[var(--spr-green)]',
@@ -41,6 +42,7 @@ export default function AITrustCenterView({ role = 'Viewer', passports = [] }: {
   const [creating, setCreating] = useState(false);
   const [obsForm, setObsForm] = useState({ observationType: 'security', summary: '', detail: '' });
   const [loggingObservation, setLoggingObservation] = useState(false);
+  const [agentSecurity, setAgentSecurity] = useState<AgentSecuritySummary | null>(null);
 
   const canManage = role === 'Owner' || role === 'Admin' || role === 'Operator';
   const canDelete = role === 'Owner' || role === 'Admin';
@@ -50,6 +52,13 @@ export default function AITrustCenterView({ role = 'Viewer', passports = [] }: {
     apiFetch('/api/ai-trust/systems').then(async (r) => { const data = await r.json().catch(() => null); if (r.ok && Array.isArray(data?.systems)) setSystems(data.systems); else setError(responseError(data, 'Unable to load AI systems.')); }).finally(() => setLoading(false));
   };
   useEffect(() => { loadSystems(); }, []);
+  useEffect(() => {
+    apiFetch('/api/agent-security/summary').then(async (r) => {
+      if (!r.ok) return;
+      const data = await r.json().catch(() => null);
+      if (data && typeof data.total === 'number') setAgentSecurity(data);
+    }).catch(() => {});
+  }, []);
 
   const selected = systems.find((s) => s.id === selectedId) || null;
   useEffect(() => {
@@ -126,6 +135,24 @@ export default function AITrustCenterView({ role = 'Viewer', passports = [] }: {
           <Metric label="Under review" value={summary.underReview} />
         </div>
       </header>
+
+      <section className="spr-panel p-5" aria-label="Observed agent security">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--spr-highlight)]">Observed agent security</div>
+            <h2 className="mt-1 text-lg font-semibold text-[var(--spr-text)]">Agent, MCP, tool and config evidence</h2>
+            <p className="mt-1 max-w-3xl text-xs leading-5 text-[var(--spr-text-muted)]">Observed evidence is kept separate from declared AI inventory. Suspicious content, capabilities and configuration changes remain observations until SPR has evidence of execution or verification.</p>
+          </div>
+          <span className="rounded-full border border-[var(--spr-border)] px-2.5 py-1 text-[11px] font-semibold text-[var(--spr-text-muted)]">{agentSecurity ? 'Evidence layer active' : 'No observed agent evidence yet'}</span>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Metric label="Observed agent assets" value={agentSecurity?.total ?? 0} />
+          <Metric label="MCP servers" value={agentSecurity?.mcpServers ?? 0} />
+          <Metric label="Unverified MCP" value={agentSecurity?.unverifiedMcp ?? 0} />
+          <Metric label="Risk chains · 30d" value={agentSecurity?.dangerousChains30d ?? 0} />
+        </div>
+        {agentSecurity && (agentSecurity.configDrift30d > 0 || agentSecurity.openHighRiskSignals > 0) && <div className="mt-3 rounded-md border border-[var(--spr-amber)]/30 bg-[var(--spr-amber)]/10 px-3 py-2 text-xs text-[var(--spr-amber)]">Attention: {agentSecurity.configDrift30d} agent configuration drift event{agentSecurity.configDrift30d === 1 ? '' : 's'} and {agentSecurity.openHighRiskSignals} unresolved high-risk signal{agentSecurity.openHighRiskSignals === 1 ? '' : 's'} observed.</div>}
+      </section>
 
       {error && <p role="alert" className="rounded-md border border-[var(--spr-red)]/30 bg-[var(--spr-red)]/10 px-4 py-3 text-sm text-[var(--spr-red)]">{error}</p>}
 
