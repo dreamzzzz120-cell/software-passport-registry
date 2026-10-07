@@ -116,11 +116,17 @@ export const apiFetch = async (input: RequestInfo | URL, init?: FetchOptions): P
           window.dispatchEvent(new CustomEvent('billing-required', { detail: { path: resolvedUrl.pathname } }));
         }
       }
+      // /api/user/me is the authoritative workspace projection, but a 403 is
+      // not proof that the browser's Supabase session is invalid. Database/RLS
+      // or provisioning dependencies can fail transiently. Signing out here
+      // turned those temporary failures into an Owner -> signed-out/Viewer
+      // flip. App.tsx owns the decision: it can provision during signup, show
+      // SessionUnavailable for an established account, or sign out only after
+      // an authoritative 401 survives refresh + retry.
       if (response.status === 403 && resolvedUrl.pathname === '/api/user/me' && !isSignupTransitionActive()) {
         const rejectedEmail = auth?.currentUser?.email ?? null;
         setAuthNotice(notProvisionedMessage(rejectedEmail));
-        window.dispatchEvent(new CustomEvent('auth-provisioning-failed', { detail: { email: rejectedEmail } }));
-        await auth.signOut().catch(() => undefined);
+        window.dispatchEvent(new CustomEvent('auth-profile-unavailable', { detail: { email: rejectedEmail } }));
       }
       return response;
     } catch (err) {
