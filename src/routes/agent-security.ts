@@ -213,9 +213,12 @@ export function createAgentSecurityRouter() {
       const tenantId = req.user!.tenantId;
       const db = req.db!;
       const p = parsed.data;
-      const ids = [p.fromAssetId, p.toAssetId].filter(Boolean) as string[];
-      const owned = (await db.execute(sql`SELECT id FROM agent_assets WHERE tenant_id=${tenantId} AND id = ANY(${ids})`) as any).rows || [];
-      if (owned.length !== new Set(ids).size) return res.status(404).json({ error: 'AGENT_ASSET_NOT_FOUND' });
+      const fromOwner = (await db.execute(sql`SELECT id FROM agent_assets WHERE tenant_id=${tenantId} AND id=${p.fromAssetId} LIMIT 1`) as any).rows?.[0];
+      if (!fromOwner) return res.status(404).json({ error: 'AGENT_ASSET_NOT_FOUND' });
+      if (p.toAssetId) {
+        const toOwner = (await db.execute(sql`SELECT id FROM agent_assets WHERE tenant_id=${tenantId} AND id=${p.toAssetId} LIMIT 1`) as any).rows?.[0];
+        if (!toOwner) return res.status(404).json({ error: 'AGENT_ASSET_NOT_FOUND' });
+      }
       const relationshipId = makeId('arel');
       await db.execute(sql`
         INSERT INTO agent_relationships (
