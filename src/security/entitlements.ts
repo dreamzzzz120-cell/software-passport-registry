@@ -131,6 +131,12 @@ export async function evaluateCapability(db: ScopedDb, tenantId: string, capabil
   return { allowed: await tenantHasAddonCapability(db, tenantId, capability), gate, state };
 }
 
+function plansIncludingCapability(capability: Capability): string[] {
+  return Object.entries(PLAN_CAPABILITY_MATRIX)
+    .filter(([, capabilities]) => capabilities.includes(capability))
+    .map(([plan]) => plan);
+}
+
 export function capabilityDenial(capability: Capability, decision: CapabilityDecision) {
   if (decision.gate === 'unpaid') {
     return {
@@ -146,10 +152,11 @@ export function capabilityDenial(capability: Capability, decision: CapabilityDec
       billingPath: '/billing', plan: decision.state.plan, subscriptionStatus: decision.state.status,
     };
   }
+  const availablePlans = plansIncludingCapability(capability);
   return {
     error: 'CAPABILITY_NOT_INCLUDED', code: 'CAPABILITY_NOT_INCLUDED', capability,
     message: `The active SPR plan does not include ${capability.replaceAll('_', ' ')}.`,
-    billingPath: '/billing', plan: decision.state.plan,
+    billingPath: '/billing', plan: decision.state.plan, availablePlans,
   };
 }
 

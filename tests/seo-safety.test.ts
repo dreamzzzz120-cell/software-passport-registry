@@ -78,7 +78,8 @@ describe('the public route set matches the application itself', () => {
     const declared = app.match(/const PUBLIC_PATHS = new Set\(\[([^\]]+)\]\)/);
     const publicPaths = [...declared![1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
     expect(publicPaths).toContain('/registry');
-    expect(app).toContain("if (path === '/registry') return <PublicRegistryView />;");
+    expect(app).toContain("if (!user && path === '/registry') return <PublicRegistryView />;");
+    expect(app).toContain("case '/registry': view = <PublicRegistryView />; break;");
   });
 });
 

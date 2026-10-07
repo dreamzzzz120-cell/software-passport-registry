@@ -1,3 +1,4 @@
+import { includeUnresolvedNpmDeclarations } from './declared-npm-cyclonedx.ts';
 import { decryptCredentials } from '../integrations/credential-vault.ts';
 import crypto from 'node:crypto';
 import os from 'node:os';
@@ -601,12 +602,13 @@ export async function generateRepositorySbom(scanRoot: string, syftPath: string,
   // reach finding identity, the persisted SBOM, or an API response.
   // `raw` stays the untouched Syft output so rawSbomHash still attests to
   // exactly what the generator produced.
-  const document = normalizeCycloneDxComponentNames(parsed, scanRoot);
+  const normalizedDocument = normalizeCycloneDxComponentNames(parsed, scanRoot);
   let resolvedComponents: SbomComponent[] = [];
-  try { resolvedComponents = normalizeCycloneDx(document); }
+  try { resolvedComponents = normalizeCycloneDx(normalizedDocument); }
   catch (error: any) { if (error?.message !== 'SBOM_EMPTY') throw error; }
   const declaredNpmDependencies = await collectDeclaredNpmDependencies(scanRoot);
   const components = mergeDeclaredNpmDependencies(resolvedComponents, declaredNpmDependencies);
+  const document = includeUnresolvedNpmDeclarations(normalizedDocument, declaredNpmDependencies);
   if (components.length === 0) throw new Error('SBOM_EMPTY');
   return { document, components, declaredNpmDependencies, raw: result.stdout, exitCode: result.code };
 }
