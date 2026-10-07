@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { consumeAuthNotice } from '../lib/authNotice';
 import { describeAuthRedirectError, parseAuthRedirectError } from '../lib/authRedirectError';
 import { passwordRecoveryPending, setPasswordRecoveryPending } from '../lib/authRecovery';
+import { trackGrowthEvent } from '../analytics';
 
 interface LoginViewProps {
   onLoginSuccess: (user: { uid: string; email: string | null; displayName: string; token: string; emailVerified: boolean; onboarded: 0 }) => void;
@@ -17,8 +18,10 @@ function getAuthRedirect() {
   // Keep the in-app destination that brought this prospect to auth. App.tsx
   // validates ?next= before navigating, so the confirmation link stays
   // same-origin while preserving pricing/free-review intent through email.
-  const next = new URLSearchParams(window.location.search).get('next');
+  const currentParams = new URLSearchParams(window.location.search);
+  const next = currentParams.get('next');
   if (next) redirect.searchParams.set('next', next);
+  if (currentParams.get('mode') === 'signup') redirect.searchParams.set('signup', '1');
   return redirect.toString();
 }
 
@@ -32,6 +35,7 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
   const recoveryRequested = useRef(passwordRecoveryPending());
   const signupRequested = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mode') === 'signup';
   const [mode, setMode] = useState<'login' | 'signup' | 'reset' | 'recovery'>(() => recoveryRequested.current ? 'recovery' : signupRequested ? 'signup' : 'login');
+  const signupTracked = useRef(false);
   const [recoveryReady, setRecoveryReady] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState('');
   const [email, setEmail] = useState('');
@@ -46,6 +50,12 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
   const [mfaBusy, setMfaBusy] = useState(false);
   const productName = brand?.productName || 'Software Passport Registry';
   const brandedSignInTitle = brand ? `Sign in to ${brand.productName}` : 'Sign in';
+  useEffect(() => {
+    if (mode !== 'signup' || signupTracked.current) return;
+    signupTracked.current = true;
+    trackGrowthEvent('signup_started');
+  }, [mode]);
+
   const finishSession = async (session: { access_token: string; user: any }) => {
     if (recoveryRequested.current) return;
     const user = session.user;
@@ -74,6 +84,13 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
 
     setMfaFactorId(null);
     setMfaCode('');
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('signup') === '1') {
+      trackGrowthEvent('signup_completed');
+      params.delete('signup');
+      const query = params.toString();
+      window.history.replaceState(null, '', window.location.pathname + (query ? `?${query}` : '') + window.location.hash);
+    }
     onLoginSuccess({ uid: user.id, email: user.email ?? null, displayName: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User', token, emailVerified, onboarded: 0 });
   };
   const clearStaleLocalSession = async (cause: unknown) => {
@@ -161,7 +178,11 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
           setError('An account with this email already exists. Sign in, or use "Forgot password?" to reset it.');
           return;
         }
-        if (data.session) { await finishSession(data.session); return; }
+        if (data.session) {
+          trackGrowthEvent('signup_completed');
+          await finishSession(data.session);
+          return;
+        }
         const address = email.trim().toLowerCase();
         setUnconfirmedEmail(address);
         setNotice(`Account created. Supabase has sent a confirmation link to ${address}. Open it to activate the account. The link is only valid for a limited time; if it has expired by the time you use it, request a new one below.`);
