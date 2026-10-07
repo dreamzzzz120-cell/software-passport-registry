@@ -11,7 +11,7 @@ type AiSystem = {
   tool_access: string[]; permissions: string[]; owner_display: string; created_by: string; created_at: string; updated_at: string;
 };
 type Observation = { id: string; observation_type: string; summary: string; detail: string; observed_by: string; created_at: string };
-type AgentSecuritySummary = { total: number; agents: number; mcpServers: number; unverifiedMcp: number; agentConfigs: number; configDrift30d: number; dangerousChains30d: number; openHighRiskSignals: number; authoritativeScope: string };
+type AgentSecuritySummary = { total: number; agents: number; mcpServers: number; unverifiedMcp: number; agentConfigs: number; writeCapableAssets: number; executeCapableAssets: number; relationships: number; configDrift30d: number; dangerousChains30d: number; openHighRiskSignals: number; authoritativeScope: string };
 
 const STATUS_STYLES: Record<AiSystem['status'], string> = {
   active: 'border-[var(--spr-green)]/30 bg-[var(--spr-green)]/10 text-[var(--spr-green)]',
@@ -124,7 +124,7 @@ export default function AITrustCenterView({ role = 'Viewer', passports = [] }: {
           <div>
             <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--spr-highlight)]"><Bot className="h-4 w-4" /> AI Trust Center</div>
             <h1 id="ai-trust-title" className="mt-2 text-3xl font-semibold tracking-tight">Your AI systems, declared and tracked</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--spr-text-muted)]">This is a self-reported registry. SPR has no mechanism to auto-discover AI agents or model usage — every field here is what your team declared, not an independently observed fact.</p>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--spr-text-muted)]">This registry remains self-reported for named AI systems and model usage. Repository scans can now independently observe supported agent/MCP configuration evidence; SPR keeps those observations separate from what your team declares.</p>
           </div>
           {canManage && <button onClick={() => setShowForm((open) => !open)} className="inline-flex items-center gap-2 spr-btn spr-btn-primary"><Plus size={16} /> Register AI system</button>}
         </div>
@@ -151,6 +151,7 @@ export default function AITrustCenterView({ role = 'Viewer', passports = [] }: {
           <Metric label="Unverified MCP" value={agentSecurity?.unverifiedMcp ?? 0} />
           <Metric label="Risk chains · 30d" value={agentSecurity?.dangerousChains30d ?? 0} />
         </div>
+        {agentSecurity && <div className="mt-3 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-3 py-2 text-xs text-[var(--spr-text-muted)]"><span className="font-semibold text-[var(--spr-text)]">Blast radius:</span> {agentSecurity.writeCapableAssets} write/admin-capable asset{agentSecurity.writeCapableAssets === 1 ? '' : 's'} · {agentSecurity.executeCapableAssets} execute-capable asset{agentSecurity.executeCapableAssets === 1 ? '' : 's'} · {agentSecurity.relationships} observed relationship{agentSecurity.relationships === 1 ? '' : 's'}.</div>}
         {agentSecurity && (agentSecurity.configDrift30d > 0 || agentSecurity.openHighRiskSignals > 0) && <div className="mt-3 rounded-md border border-[var(--spr-amber)]/30 bg-[var(--spr-amber)]/10 px-3 py-2 text-xs text-[var(--spr-amber)]">Attention: {agentSecurity.configDrift30d} agent configuration drift event{agentSecurity.configDrift30d === 1 ? '' : 's'} and {agentSecurity.openHighRiskSignals} unresolved high-risk signal{agentSecurity.openHighRiskSignals === 1 ? '' : 's'} observed.</div>}
       </section>
 
@@ -266,7 +267,7 @@ export default function AITrustCenterView({ role = 'Viewer', passports = [] }: {
 
       <div className="rounded-md border border-[var(--spr-amber)]/25 bg-[var(--spr-amber)]/10 p-4 text-xs leading-5 text-[var(--spr-amber)]/75 flex gap-2">
         <AlertCircle className="h-4 w-4 shrink-0" />
-        Capability boundary: registration and observations are manually entered by your team, not detected. There is no vendor risk-scoring feed, model-version-change monitoring, or automated tool-access audit behind this yet.
+        Capability boundary: named AI systems and model usage remain manually declared. Supported repository agent/MCP configuration files are independently observed during repository scans, but SPR does not claim host-level discovery, runtime behavior, vendor risk scores, or model-version monitoring unless separate evidence exists.
       </div>
     </section>
   );
