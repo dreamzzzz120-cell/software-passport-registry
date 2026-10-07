@@ -111,9 +111,33 @@ export const apiFetch = async (input: RequestInfo | URL, init?: FetchOptions): P
       if (response.status === 402) {
         const isBillingPage = window.location.pathname === '/billing' || window.location.pathname === '/pricing';
         if (!isBillingPage) {
-          window.history.pushState({}, '', '/billing');
+          let denial: any = null;
+          try { denial = await response.clone().json(); } catch { denial = null; }
+
+          const params = new URLSearchParams();
+          const code = typeof denial?.code === 'string' ? denial.code : '';
+          const capability = typeof denial?.capability === 'string' && /^[a-z_]{1,64}$/.test(denial.capability) ? denial.capability : '';
+          const subscriptionStatus = typeof denial?.subscriptionStatus === 'string' && /^[a-z_]{1,64}$/.test(denial.subscriptionStatus) ? denial.subscriptionStatus : '';
+          const allowedPlanIds = new Set(['pilot', 'starter', 'professional', 'growth', 'enterprise']);
+          const availablePlans = Array.isArray(denial?.availablePlans)
+            ? denial.availablePlans.filter((plan: unknown): plan is string => typeof plan === 'string' && allowedPlanIds.has(plan))
+            : [];
+
+          if (code === 'CAPABILITY_NOT_INCLUDED' && capability) {
+            params.set('reason', 'capability');
+            params.set('required', capability);
+            if (availablePlans.length) params.set('plans', availablePlans.join(','));
+          } else {
+            params.set('reason', 'subscription');
+            if (subscriptionStatus) params.set('status', subscriptionStatus);
+          }
+
+          const billingPath = `/billing?${params.toString()}`;
+          window.history.pushState({}, '', billingPath);
           window.dispatchEvent(new PopStateEvent('popstate'));
-          window.dispatchEvent(new CustomEvent('billing-required', { detail: { path: resolvedUrl.pathname } }));
+          window.dispatchEvent(new CustomEvent('billing-required', {
+            detail: { path: resolvedUrl.pathname, code: code || 'SUBSCRIPTION_REQUIRED', capability: capability || null, availablePlans },
+          }));
         }
       }
       // /api/user/me is the authoritative workspace projection, but a 403 is
