@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS agent_assets (
   origin_trust text NOT NULL DEFAULT 'UNKNOWN' CHECK (origin_trust IN ('INTERNAL','EXTERNAL','UNKNOWN')),
   verification_state text NOT NULL DEFAULT 'OBSERVED' CHECK (verification_state IN ('OBSERVED','VERIFIED','UNKNOWN')),
   evidence_hash text NOT NULL,
+  -- Never store raw credentials or attacker payload secrets here. Ingestion rejects credential-like fields.
   metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
   first_seen_at timestamptz NOT NULL,
   last_seen_at timestamptz NOT NULL,
@@ -61,7 +62,7 @@ CREATE TABLE IF NOT EXISTS agent_security_events (
   id text PRIMARY KEY,
   tenant_id text NOT NULL,
   agent_asset_id text,
-  event_type text NOT NULL CHECK (event_type IN ('prompt_injection_indicator','agent_config_drift','excessive_tool_scope','unverified_mcp','dangerous_tool_chain','execution_receipt')),
+  event_type text NOT NULL CHECK (event_type IN ('prompt_injection_indicator','credential_exposure_indicator','exfiltration_indicator','tool_call_anomaly','response_integrity_failure','agent_config_drift','excessive_tool_scope','unverified_mcp','dangerous_tool_chain','execution_receipt')),
   source_origin text NOT NULL DEFAULT 'UNKNOWN' CHECK (source_origin IN ('INTERNAL','EXTERNAL','UNKNOWN')),
   source_ref text NOT NULL DEFAULT '',
   action_capability text NOT NULL DEFAULT '',
@@ -69,6 +70,7 @@ CREATE TABLE IF NOT EXISTS agent_security_events (
   outcome text NOT NULL DEFAULT 'UNKNOWN' CHECK (outcome IN ('BLOCKED','SUCCEEDED','FAILED','NOT_OBSERVED','UNKNOWN')),
   severity text NOT NULL DEFAULT 'informational' CHECK (severity IN ('informational','low','medium','high','critical')),
   evidence_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+  -- Structured observation only; raw credentials/tokens must be redacted before storage.
   detail jsonb NOT NULL DEFAULT '{}'::jsonb,
   observed_at timestamptz NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now()
