@@ -16,7 +16,41 @@ let initialized = false;
 if (supabaseConfigured) void supabase.auth.getSession().then(({ data }) => { currentUser = data.session?.user ? mapUser(data.session.user) : null; initialized = true; }).catch(() => { initialized = true; });
 else initialized = true;
 export const auth: any = { get currentUser() { return currentUser; }, get initialized() { return initialized; }, async getIdToken(forceRefresh = false) { return currentUser?.getIdToken(forceRefresh) || ''; }, async signOut() { const { error } = await supabase.auth.signOut(); if (error) throw error; } };
-export function onAuthStateChanged(_auth: any, callback: (user: User | null) => void) { let active = true; void supabase.auth.getSession().then(({ data }) => { if (active) callback(data.session?.user ? mapUser(data.session.user) : null); }); const { data } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session) => { currentUser = session?.user ? mapUser(session.user) : null; if (active) callback(currentUser); }); return () => { active = false; data.subscription.unsubscribe(); }; }
+export function onAuthStateChanged(_auth: any, callback: (user: User | null) => void) {
+  let active = true;
+  let hydrated = false;
+  void supabase.auth.getSession().then(({ data }) => {
+    if (!active) return;
+    currentUser = data.session?.user ? mapUser(data.session.user) : null;
+    hydrated = true;
+    callback(currentUser);
+  }).catch(() => {
+    // A storage/read failure is not a sign-out event. Leave the last confirmed
+    // identity intact and let the workspace identity probe fail closed.
+    hydrated = true;
+  });
+  const { data } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session) => {
+    if (!active) return;
+    if (event === 'SIGNED_OUT') {
+      currentUser = null;
+      callback(null);
+      return;
+    }
+    if (session?.user) {
+      currentUser = mapUser(session.user);
+      callback(currentUser);
+      return;
+    }
+    // Supabase can emit an INITIAL_SESSION/null while storage hydration or a
+    // refresh is settling. Once we have a confirmed user, a null event that is
+    // not SIGNED_OUT must never erase it.
+    if (!hydrated && event === 'INITIAL_SESSION') {
+      currentUser = null;
+      callback(null);
+    }
+  });
+  return () => { active = false; data.subscription.unsubscribe(); };
+}
 export async function getRedirectResult(_auth: any) { const { data, error } = await supabase.auth.getSession(); if (error) throw error; return data.session?.user ? { user: mapUser(data.session.user) } : null; }
 function authError(code: string, message: string) { return Object.assign(new Error(message), { code }); }
 export async function signInWithEmailAndPassword(_auth: any, email: string, password: string) { const { data, error } = await supabase.auth.signInWithPassword({ email, password }); if (error) { const message = error.message.toLowerCase(); if (message.includes('email not confirmed')) throw authError('auth/email-not-verified', 'Email not confirmed'); if (message.includes('invalid login credentials')) throw authError('auth/invalid-credential', error.message); throw authError('auth/network-request-failed', error.message); } if (!data.user) throw authError('auth/invalid-credential', 'Authentication did not return a user.'); currentUser = mapUser(data.user); return { user: currentUser }; }
