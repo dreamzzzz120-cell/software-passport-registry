@@ -12,7 +12,14 @@ interface LoginViewProps {
 
 const PRODUCTION_AUTH_REDIRECT = 'https://www.softwarepassportregistry.com/login';
 function getAuthRedirect() {
-  return typeof window === 'undefined' ? PRODUCTION_AUTH_REDIRECT : `${window.location.origin}/login`;
+  if (typeof window === 'undefined') return PRODUCTION_AUTH_REDIRECT;
+  const redirect = new URL('/login', window.location.origin);
+  // Keep the in-app destination that brought this prospect to auth. App.tsx
+  // validates ?next= before navigating, so the confirmation link stays
+  // same-origin while preserving pricing/free-review intent through email.
+  const next = new URLSearchParams(window.location.search).get('next');
+  if (next) redirect.searchParams.set('next', next);
+  return redirect.toString();
 }
 
 function preserveRecoveryIntent() {
@@ -23,7 +30,8 @@ function preserveRecoveryIntent() {
 
 export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
   const recoveryRequested = useRef(passwordRecoveryPending());
-  const [mode, setMode] = useState<'login' | 'signup' | 'reset' | 'recovery'>(() => recoveryRequested.current ? 'recovery' : 'login');
+  const signupRequested = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mode') === 'signup';
+  const [mode, setMode] = useState<'login' | 'signup' | 'reset' | 'recovery'>(() => recoveryRequested.current ? 'recovery' : signupRequested ? 'signup' : 'login');
   const [recoveryReady, setRecoveryReady] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState('');
   const [email, setEmail] = useState('');
