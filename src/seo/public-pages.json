@@ -40,6 +40,11 @@
       "description": "Pay for the software trust work you use. Compare SPR subscription plans, one-time verification reports and add-ons for MSPs and software teams."
     },
     {
+      "path": "/registry",
+      "title": "Public Software Registry — Software Passport Registry",
+      "description": "Browse public software SPR has actually observed. See repository identity, language, license, observation status and whether a completed evidence review exists."
+    },
+    {
       "path": "/msp",
       "title": "Software Passport Registry for MSPs — Software Trust & Risk Visibility",
       "description": "Software Passport Registry for MSPs. Track software inventory and evidence across every client, with risk visibility and client-facing trust reporting."
