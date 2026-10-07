@@ -21,6 +21,8 @@ type Summary = {
   mcpServers: Array<Record<string, unknown>>;
   mcpTools: Array<Record<string, unknown>>;
   handoffs: Array<Record<string, unknown>>;
+  changes: Array<Record<string, unknown>>;
+  snapshots: Array<Record<string, unknown>>;
 };
 
 const stateClass = (state: unknown) => {
@@ -98,6 +100,14 @@ export default function AgentEvidencePanel({ passports }: { passports: SoftwareP
             {summary.boundaries.map((boundary: any) => <div key={String(boundary.id)} className="rounded-md bg-[var(--spr-surface-deep)] p-3 text-xs"><div className="flex items-center justify-between gap-3"><span className="font-semibold text-[var(--spr-text)]">{String(boundary.boundary_type)}</span><span className={stateClass(boundary.state)}>{String(boundary.state || 'UNKNOWN')}</span></div><div className="mt-1 text-[var(--spr-text-muted)]">{String(boundary.transport || 'transport unknown')} · verification {boundary.verification_present === true ? 'observed' : boundary.verification_present === false ? 'not observed' : 'UNKNOWN'}</div></div>)}
             {summary.boundaries.length === 0 && <p className="text-xs text-[var(--spr-text-muted)]">No trust-boundary evidence has been recorded. This is UNKNOWN, not a pass.</p>}
           </div>
+        </div>
+      </div>
+
+      <div className="rounded-md border border-[var(--spr-border)] p-4">
+        <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-semibold text-[var(--spr-text)]">Observed changes</h3><span className="text-xs text-[var(--spr-text-faint)]">{summary.snapshots.length} snapshots</span></div>
+        <div className="mt-3 space-y-2">
+          {summary.changes.slice(0, 12).map((change: any) => <div key={String(change.id)} className="rounded-md bg-[var(--spr-surface-deep)] p-3 text-xs"><div className="flex items-center justify-between gap-3"><span className="font-semibold text-[var(--spr-text)]">{String(change.change_type).replaceAll('_', ' ')}</span><span className="text-[var(--spr-text-faint)]">{change.observed_at ? new Date(String(change.observed_at)).toLocaleString() : ''}</span></div><div className="mt-1 break-all text-[var(--spr-text-muted)]">{String(change.subject)}</div></div>)}
+          {summary.changes.length === 0 && <p className="text-xs text-[var(--spr-text-muted)]">No change has been proven between settled agent-trust snapshots yet.</p>}
         </div>
       </div>
 
