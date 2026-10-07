@@ -70,6 +70,8 @@ describe('autonomous agent suite', () => {
     expect(agentApiSource).toContain("table: 'trust_findings'");
     expect(agentApiSource).toContain("table: 'trust_observations'");
     expect(agentApiSource).toContain("table: 'monitoring_configurations'");
+    expect(agentApiSource).toContain('SELECT id,enabled,last_status AS status,last_successful_at,next_scheduled_at FROM monitoring_configurations');
+    expect(agentApiSource).not.toContain('SELECT id,enabled,status,last_successful_at,next_scheduled_at FROM monitoring_configurations');
   });
 
 });

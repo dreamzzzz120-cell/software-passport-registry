@@ -37,7 +37,7 @@ import { VERIFICATION_POLICY_VERSION } from '../lib/verification/verificationPol
 import { verifySlsaProvenance } from '../utils/slsa-verification.ts';
 import { calculateAndStoreTrustScore } from '../utils/scanner.ts';
 
-const INVITABLE_ROLES = ['Admin', 'Technician', 'Viewer', 'Client'] as const;
+const INVITABLE_ROLES = ['Admin', 'Operator', 'Technician', 'Viewer', 'Client'] as const;
 // A 'Client'-role invite must name the one client it scopes to; every other
 // role must not carry a clientId (it would be meaningless -- those roles see
 // the whole tenant).

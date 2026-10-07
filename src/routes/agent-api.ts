@@ -378,7 +378,7 @@ export function createAgentApiRouter() {
       const findings = (await db.execute(sql`SELECT id,severity,status,control_id,title,evidence_ids,updated_at FROM trust_findings WHERE tenant_id=${tenantId} AND passport_id=${passport.id} ORDER BY updated_at DESC LIMIT 500`) as any).rows || [];
       const evidence = (await db.execute(sql`SELECT id,provider,control_id,observed_at,status,limitation FROM evidence_ledger WHERE tenant_id=${tenantId} AND passport_id=${passport.id} ORDER BY observed_at DESC LIMIT 1000`) as any).rows || [];
       const latest = (await db.execute(sql`SELECT id,generated_at,evidence_ids,finding_ids,unknown_dimension_count,completeness_basis_points FROM trust_observations WHERE tenant_id=${tenantId} AND passport_id=${passport.id} ORDER BY observation_version DESC LIMIT 1`) as any).rows?.[0] || null;
-      const monitoring = (await db.execute(sql`SELECT id,enabled,status,last_successful_at,next_scheduled_at FROM monitoring_configurations WHERE tenant_id=${tenantId} AND passport_id=${passport.id} ORDER BY updated_at DESC LIMIT 1`) as any).rows?.[0] || null;
+      const monitoring = (await db.execute(sql`SELECT id,enabled,last_status AS status,last_successful_at,next_scheduled_at FROM monitoring_configurations WHERE tenant_id=${tenantId} AND passport_id=${passport.id} ORDER BY updated_at DESC LIMIT 1`) as any).rows?.[0] || null;
 
       const open = findings.filter((f: any) => !['resolved','closed','verified'].includes(String(f.status || '').toLowerCase()));
       const criticalHigh = open.filter((f: any) => ['critical','high'].includes(String(f.severity || '').toLowerCase()));

@@ -34,6 +34,16 @@ describe('SPR team administration and audit log contracts', () => {
     expect(auth).toContain('tenant_id = ${req.user!.tenantId} AND id < ${before}');
   });
 
+  it('keeps Operator assignable in both the API and team UI', () => {
+    const auth = read('src/routes/auth.ts');
+    const teamView = read('src/components/TeamView.tsx');
+    const roleList = "const INVITABLE_ROLES = ['Admin', 'Operator', 'Technician', 'Viewer', 'Client'] as const;";
+    expect(auth).toContain(roleList);
+    expect(auth).toContain('const roleUpdateSchema = z.object({ role: z.enum(INVITABLE_ROLES) }).strict();');
+    expect(teamView).toContain(roleList);
+    expect(teamView).toContain('{INVITABLE_ROLES.map((candidate) => <option');
+  });
+
   it('keeps the permission matrix and CSV export sourced from real data, not fabricated rows', () => {
     const teamView = read('src/components/TeamView.tsx');
     expect(teamView).toContain('PERMISSION_MATRIX');

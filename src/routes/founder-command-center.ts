@@ -20,6 +20,7 @@ import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import rateLimit from 'express-rate-limit';
+import * as Sentry from '@sentry/node';
 const founderReadLimiter = rateLimit({ windowMs: 60_000, limit: 60, standardHeaders: 'draft-7', legacyHeaders: false, validate: { trustProxy: false } });
 import { z } from 'zod';
 import { AuthenticatedRequest, requireAuth, requireRole, requireFounder, rateLimiter } from '../middleware/security.ts';
@@ -34,6 +35,7 @@ import {
 import { connectionGuides } from '../lib/server/founder/connection-guides.ts';
 import { allAgentReports } from '../lib/server/founder/agents.ts';
 import { founderOverview } from '../lib/server/founder/overview.ts';
+import { config } from '../config.ts';
 
 export function createFounderCommandCenterRouter() {
   const router = Router();
@@ -87,6 +89,21 @@ export function createFounderCommandCenterRouter() {
         },
         generatedAt: new Date().toISOString(),
       });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  // Founder-only delivery probe for production error monitoring. The UI exposes
+  // this as a manual proof action; a missing DSN remains an explicit 503/UNKNOWN
+  // rather than pretending observability is configured.
+  router.post('/founder/monitoring/test-event', requireAuth, requireRole('Owner'), requireFounder, rateLimiter, async (_req: AuthenticatedRequest, res, next) => {
+    if (!config.sentry.dsn) return res.status(503).json({ error: 'SENTRY_NOT_CONFIGURED', message: 'Sentry DSN is not configured on the API service.' });
+    try {
+      const sentAt = new Date().toISOString();
+      const eventId = Sentry.captureMessage('SPR founder monitoring test event', { level: 'info', tags: { source: 'founder-monitoring-test' } });
+      const flushed = await Sentry.flush(2_000);
+      return res.status(202).json({ accepted: true, eventId, sentAt, flushed });
     } catch (error) {
       return next(error);
     }

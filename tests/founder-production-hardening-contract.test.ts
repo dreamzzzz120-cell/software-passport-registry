@@ -26,4 +26,12 @@ describe('Founder production hardening contracts', () => {
     expect(connections).toContain('for await (const _customer of stripe.customers.list');
     expect(connections).toContain('for await (const sub of stripe.subscriptions.list');
   });
+
+  it('keeps the founder monitoring test event gated and fail-closed when Sentry is absent', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/routes/founder-command-center.ts'), 'utf8');
+    expect(source).toContain("router.post('/founder/monitoring/test-event', requireAuth, requireRole('Owner'), requireFounder, rateLimiter");
+    expect(source).toContain("error: 'SENTRY_NOT_CONFIGURED'");
+    expect(source).toContain("Sentry.captureMessage('SPR founder monitoring test event'");
+    expect(source).toContain('await Sentry.flush(2_000)');
+  });
 });

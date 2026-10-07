@@ -34,7 +34,7 @@ type LoginHistoryRecord = {
   location: string;
 };
 
-const INVITABLE_ROLES = ['Admin', 'Technician', 'Viewer', 'Client'] as const;
+const INVITABLE_ROLES = ['Admin', 'Operator', 'Technician', 'Viewer', 'Client'] as const;
 
 // Sourced from the actual `requireRole(...)` gates enforced across src/routes/*.ts —
 // kept here as a static reference so the explanation can never drift silently out of
