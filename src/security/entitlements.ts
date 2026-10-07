@@ -30,12 +30,11 @@ export function capabilityForPath(req: Request): Capability {
   return PATH_CAPABILITIES.find(item => item.test(path))?.capability ?? 'workspace';
 }
 
-// Statuses in which a recorded plan still entitles the tenant to that plan's
-// capabilities. 'past_due' is included deliberately: Stripe has not cancelled
-// the subscription, it is retrying the payment, so cutting a paying customer
-// off mid-dunning would be a false lockout rather than enforcement. Real
-// cancellation arrives as 'canceled'/'unpaid' and is handled as lapsed below.
-export const PLAN_ENTITLING_STATUSES = ['active', 'trialing', 'past_due'] as const;
+// Maximum launch-hardening policy: only a positively confirmed ACTIVE Stripe
+// subscription unlocks paid workspace capabilities. Trialing, past_due,
+// incomplete, canceled, unpaid, missing, or unknown states all fail closed.
+// Billing/account recovery routes are exempted separately so customers can pay.
+export const PLAN_ENTITLING_STATUSES = ['active'] as const;
 
 // 'incomplete' is not an entitling Stripe state. A checkout that has not
 // completed payment must not unlock the workspace.
