@@ -13,8 +13,8 @@ import { DISTRIBUTION_TENANT_ID } from './distribution-engine.ts';
 
 export type ResearchReality = {
   url?: string;
-  company?: string;
-  score?: number;
+  company?: string | null;
+  score?: number | null;
   httpObserved?: boolean;
   observedAt?: string;
   publicRoleEmails?: string[];
@@ -24,7 +24,7 @@ export type ResearchReality = {
     compliance?: boolean;
     psa?: boolean;
     multiClient?: boolean;
-  };
+  } | null;
 };
 
 export type ShadowMissionBuild = {
