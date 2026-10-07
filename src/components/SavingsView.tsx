@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AlertCircle, DollarSign, Loader2, Save } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
 
@@ -50,28 +50,34 @@ export default function SavingsView({ role = 'Viewer' }: { role?: string }) {
   const [showBaseline, setShowBaseline] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const loadGeneration = useRef(0);
 
   const load = async (days: number) => {
-    setLoading(true); setError('');
+    const generation = ++loadGeneration.current;
+    setLoading(true); setError(''); setReport(null);
     try {
       const [reportRes, baselineRes] = await Promise.all([
         apiFetch(`/api/savings/report?windowDays=${days}`),
         apiFetch('/api/savings/baseline'),
       ]);
+      if (generation !== loadGeneration.current) return;
       if (!reportRes.ok) throw new Error('Unable to load the savings report.');
-      setReport(await reportRes.json());
+      const nextReport = await reportRes.json();
+      if (generation !== loadGeneration.current) return;
+      setReport(nextReport);
       if (baselineRes.ok) {
         const b: Baseline = await baselineRes.json();
+        if (generation !== loadGeneration.current) return;
         setBaseline(b);
         setForm(Object.fromEntries(FIELDS.map((f) => [f.key, b?.[f.key] != null ? String(b[f.key]) : ''])));
       }
     } catch (e: any) {
-      setError(e?.message || 'Unable to load the savings report.');
+      if (generation === loadGeneration.current) setError(e?.message || 'Unable to load the savings report.');
     } finally {
-      setLoading(false);
+      if (generation === loadGeneration.current) setLoading(false);
     }
   };
-  useEffect(() => { void load(windowDays); }, [windowDays]);
+  useEffect(() => { void load(windowDays); return () => { loadGeneration.current += 1; }; }, [windowDays]);
 
   const saveBaseline = async () => {
     setSaving(true); setSaveError('');
@@ -111,7 +117,7 @@ export default function SavingsView({ role = 'Viewer' }: { role?: string }) {
       </div>
     </header>
 
-    {error && <div role="alert" className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 px-4 py-3 text-sm text-[var(--spr-red)]">{error}</div>}
+    {error && <div role="alert" className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 px-4 py-3 text-sm text-[var(--spr-red)]">{error}<button onClick={() => void load(windowDays)} className="ml-3 underline">Retry</button></div>}
 
     {loading ? <div className="flex items-center gap-2 py-10 text-sm text-[var(--spr-text-muted)]"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</div> : report && (
       <div className="space-y-5">
