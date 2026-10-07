@@ -8,6 +8,7 @@ import { CheckCircle2, FileDown, Lock } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { apiFetch } from '../utils/apiClient';
+import { trackGrowthEvent } from '../analytics';
 
 type Props = {
   passportId: string;
@@ -103,6 +104,7 @@ export default function FreeReviewPdfGate({ passportId, statusUrl, result, repos
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { setError(data?.error || 'Could not record your request.'); return; }
       setUnlocked(true);
+      trackGrowthEvent('lead_captured');
       buildPdf(result, repositoryLabel).save(`spr-free-review-${repositoryLabel.replace(/[^A-Za-z0-9._-]+/g, '-')}.pdf`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not record your request.');
