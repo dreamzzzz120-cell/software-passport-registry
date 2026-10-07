@@ -10,16 +10,32 @@ const response = (data: unknown, status = 200) => new Response(JSON.stringify(da
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 describe('public registry visitor next steps', () => {
  it('keeps evidence UNKNOWN on index failure and carries the repo into free review', async () => {
-  vi.mocked(apiFetch).mockResolvedValue(response({ ok: true, count: 370, items: [item] }));
+  vi.mocked(apiFetch).mockResolvedValue(response({ ok: true, count: 1, items: [item] }));
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({}, 503)));
   render(<PublicRegistryView />);
   const link = await screen.findByRole('link', { name: 'Run a free review' });
   expect(link.getAttribute('href')).toContain('owner=expressjs&repo=express');
   expect(screen.queryByRole('link', { name: 'View SPR evidence' })).toBeNull();
-  expect(screen.getByText(/Search and language filters apply only/)).toBeTruthy();
+  expect(screen.getByText(/Search and language filters apply to the complete loaded registry/)).toBeTruthy();
   fireEvent.change(screen.getByRole('textbox'), { target: { value: 'missing' } });
-  expect(screen.getByText('No matches among loaded records')).toBeTruthy();
+  expect(screen.getByText('No matches in the observed registry')).toBeTruthy();
  });
+
+ it('loads every registry page instead of stopping at the first page', async () => {
+  const second = { ...item, id: 'second', repository_owner: 'vitejs', repository_name: 'vite' };
+  vi.mocked(apiFetch)
+    .mockResolvedValueOnce(response({ ok: true, count: 2, items: [item] }))
+    .mockResolvedValueOnce(response({ ok: true, count: 2, items: [second] }));
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ entries: [] })));
+  render(<PublicRegistryView />);
+  await screen.findByText('expressjs');
+  expect(screen.getByText('express')).toBeTruthy();
+  expect(await screen.findByText('vitejs')).toBeTruthy();
+  expect(screen.getByText('vite')).toBeTruthy();
+  expect(vi.mocked(apiFetch).mock.calls[0]?.[0]).toContain('offset=0');
+  expect(vi.mocked(apiFetch).mock.calls[1]?.[0]).toContain('offset=1');
+ });
+
  it('links evidence only when a retrieved completed review identifies that repository', async () => {
   vi.mocked(apiFetch).mockResolvedValue(response({ ok: true, count: 1, items: [item] }));
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ entries: [{ owner: 'ExpressJS', repository: 'Express' }] })));
