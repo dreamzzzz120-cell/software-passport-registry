@@ -16,7 +16,7 @@ describe('public registry visitor next steps', () => {
   const link = await screen.findByRole('link', { name: 'Run a free review' });
   expect(link.getAttribute('href')).toContain('owner=expressjs&repo=express');
   expect(screen.queryByRole('link', { name: 'View SPR evidence' })).toBeNull();
-  expect(screen.getByText(/Search and language filters apply only/)).toBeTruthy();
+  expect(screen.getByText(/Search and language filters apply to the complete loaded registry/)).toBeTruthy();
   fireEvent.change(screen.getByRole('textbox'), { target: { value: 'missing' } });
   expect(screen.getByText('No matches in the observed registry')).toBeTruthy();
  });
