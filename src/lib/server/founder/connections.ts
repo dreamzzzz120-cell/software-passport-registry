@@ -116,7 +116,7 @@ export async function checkGithubCi(): Promise<ConnectionStatus> {
     if (runStatus !== 'completed' || conclusion === null) {
       return { key: 'github_ci', name: 'GitHub CI', status: 'ok', detail: `latest run: ${runStatus || 'in progress'}`, lastChecked: now() };
     }
-    return { key: 'github_ci', name: 'GitHub CI', status: conclusion === 'success' ? 'ok' : 'error', detail: `latest run: ${conclusion}`, lastChecked: now() };
+    return { key: 'github_ci', name: 'GitHub CI', status: conclusion === 'success' ? 'ok' : 'error', detail: conclusion === 'success' ? 'GitHub connected; latest workflow succeeded.' : `GitHub connected; latest workflow completed with ${conclusion}.`, lastChecked: now() };
   } catch (err) {
     return { key: 'github_ci', name: 'GitHub CI', status: 'error', detail: safeErrorDetail(err), lastChecked: now() };
   }
