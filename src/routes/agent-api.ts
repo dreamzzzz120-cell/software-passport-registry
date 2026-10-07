@@ -949,7 +949,7 @@ function chooseCommercialNextMove(snapshot: FounderCommercialSnapshot): AgentNex
 }
 
 function navigationIntent(q: string): { path: string; reply: string } | null {
-  const routes: Array<[RegExp, string, string]> = [[/command center|dashboard|home/, '/dashboard', 'Opening the Command Center.'], [/clients?|customer list|client management/, '/clients', 'Opening Clients.'], [/passports?|registry|software inventory/, '/passports', 'Opening Passports.'], [/vendors?|third.?party risk/, '/vendors', 'Opening Vendor Risk.'], [/monitoring|alerts?/, '/monitoring', 'Opening Monitoring.'], [/compliance|governance/, '/compliance', 'Opening Compliance.'], [/reports?/, '/reports', 'Opening Reports.'], [/billing|subscription|plan/, '/billing', 'Opening Billing.'], [/settings?/, '/settings', 'Opening Settings.']];
+  const routes: Array<[RegExp, string, string]> = [[/command center|dashboard|home/, '/dashboard', 'Opening the Command Center.'], [/clients?|customer list|client management/, '/clients', 'Opening Clients.'], [/passports?|registry|software inventory/, '/passports', 'Opening Passports.'], [/vendors?|third.?party risk/, '/vendors', 'Opening Vendor Risk.'], [/monitoring|alerts?/, '/monitoring', 'Opening Monitoring.'], [/compliance|governance/, '/compliance', 'Opening Compliance.'], [/reports?/, '/reports', 'Opening Reports.'], [/billing|subscription|plan/, '/billing', 'Opening Billing.'], [/white.?label|branding|brand setup/, '/white-label', 'Opening White Label.'], [/settings?/, '/settings', 'Opening Settings.']];
   for (const [pattern, path, reply] of routes) if (pattern.test(q)) return { path, reply };
   return null;
 }
