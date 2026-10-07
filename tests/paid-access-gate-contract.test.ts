@@ -36,11 +36,11 @@ async function runGate(options: { baseUrl: string; path: string; subscription: {
 }
 
 describe('paid access contract', () => {
-  it('allows an authenticated workspace with no subscription row', async () => {
+  it('blocks an authenticated workspace with no confirmed subscription row', async () => {
     const run = await runGate({ baseUrl: '/api', path: '/scans', subscription: null });
-    expect(run.allowed).toBe(true);
-    expect(run.status).toBeNull();
-    expect(run.locals.billing).toMatchObject({ plan: null, status: 'none', gate: 'default-access' });
+    expect(run.allowed).toBe(false);
+    expect(run.status).toBe(402);
+    expect(run.body).toMatchObject({ code: 'SUBSCRIPTION_REQUIRED', billingPath: '/billing' });
     expect(run.queries.map(sqlText).some(text => text.includes('plan_capabilities'))).toBe(false);
   });
 
@@ -52,11 +52,12 @@ describe('paid access contract', () => {
     expect(denied.status).toBe(402);
   });
 
-  it('keeps workspace access for canceled and unpaid plans', async () => {
+  it('blocks paid workspace access for canceled and unpaid plans', async () => {
     for (const status of ['canceled', 'unpaid']) {
       const run = await runGate({ baseUrl: '/api', path: '/user/clients', subscription: { plan: 'growth', status } });
-      expect(run.allowed).toBe(true);
-      expect(run.locals.billing).toMatchObject({ gate: 'lapsed' });
+      expect(run.allowed).toBe(false);
+      expect(run.status).toBe(402);
+      expect(run.body).toMatchObject({ code: 'SUBSCRIPTION_REQUIRED', billingPath: '/billing' });
     }
   });
 
@@ -64,9 +65,9 @@ describe('paid access contract', () => {
     expect(BASELINE_CAPABILITY).toBe('workspace');
     expect(PLAN_ENTITLING_STATUSES).toEqual(['active', 'trialing', 'past_due']);
     for (const capabilities of Object.values(PLAN_CAPABILITY_MATRIX)) expect(capabilities).toContain(BASELINE_CAPABILITY);
-    expect(lapsedPlanAllows('workspace')).toBe(true);
+    expect(lapsedPlanAllows('workspace')).toBe(false);
     expect(lapsedPlanAllows('bulk_export')).toBe(false);
-    expect(resolveSubscriptionGate({ plan: 'growth', status: 'incomplete' })).toBe('default-access');
+    expect(resolveSubscriptionGate({ plan: 'growth', status: 'incomplete' })).toBe('unpaid');
     expect(resolveSubscriptionGate({ plan: 'growth', status: 'active' })).toBe('enforce-plan');
     expect(resolveSubscriptionGate({ plan: 'growth', status: 'canceled' })).toBe('lapsed');
   });
