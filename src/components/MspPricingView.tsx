@@ -195,7 +195,8 @@ export default function MspPricingView({ isAuthenticated, onPrimaryAction }: Pro
                 ))}
               </ul>
               <button onClick={() => {
-                if (isAuthenticated || plan.checkoutAvailable) return onPrimaryAction();
+                if (isAuthenticated) return onPrimaryAction();
+                if (plan.checkoutAvailable) return window.location.assign('/login?next=%2Fbilling');
                 window.location.assign('/contact/');
               }} className="spr-btn spr-btn-primary mt-6 w-full">
                 {isAuthenticated ? 'Open billing' : plan.checkoutAvailable ? 'Get started' : 'Contact sales'}

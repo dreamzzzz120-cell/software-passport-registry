@@ -565,8 +565,8 @@ export default function App() {
   if (user && !isPublicPath(path) && mfaState === 'checking') return <AuthLoading />;
   if (user && !isPublicPath(path) && mfaState === 'error') return <SessionUnavailable onRetry={() => { setMfaState('checking'); setMfaCheckKey((value) => value + 1); }} onSignOut={() => void signOutUser()} />;
   if (user && !isPublicPath(path) && mfaState === 'required') return <MfaChallengeView onVerified={() => { setMfaState('ready'); setReloadKey((value) => value + 1); }} onSignOut={() => void signOutUser()} />;
-  if (user && !isPublicPath(path) && (identityState === 'loading' || identityUid !== user.uid)) return <AuthLoading />;
   if (user && !isPublicPath(path) && identityState === 'error') return <SessionUnavailable onRetry={() => setReloadKey((value) => value + 1)} onSignOut={() => void signOutUser()} />;
+  if (user && !isPublicPath(path) && (identityState === 'loading' || identityUid !== user.uid)) return <AuthLoading />;
   if (user && !isPublicPath(path) && identityState === 'ready' && !role) return <SessionUnavailable onRetry={() => setReloadKey((value) => value + 1)} onSignOut={() => void signOutUser()} />;
   // On a tenant's own hostname the root is that tenant's portal, not SPR's
   // marketing site: signed-out visitors get the branded sign-in page.
