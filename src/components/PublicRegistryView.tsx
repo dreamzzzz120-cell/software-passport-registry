@@ -35,10 +35,22 @@ export default function PublicRegistryView() {
     setData(null);
     setState('loading');
     try {
-      const response = await apiFetch('/api/registry-public?limit=100');
-      const json = await response.json();
-      if (!response.ok || !json?.ok || !Array.isArray(json.items) || !Number.isFinite(json.count)) throw new Error('REGISTRY_READ_FAILED');
-      setData(json);
+      const pageSize = 500;
+      let offset = 0;
+      let total = 0;
+      let semantics: RegistryResponse['semantics'];
+      const byId = new Map<string, RegistryItem>();
+      do {
+        const response = await apiFetch(`/api/registry-public?limit=${pageSize}&offset=${offset}`);
+        const json = await response.json();
+        if (!response.ok || !json?.ok || !Array.isArray(json.items) || !Number.isFinite(json.count)) throw new Error('REGISTRY_READ_FAILED');
+        total = json.count;
+        semantics ??= json.semantics;
+        for (const item of json.items as RegistryItem[]) byId.set(item.id, item);
+        if (json.items.length === 0) break;
+        offset += json.items.length;
+      } while (offset < total);
+      setData({ ok: true, count: total, items: [...byId.values()], semantics });
       setState('ready');
     } catch {
       setState('error');
@@ -146,8 +158,8 @@ export default function PublicRegistryView() {
       {state === 'ready' && data && visibleItems.length === 0 && (
         <div className="rounded-2xl border border-dashed border-[var(--spr-border)] bg-[var(--spr-surface)] p-10 text-center">
           <Search className="mx-auto h-6 w-6 text-[var(--spr-text-muted)]" />
-          <div className="mt-3 font-semibold text-[var(--spr-text)]">{data.items.length === 0 ? 'No repositories observed yet' : 'No matches among loaded records'}</div>
-          <p className="mt-1 text-sm text-[var(--spr-text-muted)]">{data.items.length === 0 ? 'Run a free review of a public repository to collect evidence.' : 'Clear the filters or review a repository directly. Repositories outside this loaded set have not been searched.'}</p>
+          <div className="mt-3 font-semibold text-[var(--spr-text)]">{data.items.length === 0 ? 'No repositories observed yet' : 'No matches in the observed registry'}</div>
+          <p className="mt-1 text-sm text-[var(--spr-text-muted)]">{data.items.length === 0 ? 'Run a free review of a public repository to collect evidence.' : 'Clear the filters or review a repository directly. The complete observed registry was searched.'}</p>
           <button type="button" onClick={() => { setQuery(''); setLanguage('all'); }} className="mt-4 mr-4 underline">Clear filters</button><a href="/free-review" className="underline">Run a free review</a>
         </div>
       )}
