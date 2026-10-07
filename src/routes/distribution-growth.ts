@@ -5,7 +5,7 @@ import { appPool } from '../db/index.ts';
 import { requireAuth, requireFounder, requireRole, type AuthenticatedRequest } from '../middleware/security.ts';
 import { DISTRIBUTION_TENANT_ID } from '../lib/distribution-engine.ts';
 
-const stages = ['new','qualified','contacted','replied','demo','pilot','customer','lost'] as const;
+const stages = ['new','qualified','contacted','replied','demo','checkout','pilot','customer','lost'] as const;
 const stageSchema = z.object({ stage: z.enum(stages) }).strict();
 const aeoStatus = ['backlog','published','monitoring','retired'] as const;
 const aeoIntent = ['informational','commercial','comparison','navigational'] as const;
@@ -73,7 +73,7 @@ export function createDistributionGrowthRouter() {
     try {
       const payload = await withTenant(async (client) => {
         const settingsResult = await client.query(`SELECT discovery_enabled AS "discoveryEnabled", outreach_enabled AS "outreachEnabled", daily_send_cap AS "dailySendCap", followup_delay_days AS "followupDelayDays", max_followups AS "maxFollowups", demo_url AS "demoUrl", updated_at AS "updatedAt" FROM distribution_campaign_settings WHERE tenant_id=$1 LIMIT 1`, [DISTRIBUTION_TENANT_ID]);
-        const contactsResult = await client.query(`SELECT id,email,company,source_url AS "sourceUrl",evidence,outreach_basis AS "outreachBasis",status,pipeline_stage AS "pipelineStage",last_contacted_at AS "lastContactedAt",next_followup_at AS "nextFollowupAt",followup_count AS "followupCount",replied_at AS "repliedAt",demo_at AS "demoAt",pilot_at AS "pilotAt",customer_at AS "customerAt",lost_at AS "lostAt",created_at AS "createdAt",updated_at AS "updatedAt" FROM distribution_contacts WHERE tenant_id=$1 ORDER BY updated_at DESC LIMIT 500`, [DISTRIBUTION_TENANT_ID]);
+        const contactsResult = await client.query(`SELECT id,email,company,source_url AS "sourceUrl",evidence,outreach_basis AS "outreachBasis",status,pipeline_stage AS "pipelineStage",last_contacted_at AS "lastContactedAt",next_followup_at AS "nextFollowupAt",followup_count AS "followupCount",replied_at AS "repliedAt",demo_at AS "demoAt",checkout_at AS "checkoutAt",pilot_at AS "pilotAt",customer_at AS "customerAt",lost_at AS "lostAt",created_at AS "createdAt",updated_at AS "updatedAt" FROM distribution_contacts WHERE tenant_id=$1 ORDER BY updated_at DESC LIMIT 500`, [DISTRIBUTION_TENANT_ID]);
         const messagesResult = await client.query(`SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE status='sent')::int AS sent, COUNT(*) FILTER (WHERE status='failed')::int AS failed FROM distribution_messages WHERE tenant_id=$1`, [DISTRIBUTION_TENANT_ID]);
         const aeoResult = await client.query(`SELECT id,question,intent,target_path AS "targetPath",status,answer_evidence AS "answerEvidence",observed_mentions AS "observedMentions",observed_citations AS "observedCitations",last_checked_at AS "lastCheckedAt",created_at AS "createdAt",updated_at AS "updatedAt" FROM distribution_aeo_queries WHERE tenant_id=$1 ORDER BY updated_at DESC LIMIT 250`, [DISTRIBUTION_TENANT_ID]);
         const aeoRows = (aeoResult.rows ?? []).map((row: any) => {
@@ -122,7 +122,7 @@ export function createDistributionGrowthRouter() {
       if (!parsed.success) return res.status(400).json({ error: 'A valid pipeline stage is required.' });
       const contactId = String(req.params.contactId || '').trim();
       if (contactId.length < 1 || contactId.length > 128) return res.status(400).json({ error: 'Invalid contact id.' });
-      const result = await withTenant(async (client) => client.query(`UPDATE distribution_contacts SET pipeline_stage=$3, replied_at=CASE WHEN $3='replied' THEN COALESCE(replied_at,CURRENT_TIMESTAMP) ELSE replied_at END, demo_at=CASE WHEN $3='demo' THEN COALESCE(demo_at,CURRENT_TIMESTAMP) ELSE demo_at END, pilot_at=CASE WHEN $3='pilot' THEN COALESCE(pilot_at,CURRENT_TIMESTAMP) ELSE pilot_at END, customer_at=CASE WHEN $3='customer' THEN COALESCE(customer_at,CURRENT_TIMESTAMP) ELSE customer_at END, lost_at=CASE WHEN $3='lost' THEN COALESCE(lost_at,CURRENT_TIMESTAMP) ELSE lost_at END, updated_at=CURRENT_TIMESTAMP WHERE id=$1 AND tenant_id=$2 RETURNING id,pipeline_stage AS "pipelineStage",updated_at AS "updatedAt"`, [contactId, DISTRIBUTION_TENANT_ID, parsed.data.stage]));
+      const result = await withTenant(async (client) => client.query(`UPDATE distribution_contacts SET pipeline_stage=$3, replied_at=CASE WHEN $3='replied' THEN COALESCE(replied_at,CURRENT_TIMESTAMP) ELSE replied_at END, demo_at=CASE WHEN $3='demo' THEN COALESCE(demo_at,CURRENT_TIMESTAMP) ELSE demo_at END, checkout_at=CASE WHEN $3='checkout' THEN COALESCE(checkout_at,CURRENT_TIMESTAMP) ELSE checkout_at END, pilot_at=CASE WHEN $3='pilot' THEN COALESCE(pilot_at,CURRENT_TIMESTAMP) ELSE pilot_at END, customer_at=CASE WHEN $3='customer' THEN COALESCE(customer_at,CURRENT_TIMESTAMP) ELSE customer_at END, lost_at=CASE WHEN $3='lost' THEN COALESCE(lost_at,CURRENT_TIMESTAMP) ELSE lost_at END, updated_at=CURRENT_TIMESTAMP WHERE id=$1 AND tenant_id=$2 RETURNING id,pipeline_stage AS "pipelineStage",updated_at AS "updatedAt"`, [contactId, DISTRIBUTION_TENANT_ID, parsed.data.stage]));
       if (!result.rows?.[0]) return res.status(404).json({ error: 'Contact not found.' });
       return res.json(result.rows[0]);
     } catch (error) { return next(error); }
