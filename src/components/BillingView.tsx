@@ -32,13 +32,47 @@ type BillingStatus = {
 // Stripe sends the buyer back with one of these query strings. The banner
 // only says the checkout page reported success; the purchase list below is
 // what SPR's webhook actually recorded, and only that counts as confirmed.
-function returnBanner(): { tone: 'ok' | 'muted'; text: string } | null {
+function returnBanner(): { tone: 'ok' | 'muted' | 'warning'; text: string } | null {
   if (typeof window === 'undefined') return null;
   const q = new URLSearchParams(window.location.search);
   if (q.get('checkout') === 'success') return { tone: 'ok', text: 'Stripe reported your plan checkout as complete. It appears under Your purchases once SPR receives Stripe\'s confirmation (usually within a minute).' };
   if (q.get('purchase') === 'success') return { tone: 'ok', text: `Stripe reported your order as complete${q.get('product') ? ` (${q.get('product')})` : ''}. An order-received email with your reference is on its way; the item appears under Your purchases once confirmed.` };
   if (q.get('addon') === 'success') return { tone: 'ok', text: 'Stripe reported your add-on checkout as complete. It becomes active once SPR receives Stripe\'s confirmation (usually within a minute).' };
   if (q.get('checkout') === 'cancelled' || q.get('purchase') === 'cancelled' || q.get('addon') === 'cancelled') return { tone: 'muted', text: 'Checkout was cancelled. Nothing was charged.' };
+
+  const reason = q.get('reason');
+  if (reason === 'capability') {
+    const capability = q.get('required');
+    const rawPlans = q.get('plans')?.split(',') ?? [];
+    const validPlans = rawPlans.filter((plan): plan is PlanId => ['pilot', 'starter', 'professional', 'growth', 'enterprise'].includes(plan));
+    const capabilityLabel = capability && /^[a-z_]{1,64}$/.test(capability)
+      ? capability.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
+      : 'This feature';
+    const planLabels: Record<PlanId, string> = {
+      pilot: 'MSP White-Label Pilot',
+      starter: 'MSP Starter',
+      professional: 'MSP Professional',
+      growth: 'MSP Business',
+      enterprise: 'Enterprise',
+    };
+    const available = validPlans.map((plan) => planLabels[plan]);
+    return {
+      tone: 'warning',
+      text: available.length
+        ? `${capabilityLabel} is not included in your current plan. It is available on ${available.join(', ')}.`
+        : `${capabilityLabel} is not included in your current plan. Choose a plan below that includes it.`,
+    };
+  }
+  if (reason === 'subscription') {
+    const status = q.get('status');
+    const safeStatus = status && /^[a-z_]{1,64}$/.test(status) ? status.replaceAll('_', ' ') : null;
+    return {
+      tone: 'warning',
+      text: safeStatus
+        ? `Workspace access is locked because the subscription is ${safeStatus}. Reactivate or choose an active plan to continue.`
+        : 'An active SPR subscription is required to unlock the MSP workspace.',
+    };
+  }
   return null;
 }
 
@@ -162,8 +196,18 @@ export default function BillingView() {
         </div>
       )}
       {banner && (
-        <div role="status" className={banner.tone === 'ok' ? 'flex items-center gap-2 rounded-md border border-[var(--spr-green)]/40 bg-[var(--spr-green)]/10 px-4 py-3 text-sm text-[var(--spr-green)]' : 'flex items-center gap-2 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] px-4 py-3 text-sm text-[var(--spr-text-muted)]'}>
-          <CheckCircle2 className="h-4 w-4 shrink-0" /> {banner.text}
+        <div
+          role="status"
+          className={
+            banner.tone === 'ok'
+              ? 'flex items-center gap-2 rounded-md border border-[var(--spr-green)]/40 bg-[var(--spr-green)]/10 px-4 py-3 text-sm text-[var(--spr-green)]'
+              : banner.tone === 'warning'
+                ? 'flex items-center gap-2 rounded-md border border-[var(--spr-amber)]/40 bg-[var(--spr-amber)]/10 px-4 py-3 text-sm text-[var(--spr-amber)]'
+                : 'flex items-center gap-2 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] px-4 py-3 text-sm text-[var(--spr-text-muted)]'
+          }
+        >
+          {banner.tone === 'warning' ? <AlertTriangle className="h-4 w-4 shrink-0" /> : <CheckCircle2 className="h-4 w-4 shrink-0" />}
+          {banner.text}
         </div>
       )}
 
