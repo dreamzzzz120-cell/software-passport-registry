@@ -26,6 +26,17 @@ export default function FounderGrowthHub() {
     return sent > 0 ? Math.round((replied / sent) * 100) : null;
   }, [data]);
 
+  const funnelSessions = (eventName: string): number | null => {
+    const value = data?.growth?.funnel?.[eventName]?.sessions;
+    return typeof value === 'number' ? value : null;
+  };
+  const stageRate = (from: string, to: string): string => {
+    const start = funnelSessions(from);
+    const end = funnelSessions(to);
+    if (start === null || end === null || start <= 0) return 'Not verified';
+    return `${Math.round((end / start) * 100)}%`;
+  };
+
   const saveCampaign = async (patch: Record<string, unknown>) => {
     setBusy(true); setError(null);
     try { const response = await apiFetch('/api/founder/distribution/campaign', { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(patch) }); const body = await response.json().catch(() => null); if (!response.ok) throw new Error(body?.error || `Campaign update failed (${response.status})`); await load(); }
@@ -61,10 +72,21 @@ export default function FounderGrowthHub() {
           ['Free reviews', data?.growth?.freeReviews?.reviews],
           ['Completed reviews', data?.growth?.freeReviews?.completed],
           ['Leads captured', data?.growth?.funnel?.lead_captured?.sessions],
+          ['Pricing viewers', data?.growth?.funnel?.pricing_view?.sessions],
+          ['Signup starts', data?.growth?.funnel?.signup_started?.sessions],
+          ['Signup completes', data?.growth?.funnel?.signup_completed?.sessions],
           ['Referral visits', data?.growth?.referrals?.visits],
           ['Registry claims', data?.growth?.registryClaims?.total],
           ['Customers', data?.pipeline?.customer],
         ].map(([label,value]) => <div key={String(label)} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3"><div className="text-[10px] uppercase tracking-[.16em] text-[var(--spr-text-muted)]">{label}</div><div className="mt-1 text-xl font-bold text-[var(--spr-text)]">{value ?? '—'}</div></div>)}
+      </div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          ['Review → complete', stageRate('free_review_started','free_review_completed')],
+          ['Complete → lead', stageRate('free_review_completed','lead_captured')],
+          ['Pricing → signup', stageRate('pricing_view','signup_started')],
+          ['Signup → confirmed', stageRate('signup_started','signup_completed')],
+        ].map(([label,value]) => <div key={label} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3"><div className="text-[10px] uppercase tracking-[.16em] text-[var(--spr-text-muted)]">{label}</div><div className="mt-1 text-lg font-bold text-[var(--spr-text)]">{value}</div></div>)}
       </div>
     </div>
     <div className="mt-6 grid gap-4 lg:grid-cols-2">
