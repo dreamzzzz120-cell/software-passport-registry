@@ -124,7 +124,7 @@ describe('monitoring enrollment UI', () => {
   it('renders real alerts from the trust-loop endpoint with an honest empty state', () => {
     const s = source();
     expect(s).toContain("apiFetch('/api/trust-loop/monitoring', {");
-    expect(s).toContain('No changes have triggered an alert yet');
+    expect(s).toContain('No monitored-source changes have triggered a change alert yet');
   });
 
   it('only offers acknowledge/resolve controls to roles that can mutate, not to Client/Viewer', () => {
