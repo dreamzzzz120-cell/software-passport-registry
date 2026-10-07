@@ -20,7 +20,7 @@ const STATE_META: Record<TrustState, { label: string; color: string; icon: typeo
   PARTIALLY_VERIFIED: { label: 'Partially Verified', color: AMBER, icon: ShieldAlert, description: 'Some relevant evidence is verified, but meaningful gaps remain.' },
   EVIDENCE_INCOMPLETE: { label: 'Evidence Incomplete', color: NEUTRAL, icon: HelpCircle, description: 'There is insufficient evidence to establish the requested trust state.' },
   VERIFICATION_FAILED: { label: 'Verification Failed', color: RED, icon: XCircle, description: 'Submitted evidence failed verification.' },
-  UNINITIALIZED: { label: 'Trust State Uninitialized', color: NEUTRAL, icon: Circle, description: 'No Passport exists yet.' },
+  UNINITIALIZED: { label: 'Trust State Uninitialized', color: NEUTRAL, icon: Circle, description: 'No Passport or evidence exists yet.' },
 };
 
 /**
@@ -62,7 +62,7 @@ export function trustStateFromDecision(state: VerificationDecisionState | null |
     case 'INVESTIGATE': return 'VERIFICATION_FAILED';
     case 'AVOID': return 'VERIFICATION_FAILED';
     case 'UNKNOWN': return 'EVIDENCE_INCOMPLETE';
-    default: return 'EVIDENCE_INCOMPLETE';
+    default: return 'UNINITIALIZED';
   }
 }
 
