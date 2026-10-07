@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pause, Play, RefreshCw } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
 
-type Stage = 'new'|'qualified'|'contacted'|'replied'|'demo'|'pilot'|'customer'|'lost';
-const STAGES: Stage[] = ['new','qualified','contacted','replied','demo','pilot','customer','lost'];
-const LABELS: Record<Stage,string> = { new:'New', qualified:'Qualified', contacted:'Contacted', replied:'Replied', demo:'Demo', pilot:'Pilot', customer:'Customer', lost:'Lost' };
+type Stage = 'new'|'qualified'|'contacted'|'replied'|'demo'|'checkout'|'pilot'|'customer'|'lost';
+const STAGES: Stage[] = ['new','qualified','contacted','replied','demo','checkout','pilot','customer','lost'];
+const LABELS: Record<Stage,string> = { new:'New', qualified:'Qualified', contacted:'Contacted', replied:'Replied', demo:'Demo', checkout:'Checkout', pilot:'Pilot', customer:'Customer', lost:'Lost' };
 
 export default function FounderGrowthHub() {
   const [data, setData] = useState<any>(null);
@@ -22,7 +22,7 @@ export default function FounderGrowthHub() {
   const settings = data?.settings ?? {};
   const conversion = useMemo(() => {
     const sent = Number(data?.messages?.sent ?? 0);
-    const replied = Number(data?.pipeline?.replied ?? 0) + Number(data?.pipeline?.demo ?? 0) + Number(data?.pipeline?.pilot ?? 0) + Number(data?.pipeline?.customer ?? 0);
+    const replied = Number(data?.pipeline?.replied ?? 0) + Number(data?.pipeline?.demo ?? 0) + Number(data?.pipeline?.checkout ?? 0) + Number(data?.pipeline?.pilot ?? 0) + Number(data?.pipeline?.customer ?? 0);
     return sent > 0 ? Math.round((replied / sent) * 100) : null;
   }, [data]);
 
