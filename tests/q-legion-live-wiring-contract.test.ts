@@ -25,4 +25,15 @@ describe('Q-LEGION founder route and worker wiring', () => {
     expect(server).toContain('createQLegionRouter');
     expect(dashboard).toContain('<FounderQLegionPanel />');
   });
+
+  it('backfills only completed observed research that does not already have a mission', () => {
+    const shadow = readFileSync(resolve(process.cwd(), 'src/lib/q-legion-shadow.ts'), 'utf8');
+    expect(shadow).toContain('backfillResearchShadowMissions');
+    expect(shadow).toContain("j.kind='research_url'");
+    expect(shadow).toContain("j.status='succeeded'");
+    expect(shadow).toContain("q.source_kind='distribution_research'");
+    expect(shadow).toContain('q.source_id=j.id');
+    expect(worker).toContain('Q-LEGION shadow backfill:');
+  });
+
 });
