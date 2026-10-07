@@ -29,7 +29,7 @@ const SCHEDULE_OPTIONS = [
   { seconds: 86400, label: 'Every 24 hours' },
 ];
 
-export default function MonitoringView({ role = 'Viewer', passports = [], clients = [] }: { role?: string; passports?: SoftwarePassport[]; clients?: Client[] }) {
+export default function MonitoringView({ role, passports = [], clients = [] }: { role: string; passports?: SoftwarePassport[]; clients?: Client[] }) {
   const canRun = role === 'Owner' || role === 'Admin' || role === 'Technician';
   const canEnroll = role === 'Owner' || role === 'Admin';
   const [configurations, setConfigurations] = useState<Configuration[]>([]);
@@ -57,19 +57,29 @@ export default function MonitoringView({ role = 'Viewer', passports = [], client
     setLoading(true); setError(null);
     try {
       const [configResponse, jobsResponse, collectorsResponse, alertsResponse] = await Promise.all([
-        apiFetch('/api/monitoring/monitoring-configurations'), apiFetch('/api/monitoring/collector-jobs'),
-        apiFetch('/api/monitoring/collectors'), apiFetch('/api/trust-loop/monitoring'),
+        apiFetch('/api/monitoring/monitoring-configurations', { timeout: 12_000, retries: 1 }),
+        apiFetch('/api/monitoring/collector-jobs', { timeout: 12_000, retries: 1 }),
+        apiFetch('/api/monitoring/collectors', { timeout: 12_000, retries: 1 }),
+        apiFetch('/api/trust-loop/monitoring', { timeout: 12_000, retries: 1 }),
       ]);
-      if (!configResponse.ok) {
-        const body = await configResponse.json().catch(() => ({}));
-        throw new Error(body?.error?.message || body?.error || 'Monitoring data could not be loaded.');
-      }
-      setConfigurations(await configResponse.json());
+
+      const failures: string[] = [];
+      if (configResponse.ok) setConfigurations(await configResponse.json());
+      else failures.push(configResponse.status === 429 ? 'monitoring configurations are temporarily rate-limited' : 'monitoring configurations could not be loaded');
+
       if (jobsResponse.ok) setJobs(await jobsResponse.json());
+      else failures.push(jobsResponse.status === 429 ? 'collector jobs are temporarily rate-limited' : 'collector jobs could not be loaded');
+
       if (collectorsResponse.ok) setCollectorDefs(await collectorsResponse.json());
+      else failures.push(collectorsResponse.status === 429 ? 'collector definitions are temporarily rate-limited' : 'collector definitions could not be loaded');
+
       if (alertsResponse.ok) setAlerts((await alertsResponse.json()).alerts ?? []);
-    } catch (cause: any) { setError(cause?.message || 'Monitoring data could not be loaded.'); }
-    finally { setLoading(false); }
+      else failures.push(alertsResponse.status === 429 ? 'alerts are temporarily rate-limited' : 'alerts could not be loaded');
+
+      if (failures.length) setError(`Partial monitoring data loaded: ${failures.join('; ')}. Existing observed data is preserved; refresh to retry.`);
+    } catch (cause: any) {
+      setError(cause?.message || 'Monitoring data could not be loaded. Existing observed data is preserved; refresh to retry.');
+    } finally { setLoading(false); }
   };
   useEffect(() => { void load(); }, []);
 
