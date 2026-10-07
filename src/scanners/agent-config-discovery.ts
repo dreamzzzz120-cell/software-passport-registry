@@ -114,12 +114,12 @@ export async function discoverAgentConfigEvidence(
   const relationships: DiscoveredAgentRelationship[] = [];
   const limitations: string[] = [];
   const candidates = entries.filter((entry) => entry.absolutePath && AGENT_CONFIG_PATHS.some((pattern) => pattern.test(entry.path)));
-  if (candidates.length > MAX_CONFIG_FILES) limitations.push(\`AGENT_CONFIG_DISCOVERY_TRUNCATED: found \${candidates.length} candidate files; inspected first \${MAX_CONFIG_FILES}.\`);
+  if (candidates.length > MAX_CONFIG_FILES) limitations.push(`AGENT_CONFIG_DISCOVERY_TRUNCATED: found ${candidates.length} candidate files; inspected first ${MAX_CONFIG_FILES}.`);
 
   for (const entry of candidates.slice(0, MAX_CONFIG_FILES)) {
     if (!entry.absolutePath) continue;
     if (entry.size !== null && entry.size > MAX_CONFIG_BYTES) {
-      limitations.push(\`AGENT_CONFIG_TOO_LARGE: \${entry.path} exceeds \${MAX_CONFIG_BYTES} bytes and was not parsed.\`);
+      limitations.push(`AGENT_CONFIG_TOO_LARGE: ${entry.path} exceeds ${MAX_CONFIG_BYTES} bytes and was not parsed.`);
       continue;
     }
 
@@ -127,21 +127,21 @@ export async function discoverAgentConfigEvidence(
     try {
       bytes = await readFile(entry.absolutePath);
     } catch {
-      limitations.push(\`AGENT_CONFIG_UNREADABLE: \${entry.path} could not be read.\`);
+      limitations.push(`AGENT_CONFIG_UNREADABLE: ${entry.path} could not be read.`);
       continue;
     }
     if (bytes.length > MAX_CONFIG_BYTES) {
-      limitations.push(\`AGENT_CONFIG_TOO_LARGE: \${entry.path} exceeds \${MAX_CONFIG_BYTES} bytes and was not parsed.\`);
+      limitations.push(`AGENT_CONFIG_TOO_LARGE: ${entry.path} exceeds ${MAX_CONFIG_BYTES} bytes and was not parsed.`);
       continue;
     }
 
     const evidenceHash = hash(bytes);
-    const sourceIdentifier = \`github:\${source.repository}@\${source.commitSha}:\${entry.path}\`;
-    const configKey = \`config:\${entry.path}\`;
+    const sourceIdentifier = `github:${source.repository}@${source.commitSha}:${entry.path}`;
+    const configKey = `config:${entry.path}`;
     const kind = configKind(entry.path);
     let parsed: unknown = null;
     try { parsed = JSON.parse(bytes.toString('utf8')); } catch {
-      limitations.push(\`AGENT_CONFIG_INVALID_JSON: \${entry.path} was observed and hashed but could not be structurally parsed.\`);
+      limitations.push(`AGENT_CONFIG_INVALID_JSON: ${entry.path} was observed and hashed but could not be structurally parsed.`);
     }
 
     const servers = mcpServers(parsed);
@@ -181,7 +181,7 @@ export async function discoverAgentConfigEvidence(
       const command = cleanString(server.command, 500);
       const url = cleanString(server.url, 500);
       const serverHash = hash(JSON.stringify({ serverName, command, url, args: Array.isArray(server.args) ? server.args : [], envKeys: envKeys(server.env) }));
-      const serverKey = \`mcp:\${entry.path}:\${serverName}\`;
+      const serverKey = `mcp:${entry.path}:${serverName}`;
       const serverCapabilities: DiscoveredCapability[] = [];
       if (command) serverCapabilities.push({ capability: 'process.execute', accessMode: 'execute', targetType: 'executable', targetIdentifier: executableName(command), evidenceHash: serverHash });
       if (url) serverCapabilities.push({ capability: 'network.connect', accessMode: 'execute', targetType: 'endpoint', targetIdentifier: url, evidenceHash: serverHash });
@@ -192,7 +192,7 @@ export async function discoverAgentConfigEvidence(
         name: serverName.slice(0, 255),
         vendor: '',
         version: '',
-        sourceIdentifier: \`\${sourceIdentifier}#mcp:\${serverName}\`,
+        sourceIdentifier: `${sourceIdentifier}#mcp:${serverName}`,
         evidenceHash: serverHash,
         metadata: {
           repository: source.repository,
