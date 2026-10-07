@@ -13,6 +13,7 @@ import {
 import { auth } from '../lib/supabase-auth';
 import { apiFetch } from '../utils/apiClient';
 import DataGovernancePanel from './DataGovernancePanel';
+import MfaSettingsPanel from './MfaSettingsPanel';
 
 interface SettingsViewProps {
   theme: 'light' | 'dark';
@@ -458,6 +459,8 @@ export default function SettingsView({ theme, onToggleTheme, role, userEmail, on
           {/* Left Column: Core Preferences */}
           <div className="lg:col-span-2 space-y-6">
             
+            <MfaSettingsPanel />
+
             {/* Theme & Interface Customization Card */}
             <div className="spr-panel p-5 space-y-4">
               <h3 className="text-xs font-bold text-[var(--spr-text)] flex items-center gap-1.5 pb-2 border-b border-[var(--spr-border)]">
