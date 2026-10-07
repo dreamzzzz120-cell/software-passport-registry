@@ -616,11 +616,19 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
           const clientLimit = PLAN_CLIENT_LIMITS[plan];
           const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id;
           await db.execute(sql`
-            UPDATE tenant_subscriptions
-            SET stripe_customer_id = COALESCE(${customerId ?? null}, stripe_customer_id),
-                stripe_subscription_id = ${String(session.subscription)}, plan = ${plan},
-                status = 'active', client_limit = ${clientLimit}, updated_at = CURRENT_TIMESTAMP
-            WHERE tenant_id = ${tenantId}
+            INSERT INTO tenant_subscriptions (
+              tenant_id, stripe_customer_id, stripe_subscription_id, plan, status, client_limit, updated_at
+            )
+            VALUES (
+              ${tenantId}, ${customerId ?? null}, ${String(session.subscription)}, ${plan}, 'active', ${clientLimit}, CURRENT_TIMESTAMP
+            )
+            ON CONFLICT (tenant_id) DO UPDATE SET
+              stripe_customer_id = COALESCE(EXCLUDED.stripe_customer_id, tenant_subscriptions.stripe_customer_id),
+              stripe_subscription_id = EXCLUDED.stripe_subscription_id,
+              plan = EXCLUDED.plan,
+              status = 'active',
+              client_limit = EXCLUDED.client_limit,
+              updated_at = CURRENT_TIMESTAMP
           `);
           await appendAuditEntry(db, { tenantId, action: 'billing.subscription.activated', actor: 'stripe-webhook', payload: { plan, stripeEventId: event.id, stripeSubscriptionId: String(session.subscription), stripeCustomerId: customerId ?? null } });
         } else if (tenantId && session.mode === 'payment') {
@@ -719,7 +727,7 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
         const metadataPlan = subscription.metadata?.plan as PlanId | undefined;
         const plan = resolvedPlan ?? (metadataPlan && PLAN_CONFIG[metadataPlan] ? metadataPlan : undefined);
         const updated = tenantId && plan && PLAN_CONFIG[plan]
-          ? (await db.execute(sql`UPDATE tenant_subscriptions SET stripe_subscription_id = ${subscription.id}, plan = ${plan}, client_limit = ${PLAN_CLIENT_LIMITS[plan]}, status = ${subscription.status}, current_period_end = ${periodEnd}, updated_at = CURRENT_TIMESTAMP WHERE tenant_id = ${tenantId} RETURNING tenant_id`) as any).rows?.[0]
+          ? (await db.execute(sql`INSERT INTO tenant_subscriptions (tenant_id, stripe_subscription_id, plan, client_limit, status, current_period_end, updated_at) VALUES (${tenantId}, ${subscription.id}, ${plan}, ${PLAN_CLIENT_LIMITS[plan]}, ${subscription.status}, ${periodEnd}, CURRENT_TIMESTAMP) ON CONFLICT (tenant_id) DO UPDATE SET stripe_subscription_id = EXCLUDED.stripe_subscription_id, plan = EXCLUDED.plan, client_limit = EXCLUDED.client_limit, status = EXCLUDED.status, current_period_end = EXCLUDED.current_period_end, updated_at = CURRENT_TIMESTAMP RETURNING tenant_id`) as any).rows?.[0]
           // No usable plan metadata: fall back to the subscription id, which
           // matches the plan row and nothing else. This preserves status
           // changes even if a malformed third-party subscription event arrives.
