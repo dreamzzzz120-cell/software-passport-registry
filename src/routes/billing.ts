@@ -186,10 +186,10 @@ async function discoverMissingCatalogPrices(stripe: Stripe): Promise<void> {
   await discoveryInFlight;
 }
 
-export async function getPlanLimits(tenantId: string, scopedDb: { execute: (query: any) => Promise<any> }): Promise<{ plan: PlanId | null; clientLimit: number | null }> {
-  const subResult = await scopedDb.execute(sql`SELECT plan, client_limit AS "clientLimit" FROM tenant_subscriptions WHERE tenant_id = ${tenantId} LIMIT 1`);
+export async function getPlanLimits(tenantId: string, scopedDb: { execute: (query: any) => Promise<any> }): Promise<{ plan: PlanId | null; clientLimit: number | null; status: string }> {
+  const subResult = await scopedDb.execute(sql`SELECT plan, status, client_limit AS "clientLimit" FROM tenant_subscriptions WHERE tenant_id = ${tenantId} LIMIT 1`);
   const row = (subResult as any).rows?.[0];
-  return { plan: row?.plan ?? null, clientLimit: row?.clientLimit ?? null };
+  return { plan: row?.plan ?? null, clientLimit: row?.clientLimit ?? null, status: row?.status ?? 'none' };
 }
 
 function stripeClient(): Stripe {
@@ -795,21 +795,18 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
 export async function canCreateClient(tenantId: string, scopedDb: { execute: (query: any) => Promise<any> }): Promise<{
   allowed: boolean; plan: PlanId | null; clientLimit: number | null; clientCount: number; nextPlan: PlanId | null;
 }> {
-  let plan: PlanId | null = null;
-  let clientLimit: number | null = null;
-
-  try {
-    const limits = await getPlanLimits(tenantId, scopedDb);
-    plan = limits.plan;
-    clientLimit = limits.clientLimit;
-  } catch (error) {
-    const code = (error as any)?.code ?? (error as any)?.cause?.code;
-    if (code !== '42P01' && code !== '42703') throw error;
-  }
+  // Defense in depth: client creation must independently prove an entitling
+  // subscription. The global middleware already gates paid routes, but this
+  // helper is also used at the mutation boundary and must never fail open.
+  const limits = await getPlanLimits(tenantId, scopedDb);
+  const plan = limits.plan;
+  const clientLimit = limits.clientLimit;
+  const status = limits.status;
 
   const countResult = await scopedDb.execute(sql`SELECT count(*)::int AS count FROM clients WHERE tenant_id = ${tenantId}`);
   const clientCount = (countResult as any).rows?.[0]?.count ?? 0;
-  const allowed = clientLimit === null || clientCount < clientLimit;
+  const paid = Boolean(plan) && status === 'active';
+  const allowed = paid && (clientLimit === null || clientCount < clientLimit);
   const currentIndex = plan ? PLAN_IDS.indexOf(plan) : -1;
   const nextPlan = currentIndex >= 0 && currentIndex < PLAN_IDS.length - 1 ? PLAN_IDS[currentIndex + 1] : null;
   return { allowed, plan, clientLimit, clientCount, nextPlan };
