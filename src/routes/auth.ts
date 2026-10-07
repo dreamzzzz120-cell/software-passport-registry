@@ -55,6 +55,7 @@ const profileUpdateSchema = z.object({
   companyName: z.string().trim().max(200).optional(),
 }).strict();
 const revokeSessionSchema = z.object({ sessionId: z.string().trim().min(1).max(200) }).strict();
+const mfaStateSchema = z.object({ enabled: z.boolean() }).strict();
 // The raw in-toto/SLSA statement text and the digest the submitter claims for
 // it. hash is independently recomputed and compared server-side
 // (verifySlsaProvenance) -- it is never trusted on its own, matching the
@@ -223,6 +224,19 @@ export function createAuthRouter() {
     } catch (error) {
       return next(error);
     }
+  });
+
+  router.post('/auth/mfa-state', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+    const parsed = mfaStateSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Invalid MFA state request', details: parsed.error.flatten() });
+    if (req.user!.aal !== 'aal2') return res.status(403).json({ error: 'A verified second factor is required to change MFA enforcement.', code: 'MFA_AAL2_REQUIRED' });
+    try {
+      const result = await db.update(users).set({ mfaEnabled: parsed.data.enabled ? 1 : 0 }).where(eq(users.uid, req.user!.uid)).returning({ mfaEnabled: users.mfaEnabled });
+      const updated = result[0];
+      if (!updated) return res.status(404).json({ error: 'User account not found' });
+      await appendAuditEntry(req.db!, { tenantId: req.user!.tenantId, action: parsed.data.enabled ? 'auth.mfa.enabled' : 'auth.mfa.disabled', actor: req.user!.email, payload: { aal: req.user!.aal } });
+      return res.json({ mfaEnabled: Boolean(updated.mfaEnabled) });
+    } catch (error) { return next(error); }
   });
 
   router.put('/user/profile', requireAuth, async (req: AuthenticatedRequest, res, next) => {
