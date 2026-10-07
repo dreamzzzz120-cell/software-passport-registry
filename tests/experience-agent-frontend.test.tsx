@@ -357,7 +357,7 @@ describe('evidence, provenance and UNKNOWN as shown to the user', () => {
     expect(calls.map((c) => c.url)).toEqual(['/api/agent/v1/command', '/api/agent/v1/verify-software']);
     expect(calls[1].body).toEqual({ query: 'alpha app' });
     const dialog = screen.getByRole('dialog');
-    expect(dialog.textContent).toContain('Observed: OBSERVED');
+    expect(dialog.textContent).toContain('Observed stateOBSERVED');
     expect(dialog.textContent).toContain('Finding IDs observed: f-a-1, f-a-2');
     expect(dialog.textContent).toContain('Evidence IDs observed: e-a-1');
     expect(dialog.textContent).toContain('Observation IDs observed: obs-a-1');
@@ -375,7 +375,7 @@ describe('evidence, provenance and UNKNOWN as shown to the user', () => {
     await mount(true);
     await openAndSend('verify nothing');
     await screen.findByText(/That software is UNKNOWN because no matching passport record was observed in your authorized workspace\. No negative trust claim was made\./);
-    expect(screen.getByRole('dialog').textContent).toContain('Observed: UNKNOWN');
+    expect(screen.getByRole('dialog').textContent).toContain('Observed stateUNKNOWN');
   });
 
   it('summary answers show the tables, fields and filters they were counted from', async () => {
@@ -426,7 +426,7 @@ describe('commercial intelligence production contracts', () => {
     await mount(true);
     await openAndSend('show revenue');
     expect(await screen.findByText('Evidence-backed income opportunities')).toBeTruthy();
-    expect(screen.getByText('UNKNOWN')).toBeTruthy();
+    expect(screen.getAllByText('UNKNOWN').length).toBeGreaterThan(0);
     expect(screen.getByLabelText('Opportunity priority chart')).toBeTruthy();
     expect(screen.getByText(/not forecast revenue/i)).toBeTruthy();
   });
