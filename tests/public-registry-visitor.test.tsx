@@ -28,8 +28,10 @@ describe('public registry visitor next steps', () => {
     .mockResolvedValueOnce(response({ ok: true, count: 2, items: [second] }));
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ entries: [] })));
   render(<PublicRegistryView />);
-  await screen.findByText('expressjs/express');
-  expect(await screen.findByText('vitejs/vite')).toBeTruthy();
+  await screen.findByText('expressjs');
+  expect(screen.getByText('express')).toBeTruthy();
+  expect(await screen.findByText('vitejs')).toBeTruthy();
+  expect(screen.getByText('vite')).toBeTruthy();
   expect(vi.mocked(apiFetch).mock.calls[0]?.[0]).toContain('offset=0');
   expect(vi.mocked(apiFetch).mock.calls[1]?.[0]).toContain('offset=1');
  });
