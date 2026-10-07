@@ -127,66 +127,124 @@ export async function checkGithubCi(): Promise<ConnectionStatus> {
 // records. MRR is normalized to a monthly value and discounts are applied.
 // Failed/unavailable checks return null values so the Founder UI cannot turn a
 // provider failure into a false zero.
-export async function checkStripeAndMrr(): Promise<{ connection: ConnectionStatus; customerCount: number | null; mrrCents: number | null; activeSubscriptionCount: number | null; successfulPaymentCount30d: number | null; successfulPaymentAmount30dCents: number | null }> {
-  if (!config.stripe.secretKey) return { connection: { key: 'stripe', name: 'Stripe', status: 'not_configured', detail: 'Stripe connection is not configured', lastChecked: now() }, customerCount: null, mrrCents: null, activeSubscriptionCount: null, successfulPaymentCount30d: null, successfulPaymentAmount30dCents: null };
+type StripeMetrics = { connection: ConnectionStatus; customerCount: number | null; mrrCents: number | null; activeSubscriptionCount: number | null; successfulPaymentCount30d: number | null; successfulPaymentAmount30dCents: number | null };
+const emptyStripeMetrics = { customerCount: null, mrrCents: null, activeSubscriptionCount: null, successfulPaymentCount30d: null, successfulPaymentAmount30dCents: null };
+
+function stripeFailure(err: unknown): string {
+  const status = (err as { statusCode?: number })?.statusCode;
+  if (status === 401) return 'credentials rejected';
+  if (status === 403) return 'read permission missing';
+  if (status === 429) return 'provider rate limit';
+  if (status === 400) return 'provider rejected the telemetry request';
+  if ((err as Error)?.name === 'FounderStripeTimeout') return 'check timed out';
+  return safeErrorDetail(err);
+}
+
+async function boundedStripeRead<T>(read: (expired: () => boolean) => Promise<T>): Promise<T> {
+  let expired = false;
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => { expired = true; const error = new Error('Stripe check timed out'); error.name = 'FounderStripeTimeout'; reject(error); }, CHECK_TIMEOUT_MS);
+  });
+  try { return await Promise.race([Promise.resolve().then(() => read(() => expired)), timeout]); }
+  finally { clearTimeout(timer!); }
+}
+
+// The dashboard formats money as USD. Unsupported prices/discounts remain
+// unknown instead of becoming zero, undiscounted revenue, or mixed currency.
+export function subscriptionMonthlyUsd(sub: any): number | null {
+  if (sub.items?.has_more || !Array.isArray(sub.items?.data) || !sub.items.data.length) return null;
+  const items = sub.items.data;
+  let total = 0;
+  for (const item of items) {
+    const price = item.price;
+    const recurring = price?.recurring;
+    const amount = price?.unit_amount;
+    const quantity = item.quantity ?? 1;
+    const count = recurring?.interval_count ?? 1;
+    if (price?.currency !== 'usd' || price?.transform_quantity || !Number.isFinite(amount) || amount < 0 || recurring?.usage_type === 'metered'
+      || !Number.isFinite(quantity) || quantity < 0 || !Number.isFinite(count) || count <= 0 || item.discounts?.length) return null;
+    const factor = recurring?.interval === 'year' ? 1 / 12 : recurring?.interval === 'week' ? 52 / 12 : recurring?.interval === 'day' ? 365 / 12 : recurring?.interval === 'month' ? 1 : null;
+    if (factor === null) return null;
+    total += amount * quantity * factor / count;
+  }
+  for (const discount of sub.discounts ?? []) {
+    if (!discount || typeof discount !== 'object') return null;
+    if (typeof discount.end === 'number' && discount.end < Date.now() / 1000) continue;
+    const coupon = discount.coupon ?? discount.source?.coupon;
+    if (!coupon || typeof coupon !== 'object' || coupon.applies_to?.products?.length) return null;
+    if (typeof coupon.percent_off === 'number' && coupon.percent_off >= 0 && coupon.percent_off <= 100) total *= 1 - coupon.percent_off / 100;
+    else if (typeof coupon.amount_off === 'number' && coupon.amount_off >= 0 && coupon.currency === 'usd') {
+      // A fixed coupon is applied per billing period. Mixed periods require a
+      // provider invoice breakdown; do not subtract its face value from MRR.
+      const interval = items[0].price.recurring.interval;
+      const count = items[0].price.recurring.interval_count ?? 1;
+      if (items.some((item: any) => item.price.recurring.interval !== interval || (item.price.recurring.interval_count ?? 1) !== count)) return null;
+      const factor = interval === 'year' ? 1 / 12 : interval === 'week' ? 52 / 12 : interval === 'day' ? 365 / 12 : 1;
+      total -= coupon.amount_off * factor / count;
+    } else return null;
+  }
+  return Number.isFinite(total) ? Math.max(0, total) : null;
+}
+
+export async function checkStripeAndMrr(): Promise<StripeMetrics> {
+  const key = config.stripe.secretKey;
+  if (!key) return { connection: { key: 'stripe', name: 'Stripe', status: 'not_configured', detail: 'Stripe connection is not configured', lastChecked: now() }, ...emptyStripeMetrics };
+  const testMode = /^(?:sk|rk)_test_/.test(key);
+  if (config.isProduction && testMode) return { connection: { key: 'stripe', name: 'Stripe', status: 'error', detail: 'TEST MODE key is configured in production; live billing telemetry is unavailable.', lastChecked: now() }, ...emptyStripeMetrics };
   try {
     const Stripe = (await import('stripe')).default;
-    const stripe = new Stripe(config.stripe.secretKey);
-    let customerCount = 0;
-    for await (const _customer of stripe.customers.list({ limit: 100 })) customerCount += 1;
-
-    const applyDiscounts = (cents: number, discounts: unknown[]): number => {
-      let value = cents;
-      for (const d of discounts) {
-        const coupon = (d as any)?.coupon ?? (d as any)?.source?.coupon;
-        if (!coupon) continue;
-        if (typeof coupon.percent_off === 'number') value -= value * (coupon.percent_off / 100);
-        else if (typeof coupon.amount_off === 'number') value -= coupon.amount_off;
-      }
-      return Math.max(0, Math.round(value));
-    };
-
-    let mrrCents = 0;
-    let activeSubscriptions = 0;
-    for await (const sub of stripe.subscriptions.list({ status: 'active', limit: 100, expand: ['data.discounts'] })) {
-      activeSubscriptions += 1;
-      const itemTotal = sub.items.data.reduce((sum, item) => {
-        const amount = item.price?.unit_amount ?? 0;
-        const interval = item.price?.recurring?.interval;
-        const intervalCount = item.price?.recurring?.interval_count ?? 1;
-        const qty = item.quantity ?? 1;
-        const monthly = interval === 'year' ? amount / (12 * intervalCount) : interval === 'week' ? amount * 52 / (12 * intervalCount) : interval === 'day' ? amount * 365 / (12 * intervalCount) : amount / intervalCount;
-        return sum + monthly * qty;
-      }, 0);
-      const discounts = ((sub as any).discounts ?? []).filter((d: unknown) => d && typeof d === 'object');
-      mrrCents += applyDiscounts(itemTotal, discounts);
-    }
-
-    const createdAfter = Math.floor((Date.now() - 30 * 24 * 60 * 60 * 1000) / 1000);
-    let successfulPaymentCount30d = 0;
-    let successfulPaymentAmount30dCents = 0;
-    for await (const intent of stripe.paymentIntents.list({ limit: 100, created: { gte: createdAfter } })) {
-      if (intent.status !== 'succeeded') continue;
-      successfulPaymentCount30d += 1;
-      successfulPaymentAmount30dCents += intent.amount_received ?? intent.amount ?? 0;
-    }
-
+    const stripe = new Stripe(key, { timeout: CHECK_TIMEOUT_MS, maxNetworkRetries: 0 });
+    const [customers, subscriptions, payments] = await Promise.allSettled([
+      boundedStripeRead(async expired => {
+        let count = 0;
+        for await (const _customer of stripe.customers.list({ limit: 100 })) { if (expired()) throw new Error('check expired'); count += 1; }
+        return count;
+      }),
+      boundedStripeRead(async expired => {
+        let count = 0;
+        let total = 0;
+        let known = true;
+        for await (const sub of stripe.subscriptions.list({ status: 'active', limit: 100, expand: ['data.discounts.source.coupon'] })) {
+          if (expired()) throw new Error('check expired');
+          count += 1;
+          const monthly = subscriptionMonthlyUsd(sub);
+          if (monthly === null) known = false; else total += monthly;
+        }
+        return { count, mrr: known ? Math.round(total) : null };
+      }),
+      boundedStripeRead(async expired => {
+        const createdAfter = Math.floor((Date.now() - 30 * 24 * 60 * 60 * 1000) / 1000);
+        let count = 0;
+        let total = 0;
+        let known = true;
+        for await (const intent of stripe.paymentIntents.list({ limit: 100, created: { gte: createdAfter } })) {
+          if (expired()) throw new Error('check expired');
+          if (intent.status !== 'succeeded') continue;
+          count += 1;
+          const amount = intent.amount_received;
+          if (intent.currency !== 'usd' || !Number.isFinite(amount) || amount < 0) known = false; else total += amount;
+        }
+        return { count, amount: known ? total : null };
+      }),
+    ]);
+    const failures = [customers, subscriptions, payments].flatMap((result, index) => result.status === 'rejected' ? [`${['customers', 'subscriptions', 'payments'][index]} unavailable (${stripeFailure(result.reason)})`] : []);
+    if (subscriptions.status === 'fulfilled' && subscriptions.value.mrr === null) failures.push('USD MRR unavailable for unsupported pricing or discounts');
+    if (payments.status === 'fulfilled' && payments.value.amount === null) failures.push('USD payment total unavailable for unsupported currency or amount');
+    const customerCount = customers.status === 'fulfilled' ? customers.value : null;
+    const activeSubscriptionCount = subscriptions.status === 'fulfilled' ? subscriptions.value.count : null;
+    const successfulPaymentCount30d = payments.status === 'fulfilled' ? payments.value.count : null;
+    const readings = `${customerCount ?? 'unknown'} customers, ${activeSubscriptionCount ?? 'unknown'} active subs, ${successfulPaymentCount30d ?? 'unknown'} successful payments in 30d`;
     return {
-      connection: {
-        key: 'stripe',
-        name: 'Stripe',
-        status: config.isProduction && /_(?:test)_/.test(config.stripe.secretKey) ? 'error' : 'ok',
-        detail: (config.isProduction && /_(?:test)_/.test(config.stripe.secretKey) ? 'TEST MODE key is configured in production; ' : 'LIVE MODE; ') + customerCount + ' customers, ' + activeSubscriptions + ' active subs, ' + successfulPaymentCount30d + ' successful payments in 30d',
-        lastChecked: now(),
-      },
+      connection: { key: 'stripe', name: 'Stripe', status: failures.length ? 'error' : 'ok', detail: `${testMode ? 'TEST MODE' : 'LIVE MODE'}; ${readings}${failures.length ? '; ' + failures.join('; ') : ''}`, lastChecked: now() },
       customerCount,
-      mrrCents: Math.max(0, Math.round(mrrCents)),
-      activeSubscriptionCount: activeSubscriptions,
+      mrrCents: subscriptions.status === 'fulfilled' ? subscriptions.value.mrr : null,
+      activeSubscriptionCount,
       successfulPaymentCount30d,
-      successfulPaymentAmount30dCents,
+      successfulPaymentAmount30dCents: payments.status === 'fulfilled' ? payments.value.amount : null,
     };
   } catch (err) {
-    return { connection: { key: 'stripe', name: 'Stripe', status: 'error', detail: safeErrorDetail(err), lastChecked: now() }, customerCount: null, mrrCents: null, activeSubscriptionCount: null, successfulPaymentCount30d: null, successfulPaymentAmount30dCents: null };
+    return { connection: { key: 'stripe', name: 'Stripe', status: 'error', detail: stripeFailure(err), lastChecked: now() }, ...emptyStripeMetrics };
   }
 }
 
