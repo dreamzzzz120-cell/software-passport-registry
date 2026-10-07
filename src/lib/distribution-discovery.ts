@@ -13,7 +13,7 @@ export type DiscoveryResult = {
   discoveredAt: string;
 };
 
-const MAX_RESULTS = 100;
+const MAX_RESULTS = 2000;
 const MAX_QUERY = 200;
 
 export function canonicalizeDomain(input: string) {
@@ -155,7 +155,7 @@ export function resolveDiscoveryProvider(env: NodeJS.ProcessEnv = process.env): 
   if (brave) return braveSearchProvider(brave);
   const endpoint = env.DISTRIBUTION_DISCOVERY_PROVIDER_URL?.trim();
   if (endpoint) return httpEndpointProvider(endpoint);
-  const seeds = parseSeedUrls(env.DISTRIBUTION_DISCOVERY_SEED_URLS);
+  const seeds = parseSeedUrls([env.DISTRIBUTION_DISCOVERY_SEED_URLS, env.DISTRIBUTION_DISCOVERY_EXTRA_SEED_URLS].filter(Boolean).join('\n'));
   if (seeds.length) return seedListProvider(seeds);
   return null;
 }
