@@ -8,6 +8,11 @@ describe('seed-list discovery provider', () => {
     expect(parseSeedUrls('  \n ,')).toEqual([]);
   });
 
+  it('accepts large seed batches for high-volume discovery', () => {
+    const urls = Array.from({ length: 250 }, (_, i) => `https://msp-${i}.example.com/`).join('\n');
+    expect(parseSeedUrls(urls)).toHaveLength(250);
+  });
+
   it('returns home pages, deduped, ignoring the query', async () => {
     const provider = seedListProvider(['https://sfy.ca/services/cybersecurity/', 'https://sfy.ca/', 'https://kcc.ca/managed-it-services', 'ftp://bad.example']);
     const a = await provider.discover('managed IT services Kelowna, BC', 25);
