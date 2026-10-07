@@ -450,13 +450,15 @@ export function createAiTrustRouter() {
       const passport = ((await db.execute(sql`SELECT id FROM passports WHERE id=${passportId} AND tenant_id=${tenantId} LIMIT 1`)) as any).rows?.[0];
       if (!passport) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
 
-      const [agentsResult, boundariesResult, capabilitiesResult, mcpServersResult, mcpToolsResult, handoffsResult] = await Promise.all([
+      const [agentsResult, boundariesResult, capabilitiesResult, mcpServersResult, mcpToolsResult, handoffsResult, changesResult, snapshotsResult] = await Promise.all([
         db.execute(sql`SELECT * FROM agent_assets WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY last_observed_at DESC`),
         db.execute(sql`SELECT * FROM agent_trust_boundaries WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY last_observed_at DESC`),
         db.execute(sql`SELECT * FROM agent_capabilities WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY observed_at DESC`),
         db.execute(sql`SELECT * FROM agent_mcp_servers WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY observed_at DESC`),
         db.execute(sql`SELECT * FROM agent_mcp_tools WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY observed_at DESC`),
         db.execute(sql`SELECT * FROM agent_handoffs WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY observed_at DESC`),
+        db.execute(sql`SELECT id,scan_id,change_type,subject,before_state,after_state,observed_at FROM agent_trust_changes WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY observed_at DESC LIMIT 100`),
+        db.execute(sql`SELECT id,scan_id,source_ref,snapshot_hash,observed_at FROM agent_trust_snapshots WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY observed_at DESC LIMIT 20`),
       ]);
       const agents = (agentsResult as any).rows ?? [];
       const boundaries = (boundariesResult as any).rows ?? [];
@@ -464,6 +466,8 @@ export function createAiTrustRouter() {
       const mcpServers = (mcpServersResult as any).rows ?? [];
       const mcpTools = (mcpToolsResult as any).rows ?? [];
       const handoffs = (handoffsResult as any).rows ?? [];
+      const changes = (changesResult as any).rows ?? [];
+      const snapshots = (snapshotsResult as any).rows ?? [];
       return res.json({
         passportId,
         coverage: {
@@ -476,7 +480,7 @@ export function createAiTrustRouter() {
           unknownBoundaries: boundaries.filter((row: any) => String(row.state).toUpperCase() === 'UNKNOWN').length,
           unverifiedHandoffs: handoffs.filter((row: any) => ['UNVERIFIED','UNKNOWN'].includes(String(row.verification_state).toUpperCase())).length,
         },
-        agents, boundaries, capabilities, mcpServers, mcpTools, handoffs,
+        agents, boundaries, capabilities, mcpServers, mcpTools, handoffs, changes, snapshots,
         authoritative: true,
         note: 'Observed evidence only. Missing records remain UNKNOWN and this endpoint does not assert that any model or agent is safe.',
       });
