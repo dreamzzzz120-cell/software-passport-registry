@@ -8,7 +8,6 @@ import { appendAuditEntry } from '../security/audit-log.ts';
 const ASSET_TYPES = ['agent','mcp_server','cli_tool','integration','agent_config'] as const;
 const SOURCE_TYPES = ['filesystem','github','mcp','cli','saas','manual_observation','other'] as const;
 const ORIGINS = ['INTERNAL','EXTERNAL','UNKNOWN'] as const;
-const VERIFICATION = ['OBSERVED','VERIFIED','UNKNOWN'] as const;
 const INGEST_VERIFICATION = ['OBSERVED','UNKNOWN'] as const;
 const ACCESS_MODES = ['read','write','execute','admin','unknown'] as const;
 const EVENT_TYPES = ['prompt_injection_indicator','credential_exposure_indicator','exfiltration_indicator','tool_call_anomaly','response_integrity_failure','agent_config_drift','excessive_tool_scope','unverified_mcp','dangerous_tool_chain','execution_receipt'] as const;
