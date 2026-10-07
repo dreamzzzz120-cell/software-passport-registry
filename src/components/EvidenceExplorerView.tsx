@@ -30,10 +30,41 @@ const STATUS_ICON: Record<string, typeof CheckCircle2> = { PASS: CheckCircle2, F
 const STATUS_COLOR: Record<string, string> = { PASS: 'text-[var(--spr-green)]', FAIL: 'text-[var(--spr-red)]', UNKNOWN: 'text-amber-300' };
 
 export default function EvidenceExplorerView({ passports = [], selectedPassportId, onSelectPassportId }: Props) {
+  const [fallbackPassports, setFallbackPassports] = useState<Array<Pick<SoftwarePassport, 'id' | 'name' | 'version'>>>([]);
+  const [passportListState, setPassportListState] = useState<'idle' | 'loading' | 'ready' | 'error'>(passports.length ? 'ready' : 'idle');
+  const availablePassports = passports.length ? passports : fallbackPassports;
+
+  useEffect(() => {
+    if (passports.length) {
+      setPassportListState('ready');
+      return;
+    }
+    let cancelled = false;
+    setPassportListState('loading');
+    apiFetch('/api/user/passports')
+      .then(async (response) => {
+        const data = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(responseError(data, 'Unable to load passports.'));
+        const rows = Array.isArray(data) ? data : data?.passports;
+        if (!Array.isArray(rows)) throw new Error('Invalid passport response.');
+        if (!cancelled) {
+          setFallbackPassports(rows.map((row: any) => ({
+            id: String(row.id),
+            name: String(row.name || 'Unnamed software'),
+            version: String(row.version || 'unknown'),
+          })));
+          setPassportListState('ready');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setPassportListState('error');
+      });
+    return () => { cancelled = true; };
+  }, [passports]);
   // Arriving here from the Trust Room ("Inspect evidence" / "View evidence")
   // should land on the same passport the user was just investigating, not
   // silently reset to whichever passport happens to be first in the list.
-  const [passportId, setPassportId] = useState(() => (selectedPassportId && passports.some((p) => p.id === selectedPassportId)) ? selectedPassportId : passports[0]?.id || '');
+  const [passportId, setPassportId] = useState(() => (selectedPassportId && availablePassports.some((p) => p.id === selectedPassportId)) ? selectedPassportId : availablePassports[0]?.id || '');
   const [ledger, setLedger] = useState<Ledger | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,11 +75,11 @@ export default function EvidenceExplorerView({ passports = [], selectedPassportI
   const selectPassport = (id: string) => { setPassportId(id); onSelectPassportId?.(id); };
 
   useEffect(() => {
-    if (selectedPassportId && selectedPassportId !== passportId && passports.some((p) => p.id === selectedPassportId)) setPassportId(selectedPassportId);
-  }, [selectedPassportId]);
+    if (selectedPassportId && selectedPassportId !== passportId && availablePassports.some((p) => p.id === selectedPassportId)) setPassportId(selectedPassportId);
+  }, [selectedPassportId, availablePassports]);
   useEffect(() => {
-    if (!passports.some((p) => p.id === passportId)) setPassportId(passports[0]?.id || '');
-  }, [passports, passportId]);
+    if (!availablePassports.some((p) => p.id === passportId)) setPassportId(availablePassports[0]?.id || '');
+  }, [availablePassports, passportId]);
 
   useEffect(() => {
     if (!passportId) { setLedger(null); return; }
@@ -93,10 +124,13 @@ export default function EvidenceExplorerView({ passports = [], selectedPassportI
         <div className="mt-5">
           <label className="sr-only" htmlFor="evidence-explorer-passport">Passport</label>
           <select id="evidence-explorer-passport" value={passportId} onChange={(event) => selectPassport(event.target.value)} className="min-w-[260px] rounded-xl border border-[var(--spr-border)] bg-[#0b101b] px-3 py-2.5 text-sm text-[var(--spr-text)]">
-            {!passports.length && <option value="">No passports loaded</option>}
-            {passports.map((passport) => <option key={passport.id} value={passport.id}>{passport.name} · {passport.version}</option>)}
+            {passportListState === 'loading' && <option value="">Loading passports…</option>}
+            {passportListState === 'error' && <option value="">Passport list unavailable</option>}
+            {passportListState === 'ready' && !availablePassports.length && <option value="">No passports recorded</option>}
+            {availablePassports.map((passport) => <option key={passport.id} value={passport.id}>{passport.name} · {passport.version}</option>)}
           </select>
         </div>
+        {passportListState === 'error' && <div className="mt-3 flex items-center gap-3 text-xs text-[var(--spr-red)]"><span>SPR could not load the Passport list. The evidence chain has not been treated as empty.</span><button type="button" onClick={() => { setFallbackPassports([]); setPassportListState('idle'); }} className="spr-btn spr-btn-secondary">Retry</button></div>}
         {error && <p role="alert" className="mt-3 text-xs text-[var(--spr-red)]">{error}</p>}
       </header>
 
