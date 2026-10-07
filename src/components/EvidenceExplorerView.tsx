@@ -30,6 +30,7 @@ const STATUS_ICON: Record<string, typeof CheckCircle2> = { PASS: CheckCircle2, F
 const STATUS_COLOR: Record<string, string> = { PASS: 'text-[var(--spr-green)]', FAIL: 'text-[var(--spr-red)]', UNKNOWN: 'text-amber-300' };
 
 export default function EvidenceExplorerView({ passports = [], selectedPassportId, onSelectPassportId }: Props) {
+  const [resolvedPassports, setResolvedPassports] = useState<SoftwarePassport[]>(passports);
   // Arriving here from the Trust Room ("Inspect evidence" / "View evidence")
   // should land on the same passport the user was just investigating, not
   // silently reset to whichever passport happens to be first in the list.
@@ -43,12 +44,30 @@ export default function EvidenceExplorerView({ passports = [], selectedPassportI
 
   const selectPassport = (id: string) => { setPassportId(id); onSelectPassportId?.(id); };
 
+  useEffect(() => { setResolvedPassports(passports); }, [passports]);
   useEffect(() => {
-    if (selectedPassportId && selectedPassportId !== passportId && passports.some((p) => p.id === selectedPassportId)) setPassportId(selectedPassportId);
-  }, [selectedPassportId]);
+    if (passports.length) return;
+    let cancelled = false;
+    apiFetch('/api/user/passports')
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Unable to load passports for Evidence Explorer.');
+        const data = await response.json().catch(() => []);
+        const rows = Array.isArray(data) ? data : data?.passports;
+        if (!cancelled && Array.isArray(rows)) {
+          const next = rows.map((row: any) => ({ ...row, id: String(row.id), name: String(row.name || 'Unnamed software'), version: String(row.version || 'unknown'), publisher: String(row.publisher || 'unknown') })) as SoftwarePassport[];
+          setResolvedPassports(next);
+          if (!passportId && next[0]?.id) setPassportId(next[0].id);
+        }
+      })
+      .catch((loadError) => { if (!cancelled) setError(loadError instanceof Error ? loadError.message : 'Unable to load passports for Evidence Explorer.'); });
+    return () => { cancelled = true; };
+  }, [passports.length, passportId]);
   useEffect(() => {
-    if (!passports.some((p) => p.id === passportId)) setPassportId(passports[0]?.id || '');
-  }, [passports, passportId]);
+    if (selectedPassportId && selectedPassportId !== passportId && resolvedPassports.some((p) => p.id === selectedPassportId)) setPassportId(selectedPassportId);
+  }, [selectedPassportId, resolvedPassports, passportId]);
+  useEffect(() => {
+    if (!resolvedPassports.some((p) => p.id === passportId)) setPassportId(resolvedPassports[0]?.id || '');
+  }, [resolvedPassports, passportId]);
 
   useEffect(() => {
     if (!passportId) { setLedger(null); return; }
@@ -93,8 +112,8 @@ export default function EvidenceExplorerView({ passports = [], selectedPassportI
         <div className="mt-5">
           <label className="sr-only" htmlFor="evidence-explorer-passport">Passport</label>
           <select id="evidence-explorer-passport" value={passportId} onChange={(event) => selectPassport(event.target.value)} className="min-w-[260px] rounded-xl border border-[var(--spr-border)] bg-[#0b101b] px-3 py-2.5 text-sm text-[var(--spr-text)]">
-            {!passports.length && <option value="">No passports loaded</option>}
-            {passports.map((passport) => <option key={passport.id} value={passport.id}>{passport.name} · {passport.version}</option>)}
+            {!resolvedPassports.length && <option value="">No passports available</option>}
+            {resolvedPassports.map((passport) => <option key={passport.id} value={passport.id}>{passport.name} · {passport.version}</option>)}
           </select>
         </div>
         {error && <p role="alert" className="mt-3 text-xs text-[var(--spr-red)]">{error}</p>}
