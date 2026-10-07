@@ -50,11 +50,12 @@ describe('Trust Network (MSP Command Center rebuild) preserves existing function
     expect(backend).toContain("status = 'VERIFICATION_QUEUED'");
   });
 
-  it('renamed the page to Trust Network with the MSP control plane framing', () => {
+  it('keeps Trust Network as the operating model while upgrading MSP Command framing', () => {
     const s = source();
-    expect(s).toContain('>Trust Network</h1>');
-    expect(s).toContain('MSP control plane');
-    expect(s).toContain('A live view of software trust across your client environment.');
+    expect(s).toContain('MSP command plane');
+    expect(s).toContain('One queue for trust, change, and client action.');
+    expect(s).toContain('Start with what changed.');
+    expect(s).toContain('<TrustNetworkMap');
   });
 
   it('quick-jump navigation only points at real, existing routes', () => {
