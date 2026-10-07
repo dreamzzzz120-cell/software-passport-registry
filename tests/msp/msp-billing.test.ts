@@ -1,15 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { readCode as read } from '../helpers/source-contract.ts';
 
-// SECTION 16 of the MSP acceptance spec names a specific, previously-real
-// incident by shape: absence of a subscription row must never make the
-// whole application return 402 to every route. This sandbox has no live
-// Stripe test-mode account and no database to actually create a
-// no-subscription tenant against, so this verifies the guarantee at the
-// level this codebase already relies on for it: the source of
-// enforcePaidAccess itself, which every authenticated request passes
-// through.
-describe('billing denial is capability-scoped, not a blanket workspace lockout', () => {
+// Launch policy: an authenticated MSP may reach identity and billing routes,
+ // but paid workspace capabilities must fail closed until Stripe-backed
+ // subscription state is entitling. This suite locks that boundary in place.
+describe('billing denial is capability-scoped and unpaid workspaces fail closed', () => {
   const security = read('src/middleware/security.ts');
 
   it('exempts a real, named set of paths from paid-access checks entirely', () => {
@@ -18,6 +13,20 @@ describe('billing denial is capability-scoped, not a blanket workspace lockout',
     expect(security).toContain("'/api/user/me'");
   });
 
+
+  it('treats no confirmed plan as unpaid instead of unrestricted access', () => {
+    const entitlements = read('src/security/entitlements.ts');
+    expect(entitlements).toContain("export type SubscriptionGate = 'unpaid' | 'enforce-plan' | 'lapsed'");
+    expect(entitlements).toContain("if (!subscription.plan) return 'unpaid';");
+    expect(entitlements).toContain("if (gate === 'unpaid') return { allowed: false, gate, state };");
+    expect(entitlements).toContain("message: 'Choose an SPR plan to unlock the MSP workspace.'");
+  });
+
+  it('keeps billing and identity routes reachable so an unpaid MSP can subscribe', () => {
+    expect(security).toContain("'/api/billing'");
+    expect(security).toContain("'/api/user/me'");
+    expect(security).toContain('isBillingExemptPath(req)');
+  });
   it('checks a specific capability derived from the request path, not a single account-wide flag', () => {
     expect(security).toContain('capabilityForPath(req)');
     expect(security).toContain('evaluateCapability(scopedDb, tenantId, capability)');
