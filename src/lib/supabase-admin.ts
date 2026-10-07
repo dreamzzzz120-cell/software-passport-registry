@@ -16,7 +16,7 @@ function testOnlyClaims(token: string) {
     const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8')) as Record<string, any>;
     const uid = payload.user_id || payload.sub;
     if (!uid) return null;
-    return { uid, email: payload.email, email_verified: Boolean(payload.email_verified), user_metadata: {}, app_metadata: {}, aud: 'authenticated' };
+    return { uid, email: payload.email, email_verified: Boolean(payload.email_verified), user_metadata: {}, app_metadata: {}, aud: 'authenticated', aal: typeof payload.aal === 'string' ? payload.aal : 'aal1' };
   } catch { return null; }
 }
 export const adminAuth = {
@@ -25,8 +25,10 @@ export const adminAuth = {
     if (testClaims) return testClaims;
     const { data, error } = await getClient().auth.getUser(token);
     if (error || !data.user) { const err = new Error('Invalid or expired Supabase access token') as Error & { code?: string }; err.code = 'auth/invalid-id-token'; throw err; }
-    return { uid: data.user.id, email: data.user.email ?? undefined, email_verified: Boolean(data.user.email_confirmed_at), user_metadata: data.user.user_metadata ?? {}, app_metadata: data.user.app_metadata ?? {}, aud: 'authenticated' };
+    let aal = 'aal1'; try { const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8')); if (typeof payload?.aal === 'string') aal = payload.aal; } catch { /* token identity was already verified; absent AAL means aal1 */ }
+    return { uid: data.user.id, email: data.user.email ?? undefined, email_verified: Boolean(data.user.email_confirmed_at), user_metadata: data.user.user_metadata ?? {}, app_metadata: data.user.app_metadata ?? {}, aud: 'authenticated', aal };
   },
+  async listMfaFactors(uid: string) { if (process.env.SPR_SECURITY_TEST_AUTH === 'true') return []; const mfa = (getAdminClient().auth.admin as any).mfa; if (!mfa?.listFactors) return []; const { data, error } = await mfa.listFactors({ userId: uid }); if (error) throw error; return Array.isArray(data?.factors) ? data.factors : Array.isArray(data) ? data : []; },
   async listUsers(perPage = 1000) { const { data, error } = await getAdminClient().auth.admin.listUsers({ page: 1, perPage }); if (error) throw error; return data.users; },
   async getUserByEmail(email: string) { let page = 1; const perPage = 1000; while (true) { const { data, error } = await getAdminClient().auth.admin.listUsers({ page, perPage }); if (error) throw error; const user = data.users.find((candidate) => candidate.email?.toLowerCase() === email.toLowerCase()); if (user) return { uid: user.id, email: user.email, emailVerified: Boolean(user.email_confirmed_at) }; if (data.users.length < perPage) break; page += 1; } const err = new Error('User not found') as Error & { code?: string }; err.code = 'auth/user-not-found'; throw err; },
   async createUser(input: { email: string; password?: string; emailVerified?: boolean; displayName?: string; disabled?: boolean }) { const { data, error } = await getAdminClient().auth.admin.createUser({ email: input.email, password: input.password, email_confirm: input.emailVerified, user_metadata: input.displayName ? { full_name: input.displayName, displayName: input.displayName } : undefined }); if (error || !data.user) throw error || new Error('Unable to create Supabase user'); return { uid: data.user.id, email: data.user.email, emailVerified: Boolean(data.user.email_confirmed_at) }; },
