@@ -51,7 +51,8 @@ export default function AlertsView({ alerts, onAlertAction, role = 'Viewer' }: A
         && (statusFilter === 'all' || alert.status === statusFilter);
     });
   }, [alerts, query, severityFilter, categoryFilter, statusFilter]);
-  const activeCount = alerts.filter((alert) => alert.status === 'Active').length;
+  // "Active attention" means any unresolved record, matching MSP Command.
+  const activeCount = alerts.filter((alert) => alert.status !== 'Resolved' && alert.status !== 'Cancelled').length;
   const criticalCount = alerts.filter((alert) => alert.status !== 'Resolved' && alert.status !== 'Cancelled' && alert.severity === 'Critical').length;
   const resolvedCount = alerts.filter((alert) => alert.status === 'Resolved').length;
   const selectedAlert = alerts.find((alert) => alert.id === selectedAlertId);

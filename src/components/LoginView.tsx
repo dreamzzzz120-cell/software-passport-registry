@@ -68,6 +68,14 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
     setMfaCode('');
     onLoginSuccess({ uid: user.id, email: user.email ?? null, displayName: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User', token, emailVerified, onboarded: 0 });
   };
+  const clearStaleLocalSession = async (cause: unknown) => {
+    const message = cause instanceof Error ? cause.message.toLowerCase() : String(cause ?? '').toLowerCase();
+    const code = cause && typeof cause === 'object' && 'code' in cause ? String((cause as { code?: unknown }).code ?? '').toLowerCase() : '';
+    if (!message.includes('session') && !code.includes('session_not_found')) return false;
+    await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined);
+    return true;
+  };
+
   useEffect(() => {
     if (recoveryRequested.current) preserveRecoveryIntent();
     const pending = consumeAuthNotice();
@@ -81,7 +89,13 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
     let mounted = true;
     supabase.auth.getSession().then(async ({ data, error }) => {
       if (!mounted) return;
-      if (error) { setError(error.message); return; }
+      if (error) {
+        if (await clearStaleLocalSession(error)) {
+          if (mounted) setNotice('Your previous session had expired. Sign in again to continue.');
+          return;
+        }
+        setError(error.message); return;
+      }
       if (recoveryRequested.current) {
         setRecoveryReady(Boolean(data.session));
         if (!data.session) setError('This reset link has no active session. Request a new password reset link.');
@@ -145,6 +159,10 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
         setNotice(`Account created. Supabase has sent a confirmation link to ${address}. Open it to activate the account. The link is only valid for a limited time; if it has expired by the time you use it, request a new one below.`);
         return;
       }
+      // A stale refresh/session record must not poison a fresh password login.
+      // Clear only local invalid session state; this never changes the password.
+      const current = await supabase.auth.getSession();
+      if (current.error) await clearStaleLocalSession(current.error);
       const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
       if (error) {
         if (error.message.toLowerCase().includes('email not confirmed')) {
