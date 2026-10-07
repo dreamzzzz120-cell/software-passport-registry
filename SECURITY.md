@@ -9,3 +9,5 @@ Do not include passwords, API keys, access tokens, private customer data, or oth
 ## Production security standard
 
 SPR follows the controls documented in `docs/SECURITY_HARDENING.md`. Releases must pass the automated security gate before production deployment.
+
+Security incidents are handled using `docs/INCIDENT_RESPONSE.md`, which defines severity, evidence preservation, containment, authoritative investigation, recovery verification, communication and post-incident review.
