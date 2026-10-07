@@ -29,4 +29,12 @@ describe('Stripe Checkout compatibility', () => {
     expect(adaptiveDisabled.length).toBeGreaterThan(0);
     expect(managedDisabled.length).toBe(adaptiveDisabled.length);
   });
+  it('recovers catalogue checkout from stale configured Stripe Price IDs using live Stripe metadata', () => {
+    const source = fs.readFileSync(path.join(root, 'src/routes/billing.ts'), 'utf8');
+    expect(source).toContain("...PLAN_IDS.map((id) => ({ priceKey: PLAN_CONFIG[id].priceKey");
+    expect(source).toContain("metadataKey: 'spr_plan'");
+    expect(source).toContain("metadataKey: 'spr_catalog_id'");
+    expect(source).toContain("return discoveredPriceIds.get(priceKey) || config.stripe.prices[priceKey]");
+  });
+
 });
