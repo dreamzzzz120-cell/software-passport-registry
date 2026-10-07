@@ -143,7 +143,7 @@ export default function PublicRegistryView() {
             {languages.map(([name, count]) => <option key={name} value={name}>{name} ({count})</option>)}
           </select>
         </div>
-        {data && <div className="mt-3 text-xs text-[var(--spr-text-muted)]">Showing {visibleItems.length} of {data.items.length} loaded records ({data.count} total). Search and language filters apply only to these loaded records.</div>}
+        {data && <div className="mt-3 text-xs text-[var(--spr-text-muted)]">Showing {visibleItems.length} of {data.items.length} observed repositories. Search and language filters apply to the complete loaded registry.</div>}
       </section>
 
       {state === 'loading' && <div className="rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface)] p-8 text-center text-sm text-[var(--spr-text-muted)]">Loading observed software…</div>}
