@@ -9,6 +9,7 @@ export default function LegalFooterLinks({ className = '' }: { className?: strin
       <a href="/trust/" className="hover:text-[var(--spr-highlight)] hover:underline">Trust Center</a>
       <a href="/about/" className="hover:text-[var(--spr-highlight)] hover:underline">About SPR</a>
       <a href="/methodology/" className="hover:text-[var(--spr-highlight)] hover:underline">Methodology</a>
+      <a href="/docs/" className="hover:text-[var(--spr-highlight)] hover:underline">Docs</a>
       <a href="/terms" className="hover:text-[var(--spr-highlight)] hover:underline">Terms of Service</a>
       <a href="/privacy" className="hover:text-[var(--spr-highlight)] hover:underline">Privacy Policy</a>
     </div>
