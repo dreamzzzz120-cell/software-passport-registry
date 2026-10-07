@@ -235,6 +235,15 @@ export async function checkStripeAndMrr(): Promise<StripeMetrics> {
     const activeSubscriptionCount = subscriptions.status === 'fulfilled' ? subscriptions.value.count : null;
     const successfulPaymentCount30d = payments.status === 'fulfilled' ? payments.value.count : null;
     const readings = `${customerCount ?? 'unknown'} customers, ${activeSubscriptionCount ?? 'unknown'} active subs, ${successfulPaymentCount30d ?? 'unknown'} successful payments in 30d`;
+    // Operational diagnostics contain availability only, never keys, customer
+    // identities, money amounts or raw provider errors.
+    console.info('[FounderStripeTelemetry]', JSON.stringify({
+      customers: customers.status === 'fulfilled' ? 'verified' : stripeFailure(customers.reason),
+      subscriptions: subscriptions.status === 'fulfilled' ? 'verified' : stripeFailure(subscriptions.reason),
+      payments: payments.status === 'fulfilled' ? 'verified' : stripeFailure(payments.reason),
+      usdMrr: subscriptions.status === 'fulfilled' && subscriptions.value.mrr !== null ? 'verified' : 'unavailable',
+      usdPaymentTotal: payments.status === 'fulfilled' && payments.value.amount !== null ? 'verified' : 'unavailable',
+    }));
     return {
       connection: { key: 'stripe', name: 'Stripe', status: failures.length ? 'error' : 'ok', detail: `${testMode ? 'TEST MODE' : 'LIVE MODE'}; ${readings}${failures.length ? '; ' + failures.join('; ') : ''}`, lastChecked: now() },
       customerCount,

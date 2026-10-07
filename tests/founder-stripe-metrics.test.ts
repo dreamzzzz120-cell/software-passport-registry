@@ -10,12 +10,13 @@ import { checkStripeAndMrr, subscriptionMonthlyUsd } from '../src/lib/server/fou
 const stream = (rows: unknown[]) => ({ async *[Symbol.asyncIterator]() { yield* rows; } });
 const subscription = (price: Record<string, unknown> = {}, discounts: unknown[] = []) => ({ items: { data: [{ quantity: 1, price: { unit_amount: 12000, currency: 'usd', recurring: { interval: 'month', interval_count: 1 }, ...price } }] }, discounts });
 beforeEach(() => {
+  vi.spyOn(console, 'info').mockImplementation(() => undefined);
   vi.clearAllMocks(); mocks.config.stripe.secretKey = 'sk_live_unit'; mocks.config.isProduction = true;
   mocks.customers.mockReturnValue(stream([{ id: 'one' }, { id: 'two' }]));
   mocks.subscriptions.mockReturnValue(stream([subscription()]));
   mocks.payments.mockReturnValue(stream([{ status: 'succeeded', currency: 'usd', amount_received: 5000 }, { status: 'processing', currency: 'usd', amount_received: 0 }]));
 });
-afterEach(() => { vi.useRealTimers(); });
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('independent founder Stripe telemetry', () => {
   it('returns exact completed reads with the current coupon expansion and bounded SDK requests', async () => {
@@ -31,6 +32,7 @@ describe('independent founder Stripe telemetry', () => {
     expect(result).toMatchObject({ customerCount: 2, activeSubscriptionCount: 1, mrrCents: 12000, successfulPaymentCount30d: null, successfulPaymentAmount30dCents: null });
     expect(result.connection.detail).toContain('payments unavailable (read permission missing)');
     expect(JSON.stringify(result)).not.toContain('sk_live_sensitive');
+    expect(console.info).toHaveBeenCalledWith('[FounderStripeTelemetry]', expect.not.stringContaining('sk_live_sensitive'));
   });
   it('does not publish a partial count when pagination fails after yielding a page', async () => {
     mocks.customers.mockReturnValue({ async *[Symbol.asyncIterator]() { yield { id: 'first' }; throw new Error('page two failed'); } });
