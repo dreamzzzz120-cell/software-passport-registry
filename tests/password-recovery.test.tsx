@@ -3,7 +3,19 @@ import React from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, act } from '@testing-library/react';
 
-const auth = vi.hoisted(() => ({ getSession: vi.fn(), onAuthStateChange: vi.fn(), updateUser: vi.fn(), resetPasswordForEmail: vi.fn() }));
+const auth = vi.hoisted(() => ({
+  getSession: vi.fn(),
+  onAuthStateChange: vi.fn(),
+  updateUser: vi.fn(),
+  resetPasswordForEmail: vi.fn(),
+  signOut: vi.fn(),
+  mfa: {
+    getAuthenticatorAssuranceLevel: vi.fn(),
+    listFactors: vi.fn(),
+    challenge: vi.fn(),
+    verify: vi.fn(),
+  },
+}));
 vi.mock('../src/lib/supabase', () => ({ supabase: { auth } }));
 import LoginView from '../src/components/LoginView';
 import { isRecoveryRedirect, setPasswordRecoveryPending } from '../src/lib/authRecovery';
@@ -15,6 +27,8 @@ beforeEach(() => {
   window.history.replaceState(null, '', '/login?recovery=1');
   auth.getSession.mockResolvedValue({ data: { session }, error: null });
   auth.updateUser.mockResolvedValue({ data: { user: session.user }, error: null });
+  auth.mfa.getAuthenticatorAssuranceLevel.mockResolvedValue({ data: { currentLevel: 'aal1', nextLevel: 'aal1' }, error: null });
+  auth.mfa.listFactors.mockResolvedValue({ data: { totp: [], phone: [] }, error: null });
   auth.onAuthStateChange.mockImplementation(callback => { listener = callback; return { data: { subscription: { unsubscribe: vi.fn() } } }; });
 });
 afterEach(() => { cleanup(); setPasswordRecoveryPending(false); });
