@@ -405,3 +405,54 @@ describe('evidence, provenance and UNKNOWN as shown to the user', () => {
     expect(input.maxLength).toBe(500);
   });
 });
+
+
+describe('commercial intelligence production contracts', () => {
+  it('renders observed opportunity metrics without fabricating dollar value', async () => {
+    responder = () => ok({
+      intent: 'commercial',
+      reply: 'Observed commercial state.',
+      data: {
+        portfolioCommercial: {
+          opportunityCount: 2,
+          opportunities: [
+            { passportId: 'p1', passportName: 'Alpha', kind: 'REMEDIATION', priority: 340, reason: 'Observed high finding.', nextActionLabel: 'Review Alpha', command: 'Inspect passport p1' },
+            { passportId: 'p2', passportName: 'Beta', kind: 'MONITORING', priority: 205, reason: 'Monitoring is not enabled.', nextActionLabel: 'Review Beta', command: 'Inspect passport p2' },
+          ],
+          policy: 'Observed only.',
+        },
+      },
+    });
+    await mount(true);
+    await openAndSend('show revenue');
+    expect(await screen.findByText('Evidence-backed income opportunities')).toBeTruthy();
+    expect(screen.getByText('UNKNOWN')).toBeTruthy();
+    expect(screen.getByLabelText('Opportunity priority chart')).toBeTruthy();
+    expect(screen.getByText(/not forecast revenue/i)).toBeTruthy();
+  });
+
+  it('shows configured opportunity value only when the server supplies it', async () => {
+    responder = () => ok({
+      intent: 'commercial',
+      reply: 'Configured value is available.',
+      data: {
+        portfolioCommercial: {
+          opportunityCount: 1,
+          configuredValue: 1250,
+          opportunities: [
+            { passportId: 'p1', passportName: 'Alpha', kind: 'REMEDIATION', priority: 340, reason: 'Observed high finding.', nextActionLabel: 'Review Alpha', command: 'Inspect passport p1' },
+          ],
+        },
+      },
+    });
+    await mount(true);
+    await openAndSend('show revenue');
+    expect(await screen.findByText(/1,250/)).toBeTruthy();
+  });
+
+  it('exposes white-label setup as an operating mode', async () => {
+    await mount(true);
+    keyK({ ctrlKey: true });
+    expect(await screen.findByRole('button', { name: 'White label' })).toBeTruthy();
+  });
+});
