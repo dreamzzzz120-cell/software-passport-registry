@@ -14,7 +14,7 @@ interface Props {
   clients: Client[];
   alerts: Alert[];
   passports: SoftwarePassport[];
-  role?: string;
+  role: string;
   onSelectClient: (id: string) => void;
   onSelectPassport?: (id: string) => void;
   onNavigate: (tab: string) => void;
@@ -37,7 +37,7 @@ const pct = (n: number | null) => n === null ? 'Not verified' : `${n}%`;
 
 export default function MSPOperationsCommandCenter(props: Props) {
   const {
-    clients, alerts, passports, verificationDecisions = {}, role = 'Viewer',
+    clients, alerts, passports, verificationDecisions = {}, role,
     onSelectClient, onSelectPassport, onNavigate, dataStatus = 'ready', onRetry
   } = props;
   const [showAllActions, setShowAllActions] = useState(false);
