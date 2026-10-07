@@ -618,7 +618,7 @@ export default function App() {
     case '/integrations': view = <IntegrationsView passports={passports} clients={clients} onNavigateTab={onNavigateTab} />; break;
     case '/monitoring': view = <MonitoringView role={role ?? 'Viewer'} passports={passports} clients={clients} />; break;
     case '/security': view = <SecurityCenterView clients={clients} passports={passports} role={role ?? 'Viewer'} />; break;
-    case '/compliance': view = <ComplianceView clients={clients} role={role ?? 'Viewer'} />; break;
+    case '/compliance': view = <ComplianceView clients={clients} role={role} />; break;
     case '/msp': view = <MSPOperationsCommandCenter clients={clients} alerts={alerts} passports={passports} role={role ?? 'Viewer'} onSelectClient={setSelectedClientId} onSelectPassport={setSelectedPassportId} onNavigate={navigate} verificationDecisions={verificationDecisions} dataStatus={dataStatus} onRetry={() => setReloadKey((n) => n + 1)} />; break;
     // Guided wrapper around the existing Universal Intake endpoints. It adds no
     case '/agent-trust': view = <AgentTrustView />; break;
@@ -628,7 +628,7 @@ export default function App() {
     // Hiding the tile is not enough: the path is still typeable. A non-founder
     // who navigates here gets the ordinary dashboard, not the founder shell.
     case '/founder': view = isFounder
-      ? <FounderDashboardView userRole={role} />
+      ? <FounderDashboardView userRole={role ?? 'Viewer'} />
       : <WorkflowBoundary title="Workflow" description="This authenticated capability is explicitly routed through the Command Center. Choose its owning workflow from the left rail." onNavigate={navigate} />;
       break;
     case '/billing': view = <BillingView />; break;
