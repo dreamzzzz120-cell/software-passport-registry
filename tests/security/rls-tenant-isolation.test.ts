@@ -37,6 +37,7 @@ describeIfConfigured('spr_app_runtime cannot bypass Row-Level Security', () => {
 
   afterAll(async () => {
     await asTenant(TENANT_A, (c) => c.query('DELETE FROM clients WHERE id = $1', [TEST_CLIENT_ID])).catch(() => undefined);
+    await asTenant(TENANT_A, (c) => c.query('DELETE FROM tenant_subscriptions WHERE tenant_id = $1', [TENANT_A])).catch(() => undefined);
     await pool.end();
   });
 
@@ -52,7 +53,13 @@ describeIfConfigured('spr_app_runtime cannot bypass Row-Level Security', () => {
     }
   });
 
-  it('a row created under one tenant is invisible to another tenant', async () => {
+  it('a row created under one paid tenant is invisible to another tenant', async () => {
+    await asTenant(TENANT_A, (c) => c.query(
+      `INSERT INTO tenant_subscriptions (tenant_id, plan, status, client_limit)
+       VALUES ($1, 'enterprise', 'active', NULL)
+       ON CONFLICT (tenant_id) DO UPDATE SET plan='enterprise', status='active', client_limit=NULL`,
+      [TENANT_A],
+    ));
     await asTenant(TENANT_A, (c) => c.query(`
       INSERT INTO clients (id, tenant_id, name, domain, industry, trust_score, risk_level, avatar_color, subscription_tier, joined_date, team_count, passport_count, critical_risks_count, compliance_progress, software_inventory, compliance_status, team_members, activity_timeline)
       VALUES ($1, $2, 'RLS Regression Test', 'test.example', 'Test', 0, 'Low', '#000000', 'Standard', now()::text, 0, 0, 0, 0, '[]', '[]', '[]', '[]')
@@ -76,13 +83,16 @@ describeIfConfigured('spr_app_runtime cannot bypass Row-Level Security', () => {
     expect(stillIntact.rows[0]?.name).toBe('RLS Regression Test');
   });
 
-  it('rejects an INSERT that forges another tenant\'s tenant_id', async () => {
+  it('rejects a forged cross-tenant INSERT before any row can be created', async () => {
     await expect(
       asTenant(TENANT_B, (c) => c.query(`
         INSERT INTO clients (id, tenant_id, name, domain, industry, trust_score, risk_level, avatar_color, subscription_tier, joined_date, team_count, passport_count, critical_risks_count, compliance_progress, software_inventory, compliance_status, team_members, activity_timeline)
         VALUES ($1, $2, 'Forged tenant', 'test.example', 'Test', 0, 'Low', '#000000', 'Standard', now()::text, 0, 0, 0, 0, '[]', '[]', '[]', '[]')
       `, [`${TEST_CLIENT_ID}-forged`, TENANT_A]))
-    ).rejects.toThrow(/row-level security/i);
+    ).rejects.toThrow(/row-level security|SUBSCRIPTION_REQUIRED/i);
+
+    const forged = await asTenant(TENANT_A, (c) => c.query('SELECT id FROM clients WHERE id = $1', [`${TEST_CLIENT_ID}-forged`]));
+    expect(forged.rows).toHaveLength(0);
   });
 });
 

@@ -47,8 +47,8 @@ describe('Stripe webhook handler: signature, idempotency, tenant-safe event hand
     expect(branch).toMatch(/if \(addon && ADDON_CONFIG\[addon\]\) \{[\s\S]*?break;\s*\}/);
   });
 
-  it('every subscription-activating event writes a real audit entry with the Stripe event id', () => {
-    expect(handler).toContain("action: 'billing.subscription.activated'");
+  it('every subscription activation is conditional on authoritative Stripe status and carries the Stripe event id', () => {
+    expect(handler).toContain("authoritativeStatus === 'active' ? 'billing.subscription.activated' : 'billing.subscription.checkout_confirmed'");
     expect(handler).toContain('stripeEventId: event.id');
   });
 });

@@ -186,10 +186,10 @@ async function discoverMissingCatalogPrices(stripe: Stripe): Promise<void> {
   await discoveryInFlight;
 }
 
-export async function getPlanLimits(tenantId: string, scopedDb: { execute: (query: any) => Promise<any> }): Promise<{ plan: PlanId | null; clientLimit: number | null }> {
-  const subResult = await scopedDb.execute(sql`SELECT plan, client_limit AS "clientLimit" FROM tenant_subscriptions WHERE tenant_id = ${tenantId} LIMIT 1`);
+export async function getPlanLimits(tenantId: string, scopedDb: { execute: (query: any) => Promise<any> }): Promise<{ plan: PlanId | null; clientLimit: number | null; status: string }> {
+  const subResult = await scopedDb.execute(sql`SELECT plan, status, client_limit AS "clientLimit" FROM tenant_subscriptions WHERE tenant_id = ${tenantId} LIMIT 1`);
   const row = (subResult as any).rows?.[0];
-  return { plan: row?.plan ?? null, clientLimit: row?.clientLimit ?? null };
+  return { plan: row?.plan ?? null, clientLimit: row?.clientLimit ?? null, status: row?.status ?? 'none' };
 }
 
 function stripeClient(): Stripe {
@@ -508,6 +508,15 @@ export function createBillingRouter() {
       const parsed = addonCheckoutSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
       const tenantId = req.user!.tenantId;
+      const activePlan = (await req.db!.execute(sql`SELECT plan FROM tenant_subscriptions WHERE tenant_id = ${tenantId} AND plan IS NOT NULL AND status = 'active' LIMIT 1`) as any).rows?.[0];
+      if (!activePlan) {
+        return res.status(402).json({
+          error: 'SUBSCRIPTION_REQUIRED',
+          code: 'SUBSCRIPTION_REQUIRED',
+          billingPath: '/billing',
+          message: 'An active SPR plan is required before purchasing add-ons.',
+        });
+      }
       const activeAddon = (await req.db!.execute(sql`SELECT stripe_subscription_id FROM tenant_addons WHERE tenant_id = ${tenantId} AND addon = ${parsed.data.addon} AND status IN ('active', 'trialing', 'past_due') LIMIT 1`) as any).rows?.[0];
       if (activeAddon) return res.status(409).json({ error: 'ADDON_ALREADY_ACTIVE', code: 'ADDON_ALREADY_ACTIVE', addon: parsed.data.addon, billingPath: '/billing', message: `${ADDON_CONFIG[parsed.data.addon].label} is already active on this workspace. Manage it from Manage billing.` });
       const paymentLink = addonPaymentLink(parsed.data.addon);
@@ -613,24 +622,41 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
         const metadataPlan = session.metadata?.plan as PlanId | undefined;
         const plan = metadataPlan && PLAN_CONFIG[metadataPlan] ? metadataPlan : paymentLinkPlan;
         if (tenantId && session.subscription && plan && PLAN_CONFIG[plan]) {
-          const clientLimit = PLAN_CLIENT_LIMITS[plan];
+          if (!config.stripe.secretKey) throw new Error('STRIPE_SUBSCRIPTION_VERIFICATION_UNAVAILABLE');
+          const subscriptionId = String(session.subscription);
+          const authoritativeSubscription = await stripe.subscriptions.retrieve(subscriptionId);
+          const authoritativeTenantId = authoritativeSubscription.metadata?.tenantId;
+          if (authoritativeTenantId && authoritativeTenantId !== tenantId) {
+            throw new Error('STRIPE_SUBSCRIPTION_TENANT_MISMATCH');
+          }
+          const currentPriceId = authoritativeSubscription.items.data[0]?.price?.id;
+          const resolvedPlan = PLAN_IDS.find((id) => planPriceId(id) === currentPriceId);
+          const authoritativePlan = resolvedPlan ?? plan;
+          if (!PLAN_CONFIG[authoritativePlan]) throw new Error('STRIPE_SUBSCRIPTION_PLAN_UNRESOLVED');
+          const clientLimit = PLAN_CLIENT_LIMITS[authoritativePlan];
           const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id;
+          const authoritativeStatus = authoritativeSubscription.status;
           await db.execute(sql`
             INSERT INTO tenant_subscriptions (
               tenant_id, stripe_customer_id, stripe_subscription_id, plan, status, client_limit, updated_at
             )
             VALUES (
-              ${tenantId}, ${customerId ?? null}, ${String(session.subscription)}, ${plan}, 'active', ${clientLimit}, CURRENT_TIMESTAMP
+              ${tenantId}, ${customerId ?? null}, ${subscriptionId}, ${authoritativePlan}, ${authoritativeStatus}, ${clientLimit}, CURRENT_TIMESTAMP
             )
             ON CONFLICT (tenant_id) DO UPDATE SET
               stripe_customer_id = COALESCE(EXCLUDED.stripe_customer_id, tenant_subscriptions.stripe_customer_id),
               stripe_subscription_id = EXCLUDED.stripe_subscription_id,
               plan = EXCLUDED.plan,
-              status = 'active',
+              status = EXCLUDED.status,
               client_limit = EXCLUDED.client_limit,
               updated_at = CURRENT_TIMESTAMP
           `);
-          await appendAuditEntry(db, { tenantId, action: 'billing.subscription.activated', actor: 'stripe-webhook', payload: { plan, stripeEventId: event.id, stripeSubscriptionId: String(session.subscription), stripeCustomerId: customerId ?? null } });
+          await appendAuditEntry(db, {
+            tenantId,
+            action: authoritativeStatus === 'active' ? 'billing.subscription.activated' : 'billing.subscription.checkout_confirmed',
+            actor: 'stripe-webhook',
+            payload: { plan: authoritativePlan, status: authoritativeStatus, stripeEventId: event.id, stripeSubscriptionId: subscriptionId, stripeCustomerId: customerId ?? null },
+          });
         } else if (tenantId && session.mode === 'payment') {
           const productId = session.metadata?.product ?? paymentLinkProduct ?? null;
           // A first purchase may create the tenant's Stripe customer. Persist
@@ -692,7 +718,13 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
             await db.execute(sql`UPDATE tenant_subscriptions SET stripe_customer_id = COALESCE(stripe_customer_id, ${addonCustomerId}), updated_at = CURRENT_TIMESTAMP WHERE tenant_id = ${tenantId}`);
           }
           if (typeof session.subscription === 'string' && addonId && ADDON_CONFIG[addonId]) {
-            await db.execute(sql`INSERT INTO tenant_addons (stripe_subscription_id, tenant_id, addon, status) VALUES (${session.subscription}, ${tenantId}, ${addonId}, 'active') ON CONFLICT (stripe_subscription_id) DO UPDATE SET status = 'active', updated_at = CURRENT_TIMESTAMP`);
+            if (!config.stripe.secretKey) throw new Error('STRIPE_ADDON_VERIFICATION_UNAVAILABLE');
+            const authoritativeAddon = await stripe.subscriptions.retrieve(session.subscription);
+            const authoritativeTenantId = authoritativeAddon.metadata?.tenantId;
+            const authoritativeAddonId = authoritativeAddon.metadata?.addon as AddonId | undefined;
+            if (authoritativeTenantId && authoritativeTenantId !== tenantId) throw new Error('STRIPE_ADDON_TENANT_MISMATCH');
+            if (authoritativeAddonId && authoritativeAddonId !== addonId) throw new Error('STRIPE_ADDON_METADATA_MISMATCH');
+            await db.execute(sql`INSERT INTO tenant_addons (stripe_subscription_id, tenant_id, addon, status) VALUES (${session.subscription}, ${tenantId}, ${addonId}, ${authoritativeAddon.status}) ON CONFLICT (stripe_subscription_id) DO UPDATE SET status = EXCLUDED.status, updated_at = CURRENT_TIMESTAMP`);
           }
           await appendAuditEntry(db, { tenantId, action: 'billing.addon.completed', actor: 'stripe-webhook', payload: { addon: addonId ?? null, stripeEventId: event.id, checkoutSessionId: session.id, stripeSubscriptionId: session.subscription ? String(session.subscription) : null } });
         }
@@ -795,21 +827,18 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
 export async function canCreateClient(tenantId: string, scopedDb: { execute: (query: any) => Promise<any> }): Promise<{
   allowed: boolean; plan: PlanId | null; clientLimit: number | null; clientCount: number; nextPlan: PlanId | null;
 }> {
-  let plan: PlanId | null = null;
-  let clientLimit: number | null = null;
-
-  try {
-    const limits = await getPlanLimits(tenantId, scopedDb);
-    plan = limits.plan;
-    clientLimit = limits.clientLimit;
-  } catch (error) {
-    const code = (error as any)?.code ?? (error as any)?.cause?.code;
-    if (code !== '42P01' && code !== '42703') throw error;
-  }
+  // Defense in depth: client creation must independently prove an entitling
+  // subscription. The global middleware already gates paid routes, but this
+  // helper is also used at the mutation boundary and must never fail open.
+  const limits = await getPlanLimits(tenantId, scopedDb);
+  const plan = limits.plan;
+  const clientLimit = limits.clientLimit;
+  const status = limits.status;
 
   const countResult = await scopedDb.execute(sql`SELECT count(*)::int AS count FROM clients WHERE tenant_id = ${tenantId}`);
   const clientCount = (countResult as any).rows?.[0]?.count ?? 0;
-  const allowed = clientLimit === null || clientCount < clientLimit;
+  const paid = Boolean(plan) && status === 'active';
+  const allowed = paid && (clientLimit === null || clientCount < clientLimit);
   const currentIndex = plan ? PLAN_IDS.indexOf(plan) : -1;
   const nextPlan = currentIndex >= 0 && currentIndex < PLAN_IDS.length - 1 ? PLAN_IDS[currentIndex + 1] : null;
   return { allowed, plan, clientLimit, clientCount, nextPlan };

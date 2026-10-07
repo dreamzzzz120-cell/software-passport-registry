@@ -52,8 +52,8 @@ describe('paid access contract', () => {
     expect(denied.status).toBe(402);
   });
 
-  it('blocks paid workspace access for canceled and unpaid plans', async () => {
-    for (const status of ['canceled', 'unpaid']) {
+  it('blocks paid workspace access for every non-active subscription state', async () => {
+    for (const status of ['trialing', 'past_due', 'incomplete', 'canceled', 'unpaid']) {
       const run = await runGate({ baseUrl: '/api', path: '/user/clients', subscription: { plan: 'growth', status } });
       expect(run.allowed).toBe(false);
       expect(run.status).toBe(402);
@@ -63,7 +63,7 @@ describe('paid access contract', () => {
 
   it('preserves the entitlement model', () => {
     expect(BASELINE_CAPABILITY).toBe('workspace');
-    expect(PLAN_ENTITLING_STATUSES).toEqual(['active', 'trialing', 'past_due']);
+    expect(PLAN_ENTITLING_STATUSES).toEqual(['active']);
     for (const capabilities of Object.values(PLAN_CAPABILITY_MATRIX)) expect(capabilities).toContain(BASELINE_CAPABILITY);
     expect(lapsedPlanAllows('workspace')).toBe(false);
     expect(lapsedPlanAllows('bulk_export')).toBe(false);
