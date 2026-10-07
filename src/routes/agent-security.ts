@@ -39,6 +39,16 @@ const observeAssetSchema = z.object({
   capabilities: z.array(capabilitySchema).max(200).default([]),
 }).strict();
 
+const relationshipSchema = z.object({
+  fromAssetId: z.string().trim().min(1).max(255),
+  relationType: z.enum(['USES','EXPOSES','CAN_ACCESS','READS_FROM','WRITES_TO','CONFIGURES']),
+  toAssetId: z.string().trim().max(255).nullable().optional(),
+  targetType: z.string().trim().max(120).default(''),
+  targetIdentifier: z.string().trim().max(1000).default(''),
+  evidenceHash: z.string().trim().min(16).max(256),
+  observedAt: z.string().datetime(),
+}).strict();
+
 const eventSchema = z.object({
   agentAssetId: z.string().trim().max(255).nullable().optional(),
   eventType: z.enum(EVENT_TYPES),
@@ -144,7 +154,7 @@ export function createAgentSecurityRouter() {
         ) VALUES (
           ${assetId},${tenantId},${p.aiSystemId ?? null},${p.passportId ?? null},${p.assetType},${p.name},${p.vendor},${p.version},
           ${p.sourceType},${p.sourceIdentifier},${p.originTrust},${p.verificationState},${p.evidenceHash},
-          ${JSON.stringify(p.metadata)},${p.observedAt},${p.observedAt},now(),now()
+          CAST(${JSON.stringify(p.metadata)} AS jsonb),${p.observedAt},${p.observedAt},now(),now()
         )
         ON CONFLICT (tenant_id, source_type, source_identifier)
         DO UPDATE SET
@@ -182,6 +192,62 @@ export function createAgentSecurityRouter() {
     } catch (error) { return next(error); }
   });
 
+  router.get('/relationships', requireRole([...READ_ROLES]), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const tenantId = req.user!.tenantId;
+      const rows = (await req.db!.execute(sql`
+        SELECT r.*
+        FROM agent_relationships r
+        WHERE r.tenant_id=${tenantId}
+        ORDER BY r.observed_at DESC
+        LIMIT 1000
+      `) as any).rows || [];
+      return res.json({ relationships: rows });
+    } catch (error) { return next(error); }
+  });
+
+  router.post('/relationships', requireRole(['Owner','Admin','Operator']), async (req: AuthenticatedRequest, res, next) => {
+    const parsed = relationshipSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'INVALID_AGENT_RELATIONSHIP', details: parsed.error.flatten() });
+    try {
+      const tenantId = req.user!.tenantId;
+      const db = req.db!;
+      const p = parsed.data;
+      const ids = [p.fromAssetId, p.toAssetId].filter(Boolean) as string[];
+      const owned = (await db.execute(sql`SELECT id FROM agent_assets WHERE tenant_id=${tenantId} AND id = ANY(${ids})`) as any).rows || [];
+      if (owned.length !== new Set(ids).size) return res.status(404).json({ error: 'AGENT_ASSET_NOT_FOUND' });
+      const relationshipId = makeId('arel');
+      await db.execute(sql`
+        INSERT INTO agent_relationships (
+          id,tenant_id,from_asset_id,relation_type,to_asset_id,target_type,target_identifier,observed_at,evidence_hash
+        ) VALUES (
+          ${relationshipId},${tenantId},${p.fromAssetId},${p.relationType},${p.toAssetId ?? null},${p.targetType},${p.targetIdentifier},${p.observedAt},${p.evidenceHash}
+        )
+      `);
+      await appendAuditEntry(db, {
+        tenantId,
+        action: 'agent_relationship.observed',
+        actor: req.user!.email,
+        payload: { relationshipId, fromAssetId: p.fromAssetId, relationType: p.relationType, toAssetId: p.toAssetId ?? null, targetType: p.targetType, targetIdentifier: p.targetIdentifier },
+      });
+      return res.status(201).json({ id: relationshipId, ...p });
+    } catch (error) { return next(error); }
+  });
+
+  router.get('/events', requireRole([...READ_ROLES]), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const tenantId = req.user!.tenantId;
+      const rows = (await req.db!.execute(sql`
+        SELECT *
+        FROM agent_security_events
+        WHERE tenant_id=${tenantId}
+        ORDER BY observed_at DESC
+        LIMIT 500
+      `) as any).rows || [];
+      return res.json({ events: rows });
+    } catch (error) { return next(error); }
+  });
+
   router.post('/events', requireRole(['Owner','Admin','Operator']), async (req: AuthenticatedRequest, res, next) => {
     const parsed = eventSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'INVALID_AGENT_SECURITY_EVENT', details: parsed.error.flatten() });
@@ -200,7 +266,7 @@ export function createAgentSecurityRouter() {
           action_capability,target_ref,outcome,severity,evidence_ids,detail,observed_at
         ) VALUES (
           ${eventId},${tenantId},${p.agentAssetId ?? null},${p.eventType},${p.sourceOrigin},${p.sourceRef},
-          ${p.actionCapability},${p.targetRef},${p.outcome},${p.severity},${JSON.stringify(p.evidenceIds)},${JSON.stringify(p.detail)},${p.observedAt}
+          ${p.actionCapability},${p.targetRef},${p.outcome},${p.severity},CAST(${JSON.stringify(p.evidenceIds)} AS jsonb),CAST(${JSON.stringify(p.detail)} AS jsonb),${p.observedAt}
         )
       `);
       await appendAuditEntry(db, {
