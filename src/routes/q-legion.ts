@@ -87,7 +87,7 @@ export function createQLegionRouter() {
         LIMIT 1
       `) as any).rows?.[0] ?? { strategyExecutionEnabled: false, updatedAt: null };
 
-      const outcomeByMission = new Map(outcomeRows.map((row: any) => [String(row.missionId), row]));
+      const outcomeByMission = new Map<string, any>(outcomeRows.map((row: any) => [String(row.missionId), row]));
       const missions = rows.map((row: any) => {
         const outcome = outcomeByMission.get(String(row.id)) ?? {
           sent: 0, replied: 0, demos: 0, checkouts: 0, pilots: 0, customers: 0, lost: 0,
