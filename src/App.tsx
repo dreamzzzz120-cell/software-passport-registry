@@ -206,7 +206,7 @@ export default function App() {
   const freeReviewResult = useMemo(() => parseFreeReviewResultPath(path), [path]);
   const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState<User | null>(null);
-  const [role, setRole] = useState('Viewer');
+  const [role, setRole] = useState<string | null>(null);
   // Never present the default Viewer role as an authenticated fact. The role
   // becomes usable only after /api/user/me confirms the current Supabase UID.
   // This prevents a transient profile/API failure from making an Owner look
@@ -525,6 +525,7 @@ export default function App() {
   if (!authReady) return <AuthLoading />;
   if (user && !isPublicPath(path) && (identityState === 'loading' || identityUid !== user.uid)) return <AuthLoading />;
   if (user && !isPublicPath(path) && identityState === 'error') return <SessionUnavailable onRetry={() => setReloadKey((value) => value + 1)} onSignOut={() => void signOutUser()} />;
+  if (user && !isPublicPath(path) && identityState === 'ready' && !role) return <SessionUnavailable onRetry={() => setReloadKey((value) => value + 1)} onSignOut={() => void signOutUser()} />;
   // On a tenant's own hostname the root is that tenant's portal, not SPR's
   // marketing site: signed-out visitors get the branded sign-in page.
   if (path === '/' && hostBrand && !user) return <LoginView onLoginSuccess={() => navigate(returnPathFromLocation())} brand={hostBrand} />;
@@ -595,33 +596,33 @@ export default function App() {
   if (selectedExtension) view = <ExtensionWorkflow id={selectedExtension} onNavigate={navigate} />;
   else switch (path) {
     case '/onboarding': view = <OnboardingView clientsCount={clients.length} passportsCount={passports.length} scansCount={scans.length} onOpenQuickAction={quickAction} onNavigateTab={onNavigateTab} onComplete={() => navigate('/dashboard')} />; break;
-     case '/dashboard': view = <EvidenceDashboardView clients={clients} alerts={alerts} scans={scans} passports={passports} findings={findings} dataStatus={dataStatus} role={role} onNavigateTab={onNavigateTab} onOpenQuickAction={quickAction} />; break;
+     case '/dashboard': view = <EvidenceDashboardView clients={clients} alerts={alerts} scans={scans} passports={passports} findings={findings} dataStatus={dataStatus} role={role ?? 'Viewer'} onNavigateTab={onNavigateTab} onOpenQuickAction={quickAction} />; break;
     case '/coverage': view = <CoverageView clients={clients} scans={scans} passports={passports} onNavigateTab={onNavigateTab} />; break;
     case '/evidence-explorer': view = <EvidenceExplorerView passports={passports} />; break;
     case '/evidence-exchange': view = <EvidenceExchangeView clients={clients} passports={passports} vendors={vendors} onNavigate={navigate} />; break;
     case '/procurement-gate': view = <ProcurementGateView passports={passports} onNavigate={navigate} />; break;
-    case '/vendor-evidence-exchange': view = <VendorEvidenceExchangeView vendors={vendors} role={role} onNavigate={navigate} />; break;
+    case '/vendor-evidence-exchange': view = <VendorEvidenceExchangeView vendors={vendors} role={role ?? 'Viewer'} onNavigate={navigate} />; break;
     case '/assets': view = <AssetsView clients={clients} searchQuery="" assets={assets} />; break;
-    case '/passports': view = <PassportsView verificationDecisions={verificationDecisions} verificationDetails={verificationDetails} passports={passports} selectedPassportId={selectedPassportId} setSelectedPassportId={setSelectedPassportId} searchQuery="" clients={clients} assets={assets} role={role} onNavigateTab={onNavigateTab} onUpdatePassport={(passport) => setPassports((current) => current.map((item) => item.id === passport.id ? passport : item))} onReload={() => setReloadKey((n) => n + 1)} />; break;
+    case '/passports': view = <PassportsView verificationDecisions={verificationDecisions} verificationDetails={verificationDetails} passports={passports} selectedPassportId={selectedPassportId} setSelectedPassportId={setSelectedPassportId} searchQuery="" clients={clients} assets={assets} role={role ?? 'Viewer'} onNavigateTab={onNavigateTab} onUpdatePassport={(passport) => setPassports((current) => current.map((item) => item.id === passport.id ? passport : item))} onReload={() => setReloadKey((n) => n + 1)} />; break;
     case '/registry': view = <PublicRegistryView />; break;
-    case '/scans': view = <ScansView scans={scans} clients={clients} assets={assets} passports={passports} role={role} onTriggerNewScan={(scan) => setScans((current) => [scan, ...current.filter((item) => item.id !== scan.id)].slice(0, 100))} />; break;
-    case '/alerts': view = <AlertsView alerts={alerts} onAlertAction={performAlertAction} role={role} />; break;
-    case '/reports': view = <ReportsView clients={clients} passports={passports} scans={scans} alerts={alerts} findings={findings} role={role} />; break;
+    case '/scans': view = <ScansView scans={scans} clients={clients} assets={assets} passports={passports} role={role ?? 'Viewer'} onTriggerNewScan={(scan) => setScans((current) => [scan, ...current.filter((item) => item.id !== scan.id)].slice(0, 100))} />; break;
+    case '/alerts': view = <AlertsView alerts={alerts} onAlertAction={performAlertAction} role={role ?? 'Viewer'} />; break;
+    case '/reports': view = <ReportsView clients={clients} passports={passports} scans={scans} alerts={alerts} findings={findings} role={role ?? 'Viewer'} />; break;
     case '/trust-graph': view = <TrustGraphView clients={clients} passports={passports} assets={assets} findings={findings} />; break;
-    case '/clients': view = <ClientsView clients={clients} selectedClientId={selectedClientId} setSelectedClientId={setSelectedClientId} passports={passports} onNavigateTab={onNavigateTab} searchQuery="" role={role} onClientCreated={(client) => { setClients((current) => [client, ...current]); setSelectedClientId(client.id); }} />; break;
-    case '/vendors': view = <VendorsView vendors={vendors} searchQuery="" role={role} onVendorsChange={setVendors} />; break;
-    case '/questionnaires': view = <QuestionnairesView role={role} clients={clients} passports={passports} />; break;
-    case '/savings': view = <SavingsView role={role} />; break;
-    case '/governance': view = <GovernanceView role={role} />; break;
-    case '/privacy': view = <PrivacyView role={role} />; break;
+    case '/clients': view = <ClientsView clients={clients} selectedClientId={selectedClientId} setSelectedClientId={setSelectedClientId} passports={passports} onNavigateTab={onNavigateTab} searchQuery="" role={role ?? 'Viewer'} onClientCreated={(client) => { setClients((current) => [client, ...current]); setSelectedClientId(client.id); }} />; break;
+    case '/vendors': view = <VendorsView vendors={vendors} searchQuery="" role={role ?? 'Viewer'} onVendorsChange={setVendors} />; break;
+    case '/questionnaires': view = <QuestionnairesView role={role ?? 'Viewer'} clients={clients} passports={passports} />; break;
+    case '/savings': view = <SavingsView role={role ?? 'Viewer'} />; break;
+    case '/governance': view = <GovernanceView role={role ?? 'Viewer'} />; break;
+    case '/privacy': view = <PrivacyView role={role ?? 'Viewer'} />; break;
     case '/integrations': view = <IntegrationsView passports={passports} clients={clients} onNavigateTab={onNavigateTab} />; break;
-    case '/monitoring': view = <MonitoringView role={role} passports={passports} clients={clients} />; break;
-    case '/security': view = <SecurityCenterView clients={clients} passports={passports} role={role} />; break;
-    case '/compliance': view = <ComplianceView clients={clients} role={role} />; break;
-    case '/msp': view = <MSPOperationsCommandCenter clients={clients} alerts={alerts} passports={passports} role={role} onSelectClient={setSelectedClientId} onSelectPassport={setSelectedPassportId} onNavigate={navigate} verificationDecisions={verificationDecisions} dataStatus={dataStatus} onRetry={() => setReloadKey((n) => n + 1)} />; break;
+    case '/monitoring': view = <MonitoringView role={role ?? 'Viewer'} passports={passports} clients={clients} />; break;
+    case '/security': view = <SecurityCenterView clients={clients} passports={passports} role={role ?? 'Viewer'} />; break;
+    case '/compliance': view = <ComplianceView clients={clients} role={role ?? 'Viewer'} />; break;
+    case '/msp': view = <MSPOperationsCommandCenter clients={clients} alerts={alerts} passports={passports} role={role ?? 'Viewer'} onSelectClient={setSelectedClientId} onSelectPassport={setSelectedPassportId} onNavigate={navigate} verificationDecisions={verificationDecisions} dataStatus={dataStatus} onRetry={() => setReloadKey((n) => n + 1)} />; break;
     // Guided wrapper around the existing Universal Intake endpoints. It adds no
     case '/agent-trust': view = <AgentTrustView />; break;
-    case '/ai-trust-center': view = <AITrustCenterView role={role} passports={passports} />; break;
+    case '/ai-trust-center': view = <AITrustCenterView role={role ?? 'Viewer'} passports={passports} />; break;
     case '/enterprise-readiness': view = <EnterpriseReadinessView clients={clients} />; break;
     case '/investor': view = <InvestorHomeView passports={passports} clients={clients} alerts={alerts} onShowTelemetry={() => navigate('/scans')} onNavigateTab={onNavigateTab} />; break;
     // Hiding the tile is not enough: the path is still typeable. A non-founder
@@ -632,11 +633,11 @@ export default function App() {
       break;
     case '/billing': view = <BillingView />; break;
     case '/pricing': view = <MspPricingView isAuthenticated={true} onPrimaryAction={() => navigate('/billing')} />; break;
-    case '/settings': view = <SettingsView theme={theme} onToggleTheme={() => { window.localStorage.setItem('spr-theme-choice', '1'); setTheme((current) => current === 'dark' ? 'light' : 'dark'); }} role={role} userEmail={user.email ?? undefined} onWorkspaceDeleted={signOutUser} />; break;
-    case '/white-label': view = <WhiteLabelView role={role} passports={passports} branding={branding} theme={theme} onBrandingSaved={setBranding} onPreview={onBrandingPreview} />; break;
-    case '/team': view = <TeamView role={role} />; break;
+    case '/settings': view = <SettingsView theme={theme} onToggleTheme={() => { window.localStorage.setItem('spr-theme-choice', '1'); setTheme((current) => current === 'dark' ? 'light' : 'dark'); }} role={role ?? 'Viewer'} userEmail={user.email ?? undefined} onWorkspaceDeleted={signOutUser} />; break;
+    case '/white-label': view = <WhiteLabelView role={role ?? 'Viewer'} passports={passports} branding={branding} theme={theme} onBrandingSaved={setBranding} onPreview={onBrandingPreview} />; break;
+    case '/team': view = <TeamView role={role ?? 'Viewer'} />; break;
     case '/audit-log': view = <AuditLogView />; break;
-    case '/extensions': view = <ExtensionMarketplace onNavigateTab={onNavigateTab} role={role} />; break;
+    case '/extensions': view = <ExtensionMarketplace onNavigateTab={onNavigateTab} role={role ?? 'Viewer'} />; break;
     // No '/free-review' case: it is answered above, before the authenticated
     // shell, for signed-in and signed-out visitors alike. Rendering it in here
     // was what wrapped the free report in the Command Center and made opening a
@@ -647,7 +648,7 @@ export default function App() {
   const workspaceStage = path === '/assets' ? 'software' : path === '/passports' || path === '/registry' ? 'passports' : path === '/evidence-explorer' ? 'evidence' : path === '/monitoring' ? 'monitoring' : path === '/reports' ? 'reports' : null;
 
   return (
-    <CommandCenter path={path} userEmail={user.email} role={role} isFounder={isFounder} branding={effectiveBranding} onNavigate={navigate} onSignOut={() => void signOutUser()}>
+    <CommandCenter path={path} userEmail={user.email} role={role ?? 'Viewer'} isFounder={isFounder} branding={effectiveBranding} onNavigate={navigate} onSignOut={() => void signOutUser()}>
       {workspaceStage ? <WorkspaceOperatingShell stage={workspaceStage} onNavigate={navigate}><ViewErrorBoundary routeKey={path}>{view}</ViewErrorBoundary></WorkspaceOperatingShell> : <ViewErrorBoundary routeKey={path}>{view}</ViewErrorBoundary>}
     </CommandCenter>
   );
