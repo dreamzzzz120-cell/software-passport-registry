@@ -7,6 +7,7 @@ import React, { useEffect, useState } from 'react';
 import { Check, ShieldCheck, Loader2, AlertTriangle } from 'lucide-react';
 import LegalFooterLinks from './legal/LegalFooterLinks';
 import { apiFetch } from '../utils/apiClient';
+import { trackGrowthEvent } from '../analytics';
 
 interface Props {
   isAuthenticated: boolean;
@@ -118,6 +119,7 @@ export default function MspPricingView({ isAuthenticated, onPrimaryAction }: Pro
   const [catalogError, setCatalogError] = useState(false);
 
   useEffect(() => {
+    trackGrowthEvent('pricing_view');
     let active = true;
     apiFetch('/api/billing/catalog')
       .then((res) => { if (!res.ok) throw new Error('catalog unavailable'); return res.json(); })
