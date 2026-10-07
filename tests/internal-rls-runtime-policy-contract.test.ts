@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const sql = fs.readFileSync(path.join(root, 'migrations/0137_internal_rls_runtime_policies.sql'), 'utf8');
+const sql = fs.readFileSync(path.join(root, 'migrations/0138_internal_rls_runtime_policies.sql'), 'utf8');
 
 describe('internal RLS runtime policies', () => {
   it('gives growth_agents only trusted runtime policy coverage', () => {
