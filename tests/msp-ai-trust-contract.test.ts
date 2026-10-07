@@ -65,4 +65,14 @@ describe('SPR MSP technician assignment and AI Trust Center contracts', () => {
     expect(msp).toContain("apiFetch('/api/organization/team')");
     expect(msp).toContain('clientRiskRollup');
   });
+  it('supports Gemini as an evidence-grounded AI provider without weakening authoritative trust boundaries', () => {
+    const aiTrust = read('src/routes/ai-trust.ts');
+    expect(aiTrust).toContain("import { GoogleGenAI } from '@google/genai';");
+    expect(aiTrust).toContain("AI_PROVIDER === 'gemini'");
+    expect(aiTrust).toContain("responseMimeType: 'application/json'");
+    expect(aiTrust).toContain('responseSchema: params.schema');
+    expect(aiTrust).toContain('structuredProviderCall({ provider');
+    expect(aiTrust).toContain('AI explanation only. SPR trust state remains determined by authoritative evidence and deterministic scoring.');
+  });
+
 });
