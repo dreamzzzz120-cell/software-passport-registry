@@ -18,6 +18,12 @@ CREATE POLICY spr_tenant_isolation ON q_legion_settings
   USING (tenant_id = current_setting('app.tenant_id', true))
   WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
 
+DROP POLICY IF EXISTS spr_worker_cross_tenant ON q_legion_settings;
+CREATE POLICY spr_worker_cross_tenant ON q_legion_settings
+  FOR ALL TO spr_worker_runtime
+  USING (current_user = 'spr_worker_runtime')
+  WITH CHECK (current_user = 'spr_worker_runtime');
+
 ALTER TABLE distribution_messages
   ADD COLUMN IF NOT EXISTS q_legion_mission_id text,
   ADD COLUMN IF NOT EXISTS q_legion_strategy_id text,
