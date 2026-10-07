@@ -1,5 +1,6 @@
 /** SPR Supabase browser client. Publishable keys are safe for browser use. */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import './authRecovery';
 
 // The project URL and publishable key are inlined at build time by
 // vite.config.ts from VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY, which
