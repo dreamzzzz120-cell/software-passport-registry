@@ -167,6 +167,16 @@ describe('Stripe webhook handling', () => {
     expect(source()).toContain("action: 'billing.addon.completed'");
   });
 
+
+  it('requires an active base plan before add-on checkout', () => {
+    const s = source();
+    const start = s.indexOf("router.post('/addon-checkout'");
+    const end = s.indexOf("router.post('/portal'", start);
+    const branch = s.slice(start, end);
+    expect(branch).toContain("status = 'active'");
+    expect(branch).toContain("code: 'SUBSCRIPTION_REQUIRED'");
+    expect(branch).toContain('An active SPR plan is required before purchasing add-ons.');
+  });
   it('is mounted with the raw body before the global JSON parser, not after', () => {
     const serverSource = read('server.ts');
     const webhookIndex = serverSource.indexOf("app.post('/api/billing/webhook'");
