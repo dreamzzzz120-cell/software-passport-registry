@@ -179,34 +179,35 @@ describe('Stripe webhook handling', () => {
 });
 
 describe('entitlement enforcement is real, wired into the actual client-creation route, not just displayed', () => {
-  it('canCreateClient is exported and treats a tenant with no subscription row (or a null limit) as unrestricted', () => {
-    const s = read('src/routes/billing.ts');
-    expect(s).toContain('export async function canCreateClient');
-    expect(s).toContain('const allowed = clientLimit === null || clientCount < clientLimit;');
-  });
-
-  it('treats a missing tenant_subscriptions table as unrestricted billing state instead of crashing client creation', async () => {
+  it('canCreateClient independently fails closed without an active paid subscription', async () => {
     const { canCreateClient } = await import('../src/routes/billing.ts');
-    const missingBillingTable = {
+    const noSubscription = {
       execute: async (query: unknown) => {
-        const sqlText = String((query as any)?.query ?? '');
-        if (sqlText.includes('FROM tenant_subscriptions')) {
-          const err = new Error('relation "tenant_subscriptions" does not exist');
-          (err as any).code = '42P01';
-          throw err;
-        }
-        if (sqlText.includes('FROM clients WHERE tenant_id')) return { rows: [{ count: 0 }] };
+        const text = JSON.stringify(query);
+        if (text.includes('tenant_subscriptions')) return { rows: [] };
+        if (text.includes('clients')) return { rows: [{ count: 0 }] };
         return { rows: [] };
       },
     };
-
-    await expect(canCreateClient('tenant-missing-billing', missingBillingTable as any)).resolves.toMatchObject({
-      allowed: true,
+    await expect(canCreateClient('tenant-unpaid', noSubscription as any)).resolves.toMatchObject({
+      allowed: false,
       plan: null,
       clientLimit: null,
       clientCount: 0,
       nextPlan: null,
     });
+  });
+
+  it('propagates missing billing schema errors instead of granting access', async () => {
+    const { canCreateClient } = await import('../src/routes/billing.ts');
+    const missingBillingTable = {
+      execute: async () => {
+        const err = new Error('relation "tenant_subscriptions" does not exist');
+        (err as any).code = '42P01';
+        throw err;
+      },
+    };
+    await expect(canCreateClient('tenant-missing-billing', missingBillingTable as any)).rejects.toMatchObject({ code: '42P01' });
   });
 
   it('POST /api/user/clients actually calls canCreateClient before inserting, and returns a structured 402 with usage/upgrade info when blocked', () => {
@@ -238,7 +239,7 @@ describe('entitlement enforcement is real, wired into the actual client-creation
   });
 });
 
-describe('migration 0043 enforces the client limit at the database level, closing the check-then-act race', () => {
+describe('database paywall enforcement closes route and race bypasses', () => {
   it('widens the plan CHECK constraint to the real 5-tier set', () => {
     const s = read('migrations/0043_billing_plan_tiers.sql');
     expect(s).toContain("CHECK (plan IN ('pilot', 'starter', 'professional', 'growth', 'enterprise'))");
@@ -250,8 +251,10 @@ describe('migration 0043 enforces the client limit at the database level, closin
     expect(s).toContain("RAISE EXCEPTION 'CLIENT_LIMIT_REACHED'");
   });
 
-  it('treats a NULL client_limit as unrestricted, never blocking Enterprise or a tenant with no subscription row', () => {
-    const s = read('migrations/0043_billing_plan_tiers.sql');
+  it('requires an active subscription before client insertion and only then permits unlimited Enterprise', () => {
+    const s = read('migrations/0135_client_creation_requires_active_subscription.sql');
+    expect(s).toContain("v_status IS DISTINCT FROM 'active'");
+    expect(s).toContain("RAISE EXCEPTION 'SUBSCRIPTION_REQUIRED'");
     expect(s).toContain('IF v_limit IS NULL THEN');
     expect(s).toContain('RETURN NEW;');
   });
