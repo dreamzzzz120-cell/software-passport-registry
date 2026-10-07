@@ -340,6 +340,12 @@ export default function App() {
   useEffect(() => { if (authReady && !user && !isPublicPath(path)) navigate('/login'); }, [authReady, user, path]);
 
   useEffect(() => {
+    const requireMfa = () => setMfaState('required');
+    window.addEventListener('mfa-required', requireMfa);
+    return () => window.removeEventListener('mfa-required', requireMfa);
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     if (!user) { setMfaState('ready'); return () => { cancelled = true; }; }
     setMfaState('checking');
@@ -353,7 +359,7 @@ export default function App() {
       }
     }).catch(() => { if (!cancelled) setMfaState('error'); });
     return () => { cancelled = true; };
-  }, [user?.uid, mfaCheckKey]);
+  }, [user, mfaCheckKey]);
 
   useEffect(() => {
     if (!user || isFounder || dataStatus !== 'ready') return;
@@ -361,6 +367,13 @@ export default function App() {
   }, [user, isFounder, dataStatus, clients.length, passports.length, scans.length, path]);
 
   useEffect(() => {
+    setIdentityState('loading'); setIdentityUid(null); setRole(''); setIsFounder(false);
+    setClients(EMPTY_CLIENTS); setPassports(EMPTY_PASSPORTS); setAssets([]);
+    setVendors(EMPTY_VENDORS); setAlerts(EMPTY_ALERTS); setFindings([]);
+    setScans(EMPTY_SCANS); setIntegrations(EMPTY_INTEGRATIONS);
+    setSelectedClientId(''); setSelectedPassportId(null);
+    setVerificationDecisions({}); setVerificationDetails({});
+    setBranding(EMPTY_BRANDING); setBrandingPreview(null); setDataStatus('loading');
     if (!user) return;
     let cancelled = false;
     const load = async () => {
@@ -384,6 +397,11 @@ export default function App() {
       beginSignupTransition();
       try {
         const probe = await apiFetch('/api/user/me');
+        if (cancelled) return;
+        if (probe.status === 403) {
+          const denial = await probe.clone().json().catch(() => null);
+          if (denial?.code === 'MFA_REQUIRED') { if (!cancelled) setMfaState('required'); return; }
+        }
         if (probe.status === 403 && auth.currentUser?.emailVerified) {
           const provisioned = await apiFetch('/api/auth/workspace', { method: 'POST' });
           // Claims are stale immediately after provisioning; refresh so the
@@ -397,6 +415,7 @@ export default function App() {
         endSignupTransition();
       }
 
+      if (cancelled) return;
       if (!cancelled) setDataStatus('loading');
       const results = await Promise.allSettled([
         apiFetch('/api/user/me'), apiFetch('/api/scans'), apiFetch('/api/trust-loop/findings'), apiFetch('/api/user/passports'), apiFetch('/api/user/clients'), apiFetch('/api/integrations'), apiFetch('/api/vendors'),
@@ -546,8 +565,8 @@ export default function App() {
   if (user && !isPublicPath(path) && mfaState === 'checking') return <AuthLoading />;
   if (user && !isPublicPath(path) && mfaState === 'error') return <SessionUnavailable onRetry={() => { setMfaState('checking'); setMfaCheckKey((value) => value + 1); }} onSignOut={() => void signOutUser()} />;
   if (user && !isPublicPath(path) && mfaState === 'required') return <MfaChallengeView onVerified={() => { setMfaState('ready'); setReloadKey((value) => value + 1); }} onSignOut={() => void signOutUser()} />;
-  if (user && !isPublicPath(path) && (identityState === 'loading' || identityUid !== user.uid)) return <AuthLoading />;
   if (user && !isPublicPath(path) && identityState === 'error') return <SessionUnavailable onRetry={() => setReloadKey((value) => value + 1)} onSignOut={() => void signOutUser()} />;
+  if (user && !isPublicPath(path) && (identityState === 'loading' || identityUid !== user.uid)) return <AuthLoading />;
   if (user && !isPublicPath(path) && identityState === 'ready' && !role) return <SessionUnavailable onRetry={() => setReloadKey((value) => value + 1)} onSignOut={() => void signOutUser()} />;
   // On a tenant's own hostname the root is that tenant's portal, not SPR's
   // marketing site: signed-out visitors get the branded sign-in page.

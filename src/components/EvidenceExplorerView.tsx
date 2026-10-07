@@ -15,6 +15,7 @@ interface Props {
 }
 
 const STATUS_FILTERS = ['ALL', 'PASS', 'FAIL', 'UNKNOWN'] as const;
+const EMPTY_PASSPORTS: SoftwarePassport[] = [];
 
 function responseError(data: any, fallback: string) {
   if (typeof data?.error === 'string') return data.error;
@@ -29,7 +30,7 @@ function parseIds(value: string): string[] {
 const STATUS_ICON: Record<string, typeof CheckCircle2> = { PASS: CheckCircle2, FAIL: XCircle, UNKNOWN: ShieldQuestion };
 const STATUS_COLOR: Record<string, string> = { PASS: 'text-[var(--spr-green)]', FAIL: 'text-[var(--spr-red)]', UNKNOWN: 'text-amber-300' };
 
-export default function EvidenceExplorerView({ passports = [], selectedPassportId, onSelectPassportId }: Props) {
+export default function EvidenceExplorerView({ passports = EMPTY_PASSPORTS, selectedPassportId, onSelectPassportId }: Props) {
   const [fallbackPassports, setFallbackPassports] = useState<Array<Pick<SoftwarePassport, 'id' | 'name' | 'version'>>>([]);
   const [passportListState, setPassportListState] = useState<'idle' | 'loading' | 'ready' | 'error'>(passports.length ? 'ready' : 'idle');
   const [passportListRetry, setPassportListRetry] = useState(0);
@@ -41,13 +42,14 @@ export default function EvidenceExplorerView({ passports = [], selectedPassportI
       return;
     }
     let cancelled = false;
+    setFallbackPassports([]);
     setPassportListState('loading');
     apiFetch('/api/user/passports')
       .then(async (response) => {
         const data = await response.json().catch(() => null);
         if (!response.ok) throw new Error(responseError(data, 'Unable to load passports.'));
         const rows = Array.isArray(data) ? data : data?.passports;
-        if (!Array.isArray(rows)) throw new Error('Invalid passport response.');
+        if (!Array.isArray(rows) || rows.some((row: any) => !row || !['string', 'number'].includes(typeof row.id) || !String(row.id).trim())) throw new Error('Invalid passport response.');
         if (!cancelled) {
           setFallbackPassports(rows.map((row: any) => ({
             id: String(row.id),
@@ -83,7 +85,9 @@ export default function EvidenceExplorerView({ passports = [], selectedPassportI
   }, [availablePassports, passportId]);
 
   useEffect(() => {
-    if (!passportId) { setLedger(null); return; }
+    let cancelled = false;
+    setLedger(null);
+    if (!passportId) { setLoading(false); return; }
     setLoading(true);
     setError(null);
     setSelectedFindingId(null);
@@ -91,10 +95,12 @@ export default function EvidenceExplorerView({ passports = [], selectedPassportI
       .then(async (response) => {
         const data = await response.json().catch(() => null);
         if (!response.ok) throw new Error(responseError(data, 'Unable to load the evidence ledger.'));
-        setLedger(data as Ledger);
+        if (!data || !Array.isArray(data.evidence) || !Array.isArray(data.findings) || !Array.isArray(data.observations)) throw new Error('Invalid evidence ledger response.');
+        if (!cancelled) setLedger(data as Ledger);
       })
-      .catch((loadError) => { setLedger(null); setError(loadError instanceof Error ? loadError.message : 'Unable to load the evidence ledger.'); })
-      .finally(() => setLoading(false));
+      .catch((loadError) => { if (!cancelled) { setLedger(null); setError(loadError instanceof Error ? loadError.message : 'Unable to load the evidence ledger.'); } })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [passportId]);
 
   const evidenceById = useMemo(() => new Map((ledger?.evidence || []).map((item) => [item.id, item])), [ledger]);

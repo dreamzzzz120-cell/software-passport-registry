@@ -150,6 +150,13 @@ export const apiFetch = async (input: RequestInfo | URL, init?: FetchOptions): P
       // flip. App.tsx owns the decision: it can provision during signup, show
       // SessionUnavailable for an established account, or sign out only after
       // an authoritative 401 survives refresh + retry.
+      if (response.status === 403) {
+        const denial = await response.clone().json().catch(() => null);
+        if (denial?.code === 'MFA_REQUIRED') {
+          window.dispatchEvent(new CustomEvent('mfa-required'));
+          return response;
+        }
+      }
       if (response.status === 403 && resolvedUrl.pathname === '/api/user/me' && !isSignupTransitionActive()) {
         const rejectedEmail = auth?.currentUser?.email ?? null;
         setAuthNotice(notProvisionedMessage(rejectedEmail));

@@ -366,7 +366,9 @@ export function createTrustLoopRouter() {
       const db = req.db!;
       const tenantId = req.user!.tenantId;
       const passportId = req.params.passportId;
-      const scope = await db.execute(sql`SELECT id FROM passports WHERE id=${passportId} AND tenant_id=${tenantId} LIMIT 1`);
+      const clientScope = req.user!.role === 'Client' ? req.user!.clientId : null;
+      if (req.user!.role === 'Client' && !clientScope) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
+      const scope = await db.execute(sql`SELECT id FROM passports WHERE id=${passportId} AND tenant_id=${tenantId} AND (${clientScope}::text IS NULL OR client_id=${clientScope}) LIMIT 1`);
       if (!(scope as any).rows?.length) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
       const observations = await db.execute(sql`SELECT id,observation_version,generated_at,previous_observation_id,evidence_ids,finding_ids,canonical_payload_hash,completeness_basis_points,open_finding_count,unknown_dimension_count FROM trust_observations WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY observation_version DESC`);
       const evidence = await db.execute(sql`SELECT id,provider,control_id,subject,source_url,observed_at,verification_method,status,severity,evidence_hash,limitation FROM evidence_ledger WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY observed_at DESC`);
