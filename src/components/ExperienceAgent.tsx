@@ -38,7 +38,7 @@ const QUICK_ACTIONS = [
   { label: 'Monitoring', value: 'Show monitoring status and what needs attention' },
 ];
 
-const SAFE_NAV_PATHS = new Set(['/dashboard', '/clients', '/passports', '/vendors', '/monitoring', '/compliance', '/reports', '/billing', '/settings', '/founder']);
+const SAFE_NAV_PATHS = new Set(['/dashboard', '/clients', '/passports', '/vendors', '/monitoring', '/compliance', '/reports', '/billing', '/settings', '/founder', '/white-label']);
 const SAFE_ACTION_ENDPOINTS = new Set(['/api/agent/v1/verify-software']);
 const SAFE_CONFIRMED_ACTION_ENDPOINTS = new Set(['/api/scans', '/api/report-schedules', '/api/founder/distribution/discovery/run', '/api/founder/distribution/qualify-lead']);
 function isConfirmedActionEndpoint(endpoint: string) {
