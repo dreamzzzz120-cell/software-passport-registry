@@ -298,7 +298,7 @@ export function createAgentSecurityRouter() {
         const targets = window.map((event: any) => String(event.target_ref || '').toLowerCase());
         const hasRead = capabilities.some((value: string) => /read|fetch|get|retrieve|filesystem/.test(value));
         const hasWriteOrSend = capabilities.some((value: string) => /write|post|send|publish|upload|execute|create/.test(value));
-        const hasExternalTarget = targets.some((value: string) => /^https?:///.test(value) || /webhook|email|slack|http|external/.test(value));
+        const hasExternalTarget = targets.some((value: string) => /^https?:\\/\\//.test(value) || /webhook|email|slack|http|external/.test(value));
         const succeeded = window.some((event: any) => event.outcome === 'SUCCEEDED');
         const dangerous = hasRead && hasWriteOrSend && hasExternalTarget;
         sequences.push({
