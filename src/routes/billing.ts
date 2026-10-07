@@ -62,7 +62,7 @@ export const PLAN_CLIENT_LIMITS: Record<PlanId, number | null> = Object.fromEntr
 ) as Record<PlanId, number | null>;
 
 function planPriceId(plan: PlanId): string | undefined {
-  return config.stripe.prices[PLAN_CONFIG[plan].priceKey as keyof typeof config.stripe.prices];
+  return configuredPriceId(PLAN_CONFIG[plan].priceKey as keyof typeof config.stripe.prices);
 }
 
 function planPaymentLink(plan: PlanId): string | undefined {
@@ -139,7 +139,10 @@ let discoveryInFlight: Promise<void> | null = null;
 const DISCOVERY_TTL_MS = 5 * 60 * 1000;
 
 function configuredPriceId(priceKey: keyof typeof config.stripe.prices): string | undefined {
-  return config.stripe.prices[priceKey] || discoveredPriceIds.get(priceKey);
+  // Prefer a price freshly discovered from the live Stripe catalogue. This
+  // lets production recover automatically when a configured Price ID points
+  // at an archived/test/rotated object while the live product still exists.
+  return discoveredPriceIds.get(priceKey) || config.stripe.prices[priceKey];
 }
 
 function oneTimePriceId(product: OneTimeProductId): string | undefined {
@@ -160,16 +163,19 @@ async function discoverMissingCatalogPrices(stripe: Stripe): Promise<void> {
     discoveryInFlight = (async () => {
       const prices = await stripe.prices.list({ active: true, limit: 100, expand: ['data.product'] }).autoPagingToArray({ limit: 1000 });
       const targets = [
-        ...ONE_TIME_IDS.map((id) => ({ priceKey: ONE_TIME_CONFIG[id].priceKey, label: ONE_TIME_CONFIG[id].label, recurring: false })),
-        ...ADDON_IDS.map((id) => ({ priceKey: ADDON_CONFIG[id].priceKey, label: ADDON_CONFIG[id].label, recurring: true })),
+        ...PLAN_IDS.map((id) => ({ priceKey: PLAN_CONFIG[id].priceKey, label: PLAN_CONFIG[id].label, recurring: true, metadataKey: 'spr_plan', metadataValue: id })),
+        ...ONE_TIME_IDS.map((id) => ({ priceKey: ONE_TIME_CONFIG[id].priceKey, label: ONE_TIME_CONFIG[id].label, recurring: false, metadataKey: 'spr_catalog_id', metadataValue: id })),
+        ...ADDON_IDS.map((id) => ({ priceKey: ADDON_CONFIG[id].priceKey, label: ADDON_CONFIG[id].label, recurring: true, metadataKey: 'spr_catalog_id', metadataValue: id })),
       ];
 
       for (const target of targets) {
-        if (config.stripe.prices[target.priceKey as keyof typeof config.stripe.prices]) continue;
         const expected = normalizeProductName(target.label);
         const matches = prices.filter((price) => {
           const product = typeof price.product === 'object' && price.product && !('deleted' in price.product) ? price.product : null;
-          if (!product?.name || normalizeProductName(product.name) !== expected) return false;
+          if (!product) return false;
+          const metadataMatch = product.metadata?.[target.metadataKey] === target.metadataValue || price.metadata?.[target.metadataKey] === target.metadataValue;
+          const nameMatch = Boolean(product.name) && normalizeProductName(product.name) === expected;
+          if (!metadataMatch && !nameMatch) return false;
           return target.recurring ? Boolean(price.recurring) : !price.recurring;
         });
         if (matches.length === 1) {
