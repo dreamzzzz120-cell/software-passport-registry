@@ -391,26 +391,32 @@ describe('Manage billing visibility', () => {
 
 
 describe('production Stripe mode safety', () => {
-  it('fails closed when a Stripe test key is present in production', () => {
+  it('fails closed for server-side Stripe API checkout when a test key is present in production', () => {
     const s = read('src/routes/billing.ts');
     expect(s).toContain('STRIPE_TEST_MODE_IN_PRODUCTION');
     expect(s).toContain('stripeTestModeInProduction');
     expect(s).toContain('requireLiveStripeInProduction');
   });
 
-  it('does not expose checkout as available while production is using test mode', () => {
+  it('keeps configured live Payment Links available as a production recovery path', () => {
     const s = read('src/routes/billing.ts');
-    expect(s).toContain("billingConfigured: (Boolean(config.stripe.secretKey) || hasPaymentLinkCheckout) && !productionTestMode");
-    expect(s).toContain('if (productionTestMode) return { ...stripeEntry, checkoutAvailable: false }');
-    expect(s).toContain('fallback && !stripeEntry.checkoutAvailable && !productionTestMode');
+    expect(s).toContain('Boolean((config.stripe.secretKey && !productionTestMode) || hasPaymentLinkCheckout)');
+    expect(s).toContain('fallback && (!stripeEntry.checkoutAvailable || productionTestMode)');
+    expect(s).toContain('if (productionTestMode && !link) return { ...stripeEntry, checkoutAvailable: false }');
+    expect(s).toContain("url.searchParams.set('client_reference_id', \`${tenantId}__sprplan__${parsed.data.plan}\`)");
   });
 
-  it('guards plan, one-time, add-on, and billing portal routes in production', () => {
+  it('keeps the Billing Portal blocked until a live Stripe API key is installed', () => {
     const s = read('src/routes/billing.ts');
-    for (const route of ['/checkout', '/one-time-checkout', '/addon-checkout', '/portal']) {
-      const start = s.indexOf(`router.post('${route}'`);
-      expect(start).toBeGreaterThan(-1);
-      expect(s.slice(start, start + 500)).toContain('requireLiveStripeInProduction(res)');
-    }
+    const start = s.indexOf("router.post('/portal'");
+    expect(start).toBeGreaterThan(-1);
+    expect(s.slice(start, start + 500)).toContain('requireLiveStripeInProduction(res)');
+  });
+
+  it('activates Payment Link purchases only from a signed completed checkout event with paid status', () => {
+    const s = read('src/routes/billing.ts');
+    expect(s).toContain('paymentLinkMatch && stripeTestModeInProduction()');
+    expect(s).toContain("session.payment_status === 'paid' || session.payment_status === 'no_payment_required'");
+    expect(s).toContain("? 'active'");
   });
 });
