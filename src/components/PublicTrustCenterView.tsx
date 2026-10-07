@@ -113,7 +113,32 @@ function Security({ onNavigate }: { onNavigate: (path: string) => void }) {
 }
 
 function Trust() {
-  return <div className="max-w-5xl"><Eyebrow>Trust Center</Eyebrow><h1 className="mt-3 text-4xl font-semibold tracking-tight">Verify SPR itself.</h1><p className="mt-5 max-w-3xl text-sm leading-7 text-[var(--spr-text-muted)]">This page is designed for customers, MSPs, partners and investors who want to understand what SPR is, what it claims, and where its limits are.</p><div className="mt-10 overflow-hidden rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)]"><Row label="Product" value="Software Passport Registry (SPR)" /><Row label="Purpose" value="Evidence-based software trust and governance infrastructure" /><Row label="Status" value="Early-stage independent software product" /><Row label="Certification status" value="No security or compliance certification is claimed here" /><Row label="Government affiliation" value="None claimed" /><Row label="Digital Product Passport registry" value="Not the European Commission registry" /><Row label="Evidence model" value="Observed evidence, verification, explainable trust state and limitations" /></div><div className="mt-8 grid gap-5 md:grid-cols-3"><Card title="Methodology">How evidence becomes a trust state.</Card><Card title="Security">Controls, limitations and third-party dependencies.</Card><Card title="Legal">Terms, Privacy and the Data Processing Agreement are publicly available.</Card></div></div>;
+  const proof = [
+    ['Evidence model', 'Observed / verified / UNKNOWN', 'Missing evidence stays visible. SPR does not turn absence into confidence.'],
+    ['Change model', 'Historical + current', 'New observations append to the record so prior evidence is not silently rewritten.'],
+    ['AI boundary', 'Read-only evidence use', 'AI may explain supplied evidence; it cannot create evidence, findings, trust state, or remediation decisions.'],
+    ['Customer proof', 'Exportable records', 'Passports, SBOMs, findings, timestamps, sources and reports are designed to be inspectable and shareable.'],
+  ];
+  return <div className="max-w-6xl">
+    <Eyebrow>Trust Center</Eyebrow>
+    <div className="mt-3 grid gap-8 lg:grid-cols-[1.2fr_.8fr] lg:items-end">
+      <div>
+        <h1 className="text-4xl font-semibold tracking-tight md:text-5xl">Don’t trust the marketing. Inspect the evidence.</h1>
+        <p className="mt-5 max-w-3xl text-base leading-8 text-[var(--spr-text-muted)]">SPR is built around a simple rule: a claim should be traceable to what was actually observed, when it was observed, and where it came from. This center exposes the system’s controls, limits, evidence model and public operating commitments.</p>
+      </div>
+      <div className="rounded-2xl border border-[var(--spr-highlight)]/25 bg-[var(--spr-accent-soft)] p-5">
+        <div className="text-[11px] font-bold uppercase tracking-[.2em] text-[var(--spr-highlight)]">Public position</div>
+        <div className="mt-3 text-xl font-semibold">Evidence infrastructure, not a certification badge.</div>
+        <p className="mt-2 text-xs leading-6 text-[var(--spr-text-muted)]">SPR does not claim government approval, SOC 2, ISO 27001, penetration-test certification, or regulatory certification unless independently verified evidence supports the claim.</p>
+      </div>
+    </div>
+    <div className="mt-10 grid gap-4 md:grid-cols-2">{proof.map(([title, value, body]) => <section key={title} className="rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5"><div className="text-[11px] font-bold uppercase tracking-[.16em] text-[var(--spr-text-faint)]">{title}</div><div className="mt-2 text-lg font-semibold">{value}</div><p className="mt-2 text-xs leading-6 text-[var(--spr-text-muted)]">{body}</p></section>)}</div>
+    <div className="mt-8 grid gap-5 lg:grid-cols-3">
+      <Card title="Methodology">See how identity, collection, verification and trust-state interpretation are kept separate.</Card>
+      <Card title="Security">Review tenant isolation, authentication, authorization, transport and evidence-integrity controls.</Card>
+      <Card title="Legal + operations">Review the DPA, retention model, subprocessors, terms and privacy commitments that define the operating boundary.</Card>
+    </div>
+  </div>;
 }
 
 const CONTACT_TOPICS: Array<{ id: string; label: string }> = [
@@ -147,9 +172,11 @@ function Contact() {
 
   return <div className="max-w-4xl">
     <Eyebrow>Contact</Eyebrow>
-    <h1 className="mt-3 text-4xl font-semibold tracking-tight">Talk to Software Passport Registry.</h1>
-    <p className="mt-5 max-w-3xl text-sm leading-7 text-[var(--spr-text-muted)]">Product questions, security reports, partnership discussions, MSP pilots and privacy requests all come through the same form. Every message is stored and forwarded to the team; the confirmation below tells you exactly which of those happened.</p>
-    <div className="mt-10 grid gap-8 md:grid-cols-[1fr_280px]">
+    <div className="mt-3 grid gap-6 lg:grid-cols-[1fr_300px] lg:items-end">
+      <div><h1 className="text-4xl font-semibold tracking-tight md:text-5xl">Bring the question. We’ll keep the evidence boundary clear.</h1><p className="mt-5 max-w-3xl text-sm leading-7 text-[var(--spr-text-muted)]">Use this channel for product questions, MSP pilots, partnerships, security reports and privacy requests. Your submission gets a reference ID so you can distinguish a recorded request from an email delivery assumption.</p></div>
+      <div className="rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5"><div className="text-[11px] font-bold uppercase tracking-[.16em] text-[var(--spr-text-faint)]">What happens next</div><ol className="mt-3 space-y-2 text-xs leading-5 text-[var(--spr-text-muted)]"><li><b className="text-[var(--spr-text)]">1.</b> SPR validates and records the request.</li><li><b className="text-[var(--spr-text)]">2.</b> A reference ID is returned.</li><li><b className="text-[var(--spr-text)]">3.</b> Email forwarding is reported separately as succeeded or not verified.</li></ol></div>
+    </div>
+    <div className="mt-10 grid gap-8 md:grid-cols-[1fr_300px]">
       {result ? (
         <div className="rounded-md border border-[var(--spr-green)]/30 bg-[var(--spr-green)]/5 p-6 text-sm leading-7">
           <div className="font-semibold">Message recorded.</div>
@@ -168,7 +195,7 @@ function Contact() {
           <Field label="Message"><textarea required minLength={10} maxLength={4000} rows={7} value={form.message} onChange={update('message')} className={inputClass} /></Field>
           <div className="hidden" aria-hidden="true"><label>Website<input tabIndex={-1} autoComplete="off" value={form.website} onChange={update('website')} /></label></div>
           {error && <div className="rounded border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/5 px-3 py-2 text-xs text-[var(--spr-red)]">{error}</div>}
-          <button type="submit" disabled={busy} className="rounded-[3px] bg-[var(--spr-accent)] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[var(--spr-accent-hover)] disabled:opacity-60">{busy ? 'Sending…' : 'Send message'}</button>
+          <button type="submit" disabled={busy} className="rounded-[3px] bg-[var(--spr-accent)] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[var(--spr-accent-hover)] disabled:opacity-60">{busy ? 'Recording request…' : 'Record and send request'}</button>
           <p className="text-[11px] leading-5 text-[var(--spr-text-faint)]">Your message, name, email and a hashed form of your IP address are stored so we can reply and detect abuse. See the <a href="/privacy" className="text-[var(--spr-highlight)] hover:underline">Privacy Policy</a>.</p>
         </form>
       )}

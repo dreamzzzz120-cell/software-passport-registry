@@ -111,6 +111,14 @@ describe('billing routes are real, authenticated, and role-gated', () => {
     const s = source();
     expect(s).toContain('if (!priceId) return res.status(503)');
   });
+
+  it('creates the tenant entitlement on Stripe confirmation even when no subscription row existed before checkout', () => {
+    const s = source();
+    expect(s).toContain('INSERT INTO tenant_subscriptions (');
+    expect(s).toContain('ON CONFLICT (tenant_id) DO UPDATE SET');
+    expect(s).toContain("status = 'active'");
+    expect(s).toContain("action: 'billing.subscription.activated'");
+  });
 });
 
 describe('Stripe webhook handling', () => {

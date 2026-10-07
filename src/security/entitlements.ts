@@ -37,24 +37,18 @@ export function capabilityForPath(req: Request): Capability {
 // cancellation arrives as 'canceled'/'unpaid' and is handled as lapsed below.
 export const PLAN_ENTITLING_STATUSES = ['active', 'trialing', 'past_due'] as const;
 
-// POST /api/billing/checkout writes a row with status 'incomplete' *before*
-// the customer ever reaches Stripe. Starting -- or abandoning -- a checkout
-// must never take away access the tenant had a moment earlier, so this state
-// is treated exactly like having no plan on record at all.
+// 'incomplete' is not an entitling Stripe state. A checkout that has not
+// completed payment must not unlock the workspace.
 export const PRE_PAYMENT_STATUSES = ['incomplete'] as const;
 
-// Every plan in PLAN_CAPABILITY_MATRIX includes 'workspace', and
-// capabilityForPath() falls back to it for any route that is not one of the
-// specific paid capabilities. It is therefore the floor a lapsed tenant keeps:
-// they can still reach their own workspace and the billing surface to
-// resubscribe, while every paid capability is withheld. Their data is never
-// hidden from them, which is what docs/billing-paywall-inventory.md requires
-// of cancellation -- the webhook sets the status "without deleting any data".
+// capabilityForPath() falls back to workspace for normal authenticated app
+// routes. Billing and identity recovery are exempted before capability
+// evaluation; there is intentionally no free workspace capability at launch.
 export const BASELINE_CAPABILITY: Capability = 'workspace';
 
 const ENTITLING_STATUSES_SQL = sql.join(PLAN_ENTITLING_STATUSES.map(status => sql`${status}`), sql`, `);
 
-export type SubscriptionGate = 'default-access' | 'enforce-plan' | 'lapsed';
+export type SubscriptionGate = 'unpaid' | 'enforce-plan' | 'lapsed';
 
 export interface SubscriptionState { plan: string | null; status: string; currentPeriodEnd: string | null; }
 
@@ -63,26 +57,25 @@ export interface CapabilityDecision { allowed: boolean; gate: SubscriptionGate; 
 interface SubscriptionRow { plan?: string | null; status?: string | null; currentPeriodEnd?: string | null }
 
 /**
- * The documented default, from docs/billing-paywall-inventory.md: "A tenant
- * with no tenant_subscriptions row (or no plan set) is treated as
- * unrestricted, not as 'no plan.'" A missing row means the tenant predates
- * billing or has never been through checkout -- it is not evidence that they
- * failed to pay. Treating absence as denial is what produced the blanket 402s
- * on /api/user/clients, /api/scans, /api/user/passports and the rest.
- *
- * Enforcement therefore begins only once a plan is actually recorded, which is
- * the same rule canCreateClient() and migration 0043's trigger already apply
- * when they treat a NULL client_limit as unrestricted.
+ * Launch policy: access follows confirmed billing evidence. A tenant with no
+ * plan, or only a pre-payment state, is unpaid. Identity and billing recovery
+ * routes are exempted earlier in requireAuth so the customer can still sign in,
+ * choose a plan, complete Checkout, and manage billing.
  */
 export function resolveSubscriptionGate(subscription: { plan: string | null; status: string }): SubscriptionGate {
-  if (!subscription.plan) return 'default-access';
-  if ((PRE_PAYMENT_STATUSES as readonly string[]).includes(subscription.status)) return 'default-access';
+  // Launch policy: no confirmed paid plan means no paid workspace capability.
+  // Billing and identity routes remain exempt at the authenticated boundary so
+  // an MSP can sign in, choose a plan, complete Checkout, and recover billing.
+  if (!subscription.plan) return 'unpaid';
+  if ((PRE_PAYMENT_STATUSES as readonly string[]).includes(subscription.status)) return 'unpaid';
   if ((PLAN_ENTITLING_STATUSES as readonly string[]).includes(subscription.status)) return 'enforce-plan';
   return 'lapsed';
 }
 
-export function lapsedPlanAllows(capability: Capability): boolean {
-  return capability === BASELINE_CAPABILITY;
+export function lapsedPlanAllows(_capability: Capability): boolean {
+  // A canceled or unpaid subscription keeps identity + billing access through
+  // BILLING_EXEMPT_PATHS, but no paid workspace capability remains available.
+  return false;
 }
 
 export async function readSubscriptionState(db: ScopedDb, tenantId: string): Promise<SubscriptionState> {
@@ -132,7 +125,7 @@ export async function tenantHasAddonCapability(db: ScopedDb, tenantId: string, c
 export async function evaluateCapability(db: ScopedDb, tenantId: string, capability: Capability): Promise<CapabilityDecision> {
   const state = await readSubscriptionState(db, tenantId);
   const gate = resolveSubscriptionGate(state);
-  if (gate === 'default-access') return { allowed: true, gate, state };
+  if (gate === 'unpaid') return { allowed: false, gate, state };
   if (gate === 'lapsed') return { allowed: lapsedPlanAllows(capability), gate, state };
   // A paid add-on grants its capability regardless of the plan tier.
   if (await tenantHasCapability(db, tenantId, capability)) return { allowed: true, gate, state };
@@ -140,6 +133,13 @@ export async function evaluateCapability(db: ScopedDb, tenantId: string, capabil
 }
 
 export function capabilityDenial(capability: Capability, decision: CapabilityDecision) {
+  if (decision.gate === 'unpaid') {
+    return {
+      error: 'SUBSCRIPTION_REQUIRED', code: 'SUBSCRIPTION_REQUIRED', capability,
+      message: 'Choose an SPR plan to unlock the MSP workspace.',
+      billingPath: '/billing', plan: null, subscriptionStatus: decision.state.status,
+    };
+  }
   if (decision.gate === 'lapsed') {
     return {
       error: 'SUBSCRIPTION_REQUIRED', code: 'SUBSCRIPTION_REQUIRED', capability,

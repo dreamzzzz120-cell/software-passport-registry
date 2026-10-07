@@ -96,6 +96,15 @@ export default function MonitoringView({ role, passports = [], clients = [] }: {
     finally { setAlertUpdating(null); }
   };
   const openAlerts = alerts.filter((a) => a.status === 'OPEN' || a.status === 'ACKNOWLEDGED');
+  const monitoringSummary = useMemo(() => {
+    const enabled = configurations.filter((item) => item.enabled).length;
+    const blocked = configurations.filter((item) => item.lastStatus === 'disabled_missing_credential' || item.lastStatus === 'disabled_invalid_credential').length;
+    const observed = configurations.filter((item) => Boolean(item.lastObservedAt)).length;
+    const coveragePct = configurations.length > 0 ? Math.round((observed / configurations.length) * 100) : null;
+    const inFlight = jobs.filter((job) => ['QUEUED', 'RUNNING', 'IN_PROGRESS', 'PENDING'].includes(String(job.state).toUpperCase())).length;
+    const priorityAlerts = openAlerts.filter((alert) => alert.severity === 'critical' || alert.severity === 'high').length;
+    return { enabled, blocked, observed, coveragePct, inFlight, priorityAlerts };
+  }, [configurations, jobs, openAlerts]);
 
   const run = async (id: string) => {
     setRunning(id); setError(null);
@@ -145,13 +154,31 @@ export default function MonitoringView({ role, passports = [], clients = [] }: {
   };
 
   return <div className="mx-auto max-w-6xl space-y-7 pb-10" id="monitoring-workspace">
-    <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-      <div><div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.2em] text-[var(--spr-highlight)]"><Activity className="h-4 w-4" /> Continuous verification</div><h1 className="mt-3 text-3xl font-bold tracking-tight text-[var(--spr-text)]">What changed since the last check?</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--spr-text-muted)]">Monitoring queues configured server-side collectors. A queued run is not a completed or verified result.</p></div>
-      <div className="flex gap-2">
-        {canEnroll && <button onClick={() => { setShowEnroll(true); setEnrollError(null); }} className="spr-btn spr-btn-primary inline-flex items-center justify-center gap-2"><Plus className="h-4 w-4" />Enable monitoring</button>}
-        <button onClick={() => void load()} disabled={loading} className="spr-btn spr-btn-secondary inline-flex items-center justify-center gap-2 disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />Refresh</button>
+    <header className="overflow-hidden rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6 md:p-8">
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.22em] text-[var(--spr-highlight)]"><Activity className="h-4 w-4" /> Monitoring control plane</div>
+          <h1 className="mt-3 text-3xl font-bold tracking-tight text-[var(--spr-text)] md:text-4xl">Observe change before a client has to ask.</h1>
+          <p className="mt-3 max-w-3xl text-sm leading-7 text-[var(--spr-text-muted)]">Collectors re-check configured sources, preserve the observation timestamp, and surface material change into the same alert and remediation workflow used across SPR. Queueing a run is not proof; completed evidence is.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {canEnroll && <button onClick={() => { setShowEnroll(true); setEnrollError(null); }} className="spr-btn spr-btn-primary inline-flex items-center justify-center gap-2"><Plus className="h-4 w-4" />Add monitored source</button>}
+          <button onClick={() => void load()} disabled={loading} className="spr-btn spr-btn-secondary inline-flex items-center justify-center gap-2 disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />Refresh evidence</button>
+        </div>
       </div>
+      {!loading && <div className="mt-7 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MonitorMetric label="Sources watching" value={String(monitoringSummary.enabled)} detail={monitoringSummary.blocked > 0 ? `${monitoringSummary.blocked} blocked by connection` : 'No credential blocks observed'} icon={<Activity className="h-4 w-4" />} />
+        <MonitorMetric label="Observed coverage" value={monitoringSummary.coveragePct == null ? 'Not measured' : `${monitoringSummary.coveragePct}%`} detail={configurations.length ? `${monitoringSummary.observed} of ${configurations.length} sources have an observation` : 'Add a source to establish coverage'} icon={<CheckCircle2 className="h-4 w-4" />} />
+        <MonitorMetric label="Open changes" value={String(openAlerts.length)} detail={monitoringSummary.priorityAlerts ? `${monitoringSummary.priorityAlerts} high / critical` : 'No high-priority changes observed'} icon={<AlertCircle className="h-4 w-4" />} />
+        <MonitorMetric label="Runs in flight" value={String(monitoringSummary.inFlight)} detail="Queued or actively collecting; not yet evidence" icon={<Clock3 className="h-4 w-4" />} />
+      </div>}
     </header>
+
+    {!loading && <section className="grid gap-3 md:grid-cols-3">
+      <ProofStep n="01" title="Collect" body="A configured collector observes a real repository, certificate, DNS record, or endpoint." />
+      <ProofStep n="02" title="Compare" body="SPR compares the new observation with prior evidence and keeps the timestamp and source boundary visible." />
+      <ProofStep n="03" title="Act" body="Material changes become alerts and remediation work. Missing evidence remains UNKNOWN." />
+    </section>}
 
     {error && <div role="alert" className="flex gap-3 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4 text-sm text-[var(--spr-red)]"><AlertCircle className="h-5 w-5 shrink-0" /><div><p className="font-semibold">Verification unavailable</p><p className="mt-1 text-[var(--spr-red)]">{error}</p></div></div>}
 
@@ -182,7 +209,12 @@ export default function MonitoringView({ role, passports = [], clients = [] }: {
     )}
 
     {loading ? <div className="grid gap-4 md:grid-cols-2">{[1, 2].map(item => <div key={item} className="h-52 animate-pulse rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)]" />)}</div>
-      : configurations.length ? <section className="grid gap-4 md:grid-cols-2">{configurations.map(config => {
+      : configurations.length ? <section>
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div><div className="text-[11px] font-bold uppercase tracking-[.18em] text-[var(--spr-text-faint)]">Collector fleet</div><h2 className="mt-1 text-xl font-semibold text-[var(--spr-text)]">Monitored evidence sources</h2><p className="mt-1 text-xs text-[var(--spr-text-muted)]">Each card is one configured observation boundary. Status is shown exactly as reported by the collector.</p></div>
+          <div className="text-xs text-[var(--spr-text-faint)]">{configurations.length} configured · {monitoringSummary.enabled} watching</div>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">{configurations.map(config => {
           const job = latest(config.id);
           const missingCredential = config.lastStatus === 'disabled_missing_credential';
           const invalidCredential = config.lastStatus === 'disabled_invalid_credential';
@@ -202,10 +234,15 @@ export default function MonitoringView({ role, passports = [], clients = [] }: {
                 </div>
               </div>
             </div>}
-            <dl className="mt-5 space-y-3 text-sm"><Row icon={<Clock3 />} label="Last observed" value={readable(config.lastObservedAt)} /><Row icon={<Activity />} label="Last run" value={job ? `${job.state} · ${readable(job.completedAt || job.createdAt)}` : 'No run recorded'} /><Row icon={<CheckCircle2 />} label="Next check" value={credentialBlocked ? 'Blocked until GitHub is connected' : readable(config.nextScheduledAt)} /></dl>
+            <dl className="mt-5 grid gap-3 sm:grid-cols-2">
+              <Row icon={<Clock3 />} label="Last observed" value={readable(config.lastObservedAt)} />
+              <Row icon={<Activity />} label="Latest collector run" value={job ? `${job.state} · ${readable(job.completedAt || job.createdAt)}` : 'No run recorded'} />
+              <Row icon={<CheckCircle2 />} label="Next scheduled check" value={credentialBlocked ? 'Blocked until GitHub is connected' : readable(config.nextScheduledAt)} />
+              <Row icon={<Activity />} label="Collector state" value={config.lastStatus || (config.enabled ? 'Enabled; no collector state observed yet' : 'Paused')} />
+            </dl>
             <button onClick={() => void run(config.id)} disabled={!canRun || !config.enabled || running === config.id} title={!canRun ? `Your ${role} role cannot run verifications.` : credentialBlocked ? 'Connect a tenant GitHub credential first.' : undefined} className="spr-btn spr-btn-primary mt-6 inline-flex w-full items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"><Play className="h-4 w-4" />{running === config.id ? 'Queueing check…' : credentialBlocked ? 'Blocked — connect GitHub' : 'Re-verify now'}</button>
           </article>;
-        })}</section>
+        })}</div></section>
       : <section className="spr-panel px-6 py-16 text-center"><XCircle className="mx-auto h-8 w-8 text-[var(--spr-text-faint)]" /><h2 className="mt-3 font-semibold text-[var(--spr-text)]">No verification sources configured</h2><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[var(--spr-text-muted)]">SPR cannot claim continuous coverage until an administrator configures a monitored source for this tenant.</p>{canEnroll && <button onClick={() => setShowEnroll(true)} className="spr-btn spr-btn-primary mt-5 inline-flex items-center gap-2"><Plus className="h-4 w-4" />Enable monitoring</button>}</section>}
 
     {showEnroll && (
@@ -285,4 +322,8 @@ export default function MonitoringView({ role, passports = [], clients = [] }: {
     )}
   </div>;
 }
-function Row({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) { return <div className="flex gap-3"><span className="h-4 w-4 text-[var(--spr-text-faint)]">{icon}</span><div><dt className="text-xs text-[var(--spr-text-faint)]">{label}</dt><dd className="mt-0.5 text-[var(--spr-text)]">{value}</dd></div></div>; }
+function Row({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) { return <div className="flex gap-3 rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] p-3"><span className="mt-0.5 h-4 w-4 text-[var(--spr-text-faint)]">{icon}</span><div><dt className="text-[11px] font-semibold uppercase tracking-[.12em] text-[var(--spr-text-faint)]">{label}</dt><dd className="mt-1 text-xs leading-5 text-[var(--spr-text)]">{value}</dd></div></div>; }
+
+function MonitorMetric({ icon, label, value, detail }: { icon: React.ReactNode; label: string; value: string; detail: string }) { return <div className="rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] p-4"><div className="flex items-center justify-between gap-3 text-[11px] font-bold uppercase tracking-[.14em] text-[var(--spr-text-faint)]"><span>{label}</span><span className="text-[var(--spr-highlight)]">{icon}</span></div><div className="mt-3 text-2xl font-bold tracking-tight text-[var(--spr-text)]">{value}</div><p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">{detail}</p></div>; }
+
+function ProofStep({ n, title, body }: { n: string; title: string; body: string }) { return <div className="rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><div className="text-[11px] font-bold uppercase tracking-[.16em] text-[var(--spr-highlight)]">{n} · {title}</div><p className="mt-2 text-xs leading-6 text-[var(--spr-text-muted)]">{body}</p></div>; }

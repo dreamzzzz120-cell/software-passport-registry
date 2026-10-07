@@ -180,6 +180,13 @@ export default function AgentTrustView() {
     }
   };
 
+  const agentSummary = useMemo(() => {
+    const live = agents.filter((agent) => agent.status === 'LIVE').length;
+    const completed = Object.values(agentStates).filter((entry) => entry.state === 'done').length;
+    const failed = Object.values(agentStates).filter((entry) => entry.state === 'error').length;
+    return { live, completed, failed };
+  }, [agentStates]);
+
   const claimStatusColor = claimResult?.status === 'VERIFIED' ? 'text-[var(--spr-green)]' : claimResult?.status === 'CONTRADICTED' ? 'text-[var(--spr-red)]' : 'text-[var(--spr-amber)]';
   const ClaimIcon = claimResult?.status === 'VERIFIED' ? CheckCircle2 : claimResult?.status === 'CONTRADICTED' ? XCircle : AlertCircle;
 
@@ -192,13 +199,19 @@ export default function AgentTrustView() {
 
   return <div className="mx-auto max-w-7xl space-y-8">
     <section className="spr-panel overflow-hidden p-6 md:p-8">
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.25em] text-[var(--spr-highlight)]"><Bot className="h-4 w-4" /> AUTONOMOUS TRUST OPERATIONS</div>
-          <h1 className="mt-3 text-3xl font-bold tracking-tight">SPR Agents</h1>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--spr-text-muted)]">SPR does the evidence work, then agents use that evidence to perform repeatable trust operations. Agents never turn missing evidence into a positive claim.</p>
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.25em] text-[var(--spr-highlight)]"><Bot className="h-4 w-4" /> Evidence-bounded agent operations</div>
+          <h1 className="mt-3 text-3xl font-bold tracking-tight md:text-4xl">Agents that can explain what they used.</h1>
+          <p className="mt-3 max-w-3xl text-sm leading-7 text-[var(--spr-text-muted)]">SPR agents operate on observed registry evidence and explicit authenticated APIs. They can retrieve, compare, explain, queue or package work — but they cannot turn missing evidence into a positive claim.</p>
         </div>
-        <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] px-4 py-3 text-sm"><div className="flex items-center gap-2 font-semibold"><ShieldCheck className="h-4 w-4" /> Core rule</div><div className="mt-1 text-[var(--spr-text-muted)]">If SPR cannot observe it, SPR does not claim it.</div></div>
+        <div className="rounded-2xl border border-[var(--spr-highlight)]/25 bg-[var(--spr-accent-soft)] p-4 text-sm"><div className="flex items-center gap-2 font-semibold"><ShieldCheck className="h-4 w-4" /> Non-negotiable rule</div><div className="mt-1 text-[var(--spr-text-muted)]">Unknown stays UNKNOWN. Agent output is not evidence.</div></div>
+      </div>
+      <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <AgentMetric label="Live agents" value={String(agentSummary.live)} detail="Declared LIVE in this surface" />
+        <AgentMetric label="Successful runs" value={String(agentSummary.completed)} detail="This browser session only" />
+        <AgentMetric label="Failed runs" value={String(agentSummary.failed)} detail="Visible; never hidden as success" />
+        <AgentMetric label="MCP transport" value={mcpAvailable == null ? 'Checking' : mcpAvailable ? 'Available' : 'Unavailable'} detail="Read-only trust transport" />
       </div>
       {mcpAvailable === false && <div className="mt-6 rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 p-4 text-sm text-[var(--spr-red)]">The MCP endpoint is not currently enabled on this server. Agent requests through /mcp will fail until its server-side configuration is enabled.</div>}
     </section>
@@ -243,3 +256,6 @@ export default function AgentTrustView() {
     <section className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5 text-sm text-[var(--spr-text-muted)]"><strong className="text-[var(--spr-text)]">Architecture:</strong> Agent → SPR evidence → authoritative verification → action. The agent layer is an extension of SPR, not a second trust database.</section>
   </div>;
 }
+
+
+function AgentMetric({ label, value, detail }: { label: string; value: string; detail: string }) { return <div className="rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] p-4"><div className="text-[11px] font-bold uppercase tracking-[.14em] text-[var(--spr-text-faint)]">{label}</div><div className="mt-2 text-xl font-semibold text-[var(--spr-text)]">{value}</div><div className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">{detail}</div></div>; }
