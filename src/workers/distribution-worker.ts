@@ -146,19 +146,26 @@ async function sweepDiscovery(pool: ReturnType<typeof createWorkerPool>) {
     return 0;
   }
   const configured = process.env.DISTRIBUTION_DISCOVERY_QUERIES?.split('\n').map((s) => s.trim()).filter(Boolean);
-  const queries = (configured?.length ? configured : buildMspDiscoveryQueries()).slice(0, 20);
+  const queries = (configured?.length ? configured : buildMspDiscoveryQueries()).slice(0, 100);
   // Every domain already researched, so a daily sweep only queues new businesses.
   const seen = await knownResearchDomains(pool);
   let queued = 0;
-  for (const query of queries) {
-    let candidates: DiscoveryResult[] = [];
-    try { candidates = await provider.discover(query, 20); }
-    catch (error) { console.error(`[Distribution] ${provider.name} failed for "${query}":`, error instanceof Error ? error.message : String(error)); continue; }
-    for (const candidate of dedupeDiscoveryResults(candidates)) {
+  const batches: Array<{ query: string; candidates: DiscoveryResult[] }> = [];
+  if (provider.name === 'seed-list') {
+    try { batches.push({ query: 'seed-list', candidates: await provider.discover('seed-list', 2000) }); }
+    catch (error) { console.error('[Distribution] seed-list discovery failed:', error instanceof Error ? error.message : String(error)); }
+  } else {
+    for (const query of queries) {
+      try { batches.push({ query, candidates: await provider.discover(query, 20) }); }
+      catch (error) { console.error(`[Distribution] ${provider.name} failed for "${query}":`, error instanceof Error ? error.message : String(error)); }
+    }
+  }
+  for (const batch of batches) {
+    for (const candidate of dedupeDiscoveryResults(batch.candidates)) {
       const domain = canonicalizeDomain(candidate.url);
       if (seen.has(domain)) continue;
       seen.add(domain);
-      try { await enqueueResearchUrl(pool, candidate.url, { kind: 'discovery_sweep', query }); queued++; }
+      try { await enqueueResearchUrl(pool, candidate.url, { kind: 'discovery_sweep', query: batch.query }); queued++; }
       catch (error) { console.warn(`[Distribution] skipped ${candidate.url}:`, error instanceof Error ? error.message : String(error)); }
     }
   }
