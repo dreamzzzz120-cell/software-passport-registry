@@ -119,7 +119,11 @@ export async function runRegistryCrawlerLoop(): Promise<void> {
             const identityId = registryIdentityId('github', repo.owner, repo.repository);
             const canonicalKey = `github:${repo.owner.toLowerCase()}/${repo.repository.toLowerCase()}`;
             const canonicalUrl = `https://github.com/${repo.owner}/${repo.repository}`;
-                      await client.query(`
+            const existing = ((await db.execute(sql`
+              SELECT status, next_refresh_at, identity_id, observation_count FROM registry_ingestion_items
+              WHERE provider = 'github' AND lower(repository_owner) = ${repo.owner.toLowerCase()} AND lower(repository_name) = ${repo.repository.toLowerCase()} LIMIT 1
+            `)) as any).rows?.[0];
+            await client.query(`
               INSERT INTO software_registry_identities
                 (id, provider, canonical_key, canonical_name, repository_owner, repository_name, canonical_url, stars, last_observed_at, next_refresh_at, updated_at)
               VALUES ($1,'github',$2,$3,$4,$5,$6,$7,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP + INTERVAL '30 days',CURRENT_TIMESTAMP)
@@ -139,14 +143,11 @@ export async function runRegistryCrawlerLoop(): Promise<void> {
               VALUES ($1,'github',$2,$3,$4,'discovered',$5,$6,$7,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP + INTERVAL '30 days','unknown','initial_discovery',1,CURRENT_TIMESTAMP)
               ON CONFLICT (provider, repository_owner, repository_name) DO UPDATE SET
                 identity_id=EXCLUDED.identity_id, canonical_key=EXCLUDED.canonical_key, stars=EXCLUDED.stars,
-                last_observed_at=CURRENT_TIMESTAMP, observation_count=registry_ingestion_items.observation_count + 1,
+                last_observed_at=CURRENT_TIMESTAMP,
+                next_refresh_at=registry_ingestion_items.next_refresh_at,
+                observation_count=registry_ingestion_items.observation_count,
                 updated_at=CURRENT_TIMESTAMP
             `, [`reging_${identityId}`, repo.owner, repo.repository, canonicalUrl, identityId, canonicalKey, repo.stars]);
-            const existing = ((await db.execute(sql`
-              SELECT status, next_refresh_at FROM registry_ingestion_items
-              WHERE provider = 'github' AND lower(repository_owner) = ${repo.owner.toLowerCase()}
-                AND lower(repository_name) = ${repo.repository.toLowerCase()} LIMIT 1
-            `)) as any).rows?.[0];
             const activeJob = ((await db.execute(sql`
               SELECT 1 FROM agent_jobs j JOIN repository_scan_sources s ON s.job_id = j.id AND s.tenant_id = j.tenant_id
               WHERE j.tenant_id = ${FREE_REVIEW_TENANT_ID} AND j.job_type = 'repository_scan'
