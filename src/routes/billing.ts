@@ -311,8 +311,12 @@ export async function buildCatalog() {
   const hasPaymentLinkCheckout = PLAN_IDS.some((id) => Boolean(planPaymentLink(id)));
   const productionTestMode = stripeTestModeInProduction();
   return {
-    billingConfigured: (Boolean(config.stripe.secretKey) || hasPaymentLinkCheckout) && !productionTestMode,
-    billingConfigurationError: productionTestMode
+    // A live Payment Link is a valid production checkout path even if the
+    // server-side Stripe API credential is still test-mode. Keep API-created
+    // Checkout and the Billing Portal blocked in that state, but do not turn
+    // off a separately configured live hosted checkout path.
+    billingConfigured: Boolean((config.stripe.secretKey && !productionTestMode) || hasPaymentLinkCheckout),
+    billingConfigurationError: productionTestMode && !hasPaymentLinkCheckout
       ? 'STRIPE_TEST_MODE_IN_PRODUCTION'
       : stripeSecretKeyMisconfigured ? 'STRIPE_SECRET_KEY_INVALID' : null,
     plans: PLAN_IDS.map((id) => {
@@ -320,7 +324,7 @@ export async function buildCatalog() {
       const fallback = planPaymentLink(id) ? config.stripe.paymentLinkCatalog[id as keyof typeof config.stripe.paymentLinkCatalog] : undefined;
       return {
         ...stripeEntry,
-        ...(fallback && !stripeEntry.checkoutAvailable && !productionTestMode ? {
+        ...(fallback && (!stripeEntry.checkoutAvailable || productionTestMode) ? {
           priceLabel: fallback.priceLabel,
           unitAmount: fallback.unitAmount,
           currency: fallback.currency,
@@ -333,17 +337,17 @@ export async function buildCatalog() {
     }),
     products: ONE_TIME_IDS.map((id) => {
       const stripeEntry = catalogEntry(id, ONE_TIME_CONFIG[id].label, oneTimePriceId(id), prices);
-      if (productionTestMode) return { ...stripeEntry, checkoutAvailable: false };
       const link = oneTimePaymentLink(id);
-      return link && !stripeEntry.checkoutAvailable
+      if (productionTestMode && !link) return { ...stripeEntry, checkoutAvailable: false };
+      return link && (!stripeEntry.checkoutAvailable || productionTestMode)
         ? { ...stripeEntry, ...paymentLinkFallback(ONE_TIME_FALLBACK_PRICE[id], false, ONE_TIME_CONFIG[id].label), checkoutAvailable: true }
         : stripeEntry;
     }),
     addons: ADDON_IDS.map((id) => {
       const stripeEntry = catalogEntry(id, ADDON_CONFIG[id].label, addonPriceId(id), prices);
-      if (productionTestMode) return { ...stripeEntry, checkoutAvailable: false };
       const link = addonPaymentLink(id);
-      return link && !stripeEntry.checkoutAvailable
+      if (productionTestMode && !link) return { ...stripeEntry, checkoutAvailable: false };
+      return link && (!stripeEntry.checkoutAvailable || productionTestMode)
         ? { ...stripeEntry, ...paymentLinkFallback(ADDON_FALLBACK_PRICE[id], true, ADDON_CONFIG[id].label), checkoutAvailable: true }
         : stripeEntry;
     }),
@@ -408,7 +412,6 @@ export function createBillingRouter() {
 
   router.post('/checkout', requireAuth, requireRole(['Owner']), async (req: AuthenticatedRequest, res, next) => {
     try {
-      if (!requireLiveStripeInProduction(res)) return;
       const parsed = checkoutSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
       const priceId = planPriceId(parsed.data.plan);
@@ -430,7 +433,8 @@ export function createBillingRouter() {
       }
       let checkoutUrl: string;
       let checkoutReference: string;
-      if (config.stripe.secretKey) {
+      const paymentLink = planPaymentLink(parsed.data.plan);
+      if (config.stripe.secretKey && !stripeTestModeInProduction()) {
         const stripe = stripeClient();
         const session = await stripe.checkout.sessions.create({
           mode: 'subscription',
@@ -450,8 +454,10 @@ export function createBillingRouter() {
         checkoutUrl = session.url;
         checkoutReference = session.id;
       } else {
-        const paymentLink = planPaymentLink(parsed.data.plan);
-        if (!paymentLink) return res.status(503).json({ error: 'BILLING_NOT_CONFIGURED' });
+        if (!paymentLink) {
+          if (!requireLiveStripeInProduction(res)) return;
+          return res.status(503).json({ error: 'BILLING_NOT_CONFIGURED' });
+        }
         const url = new URL(paymentLink);
         url.searchParams.set('client_reference_id', `${tenantId}__sprplan__${parsed.data.plan}`);
         if (req.user!.email) url.searchParams.set('prefilled_email', req.user!.email);
@@ -465,7 +471,6 @@ export function createBillingRouter() {
 
   router.post('/one-time-checkout', requireAuth, async (req: AuthenticatedRequest, res, next) => {
     try {
-      if (!requireLiveStripeInProduction(res)) return;
       const parsed = oneTimeCheckoutSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
       const tenantId = req.user!.tenantId;
@@ -477,7 +482,10 @@ export function createBillingRouter() {
         await appendAuditEntry(req.db!, { tenantId, action: 'billing.purchase.initiated', actor: req.user!.uid, payload: { product: parsed.data.product, checkoutSessionId: 'payment-link' } });
         return res.json({ url: url.toString() });
       }
-      if (!config.stripe.secretKey) return res.status(503).json({ error: 'BILLING_NOT_CONFIGURED' });
+      if (!config.stripe.secretKey || stripeTestModeInProduction()) {
+        if (!requireLiveStripeInProduction(res)) return;
+        return res.status(503).json({ error: 'BILLING_NOT_CONFIGURED' });
+      }
       const stripe = stripeClient();
       await discoverMissingCatalogPrices(stripe);
       const priceId = oneTimePriceId(parsed.data.product);
@@ -504,7 +512,6 @@ export function createBillingRouter() {
 
   router.post('/addon-checkout', requireAuth, async (req: AuthenticatedRequest, res, next) => {
     try {
-      if (!requireLiveStripeInProduction(res)) return;
       const parsed = addonCheckoutSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
       const tenantId = req.user!.tenantId;
@@ -527,7 +534,10 @@ export function createBillingRouter() {
         await appendAuditEntry(req.db!, { tenantId, action: 'billing.addon.initiated', actor: req.user!.uid, payload: { addon: parsed.data.addon, checkoutSessionId: 'payment-link' } });
         return res.json({ url: url.toString() });
       }
-      if (!config.stripe.secretKey) return res.status(503).json({ error: 'BILLING_NOT_CONFIGURED' });
+      if (!config.stripe.secretKey || stripeTestModeInProduction()) {
+        if (!requireLiveStripeInProduction(res)) return;
+        return res.status(503).json({ error: 'BILLING_NOT_CONFIGURED' });
+      }
       const stripe = stripeClient();
       await discoverMissingCatalogPrices(stripe);
       const priceId = addonPriceId(parsed.data.addon);
@@ -622,20 +632,34 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
         const metadataPlan = session.metadata?.plan as PlanId | undefined;
         const plan = metadataPlan && PLAN_CONFIG[metadataPlan] ? metadataPlan : paymentLinkPlan;
         if (tenantId && session.subscription && plan && PLAN_CONFIG[plan]) {
-          if (!config.stripe.secretKey) throw new Error('STRIPE_SUBSCRIPTION_VERIFICATION_UNAVAILABLE');
           const subscriptionId = String(session.subscription);
-          const authoritativeSubscription = await stripe.subscriptions.retrieve(subscriptionId);
-          const authoritativeTenantId = authoritativeSubscription.metadata?.tenantId;
-          if (authoritativeTenantId && authoritativeTenantId !== tenantId) {
-            throw new Error('STRIPE_SUBSCRIPTION_TENANT_MISMATCH');
+          let authoritativePlan: PlanId = plan;
+          let authoritativeStatus: string;
+          if (paymentLinkMatch && stripeTestModeInProduction()) {
+            // The event itself has already passed Stripe signature verification.
+            // In recovery mode the live Payment Link is therefore authoritative
+            // for tenant+plan identity, while the completed Checkout Session is
+            // authoritative for whether money was collected. Future subscription
+            // webhooks reconcile status by stripe_subscription_id even when the
+            // Payment Link cannot inject per-tenant subscription metadata.
+            authoritativeStatus = session.payment_status === 'paid' || session.payment_status === 'no_payment_required'
+              ? 'active'
+              : 'incomplete';
+          } else {
+            if (!config.stripe.secretKey) throw new Error('STRIPE_SUBSCRIPTION_VERIFICATION_UNAVAILABLE');
+            const authoritativeSubscription = await stripe.subscriptions.retrieve(subscriptionId);
+            const authoritativeTenantId = authoritativeSubscription.metadata?.tenantId;
+            if (authoritativeTenantId && authoritativeTenantId !== tenantId) {
+              throw new Error('STRIPE_SUBSCRIPTION_TENANT_MISMATCH');
+            }
+            const currentPriceId = authoritativeSubscription.items.data[0]?.price?.id;
+            const resolvedPlan = PLAN_IDS.find((id) => planPriceId(id) === currentPriceId);
+            authoritativePlan = resolvedPlan ?? plan;
+            authoritativeStatus = authoritativeSubscription.status;
           }
-          const currentPriceId = authoritativeSubscription.items.data[0]?.price?.id;
-          const resolvedPlan = PLAN_IDS.find((id) => planPriceId(id) === currentPriceId);
-          const authoritativePlan = resolvedPlan ?? plan;
           if (!PLAN_CONFIG[authoritativePlan]) throw new Error('STRIPE_SUBSCRIPTION_PLAN_UNRESOLVED');
           const clientLimit = PLAN_CLIENT_LIMITS[authoritativePlan];
           const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id;
-          const authoritativeStatus = authoritativeSubscription.status;
           await db.execute(sql`
             INSERT INTO tenant_subscriptions (
               tenant_id, stripe_customer_id, stripe_subscription_id, plan, status, client_limit, updated_at
@@ -718,13 +742,21 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
             await db.execute(sql`UPDATE tenant_subscriptions SET stripe_customer_id = COALESCE(stripe_customer_id, ${addonCustomerId}), updated_at = CURRENT_TIMESTAMP WHERE tenant_id = ${tenantId}`);
           }
           if (typeof session.subscription === 'string' && addonId && ADDON_CONFIG[addonId]) {
-            if (!config.stripe.secretKey) throw new Error('STRIPE_ADDON_VERIFICATION_UNAVAILABLE');
-            const authoritativeAddon = await stripe.subscriptions.retrieve(session.subscription);
-            const authoritativeTenantId = authoritativeAddon.metadata?.tenantId;
-            const authoritativeAddonId = authoritativeAddon.metadata?.addon as AddonId | undefined;
-            if (authoritativeTenantId && authoritativeTenantId !== tenantId) throw new Error('STRIPE_ADDON_TENANT_MISMATCH');
-            if (authoritativeAddonId && authoritativeAddonId !== addonId) throw new Error('STRIPE_ADDON_METADATA_MISMATCH');
-            await db.execute(sql`INSERT INTO tenant_addons (stripe_subscription_id, tenant_id, addon, status) VALUES (${session.subscription}, ${tenantId}, ${addonId}, ${authoritativeAddon.status}) ON CONFLICT (stripe_subscription_id) DO UPDATE SET status = EXCLUDED.status, updated_at = CURRENT_TIMESTAMP`);
+            let addonStatus: string;
+            if (paymentLinkAddonMatch && stripeTestModeInProduction()) {
+              addonStatus = session.payment_status === 'paid' || session.payment_status === 'no_payment_required'
+                ? 'active'
+                : 'incomplete';
+            } else {
+              if (!config.stripe.secretKey) throw new Error('STRIPE_ADDON_VERIFICATION_UNAVAILABLE');
+              const authoritativeAddon = await stripe.subscriptions.retrieve(session.subscription);
+              const authoritativeTenantId = authoritativeAddon.metadata?.tenantId;
+              const authoritativeAddonId = authoritativeAddon.metadata?.addon as AddonId | undefined;
+              if (authoritativeTenantId && authoritativeTenantId !== tenantId) throw new Error('STRIPE_ADDON_TENANT_MISMATCH');
+              if (authoritativeAddonId && authoritativeAddonId !== addonId) throw new Error('STRIPE_ADDON_METADATA_MISMATCH');
+              addonStatus = authoritativeAddon.status;
+            }
+            await db.execute(sql`INSERT INTO tenant_addons (stripe_subscription_id, tenant_id, addon, status) VALUES (${session.subscription}, ${tenantId}, ${addonId}, ${addonStatus}) ON CONFLICT (stripe_subscription_id) DO UPDATE SET status = EXCLUDED.status, updated_at = CURRENT_TIMESTAMP`);
           }
           await appendAuditEntry(db, { tenantId, action: 'billing.addon.completed', actor: 'stripe-webhook', payload: { addon: addonId ?? null, stripeEventId: event.id, checkoutSessionId: session.id, stripeSubscriptionId: session.subscription ? String(session.subscription) : null } });
         }
