@@ -30,7 +30,7 @@ function parseList(value: string): string[] {
   return value.split(',').map((item) => item.trim()).filter(Boolean);
 }
 
-export default function AITrustCenterView({ role = 'Viewer', passports = [] }: { role?: string; passports?: SoftwarePassport[] }) {
+export default function AITrustCenterView({ role, passports = [] }: { role: string; passports?: SoftwarePassport[] }) {
   const [systems, setSystems] = useState<AiSystem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
