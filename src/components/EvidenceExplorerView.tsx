@@ -32,6 +32,7 @@ const STATUS_COLOR: Record<string, string> = { PASS: 'text-[var(--spr-green)]', 
 export default function EvidenceExplorerView({ passports = [], selectedPassportId, onSelectPassportId }: Props) {
   const [fallbackPassports, setFallbackPassports] = useState<Array<Pick<SoftwarePassport, 'id' | 'name' | 'version'>>>([]);
   const [passportListState, setPassportListState] = useState<'idle' | 'loading' | 'ready' | 'error'>(passports.length ? 'ready' : 'idle');
+  const [passportListRetry, setPassportListRetry] = useState(0);
   const availablePassports = passports.length ? passports : fallbackPassports;
 
   useEffect(() => {
@@ -60,7 +61,7 @@ export default function EvidenceExplorerView({ passports = [], selectedPassportI
         if (!cancelled) setPassportListState('error');
       });
     return () => { cancelled = true; };
-  }, [passports]);
+  }, [passports, passportListRetry]);
   // Arriving here from the Trust Room ("Inspect evidence" / "View evidence")
   // should land on the same passport the user was just investigating, not
   // silently reset to whichever passport happens to be first in the list.
@@ -130,7 +131,7 @@ export default function EvidenceExplorerView({ passports = [], selectedPassportI
             {availablePassports.map((passport) => <option key={passport.id} value={passport.id}>{passport.name} · {passport.version}</option>)}
           </select>
         </div>
-        {passportListState === 'error' && <div className="mt-3 flex items-center gap-3 text-xs text-[var(--spr-red)]"><span>SPR could not load the Passport list. The evidence chain has not been treated as empty.</span><button type="button" onClick={() => { setFallbackPassports([]); setPassportListState('idle'); }} className="spr-btn spr-btn-secondary">Retry</button></div>}
+        {passportListState === 'error' && <div className="mt-3 flex items-center gap-3 text-xs text-[var(--spr-red)]"><span>SPR could not load the Passport list. The evidence chain has not been treated as empty.</span><button type="button" onClick={() => { setFallbackPassports([]); setPassportListRetry((value) => value + 1); }} className="spr-btn spr-btn-secondary">Retry</button></div>}
         {error && <p role="alert" className="mt-3 text-xs text-[var(--spr-red)]">{error}</p>}
       </header>
 
