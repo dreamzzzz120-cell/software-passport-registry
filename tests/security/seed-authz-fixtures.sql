@@ -16,6 +16,15 @@ VALUES
 ON CONFLICT (tenant_id) DO UPDATE
 SET plan=EXCLUDED.plan, status=EXCLUDED.status, client_limit=EXCLUDED.client_limit, updated_at=CURRENT_TIMESTAMP;
 
+-- Trust Loop routes map to the paid passport capability. Make the fixture's
+-- Enterprise plan explicit so this suite reaches tenant authorization rather
+-- than correctly stopping at the billing boundary.
+INSERT INTO plan_capabilities (plan, capability, enabled)
+SELECT 'enterprise', 'passport', true
+WHERE NOT EXISTS (
+  SELECT 1 FROM plan_capabilities WHERE plan='enterprise' AND capability='passport'
+);
+
 INSERT INTO clients (id,tenant_id,name,domain,industry,joined_date)
 VALUES
   ('security-client-a','tenant-a','Security Client A','a.security.test','Security','2026-01-01'),
