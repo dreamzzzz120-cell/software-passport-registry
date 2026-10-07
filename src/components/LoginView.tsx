@@ -24,6 +24,9 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
   const [notice, setNotice] = useState('');
   const [unconfirmedEmail, setUnconfirmedEmail] = useState('');
   const [resending, setResending] = useState(false);
+  const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaBusy, setMfaBusy] = useState(false);
   const productName = brand?.productName || 'Software Passport Registry';
   const brandedSignInTitle = brand ? `Sign in to ${brand.productName}` : 'Sign in';
   const finishSession = async (session: { access_token: string; user: any }) => {
@@ -37,6 +40,24 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
       setNotice(address ? `Your account exists, but the email address is not confirmed yet. Open the confirmation link sent to ${address}, or request a new one below.` : 'Your account exists, but the email address is not confirmed yet. Open the confirmation link to activate it.');
       return;
     }
+
+    // A password/OAuth session for an account with verified MFA factors starts
+    // at AAL1. Do not enter the workspace until Supabase confirms AAL2.
+    const assurance = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (assurance.error) throw assurance.error;
+    if (assurance.data?.nextLevel === 'aal2' && assurance.data?.currentLevel !== 'aal2') {
+      const factors = await supabase.auth.mfa.listFactors();
+      if (factors.error) throw factors.error;
+      const factor = (factors.data?.totp || []).find((item: any) => item.status === 'verified');
+      if (!factor?.id) throw new Error('This account requires multi-factor authentication, but no verified authenticator factor is available.');
+      setMfaFactorId(String(factor.id));
+      setMfaCode('');
+      setNotice('Enter the current code from your authenticator app to complete sign-in.');
+      return;
+    }
+
+    setMfaFactorId(null);
+    setMfaCode('');
     onLoginSuccess({ uid: user.id, email: user.email ?? null, displayName: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User', token, emailVerified, onboarded: 0 });
   };
   useEffect(() => {
@@ -94,6 +115,43 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
       await finishSession(data.session);
     } catch (e) { setError(e instanceof Error ? e.message : 'Authentication failed.'); } finally { setBusy(false); }
   };
+  const verifyMfa = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!mfaFactorId || !/^\d{6}$/.test(mfaCode.trim())) {
+      setError('Enter the current 6-digit code from your authenticator app.');
+      return;
+    }
+    setMfaBusy(true);
+    setError('');
+    try {
+      const challenge = await supabase.auth.mfa.challenge({ factorId: mfaFactorId });
+      if (challenge.error) throw challenge.error;
+      if (!challenge.data?.id) throw new Error('Could not create an MFA challenge.');
+      const verified = await supabase.auth.mfa.verify({
+        factorId: mfaFactorId,
+        challengeId: challenge.data.id,
+        code: mfaCode.trim(),
+      });
+      if (verified.error) throw verified.error;
+      const session = await supabase.auth.getSession();
+      if (session.error || !session.data.session) throw session.error || new Error('MFA verification succeeded but no session was returned.');
+      await finishSession(session.data.session);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Authenticator verification failed.');
+    } finally {
+      setMfaBusy(false);
+    }
+  };
+
+  const cancelMfa = async () => {
+    await supabase.auth.signOut().catch(() => undefined);
+    setMfaFactorId(null);
+    setMfaCode('');
+    setPassword('');
+    setNotice('');
+    setError('');
+  };
+
   const resendConfirmation = async () => {
     const address = (unconfirmedEmail.trim() || email.trim()).toLowerCase();
     if (!address) { setError('Enter the email address you signed up with, then request a new confirmation link.'); return; }
@@ -112,10 +170,22 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
     {error && <div className="mb-4 flex gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm"><AlertCircle size={18} />{error}</div>}
     {notice && <div className="mb-4 flex gap-2 rounded-lg border border-primary/30 bg-primary/10 p-3 text-sm"><CheckCircle2 size={18} />{notice}</div>}
     {unconfirmedEmail && mode !== 'reset' && <button type="button" onClick={resendConfirmation} disabled={resending} className="mb-4 flex w-full items-center justify-center gap-2 rounded-lg border border-border px-4 py-2.5 text-sm font-medium disabled:opacity-50">{resending ? <Loader className="animate-spin" size={16} /> : <MailCheck size={16} />}Resend confirmation email</button>}
-    <form onSubmit={submit} className="space-y-4"><label className="block text-sm font-medium">Email<input value={email} onChange={e => setEmail(e.target.value)} type="email" required autoComplete="email" className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-3 outline-none focus:ring-2 focus:ring-primary" /></label>
-      {mode !== 'reset' && <label className="block text-sm font-medium">Password<div className="relative mt-1"><input value={password} onChange={e => setPassword(e.target.value)} type="password" required minLength={8} autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} className="w-full rounded-lg border border-border bg-background px-3 py-3 pr-11 outline-none focus:ring-2 focus:ring-primary" /><EyeOff size={18} className="absolute right-3 top-3 text-muted-foreground" /></div></label>}
-      <button disabled={busy} className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 font-semibold text-primary-foreground disabled:opacity-50">{busy ? <Loader className="animate-spin" size={18} /> : <ArrowRight size={18} />}{mode === 'login' ? 'Sign in' : mode === 'signup' ? 'Create account' : 'Send reset email'}</button></form>
-    <div className="mt-5 flex justify-center gap-4 text-sm text-muted-foreground">{mode === 'login' ? <><button onClick={() => setMode('signup')}>Create account</button><button onClick={() => setMode('reset')}>Forgot password?</button></> : <button onClick={() => { setMode('login'); setError(''); setNotice(''); setUnconfirmedEmail(''); }}>Back to sign in</button>}</div>
+    {mfaFactorId ? (
+      <form onSubmit={verifyMfa} className="space-y-4">
+        <label className="block text-sm font-medium">Authenticator code
+          <input inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={mfaCode} onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, '').slice(0, 6))} required aria-label="Authenticator code" className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-3 font-mono text-lg tracking-[.25em] outline-none focus:ring-2 focus:ring-primary" />
+        </label>
+        <button disabled={mfaBusy || mfaCode.length !== 6} className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 font-semibold text-primary-foreground disabled:opacity-50">{mfaBusy ? <Loader className="animate-spin" size={18} /> : <ShieldCheck size={18} />}Verify and continue</button>
+        <button type="button" onClick={() => void cancelMfa()} disabled={mfaBusy} className="w-full rounded-lg border border-border px-4 py-3 text-sm font-medium disabled:opacity-50">Sign out and use another account</button>
+      </form>
+    ) : (
+      <>
+        <form onSubmit={submit} className="space-y-4"><label className="block text-sm font-medium">Email<input value={email} onChange={e => setEmail(e.target.value)} type="email" required autoComplete="email" className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-3 outline-none focus:ring-2 focus:ring-primary" /></label>
+          {mode !== 'reset' && <label className="block text-sm font-medium">Password<div className="relative mt-1"><input value={password} onChange={e => setPassword(e.target.value)} type="password" required minLength={8} autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} className="w-full rounded-lg border border-border bg-background px-3 py-3 pr-11 outline-none focus:ring-2 focus:ring-primary" /><EyeOff size={18} className="absolute right-3 top-3 text-muted-foreground" /></div></label>}
+          <button disabled={busy} className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 font-semibold text-primary-foreground disabled:opacity-50">{busy ? <Loader className="animate-spin" size={18} /> : <ArrowRight size={18} />}{mode === 'login' ? 'Sign in' : mode === 'signup' ? 'Create account' : 'Send reset email'}</button></form>
+        <div className="mt-5 flex justify-center gap-4 text-sm text-muted-foreground">{mode === 'login' ? <><button onClick={() => setMode('signup')}>Create account</button><button onClick={() => setMode('reset')}>Forgot password?</button></> : <button onClick={() => { setMode('login'); setError(''); setNotice(''); setUnconfirmedEmail(''); }}>Back to sign in</button>}</div>
+      </>
+    )}
     <footer className="mt-7 flex justify-center gap-4 text-xs text-muted-foreground"><a href="/terms">Terms of Service</a><a href="/privacy">Privacy Policy</a></footer>
   </section></main>;
 }
