@@ -112,12 +112,13 @@ describe('billing routes are real, authenticated, and role-gated', () => {
     expect(s).toContain('if (!priceId) return res.status(503)');
   });
 
-  it('creates the tenant entitlement on Stripe confirmation even when no subscription row existed before checkout', () => {
+  it('creates the tenant entitlement on Stripe confirmation using Stripe\'s authoritative subscription state', () => {
     const s = source();
     expect(s).toContain('INSERT INTO tenant_subscriptions (');
     expect(s).toContain('ON CONFLICT (tenant_id) DO UPDATE SET');
-    expect(s).toContain("status = 'active'");
-    expect(s).toContain("action: 'billing.subscription.activated'");
+    expect(s).toContain('await stripe.subscriptions.retrieve(subscriptionId)');
+    expect(s).toContain('status = EXCLUDED.status');
+    expect(s).toContain("authoritativeStatus === 'active' ? 'billing.subscription.activated' : 'billing.subscription.checkout_confirmed'");
   });
 });
 
@@ -165,6 +166,16 @@ describe('Stripe webhook handling', () => {
 
   it('records an add-on that was actually bought, not only one that was started', () => {
     expect(source()).toContain("action: 'billing.addon.completed'");
+  });
+
+  it('never assumes checkout completion means an active plan or add-on', () => {
+    const s = source();
+    expect(s).toContain('const authoritativeSubscription = await stripe.subscriptions.retrieve(subscriptionId)');
+    expect(s).toContain('const authoritativeStatus = authoritativeSubscription.status');
+    expect(s).toContain('const authoritativeAddon = await stripe.subscriptions.retrieve(session.subscription)');
+    expect(s).toContain('status = EXCLUDED.status');
+    expect(s).toContain('STRIPE_SUBSCRIPTION_TENANT_MISMATCH');
+    expect(s).toContain('STRIPE_ADDON_TENANT_MISMATCH');
   });
 
 
