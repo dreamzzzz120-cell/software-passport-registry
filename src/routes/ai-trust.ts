@@ -85,8 +85,10 @@ const ASK_JSON_SCHEMA = {
 };
 
 function aiProviderAvailable(): 'claude' | 'gateway' | null {
-  if (isClaudeConfigured()) return 'claude';
+  // Prefer the provider-neutral AI Gateway so production uses the configured
+  // GPT model consistently. Claude remains an explicit fallback only.
   if (process.env.AI_GATEWAY_API_KEY) return 'gateway';
+  if (isClaudeConfigured()) return 'claude';
   return null;
 }
 
@@ -243,7 +245,7 @@ export function createAiTrustRouter() {
     const passportId = typeof req.body?.passportId === 'string' ? req.body.passportId.trim() : '';
     if (!passportId) return res.status(400).json({ error: 'PASSPORT_ID_REQUIRED' });
     const provider = aiProviderAvailable();
-    if (!provider) return res.status(503).json({ error: 'AI_NOT_CONFIGURED', message: 'AI explanation is unavailable until ANTHROPIC_API_KEY (or the fallback AI_GATEWAY_API_KEY) is configured.' });
+    if (!provider) return res.status(503).json({ error: 'AI_NOT_CONFIGURED', message: 'AI explanation is unavailable until AI_GATEWAY_API_KEY is configured (Claude remains an optional fallback).' });
     try {
       const db = req.db!;
       const tenantId = req.user!.tenantId;
