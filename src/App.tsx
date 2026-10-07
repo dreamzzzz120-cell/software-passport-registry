@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { workspaceIdentity } from './lib/workspaceIdentity';
-import { getRedirectResult, onAuthStateChanged, signOut, type User } from './lib/supabase-auth';
+import { getRedirectResult, onAuthStateChanged, signOut, supabase, type User } from './lib/supabase-auth';
 import type { Alert, Client, Integration, Scan, SoftwarePassport, Vendor } from './types';
 import { apiFetch } from './utils/apiClient';
 import { auth } from './lib/supabase-auth';
@@ -51,6 +51,7 @@ import OnboardingView from './components/OnboardingView';
 import FreeReviewView from './components/FreeReviewView';
 import DemoPassport from './components/DemoPassport';
 import ViewErrorBoundary from './components/ViewErrorBoundary';
+import MfaChallengeView from './components/MfaChallengeView';
 import { normalizeClientRecord, toJsonArrayColumn } from './lib/clientJsonColumns';
 import TermsView from './components/legal/TermsView';
 import PublicTrustCenterView from './components/PublicTrustCenterView';
@@ -213,6 +214,7 @@ export default function App() {
   // like a Viewer with an empty workspace.
   const [identityState, setIdentityState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [identityUid, setIdentityUid] = useState<string | null>(null);
+  const [mfaState, setMfaState] = useState<'checking' | 'ready' | 'required' | 'error'>('checking');
   // Platform-operator identity, from the server's FOUNDER_EMAILS allowlist.
   // Never inferred from `role`: Owner is per-tenant and every customer has one.
   const [isFounder, setIsFounder] = useState(false);
@@ -334,6 +336,18 @@ export default function App() {
     };
   }, []);
   useEffect(() => { if (authReady && !user && !isPublicPath(path)) navigate('/login'); }, [authReady, user, path]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!user) { setMfaState('ready'); return () => { cancelled = true; }; }
+    setMfaState('checking');
+    void supabase.auth.mfa.getAuthenticatorAssuranceLevel().then(({ data, error }) => {
+      if (cancelled) return;
+      if (error) { setMfaState('error'); return; }
+      setMfaState(data.nextLevel === 'aal2' && data.currentLevel !== 'aal2' ? 'required' : 'ready');
+    }).catch(() => { if (!cancelled) setMfaState('error'); });
+    return () => { cancelled = true; };
+  }, [user?.uid]);
 
   useEffect(() => {
     if (!user || isFounder || dataStatus !== 'ready') return;
@@ -523,6 +537,9 @@ export default function App() {
   const signOutUser = async () => { await signOut(auth); navigate('/login'); };
 
   if (!authReady) return <AuthLoading />;
+  if (user && !isPublicPath(path) && mfaState === 'checking') return <AuthLoading />;
+  if (user && !isPublicPath(path) && mfaState === 'error') return <SessionUnavailable onRetry={() => setMfaState('checking')} onSignOut={() => void signOutUser()} />;
+  if (user && !isPublicPath(path) && mfaState === 'required') return <MfaChallengeView onVerified={() => setMfaState('ready')} onSignOut={() => void signOutUser()} />;
   if (user && !isPublicPath(path) && (identityState === 'loading' || identityUid !== user.uid)) return <AuthLoading />;
   if (user && !isPublicPath(path) && identityState === 'error') return <SessionUnavailable onRetry={() => setReloadKey((value) => value + 1)} onSignOut={() => void signOutUser()} />;
   if (user && !isPublicPath(path) && identityState === 'ready' && !role) return <SessionUnavailable onRetry={() => setReloadKey((value) => value + 1)} onSignOut={() => void signOutUser()} />;
