@@ -275,6 +275,54 @@ export function createAgentSecurityRouter() {
     } catch (error) { return next(error); }
   });
 
+  router.get('/sequences', requireRole([...READ_ROLES]), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const tenantId = req.user!.tenantId;
+      const rows = (await req.db!.execute(sql`
+        SELECT id, agent_asset_id, event_type, source_origin, source_ref, action_capability,
+               target_ref, outcome, severity, evidence_ids, detail, observed_at
+        FROM agent_security_events
+        WHERE tenant_id=${tenantId}
+          AND event_type='execution_receipt'
+        ORDER BY observed_at DESC
+        LIMIT 500
+      `) as any).rows || [];
+
+      const ordered = [...rows].sort((a: any, b: any) => Date.parse(a.observed_at) - Date.parse(b.observed_at));
+      const sequences: any[] = [];
+      for (let i = 0; i < ordered.length; i += 1) {
+        const start = ordered[i];
+        const window = ordered.slice(i, i + 6).filter((event: any) => Date.parse(event.observed_at) - Date.parse(start.observed_at) <= 5 * 60 * 1000);
+        if (window.length < 2) continue;
+        const capabilities = window.map((event: any) => String(event.action_capability || '').toLowerCase());
+        const targets = window.map((event: any) => String(event.target_ref || '').toLowerCase());
+        const hasRead = capabilities.some((value: string) => /read|fetch|get|retrieve|filesystem/.test(value));
+        const hasWriteOrSend = capabilities.some((value: string) => /write|post|send|publish|upload|execute|create/.test(value));
+        const hasExternalTarget = targets.some((value: string) => /^https?:///.test(value) || /webhook|email|slack|http|external/.test(value));
+        const succeeded = window.some((event: any) => event.outcome === 'SUCCEEDED');
+        const dangerous = hasRead && hasWriteOrSend && hasExternalTarget;
+        sequences.push({
+          startedAt: start.observed_at,
+          endedAt: window[window.length - 1].observed_at,
+          eventIds: window.map((event: any) => event.id),
+          capabilities: window.map((event: any) => event.action_capability),
+          targets: window.map((event: any) => event.target_ref),
+          classification: dangerous ? 'DANGEROUS_TOOL_CHAIN' : 'OBSERVED_SEQUENCE',
+          executionOutcome: succeeded ? 'SUCCEEDED_OBSERVED' : 'NO_SUCCESS_OBSERVED',
+          evidenceBacked: true,
+        });
+      }
+
+      const deduped = sequences.filter((sequence, index, all) =>
+        index === all.findIndex((candidate) => candidate.eventIds.join('|') === sequence.eventIds.join('|'))
+      ).slice(-100).reverse();
+      return res.json({
+        sequences: deduped,
+        policy: 'Sequence analysis is derived only from stored execution_receipt evidence. Capability alone never implies execution.',
+      });
+    } catch (error) { return next(error); }
+  });
+
   router.get('/events', requireRole([...READ_ROLES]), async (req: AuthenticatedRequest, res, next) => {
     try {
       const tenantId = req.user!.tenantId;
