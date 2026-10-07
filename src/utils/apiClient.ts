@@ -117,6 +117,11 @@ export const apiFetch = async (input: RequestInfo | URL, init?: FetchOptions): P
         }
       }
       if (response.status === 403 && resolvedUrl.pathname === '/api/user/me' && !isSignupTransitionActive()) {
+        const denied = await response.clone().json().catch(() => null);
+        if (denied?.code === 'MFA_REQUIRED') {
+          window.dispatchEvent(new CustomEvent('mfa-required'));
+          return response;
+        }
         const rejectedEmail = auth?.currentUser?.email ?? null;
         setAuthNotice(notProvisionedMessage(rejectedEmail));
         window.dispatchEvent(new CustomEvent('auth-provisioning-failed', { detail: { email: rejectedEmail } }));
