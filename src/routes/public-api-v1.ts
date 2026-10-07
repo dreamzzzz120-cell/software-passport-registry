@@ -25,7 +25,7 @@ async function apiKeyAuth(req: AuthenticatedRequest, res: any, next: any) {
     if (!row) return res.status(401).json({ error: { code: 'INVALID_API_KEY', message: 'Missing, expired, or revoked API key.' } });
     const parsedScopes = z.array(scopes).safeParse(JSON.parse(String(row.scopes ?? '[]')));
     if (!parsedScopes.success) return res.status(401).json({ error: { code: 'INVALID_API_KEY', message: 'API key configuration is invalid.' } });
-    req.user = { id: 0, uid: `api-key:${row.id}`, email: '', tenantId: String(row.tenant_id), role: 'ApiKey', clientId: null, emailVerified: true };
+    req.user = { id: 0, uid: `api-key:${row.id}`, email: '', tenantId: String(row.tenant_id), role: 'ApiKey', clientId: null, emailVerified: true, aal: 'api_key' };
     req.db = await attachTenantScope(String(row.tenant_id), res);
     (req as any).sprApiKeyId = String(row.id); (req as any).sprApiKeyScopes = parsedScopes.data;
     await db.execute(sql`UPDATE spr_api_keys SET last_used_at=CURRENT_TIMESTAMP::text WHERE id=${row.id} AND revoked_at IS NULL`);
