@@ -5,7 +5,7 @@ import { renderBrandedEmail, SPR_DEFAULT_BRAND, sendBrandedEmail } from './brand
 import { DISTRIBUTION_TENANT_ID } from './distribution-engine.ts';
 
 const PUBLIC_ORIGIN = 'https://www.softwarepassportregistry.com';
-const DAILY_LIMIT = Math.max(1, Math.min(500, Number.parseInt(process.env.DISTRIBUTION_DAILY_SEND_LIMIT ?? '50', 10) || 50));
+const DAILY_LIMIT = Math.max(1, Math.min(1000, Number.parseInt(process.env.DISTRIBUTION_DAILY_SEND_LIMIT ?? '50', 10) || 50));
 const FOLLOWUP_DAYS = Math.max(1, Math.min(30, Number.parseInt(process.env.DISTRIBUTION_FOLLOWUP_DAYS ?? '5', 10) || 5));
 const MAX_FOLLOWUPS = Math.max(0, Math.min(3, Number.parseInt(process.env.DISTRIBUTION_MAX_FOLLOWUPS ?? '2', 10) || 2));
 
