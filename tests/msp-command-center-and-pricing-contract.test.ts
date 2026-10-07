@@ -100,9 +100,10 @@ describe('SPR MSP pricing — packaging separated from live billing', () => {
     expect(app).toContain(code`if (!user && path === '/pricing') return <MspPricingView isAuthenticated={false} onPrimaryAction={() => navigate('/free-review')} />;`);
   });
 
-  it('sends a signed-out paid-plan prospect to sign in and then billing, not back to Free Review', () => {
+  it('sends a signed-out paid-plan prospect straight into signup and preserves the selected plan', () => {
     const s = source();
-    expect(s).toContain(code`if (plan.checkoutAvailable) return window.location.assign('/login?next=%2Fbilling')`);
+    expect(s).toContain(code`const next = encodeURIComponent(\`/billing?plan=\${plan.id}\`)`);
+    expect(s).toContain(code`window.location.assign(\`/login?mode=signup&next=\${next}\`)`);
   });
 });
 
