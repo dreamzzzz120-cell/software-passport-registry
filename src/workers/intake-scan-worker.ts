@@ -380,12 +380,15 @@ export async function runIntakeScannerOnce(pool: Pool) {
 
 export async function runIntakeScannerLoop() {
   const pool = createWorkerPool();
-  await assertWorkerDatabase(pool);
   let stopping = false;
   const stop = () => { stopping = true; };
   process.once('SIGINT', stop); process.once('SIGTERM', stop);
   console.log(JSON.stringify({ event: 'intake_scanner_started', workerId: WORKER_ID }));
-  try { while (!stopping) { const processed = await runIntakeScannerOnce(pool); if (!processed) await new Promise((resolve) => setTimeout(resolve, 2000)); } }
-  finally { await pool.end(); }
+  try { await assertWorkerDatabase(pool); while (!stopping) { const processed = await runIntakeScannerOnce(pool); if (!processed) await new Promise((resolve) => setTimeout(resolve, 2000)); } }
+  finally {
+    process.removeListener('SIGINT', stop);
+    process.removeListener('SIGTERM', stop);
+    await pool.end();
+  }
 }
 
