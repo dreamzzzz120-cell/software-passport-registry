@@ -171,7 +171,7 @@ describe('Stripe webhook handling', () => {
   it('never assumes checkout completion means an active plan or add-on', () => {
     const s = source();
     expect(s).toContain('const authoritativeSubscription = await stripe.subscriptions.retrieve(subscriptionId)');
-    expect(s).toContain('const authoritativeStatus = authoritativeSubscription.status');
+    expect(s).toContain('authoritativeStatus = authoritativeSubscription.status');
     expect(s).toContain('const authoritativeAddon = await stripe.subscriptions.retrieve(session.subscription)');
     expect(s).toContain('status = EXCLUDED.status');
     expect(s).toContain('STRIPE_SUBSCRIPTION_TENANT_MISMATCH');
