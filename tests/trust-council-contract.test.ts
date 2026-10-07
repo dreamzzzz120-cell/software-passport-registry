@@ -66,17 +66,20 @@ describe('the chair cannot be more favourable than the reviewers without saying 
 });
 
 describe('AI provider wiring', () => {
-  it('Claude is the primary reasoning model in the scanner and the trust routes, with honest fallbacks', () => {
+  it('supports configured AI providers in trust routes while preserving honest fallbacks', () => {
     const scanner = read('src/utils/scanner.ts');
     expect(scanner).toContain("isClaudeConfigured() ? 'claude' : geminiKey ? 'gemini' : null");
     expect(scanner).toContain('claudeStructured({');
     expect(scanner).toContain('Falling back to secure static compiler');
     const routes = read('src/routes/ai-trust.ts');
+    expect(routes).toContain("type AiProvider = 'claude' | 'gemini' | 'gateway'");
+    expect(routes).toContain("AI_PROVIDER === 'gemini'");
     expect(routes).toContain("router.post('/trust-council'");
     expect(routes).toContain("router.post('/ask'");
     expect(routes).toContain("router.get('/ai-status'");
-    expect(routes).toContain("if (!isClaudeConfigured()) return res.status(503).json({ error: 'AI_NOT_CONFIGURED'");
+    expect(routes).toContain("if (!provider) return res.status(503).json({ error: 'AI_NOT_CONFIGURED'");
     expect(read('package.json')).toContain('"@anthropic-ai/sdk"');
+    expect(read('package.json')).toContain('"@google/genai"');
   });
 
   it('council and Q&A never write authoritative state', () => {
