@@ -13,6 +13,7 @@ import FounderGrowthHub from './FounderGrowthHub';
 import FounderAgentsPanel from './FounderAgentsPanel';
 import FounderOverview from './FounderOverview';
 import FounderMissionControl from './FounderMissionControl';
+import FounderQLegionPanel from './FounderQLegionPanel';
 import FounderControlPlane from './FounderControlPlane';
 import FounderFeatureControlMatrix from './FounderFeatureControlMatrix';
 
@@ -116,6 +117,7 @@ function FounderDashboardContent({ userRole }: FounderDashboardViewProps) {
         </section>
         <FounderOverview />
         <FounderMissionControl />
+        <FounderQLegionPanel />
       </div>
       <div hidden={area !== 'operations'} className="space-y-6">
       <FounderControlPlane />
