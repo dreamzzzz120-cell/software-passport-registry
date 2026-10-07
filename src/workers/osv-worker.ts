@@ -299,7 +299,21 @@ async function persistProviderResult(client: PoolClient, job: ClaimedJob, compon
   `, [evidenceId, job.tenant_id, job.passport_id, `OSV response for ${component.name}@${component.version}`, receivedAt, digest, persistedPayload, job.scan_id]);
 
   const vulnerabilities = Array.isArray((providerResponse as any)?.vulns) ? (providerResponse as any).vulns : [];
-  for (const vulnerability of vulnerabilities) {
+  // Defense-in-depth: if OSV enumerates affected versions for this package,
+  // require the observed version to be in that set before creating a finding.
+  // The complete provider response remains persisted as evidence above.
+  const actionableVulnerabilities = vulnerabilities.filter((vulnerability: any) => {
+    const affected = Array.isArray(vulnerability?.affected) ? vulnerability.affected : [];
+    if (affected.length === 0) return true;
+    const matching = affected.filter((entry: any) => {
+      const pkg = entry?.package;
+      return pkg && typeof pkg.name === 'string' && pkg.name.toLowerCase() === component.name.toLowerCase();
+    });
+    if (matching.length === 0) return false;
+    const enumerated = matching.flatMap((entry: any) => Array.isArray(entry?.versions) ? entry.versions.map(String) : []);
+    return enumerated.length === 0 || enumerated.includes(component.version);
+  });
+  for (const vulnerability of actionableVulnerabilities) {
     const aliases = Array.isArray(vulnerability?.aliases) ? vulnerability.aliases : [];
     const vulnerabilityId = String(vulnerability?.id || aliases[0] || 'OSV vulnerability').trim();
     const vulnKey = vulnerabilityIdentity({ tenantId: job.tenant_id, passportId: job.passport_id, vulnerabilityId, component });
@@ -317,7 +331,7 @@ async function persistProviderResult(client: PoolClient, job: ClaimedJob, compon
       `${component.name}@${component.version}`, receivedAt, job.scan_id,
     ]);
   }
-  return vulnerabilities.length;
+  return actionableVulnerabilities.length;
 }
 
 export async function processJob(pool: Pool, job: ClaimedJob, componentOverride?: SbomComponent[]) {
