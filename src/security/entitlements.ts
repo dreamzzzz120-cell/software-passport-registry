@@ -54,7 +54,7 @@ export const BASELINE_CAPABILITY: Capability = 'workspace';
 
 const ENTITLING_STATUSES_SQL = sql.join(PLAN_ENTITLING_STATUSES.map(status => sql`${status}`), sql`, `);
 
-export type SubscriptionGate = 'default-access' | 'enforce-plan' | 'lapsed';
+export type SubscriptionGate = 'unpaid' | 'enforce-plan' | 'lapsed';
 
 export interface SubscriptionState { plan: string | null; status: string; currentPeriodEnd: string | null; }
 
@@ -75,8 +75,11 @@ interface SubscriptionRow { plan?: string | null; status?: string | null; curren
  * when they treat a NULL client_limit as unrestricted.
  */
 export function resolveSubscriptionGate(subscription: { plan: string | null; status: string }): SubscriptionGate {
-  if (!subscription.plan) return 'default-access';
-  if ((PRE_PAYMENT_STATUSES as readonly string[]).includes(subscription.status)) return 'default-access';
+  // Launch policy: no confirmed paid plan means no paid workspace capability.
+  // Billing and identity routes remain exempt at the authenticated boundary so
+  // an MSP can sign in, choose a plan, complete Checkout, and recover billing.
+  if (!subscription.plan) return 'unpaid';
+  if ((PRE_PAYMENT_STATUSES as readonly string[]).includes(subscription.status)) return 'unpaid';
   if ((PLAN_ENTITLING_STATUSES as readonly string[]).includes(subscription.status)) return 'enforce-plan';
   return 'lapsed';
 }
@@ -132,7 +135,7 @@ export async function tenantHasAddonCapability(db: ScopedDb, tenantId: string, c
 export async function evaluateCapability(db: ScopedDb, tenantId: string, capability: Capability): Promise<CapabilityDecision> {
   const state = await readSubscriptionState(db, tenantId);
   const gate = resolveSubscriptionGate(state);
-  if (gate === 'default-access') return { allowed: true, gate, state };
+  if (gate === 'unpaid') return { allowed: false, gate, state };
   if (gate === 'lapsed') return { allowed: lapsedPlanAllows(capability), gate, state };
   // A paid add-on grants its capability regardless of the plan tier.
   if (await tenantHasCapability(db, tenantId, capability)) return { allowed: true, gate, state };
@@ -140,6 +143,13 @@ export async function evaluateCapability(db: ScopedDb, tenantId: string, capabil
 }
 
 export function capabilityDenial(capability: Capability, decision: CapabilityDecision) {
+  if (decision.gate === 'unpaid') {
+    return {
+      error: 'SUBSCRIPTION_REQUIRED', code: 'SUBSCRIPTION_REQUIRED', capability,
+      message: 'Choose an SPR plan to unlock the MSP workspace.',
+      billingPath: '/billing', plan: null, subscriptionStatus: decision.state.status,
+    };
+  }
   if (decision.gate === 'lapsed') {
     return {
       error: 'SUBSCRIPTION_REQUIRED', code: 'SUBSCRIPTION_REQUIRED', capability,
