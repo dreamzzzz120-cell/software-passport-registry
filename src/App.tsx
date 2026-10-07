@@ -612,7 +612,7 @@ export default function App() {
     : `/login?next=${encodeURIComponent(freeReviewReturnPath)}`;
   if (path === '/free-review') return <FreeReviewView onSignUp={() => navigate(freeReviewSignUpTarget)} />;
   if (freeReviewResult) return <FreeReviewView onSignUp={() => navigate(freeReviewSignUpTarget)} initialResult={freeReviewResult} />;
-  if (!user && path === '/pricing') return <MspPricingView isAuthenticated={false} onPrimaryAction={() => navigate('/login')} />;
+  if (!user && path === '/pricing') return <MspPricingView isAuthenticated={false} onPrimaryAction={() => navigate('/free-review')} />;
   if (!user && path === '/msp') return <MspLandingView onEnter={() => navigate('/login')} onViewPricing={() => navigate('/pricing')} />;
   if (!user) return <AuthLoading />;
 
