@@ -445,12 +445,25 @@ export default function IntegrationsView({ passports = [], clients = [], onNavig
 
       {/* Real webhook subscriptions — replaces a prior panel whose Save/Test buttons were no-ops against endpoints that did not exist. */}
       <div className="spr-panel p-6 text-[var(--spr-text)] space-y-5">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-[var(--spr-accent-soft)] border border-[var(--spr-accent)]/40 text-[var(--spr-highlight)] rounded-md"><Webhook className="w-5 h-5" /></div>
-          <div>
-            <h2 className="text-base font-display font-bold">Webhook subscriptions</h2>
-            <p className="text-xs text-[var(--spr-text-muted)] mt-0.5">SPR delivers a signed HTTP POST to your URL for the events you pick. Relay it to Slack, Jira, or a PSA with your own automation (e.g. Zapier, a small serverless function) — SPR does not host per-PSA routing rules itself.</p>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 bg-[var(--spr-accent-soft)] border border-[var(--spr-accent)]/40 text-[var(--spr-highlight)] rounded-md"><Webhook className="w-5 h-5" /></div>
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-[.18em] text-[var(--spr-highlight)]">Outbound evidence events</div>
+              <h2 className="mt-1 text-xl font-display font-bold">Signed webhooks</h2>
+              <p className="mt-1 max-w-2xl text-xs leading-5 text-[var(--spr-text-muted)]">SPR sends a signed HTTP POST for the event types you select. Delivery proves that SPR attempted to transmit an event; your receiver still decides what action to take.</p>
+            </div>
           </div>
+          <div className="grid grid-cols-3 gap-2 text-center text-xs">
+            <WebhookMetric label="Subscriptions" value={String(webhooks.length)} />
+            <WebhookMetric label="Active" value={String(webhooks.filter((item) => item.active).length)} />
+            <WebhookMetric label="With failures" value={String(webhooks.filter((item) => item.consecutive_failure_count > 0).length)} />
+          </div>
+        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          <WebhookStep title="1 · Sign" body="SPR signs the payload with the one-time secret issued when the subscription is created." />
+          <WebhookStep title="2 · Deliver" body="SPR POSTs only to the configured HTTPS destination for the selected event classes." />
+          <WebhookStep title="3 · Verify" body="Your receiver validates x-spr-signature before creating tickets, messages, or automation." />
         </div>
 
         <div className="grid gap-4 lg:grid-cols-2">
@@ -543,3 +556,7 @@ function ProviderCustomerMapping({ provider, clients, customers, discovering, me
     </div>
   );
 }
+
+
+function WebhookMetric({ label, value }: { label: string; value: string }) { return <div className="rounded-lg border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-3 py-2"><div className="text-[10px] font-bold uppercase tracking-[.12em] text-[var(--spr-text-faint)]">{label}</div><div className="mt-1 font-semibold text-[var(--spr-text)]">{value}</div></div>; }
+function WebhookStep({ title, body }: { title: string; body: string }) { return <div className="rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] p-4"><div className="text-[11px] font-bold uppercase tracking-[.14em] text-[var(--spr-highlight)]">{title}</div><p className="mt-2 text-xs leading-5 text-[var(--spr-text-muted)]">{body}</p></div>; }
