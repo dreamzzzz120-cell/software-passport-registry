@@ -622,24 +622,41 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
         const metadataPlan = session.metadata?.plan as PlanId | undefined;
         const plan = metadataPlan && PLAN_CONFIG[metadataPlan] ? metadataPlan : paymentLinkPlan;
         if (tenantId && session.subscription && plan && PLAN_CONFIG[plan]) {
-          const clientLimit = PLAN_CLIENT_LIMITS[plan];
+          if (!config.stripe.secretKey) throw new Error('STRIPE_SUBSCRIPTION_VERIFICATION_UNAVAILABLE');
+          const subscriptionId = String(session.subscription);
+          const authoritativeSubscription = await stripe.subscriptions.retrieve(subscriptionId);
+          const authoritativeTenantId = authoritativeSubscription.metadata?.tenantId;
+          if (authoritativeTenantId && authoritativeTenantId !== tenantId) {
+            throw new Error('STRIPE_SUBSCRIPTION_TENANT_MISMATCH');
+          }
+          const currentPriceId = authoritativeSubscription.items.data[0]?.price?.id;
+          const resolvedPlan = PLAN_IDS.find((id) => planPriceId(id) === currentPriceId);
+          const authoritativePlan = resolvedPlan ?? plan;
+          if (!PLAN_CONFIG[authoritativePlan]) throw new Error('STRIPE_SUBSCRIPTION_PLAN_UNRESOLVED');
+          const clientLimit = PLAN_CLIENT_LIMITS[authoritativePlan];
           const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id;
+          const authoritativeStatus = authoritativeSubscription.status;
           await db.execute(sql`
             INSERT INTO tenant_subscriptions (
               tenant_id, stripe_customer_id, stripe_subscription_id, plan, status, client_limit, updated_at
             )
             VALUES (
-              ${tenantId}, ${customerId ?? null}, ${String(session.subscription)}, ${plan}, 'active', ${clientLimit}, CURRENT_TIMESTAMP
+              ${tenantId}, ${customerId ?? null}, ${subscriptionId}, ${authoritativePlan}, ${authoritativeStatus}, ${clientLimit}, CURRENT_TIMESTAMP
             )
             ON CONFLICT (tenant_id) DO UPDATE SET
               stripe_customer_id = COALESCE(EXCLUDED.stripe_customer_id, tenant_subscriptions.stripe_customer_id),
               stripe_subscription_id = EXCLUDED.stripe_subscription_id,
               plan = EXCLUDED.plan,
-              status = 'active',
+              status = EXCLUDED.status,
               client_limit = EXCLUDED.client_limit,
               updated_at = CURRENT_TIMESTAMP
           `);
-          await appendAuditEntry(db, { tenantId, action: 'billing.subscription.activated', actor: 'stripe-webhook', payload: { plan, stripeEventId: event.id, stripeSubscriptionId: String(session.subscription), stripeCustomerId: customerId ?? null } });
+          await appendAuditEntry(db, {
+            tenantId,
+            action: authoritativeStatus === 'active' ? 'billing.subscription.activated' : 'billing.subscription.checkout_confirmed',
+            actor: 'stripe-webhook',
+            payload: { plan: authoritativePlan, status: authoritativeStatus, stripeEventId: event.id, stripeSubscriptionId: subscriptionId, stripeCustomerId: customerId ?? null },
+          });
         } else if (tenantId && session.mode === 'payment') {
           const productId = session.metadata?.product ?? paymentLinkProduct ?? null;
           // A first purchase may create the tenant's Stripe customer. Persist
@@ -701,7 +718,13 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
             await db.execute(sql`UPDATE tenant_subscriptions SET stripe_customer_id = COALESCE(stripe_customer_id, ${addonCustomerId}), updated_at = CURRENT_TIMESTAMP WHERE tenant_id = ${tenantId}`);
           }
           if (typeof session.subscription === 'string' && addonId && ADDON_CONFIG[addonId]) {
-            await db.execute(sql`INSERT INTO tenant_addons (stripe_subscription_id, tenant_id, addon, status) VALUES (${session.subscription}, ${tenantId}, ${addonId}, 'active') ON CONFLICT (stripe_subscription_id) DO UPDATE SET status = 'active', updated_at = CURRENT_TIMESTAMP`);
+            if (!config.stripe.secretKey) throw new Error('STRIPE_ADDON_VERIFICATION_UNAVAILABLE');
+            const authoritativeAddon = await stripe.subscriptions.retrieve(session.subscription);
+            const authoritativeTenantId = authoritativeAddon.metadata?.tenantId;
+            const authoritativeAddonId = authoritativeAddon.metadata?.addon as AddonId | undefined;
+            if (authoritativeTenantId && authoritativeTenantId !== tenantId) throw new Error('STRIPE_ADDON_TENANT_MISMATCH');
+            if (authoritativeAddonId && authoritativeAddonId !== addonId) throw new Error('STRIPE_ADDON_METADATA_MISMATCH');
+            await db.execute(sql`INSERT INTO tenant_addons (stripe_subscription_id, tenant_id, addon, status) VALUES (${session.subscription}, ${tenantId}, ${addonId}, ${authoritativeAddon.status}) ON CONFLICT (stripe_subscription_id) DO UPDATE SET status = EXCLUDED.status, updated_at = CURRENT_TIMESTAMP`);
           }
           await appendAuditEntry(db, { tenantId, action: 'billing.addon.completed', actor: 'stripe-webhook', payload: { addon: addonId ?? null, stripeEventId: event.id, checkoutSessionId: session.id, stripeSubscriptionId: session.subscription ? String(session.subscription) : null } });
         }
