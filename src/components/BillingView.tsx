@@ -32,13 +32,47 @@ type BillingStatus = {
 // Stripe sends the buyer back with one of these query strings. The banner
 // only says the checkout page reported success; the purchase list below is
 // what SPR's webhook actually recorded, and only that counts as confirmed.
-function returnBanner(): { tone: 'ok' | 'muted'; text: string } | null {
+function returnBanner(): { tone: 'ok' | 'muted' | 'warning'; text: string } | null {
   if (typeof window === 'undefined') return null;
   const q = new URLSearchParams(window.location.search);
   if (q.get('checkout') === 'success') return { tone: 'ok', text: 'Stripe reported your plan checkout as complete. It appears under Your purchases once SPR receives Stripe\'s confirmation (usually within a minute).' };
   if (q.get('purchase') === 'success') return { tone: 'ok', text: `Stripe reported your order as complete${q.get('product') ? ` (${q.get('product')})` : ''}. An order-received email with your reference is on its way; the item appears under Your purchases once confirmed.` };
   if (q.get('addon') === 'success') return { tone: 'ok', text: 'Stripe reported your add-on checkout as complete. It becomes active once SPR receives Stripe\'s confirmation (usually within a minute).' };
   if (q.get('checkout') === 'cancelled' || q.get('purchase') === 'cancelled' || q.get('addon') === 'cancelled') return { tone: 'muted', text: 'Checkout was cancelled. Nothing was charged.' };
+
+  const reason = q.get('reason');
+  if (reason === 'capability') {
+    const capability = q.get('required');
+    const rawPlans = q.get('plans')?.split(',') ?? [];
+    const validPlans = rawPlans.filter((plan): plan is PlanId => ['pilot', 'starter', 'professional', 'growth', 'enterprise'].includes(plan));
+    const capabilityLabel = capability && /^[a-z_]{1,64}$/.test(capability)
+      ? capability.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
+      : 'This feature';
+    const planLabels: Record<PlanId, string> = {
+      pilot: 'MSP White-Label Pilot',
+      starter: 'MSP Starter',
+      professional: 'MSP Professional',
+      growth: 'MSP Business',
+      enterprise: 'Enterprise',
+    };
+    const available = validPlans.map((plan) => planLabels[plan]);
+    return {
+      tone: 'warning',
+      text: available.length
+        ? `${capabilityLabel} is not included in your current plan. It is available on ${available.join(', ')}.`
+        : `${capabilityLabel} is not included in your current plan. Choose a plan below that includes it.`,
+    };
+  }
+  if (reason === 'subscription') {
+    const status = q.get('status');
+    const safeStatus = status && /^[a-z_]{1,64}$/.test(status) ? status.replaceAll('_', ' ') : null;
+    return {
+      tone: 'warning',
+      text: safeStatus
+        ? `Workspace access is locked because the subscription is ${safeStatus}. Reactivate or choose an active plan to continue.`
+        : 'An active SPR subscription is required to unlock the MSP workspace.',
+    };
+  }
   return null;
 }
 
@@ -140,9 +174,12 @@ export default function BillingView() {
 
 
   const anyBusy = busyPlan !== null || busyProduct !== null || busyAddon !== null;
-  const manageableStatuses = new Set(['active', 'trialing', 'past_due']);
-  const currentPlan = status?.subscription?.plan && manageableStatuses.has(status.subscription.status) ? status.subscription.plan : null;
-  const currentPlanLabel = currentPlan ? status?.plans.find((p) => p.id === currentPlan)?.label ?? currentPlan : null;
+  const subscriptionStatus = status?.subscription?.status ?? 'none';
+  const entitlementActive = subscriptionStatus === 'active' && Boolean(status?.subscription?.plan);
+  const currentPlan = entitlementActive ? status!.subscription!.plan : null;
+  const recordedPlan = status?.subscription?.plan ?? null;
+  const currentPlanLabel = recordedPlan ? status?.plans.find((p) => p.id === recordedPlan)?.label ?? recordedPlan : null;
+  const subscriptionNeedsAttention = Boolean(recordedPlan) && !entitlementActive;
 
   return (
     <div className="space-y-10" id="msp-billing-view">
@@ -159,8 +196,18 @@ export default function BillingView() {
         </div>
       )}
       {banner && (
-        <div role="status" className={banner.tone === 'ok' ? 'flex items-center gap-2 rounded-md border border-[var(--spr-green)]/40 bg-[var(--spr-green)]/10 px-4 py-3 text-sm text-[var(--spr-green)]' : 'flex items-center gap-2 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] px-4 py-3 text-sm text-[var(--spr-text-muted)]'}>
-          <CheckCircle2 className="h-4 w-4 shrink-0" /> {banner.text}
+        <div
+          role="status"
+          className={
+            banner.tone === 'ok'
+              ? 'flex items-center gap-2 rounded-md border border-[var(--spr-green)]/40 bg-[var(--spr-green)]/10 px-4 py-3 text-sm text-[var(--spr-green)]'
+              : banner.tone === 'warning'
+                ? 'flex items-center gap-2 rounded-md border border-[var(--spr-amber)]/40 bg-[var(--spr-amber)]/10 px-4 py-3 text-sm text-[var(--spr-amber)]'
+                : 'flex items-center gap-2 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] px-4 py-3 text-sm text-[var(--spr-text-muted)]'
+          }
+        >
+          {banner.tone === 'warning' ? <AlertTriangle className="h-4 w-4 shrink-0" /> : <CheckCircle2 className="h-4 w-4 shrink-0" />}
+          {banner.text}
         </div>
       )}
 
@@ -202,25 +249,34 @@ export default function BillingView() {
           )}
           <div className="flex flex-col justify-between gap-4 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] px-5 py-4 md:flex-row md:items-center">
             <div className="min-w-0">
-              {currentPlan ? (
+              {entitlementActive ? (
                 <>
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm text-[var(--spr-text-muted)]">Current plan</span>
+                    <span className="text-sm text-[var(--spr-text-muted)]">Active plan</span>
                     <span className="text-base font-semibold text-[var(--spr-text)]">{currentPlanLabel}</span>
-                    <span className={`rounded-full border px-2 py-0.5 text-[12px] font-medium ${status.subscription!.status === 'active' ? 'border-[var(--spr-green)]/40 text-[var(--spr-green)]' : status.subscription!.status === 'past_due' ? 'border-[var(--spr-red)]/40 text-[var(--spr-red)]' : 'border-[var(--spr-amber)]/40 text-[var(--spr-amber)]'}`}>
-                      {status.subscription!.status.replace('_', ' ')}
-                    </span>
+                    <span className="rounded-full border border-[var(--spr-green)]/40 px-2 py-0.5 text-[12px] font-medium text-[var(--spr-green)]">active</span>
                   </div>
                   <p className="mt-1 text-sm text-[var(--spr-text-muted)]">
                     {status.clientCount} client{status.clientCount === 1 ? '' : 's'} used{status.subscription!.clientLimit != null ? ` of ${status.subscription!.clientLimit}` : ' (unlimited)'}
                     {status.subscription!.currentPeriodEnd && ` · renews ${new Date(status.subscription!.currentPeriodEnd).toLocaleDateString()}`}
                   </p>
                 </>
+              ) : subscriptionNeedsAttention ? (
+                <>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm text-[var(--spr-text-muted)]">Recorded plan</span>
+                    <span className="text-base font-semibold text-[var(--spr-text)]">{currentPlanLabel}</span>
+                    <span className="rounded-full border border-[var(--spr-red)]/40 px-2 py-0.5 text-[12px] font-medium text-[var(--spr-red)]">{subscriptionStatus.replace('_', ' ')}</span>
+                  </div>
+                  <p className="mt-1 text-sm leading-6 text-[var(--spr-text-muted)]">
+                    Workspace access is locked until Stripe reports this subscription as active. Manage billing to resolve payment or subscription status.
+                  </p>
+                </>
               ) : (
                 <>
-                  <div className="text-sm font-semibold text-[var(--spr-text)]">Billing management</div>
+                  <div className="text-sm font-semibold text-[var(--spr-text)]">No active workspace subscription</div>
                   <p className="mt-1 text-sm text-[var(--spr-text-muted)]">
-                    Open Stripe to manage payment methods, invoices, and any active subscription tied to your billing email.
+                    Choose a plan below to unlock the MSP workspace. One-time reports remain available without a subscription.
                   </p>
                 </>
               )}
@@ -298,9 +354,9 @@ export default function BillingView() {
                   </div>
                   <div className="flex shrink-0 items-center gap-4">
                     <span className="text-sm font-semibold tabular-nums text-[var(--spr-text)]">{addon.priceLabel ?? '—'}</span>
-                    <button onClick={() => handleAddon(addon.id)} disabled={!addon.checkoutAvailable || anyBusy} className={BTN_OUTLINE}>
+                    <button onClick={() => handleAddon(addon.id)} disabled={!entitlementActive || !addon.checkoutAvailable || anyBusy} className={BTN_OUTLINE} title={!entitlementActive ? 'An active SPR plan is required before add-ons can be purchased.' : undefined}>
                       {busyAddon === addon.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                      {addon.checkoutAvailable ? 'Add' : 'Unavailable'}
+                      {!entitlementActive ? 'Active plan required' : addon.checkoutAvailable ? 'Add' : 'Unavailable'}
                     </button>
                   </div>
                 </div>

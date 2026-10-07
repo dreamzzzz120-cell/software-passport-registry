@@ -388,6 +388,16 @@ describe('architecture boundaries (source contracts)', () => {
     expect(source).not.toMatch(/\b(INSERT|UPDATE|DELETE)\s+(INTO|FROM|\w+\s+SET)\b/i);
   });
 
+  it('uses the configured Gemini model when AI Gateway is unavailable instead of degrading to navigation-only fallback', async () => {
+    const { readRaw } = await import('./helpers/source-contract.ts');
+    const source = readRaw('src/routes/agent-api.ts');
+    expect(source).toContain("import { GoogleGenAI } from '@google/genai'");
+    expect(source).toContain('if (!config.aiGateway.apiKey && !config.gemini.apiKey) return fallback;');
+    expect(source).toContain('else if (config.gemini.apiKey)');
+    expect(source).toContain('gemini.models.generateContent');
+    expect(source).toContain("process.env.GEMINI_MODEL || process.env.AI_MODEL");
+  });
+
   it('every navigation path the server can return is on the frontend allowlist', async () => {
     const { readRaw } = await import('./helpers/source-contract.ts');
     const server = readRaw('src/routes/agent-api.ts');

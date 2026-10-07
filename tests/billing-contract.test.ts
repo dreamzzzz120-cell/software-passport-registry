@@ -347,10 +347,12 @@ describe('checkout state integrity', () => {
     expect(checkout).toContain("action: 'billing.checkout.initiated'");
   });
 
-  it('only presents confirmed or billable Stripe states as the current plan', () => {
+  it('only presents Stripe ACTIVE as an unlocked current plan', () => {
     const s = read('src/components/BillingView.tsx');
-    expect(s).toContain("new Set(['active', 'trialing', 'past_due'])");
-    expect(s).toContain('manageableStatuses.has(status.subscription.status)');
+    expect(s).toContain("const entitlementActive = subscriptionStatus === 'active'");
+    expect(s).toContain('const currentPlan = entitlementActive ? status!.subscription!.plan : null;');
+    expect(s).toContain('Workspace access is locked until Stripe reports this subscription as active.');
+    expect(s).not.toContain("new Set(['active', 'trialing', 'past_due'])");
   });
 });
 
@@ -378,11 +380,11 @@ describe('Stripe catalog price discovery fallback', () => {
 
 
 describe('Manage billing visibility', () => {
-  it('always renders Manage billing when billing is configured, even without a current plan', () => {
+  it('always renders Manage billing when billing is configured, even without an active plan', () => {
     const s = read('src/components/BillingView.tsx');
-    expect(s).toContain('Billing management');
+    expect(s).toContain('No active workspace subscription');
     expect(s).toContain('Manage billing');
-    expect(s).not.toContain('{currentPlan && (');
+    expect(s).toContain('subscriptionNeedsAttention');
     expect(s).toContain("apiFetch('/api/billing/portal', { method: 'POST' })");
   });
 });
