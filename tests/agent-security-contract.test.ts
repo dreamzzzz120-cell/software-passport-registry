@@ -25,6 +25,10 @@ describe('agent security evidence layer contracts', () => {
     const migration = read('migrations/0133_agent_security_evidence_layer.sql');
     expect(migration).toContain("'prompt_injection_indicator'");
     expect(migration).toContain("'dangerous_tool_chain'");
+    expect(migration).toContain("'credential_exposure_indicator'");
+    expect(migration).toContain("'exfiltration_indicator'");
+    expect(migration).toContain("'tool_call_anomaly'");
+    expect(migration).toContain("'response_integrity_failure'");
     expect(migration).toContain("'execution_receipt'");
     expect(migration).toContain("'NOT_OBSERVED'");
     expect(migration).toContain("'UNKNOWN'");
@@ -35,6 +39,26 @@ describe('agent security evidence layer contracts', () => {
     expect((migration.match(/evidence_hash text NOT NULL/g) || []).length).toBeGreaterThanOrEqual(3);
     const route = read('src/routes/agent-security.ts');
     expect(route).toContain('evidenceHash: z.string().trim().min(16)');
+  });
+
+  it('prevents ingestion from self-asserting verification or storing obvious credential fields', () => {
+    const route = read('src/routes/agent-security.ts');
+    expect(route).toContain("const INGEST_VERIFICATION = ['OBSERVED','UNKNOWN']");
+    expect(route).toContain('credential-like field');
+    expect(route).toContain('UNSAFE_AGENT_METADATA');
+    expect(route).toContain('UNSAFE_EVENT_DETAIL');
+  });
+
+  it('treats capabilities as a current snapshot so revoked scope does not remain visible', () => {
+    const route = read('src/routes/agent-security.ts');
+    expect(route).toContain('DELETE FROM agent_capabilities');
+  });
+
+  it('requires evidence for successful execution receipts and rejects future-dated observations', () => {
+    const route = read('src/routes/agent-security.ts');
+    expect(route).toContain('UNPROVEN_EXECUTION_OUTCOME');
+    expect(route).toContain('EXECUTION_RECEIPT_EVIDENCE_REQUIRED');
+    expect(route).toContain('INVALID_OBSERVED_AT');
   });
 
   it('mounts the capability inside authenticated SPR rather than exposing a second public product', () => {
