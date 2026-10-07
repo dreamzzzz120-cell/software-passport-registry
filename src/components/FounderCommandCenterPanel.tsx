@@ -46,6 +46,13 @@ function observedCount(value: number | null) {
   return value === null ? 'Not verified' : String(value);
 }
 
+function connectionLabel(connection: Connection) {
+  if (connection.key === 'github_ci' && connection.status === 'error') return 'Connected — latest CI failed';
+  if (connection.status === 'ok') return 'Connected';
+  if (connection.status === 'not_configured') return 'Not configured';
+  return 'Connection error';
+}
+
 export default function FounderCommandCenterPanel() {
   const [data, setData] = useState<CommandCenterData | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -134,8 +141,11 @@ export default function FounderCommandCenterPanel() {
               >
                 <span className={DOT_CLASS[c.status]} style={{ marginTop: 4 }} />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-[var(--spr-text)]">{c.name}</p>
-                  <p className="text-xs text-[var(--spr-text-muted)]">{c.detail}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-medium text-[var(--spr-text)]">{c.name}</p>
+                    <span className="rounded border border-[var(--spr-border)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--spr-text-muted)]">{connectionLabel(c)}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-[var(--spr-text-muted)]">{c.detail}</p>
                   {guide && missing > 0 && <p className="mt-1 text-[11px] text-[var(--spr-amber)]">{missing} setting{missing === 1 ? '' : 's'} missing</p>}
                 </div>
                 {open ? <ChevronDown className="w-4 h-4 shrink-0 text-[var(--spr-text-muted)]" /> : <ChevronRight className="w-4 h-4 shrink-0 text-[var(--spr-text-muted)]" />}

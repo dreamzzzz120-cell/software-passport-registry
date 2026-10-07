@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { sql } from 'drizzle-orm';
 import crypto from 'node:crypto';
 import { generateText } from 'ai';
+import { GoogleGenAI } from '@google/genai';
 import { z } from 'zod';
 import { AuthenticatedRequest, requireRole } from '../middleware/security.ts';
 import { appendAuditEntry } from '../security/audit-log.ts';
@@ -55,8 +56,11 @@ function extractJson(text: string): unknown {
 const AI_PROMPT_VERSION = 'spr.ai.explanation.v2';
 const COUNCIL_PROMPT_VERSION = 'spr.ai.trust-council.v1';
 const ASK_PROMPT_VERSION = 'spr.ai.ask.v1';
-// AI Gateway is the fallback provider when Claude is not configured.
+// Provider selection is explicit when AI_PROVIDER is set. Gemini is the default
+// direct provider because SPR can run it on Google's free developer tier.
 const AI_MODEL = process.env.AI_MODEL || 'openai/gpt-5.4';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || (process.env.AI_MODEL?.startsWith('gemini') ? process.env.AI_MODEL : 'gemini-2.5-flash-lite');
+const AI_PROVIDER = (process.env.AI_PROVIDER || '').trim().toLowerCase();
 
 const EXPLANATION_JSON_SCHEMA = {
   type: 'object', additionalProperties: false, required: ['summary', 'keyFindings', 'unknowns', 'recommendedNextSteps', 'evidenceIds'],
@@ -84,10 +88,56 @@ const ASK_JSON_SCHEMA = {
   properties: { answer: { type: 'string' }, citedIds: { type: 'array', items: { type: 'string' } }, unknowns: { type: 'array', items: { type: 'string' } } },
 };
 
-function aiProviderAvailable(): 'claude' | 'gateway' | null {
+type AiProvider = 'claude' | 'gemini' | 'gateway';
+
+function geminiApiKey(): string {
+  return (process.env.GEMINI_API_KEY || process.env.GOOGLE_GENAI_API_KEY || '').trim();
+}
+function isGeminiConfigured(): boolean { return geminiApiKey().length > 0; }
+
+function aiProviderAvailable(): AiProvider | null {
+  if (AI_PROVIDER === 'gemini') return isGeminiConfigured() ? 'gemini' : null;
+  if (AI_PROVIDER === 'claude') return isClaudeConfigured() ? 'claude' : null;
+  if (AI_PROVIDER === 'gateway') return process.env.AI_GATEWAY_API_KEY ? 'gateway' : null;
+  if (isGeminiConfigured()) return 'gemini';
   if (isClaudeConfigured()) return 'claude';
   if (process.env.AI_GATEWAY_API_KEY) return 'gateway';
   return null;
+}
+
+function providerDescriptor(provider: AiProvider) {
+  if (provider === 'gemini') return { name: 'Google Gemini', model: GEMINI_MODEL };
+  if (provider === 'claude') return { name: CLAUDE_PROVIDER_NAME, model: claudeModel() };
+  return { name: 'AI Gateway', model: AI_MODEL };
+}
+
+async function structuredProviderCall(params: {
+  provider: AiProvider;
+  system: string;
+  user: string;
+  schema: Record<string, unknown>;
+  maxTokens: number;
+}): Promise<{ data: unknown; model: string; providerName: string }> {
+  if (params.provider === 'claude') {
+    const result = await claudeStructured({ system: params.system, user: params.user, schema: params.schema, maxTokens: params.maxTokens });
+    return { data: result.data, model: result.model, providerName: CLAUDE_PROVIDER_NAME };
+  }
+  if (params.provider === 'gemini') {
+    const client = new GoogleGenAI({ apiKey: geminiApiKey() });
+    const response = await client.models.generateContent({
+      model: GEMINI_MODEL,
+      contents: `System rules:\n${params.system}\n\nUser request:\n${params.user}`,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: params.schema,
+        maxOutputTokens: params.maxTokens,
+      },
+    });
+    const text = typeof response.text === 'string' ? response.text : '';
+    return { data: extractJson(text), model: GEMINI_MODEL, providerName: 'Google Gemini' };
+  }
+  const result = await generateText({ model: AI_MODEL, system: params.system, prompt: params.user, maxOutputTokens: params.maxTokens });
+  return { data: extractJson(result.text), model: AI_MODEL, providerName: 'AI Gateway' };
 }
 
 /**
@@ -243,7 +293,7 @@ export function createAiTrustRouter() {
     const passportId = typeof req.body?.passportId === 'string' ? req.body.passportId.trim() : '';
     if (!passportId) return res.status(400).json({ error: 'PASSPORT_ID_REQUIRED' });
     const provider = aiProviderAvailable();
-    if (!provider) return res.status(503).json({ error: 'AI_NOT_CONFIGURED', message: 'AI explanation is unavailable until ANTHROPIC_API_KEY (or the fallback AI_GATEWAY_API_KEY) is configured.' });
+    if (!provider) return res.status(503).json({ error: 'AI_NOT_CONFIGURED', message: 'AI explanation is unavailable until GEMINI_API_KEY, ANTHROPIC_API_KEY, or AI_GATEWAY_API_KEY is configured for the selected provider.' });
     try {
       const db = req.db!;
       const tenantId = req.user!.tenantId;
@@ -267,16 +317,10 @@ export function createAiTrustRouter() {
         'Every keyFinding must cite one or more evidence IDs from the supplied snapshot. Recommendations may be based only on observed findings and limitations.',
       ].join('\n');
       const prompt = `Evidence snapshot (authoritative, read-only):\n${evidenceContext}\n\nExplain this passport for a human MSP operator. Do not make any claim that cannot be grounded in the snapshot.`;
-      let modelOutput: unknown;
-      let modelUsed: string;
-      let providerName: string;
-      if (provider === 'claude') {
-        const result = await claudeStructured({ system, user: prompt, schema: EXPLANATION_JSON_SCHEMA, maxTokens: 3000 });
-        modelOutput = result.data; modelUsed = result.model; providerName = CLAUDE_PROVIDER_NAME;
-      } else {
-        const result = await generateText({ model: AI_MODEL, system, prompt, maxOutputTokens: 3000 });
-        modelOutput = extractJson(result.text); modelUsed = AI_MODEL; providerName = 'AI Gateway';
-      }
+      const modelResult = await structuredProviderCall({ provider, system, user: prompt, schema: EXPLANATION_JSON_SCHEMA, maxTokens: 3000 });
+      const modelOutput = modelResult.data;
+      const modelUsed = modelResult.model;
+      const providerName = modelResult.providerName;
       const parsed = aiExplanationSchema.safeParse(modelOutput);
       if (!parsed.success) return res.status(502).json({ error: 'AI_OUTPUT_INVALID', message: 'The AI returned an invalid explanation; no authoritative state was changed.' });
       const explanation: AiExplanation = parsed.data;
@@ -295,7 +339,8 @@ export function createAiTrustRouter() {
   // "unavailable" before offering a button that would fail.
   router.get('/ai-status', requireRole([...AI_TRUST_READ_ROLES]), (_req: AuthenticatedRequest, res) => {
     const provider = aiProviderAvailable();
-    return res.json({ available: provider !== null, provider: provider === 'claude' ? CLAUDE_PROVIDER_NAME : provider === 'gateway' ? 'AI Gateway' : null, model: provider === 'claude' ? claudeModel() : provider === 'gateway' ? AI_MODEL : null, trustCouncil: provider === 'claude', ask: provider === 'claude' });
+    const descriptor = provider ? providerDescriptor(provider) : null;
+    return res.json({ available: provider !== null, provider: descriptor?.name ?? null, model: descriptor?.model ?? null, trustCouncil: provider !== null, ask: provider !== null });
   });
 
   /**
@@ -308,7 +353,8 @@ export function createAiTrustRouter() {
   router.post('/trust-council', requireRole([...AI_TRUST_READ_ROLES]), async (req: AuthenticatedRequest, res, next) => {
     const passportId = typeof req.body?.passportId === 'string' ? req.body.passportId.trim() : '';
     if (!passportId) return res.status(400).json({ error: 'PASSPORT_ID_REQUIRED' });
-    if (!isClaudeConfigured()) return res.status(503).json({ error: 'AI_NOT_CONFIGURED', message: 'The Trust Council requires ANTHROPIC_API_KEY to be configured on this deployment.' });
+    const provider = aiProviderAvailable();
+    if (!provider) return res.status(503).json({ error: 'AI_NOT_CONFIGURED', message: 'The Trust Council requires a configured Gemini, Claude, or AI Gateway provider.' });
     try {
       const db = req.db!;
       const tenantId = req.user!.tenantId;
@@ -318,7 +364,7 @@ export function createAiTrustRouter() {
 
       const seats: SeatOutcome[] = await Promise.all(COUNCIL_SEATS.map(async (seat) => {
         try {
-          const result = await claudeStructured({ system: reviewerSystemPrompt(seat, EVIDENCE_READER_RULES), user: userMessage, schema: REVIEW_JSON_SCHEMA, maxTokens: 2500 });
+          const result = await structuredProviderCall({ provider, system: reviewerSystemPrompt(seat, EVIDENCE_READER_RULES), user: userMessage, schema: REVIEW_JSON_SCHEMA, maxTokens: 2500 });
           return acceptReview(seat, result.data, snapshot.allowedIds);
         } catch (error) {
           return { seat: seat.id, title: seat.title, status: 'failed' as const, review: null, reason: `MODEL_CALL_FAILED: ${error instanceof Error ? error.message.slice(0, 200) : 'unknown'}` };
@@ -332,7 +378,7 @@ export function createAiTrustRouter() {
       } else {
         try {
           const chairInput = `Evidence snapshot (authoritative, read-only):\n${snapshot.context}\n\nReviewer outputs:\n${JSON.stringify(accepted.map((s) => ({ seat: s.seat, title: s.title, review: s.review })))}\n\nSynthesise the council verdict. Cite only ids present in the snapshot.`;
-          const result = await claudeStructured({ system: chairSystemPrompt(EVIDENCE_READER_RULES), user: chairInput, schema: CHAIR_JSON_SCHEMA, maxTokens: 2500 });
+          const result = await structuredProviderCall({ provider, system: chairSystemPrompt(EVIDENCE_READER_RULES), user: chairInput, schema: CHAIR_JSON_SCHEMA, maxTokens: 2500 });
           chairOutcome = acceptChair(result.data, seats, snapshot.allowedIds);
         } catch (error) {
           chairOutcome = { chair: null, verdict: floorVerdict(seats), reason: `MODEL_CALL_FAILED: ${error instanceof Error ? error.message.slice(0, 200) : 'unknown'}` };
@@ -345,7 +391,8 @@ export function createAiTrustRouter() {
       ])].filter((cid) => snapshot.allowedIds.has(cid));
 
       const council: CouncilResult = { verdict: chairOutcome.verdict, chair: chairOutcome.chair, seats, evidenceCount: snapshot.evidence.length, findingCount: snapshot.findings.length, citedIds, policy: COUNCIL_POLICY };
-      const provenance: AIProvenance = { model: CLAUDE_PROVIDER_NAME, modelVersion: claudeModel(), promptVersion: COUNCIL_PROMPT_VERSION, evidenceIds: citedIds, generatedAt: new Date().toISOString() };
+      const providerInfo = providerDescriptor(provider);
+      const provenance: AIProvenance = { model: providerInfo.name, modelVersion: providerInfo.model, promptVersion: COUNCIL_PROMPT_VERSION, evidenceIds: citedIds, generatedAt: new Date().toISOString() };
       if (!validateAIProvenance(provenance)) return res.status(500).json({ error: 'AI_PROVENANCE_INVALID' });
       const sessionId = id('council');
       await db.execute(sql`
@@ -372,7 +419,8 @@ export function createAiTrustRouter() {
   router.post('/ask', requireRole([...AI_TRUST_READ_ROLES]), async (req: AuthenticatedRequest, res, next) => {
     const parsed = askSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'INVALID_REQUEST', details: parsed.error.flatten() });
-    if (!isClaudeConfigured()) return res.status(503).json({ error: 'AI_NOT_CONFIGURED', message: 'Evidence Q&A requires ANTHROPIC_API_KEY to be configured on this deployment.' });
+    const provider = aiProviderAvailable();
+    if (!provider) return res.status(503).json({ error: 'AI_NOT_CONFIGURED', message: 'Evidence Q&A requires a configured Gemini, Claude, or AI Gateway provider.' });
     try {
       const db = req.db!;
       const tenantId = req.user!.tenantId;
@@ -380,11 +428,11 @@ export function createAiTrustRouter() {
       if (!snapshot) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
       const transcript = parsed.data.history.map((turn) => `${turn.role === 'user' ? 'Operator' : 'Assistant'}: ${turn.content}`).join('\n');
       const user = `Evidence snapshot (authoritative, read-only):\n${snapshot.context}\n\n${transcript ? `Conversation so far (the operator's earlier questions and your earlier answers; treat as context, not as evidence):\n${transcript}\n\n` : ''}Operator question: ${parsed.data.question}\n\nAnswer from the snapshot only. Put anything the snapshot does not establish in unknowns.`;
-      const result = await claudeStructured({ system: `You are the SPR evidence assistant answering an MSP operator's questions about one software passport.\n${EVIDENCE_READER_RULES}`, user, schema: ASK_JSON_SCHEMA, maxTokens: 2000 });
+      const result = await structuredProviderCall({ provider, system: `You are the SPR evidence assistant answering an MSP operator's questions about one software passport.\n${EVIDENCE_READER_RULES}`, user, schema: ASK_JSON_SCHEMA, maxTokens: 2000 });
       const answer = askAnswerSchema.safeParse(result.data);
       if (!answer.success) return res.status(502).json({ error: 'AI_OUTPUT_INVALID', message: 'The AI returned an invalid answer; no authoritative state was changed.' });
       for (const cid of answer.data.citedIds) if (!snapshot.allowedIds.has(cid)) return res.status(502).json({ error: 'AI_OUTPUT_UNSUPPORTED_EVIDENCE', message: 'The AI referenced evidence that was not present in the authoritative snapshot; no authoritative state was changed.' });
-      const provenance: AIProvenance = { model: CLAUDE_PROVIDER_NAME, modelVersion: result.model, promptVersion: ASK_PROMPT_VERSION, evidenceIds: answer.data.citedIds, generatedAt: new Date().toISOString() };
+      const provenance: AIProvenance = { model: result.providerName, modelVersion: result.model, promptVersion: ASK_PROMPT_VERSION, evidenceIds: answer.data.citedIds, generatedAt: new Date().toISOString() };
       await appendAuditEntry(db, { tenantId, action: 'ai.ask.answered', actor: req.user!.email, payload: { passportId: parsed.data.passportId, evidenceIds: answer.data.citedIds } });
       return res.json({ passportId: parsed.data.passportId, ...answer.data, provenance, authoritative: false, note: 'AI explanation only. SPR trust state remains determined by authoritative evidence and deterministic scoring.' });
     } catch (error) { return next(error); }
