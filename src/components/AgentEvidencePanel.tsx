@@ -55,14 +55,14 @@ export default function AgentEvidencePanel({ passports }: { passports: SoftwareP
     return () => { cancelled = true; };
   }, [passportId]);
 
-  const cards = useMemo(() => summary ? [
+  const cards = useMemo<Array<[string, number, typeof Bot]>>(() => summary ? [
     ['Agents', summary.coverage.agents, Bot],
     ['MCP servers', summary.coverage.mcpServers, Cable],
     ['Capabilities', summary.coverage.capabilities, Terminal],
     ['Trust boundaries', summary.coverage.boundaries, Network],
     ['Unknown boundaries', summary.coverage.unknownBoundaries, AlertTriangle],
     ['Unverified handoffs', summary.coverage.unverifiedHandoffs, GitBranch],
-  ] as const : [], [summary]);
+  ] : [], [summary]);
 
   return <section className="spr-panel p-5">
     <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
