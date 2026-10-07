@@ -96,7 +96,7 @@ export default function AlertsView({ alerts, onAlertAction, role = 'Viewer' }: A
 }
 
 function SelectFilter({ icon, label, value, onChange, options }: { icon: ReactNode; label: string; value: string; onChange: (value: string) => void; options: string[] }) {
-  return <label className="flex items-center gap-2 rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-3 py-2.5 text-xs text-[var(--spr-text-muted)]">{icon}<span className="sr-only">{label}</span><select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} className="bg-transparent font-semibold text-[var(--spr-text)] outline-none">{options.map((option) => <option key={option} value={option}>{option === 'all' ? `All ${label.toLowerCase()}s` : option}</option>)}</select></label>;
+  return <label className="flex items-center gap-2 rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-3 py-2.5 text-xs text-[var(--spr-text-muted)]">{icon}<span className="sr-only">{label}</span><select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} className="bg-transparent font-semibold text-[var(--spr-text)] outline-none">{options.map((option) => <option key={option} value={option}>{option === 'all' ? `All ${label === 'Severity' ? 'severities' : label === 'Status' ? 'statuses' : `${label.toLowerCase()}s`}` : option}</option>)}</select></label>;
 }
 
 function Metric({ icon, label, value, tone }: { icon: ReactNode; label: string; value: number; tone: 'rose' | 'amber' | 'emerald' }) {
