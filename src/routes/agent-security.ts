@@ -111,7 +111,10 @@ export function createAgentSecurityRouter() {
             count(*) FILTER (WHERE asset_type='agent')::int AS agents,
             count(*) FILTER (WHERE asset_type='mcp_server')::int AS "mcpServers",
             count(*) FILTER (WHERE asset_type='mcp_server' AND verification_state<>'VERIFIED')::int AS "unverifiedMcp",
-            count(*) FILTER (WHERE asset_type='agent_config')::int AS "agentConfigs"
+            count(*) FILTER (WHERE asset_type='agent_config')::int AS "agentConfigs",
+            (SELECT count(DISTINCT c.agent_asset_id)::int FROM agent_capabilities c WHERE c.tenant_id=${tenantId} AND c.access_mode IN ('write','admin')) AS "writeCapableAssets",
+            (SELECT count(DISTINCT c.agent_asset_id)::int FROM agent_capabilities c WHERE c.tenant_id=${tenantId} AND c.access_mode='execute') AS "executeCapableAssets",
+            (SELECT count(*)::int FROM agent_relationships r WHERE r.tenant_id=${tenantId}) AS relationships
           FROM agent_assets
           WHERE tenant_id=${tenantId}
         `),
