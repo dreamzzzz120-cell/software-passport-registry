@@ -39,7 +39,7 @@ const QUICK_ACTIONS = [
 ];
 
 const SAFE_NAV_PATHS = new Set(['/dashboard', '/clients', '/passports', '/vendors', '/monitoring', '/compliance', '/reports', '/billing', '/settings', '/founder', '/white-label']);
-const SAFE_ACTION_ENDPOINTS = new Set(['/api/agent/v1/verify-software']);
+const SAFE_ACTION_ENDPOINTS = new Set(['/api/experience-agent/v1/verify-software']);
 const SAFE_CONFIRMED_ACTION_ENDPOINTS = new Set(['/api/scans', '/api/report-schedules', '/api/founder/distribution/discovery/run', '/api/founder/distribution/qualify-lead']);
 function isConfirmedActionEndpoint(endpoint: string) {
   return SAFE_CONFIRMED_ACTION_ENDPOINTS.has(endpoint)
@@ -190,7 +190,7 @@ export default function ExperienceAgent() {
     setBusy(true);
     let confirmationReceiptId: string | null = null;
     try {
-      const confirmationResponse = await apiFetch('/api/agent/v1/receipts/confirmation', {
+      const confirmationResponse = await apiFetch('/api/experience-agent/v1/receipts/confirmation', {
         method: 'POST',
         body: JSON.stringify({ action }),
         timeout: 30_000,
@@ -204,7 +204,7 @@ export default function ExperienceAgent() {
       const response = await apiFetch(action.endpoint, { method: action.method, body: JSON.stringify(action.payload), timeout: 30_000 });
       const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
       const ok = response.ok;
-      const outcomeResponse = await apiFetch('/api/agent/v1/receipts/outcome', {
+      const outcomeResponse = await apiFetch('/api/experience-agent/v1/receipts/outcome', {
         method: 'POST',
         body: JSON.stringify({
           parentReceiptId: confirmationReceiptId,
@@ -252,7 +252,7 @@ export default function ExperienceAgent() {
     setInput(''); setMessages((current) => [...current, { role: 'user', text }]); setBusy(true);
     try {
       const history = messages.slice(-12).map(({ role, text: messageText }) => ({ role, text: messageText }));
-      const response = await apiFetch('/api/agent/v1/command', { method: 'POST', body: JSON.stringify({ input: text, context: { path: window.location.pathname, history } }), timeout: 30_000 });
+      const response = await apiFetch('/api/experience-agent/v1/command', { method: 'POST', body: JSON.stringify({ input: text, context: { path: window.location.pathname, history } }), timeout: 30_000 });
       const payload = await response.json().catch(() => ({})) as CommandResponse;
       if (!response.ok) throw new Error(typeof payload.reply === 'string' ? payload.reply : 'SPR Agent could not complete the request.');
       const replyText = payload.reply || 'The request completed without a factual response.';

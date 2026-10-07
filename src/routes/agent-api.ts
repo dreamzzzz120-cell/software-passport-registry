@@ -267,7 +267,7 @@ export function createAgentApiRouter() {
       }
 
       const passportMatch = q.match(/(?:why did|explain|show|inspect|check|assess|verify)\s+(?:the\s+)?(?:passport|software)\s*[:#-]?\s*(.+)$/i) || q.match(/(?:verify|check|assess)\s+(.+)$/i);
-      if (passportMatch?.[1]?.trim()) return res.json({ schemaVersion: 'spr-experience-agent-v1', intent: 'passport', action: { type: 'verify', endpoint: '/api/agent/v1/verify-software', payload: { query: passportMatch[1].trim() } }, reply: `I’ll inspect “${passportMatch[1].trim()}” and return the observed records and their provenance. I will not invent a trust decision.` });
+      if (passportMatch?.[1]?.trim()) return res.json({ schemaVersion: 'spr-experience-agent-v1', intent: 'passport', action: { type: 'verify', endpoint: req.baseUrl === '/api/agent/v1' ? '/api/agent/v1/verify-software' : '/api/experience-agent/v1/verify-software', payload: { query: passportMatch[1].trim() } }, reply: `I’ll inspect “${passportMatch[1].trim()}” and return the observed records and their provenance. I will not invent a trust decision.` });
       if (/vendor|third.?party/.test(q) && /risk|review|check|assess/.test(q)) return res.json({ schemaVersion: 'spr-experience-agent-v1', intent: 'vendor_risk', path: '/vendors', reply: 'Opening Vendor Risk. Results there are based on observed evidence and findings.' });
       const conversational = await answerConversationally(db, tenantId, input, parsed.data.context, isFounder);
       return res.json({

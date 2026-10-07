@@ -16,7 +16,8 @@ import { evaluateVerification } from '../lib/verification/evaluateVerification.t
 
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30;
 const REPORT_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7;
-const REPORT_TYPES = ['executive', 'technical', 'msp', 'customer', 'compliance', 'vendor', 'auditor', 'evidence-ledger'];
+const REPORT_TYPES = ['executive', 'technical', 'msp', 'customer', 'compliance', 'vendor', 'auditor', 'evidence-ledger'] as const;
+const REPORT_TYPE_SET = new Set<string>(REPORT_TYPES);
 
 function base64url(input: string | Buffer) { return Buffer.from(input).toString('base64url'); }
 function signPublicPassportToken(passportId: string, tenantId: string, expiresAt: number) { if (!config.publicPassport.secret) throw new Error('Public Passport signing is not configured'); const payload = base64url(JSON.stringify({ v: 1, passportId, tenantId, exp: expiresAt })); const signature = crypto.createHmac('sha256', config.publicPassport.secret).update(payload).digest('base64url'); return `${payload}.${signature}`; }
@@ -26,7 +27,7 @@ export function verifyPublicPassportToken(token: string, passportId: string) { i
 // discriminator so a passport verification link can never be replayed against the
 // report endpoint (or vice versa) even though both are bearer tokens on the same key.
 function signPublicReportToken(passportId: string, tenantId: string, reportType: string, expiresAt: number) { if (!config.publicPassport.secret) throw new Error('Public Passport signing is not configured'); const payload = base64url(JSON.stringify({ v: 1, kind: 'report', passportId, tenantId, reportType, exp: expiresAt })); const signature = crypto.createHmac('sha256', config.publicPassport.secret).update(payload).digest('base64url'); return `${payload}.${signature}`; }
-export function verifyPublicReportToken(token: string, passportId: string) { if (!config.publicPassport.secret) return null; const parts = token.split('.'); if (parts.length !== 2 || !parts[0] || !parts[1] || token.length > 4096) return null; const expected = crypto.createHmac('sha256', config.publicPassport.secret).update(parts[0]).digest(); let supplied: Buffer; try { supplied = Buffer.from(parts[1], 'base64url'); } catch { return null; } if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) return null; try { const payload = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8')) as { v?: number; kind?: string; passportId?: string; tenantId?: string; reportType?: string; exp?: number }; if (payload.v !== 1 || payload.kind !== 'report' || payload.passportId !== passportId || !payload.tenantId || !payload.reportType || !payload.exp || payload.exp <= Math.floor(Date.now() / 1000)) return null; return payload; } catch { return null; } }
+export function verifyPublicReportToken(token: string, passportId: string) { if (!config.publicPassport.secret) return null; const parts = token.split('.'); if (parts.length !== 2 || !parts[0] || !parts[1] || token.length > 4096) return null; const expected = crypto.createHmac('sha256', config.publicPassport.secret).update(parts[0]).digest(); let supplied: Buffer; try { supplied = Buffer.from(parts[1], 'base64url'); } catch { return null; } if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) return null; try { const payload = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8')) as { v?: number; kind?: string; passportId?: string; tenantId?: string; reportType?: string; exp?: number }; if (payload.v !== 1 || payload.kind !== 'report' || payload.passportId !== passportId || !payload.tenantId || !payload.reportType || !REPORT_TYPE_SET.has(payload.reportType) || !payload.exp || payload.exp <= Math.floor(Date.now() / 1000)) return null; return payload; } catch { return null; } }
 
 // Free Review status tokens are signed with the same secret but carry their
 // own `kind` discriminator, following the same reasoning as the report
@@ -110,7 +111,8 @@ export function createPublicConnectRouter() {
 
   router.post('/public/v1/reports/:id/token', requireAuth, requireRole(['Owner', 'Admin', 'Operator']), async (req: AuthenticatedRequest, res, next) => {
     try {
-      const reportType = REPORT_TYPES.includes(String(req.body?.type)) ? String(req.body.type) : 'executive';
+      const requestedReportType = String(req.body?.type ?? 'executive');
+      const reportType = REPORT_TYPE_SET.has(requestedReportType) ? requestedReportType : 'executive';
       const db = req.db!;
       const passportId = req.params.id;
       const passport = (await db.execute(sql`SELECT id,tenant_id FROM passports WHERE id=${passportId} AND tenant_id=${req.user!.tenantId} LIMIT 1`) as any).rows?.[0];

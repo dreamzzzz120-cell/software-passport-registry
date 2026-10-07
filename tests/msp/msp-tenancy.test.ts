@@ -22,6 +22,7 @@ const routeFiles = fs.readdirSync(routesDir).filter((name) => name.endsWith('.ts
 // comments, not assumed.
 const EXEMPTIONS: Record<string, string> = {
   'agent-api.ts': 'requireAuth-gated; queries route through req.db (tenant-scoped) per file header.',
+  'experience-agent-routing.ts': 'Router-mounting wrapper only; delegates to requireAuth-gated agent-api.ts and performs no database reads or writes. Legacy compatibility is bounded to known methods and paths; supplied API keys stay on the machine router.',
   'auth.ts': 'requireAuth-gated per-route; /auth/workspace is pre-membership signup (no tenant yet by definition); founder routes carry requireFounder.',
   'billing.ts': 'requireAuth-gated; stripeWebhookHandler resolves tenantId from the verified Stripe event/metadata, not from caller input.',
   'commercial.ts': 'requireAuth-gated throughout.',

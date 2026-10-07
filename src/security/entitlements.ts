@@ -15,7 +15,7 @@ const PATH_CAPABILITIES: Array<{ capability: Capability; test: (path: string) =>
   // live: connect a repo, save credentials) are core workspace function and
   // must not be gated behind it -- a paying MSP Starter customer was locked
   // out of connecting GitHub the moment their subscription activated.
-  { capability: 'api', test: p => p.includes('/agent/v1') || p === '/api/connect' || p.startsWith('/api/connect/') || p.includes('/api/integrations/connect') },
+  { capability: 'api', test: p => p.includes('/agent/v1') || p.includes('/experience-agent/v1') || p === '/api/connect' || p.startsWith('/api/connect/') || p.includes('/api/integrations/connect') },
   // No path maps to enterprise_controls: /api/organization/* (team, branding,
   // invites) and /api/tenant/* (offboarding, deletion requests) are basic
   // workspace administration and a customer's own data rights, not an

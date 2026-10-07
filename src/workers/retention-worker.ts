@@ -103,7 +103,7 @@ export async function purgeExpiredScanFileInventory(
   return result;
 }
 
-export async function runRetentionWorkerLoop(): Promise<void> {
+export async function runRetentionWorkerOnce(): Promise<void> {
   const pool = createWorkerPool();
   try {
     await pool.query(`DELETE FROM notification_outbox n USING retention_policies r WHERE n.tenant_id=r.tenant_id AND n.created_at < CURRENT_TIMESTAMP - (r.notification_days || ' days')::interval`);
@@ -119,5 +119,11 @@ export async function runRetentionWorkerLoop(): Promise<void> {
     await purgeExpiredAnonymousIntake(pool);
     await purgeExpiredScanFileInventory(pool);
   } finally { await pool.end(); }
-  await new Promise(resolve => setTimeout(resolve, RETENTION_POLL_MS));
+}
+
+export async function runRetentionWorkerLoop(): Promise<void> {
+  for (;;) {
+    await runRetentionWorkerOnce();
+    await new Promise(resolve => setTimeout(resolve, RETENTION_POLL_MS));
+  }
 }

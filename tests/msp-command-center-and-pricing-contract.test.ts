@@ -112,7 +112,7 @@ describe('SPR MSP operations — evidence-backed revenue opportunities', () => {
 
   it('loads opportunities from Revenue Engine v2 rather than calculating synthetic gap pricing', () => {
     const s = source();
-    expect(s).toContain(code`apiFetch('/api/agent/v1/revenue-opportunities'`);
+    expect(s).toContain(code`apiFetch('/api/experience-agent/v1/revenue-opportunities'`);
     expect(s).toContain(code`catalog: {}`);
     expect(s).toContain(code`Price not configured`);
     expect(s).not.toContain(code`* 49`);

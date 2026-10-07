@@ -5,7 +5,7 @@ import { runSecurityScannerLoop } from './src/workers/security-scanner-worker.ts
 import { runIntakeScannerLoop } from './src/workers/intake-scan-worker.ts';
 import { runTrustMonitoringWorkerLoop } from './src/workers/trust-monitoring-worker.ts';
 import { runNotificationWorkerLoop } from './src/workers/notification-worker.ts';
-import { runRetentionWorkerLoop } from './src/workers/retention-worker.ts';
+import { runRetentionWorkerOnce } from './src/workers/retention-worker.ts';
 import { runReportScheduleWorkerLoop } from './src/workers/report-schedule-worker.ts';
 import { runDistributionWorkerLoop } from './src/workers/distribution-worker.ts';
 import { runPublicRepositoryAgentTeamLoop } from './src/agents/public-repository-team-v2.ts';
@@ -25,7 +25,7 @@ const jobs: Record<JobName, () => Promise<void>> = {
   intake: runIntakeScannerLoop,
   'trust-monitoring': runTrustMonitoringWorkerLoop,
   notifications: runNotificationWorkerLoop,
-  retention: runRetentionWorkerLoop,
+  retention: runRetentionWorkerOnce,
   'report-schedules': runReportScheduleWorkerLoop,
   distribution: runDistributionWorkerLoop,
   'registry-crawler': runPublicRepositoryAgentTeamLoop,
