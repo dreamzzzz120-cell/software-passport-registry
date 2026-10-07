@@ -265,9 +265,10 @@ export default function MSPCommandCenter({ clients, alerts, passports, role, onS
       <div className="ml-auto relative"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--spr-text-faint)]" /><input aria-label="Search clients" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search clients" className="w-48 rounded-lg border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] py-2 pl-9 pr-3 text-xs text-[var(--spr-text)] outline-none focus:border-[var(--spr-highlight)]" /></div>
     </nav>
 
-    <header className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
-      <div><div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[.2em] text-[var(--spr-highlight)]"><Network className="h-4 w-4" /> MSP control plane</div><h1 className="mt-2 text-3xl font-bold tracking-tight text-[var(--spr-text)] md:text-4xl">Trust Network</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--spr-text-muted)]">A live view of software trust across your client environment. See what changed, what needs attention, and where your team can act.</p></div>
-      <div className="flex flex-wrap gap-2">
+    <header className="rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-6 md:p-8">
+      <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
+        <div><div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[.2em] text-[var(--spr-highlight)]"><Network className="h-4 w-4" /> MSP command plane</div><h1 className="mt-2 text-3xl font-bold tracking-tight text-[var(--spr-text)] md:text-4xl">One queue for trust, change, and client action.</h1><p className="mt-3 max-w-3xl text-sm leading-7 text-[var(--spr-text-muted)]">Start with what changed. See which client is affected, whether evidence is fresh, who owns the work, and what SPR can actually prove. This page does not convert missing evidence into green status.</p></div>
+        <div className="flex flex-wrap gap-2">
         <div className="relative">
           <button onClick={() => setClientSwitcherOpen((open) => !open)} disabled={clients.length === 0} className="inline-flex items-center gap-2 rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] px-4 py-2.5 text-sm font-semibold text-[var(--spr-text)] disabled:opacity-50"><User className="h-4 w-4" /> Switch client</button>
           {clientSwitcherOpen && clients.length > 0 && (
@@ -280,6 +281,13 @@ export default function MSPCommandCenter({ clients, alerts, passports, role, onS
         </div>
         <button onClick={() => onNavigate('/clients')} className="inline-flex items-center gap-2 rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] px-4 py-2.5 text-sm font-semibold text-[var(--spr-text)]"><Users className="h-4 w-4" />Add client</button>
         <button onClick={() => onNavigate('/passports')} className="inline-flex items-center gap-2 rounded-xl bg-[var(--spr-accent)] px-4 py-2.5 text-sm font-semibold text-white"><Layers className="h-4 w-4" />Add software</button>
+        </div>
+      </div>
+      <div className="mt-6 grid gap-3 md:grid-cols-4">
+        <CommandPrinciple label="Evidence" value={evidenceCoverage.pct == null ? 'Not measured' : `${evidenceCoverage.pct}% verified`} />
+        <CommandPrinciple label="Software state" value={softwareVerification.total ? `${softwareVerification.verified}/${softwareVerification.total} verified` : 'No software observed'} />
+        <CommandPrinciple label="Freshness" value={softwareVerification.freshnessPct == null ? 'Not measured' : `${softwareVerification.freshnessPct}% fresh`} />
+        <CommandPrinciple label="Attention" value={active.length ? `${active.length} unresolved` : 'No unresolved findings'} />
       </div>
     </header>
 
@@ -405,3 +413,6 @@ export default function MSPCommandCenter({ clients, alerts, passports, role, onS
     </div>}
   </div>;
 }
+
+
+function CommandPrinciple({ label, value }: { label: string; value: string }) { return <div className="rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] p-4"><div className="text-[11px] font-bold uppercase tracking-[.14em] text-[var(--spr-text-faint)]">{label}</div><div className="mt-2 text-sm font-semibold text-[var(--spr-text)]">{value}</div></div>; }
