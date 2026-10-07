@@ -74,6 +74,7 @@ const STATUS_LABEL: Record<LiveCatalogItem['credentialStatus'], string> = {
 };
 
 function responseError(data: any, fallback: string) {
+  if (data?.error === 'INTEGRATION_MASTER_KEY_MISSING' || data?.error === 'INTEGRATION_MASTER_KEY_INVALID') return 'SPR cannot securely save integration credentials right now. Ask the workspace administrator to check the server encryption configuration, then retry.';
   if (typeof data?.error === 'string') return data.error;
   return fallback;
 }
@@ -363,11 +364,11 @@ export default function IntegrationsView({ passports = [], clients = [], onNavig
                 <div className="space-y-2 spr-panel-alt p-3">
                   {fields.map((field) => (
                     <div key={field.key}>
-                      <label className="text-[12px] font-bold text-[var(--spr-text-muted)]">{field.label}{field.required ? ' *' : ''}</label>
+                      <label htmlFor={`integration-${item.provider}-${field.key}`} className="text-[12px] font-bold text-[var(--spr-text-muted)]">{field.label}{field.required ? ' *' : ''}</label>
                       {field.type === 'textarea' ? (
-                        <textarea rows={5} placeholder={field.placeholder} value={credentialValues[field.key] || ''} onChange={(e) => setCredentialValues((current) => ({ ...current, [field.key]: e.target.value }))} className="mt-0.5 w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2.5 py-1.5 text-xs text-[var(--spr-text)] font-mono resize-y" />
+                        <textarea id={`integration-${item.provider}-${field.key}`} autoComplete="off" spellCheck={false} rows={5} placeholder={field.placeholder} value={credentialValues[field.key] || ''} onChange={(e) => setCredentialValues((current) => ({ ...current, [field.key]: e.target.value }))} className="mt-0.5 w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2.5 py-1.5 text-xs text-[var(--spr-text)] font-mono resize-y" />
                       ) : (
-                        <input type={field.type} placeholder={field.placeholder} value={credentialValues[field.key] || ''} onChange={(e) => setCredentialValues((current) => ({ ...current, [field.key]: e.target.value }))} className="mt-0.5 w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2.5 py-1.5 text-xs text-[var(--spr-text)]" />
+                        <input id={`integration-${item.provider}-${field.key}`} autoComplete="off" spellCheck={false} type={field.type} placeholder={field.placeholder} value={credentialValues[field.key] || ''} onChange={(e) => setCredentialValues((current) => ({ ...current, [field.key]: e.target.value }))} className="mt-0.5 w-full rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-sunken)] px-2.5 py-1.5 text-xs text-[var(--spr-text)]" />
                       )}
                     </div>
                   ))}

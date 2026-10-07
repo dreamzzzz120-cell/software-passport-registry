@@ -174,7 +174,7 @@ export default function MSPOperationsCommandCenter(props: Props) {
         </div>
         <div className="mt-7 flex flex-wrap gap-2">
           <ActionButton icon={<Users />} label="Client portfolio" onClick={() => onNavigate('/clients')} />
-          <ActionButton icon={<Layers3 />} label="Software coverage" onClick={() => onNavigate('/passports')} />
+          <ActionButton icon={<Layers3 />} label="Software coverage" onClick={() => onNavigate('/coverage')} />
           <ActionButton icon={<Activity />} label="Continuous verification" onClick={() => onNavigate('/monitoring')} />
           <ActionButton icon={<FileCheck2 />} label="Reports & exports" onClick={() => onNavigate('/reports')} />
           <ActionButton icon={<BriefcaseBusiness />} label="Billing & service" onClick={() => onNavigate('/billing')} />

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { workspaceIdentity } from './lib/workspaceIdentity';
 import { getRedirectResult, onAuthStateChanged, signOut, type User } from './lib/supabase-auth';
 import type { Alert, Client, Integration, Scan, SoftwarePassport, Vendor } from './types';
 import { apiFetch } from './utils/apiClient';
@@ -377,9 +378,13 @@ export default function App() {
       }
 
       if (!cancelled) setDataStatus('loading');
-      const responses = await Promise.all([
+      const results = await Promise.allSettled([
         apiFetch('/api/user/me'), apiFetch('/api/scans'), apiFetch('/api/trust-loop/findings'), apiFetch('/api/user/passports'), apiFetch('/api/user/clients'), apiFetch('/api/integrations'), apiFetch('/api/vendors'),
       ]);
+      if (cancelled) return;
+      // A secondary endpoint's network failure must not invalidate a profile
+      // that the identity endpoint successfully confirmed.
+      const responses = results.map(result => result.status === 'fulfilled' ? result.value : new Response(null, { status: 503 }));
       const [me, scansResponse, findingsResponse, passportsResponse, clientsResponse, integrationsResponse, vendorsResponse] = responses;
       // Only the authoritative identity probe may invalidate the browser
       // session. Auxiliary endpoints can independently return 401 because of
@@ -397,9 +402,14 @@ export default function App() {
       }
       if (me.ok) {
         const data = await me.json().catch(() => null);
+        const identity = workspaceIdentity(data, user.uid);
+        if (!identity) {
+          if (!cancelled) { setIdentityState('error'); setDataStatus('error'); }
+          return;
+        }
         if (!cancelled) {
-          setRole(String(data?.role || 'Viewer'));
-          setIsFounder(data?.isFounder === true);
+          setRole(identity.role);
+          setIsFounder(identity.isFounder);
           setIdentityUid(user.uid);
           setIdentityState('ready');
         }
@@ -463,7 +473,7 @@ export default function App() {
       if (!cancelled) setIdentityState('error');
     });
     return () => { cancelled = true; };
-  }, [user, reloadKey]);
+  }, [user?.uid, user?.emailVerified, reloadKey]);
 
   useEffect(() => {
     const refresh = () => { if (user) window.location.reload(); };

@@ -17,11 +17,15 @@ import { computeTrustVector, type TrustVectorInput } from '../trust/trust-vector
 
 const limiter = rateLimit({ windowMs: 60 * 1000, limit: 120, standardHeaders: 'draft-7', legacyHeaders: false, validate: { trustProxy: false } });
 
-export async function loadTrustVectorInput(db: any, tenantId: string, passportId: string): Promise<TrustVectorInput | null> {
-  const passport = ((await db.execute(sql`SELECT id, publisher, sbom, evidence_completeness AS "evidenceCompleteness" FROM passports WHERE id=${passportId} AND tenant_id=${tenantId} LIMIT 1`)) as any).rows?.[0];
+export async function loadTrustVectorPassport(db: any, tenantId: string, passportId: string, clientId?: string) {
+  return ((await db.execute(sql`SELECT id, publisher, sbom, evidence_completeness AS "evidenceCompleteness" FROM passports WHERE id=${passportId} AND tenant_id=${tenantId} AND ${clientId === undefined ? sql`TRUE` : sql`client_id=${clientId}`} LIMIT 1`)) as any).rows?.[0] ?? null;
+}
+
+export async function loadTrustVectorInput(db: any, tenantId: string, passportId: string, clientId?: string): Promise<TrustVectorInput | null> {
+  const passport = await loadTrustVectorPassport(db, tenantId, passportId, clientId);
   if (!passport) return null;
   let sbomComponentCount: number | null = null;
-  try { const parsed = typeof passport.sbom === 'string' ? JSON.parse(passport.sbom) : passport.sbom; if (Array.isArray(parsed)) sbomComponentCount = parsed.length; } catch { sbomComponentCount = null; }
+  try { const parsed = typeof passport.sbom === 'string' ? JSON.parse(passport.sbom) : passport.sbom; if (Array.isArray(parsed)) sbomComponentCount = parsed.length; else if (Array.isArray(parsed?.components)) sbomComponentCount = parsed.components.length; } catch { sbomComponentCount = null; }
 
   const jobs = ((await db.execute(sql`SELECT job_type AS "jobType", max(updated_at) AS "completedAt" FROM agent_jobs WHERE tenant_id=${tenantId} AND passport_id=${passportId} AND status='Completed' GROUP BY job_type`)) as any).rows ?? [];
   const completedAt = (type: string) => { const row = jobs.find((j: any) => j.jobType === type); return row?.completedAt ? new Date(row.completedAt).toISOString() : null; };
@@ -33,7 +37,7 @@ export async function loadTrustVectorInput(db: any, tenantId: string, passportId
   const monitoring = ((await db.execute(sql`SELECT id, enabled, last_status AS "lastStatus", last_successful_at AS "lastSuccessfulAt" FROM monitoring_configurations WHERE tenant_id=${tenantId} AND passport_id=${passportId}`)) as any).rows ?? [];
   const tasks = ((await db.execute(sql`SELECT id, status FROM trust_remediation_work_items WHERE tenant_id=${tenantId} AND passport_id=${passportId}`)) as any).rows ?? [];
 
-  const iso = (v: unknown) => (v ? new Date(v as string).toISOString() : null);
+  const iso = (v: unknown) => { if (!v) return null; const date = new Date(v as string); return Number.isFinite(date.getTime()) ? date.toISOString() : null; };
   return {
     passportId,
     now: Date.now(),
@@ -54,13 +58,17 @@ export async function loadTrustVectorInput(db: any, tenantId: string, passportId
 export function createTrustVectorRouter() {
   const router = Router();
   router.use(limiter, requireAuth, rateLimiter);
+  router.use((req: AuthenticatedRequest, res, next) => {
+    if (req.user!.role === 'Client' && !req.user!.clientId) return res.status(403).json({ error: 'CLIENT_SCOPE_REQUIRED' });
+    return next();
+  });
 
 
   router.get('/:passportId', async (req: AuthenticatedRequest, res, next) => {
     try {
       const tenantId = req.user!.tenantId;
       const passportId = String(req.params.passportId ?? '');
-      const input = await loadTrustVectorInput(req.db!, tenantId, passportId);
+      const input = await loadTrustVectorInput(req.db!, tenantId, passportId, req.user!.role === 'Client' ? req.user!.clientId! : undefined);
       if (!input) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
       const vector = computeTrustVector(input);
       const id = `tv_${crypto.randomUUID().replace(/-/g, '')}`;
@@ -71,6 +79,8 @@ export function createTrustVectorRouter() {
 
   router.get('/:passportId/history', async (req: AuthenticatedRequest, res, next) => {
     try {
+      const passport = await loadTrustVectorPassport(req.db!, req.user!.tenantId, String(req.params.passportId), req.user!.role === 'Client' ? req.user!.clientId! : undefined);
+      if (!passport) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
       const rows = ((await req.db!.execute(sql`SELECT id, version, vector_json AS vector, computed_at AS "computedAt" FROM passport_trust_vectors WHERE tenant_id=${req.user!.tenantId} AND passport_id=${String(req.params.passportId)} ORDER BY computed_at DESC LIMIT 30`)) as any).rows ?? [];
       return res.json({ history: rows });
     } catch (error) { return next(error); }
