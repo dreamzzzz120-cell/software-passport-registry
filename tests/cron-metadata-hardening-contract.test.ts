@@ -19,9 +19,16 @@ describe('pg_cron metadata hardening', () => {
     expect(sql).toContain('ALTER POLICY cron_job_run_details_policy ON cron.job_run_details TO postgres');
   });
 
-  it('keeps postgres access and removes client schema usage', () => {
+  it('keeps postgres access and removes client schema usage when the migration role owns the objects', () => {
     expect(sql).toContain('GRANT SELECT ON TABLE cron.job TO postgres');
     expect(sql).toContain('GRANT USAGE ON SCHEMA cron TO postgres');
     expect(sql).toContain('REVOKE USAGE ON SCHEMA cron FROM PUBLIC');
+  });
+
+  it('fails safely on Supabase-managed pg_cron ownership instead of blocking migrations', () => {
+    expect(sql).toContain('pg_get_userbyid(c.relowner) = current_user');
+    expect(sql).toContain('pg_get_userbyid(n.nspowner) = current_user');
+    expect(sql).toContain('Skipping cron.job ACL/policy hardening');
+    expect(sql).toContain('Skipping cron schema ACL hardening');
   });
 });
