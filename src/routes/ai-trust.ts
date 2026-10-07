@@ -32,6 +32,55 @@ const observationSchema = z.object({
   detail: z.string().trim().max(4000).default(''),
 }).strict();
 
+const agentAssetSchema = z.object({
+  passportId: z.string().trim().min(1).max(255),
+  name: z.string().trim().min(1).max(255),
+  agentType: z.enum(['assistant','autonomous_agent','orchestrator','worker','mcp_client','mcp_server','tool_agent','coding_agent','unknown']),
+  provider: z.string().trim().max(255).optional().default(''),
+  modelFamily: z.string().trim().max(255).optional().default(''),
+  modelVersion: z.string().trim().max(255).optional().default(''),
+  runtime: z.string().trim().max(255).optional().default(''),
+  environment: z.string().trim().max(255).optional().default(''),
+  source: z.string().trim().min(1).max(500),
+  sourceRef: z.string().trim().max(1000).optional().default(''),
+  observationState: z.enum(['OBSERVED','PARTIAL','UNKNOWN','UNOBSERVED']).default('OBSERVED'),
+}).strict();
+
+const trustBoundarySchema = z.object({
+  passportId: z.string().trim().min(1).max(255),
+  sourceAssetId: z.string().trim().max(255).optional(),
+  destinationAssetId: z.string().trim().max(255).optional(),
+  boundaryType: z.string().trim().min(1).max(255),
+  transport: z.string().trim().max(255).optional().default(''),
+  direction: z.string().trim().max(120).optional().default(''),
+  contentType: z.string().trim().max(255).optional().default(''),
+  authorizationRequired: z.boolean().optional(),
+  verificationPresent: z.boolean().optional(),
+  verificationMethod: z.string().trim().max(500).optional().default(''),
+  evidenceId: z.string().trim().max(255).optional().default(''),
+  state: z.enum(['OBSERVED','VERIFIED','UNVERIFIED','UNKNOWN']).default('UNKNOWN'),
+}).strict();
+
+const agentCapabilitySchema = z.object({
+  passportId: z.string().trim().min(1).max(255),
+  agentAssetId: z.string().trim().min(1).max(255),
+  capability: z.string().trim().min(1).max(255),
+  observationState: z.enum(['DECLARED','OBSERVED','INFERRED','UNKNOWN']).default('UNKNOWN'),
+  evidenceId: z.string().trim().max(255).optional().default(''),
+  detail: z.string().trim().max(2000).optional().default(''),
+}).strict();
+
+const agentHandoffSchema = z.object({
+  passportId: z.string().trim().min(1).max(255),
+  parentAgentId: z.string().trim().min(1).max(255),
+  childAgentId: z.string().trim().min(1).max(255),
+  requestHash: z.string().trim().max(255).optional().default(''),
+  rawResultHash: z.string().trim().max(255).optional().default(''),
+  summaryHash: z.string().trim().max(255).optional().default(''),
+  verificationState: z.enum(['VERIFIED','UNVERIFIED','UNKNOWN']).default('UNKNOWN'),
+  evidenceId: z.string().trim().max(255).optional().default(''),
+}).strict();
+
 const aiExplanationSchema = z.object({
   summary: z.string().trim().min(1).max(3000),
   keyFindings: z.array(z.object({
@@ -387,6 +436,122 @@ export function createAiTrustRouter() {
       const provenance: AIProvenance = { model: CLAUDE_PROVIDER_NAME, modelVersion: result.model, promptVersion: ASK_PROMPT_VERSION, evidenceIds: answer.data.citedIds, generatedAt: new Date().toISOString() };
       await appendAuditEntry(db, { tenantId, action: 'ai.ask.answered', actor: req.user!.email, payload: { passportId: parsed.data.passportId, evidenceIds: answer.data.citedIds } });
       return res.json({ passportId: parsed.data.passportId, ...answer.data, provenance, authoritative: false, note: 'AI explanation only. SPR trust state remains determined by authoritative evidence and deterministic scoring.' });
+    } catch (error) { return next(error); }
+  });
+
+
+  // Passport-scoped AI/agent evidence. These endpoints never compute a safety
+  // score and never convert the presence of a model into a trust claim.
+  router.get('/passports/:passportId/agent-trust', requireRole([...AI_TRUST_READ_ROLES]), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const passportId = String(req.params.passportId);
+      const passport = ((await db.execute(sql`SELECT id FROM passports WHERE id=${passportId} AND tenant_id=${tenantId} LIMIT 1`)) as any).rows?.[0];
+      if (!passport) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
+
+      const [agentsResult, boundariesResult, capabilitiesResult, mcpServersResult, mcpToolsResult, handoffsResult] = await Promise.all([
+        db.execute(sql`SELECT * FROM agent_assets WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY last_observed_at DESC`),
+        db.execute(sql`SELECT * FROM agent_trust_boundaries WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY last_observed_at DESC`),
+        db.execute(sql`SELECT * FROM agent_capabilities WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY observed_at DESC`),
+        db.execute(sql`SELECT * FROM agent_mcp_servers WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY observed_at DESC`),
+        db.execute(sql`SELECT * FROM agent_mcp_tools WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY observed_at DESC`),
+        db.execute(sql`SELECT * FROM agent_handoffs WHERE tenant_id=${tenantId} AND passport_id=${passportId} ORDER BY observed_at DESC`),
+      ]);
+      const agents = (agentsResult as any).rows ?? [];
+      const boundaries = (boundariesResult as any).rows ?? [];
+      const capabilities = (capabilitiesResult as any).rows ?? [];
+      const mcpServers = (mcpServersResult as any).rows ?? [];
+      const mcpTools = (mcpToolsResult as any).rows ?? [];
+      const handoffs = (handoffsResult as any).rows ?? [];
+      return res.json({
+        passportId,
+        coverage: {
+          agents: agents.length,
+          mcpServers: mcpServers.length,
+          mcpTools: mcpTools.length,
+          capabilities: capabilities.length,
+          boundaries: boundaries.length,
+          handoffs: handoffs.length,
+          unknownBoundaries: boundaries.filter((row: any) => String(row.state).toUpperCase() === 'UNKNOWN').length,
+          unverifiedHandoffs: handoffs.filter((row: any) => ['UNVERIFIED','UNKNOWN'].includes(String(row.verification_state).toUpperCase())).length,
+        },
+        agents, boundaries, capabilities, mcpServers, mcpTools, handoffs,
+        authoritative: true,
+        note: 'Observed evidence only. Missing records remain UNKNOWN and this endpoint does not assert that any model or agent is safe.',
+      });
+    } catch (error) { return next(error); }
+  });
+
+  router.post('/agent-assets', requireRole(['Owner','Admin','Operator']), async (req: AuthenticatedRequest, res, next) => {
+    const parsed = agentAssetSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'INVALID_PAYLOAD', details: parsed.error.flatten() });
+    try {
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const p = parsed.data;
+      const passport = ((await db.execute(sql`SELECT id FROM passports WHERE id=${p.passportId} AND tenant_id=${tenantId} LIMIT 1`)) as any).rows?.[0];
+      if (!passport) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
+      const assetId = id('agent');
+      const now = new Date().toISOString();
+      await db.execute(sql`INSERT INTO agent_assets
+        (id,tenant_id,passport_id,name,agent_type,provider,model_family,model_version,runtime,environment,source,source_ref,observation_state,first_observed_at,last_observed_at,created_at,updated_at)
+        VALUES (${assetId},${tenantId},${p.passportId},${p.name},${p.agentType},${p.provider || null},${p.modelFamily || null},${p.modelVersion || null},${p.runtime || null},${p.environment || null},${p.source},${p.sourceRef || null},${p.observationState},${now},${now},${now},${now})`);
+      await appendAuditEntry(db, { tenantId, action: 'agent_evidence.asset_observed', actor: req.user!.email, payload: { passportId: p.passportId, assetId, source: p.source, observationState: p.observationState } });
+      return res.status(201).json({ id: assetId, ...p, firstObservedAt: now, lastObservedAt: now });
+    } catch (error) { return next(error); }
+  });
+
+  router.post('/trust-boundaries', requireRole(['Owner','Admin','Operator']), async (req: AuthenticatedRequest, res, next) => {
+    const parsed = trustBoundarySchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'INVALID_PAYLOAD', details: parsed.error.flatten() });
+    try {
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const p = parsed.data;
+      const passport = ((await db.execute(sql`SELECT id FROM passports WHERE id=${p.passportId} AND tenant_id=${tenantId} LIMIT 1`)) as any).rows?.[0];
+      if (!passport) return res.status(404).json({ error: 'PASSPORT_NOT_FOUND' });
+      const boundaryId = id('boundary');
+      const now = new Date().toISOString();
+      await db.execute(sql`INSERT INTO agent_trust_boundaries
+        (id,tenant_id,passport_id,source_asset_id,destination_asset_id,boundary_type,transport,direction,content_type,authorization_required,verification_present,verification_method,evidence_id,state,first_observed_at,last_observed_at)
+        VALUES (${boundaryId},${tenantId},${p.passportId},${p.sourceAssetId || null},${p.destinationAssetId || null},${p.boundaryType},${p.transport || null},${p.direction || null},${p.contentType || null},${p.authorizationRequired ?? null},${p.verificationPresent ?? null},${p.verificationMethod || null},${p.evidenceId || null},${p.state},${now},${now})`);
+      await appendAuditEntry(db, { tenantId, action: 'agent_evidence.boundary_observed', actor: req.user!.email, payload: { passportId: p.passportId, boundaryId, state: p.state, evidenceId: p.evidenceId || null } });
+      return res.status(201).json({ id: boundaryId, ...p, firstObservedAt: now, lastObservedAt: now });
+    } catch (error) { return next(error); }
+  });
+
+  router.post('/capabilities', requireRole(['Owner','Admin','Operator']), async (req: AuthenticatedRequest, res, next) => {
+    const parsed = agentCapabilitySchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'INVALID_PAYLOAD', details: parsed.error.flatten() });
+    try {
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const p = parsed.data;
+      const owner = ((await db.execute(sql`SELECT id FROM agent_assets WHERE id=${p.agentAssetId} AND tenant_id=${tenantId} AND passport_id=${p.passportId} LIMIT 1`)) as any).rows?.[0];
+      if (!owner) return res.status(404).json({ error: 'AGENT_ASSET_NOT_FOUND' });
+      const capabilityId = id('cap');
+      const now = new Date().toISOString();
+      await db.execute(sql`INSERT INTO agent_capabilities (id,tenant_id,passport_id,agent_asset_id,capability,observation_state,evidence_id,detail,observed_at)
+        VALUES (${capabilityId},${tenantId},${p.passportId},${p.agentAssetId},${p.capability},${p.observationState},${p.evidenceId || null},${p.detail || null},${now})`);
+      return res.status(201).json({ id: capabilityId, ...p, observedAt: now });
+    } catch (error) { return next(error); }
+  });
+
+  router.post('/handoffs', requireRole(['Owner','Admin','Operator']), async (req: AuthenticatedRequest, res, next) => {
+    const parsed = agentHandoffSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'INVALID_PAYLOAD', details: parsed.error.flatten() });
+    try {
+      const db = req.db!;
+      const tenantId = req.user!.tenantId;
+      const p = parsed.data;
+      const agents = ((await db.execute(sql`SELECT id FROM agent_assets WHERE tenant_id=${tenantId} AND passport_id=${p.passportId} AND id IN (${p.parentAgentId}, ${p.childAgentId})`)) as any).rows ?? [];
+      if (agents.length !== 2) return res.status(404).json({ error: 'AGENT_ASSET_NOT_FOUND' });
+      const handoffId = id('handoff');
+      const now = new Date().toISOString();
+      await db.execute(sql`INSERT INTO agent_handoffs (id,tenant_id,passport_id,parent_agent_id,child_agent_id,request_hash,raw_result_hash,summary_hash,verification_state,evidence_id,observed_at)
+        VALUES (${handoffId},${tenantId},${p.passportId},${p.parentAgentId},${p.childAgentId},${p.requestHash || null},${p.rawResultHash || null},${p.summaryHash || null},${p.verificationState},${p.evidenceId || null},${now})`);
+      return res.status(201).json({ id: handoffId, ...p, observedAt: now });
     } catch (error) { return next(error); }
   });
 
