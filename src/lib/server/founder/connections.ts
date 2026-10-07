@@ -107,7 +107,16 @@ export async function checkGithubCi(): Promise<ConnectionStatus> {
     if (!res.ok) return { key: 'github_ci', name: 'GitHub CI', status: 'error', detail: `provider returned HTTP ${res.status}`, lastChecked: now() };
     const json: any = await res.json();
     const run = json?.workflow_runs?.[0];
-    return { key: 'github_ci', name: 'GitHub CI', status: run?.conclusion === 'success' ? 'ok' : run ? 'error' : 'not_configured', detail: run ? `latest run: ${String(run.conclusion ?? run.status).slice(0, 64)}` : 'no workflow runs found', lastChecked: now() };
+    if (!run) return { key: 'github_ci', name: 'GitHub CI', status: 'not_configured', detail: 'no workflow runs found', lastChecked: now() };
+    const runStatus = String(run.status ?? '').toLowerCase();
+    const conclusion = run.conclusion == null ? null : String(run.conclusion).toLowerCase();
+    // Queued/in-progress is evidence that GitHub Actions is connected and
+    // actively processing work. It is not a CI failure. Only a completed run
+    // with a non-success conclusion is an error.
+    if (runStatus !== 'completed' || conclusion === null) {
+      return { key: 'github_ci', name: 'GitHub CI', status: 'ok', detail: `latest run: ${runStatus || 'in progress'}`, lastChecked: now() };
+    }
+    return { key: 'github_ci', name: 'GitHub CI', status: conclusion === 'success' ? 'ok' : 'error', detail: `latest run: ${conclusion}`, lastChecked: now() };
   } catch (err) {
     return { key: 'github_ci', name: 'GitHub CI', status: 'error', detail: safeErrorDetail(err), lastChecked: now() };
   }
