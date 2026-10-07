@@ -190,3 +190,54 @@ export async function recordResearchShadowMission(pool: Pool, jobId: string, res
     client.release();
   }
 }
+
+
+export async function backfillResearchShadowMissions(pool: Pool, limit = 100) {
+  const boundedLimit = Math.max(1, Math.min(500, Math.trunc(limit) || 100));
+  const client = await pool.connect();
+  let rows: { id: string; result: ResearchReality }[] = [];
+  try {
+    await client.query('BEGIN');
+    await client.query(`SELECT set_config('app.tenant_id',$1,true)`, [DISTRIBUTION_TENANT_ID]);
+    const result = await client.query(
+      `SELECT j.id, j.result
+       FROM distribution_jobs j
+       WHERE j.tenant_id=$1
+         AND j.kind='research_url'
+         AND j.status='succeeded'
+         AND j.result IS NOT NULL
+         AND NOT EXISTS (
+           SELECT 1
+           FROM q_legion_missions q
+           WHERE q.tenant_id=j.tenant_id
+             AND q.source_kind='distribution_research'
+             AND q.source_id=j.id
+         )
+       ORDER BY j.updated_at DESC
+       LIMIT $2`,
+      [DISTRIBUTION_TENANT_ID, boundedLimit],
+    );
+    rows = result.rows.map((row) => ({
+      id: String(row.id),
+      result: row.result && typeof row.result === 'object' ? row.result as ResearchReality : {},
+    }));
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  let created = 0;
+  const failures: { jobId: string; error: string }[] = [];
+  for (const row of rows) {
+    try {
+      await recordResearchShadowMission(pool, row.id, row.result);
+      created++;
+    } catch (error) {
+      failures.push({ jobId: row.id, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  return { attempted: rows.length, created, failures };
+}
