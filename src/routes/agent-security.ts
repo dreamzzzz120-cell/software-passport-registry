@@ -9,6 +9,7 @@ const ASSET_TYPES = ['agent','mcp_server','cli_tool','integration','agent_config
 const SOURCE_TYPES = ['filesystem','github','mcp','cli','saas','manual_observation','other'] as const;
 const ORIGINS = ['INTERNAL','EXTERNAL','UNKNOWN'] as const;
 const VERIFICATION = ['OBSERVED','VERIFIED','UNKNOWN'] as const;
+const INGEST_VERIFICATION = ['OBSERVED','UNKNOWN'] as const;
 const ACCESS_MODES = ['read','write','execute','admin','unknown'] as const;
 const EVENT_TYPES = ['prompt_injection_indicator','agent_config_drift','excessive_tool_scope','unverified_mcp','dangerous_tool_chain','execution_receipt'] as const;
 const OUTCOMES = ['BLOCKED','SUCCEEDED','FAILED','NOT_OBSERVED','UNKNOWN'] as const;
@@ -32,7 +33,9 @@ const observeAssetSchema = z.object({
   sourceType: z.enum(SOURCE_TYPES),
   sourceIdentifier: z.string().trim().min(1).max(1000),
   originTrust: z.enum(ORIGINS).default('UNKNOWN'),
-  verificationState: z.enum(VERIFICATION).default('OBSERVED'),
+  // VERIFIED is deliberately excluded from ingestion: collectors may observe evidence,
+  // but verification must be earned by a separate verifier/proof path.
+  verificationState: z.enum(INGEST_VERIFICATION).default('OBSERVED'),
   evidenceHash: z.string().trim().min(16).max(256),
   observedAt: z.string().datetime(),
   metadata: z.record(z.string(), z.unknown()).default({}),
@@ -65,6 +68,32 @@ const eventSchema = z.object({
 
 function makeId(prefix: string) {
   return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`;
+}
+
+const SECRET_KEY_PATTERN = /(^|[_-])(secret|token|password|passwd|api[_-]?key|private[_-]?key|authorization|cookie|credential)s?($|[_-])/i;
+const MAX_STRUCTURED_EVIDENCE_BYTES = 32 * 1024;
+const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000;
+
+function structuredEvidenceIssue(value: Record<string, unknown>): string | null {
+  const encoded = JSON.stringify(value);
+  if (Buffer.byteLength(encoded, 'utf8') > MAX_STRUCTURED_EVIDENCE_BYTES) return 'structured evidence exceeds 32 KiB';
+  const stack: unknown[] = [value];
+  while (stack.length) {
+    const current = stack.pop();
+    if (!current || typeof current !== 'object') continue;
+    for (const [key, child] of Object.entries(current as Record<string, unknown>)) {
+      if (SECRET_KEY_PATTERN.test(key) && child !== null && child !== '' && child !== '[REDACTED]') {
+        return `credential-like field "${key}" must be redacted before ingestion`;
+      }
+      if (child && typeof child === 'object') stack.push(child);
+    }
+  }
+  return null;
+}
+
+function validateObservedAt(value: string): boolean {
+  const ts = Date.parse(value);
+  return Number.isFinite(ts) && ts <= Date.now() + MAX_FUTURE_SKEW_MS;
 }
 
 const READ_ROLES = ['Owner','Admin','Operator'] as const;
@@ -136,6 +165,9 @@ export function createAgentSecurityRouter() {
   router.post('/assets/observe', requireRole(['Owner','Admin','Operator']), async (req: AuthenticatedRequest, res, next) => {
     const parsed = observeAssetSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'INVALID_AGENT_ASSET_OBSERVATION', details: parsed.error.flatten() });
+    if (!validateObservedAt(parsed.data.observedAt)) return res.status(400).json({ error: 'INVALID_OBSERVED_AT', message: 'observedAt cannot be materially in the future.' });
+    const metadataIssue = structuredEvidenceIssue(parsed.data.metadata);
+    if (metadataIssue) return res.status(400).json({ error: 'UNSAFE_AGENT_METADATA', message: metadataIssue });
     try {
       const tenantId = req.user!.tenantId;
       const db = req.db!;
@@ -171,6 +203,9 @@ export function createAgentSecurityRouter() {
           last_seen_at=GREATEST(agent_assets.last_seen_at, EXCLUDED.last_seen_at),
           updated_at=now()
       `);
+      // Capabilities are a snapshot, not an append-only claim. Remove prior rows in the
+      // same request-scoped transaction so revoked permissions do not remain visible.
+      await db.execute(sql`DELETE FROM agent_capabilities WHERE tenant_id=${tenantId} AND agent_asset_id=${assetId}`);
       for (const c of p.capabilities) {
         await db.execute(sql`
           INSERT INTO agent_capabilities (
@@ -209,6 +244,7 @@ export function createAgentSecurityRouter() {
   router.post('/relationships', requireRole(['Owner','Admin','Operator']), async (req: AuthenticatedRequest, res, next) => {
     const parsed = relationshipSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'INVALID_AGENT_RELATIONSHIP', details: parsed.error.flatten() });
+    if (!validateObservedAt(parsed.data.observedAt)) return res.status(400).json({ error: 'INVALID_OBSERVED_AT', message: 'observedAt cannot be materially in the future.' });
     try {
       const tenantId = req.user!.tenantId;
       const db = req.db!;
@@ -254,6 +290,15 @@ export function createAgentSecurityRouter() {
   router.post('/events', requireRole(['Owner','Admin','Operator']), async (req: AuthenticatedRequest, res, next) => {
     const parsed = eventSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'INVALID_AGENT_SECURITY_EVENT', details: parsed.error.flatten() });
+    if (!validateObservedAt(parsed.data.observedAt)) return res.status(400).json({ error: 'INVALID_OBSERVED_AT', message: 'observedAt cannot be materially in the future.' });
+    const detailIssue = structuredEvidenceIssue(parsed.data.detail);
+    if (detailIssue) return res.status(400).json({ error: 'UNSAFE_EVENT_DETAIL', message: detailIssue });
+    if (parsed.data.outcome === 'SUCCEEDED' && parsed.data.eventType !== 'execution_receipt') {
+      return res.status(400).json({ error: 'UNPROVEN_EXECUTION_OUTCOME', message: 'SUCCEEDED may only be recorded on an execution_receipt event.' });
+    }
+    if (parsed.data.eventType === 'execution_receipt' && parsed.data.evidenceIds.length === 0) {
+      return res.status(400).json({ error: 'EXECUTION_RECEIPT_EVIDENCE_REQUIRED', message: 'Execution receipts require at least one evidence reference.' });
+    }
     try {
       const tenantId = req.user!.tenantId;
       const db = req.db!;
