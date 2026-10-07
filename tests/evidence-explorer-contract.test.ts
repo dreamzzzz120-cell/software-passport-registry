@@ -12,6 +12,13 @@ describe('SPR evidence explorer contracts', () => {
     expect(explorer).toContain("apiFetch(`/api/trust-loop/ledger/${encodeURIComponent(passportId)}`)");
   });
 
+  it('recovers its passport selector from the authoritative endpoint when parent state is empty', () => {
+    const explorer = read('src/components/EvidenceExplorerView.tsx');
+    expect(explorer).toContain("apiFetch('/api/user/passports')");
+    expect(explorer).toContain('resolvedPassports');
+    expect(explorer).toContain('No passports available');
+  });
+
   it('renders the full claim-to-evidence chain: source, timestamp, hash, and does not invent a fabricated per-claim confidence score', () => {
     const explorer = read('src/components/EvidenceExplorerView.tsx');
     expect(explorer).toContain('Source');
