@@ -17,7 +17,7 @@ describe('public /msp landing page reuses existing pricing and billing, without 
     // literal, so an unrelated public route cannot break this guarantee.
     const publicPathsLine = s.split('\n').find((l) => l.includes('const PUBLIC_PATHS = new Set(')) ?? '';
     expect(publicPathsLine).toContain("'/msp'");
-    expect(s).toContain("if (!user && path === '/msp') return <MspLandingView onEnter={() => navigate('/login')} onViewPricing={() => navigate('/pricing')} />;");
+    expect(s).toContain("if (!user && path === '/msp') return <MspLandingView onEnter={() => navigate('/free-review')} onViewPricing={() => navigate('/pricing')} />;");
     // The authenticated /msp route is now the evidence-backed MSP Operations
     // Command Center. The detailed legacy MSPCommandCenter remains embedded
     // inside it, so this test follows the actual route boundary rather than
