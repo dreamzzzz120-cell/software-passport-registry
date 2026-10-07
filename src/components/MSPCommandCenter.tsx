@@ -9,7 +9,7 @@ interface Props {
   clients: Client[];
   alerts: Alert[];
   passports: SoftwarePassport[];
-  role?: string;
+  role: string;
   onSelectClient: (id: string) => void;
   onSelectPassport?: (id: string) => void;
   onNavigate: (tab: string) => void;
@@ -66,7 +66,7 @@ function Detail({ label, value }: { label: string; value: string }) { return <di
 function formatStoredTime(value?: string | null) { return value ? new Date(value).toLocaleString() : 'Not observed'; }
 function evidenceList(value?: string | null) { try { const parsed = JSON.parse(value || '[]'); return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : []; } catch { return []; } }
 
-export default function MSPCommandCenter({ clients, alerts, passports, role = 'Viewer', onSelectClient, onSelectPassport, onNavigate, verificationDecisions, dataStatus = 'ready', onRetry }: Props) {
+export default function MSPCommandCenter({ clients, alerts, passports, role, onSelectClient, onSelectPassport, onNavigate, verificationDecisions, dataStatus = 'ready', onRetry }: Props) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('All');
   const [selected, setSelected] = useState<Alert | null>(null);
