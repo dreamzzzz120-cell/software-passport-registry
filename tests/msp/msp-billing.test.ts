@@ -27,6 +27,12 @@ describe('billing denial is capability-scoped and unpaid workspaces fail closed'
     expect(security).toContain("'/api/user/me'");
     expect(security).toContain('isBillingExemptPath(req)');
   });
+
+  it('keeps canceled and unpaid plans out of the paid workspace too', () => {
+    const entitlements = read('src/security/entitlements.ts');
+    expect(entitlements).toContain('export function lapsedPlanAllows(_capability: Capability): boolean');
+    expect(entitlements).toContain('return false;');
+  });
   it('checks a specific capability derived from the request path, not a single account-wide flag', () => {
     expect(security).toContain('capabilityForPath(req)');
     expect(security).toContain('evaluateCapability(scopedDb, tenantId, capability)');
