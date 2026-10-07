@@ -184,9 +184,9 @@ export default function MonitoringView({ role, passports = [], clients = [] }: {
 
     {!loading && (
       <section className="spr-panel p-5">
-        <div className="flex items-center justify-between"><h2 className="text-sm font-bold uppercase tracking-wider text-[var(--spr-text)]">Alerts{openAlerts.length > 0 ? ` (${openAlerts.length} open)` : ''}</h2></div>
+        <div className="flex items-center justify-between"><h2 className="text-sm font-bold uppercase tracking-wider text-[var(--spr-text)]">Monitoring change alerts{openAlerts.length > 0 ? ` (${openAlerts.length} open)` : ''}</h2></div>
         {alerts.length === 0
-          ? <p className="mt-3 text-sm text-[var(--spr-text-muted)]">No changes have triggered an alert yet. Alerts appear here automatically when a monitored source regresses.</p>
+          ? <p className="mt-3 text-sm text-[var(--spr-text-muted)]">No monitored-source changes have triggered a change alert yet. Trust findings are tracked separately in the Alerts workspace.</p>
           : <ul className="mt-3 divide-y divide-[var(--spr-border)]">{alerts.slice(0, 25).map((alert) => (
               <li key={alert.id} className="flex items-start justify-between gap-4 py-3">
                 <div className="min-w-0">
