@@ -17,13 +17,11 @@ function installFakeSessionStorage() {
   return store;
 }
 
-// Regression test for the bug where an authoritative /api/user/me 401 or a
-// provisioning 403 (apiClient.ts, unprovisioned identity) signed the
-// user out and navigated to /login with zero explanation: the failure was
-// detected while the authenticated shell was still mounted, so a live
-// window event fired before the fresh LoginView instance existed to hear
-// it. setAuthNotice/consumeAuthNotice persist the message across that
-// remount via sessionStorage instead.
+// Regression tests for auth notices. An authoritative /api/user/me 401 may
+// sign the browser out after refresh+retry fails, so its notice must survive
+// the remount. A /api/user/me 403 is different: it can be a transient
+// profile/RLS dependency failure, so it may set a notice/event but must not
+// sign an established browser session out.
 describe('auth notice survives the sign-out + navigate-to-login remount', () => {
   beforeEach(() => { installFakeSessionStorage(); });
 
@@ -65,13 +63,14 @@ describe('the notice is actually wired into both failure paths', () => {
     expect(source).not.toContain('responses.some((response) => response.status === 401)');
   });
 
-  it("apiClient.ts's provisioning-failure 403 branch sets a notice before signing out", () => {
+  it("apiClient.ts's profile 403 branch preserves the established browser session", () => {
     const source = read('src/utils/apiClient.ts');
     const branchStart = source.indexOf("resolvedUrl.pathname === '/api/user/me'");
     expect(branchStart).toBeGreaterThan(-1);
-    const branch = source.slice(branchStart, branchStart + 1400);
+    const branch = source.slice(branchStart, branchStart + 1800);
     expect(branch).toContain('setAuthNotice(');
-    expect(branch.indexOf('setAuthNotice(')).toBeLessThan(branch.indexOf('auth.signOut('));
+    expect(branch).toContain('auth-profile-unavailable');
+    expect(branch).not.toContain('auth.signOut(');
   });
 
   it('LoginView consumes the pending notice on mount', () => {
