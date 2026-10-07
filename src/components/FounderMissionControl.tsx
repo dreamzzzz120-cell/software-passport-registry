@@ -129,8 +129,8 @@ export default function FounderMissionControl() {
     </div>
 
     <div className="cc-founder-metrics cc-founder-metrics--mission">
-      <Metric label="MRR" value={money(business?.mrrCents)} detail={`${count(business?.activeSubscriptionCount)} active subscriptions`} icon={CreditCard} />
-      <Metric label="30d payments" value={count(business?.successfulPaymentCount30d)} detail={`${money(business?.successfulPaymentAmount30dCents)} observed gross`} icon={CreditCard} />
+      <Metric label="MRR" value={money(business?.mrrCents)} detail={business?.activeSubscriptionCount == null ? 'Subscriptions not verified' : `${count(business.activeSubscriptionCount)} active subscriptions`} icon={CreditCard} />
+      <Metric label="30d payments" value={count(business?.successfulPaymentCount30d)} detail={business?.successfulPaymentAmount30dCents == null ? 'Gross not verified' : `${money(business.successfulPaymentAmount30dCents)} observed gross`} icon={CreditCard} />
       <Metric label="Active sessions" value={count(traffic?.activeSessions)} detail={`${count(traffic?.activeEvents)} events in 30m`} icon={Users} />
       <Metric label="Visitors 24h" value={count(traffic?.visitors24h)} detail={`${count(traffic?.pageViews24h)} page views`} icon={Eye} />
       <Metric label="Leads 7d" value={count(funnel?.leads)} detail={`${count(funnel?.leadsQualified)} qualified`} icon={Zap} />
