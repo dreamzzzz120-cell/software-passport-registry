@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { KeyRound, ShieldCheck, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabase-auth';
+import { apiFetch } from '../utils/apiClient';
 
 type Factor = { id: string; status?: string; friendly_name?: string | null; factor_type?: string };
 
@@ -44,6 +45,11 @@ export default function MfaSettingsPanel() {
       if (challenge.error) throw challenge.error;
       const verified = await supabase.auth.mfa.verify({ factorId, challengeId: challenge.data.id, code: code.trim() });
       if (verified.error) throw verified.error;
+      const persisted = await apiFetch('/api/auth/mfa-state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: true }) });
+      if (!persisted.ok) {
+        await supabase.auth.mfa.unenroll({ factorId }).catch(() => undefined);
+        throw new Error('SPR could not persist MFA enforcement, so the new factor was not kept.');
+      }
       setQr(''); setSecret(''); setCode(''); setFactorId('');
       await load();
       setMessage('MFA is enabled. Future sessions must complete the second factor before SPR opens the workspace.');
@@ -56,8 +62,13 @@ export default function MfaSettingsPanel() {
     if (!window.confirm('Remove this MFA factor?')) return;
     setBusy(true); setError(''); setMessage('');
     try {
+      const state = await apiFetch('/api/auth/mfa-state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: false }) });
+      if (!state.ok) throw new Error('SPR could not authorize disabling MFA enforcement.');
       const result = await supabase.auth.mfa.unenroll({ factorId: id });
-      if (result.error) throw result.error;
+      if (result.error) {
+        await apiFetch('/api/auth/mfa-state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: true }) }).catch(() => undefined);
+        throw result.error;
+      }
       await supabase.auth.refreshSession();
       await load();
       setMessage('MFA factor removed.');
