@@ -37,10 +37,8 @@ export function capabilityForPath(req: Request): Capability {
 // cancellation arrives as 'canceled'/'unpaid' and is handled as lapsed below.
 export const PLAN_ENTITLING_STATUSES = ['active', 'trialing', 'past_due'] as const;
 
-// POST /api/billing/checkout writes a row with status 'incomplete' *before*
-// the customer ever reaches Stripe. Starting -- or abandoning -- a checkout
-// must never take away access the tenant had a moment earlier, so this state
-// is treated exactly like having no plan on record at all.
+// 'incomplete' is not an entitling Stripe state. A checkout that has not
+// completed payment must not unlock the workspace.
 export const PRE_PAYMENT_STATUSES = ['incomplete'] as const;
 
 // capabilityForPath() falls back to workspace for normal authenticated app
@@ -59,16 +57,10 @@ export interface CapabilityDecision { allowed: boolean; gate: SubscriptionGate; 
 interface SubscriptionRow { plan?: string | null; status?: string | null; currentPeriodEnd?: string | null }
 
 /**
- * The documented default, from docs/billing-paywall-inventory.md: "A tenant
- * with no tenant_subscriptions row (or no plan set) is treated as
- * unrestricted, not as 'no plan.'" A missing row means the tenant predates
- * billing or has never been through checkout -- it is not evidence that they
- * failed to pay. Treating absence as denial is what produced the blanket 402s
- * on /api/user/clients, /api/scans, /api/user/passports and the rest.
- *
- * Enforcement therefore begins only once a plan is actually recorded, which is
- * the same rule canCreateClient() and migration 0043's trigger already apply
- * when they treat a NULL client_limit as unrestricted.
+ * Launch policy: access follows confirmed billing evidence. A tenant with no
+ * plan, or only a pre-payment state, is unpaid. Identity and billing recovery
+ * routes are exempted earlier in requireAuth so the customer can still sign in,
+ * choose a plan, complete Checkout, and manage billing.
  */
 export function resolveSubscriptionGate(subscription: { plan: string | null; status: string }): SubscriptionGate {
   // Launch policy: no confirmed paid plan means no paid workspace capability.
