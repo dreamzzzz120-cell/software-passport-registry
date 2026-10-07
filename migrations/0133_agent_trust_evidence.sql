@@ -161,11 +161,31 @@ DO $$
 DECLARE table_name text;
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'spr_app_runtime') THEN
-    FOREACH table_name IN ARRAY ARRAY['agent_assets','agent_trust_boundaries','agent_capabilities','agent_mcp_servers','agent_mcp_tools','agent_handoffs']
+    FOREACH table_name IN ARRAY ARRAY['agent_assets','agent_trust_boundaries','agent_capabilities','agent_mcp_servers','agent_mcp_tools','agent_handoffs','agent_trust_snapshots','agent_trust_changes']
     LOOP
       EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON %I TO spr_app_runtime', table_name);
     END LOOP;
   END IF;
 END $$;
+
+-- Worker jobs intentionally claim work across tenants. They still use the
+-- least-privilege spr_worker_runtime role, but need an explicit cross-tenant
+-- RLS policy on these tables just like the existing scan/evidence queues.
+DO $
+DECLARE table_name text;
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'spr_worker_runtime') THEN
+    FOREACH table_name IN ARRAY ARRAY['agent_assets','agent_trust_boundaries','agent_capabilities','agent_mcp_servers','agent_mcp_tools','agent_handoffs','agent_trust_snapshots','agent_trust_changes']
+    LOOP
+      EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON %I TO spr_worker_runtime', table_name);
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname='public' AND tablename=table_name AND policyname='spr_worker_cross_tenant'
+      ) THEN
+        EXECUTE format('CREATE POLICY spr_worker_cross_tenant ON %I TO spr_worker_runtime USING (true) WITH CHECK (true)', table_name);
+      END IF;
+    END LOOP;
+  END IF;
+END $;
 
 COMMIT;
