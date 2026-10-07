@@ -9,7 +9,7 @@ describe('customer-visible unresolved npm declarations', () => {
       [{ name: 'debug', declaredRange: '^4.4.0' }, { name: 'accepts', declaredRange: '^2.0.0' }],
     );
     expect(doc.components).toHaveLength(2);
-    const unresolved = doc.components.find(c => c.name === 'accepts')!;
+    const unresolved = doc.components.find(c => c.name === 'accepts') as any;
     expect(unresolved.version).toBeUndefined();
     expect(unresolved.purl).toBeUndefined();
     expect(unresolved.properties).toContainEqual({ name: 'spr:dependency:declared-range', value: '^2.0.0' });
