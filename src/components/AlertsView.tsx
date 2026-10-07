@@ -56,6 +56,13 @@ export default function AlertsView({ alerts, onAlertAction, role = 'Viewer' }: A
   const criticalCount = alerts.filter((alert) => alert.status !== 'Resolved' && alert.status !== 'Cancelled' && alert.severity === 'Critical').length;
   const resolvedCount = alerts.filter((alert) => alert.status === 'Resolved').length;
   const selectedAlert = alerts.find((alert) => alert.id === selectedAlertId);
+  const decisionSummary = useMemo(() => {
+    const unresolved = alerts.filter((alert) => alert.status !== 'Resolved' && alert.status !== 'Cancelled');
+    const assigned = unresolved.filter((alert) => Boolean(alert.ownerDisplay)).length;
+    const escalated = unresolved.filter(isEscalated).length;
+    const unassigned = unresolved.length - assigned;
+    return { assigned, escalated, unassigned };
+  }, [alerts]);
 
   return (
     <section className="space-y-6" id="msp-alerts-hub">
@@ -72,10 +79,18 @@ export default function AlertsView({ alerts, onAlertAction, role = 'Viewer' }: A
             <SelectFilter icon={<Filter />} label="Status" value={statusFilter} onChange={setStatusFilter} options={['all', 'Active', 'Acknowledged', 'Snoozed', 'Resolved', 'Cancelled']} />
           </div>
         </div>
-        <div className="mt-7 grid gap-3 sm:grid-cols-3">
+        <div className="mt-7 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
           <Metric label="Active attention" value={activeCount} tone="rose" icon={<ShieldAlert />} />
           <Metric label="Critical open" value={criticalCount} tone="amber" icon={<AlertTriangle />} />
+          <Metric label="Assigned" value={decisionSummary.assigned} tone="emerald" icon={<User />} />
+          <Metric label="Unassigned" value={decisionSummary.unassigned} tone="amber" icon={<User />} />
+          <Metric label="Escalated / near SLA" value={decisionSummary.escalated} tone="rose" icon={<ArrowUpCircle />} />
           <Metric label="Resolved records" value={resolvedCount} tone="emerald" icon={<CheckCircle2 />} />
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <DecisionStep title="Observe" body="A collector or scan produces a finding with evidence and a timestamp." />
+          <DecisionStep title="Decide" body="Acknowledge, assign, escalate, snooze, or resolve the workflow record." />
+          <DecisionStep title="Verify" body="Resolution is not proof. New evidence is still required to verify that the condition changed." />
         </div>
       </header>
 
@@ -243,3 +258,6 @@ function AlertDrawer({ alert, onClose, onAlertAction, role }: { alert: Alert; on
 function Detail({ label, value }: { label: string; value: string }) {
   return <div className="rounded-md border border-[var(--spr-border)] bg-black/15 p-4"><div className="text-[12px] uppercase tracking-[.16em] text-[var(--spr-text-faint)]">{label}</div><div className="mt-2 text-sm font-semibold text-[var(--spr-text)]">{value}</div></div>;
 }
+
+
+function DecisionStep({ title, body }: { title: string; body: string }) { return <div className="rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] p-4"><div className="text-[11px] font-bold uppercase tracking-[.16em] text-[var(--spr-highlight)]">{title}</div><p className="mt-2 text-xs leading-5 text-[var(--spr-text-muted)]">{body}</p></div>; }
