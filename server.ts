@@ -1,4 +1,5 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
+import { mountExperienceAgentRoutes } from './src/routes/experience-agent-routing.ts';
 import rateLimit from 'express-rate-limit';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -118,8 +119,8 @@ const requireClientTrustReadScope = async (req: AuthenticatedRequest, res: Respo
 app.use('/api/trust-loop', requireAuth, requireTrustMutationRole, requireClientTrustReadScope);
 app.use('/api/trust-loop', createTrustLoopRouter());
 app.use('/api/monitoring', createMonitoringRouter());
+mountExperienceAgentRoutes(app, createAgentApiRouter());
 app.use('/api/agent/v1', createPublicApiV1Router());
-app.use('/api/agent/v1', createAgentApiRouter());
 app.use('/api/msp', requireAuth, createMspRouter());
 app.use('/api/billing', createBillingRouter());
 app.use('/api/commercial', createCommercialRouter());

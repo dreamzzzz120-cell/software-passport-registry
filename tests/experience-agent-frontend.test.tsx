@@ -113,11 +113,11 @@ describe('mounting and authentication gate', () => {
     await mount(true);
     await openAndSend('help me');
     await screen.findByText('SPR Agent could not complete the request.');
-    expect(calls.map((call) => call.url)).toEqual(['/api/agent/v1/command']);
+    expect(calls.map((call) => call.url)).toEqual(['/api/experience-agent/v1/command']);
     failed = false;
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     await screen.findByText('Recovered.');
-    expect(calls.map((call) => call.url)).toEqual(['/api/agent/v1/command', '/api/agent/v1/command']);
+    expect(calls.map((call) => call.url)).toEqual(['/api/experience-agent/v1/command', '/api/experience-agent/v1/command']);
   });
 
   it('exposes the transcript as a polite live log and character feedback', async () => {
@@ -146,7 +146,7 @@ describe('navigation and action allowlists on the client', () => {
     await openAndSend('show passports');
     await screen.findByText('Opening Passports.');
     expect(window.location.pathname).toBe('/dashboard');
-    expect(calls[0].url).toBe('/api/agent/v1/command');
+    expect(calls[0].url).toBe('/api/experience-agent/v1/command');
     expect(calls[0].body).toMatchObject({ input: 'show passports', context: { path: '/dashboard' } });
     expect((calls[0].body as any).context.history).toEqual(expect.any(Array));
     fireEvent.click(screen.getByRole('button', { name: 'Open suggested page' }));
@@ -167,16 +167,16 @@ describe('navigation and action allowlists on the client', () => {
   });
 
   it('executes only the allowlisted verify endpoint; any other action is refused without a request', async () => {
-    responder = (url) => url === '/api/agent/v1/command' ? ok({ intent: 'passport', reply: 'planning', action: { type: 'verify', endpoint: '/api/agent/v1/delete-passport', payload: { id: 'x' } } }) : ok({});
+    responder = (url) => url === '/api/experience-agent/v1/command' ? ok({ intent: 'passport', reply: 'planning', action: { type: 'verify', endpoint: '/api/experience-agent/v1/delete-passport', payload: { id: 'x' } } }) : ok({});
     await mount(true);
     await openAndSend('verify alpha app');
     await screen.findByText(/not in the agent’s approved action allowlist/);
-    expect(calls.map((c) => c.url)).toEqual(['/api/agent/v1/command']);
+    expect(calls.map((c) => c.url)).toEqual(['/api/experience-agent/v1/command']);
   });
 
   it('never executes a proposed scan until the user explicitly confirms it', async () => {
     responder = (url) => {
-      if (url === '/api/agent/v1/command') return ok({
+      if (url === '/api/experience-agent/v1/command') return ok({
         intent: 'scan_proposal',
         reply: 'I prepared a scan but have not started it.',
         proposedAction: {
@@ -190,22 +190,22 @@ describe('navigation and action allowlists on the client', () => {
           evidence: { tenantScoped: true, passportId: 'pass-a', clientId: 'client-a' },
         },
       });
-      if (url === '/api/agent/v1/receipts/confirmation') return ok({ receiptId: 'agentrcpt_confirm_scan', status: 'CONFIRMED' });
+      if (url === '/api/experience-agent/v1/receipts/confirmation') return ok({ receiptId: 'agentrcpt_confirm_scan', status: 'CONFIRMED' });
       if (url === '/api/scans') return ok({ id: 'scan_123', jobId: 'job_123', status: 'Queued' });
-      if (url === '/api/agent/v1/receipts/outcome') return ok({ receiptId: 'agentrcpt_outcome_scan', status: 'EXECUTED' });
+      if (url === '/api/experience-agent/v1/receipts/outcome') return ok({ receiptId: 'agentrcpt_outcome_scan', status: 'EXECUTED' });
       return ok({});
     };
     await mount(true);
     await openAndSend('scan alpha app');
     await screen.findByText('Run an SBOM verification scan for alpha app.');
-    expect(calls.map((c) => c.url)).toEqual(['/api/agent/v1/command']);
+    expect(calls.map((c) => c.url)).toEqual(['/api/experience-agent/v1/command']);
     fireEvent.click(screen.getByRole('button', { name: 'Confirm and run' }));
     await screen.findByText(/Receipt: id scan_123 · job job_123 · status Queued/);
     expect(calls.map((c) => c.url)).toEqual([
-      '/api/agent/v1/command',
-      '/api/agent/v1/receipts/confirmation',
+      '/api/experience-agent/v1/command',
+      '/api/experience-agent/v1/receipts/confirmation',
       '/api/scans',
-      '/api/agent/v1/receipts/outcome',
+      '/api/experience-agent/v1/receipts/outcome',
     ]);
     expect(calls[2].body).toEqual({ targetName: 'alpha app', scanType: 'SBOM Verify', clientName: 'Client A' });
     expect((calls[3].body as any).parentReceiptId).toBe('agentrcpt_confirm_scan');
@@ -213,7 +213,7 @@ describe('navigation and action allowlists on the client', () => {
 
   it('confirms an approved monitoring run only after the user clicks confirm', async () => {
     responder = (url) => {
-      if (url === '/api/agent/v1/command') return ok({
+      if (url === '/api/experience-agent/v1/command') return ok({
         intent: 'monitoring_run_proposal',
         reply: 'Prepared, not run.',
         proposedAction: {
@@ -226,27 +226,27 @@ describe('navigation and action allowlists on the client', () => {
           payload: {},
         },
       });
-      if (url === '/api/agent/v1/receipts/confirmation') return ok({ receiptId: 'agentrcpt_confirm_monitor', status: 'CONFIRMED' });
+      if (url === '/api/experience-agent/v1/receipts/confirmation') return ok({ receiptId: 'agentrcpt_confirm_monitor', status: 'CONFIRMED' });
       if (url === '/api/monitoring/monitoring-configurations/mon-1/run') return ok({ jobId: 'collector-job-1', state: 'queued', accepted: true });
-      if (url === '/api/agent/v1/receipts/outcome') return ok({ receiptId: 'agentrcpt_outcome_monitor', status: 'EXECUTED' });
+      if (url === '/api/experience-agent/v1/receipts/outcome') return ok({ receiptId: 'agentrcpt_outcome_monitor', status: 'EXECUTED' });
       return ok({});
     };
     await mount(true);
     await openAndSend('run monitoring alpha app');
-    expect(calls.map((c) => c.url)).toEqual(['/api/agent/v1/command']);
+    expect(calls.map((c) => c.url)).toEqual(['/api/experience-agent/v1/command']);
     fireEvent.click(await screen.findByRole('button', { name: 'Confirm and run' }));
     await screen.findByText(/job collector-job-1 · state queued/);
     expect(calls.map((c) => c.url)).toEqual([
-      '/api/agent/v1/command',
-      '/api/agent/v1/receipts/confirmation',
+      '/api/experience-agent/v1/command',
+      '/api/experience-agent/v1/receipts/confirmation',
       '/api/monitoring/monitoring-configurations/mon-1/run',
-      '/api/agent/v1/receipts/outcome',
+      '/api/experience-agent/v1/receipts/outcome',
     ]);
   });
 
   it('confirms a report schedule only after showing recipient and cadence', async () => {
     responder = (url) => {
-      if (url === '/api/agent/v1/command') return ok({
+      if (url === '/api/experience-agent/v1/command') return ok({
         intent: 'report_schedule_proposal',
         reply: 'Prepared, not created.',
         proposedAction: {
@@ -259,29 +259,29 @@ describe('navigation and action allowlists on the client', () => {
           payload: { passportId: 'pass-a', reportType: 'executive', cadence: 'weekly', recipientEmails: ['a@example.test'] },
         },
       });
-      if (url === '/api/agent/v1/receipts/confirmation') return ok({ receiptId: 'agentrcpt_confirm_report', status: 'CONFIRMED' });
+      if (url === '/api/experience-agent/v1/receipts/confirmation') return ok({ receiptId: 'agentrcpt_confirm_report', status: 'CONFIRMED' });
       if (url === '/api/report-schedules') return ok({ id: 'rptsch_1', cadence: 'weekly', nextRunAt: '2026-10-12T00:00:00.000Z' });
-      if (url === '/api/agent/v1/receipts/outcome') return ok({ receiptId: 'agentrcpt_outcome_report', status: 'EXECUTED' });
+      if (url === '/api/experience-agent/v1/receipts/outcome') return ok({ receiptId: 'agentrcpt_outcome_report', status: 'EXECUTED' });
       return ok({});
     };
     await mount(true);
     await openAndSend('schedule weekly report for alpha app');
     await screen.findByText(/delivered to a@example.test/);
-    expect(calls.map((c) => c.url)).toEqual(['/api/agent/v1/command']);
+    expect(calls.map((c) => c.url)).toEqual(['/api/experience-agent/v1/command']);
     fireEvent.click(screen.getByRole('button', { name: 'Confirm and run' }));
     await screen.findByText(/id rptsch_1 · cadence weekly · next 2026-10-12T00:00:00.000Z/);
     expect(calls.map((c) => c.url)).toEqual([
-      '/api/agent/v1/command',
-      '/api/agent/v1/receipts/confirmation',
+      '/api/experience-agent/v1/command',
+      '/api/experience-agent/v1/receipts/confirmation',
       '/api/report-schedules',
-      '/api/agent/v1/receipts/outcome',
+      '/api/experience-agent/v1/receipts/outcome',
     ]);
   });
 
   it('confirms founder discovery and pipeline actions through approved endpoints', async () => {
     let mode: 'discovery' | 'stage' = 'discovery';
     responder = (url) => {
-      if (url === '/api/agent/v1/command' && mode === 'discovery') return ok({
+      if (url === '/api/experience-agent/v1/command' && mode === 'discovery') return ok({
         intent: 'founder_discovery_proposal',
         reply: 'Prepared discovery.',
         proposedAction: {
@@ -294,9 +294,9 @@ describe('navigation and action allowlists on the client', () => {
           payload: { query: 'Kelowna', limit: 25 },
         },
       });
-      if (url === '/api/agent/v1/receipts/confirmation') return ok({ receiptId: mode === 'discovery' ? 'agentrcpt_confirm_discovery' : 'agentrcpt_confirm_stage', status: 'CONFIRMED' });
+      if (url === '/api/experience-agent/v1/receipts/confirmation') return ok({ receiptId: mode === 'discovery' ? 'agentrcpt_confirm_discovery' : 'agentrcpt_confirm_stage', status: 'CONFIRMED' });
       if (url === '/api/founder/distribution/discovery/run') return ok({ status: 'queued', provider: 'search', discovered: 5, queued: 5 });
-      if (url === '/api/agent/v1/command' && mode === 'stage') return ok({
+      if (url === '/api/experience-agent/v1/command' && mode === 'stage') return ok({
         intent: 'founder_pipeline_stage_proposal',
         reply: 'Prepared stage update.',
         proposedAction: {
@@ -310,13 +310,13 @@ describe('navigation and action allowlists on the client', () => {
         },
       });
       if (url === '/api/founder/distribution/contacts/dc_1/stage') return ok({ id: 'dc_1', pipelineStage: 'qualified' });
-      if (url === '/api/agent/v1/receipts/outcome') return ok({ receiptId: mode === 'discovery' ? 'agentrcpt_outcome_discovery' : 'agentrcpt_outcome_stage', status: 'EXECUTED' });
+      if (url === '/api/experience-agent/v1/receipts/outcome') return ok({ receiptId: mode === 'discovery' ? 'agentrcpt_outcome_discovery' : 'agentrcpt_outcome_stage', status: 'EXECUTED' });
       return ok({});
     };
 
     await mount(true);
     await openAndSend('find MSPs in Kelowna');
-    expect(calls.map((c) => c.url)).toEqual(['/api/agent/v1/command']);
+    expect(calls.map((c) => c.url)).toEqual(['/api/experience-agent/v1/command']);
     fireEvent.click(await screen.findByRole('button', { name: 'Confirm and run' }));
     await waitFor(() => expect(calls.map((c) => c.url)).toContain('/api/founder/distribution/discovery/run'));
 
@@ -350,11 +350,11 @@ describe('evidence, provenance and UNKNOWN as shown to the user', () => {
   };
 
   it('displays the observed counts and the provenance (ids, hash, source URL, timestamp, limitation)', async () => {
-    responder = (url) => url === '/api/agent/v1/command' ? ok({ intent: 'passport', reply: 'planning', action: { type: 'verify', endpoint: '/api/agent/v1/verify-software', payload: { query: 'alpha app' } } }) : ok(verified);
+    responder = (url) => url === '/api/experience-agent/v1/command' ? ok({ intent: 'passport', reply: 'planning', action: { type: 'verify', endpoint: '/api/experience-agent/v1/verify-software', payload: { query: 'alpha app' } } }) : ok(verified);
     await mount(true);
     await openAndSend('verify alpha app');
     await screen.findByText('I observed 1 evidence record(s). I am not assigning a separate trust decision.');
-    expect(calls.map((c) => c.url)).toEqual(['/api/agent/v1/command', '/api/agent/v1/verify-software']);
+    expect(calls.map((c) => c.url)).toEqual(['/api/experience-agent/v1/command', '/api/experience-agent/v1/verify-software']);
     expect(calls[1].body).toEqual({ query: 'alpha app' });
     const dialog = screen.getByRole('dialog');
     expect(dialog.textContent).toContain('Observed stateOBSERVED');
@@ -371,7 +371,7 @@ describe('evidence, provenance and UNKNOWN as shown to the user', () => {
   });
 
   it('shows UNKNOWN clearly when no passport was observed, with no negative claim', async () => {
-    responder = (url) => url === '/api/agent/v1/command' ? ok({ intent: 'passport', reply: 'planning', action: { type: 'verify', endpoint: '/api/agent/v1/verify-software', payload: { query: 'nothing' } } }) : notFound({ status: 'UNKNOWN', reason: 'SOFTWARE_NOT_REGISTERED', provenance: { kind: 'tenant_scoped_database_lookup', table: 'passports', fields: ['id', 'name'], matched: false } });
+    responder = (url) => url === '/api/experience-agent/v1/command' ? ok({ intent: 'passport', reply: 'planning', action: { type: 'verify', endpoint: '/api/experience-agent/v1/verify-software', payload: { query: 'nothing' } } }) : notFound({ status: 'UNKNOWN', reason: 'SOFTWARE_NOT_REGISTERED', provenance: { kind: 'tenant_scoped_database_lookup', table: 'passports', fields: ['id', 'name'], matched: false } });
     await mount(true);
     await openAndSend('verify nothing');
     await screen.findByText(/That software is UNKNOWN because no matching passport record was observed in your authorized workspace\. No negative trust claim was made\./);

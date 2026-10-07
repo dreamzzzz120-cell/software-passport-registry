@@ -78,8 +78,8 @@ describe('SPR live-audit bug-fix contracts', () => {
 
     const agents = read('src/components/AgentTrustView.tsx');
     expect(agents).toContain('Unknown stays UNKNOWN. Agent output is not evidence.');
-    expect(agents).toContain('/api/agent/v1/verify-software');
-    expect(agents).toContain('/api/agent/v1/verify-claim');
+    expect(agents).toContain('/api/experience-agent/v1/verify-software');
+    expect(agents).toContain('/api/experience-agent/v1/verify-claim');
     expect(agents).toContain('/mcp');
 
     const alerts = read('src/components/AlertsView.tsx');

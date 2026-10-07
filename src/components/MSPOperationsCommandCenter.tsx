@@ -51,7 +51,7 @@ export default function MSPOperationsCommandCenter(props: Props) {
     if (!passports.length) { setRevenueResults([]); return; }
     setRevenueLoading(true);
     Promise.all(passports.slice(0, 100).map(async passport => {
-      const response = await apiFetch('/api/agent/v1/revenue-opportunities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ passportId: passport.id, catalog: {} }) });
+      const response = await apiFetch('/api/experience-agent/v1/revenue-opportunities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ passportId: passport.id, catalog: {} }) });
       if (!response.ok) return null;
       return response.json();
     })).then(rows => { if (!cancelled) setRevenueResults(rows.filter(Boolean)); }).catch(() => { if (!cancelled) setRevenueResults([]); }).finally(() => { if (!cancelled) setRevenueLoading(false); });

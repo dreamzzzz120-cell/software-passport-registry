@@ -37,7 +37,7 @@ const agents: AgentDef[] = [
     description: 'Answers software-trust questions from observed SPR evidence.',
     action: 'Verify software',
     icon: ShieldCheck,
-    endpoint: '/api/agent/v1/verify-software',
+    endpoint: '/api/experience-agent/v1/verify-software',
     method: 'POST',
     body: (input) => ({ query: input }),
     inputPlaceholder: 'Enter a software name or passport ID',
@@ -58,7 +58,7 @@ const agents: AgentDef[] = [
     description: 'Turns vendor evidence, findings, freshness and completeness into a deterministic operational review.',
     action: 'Run vendor risk review',
     icon: ShieldCheck,
-    endpoint: '/api/agent/v1/vendor-risk',
+    endpoint: '/api/experience-agent/v1/vendor-risk',
     method: 'POST',
     body: (input) => ({ passportId: input, staleAfterDays: 30 }),
     inputPlaceholder: 'Enter a passport ID',
@@ -162,7 +162,7 @@ export default function AgentTrustView() {
     if (!claim.trim() || !passport.trim()) return;
     setClaimVerifying(true); setClaimError(null); setClaimResult(null);
     try {
-      const response = await apiFetch('/api/agent/v1/verify-claim', {
+      const response = await apiFetch('/api/experience-agent/v1/verify-claim', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ passport: passport.trim(), claim: claim.trim() }),

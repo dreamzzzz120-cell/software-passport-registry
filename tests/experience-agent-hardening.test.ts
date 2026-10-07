@@ -1,6 +1,6 @@
 /**
  * Experience Agent production hardening -- behavioural tests against the real
- * /api/agent/v1 router with authentication and the database replaced by
+ * /api/experience-agent/v1 router with authentication and the database replaced by
  * controlled fakes, so every claim below is about what the router actually
  * returns for a given request, not about how its source reads.
  *
@@ -8,7 +8,7 @@
  * lets these tests prove, rather than assert by inspection, that every query
  * carries the authenticated tenant and that no command ever writes.
  */
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import type { Server } from 'node:http';
 import { PgDialect } from 'drizzle-orm/pg-core';
@@ -39,6 +39,7 @@ const observations: Row[] = [
 export interface RecordedQuery { sql: string; params: unknown[] }
 const recorded: RecordedQuery[] = [];
 let failNextQuery = false;
+beforeEach(() => { recorded.length = 0; failNextQuery = false; });
 const dialect = new PgDialect();
 
 function tenantOf(rows: Row[], tenantId: unknown) { return rows.filter((r) => r.tenant_id === tenantId); }
@@ -103,9 +104,11 @@ vi.mock('../src/middleware/security.ts', () => ({
 let server: Server; let baseUrl = '';
 beforeAll(async () => {
   const { createAgentApiRouter } = await import('../src/routes/agent-api.ts');
+  const { mountExperienceAgentRoutes } = await import('../src/routes/experience-agent-routing.ts');
   const app = express();
   app.use(express.json({ limit: '64kb' }));
-  app.use('/api/agent/v1', createAgentApiRouter());
+  mountExperienceAgentRoutes(app, createAgentApiRouter());
+  app.use('/api/agent/v1', (_req, res) => res.status(401).json({ error: { code: 'INVALID_API_KEY' } }));
   // Same contract as server.ts: an unexpected error is a generic 500, never a
   // partial or invented result.
   app.use((err: any, _req: any, res: any, _next: any) => { const status = Number.isInteger(err?.status) && err.status >= 400 && err.status < 600 ? err.status : 500; return res.status(status).json({ error: status === 500 ? 'An unexpected server error occurred.' : err?.message || 'Request failed.', code: status === 500 ? 'INTERNAL_SERVER_ERROR' : 'REQUEST_FAILED' }); });
@@ -117,13 +120,31 @@ beforeAll(async () => {
 afterAll(async () => { await new Promise<void>((resolve) => server.close(() => resolve())); });
 
 const post = (path: string, body: unknown, token?: string, raw = false) => fetch(`${baseUrl}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: raw ? (body as string) : JSON.stringify(body) });
-const command = (input: string, token = 'tenant-a-token') => post('/api/agent/v1/command', { input }, token);
+const command = (input: string, token = 'tenant-a-token') => post('/api/experience-agent/v1/command', { input }, token);
 const FRONTEND_ALLOWLIST = ['/dashboard', '/clients', '/passports', '/vendors', '/monitoring', '/compliance', '/reports', '/billing', '/settings', '/founder'];
 const TRUST_WORDS = /\b(VERIFIED|INVESTIGATE|AVOID)\b/;
 
 describe('authentication and input boundaries', () => {
+  it('keeps the deployed UI working on its legacy route with legacy action links', async () => {
+    const response = await post('/api/agent/v1/command', { input: 'verify totally unregistered thing' }, 'tenant-a-token');
+    expect(response.status).toBe(200);
+    expect((await response.json()).action.endpoint).toBe('/api/agent/v1/verify-software');
+    const verified = await post('/api/agent/v1/verify-software', { query: 'alpha app' }, 'tenant-a-token');
+    expect(verified.status).toBe(200);
+    expect((await verified.json()).provenance.tenantScoped).toBe(true);
+  });
+
+  it('never diverts supplied API keys or unsupported paths to the browser agent', async () => {
+    for (const apiKey of ['', 'invalid', `spr_live_${'a'.repeat(43)}`]) {
+      const response = await fetch(`${baseUrl}/api/agent/v1/verify-software`, { method: 'POST', headers: { authorization: 'Bearer tenant-a-token', 'x-api-key': apiKey, 'content-type': 'application/json' }, body: JSON.stringify({ query: 'alpha app' }) });
+      expect((await response.json()).error.code).toBe('INVALID_API_KEY');
+    }
+    const response = await post('/api/agent/v1/passports', {}, 'tenant-a-token');
+    expect((await response.json()).error.code).toBe('INVALID_API_KEY');
+    expect((await post('/api/agent/v1/command', {}, 'not-a-valid-user')).status).toBe(401);
+  });
   it('rejects an unauthenticated /command request', async () => {
-    const response = await post('/api/agent/v1/command', { input: 'show clients' });
+    const response = await post('/api/experience-agent/v1/command', { input: 'show clients' });
     expect(response.status).toBe(401);
     const body = await response.json();
     expect(JSON.stringify(body)).not.toMatch(TRUST_WORDS);
@@ -149,13 +170,13 @@ describe('authentication and input boundaries', () => {
     ['array body', ['show clients']],
   ])('fails safely on a malformed payload (%s)', async (_label, body) => {
     recorded.length = 0;
-    const response = await post('/api/agent/v1/command', body, 'tenant-a-token');
+    const response = await post('/api/experience-agent/v1/command', body, 'tenant-a-token');
     expect(response.status).toBe(400);
     expect(recorded.length).toBe(0);
   });
 
   it('fails safely on a body that is not JSON', async () => {
-    const response = await post('/api/agent/v1/command', '{not json', 'tenant-a-token', true);
+    const response = await post('/api/experience-agent/v1/command', '{not json', 'tenant-a-token', true);
     expect(response.status).toBe(400);
   });
 });
@@ -208,7 +229,7 @@ describe('tenant scoping', () => {
   });
 
   it('detects a looping user and returns one executable next move instead of asking what to do', async () => {
-    const response = await post('/api/agent/v1/command', {
+    const response = await post('/api/experience-agent/v1/command', {
       input: 'what next',
       context: { path: '/dashboard', history: [{ role: 'user', text: 'what next' }, { role: 'agent', text: 'Review the highest observed risk.' }] },
     }, 'tenant-a-token');
@@ -221,7 +242,7 @@ describe('tenant scoping', () => {
   });
 
   it('tenant A cannot retrieve tenant B passport data by name, id, or vendor-risk', async () => {
-    for (const body of [{ path: '/api/agent/v1/verify-software', payload: { query: 'beta app' } }, { path: '/api/agent/v1/verify-software', payload: { query: 'pass-b' } }, { path: '/api/agent/v1/verify-passport', payload: { passportId: 'pass-b' } }, { path: '/api/agent/v1/vendor-risk', payload: { passportId: 'pass-b' } }]) {
+    for (const body of [{ path: '/api/experience-agent/v1/verify-software', payload: { query: 'beta app' } }, { path: '/api/experience-agent/v1/verify-software', payload: { query: 'pass-b' } }, { path: '/api/experience-agent/v1/verify-passport', payload: { passportId: 'pass-b' } }, { path: '/api/experience-agent/v1/vendor-risk', payload: { passportId: 'pass-b' } }]) {
       const response = await post(body.path, body.payload, 'tenant-a-token');
       expect(response.status, body.path).toBe(404);
       const json = await response.json();
@@ -229,19 +250,19 @@ describe('tenant scoping', () => {
       expect(JSON.stringify(json)).not.toContain('e-b-1');
       expect(JSON.stringify(json)).not.toContain('f-b-1');
     }
-    const direct = await fetch(`${baseUrl}/api/agent/v1/passport/pass-b`, { headers: { authorization: 'Bearer tenant-a-token' } });
+    const direct = await fetch(`${baseUrl}/api/experience-agent/v1/passport/pass-b`, { headers: { authorization: 'Bearer tenant-a-token' } });
     expect(direct.status).toBe(404);
   });
 
   it('the tenant in the request body cannot override the authenticated tenant', async () => {
-    const response = await post('/api/agent/v1/verify-software', { query: 'beta app', tenantId: 'tenant-b' }, 'tenant-a-token');
+    const response = await post('/api/experience-agent/v1/verify-software', { query: 'beta app', tenantId: 'tenant-b' }, 'tenant-a-token');
     expect(response.status).toBe(400);
   });
 });
 
 describe('UNKNOWN is the only answer for unobserved software', () => {
   it('unknown software returns UNKNOWN with provenance that says the lookup matched nothing', async () => {
-    const response = await post('/api/agent/v1/verify-software', { query: 'totally unregistered thing' }, 'tenant-a-token');
+    const response = await post('/api/experience-agent/v1/verify-software', { query: 'totally unregistered thing' }, 'tenant-a-token');
     expect(response.status).toBe(404);
     const json = await response.json();
     expect(json.status).toBe('UNKNOWN');
@@ -255,14 +276,14 @@ describe('UNKNOWN is the only answer for unobserved software', () => {
   it('the command that leads to an unknown lookup never states a negative decision', async () => {
     const json = await (await command('verify totally unregistered thing')).json();
     expect(json.intent).toBe('passport');
-    expect(json.action).toEqual({ type: 'verify', endpoint: '/api/agent/v1/verify-software', payload: { query: 'totally unregistered thing' } });
+    expect(json.action).toEqual({ type: 'verify', endpoint: '/api/experience-agent/v1/verify-software', payload: { query: 'totally unregistered thing' } });
     expect(json.reply).not.toMatch(/unsafe|malicious|avoid|reject|do not (use|deploy)/i);
   });
 });
 
 describe('observed software: evidence, provenance and no invented trust decision', () => {
   it('returns the observed records with the table/fields/filter and ids they came from', async () => {
-    const json = await (await post('/api/agent/v1/verify-software', { query: 'Alpha App' }, 'tenant-a-token')).json();
+    const json = await (await post('/api/experience-agent/v1/verify-software', { query: 'Alpha App' }, 'tenant-a-token')).json();
     expect(json.status).toBe('OBSERVED');
     expect(json.trustDecision.status).toBe('NOT_EVALUATED_BY_EXPERIENCE_AGENT');
     expect(JSON.stringify(json.trustDecision)).not.toMatch(TRUST_WORDS);
@@ -279,14 +300,14 @@ describe('observed software: evidence, provenance and no invented trust decision
   });
 
   it('preserves source URLs, hashes, timestamps and limitations exactly as observed', async () => {
-    const json = await (await post('/api/agent/v1/verify-passport', { passportId: 'pass-a' }, 'tenant-a-token')).json();
+    const json = await (await post('/api/experience-agent/v1/verify-passport', { passportId: 'pass-a' }, 'tenant-a-token')).json();
     expect(json.sources).toEqual([{ evidenceId: 'e-a-1', provider: 'osv', sourceUrl: 'https://osv.dev/vulnerability/GHSA-x', observedAt: '2026-09-01T00:00:00.000Z', verificationMethod: 'api', evidenceHash: 'sha256:abc123', limitation: 'OSV coverage only' }]);
   });
 
   it('a passport with no evidence, findings or observations is reported UNKNOWN, not clean', async () => {
     passports.push({ id: 'pass-a-empty', tenant_id: 'tenant-a', name: 'empty app', client_id: 'client-a' });
     try {
-      const json = await (await post('/api/agent/v1/verify-software', { query: 'empty app' }, 'tenant-a-token')).json();
+      const json = await (await post('/api/experience-agent/v1/verify-software', { query: 'empty app' }, 'tenant-a-token')).json();
       expect(json.status).toBe('UNKNOWN');
       expect(json.verification).toEqual({ observed: false, evidenceBacked: false, generatedAt: null });
       expect(json.findings.open).toBe(0);
@@ -295,7 +316,7 @@ describe('observed software: evidence, provenance and no invented trust decision
 
   it('vendor-risk stays tenant-scoped and reports the record ids it used', async () => {
     recorded.length = 0;
-    const json = await (await post('/api/agent/v1/vendor-risk', { passportId: 'pass-a' }, 'tenant-a-token')).json();
+    const json = await (await post('/api/experience-agent/v1/vendor-risk', { passportId: 'pass-a' }, 'tenant-a-token')).json();
     expect(json.agent).toBe('vendor-risk');
     expect(json.provenance).toMatchObject({ kind: 'tenant_scoped_database_records', passportId: 'pass-a', findingIds: ['f-a-1', 'f-a-2'], evidenceIds: ['e-a-1'] });
     for (const q of recorded) expect(q.params[0]).toBe('tenant-a');
@@ -344,7 +365,7 @@ describe('navigation and action allowlists', () => {
   it('the server never returns an action endpoint outside the verify allowlist', async () => {
     for (const prompt of ['verify alpha app', 'check lodash', 'delete all passports', 'update passport pass-a score to 100', 'export everything']) {
       const json = await (await command(prompt)).json();
-      if (json.action) expect(json.action).toMatchObject({ type: 'verify', endpoint: '/api/agent/v1/verify-software' });
+      if (json.action) expect(json.action).toMatchObject({ type: 'verify', endpoint: '/api/experience-agent/v1/verify-software' });
     }
   });
 
@@ -373,7 +394,7 @@ describe('failure is closed', () => {
 
   it('an outage during verification does not become UNKNOWN-as-fact either: it is an error', async () => {
     failNextQuery = true;
-    const response = await post('/api/agent/v1/verify-software', { query: 'alpha app' }, 'tenant-a-token');
+    const response = await post('/api/experience-agent/v1/verify-software', { query: 'alpha app' }, 'tenant-a-token');
     expect(response.status).toBe(500);
   });
 });
