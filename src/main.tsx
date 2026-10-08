@@ -17,7 +17,7 @@ installPageViewTracking();
 
 function SprApplication() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/';
-  if (path === '/software/workspace') return <SoftwareWorkspaceView />;
+  if (path === '/software/workspace') return <><SoftwareWorkspaceView /><Analytics /></>;
   return (<><App /><ExperienceAgent /><Analytics /></>);
 }
 
