@@ -212,6 +212,7 @@ export default function FreeReviewView({
   const [result, setResult] = useState<FreeReviewStatus | null>(null);
   const pollAttempt = useRef(0);
   const completionTracked = useRef(false);
+  const viewedResultKey = useRef<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -309,6 +310,12 @@ export default function FreeReviewView({
     completionTracked.current = true;
     trackGrowthEvent('free_review_completed');
   }, [result?.scanStatus]);
+
+  useEffect(() => {
+    if (result?.scanStatus !== 'complete' || !statusUrl || viewedResultKey.current === statusUrl) return;
+    viewedResultKey.current = statusUrl;
+    trackGrowthEvent('report_viewed'); // Client-side view signal, not independently verified completion.
+  }, [result?.scanStatus, statusUrl]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -835,7 +842,7 @@ export default function FreeReviewView({
                       <ActionButton
                         label="See plans & start with SPR"
                         icon={<ExternalLink className="inline h-4 w-4" />}
-                        onClick={() => window.location.assign('/pricing?utm_source=free_review&utm_medium=product&utm_campaign=review_result')}
+                        onClick={() => { trackGrowthEvent('upgrade_clicked'); window.location.assign('/pricing?utm_source=free_review&utm_medium=product&utm_campaign=review_result'); }}
                       />
                       <ActionButton
                         label="See evidence summary"
@@ -889,7 +896,7 @@ export default function FreeReviewView({
                           </button>
                           <button
                             type="button"
-                            onClick={() => window.location.assign('/pricing?utm_source=free_review&utm_medium=product&utm_campaign=continuous_verification')}
+                            onClick={() => { trackGrowthEvent('upgrade_clicked'); window.location.assign('/pricing?utm_source=free_review&utm_medium=product&utm_campaign=continuous_verification'); }}
                             className="rounded-xl border border-[var(--spr-highlight)] px-4 py-3 text-sm font-semibold text-[var(--spr-highlight)]"
                           >
                             See plans & pricing
