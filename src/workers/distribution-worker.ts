@@ -5,6 +5,7 @@ import { calculateBackoff, researchUrl, DISTRIBUTION_TENANT_ID, enqueueDistribut
 import { ingestResearchResult, ingestQualifiedLead, sendInitial, sendDueFollowups, autonomousOutreachEnabled, verifyOutreachSender } from '../lib/distribution-outreach.ts';
 import { buildMspDiscoveryQueries, canonicalizeDomain, dedupeDiscoveryResults, resolveDiscoveryProvider, type DiscoveryResult } from '../lib/distribution-discovery.ts';
 import { backfillResearchShadowMissions, recordResearchShadowMission } from '../lib/q-legion-shadow.ts';
+import { DistributionDeferredError } from '../lib/distribution-send-reservation.ts';
 
 const POLL_MS = Math.max(250, Number.parseInt(process.env.DISTRIBUTION_POLL_MS ?? '1000', 10) || 1000);
 const CONCURRENCY = Math.max(1, Math.min(50, Number.parseInt(process.env.DISTRIBUTION_CONCURRENCY ?? '10', 10) || 10));
@@ -87,7 +88,7 @@ async function failJob(pool: ReturnType<typeof createWorkerPool>,job:any,error:u
 
 async function getContactIdsForSource(pool: ReturnType<typeof createWorkerPool>,sourceUrl:string){const client=await pool.connect();try{await client.query('BEGIN');await client.query(`SELECT set_config('app.tenant_id',$1,true)`,[DISTRIBUTION_TENANT_ID]);const result=await client.query(`SELECT id FROM distribution_contacts WHERE tenant_id=$1 AND source_url=$2 AND status='active' AND NOT EXISTS (SELECT 1 FROM distribution_messages m WHERE m.contact_id=distribution_contacts.id AND m.kind='initial' AND m.status='sent') LIMIT 25`,[DISTRIBUTION_TENANT_ID,sourceUrl]);await client.query('COMMIT');return result.rows.map((row:any)=>String(row.id));}catch(error){await client.query('ROLLBACK').catch(()=>undefined);throw error;}finally{client.release();}}
 
-async function processJob(pool: ReturnType<typeof createWorkerPool>){const job=await claimJob(pool);if(!job)return false;try{const payload=typeof job.payload==='string'?JSON.parse(job.payload):job.payload??{};if(job.kind==='research_url'){if(typeof payload.url!=='string')throw new Error('DISTRIBUTION_URL_REQUIRED');const result=await researchUrl(payload.url);const defaultBasis=process.env.DISTRIBUTION_DEFAULT_OUTREACH_BASIS??'legitimate_interest';const contactsQueued=await ingestResearchResult(result,defaultBasis);await finishJob(pool,job.id,{...result,contactsQueued});try{await recordResearchShadowMission(pool,job.id,result);}catch(error){console.error(`[Distribution] Q-LEGION shadow mission failed for ${job.id}:`,error instanceof Error?error.message:String(error));}if(autonomousOutreachEnabled()&&contactsQueued>0&&(await campaignControls(pool)).outreachEnabled)for(const contactId of await getContactIdsForSource(pool,payload.url))await enqueueDistributionJob(pool,'send_outreach',{contactId});}else if(job.kind==='qualify_lead'){const email=typeof payload.email==='string'?payload.email:'';const company=typeof payload.company==='string'?payload.company:'';const text=`${company} ${email}`.toLowerCase();const businessEmail=Boolean(email&&!['gmail.com','googlemail.com','outlook.com','hotmail.com','live.com','yahoo.com','icloud.com','me.com','aol.com'].includes(email.split('@')[1]??''));const score=(businessEmail?25:0)+(company?10:0)+(/msp|managed|it services|cyber|security/.test(text)?35:0);const contact = await ingestQualifiedLead({ leadId: payload.leadId, email, company: company || null, url: typeof payload.url === 'string' ? payload.url : null, outreachBasis: typeof payload.outreachBasis === 'string' ? payload.outreachBasis : undefined, consentEvidenceUrl: typeof payload.consentEvidenceUrl === 'string' ? payload.consentEvidenceUrl : undefined }, score);await finishJob(pool,job.id,{leadId:payload.leadId,company:company||null,score,businessEmail,contact,observedAt:new Date().toISOString()});}else if(job.kind==='prepare_outreach')await finishJob(pool,job.id,{status:'prepared',observedAt:new Date().toISOString()});else if(job.kind==='send_outreach'){if(typeof payload.contactId!=='string')throw new Error('DISTRIBUTION_CONTACT_ID_REQUIRED');if(!(await campaignControls(pool)).outreachEnabled){await deferWithoutAttempt(pool,job.id,'DISTRIBUTION_OUTREACH_PAUSED');return true;}await finishJob(pool,job.id,await sendInitial(payload.contactId));}else if(job.kind==='followup_outreach'){if(!(await campaignControls(pool)).outreachEnabled){await deferWithoutAttempt(pool,job.id,'DISTRIBUTION_OUTREACH_PAUSED');return true;}await finishJob(pool,job.id,{sent:await sendDueFollowups(),observedAt:new Date().toISOString()});}else throw new Error(`DISTRIBUTION_UNKNOWN_JOB_KIND:${job.kind}`);console.info(`[Distribution] job ${job.kind} ${job.id} succeeded`);}catch(error){console.error(`[Distribution] job ${job.kind} ${job.id} failed:`,error instanceof Error?error.message:String(error));await failJob(pool,job,error);}return true;}
+async function processJob(pool: ReturnType<typeof createWorkerPool>){const job=await claimJob(pool);if(!job)return false;try{const payload=typeof job.payload==='string'?JSON.parse(job.payload):job.payload??{};if(job.kind==='research_url'){if(typeof payload.url!=='string')throw new Error('DISTRIBUTION_URL_REQUIRED');const result=await researchUrl(payload.url);const defaultBasis=process.env.DISTRIBUTION_DEFAULT_OUTREACH_BASIS??'legitimate_interest';const contactsQueued=await ingestResearchResult(result,defaultBasis);await finishJob(pool,job.id,{...result,contactsQueued});try{await recordResearchShadowMission(pool,job.id,result);}catch(error){console.error(`[Distribution] Q-LEGION shadow mission failed for ${job.id}:`,error instanceof Error?error.message:String(error));}if(autonomousOutreachEnabled()&&contactsQueued>0&&(await campaignControls(pool)).outreachEnabled)for(const contactId of await getContactIdsForSource(pool,payload.url))await enqueueDistributionJob(pool,'send_outreach',{contactId});}else if(job.kind==='qualify_lead'){const email=typeof payload.email==='string'?payload.email:'';const company=typeof payload.company==='string'?payload.company:'';const text=`${company} ${email}`.toLowerCase();const businessEmail=Boolean(email&&!['gmail.com','googlemail.com','outlook.com','hotmail.com','live.com','yahoo.com','icloud.com','me.com','aol.com'].includes(email.split('@')[1]??''));const score=(businessEmail?25:0)+(company?10:0)+(/msp|managed|it services|cyber|security/.test(text)?35:0);const contact = await ingestQualifiedLead({ leadId: payload.leadId, email, company: company || null, url: typeof payload.url === 'string' ? payload.url : null, outreachBasis: typeof payload.outreachBasis === 'string' ? payload.outreachBasis : undefined, consentEvidenceUrl: typeof payload.consentEvidenceUrl === 'string' ? payload.consentEvidenceUrl : undefined }, score);await finishJob(pool,job.id,{leadId:payload.leadId,company:company||null,score,businessEmail,contact,observedAt:new Date().toISOString()});}else if(job.kind==='prepare_outreach')await finishJob(pool,job.id,{status:'prepared',observedAt:new Date().toISOString()});else if(job.kind==='send_outreach'){if(typeof payload.contactId!=='string')throw new Error('DISTRIBUTION_CONTACT_ID_REQUIRED');if(!(await campaignControls(pool)).outreachEnabled){await deferWithoutAttempt(pool,job.id,'DISTRIBUTION_OUTREACH_PAUSED');return true;}await finishJob(pool,job.id,await sendInitial(payload.contactId));}else if(job.kind==='followup_outreach'){if(!(await campaignControls(pool)).outreachEnabled){await deferWithoutAttempt(pool,job.id,'DISTRIBUTION_OUTREACH_PAUSED');return true;}await finishJob(pool,job.id,{sent:await sendDueFollowups(),observedAt:new Date().toISOString()});}else throw new Error(`DISTRIBUTION_UNKNOWN_JOB_KIND:${job.kind}`);console.info(`[Distribution] job ${job.kind} ${job.id} succeeded`);}catch(error){console.error(`[Distribution] job ${job.kind} ${job.id} failed:`,error instanceof Error?error.message:String(error));if(error instanceof DistributionDeferredError)await deferWithoutAttempt(pool,job.id,error.message,error.delayMs);else await failJob(pool,job,error);}return true;}
 
 async function sweepFreeReviewLeads(pool: ReturnType<typeof createWorkerPool>){const client=await pool.connect();try{await client.query('BEGIN');await client.query(`SELECT set_config('app.tenant_id',$1,true)`,[DISTRIBUTION_TENANT_ID]);const result=await client.query(`SELECT l.id,l.name,l.email,l.company FROM free_review_leads l WHERE l.tenant_id=$1 AND NOT EXISTS (SELECT 1 FROM distribution_jobs j WHERE j.tenant_id=$1 AND j.kind='qualify_lead' AND j.payload->>'leadId'=l.id AND j.status IN ('queued','running','succeeded')) ORDER BY l.created_at ASC LIMIT 100`,[DISTRIBUTION_TENANT_ID]);await client.query('COMMIT');for(const lead of result.rows)await enqueueDistributionJob(pool,'qualify_lead',{leadId:lead.id,name:lead.name,email:lead.email,company:lead.company??'',origin:{kind:'lead_sweep'}});return result.rows.length;}catch(error){await client.query('ROLLBACK').catch(()=>undefined);throw error;}finally{client.release();}}
 
@@ -96,7 +97,7 @@ async function sweepFreeReviewLeads(pool: ReturnType<typeof createWorkerPool>){c
 // paused when it was found) is queued once it's settled. Bounded to recent
 // contacts so turning outreach on never mails an old backlog, and skipped when
 // a send job for the contact is already queued or running.
-export const UNSENT_CONTACT_SQL = `SELECT c.id FROM distribution_contacts c WHERE c.tenant_id=$1 AND c.status='active' AND c.source_url IS NOT NULL AND c.created_at < CURRENT_TIMESTAMP - INTERVAL '10 minutes' AND c.created_at > CURRENT_TIMESTAMP - INTERVAL '14 days' AND NOT EXISTS (SELECT 1 FROM distribution_messages m WHERE m.contact_id=c.id AND m.kind='initial' AND m.status='sent') AND NOT EXISTS (SELECT 1 FROM distribution_jobs j WHERE j.tenant_id=$1 AND j.kind='send_outreach' AND j.payload->>'contactId'=c.id AND j.status IN ('queued','running')) ORDER BY c.created_at ASC LIMIT 25`;
+export const UNSENT_CONTACT_SQL = `SELECT c.id FROM distribution_contacts c WHERE c.tenant_id=$1 AND c.status='active' AND c.source_url IS NOT NULL AND c.created_at < CURRENT_TIMESTAMP - INTERVAL '10 minutes' AND c.created_at > CURRENT_TIMESTAMP - INTERVAL '14 days' AND NOT EXISTS (SELECT 1 FROM distribution_messages m WHERE m.contact_id=c.id AND m.kind='initial' AND m.status='sent') AND NOT EXISTS (SELECT 1 FROM distribution_send_attempts a WHERE a.tenant_id=$1 AND a.contact_id=c.id AND a.kind='initial' AND a.status IN ('reserved','unknown','blocked','sent')) AND NOT EXISTS (SELECT 1 FROM distribution_jobs j WHERE j.tenant_id=$1 AND j.kind='send_outreach' AND j.payload->>'contactId'=c.id AND j.status IN ('queued','running')) ORDER BY c.created_at ASC LIMIT 25`;
 async function sweepUnsentContacts(pool: ReturnType<typeof createWorkerPool>) {
   const client = await pool.connect();
   try {
@@ -136,7 +137,7 @@ async function knownResearchDomains(pool: ReturnType<typeof createWorkerPool>) {
   finally { client.release(); }
 }
 
-async function sweepDiscovery(pool: ReturnType<typeof createWorkerPool>) {
+export async function sweepDiscovery(pool: ReturnType<typeof createWorkerPool>) {
   if (process.env.DISTRIBUTION_AUTONOMOUS_DISCOVERY !== 'true') return 0;
   const controls = await campaignControls(pool);
   if (!controls.discoveryEnabled) return 0;
@@ -145,16 +146,30 @@ async function sweepDiscovery(pool: ReturnType<typeof createWorkerPool>) {
     console.warn('[Distribution] discovery skipped: no business-search provider configured (set GOOGLE_PLACES_API_KEY, BRAVE_SEARCH_API_KEY or DISTRIBUTION_DISCOVERY_PROVIDER_URL)');
     return 0;
   }
+  const lease = await pool.connect();
+  let locked = false;
+  try {
+    const lock = await lease.query(`SELECT pg_try_advisory_lock(hashtext('spr-distribution-discovery-sweep')) AS locked`);
+    locked = lock.rows?.[0]?.locked === true;
+    if (!locked) return 0;
   const configured = process.env.DISTRIBUTION_DISCOVERY_QUERIES?.split('\n').map((s) => s.trim()).filter(Boolean);
-  const queries = (configured?.length ? configured : buildMspDiscoveryQueries()).slice(0, 20);
+  const queries = (configured?.length ? configured : buildMspDiscoveryQueries()).slice(0, 100);
   // Every domain already researched, so a daily sweep only queues new businesses.
   const seen = await knownResearchDomains(pool);
   let queued = 0;
-  for (const query of queries) {
-    let candidates: DiscoveryResult[] = [];
-    try { candidates = await provider.discover(query, 20); }
-    catch (error) { console.error(`[Distribution] ${provider.name} failed for "${query}":`, error instanceof Error ? error.message : String(error)); continue; }
-    for (const candidate of dedupeDiscoveryResults(candidates)) {
+  const batches: Array<{ query: string; candidates: DiscoveryResult[] }> = [];
+  if (provider.name === 'seed-list') {
+    try { batches.push({ query: 'seed-list', candidates: await provider.discover('seed-list', 2000) }); }
+    catch (error) { console.error('[Distribution] seed-list discovery failed:', error instanceof Error ? error.message : String(error)); }
+  } else {
+    for (const query of queries) {
+      try { batches.push({ query, candidates: await provider.discover(query, 20) }); }
+      catch (error) { console.error(`[Distribution] ${provider.name} failed for "${query}":`, error instanceof Error ? error.message : String(error)); }
+    }
+  }
+  for (const batch of batches) {
+    const query = batch.query;
+    for (const candidate of dedupeDiscoveryResults(batch.candidates)) {
       const domain = canonicalizeDomain(candidate.url);
       if (seen.has(domain)) continue;
       seen.add(domain);
@@ -163,6 +178,14 @@ async function sweepDiscovery(pool: ReturnType<typeof createWorkerPool>) {
     }
   }
   return queued;
+  } finally {
+    let destroyLease = false;
+    if (locked) {
+      try { await lease.query(`SELECT pg_advisory_unlock(hashtext('spr-distribution-discovery-sweep'))`); }
+      catch { destroyLease = true; }
+    }
+    lease.release(destroyLease);
+  }
 }
 
 // Diagnostic gate: why email provider, discovery, and db controls are or are not active.

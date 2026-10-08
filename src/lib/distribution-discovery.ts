@@ -13,7 +13,7 @@ export type DiscoveryResult = {
   discoveredAt: string;
 };
 
-const MAX_RESULTS = 100;
+const MAX_RESULTS = 2000;
 const MAX_QUERY = 200;
 
 export function canonicalizeDomain(input: string) {
@@ -137,7 +137,14 @@ export function httpEndpointProvider(endpoint: string): DiscoveryProvider {
 // known market without a search API.
 export function parseSeedUrls(raw: string | undefined): string[] {
   if (!raw) return [];
-  return raw.split(/[\n,]/).map((s) => s.trim()).filter(Boolean).slice(0, MAX_RESULTS);
+  const seen = new Set<string>();
+  return raw.split(/[\n,]/).map((s) => s.trim()).filter((url) => {
+    if (!isProspectDomain(url)) return false;
+    const domain = canonicalizeDomain(url);
+    if (seen.has(domain)) return false;
+    seen.add(domain);
+    return true;
+  }).slice(0, MAX_RESULTS);
 }
 
 export function seedListProvider(urls: string[]): DiscoveryProvider {
@@ -155,7 +162,7 @@ export function resolveDiscoveryProvider(env: NodeJS.ProcessEnv = process.env): 
   if (brave) return braveSearchProvider(brave);
   const endpoint = env.DISTRIBUTION_DISCOVERY_PROVIDER_URL?.trim();
   if (endpoint) return httpEndpointProvider(endpoint);
-  const seeds = parseSeedUrls(env.DISTRIBUTION_DISCOVERY_SEED_URLS);
+  const seeds = parseSeedUrls([env.DISTRIBUTION_DISCOVERY_SEED_URLS, env.DISTRIBUTION_DISCOVERY_EXTRA_SEED_URLS].filter(Boolean).join('\n'));
   if (seeds.length) return seedListProvider(seeds);
   return null;
 }

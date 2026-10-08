@@ -156,6 +156,14 @@ export interface SendOptions {
   from?: string;
   /** Override Reply-To; defaults to the brand support address. */
   replyTo?: string;
+  /** Stable identifier for one logical email, never a fresh retry UUID. */
+  idempotencyKey?: string;
+}
+
+export class EmailProviderError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(`EMAIL_PROVIDER_${status}:${message}`);
+  }
 }
 
 export async function sendBrandedEmail(destination: string, subject: string, brand: EmailBrand, content: BrandedEmailContent, options: SendOptions = {}): Promise<string> {
@@ -168,10 +176,12 @@ export async function sendBrandedEmail(destination: string, subject: string, bra
   const fromAddress = from.includes('<') ? from : `${brand.productName.replace(/[<>"]/g, '')} <${from}>`;
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(15_000),
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json', ...(options.idempotencyKey ? { 'Idempotency-Key': options.idempotencyKey } : {}) },
     body: JSON.stringify({ from: fromAddress, to: [destination], subject, html, text, ...((options.replyTo || brand.supportEmail) ? { reply_to: options.replyTo || brand.supportEmail } : {}) }),
   });
   const result = (await response.json().catch(() => ({}))) as { id?: string; message?: string };
-  if (!response.ok) throw new Error(`EMAIL_PROVIDER_${response.status}:${result?.message ?? 'unknown'}`);
-  return result?.id ?? '';
+  if (!response.ok) throw new EmailProviderError(response.status, result?.message ?? 'unknown');
+  if (!result.id?.trim()) throw new Error('EMAIL_PROVIDER_ACCEPTANCE_UNKNOWN');
+  return result.id;
 }
