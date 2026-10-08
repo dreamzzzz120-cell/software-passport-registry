@@ -34,17 +34,17 @@ function buildPdf(result: any, repositoryLabel: string): jsPDF {
     ['Trust score', a?.score === null || a?.score === undefined ? 'Not measured' : `${a.score} / 100 — ${a.verdict ?? ''}`],
     ['Areas observed', a ? `${a.observedAreas} of ${a.totalAreas}` : 'Not measured'],
     ['SBOM components', result.sbom?.componentCount ?? 'Not measured'],
-    ['Open findings', String(result.summary?.openFindings ?? 0)],
-    ['Critical or high', String(result.summary?.criticalOrHigh ?? 0)],
-    ['Evidence items', `${result.evidence?.total ?? 0} (verified ${result.evidence?.verified ?? 0})`],
+    ['Open findings', result.summary?.openFindings == null ? 'Not measured' : String(result.summary.openFindings)],
+    ['Critical or high', result.summary?.criticalOrHigh == null ? 'Not measured' : String(result.summary.criticalOrHigh)],
+    ['Evidence items', result.evidence?.total == null ? 'Not measured' : `${result.evidence.total} (verified ${result.evidence.verified == null ? 'not measured' : result.evidence.verified})`],
   ].map((r) => r.map(String));
   autoTable(doc, { startY: 112, head: [['Summary', 'Observed value']], body: summaryRows, styles: { fontSize: 9 }, headStyles: { fillColor: [31, 95, 122] } });
 
   const catRows = a ? Object.entries(a.categories || {}).map(([k, v]: [string, any]) => [k, v.status === 'scored' ? `${v.score} / 100` : 'Not observed', v.status === 'scored' ? v.detail : v.reason]) : [];
   if (catRows.length) autoTable(doc, { startY: (doc as any).lastAutoTable.finalY + 14, head: [['Area', 'Score', 'Basis']], body: catRows, styles: { fontSize: 8.5 }, columnStyles: { 2: { cellWidth: 300 } }, headStyles: { fillColor: [31, 95, 122] } });
 
-  const sev = result.findings?.bySeverity || {};
-  const sevRows = ['critical', 'high', 'medium', 'low', 'info'].map((s) => [s, String(sev[s] ?? 0)]);
+  const sev = result.findings?.bySeverity;
+  const sevRows = ['critical', 'high', 'medium', 'low', 'info'].map((s) => [s, sev?.[s] == null ? 'Not measured' : String(sev[s])]);
   autoTable(doc, { startY: (doc as any).lastAutoTable.finalY + 14, head: [['Findings by severity', 'Count']], body: sevRows, styles: { fontSize: 9 }, headStyles: { fillColor: [31, 95, 122] } });
 
   const teasers = (result.findings?.teasers || []).map((t: any) => [t.category, t.severity, String(t.count)]);
