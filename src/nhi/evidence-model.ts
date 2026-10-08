@@ -80,7 +80,7 @@ export function constructNhiEvidence(
   }
   return Object.freeze({
     ...parsed,
-    permissions: Object.freeze([...parsed.permissions]),
+    permissions: [...parsed.permissions],
     tenantId,
     recordedAt: now,
     ownerState: parsed.ownerRef ? "DOCUMENTED" as const : "UNKNOWN" as const,
