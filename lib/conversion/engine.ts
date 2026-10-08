@@ -5,7 +5,7 @@ export type ConversionInput = {
  scan?: {id:string;terminal:boolean;reportUrl?:string};
  account?: {registered:boolean;activeEntitlement:boolean};
  contact?: {email?:string;consentForFollowUp:boolean;unsubscribed:boolean;suppressed:boolean};
- history?: {alreadyContactedForScan:boolean;latestContactAt?:string;now:string};
+ history?: {abandonedConfirmed:boolean;alreadyContactedForScan:boolean;latestContactAt?:string;now:string};
 };
 export type Decision = {action:"none"|"show_report"|"show_signup"|"show_upgrade"|"show_support"|"queue_follow_up";reason:string;dedupeKey?:string;message?:string};
 export function decideConversion(input:ConversionInput):Decision {
@@ -24,6 +24,8 @@ export function decideConversion(input:ConversionInput):Decision {
  if(input.event!=="scan_started"||!input.scan?.id)return none("not_eligible");
  const c=input.contact;
  if(!c?.email||!c.consentForFollowUp||c.unsubscribed||c.suppressed)return none("no_contact_permission");
+ if(!input.history?.abandonedConfirmed)return none("abandonment_unverified");
+ if(input.scan.terminal)return none("scan_already_terminal");
  if(!input.history?.now||!Number.isFinite(Date.parse(input.history.now)))return none("time_unverified");
  if(input.history.alreadyContactedForScan)return none("already_contacted");
  if(input.history.latestContactAt){
