@@ -96,3 +96,13 @@ it('disables password submission if the recovery session signs out', async () =>
   act(() => { listener('SIGNED_OUT', null); });
   expect((screen.getByRole('button', { name: 'Update password' }) as HTMLButtonElement).disabled).toBe(true);
 });
+
+it('signs out the recovery session before returning to sign in', async () => {
+  render(<LoginView onLoginSuccess={complete} />);
+  await waitFor(() => expect((screen.getByRole('button', { name: 'Update password' }) as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(screen.getByRole('button', { name: 'Request a new reset link' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Back to sign in' }));
+  await screen.findByRole('button', { name: 'Sign in' });
+  expect(auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
+  expect(complete).not.toHaveBeenCalled();
+});
