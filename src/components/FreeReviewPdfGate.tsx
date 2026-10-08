@@ -29,7 +29,27 @@ function buildPdf(result: any, repositoryLabel: string): jsPDF {
   doc.text(`Scan status: ${result.scanStatus}${result.failureReason ? ` — ${result.failureReason}` : ''}`, 40, 100);
   doc.setTextColor(20);
 
+  // Lead with the observed facts and limitations, not an inferred safety verdict.
   const a = result.assessment;
+  const measuredFindings = result.summary?.openFindings;
+  const observedAreas = a?.observedAreas;
+  const totalAreas = a?.totalAreas;
+  const headline = result.scanStatus !== 'complete'
+    ? 'Review incomplete: do not treat missing results as a clean bill of health.'
+    : measuredFindings == null
+      ? 'Review completed, but finding totals were not measured.'
+      : measuredFindings > 0
+        ? `Review identified ${measuredFindings} reported finding(s) in the observed scope.`
+        : 'No findings reported in the observed scope; this does not prove safety.';
+  doc.setFontSize(11); doc.setTextColor(20);
+  const executiveLines = doc.splitTextToSize(headline, 510);
+  doc.text(executiveLines, 40, 121);
+  doc.setFontSize(9); doc.setTextColor(85);
+  doc.text(doc.splitTextToSize(
+    `Coverage: ${observedAreas == null || totalAreas == null ? 'Not measured' : `${observedAreas} of ${totalAreas} areas observed`}. Unobserved areas remain UNKNOWN. This report only describes results available at generation time.`,
+    510,
+  ), 40, 143);
+  doc.setTextColor(20);
   const summaryRows: string[][] = [
     ['Trust score', a?.score === null || a?.score === undefined ? 'Not measured' : `${a.score} / 100 — ${a.verdict ?? ''}`],
     ['Areas observed', a ? `${a.observedAreas} of ${a.totalAreas}` : 'Not measured'],
@@ -38,7 +58,7 @@ function buildPdf(result: any, repositoryLabel: string): jsPDF {
     ['Critical or high', result.summary?.criticalOrHigh == null ? 'Not measured' : String(result.summary.criticalOrHigh)],
     ['Evidence items', result.evidence?.total == null ? 'Not measured' : `${result.evidence.total} (verified ${result.evidence.verified == null ? 'not measured' : result.evidence.verified})`],
   ].map((r) => r.map(String));
-  autoTable(doc, { startY: 112, head: [['Summary', 'Observed value']], body: summaryRows, styles: { fontSize: 9 }, headStyles: { fillColor: [31, 95, 122] } });
+  autoTable(doc, { startY: 177, head: [['Summary', 'Observed value']], body: summaryRows, styles: { fontSize: 9 }, headStyles: { fillColor: [31, 95, 122] } });
 
   const catRows = a ? Object.entries(a.categories || {}).map(([k, v]: [string, any]) => [k, v.status === 'scored' ? `${v.score} / 100` : 'Not observed', v.status === 'scored' ? v.detail : v.reason]) : [];
   if (catRows.length) autoTable(doc, { startY: (doc as any).lastAutoTable.finalY + 14, head: [['Area', 'Score', 'Basis']], body: catRows, styles: { fontSize: 8.5 }, columnStyles: { 2: { cellWidth: 300 } }, headStyles: { fillColor: [31, 95, 122] } });
