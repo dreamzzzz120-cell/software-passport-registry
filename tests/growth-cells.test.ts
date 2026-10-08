@@ -1,7 +1,7 @@
 import { beforeAll,afterAll,it,expect } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';
 import { readFileSync } from 'node:fs';
-import { GROWTH_CELLS,observeGrowthCell,cellState,DISTRIBUTION_CLAIM_JOB_SQL } from '../src/lib/growth-cells.ts';
+import { GROWTH_CELLS,observeGrowthCell,runGrowthCellObservation,cellState,DISTRIBUTION_CLAIM_JOB_SQL } from '../src/lib/growth-cells.ts';
 const db=new PGlite();
 beforeAll(async()=>{
  await db.exec(`CREATE ROLE spr_app_runtime;CREATE ROLE spr_worker_runtime;
@@ -41,4 +41,16 @@ it('worker claims skip paused cells and foreign tenants; resume admits pending w
 });
 it('separates control state from activity and preserves UNKNOWN',()=>{
  expect(cellState('observing',0,0,0,false)).toBe('UNKNOWN');expect(cellState('paused',1,2,3,true)).toBe('PAUSED');expect(cellState('observing',1,0,0,false)).toBe('RUNNING');
+});
+it('returns the connection before persistence and releases it after a failed observation',async()=>{
+ let leased=false;
+ const pool={connect:async()=>{
+   if(leased)throw new Error('POOL_EXHAUSTED');leased=true;
+   return {query:(text:string,values?:any[])=>db.query(text,values),release:()=>{leased=false;}};
+ }};
+ await runGrowthCellObservation(pool,'recon','target');
+ const persistenceClient=await pool.connect();persistenceClient.release();
+ await expect(runGrowthCellObservation(pool,'unknown','target')).rejects.toThrow('GROWTH_CELL_UNKNOWN');
+ const recoveryClient=await pool.connect();recoveryClient.release();
+ expect(leased).toBe(false);
 });

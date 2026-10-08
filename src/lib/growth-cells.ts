@@ -56,3 +56,18 @@ export async function observeGrowthCell(client: {query: (...args:any[])=>Promise
   const result=await client.query(query.text,query.kind?[tenantId,query.kind]:[tenantId]);
   return {cellId:id,metrics:result.rows[0],source:growthCell(id)!.source,observedAt:new Date().toISOString(),costCents:null,execution:'OBSERVATION_ONLY',policy:'Recorded customer stages do not prove payments. This mission performs no outreach, publishing, ad buying or authority grants.'};
 }
+
+/** Release the observation connection before result persistence acquires another one. */
+export async function runGrowthCellObservation(pool: {connect:()=>Promise<{query:(...args:any[])=>Promise<any>;release:()=>void}>}, id: unknown, tenantId: string) {
+  const client=await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query("SELECT set_config('app.tenant_id',$1,true)",[tenantId]);
+    const result=await observeGrowthCell(client,id,tenantId);
+    await client.query('COMMIT');
+    return result;
+  } catch(error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {client.release();}
+}
