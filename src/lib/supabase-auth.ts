@@ -1,5 +1,6 @@
 import type { AuthChangeEvent, User as SupabaseUser } from '@supabase/supabase-js';
 import { supabase, supabaseConfigured } from './supabase';
+import { passwordRecoveryPending, setPasswordRecoveryPending } from './authRecovery';
 
 // This compatibility auth adapter (the `firebase/auth` alias target, see
 // vite.config.ts) shares the single browser client from ./supabase rather than
@@ -13,7 +14,7 @@ let currentUser: User | null = null;
 let initialized = false;
 // Importing this module must not throw when the bundle was built without
 // Supabase configuration; every auth call still fails loudly through getClient.
-if (supabaseConfigured) void supabase.auth.getSession().then(({ data }) => { currentUser = data.session?.user ? mapUser(data.session.user) : null; initialized = true; }).catch(() => { initialized = true; });
+if (supabaseConfigured) void supabase.auth.getSession().then(({ data }) => { currentUser = !passwordRecoveryPending() && data.session?.user ? mapUser(data.session.user) : null; initialized = true; }).catch(() => { initialized = true; });
 else initialized = true;
 export const auth: any = { get currentUser() { return currentUser; }, get initialized() { return initialized; }, async getIdToken(forceRefresh = false) { return currentUser?.getIdToken(forceRefresh) || ''; }, async signOut() { const { error } = await supabase.auth.signOut(); if (error) throw error; } };
 export function onAuthStateChanged(_auth: any, callback: (user: User | null) => void) {
@@ -21,7 +22,7 @@ export function onAuthStateChanged(_auth: any, callback: (user: User | null) => 
   let hydrated = false;
   void supabase.auth.getSession().then(({ data }) => {
     if (!active) return;
-    currentUser = data.session?.user ? mapUser(data.session.user) : null;
+    currentUser = !passwordRecoveryPending() && data.session?.user ? mapUser(data.session.user) : null;
     hydrated = true;
     callback(currentUser);
   }).catch(() => {
@@ -31,6 +32,12 @@ export function onAuthStateChanged(_auth: any, callback: (user: User | null) => 
   });
   const { data } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session) => {
     if (!active) return;
+    if (event === 'PASSWORD_RECOVERY') setPasswordRecoveryPending(true);
+    if (passwordRecoveryPending()) {
+      currentUser = null;
+      callback(null);
+      return;
+    }
     if (event === 'SIGNED_OUT') {
       currentUser = null;
       callback(null);
@@ -51,7 +58,7 @@ export function onAuthStateChanged(_auth: any, callback: (user: User | null) => 
   });
   return () => { active = false; data.subscription.unsubscribe(); };
 }
-export async function getRedirectResult(_auth: any) { const { data, error } = await supabase.auth.getSession(); if (error) throw error; return data.session?.user ? { user: mapUser(data.session.user) } : null; }
+export async function getRedirectResult(_auth: any) { const { data, error } = await supabase.auth.getSession(); if (error) throw error; return !passwordRecoveryPending() && data.session?.user ? { user: mapUser(data.session.user) } : null; }
 function authError(code: string, message: string) { return Object.assign(new Error(message), { code }); }
 export async function signInWithEmailAndPassword(_auth: any, email: string, password: string) { const { data, error } = await supabase.auth.signInWithPassword({ email, password }); if (error) { const message = error.message.toLowerCase(); if (message.includes('email not confirmed')) throw authError('auth/email-not-verified', 'Email not confirmed'); if (message.includes('invalid login credentials')) throw authError('auth/invalid-credential', error.message); throw authError('auth/network-request-failed', error.message); } if (!data.user) throw authError('auth/invalid-credential', 'Authentication did not return a user.'); currentUser = mapUser(data.user); return { user: currentUser }; }
 export async function createUserWithEmailAndPassword(_auth: any, email: string, password: string) { const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: email.trim().split('@')[0] }, emailRedirectTo: `${window.location.origin}/login` } }); if (error) { if (error.message.toLowerCase().includes('already registered')) throw authError('auth/email-already-in-use', error.message); if (error.message.toLowerCase().includes('password')) throw authError('auth/weak-password', error.message); throw authError('auth/network-request-failed', error.message); } if (!data.user) throw authError('auth/invalid-credential', 'Account creation did not return a user.'); currentUser = data.session ? mapUser(data.user) : null; return { user: mapUser(data.user) }; }
