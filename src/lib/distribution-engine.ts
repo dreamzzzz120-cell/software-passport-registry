@@ -4,7 +4,7 @@ import net from 'node:net';
 import type { Pool } from 'pg';
 
 export const DISTRIBUTION_TENANT_ID = 'tenant-free-review-system';
-export type DistributionJobKind = 'research_url' | 'qualify_lead' | 'prepare_outreach' | 'send_outreach' | 'followup_outreach';
+export type DistributionJobKind = 'research_url' | 'qualify_lead' | 'prepare_outreach' | 'send_outreach' | 'followup_outreach' | 'growth_cell';
 
 const MAX_PAYLOAD_BYTES = 32_000;
 const REQUEST_TIMEOUT_MS = 8_000;
