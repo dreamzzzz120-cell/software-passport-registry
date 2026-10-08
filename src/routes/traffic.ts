@@ -123,8 +123,10 @@ export function createTrafficRouter() {
         COUNT(*) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '30 minutes')::int AS active_events,
         COUNT(DISTINCT session_id) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '30 minutes')::int AS active_sessions,
         COUNT(DISTINCT session_id) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours')::int AS users_24h,
+        COUNT(DISTINCT session_id) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours')::int AS sessions_24h,
         COUNT(*) FILTER (WHERE event_name = 'page_view' AND occurred_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours')::int AS pageviews_24h,
         COUNT(DISTINCT session_id) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '7 days')::int AS users_7d,
+        COUNT(DISTINCT session_id) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '7 days')::int AS sessions_7d,
         COUNT(*) FILTER (WHERE event_name = 'page_view' AND occurred_at >= CURRENT_TIMESTAMP - INTERVAL '7 days')::int AS pageviews_7d
       FROM traffic_events
       WHERE source IS DISTINCT FROM 'founder-test'
@@ -135,7 +137,7 @@ export function createTrafficRouter() {
         AND occurred_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours'
       GROUP BY path ORDER BY views DESC LIMIT 20
     `);
-    return res.json({ summary: (result as any).rows?.[0] ?? {}, topPages: (topPages as any).rows ?? [] });
+    return res.json({ summary: (result as any).rows?.[0] ?? {}, topPages: (topPages as any).rows ?? [], measurement: 'anonymous_sessions_not_unique_people' });
   });
 
   return router;
