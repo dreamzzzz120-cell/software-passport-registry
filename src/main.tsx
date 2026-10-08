@@ -17,8 +17,7 @@ installPageViewTracking();
 
 function SprApplication() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/';
-  if (path === '/software/workspace') return <SoftwareWorkspaceView />;
-  return (<><App /><ExperienceAgent /><Analytics /></>);
+  return (<>{path === '/software/workspace' ? <SoftwareWorkspaceView /> : <><App /><ExperienceAgent /></>}<Analytics /></>);
 }
 
 ReactDOM.createRoot(root).render(<React.StrictMode><SprApplication /></React.StrictMode>);
