@@ -14,6 +14,7 @@ type Summary = {
   pageviews24h: number | null;
   users7d: number | null;
   pageviews7d: number | null;
+  latestEventAt?: string | null;
 };
 
 type TopPage = { path: string; views: number };
@@ -66,6 +67,8 @@ export default function FounderTrafficPanel() {
 
   const n = (v: number | null | undefined) => (typeof v === 'number' ? v.toLocaleString() : 'Not verified');
   const summary = data?.summary;
+  const latestEventMs = summary?.latestEventAt ? new Date(summary.latestEventAt).getTime() : NaN;
+  const staleTelemetry = state === 'ready' && (!Number.isFinite(latestEventMs) || Date.now() - latestEventMs > 24 * 60 * 60 * 1000);
   const tiles: [string, number | null | undefined][] = [
     ['Active events, 30 min', summary?.activeEvents],
     ['Active sessions, 30 min', summary?.activeSessions],
@@ -97,6 +100,8 @@ export default function FounderTrafficPanel() {
       {state === 'loading' && !data && <p className="text-xs text-[var(--spr-text-muted)]">Loading traffic telemetry…</p>}
       {state === 'error' && !data && <p role="alert" className="text-xs text-[var(--spr-red)]">Traffic could not be verified.</p>}
       {state === 'error' && data && <p className="text-xs text-[var(--spr-amber)]">Refresh failed; showing the last verified traffic snapshot.</p>}
+
+      {staleTelemetry && <p role="status" className="text-xs text-[var(--spr-amber)]">Traffic freshness warning: no events recorded in the last 24 hours, or latest event time is unavailable. This does not prove zero visitors.</p>}
 
       {data && summary && (
         <>
