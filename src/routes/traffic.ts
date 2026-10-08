@@ -5,7 +5,8 @@ import { sql } from 'drizzle-orm';
 import { db } from '../db/index.ts';
 import { requireAuth, requireRole, requireFounder, rateLimiter } from '../middleware/security.ts';
 
-const eventNames = ['page_view','free_review_started','free_review_completed','lead_captured','pricing_view','signup_started','signup_completed','pilot_started','customer_created','registry_claim_clicked','registry_share_clicked','referral_visit'] as const;
+/** Client events are analytics signals only, NEVER payment/entitlement or verified completion evidence. */
+export const eventNames = ['page_view','free_review_started','free_review_completed','lead_captured','pricing_view','signup_started','signup_completed','pilot_started','customer_created','registry_claim_clicked','registry_share_clicked','referral_visit','report_viewed','upgrade_clicked','checkout_started','checkout_failed'] as const;
 const eventSchema = z.object({
   sessionId: z.string().regex(/^[A-Za-z0-9_-]{16,80}$/),
   path: z.string().min(1).max(500),
