@@ -92,6 +92,7 @@ export function createTrafficRouter() {
         SELECT event_name AS "eventName", COUNT(*)::int AS events, COUNT(DISTINCT session_id)::int AS sessions
         FROM traffic_events
         WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'
+          AND source IS DISTINCT FROM 'founder-test'
         GROUP BY event_name ORDER BY events DESC
       `);
       const attribution = await db.execute(sql`
@@ -100,6 +101,7 @@ export function createTrafficRouter() {
                COUNT(*) FILTER (WHERE event_name IN ('lead_captured','signup_completed','pilot_started','customer_created'))::int AS conversions
         FROM traffic_events
         WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'
+          AND source IS DISTINCT FROM 'founder-test'
         GROUP BY COALESCE(source,'direct'), COALESCE(medium,'unknown'), COALESCE(campaign,'')
         ORDER BY conversions DESC, sessions DESC LIMIT 50
       `);
@@ -121,14 +123,16 @@ export function createTrafficRouter() {
         COUNT(*) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '30 minutes')::int AS active_events,
         COUNT(DISTINCT session_id) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '30 minutes')::int AS active_sessions,
         COUNT(DISTINCT session_id) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours')::int AS users_24h,
-        COUNT(*) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours')::int AS pageviews_24h,
+        COUNT(*) FILTER (WHERE event_name = 'page_view' AND occurred_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours')::int AS pageviews_24h,
         COUNT(DISTINCT session_id) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '7 days')::int AS users_7d,
-        COUNT(*) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '7 days')::int AS pageviews_7d
+        COUNT(*) FILTER (WHERE event_name = 'page_view' AND occurred_at >= CURRENT_TIMESTAMP - INTERVAL '7 days')::int AS pageviews_7d
       FROM traffic_events
+      WHERE source IS DISTINCT FROM 'founder-test'
     `);
     const topPages = await db.execute(sql`
       SELECT path, COUNT(*)::int AS views FROM traffic_events
-      WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours'
+      WHERE event_name = 'page_view' AND source IS DISTINCT FROM 'founder-test'
+        AND occurred_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours'
       GROUP BY path ORDER BY views DESC LIMIT 20
     `);
     return res.json({ summary: (result as any).rows?.[0] ?? {}, topPages: (topPages as any).rows ?? [] });
