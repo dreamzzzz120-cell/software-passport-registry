@@ -153,15 +153,17 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
         if (password !== confirmPassword) throw new Error('Passwords do not match.');
         const { data, error } = await supabase.auth.updateUser({ password });
         if (error) throw error;
-        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError || !sessionData.session || !data.user) throw sessionError || new Error('Password updated. Sign in with your new password.');
+        if (!data.user) throw new Error('Password update did not return a user.');
+        const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' });
+        if (signOutError) throw signOutError;
         recoveryRequested.current = false;
         setPasswordRecoveryPending(false);
+        setRecoveryReady(false);
         const cleanUrl = new URL(window.location.href);
         cleanUrl.searchParams.delete('recovery');
         window.history.replaceState(null, '', cleanUrl.pathname + cleanUrl.search);
         setPassword(''); setConfirmPassword(''); setMode('login');
-        await finishSession({ ...sessionData.session, user: data.user });
+        setNotice('Password updated. Sign in with your new password.');
         return;
       }
       if (mode === 'reset') {
