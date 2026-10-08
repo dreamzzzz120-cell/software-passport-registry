@@ -26,6 +26,7 @@ beforeEach(() => {
   vi.clearAllMocks(); setPasswordRecoveryPending(true);
   window.history.replaceState(null, '', '/login?recovery=1');
   auth.getSession.mockResolvedValue({ data: { session }, error: null });
+  auth.signOut.mockResolvedValue({ error: null });
   auth.updateUser.mockResolvedValue({ data: { user: session.user }, error: null });
   auth.mfa.getAuthenticatorAssuranceLevel.mockResolvedValue({ data: { currentLevel: 'aal1', nextLevel: 'aal1' }, error: null });
   auth.mfa.listFactors.mockResolvedValue({ data: { totp: [], phone: [] }, error: null });
@@ -50,10 +51,12 @@ it('keeps a restored recovery session on the password form instead of entering t
   act(() => { expect(listener('TOKEN_REFRESHED', session)).toBeUndefined(); });
   expect(complete).not.toHaveBeenCalled();
 });
-it('updates through Supabase before entering the workspace and removes recovery intent', async () => {
+it('updates through Supabase then signs out and requires a fresh sign-in', async () => {
   render(<LoginView onLoginSuccess={complete} />);
   await enterPasswords();
-  await waitFor(() => expect(complete).toHaveBeenCalledTimes(1));
+  await screen.findByText('Password updated. Sign in with your new password.');
+  expect(auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
+  expect(complete).not.toHaveBeenCalled();
   expect(auth.updateUser).toHaveBeenCalledWith({ password: 'new-password' });
   expect(window.location.search).toBe('');
 });
