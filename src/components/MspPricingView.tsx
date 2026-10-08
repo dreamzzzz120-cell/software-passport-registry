@@ -197,7 +197,7 @@ export default function MspPricingView({ isAuthenticated, onPrimaryAction }: Pro
                 ))}
               </ul>
               <button onClick={() => {
-                if (isAuthenticated) return onPrimaryAction();
+                if (isAuthenticated) { trackGrowthEvent('upgrade_clicked'); return onPrimaryAction(); }
                 if (plan.checkoutAvailable) {
                   const next = encodeURIComponent(`/billing?plan=${plan.id}`);
                   return window.location.assign(`/login?mode=signup&next=${next}`);
