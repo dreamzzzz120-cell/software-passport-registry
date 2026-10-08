@@ -1,3 +1,4 @@
+import FounderGrowthCells from './FounderGrowthCells';
 import React, { useEffect, useState } from 'react';
 import { ShieldCheck, Sparkles, RefreshCw, ChevronDown, ChevronRight } from 'lucide-react';
 import { useFounderData } from '../lib/founderData';
@@ -45,7 +46,7 @@ function FounderDashboardContent({ userRole }: FounderDashboardViewProps) {
   const [area, setArea] = useState('overview');
   const [reviewed, setReviewed] = useState<string[]>([]);
   const { commandCenter, overview, loadedAt, loading, refresh } = useFounderData();
-  const sections = [ ['overview', 'Daily overview'], ['operations', 'Operations & repairs'], ['growth', 'Customers & growth'], ['traffic', 'Traffic'], ['reports', 'Reports & features'] ];
+  const sections = [ ['overview', 'Daily overview'], ['operations', 'Operations & repairs'], ['cells', 'Growth Command cells'], ['growth', 'Customers & growth'], ['traffic', 'Traffic'], ['reports', 'Reports & features'] ];
   const dailyChecks = [ ['health', 'Check system health and unresolved issues', 'overview'], ['jobs', 'Review scans, workers and connections', 'operations'], ['customers', 'Review accounts, billing and new leads', 'growth'], ['traffic', 'Review visitors and completed Free Reviews', 'traffic'], ['evidence', 'Review SPR evidence and reports', 'reports'] ];
   const today = new Date().toLocaleDateString();
   const [reviewDate, setReviewDate] = useState(today);
@@ -125,6 +126,7 @@ function FounderDashboardContent({ userRole }: FounderDashboardViewProps) {
     <FounderAgentsPanel />
     <FounderCommandCenterPanel />
     </div>
+    {area === 'cells' && <FounderGrowthCells />}
     <div hidden={area !== 'growth'} className="space-y-4">
     <FounderSection defaultOpen title="Leads" hint="Free Review visitors who left an email">
       <FounderLeadsPanel />
