@@ -44,11 +44,14 @@ function buildPdf(result: any, repositoryLabel: string): jsPDF {
   doc.setFontSize(11); doc.setTextColor(20);
   const executiveLines = doc.splitTextToSize(headline, 510);
   doc.text(executiveLines, 40, 121);
+  const coverageY = 121 + executiveLines.length * 13 + 8;
   doc.setFontSize(9); doc.setTextColor(85);
-  doc.text(doc.splitTextToSize(
+  const coverageLines = doc.splitTextToSize(
     `Coverage: ${observedAreas == null || totalAreas == null ? 'Not measured' : `${observedAreas} of ${totalAreas} areas observed`}. Unobserved areas remain UNKNOWN. This report only describes results available at generation time.`,
     510,
-  ), 40, 143);
+  );
+  doc.text(coverageLines, 40, coverageY);
+  const summaryStartY = coverageY + coverageLines.length * 12 + 14;
   doc.setTextColor(20);
   const summaryRows: string[][] = [
     ['Trust score', a?.score === null || a?.score === undefined ? 'Not measured' : `${a.score} / 100 — ${a.verdict ?? ''}`],
@@ -58,7 +61,7 @@ function buildPdf(result: any, repositoryLabel: string): jsPDF {
     ['Critical or high', result.summary?.criticalOrHigh == null ? 'Not measured' : String(result.summary.criticalOrHigh)],
     ['Evidence items', result.evidence?.total == null ? 'Not measured' : `${result.evidence.total} (verified ${result.evidence.verified == null ? 'not measured' : result.evidence.verified})`],
   ].map((r) => r.map(String));
-  autoTable(doc, { startY: 177, head: [['Summary', 'Observed value']], body: summaryRows, styles: { fontSize: 9 }, headStyles: { fillColor: [31, 95, 122] } });
+  autoTable(doc, { startY: summaryStartY, head: [['Summary', 'Observed value']], body: summaryRows, styles: { fontSize: 9 }, headStyles: { fillColor: [31, 95, 122] } });
 
   const catRows = a ? Object.entries(a.categories || {}).map(([k, v]: [string, any]) => [k, v.status === 'scored' ? `${v.score} / 100` : 'Not observed', v.status === 'scored' ? v.detail : v.reason]) : [];
   if (catRows.length) autoTable(doc, { startY: (doc as any).lastAutoTable.finalY + 14, head: [['Area', 'Score', 'Basis']], body: catRows, styles: { fontSize: 8.5 }, columnStyles: { 2: { cellWidth: 300 } }, headStyles: { fillColor: [31, 95, 122] } });
