@@ -23,11 +23,25 @@ export default function PlainEnglishReport({ passportId, reportType }: { passpor
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showGlossary, setShowGlossary] = useState(true);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
+
+  async function downloadExplainedReport() {
+    if (!data || exporting) return;
+    setExporting(true);
+    setExportError('');
+    try {
+      const { buildPlainEnglishPdf } = await import('../utils/plainEnglishPdf');
+      buildPlainEnglishPdf(data).save(`spr-explained-report-${passportId.replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`);
+    } catch {
+      setExportError('Unable to export this report. Try downloading again.');
+    } finally { setExporting(false); }
+  }
 
   useEffect(() => {
     if (!passportId) return;
     let cancelled = false;
-    setLoading(true); setError(''); setData(null);
+    setLoading(true); setError(''); setExportError(''); setData(null);
     apiFetch(`/api/trust-loop/reports/${encodeURIComponent(passportId)}/plain-english?type=${encodeURIComponent(reportType)}`)
       .then(async (response) => {
         if (!response.ok) throw new Error('SPR could not generate a plain-English report for this passport.');
@@ -45,6 +59,8 @@ export default function PlainEnglishReport({ passportId, reportType }: { passpor
 
   return (
     <div className="space-y-5">
+      <button onClick={() => void downloadExplainedReport()} disabled={exporting} className="spr-btn spr-btn-primary disabled:opacity-40">{exporting ? 'Preparing report…' : 'Download explained report PDF'}</button>
+      {exportError && <p role="alert" className="text-sm text-[var(--spr-red)]">{exportError}</p>}
       {data.readerGuide && <section className="spr-panel p-5" aria-label="How to read this report">
         <h2 className="text-xl font-bold">Software evidence report: {data.readerGuide.softwareName}</h2>
         <p className="mt-2 text-sm leading-6">{data.readerGuide.purpose}</p>

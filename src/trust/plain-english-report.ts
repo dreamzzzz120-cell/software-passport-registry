@@ -187,7 +187,7 @@ export function toPlainEnglish(report: CanonicalReport): PlainEnglishReport {
     headline,
     situation,
     whatIsGood: resolved.map((f) => `${f.title}: resolved`),
-    whatNeedsAttention: [...open, ...unknown].map((f) => `${f.title}${f.status === 'UNKNOWN' ? ' (not enough evidence to confirm either way)' : ''}`),
+    whatNeedsAttention: [...open, ...unknown].map((f) => `${f.title}${f.status !== 'OPEN' ? ' (not enough evidence to confirm either way)' : ''}`),
     scoreExplanation,
     findings: findings.map(explainFinding),
     glossary: GLOSSARY,
