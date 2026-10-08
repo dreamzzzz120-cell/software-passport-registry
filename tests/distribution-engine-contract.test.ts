@@ -34,7 +34,7 @@ describe('outreach sender address', () => {
     // Every outreach send passes the outreach sender: the two contact sends
     // pass outreachSender() directly; the verification send spreads its fields.
     const sendCalls = (outreach.match(/sendBrandedEmail\(/g) ?? []).length;
-    const withSender = (outreach.match(/, outreachSender\(\)\)/g) ?? []).length + (outreach.match(/\}, \{ from, replyTo \}\)/g) ?? []).length;
+    const withSender = (outreach.match(/\.\.\.outreachSender\(\), idempotencyKey: reservation.id/g) ?? []).length + (outreach.match(/\}, \{ from, replyTo \}\)/g) ?? []).length;
     expect(sendCalls).toBe(withSender);
     const auth = fs.readFileSync('src/routes/auth.ts', 'utf8');
     expect(auth).not.toContain('outreachSender');

@@ -137,7 +137,14 @@ export function httpEndpointProvider(endpoint: string): DiscoveryProvider {
 // known market without a search API.
 export function parseSeedUrls(raw: string | undefined): string[] {
   if (!raw) return [];
-  return raw.split(/[\n,]/).map((s) => s.trim()).filter(Boolean).slice(0, MAX_RESULTS);
+  const seen = new Set<string>();
+  return raw.split(/[\n,]/).map((s) => s.trim()).filter((url) => {
+    if (!isProspectDomain(url)) return false;
+    const domain = canonicalizeDomain(url);
+    if (seen.has(domain)) return false;
+    seen.add(domain);
+    return true;
+  }).slice(0, MAX_RESULTS);
 }
 
 export function seedListProvider(urls: string[]): DiscoveryProvider {

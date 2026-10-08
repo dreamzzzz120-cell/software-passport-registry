@@ -13,6 +13,18 @@ describe('seed-list discovery provider', () => {
     expect(parseSeedUrls(urls)).toHaveLength(250);
   });
 
+  it('dedupes and rejects invalid seeds before applying the 2,000-domain bound', () => {
+    const valid = Array.from({ length: 2001 }, (_, i) => `https://msp-${i}.example.test/`);
+    const raw = [...Array(2000).fill('ftp://bad.example'), ...Array(2000).fill(valid[0]), ...valid].join('\n');
+    expect(parseSeedUrls(raw)).toEqual(valid.slice(0, 2000));
+  });
+
+  it('combines the extra seed feed while respecting provider precedence', async () => {
+    const env = { DISTRIBUTION_DISCOVERY_SEED_URLS: 'https://a.example.test/', DISTRIBUTION_DISCOVERY_EXTRA_SEED_URLS: 'https://b.example.test/\nhttps://www.a.example.test/' };
+    expect((await resolveDiscoveryProvider(env)!.discover('seed-list', 2000)).map(r => r.url)).toEqual(['https://a.example.test/', 'https://b.example.test/']);
+    expect(resolveDiscoveryProvider({ ...env, BRAVE_SEARCH_API_KEY: 'test' })!.name).toBe('brave-search');
+  });
+
   it('returns home pages, deduped, ignoring the query', async () => {
     const provider = seedListProvider(['https://sfy.ca/services/cybersecurity/', 'https://sfy.ca/', 'https://kcc.ca/managed-it-services', 'ftp://bad.example']);
     const a = await provider.discover('managed IT services Kelowna, BC', 25);

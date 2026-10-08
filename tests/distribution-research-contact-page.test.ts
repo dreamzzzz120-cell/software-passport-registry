@@ -90,7 +90,9 @@ describe('send hand-off safety', () => {
   it('serialises sends per contact and makes the sweep single-flight', async () => {
     const { readFileSync } = await import('node:fs');
     const outreach = readFileSync(new URL('../src/lib/distribution-outreach.ts', import.meta.url), 'utf8');
-    expect(outreach.slice(outreach.indexOf('export async function sendInitial'))).toMatch(/FROM distribution_contacts WHERE id=\$1 AND tenant_id=\$2 LIMIT 1 FOR UPDATE/);
+    expect(outreach).toContain('return sendContact(contactId, \'initial\')');
+    const reservations = readFileSync(new URL('../src/lib/distribution-send-reservation.ts', import.meta.url), 'utf8');
+    expect(reservations).toMatch(/FROM distribution_contacts WHERE id=\$1 AND tenant_id=\$2 LIMIT 1 FOR UPDATE/);
     const worker = readFileSync(new URL('../src/workers/distribution-worker.ts', import.meta.url), 'utf8');
     expect(worker).toContain(`pg_try_advisory_xact_lock(hashtext('spr-distribution-unsent-sweep'))`);
   });

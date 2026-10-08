@@ -3,11 +3,11 @@ import { sql } from 'drizzle-orm';
 import { db, appPool } from '../db/index.ts';
 import { renderBrandedEmail, SPR_DEFAULT_BRAND, sendBrandedEmail } from './branded-email.ts';
 import { DISTRIBUTION_TENANT_ID } from './distribution-engine.ts';
+import { DistributionDeferredError, withReservedOutreach } from './distribution-send-reservation.ts';
 
 const PUBLIC_ORIGIN = 'https://www.softwarepassportregistry.com';
 const DAILY_LIMIT = Math.max(1, Math.min(1000, Number.parseInt(process.env.DISTRIBUTION_DAILY_SEND_LIMIT ?? '50', 10) || 50));
-const FOLLOWUP_DAYS = Math.max(1, Math.min(30, Number.parseInt(process.env.DISTRIBUTION_FOLLOWUP_DAYS ?? '5', 10) || 5));
-const MAX_FOLLOWUPS = Math.max(0, Math.min(3, Number.parseInt(process.env.DISTRIBUTION_MAX_FOLLOWUPS ?? '2', 10) || 2));
+const SEND_INTERVAL_MS = Math.max(1000, Number.parseInt(process.env.DISTRIBUTION_SEND_INTERVAL_MS ?? '1000', 10) || 1000);
 
 // Outreach mail leaves from its own address (DISTRIBUTION_OUTREACH_FROM,
 // e.g. "Software Passport Registry <ceo@softwarepassportregistry.com>")
@@ -191,9 +191,16 @@ async function withTenant<T>(fn: (client: any) => Promise<T>) {
   } finally { client.release(); }
 }
 
-async function dailySendCount(client: any) {
-  const result = await client.query(`SELECT COUNT(*)::int AS count FROM distribution_messages WHERE tenant_id=$1 AND status='sent' AND created_at >= CURRENT_DATE`, [DISTRIBUTION_TENANT_ID]);
-  return Number(result.rows?.[0]?.count ?? 0);
+async function sendGate(client: any, contact: any) {
+  outreachAllowed(contact.outreach_basis);
+  if (contact.outreach_basis === 'consent' && !contact.consent_evidence_url?.trim()) throw new Error('DISTRIBUTION_CONSENT_EVIDENCE_REQUIRED');
+  const { from } = outreachSender();
+  const to = process.env.DISTRIBUTION_OUTREACH_VERIFY_TO?.trim().toLowerCase();
+  if (!from || !to) throw new DistributionDeferredError('DISTRIBUTION_SENDER_VERIFICATION_REQUIRED');
+  const verified = await client.query(`SELECT 1 FROM distribution_sender_verifications
+    WHERE lower(from_address)=lower($1) AND lower(to_address)=$2 AND status='sent'
+    AND NULLIF(btrim(provider_message_id),'') IS NOT NULL LIMIT 1`, [from,to]);
+  if (!verified.rows?.length) throw new DistributionDeferredError('DISTRIBUTION_SENDER_VERIFICATION_REQUIRED');
 }
 
 export async function queueContact(email: string, company: string | null, sourceUrl: string | null, evidence: Record<string, unknown>, outreachBasis: string, consentEvidenceUrl: string | null) {
@@ -208,8 +215,11 @@ export async function queueContact(email: string, company: string | null, source
   return withTenant(async (client) => {
     const existing = await client.query(`SELECT id FROM distribution_contacts WHERE tenant_id=$1 AND lower(email)=lower($2) LIMIT 1`, [DISTRIBUTION_TENANT_ID, email.trim()]);
     if (existing.rows?.[0]?.id) return String(existing.rows[0].id);
-    await client.query(`INSERT INTO distribution_contacts (id,tenant_id,email,company,source_url,evidence,outreach_basis,consent_evidence_url) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8)`, [id,DISTRIBUTION_TENANT_ID,email.trim().toLowerCase(),company,sourceUrl,JSON.stringify(evidence),outreachBasis,consentEvidenceUrl]);
-    return id;
+    const inserted = await client.query(`INSERT INTO distribution_contacts (id,tenant_id,email,company,source_url,evidence,outreach_basis,consent_evidence_url) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8) ON CONFLICT (tenant_id,email) DO NOTHING RETURNING id`, [id,DISTRIBUTION_TENANT_ID,email.trim().toLowerCase(),company,sourceUrl,JSON.stringify(evidence),outreachBasis,consentEvidenceUrl]);
+    if (inserted.rows?.[0]?.id) return String(inserted.rows[0].id);
+    const winner = await client.query(`SELECT id FROM distribution_contacts WHERE tenant_id=$1 AND email=$2`, [DISTRIBUTION_TENANT_ID,email.trim().toLowerCase()]);
+    if (!winner.rows?.[0]?.id) throw new Error('DISTRIBUTION_CONTACT_INSERT_UNKNOWN');
+    return String(winner.rows[0].id);
   });
 }
 
@@ -249,101 +259,82 @@ export async function ingestResearchResult(result: Record<string, unknown>, defa
   return queued;
 }
 
-export async function sendInitial(contactId: string) {
-  return withTenant(async (client) => {
-    // FOR UPDATE serialises concurrent sends to one contact: a second job waits
-    // here, then sees the first one's 'initial' message and stops.
-    const contactResult = await client.query(`SELECT id,email,company,source_url,evidence,status,outreach_basis,consent_evidence_url FROM distribution_contacts WHERE id=$1 AND tenant_id=$2 LIMIT 1 FOR UPDATE`, [contactId,DISTRIBUTION_TENANT_ID]);
-    const contact = contactResult.rows?.[0];
-    if (!contact || contact.status !== 'active') throw new Error('DISTRIBUTION_CONTACT_NOT_ACTIVE');
-    outreachAllowed(contact.outreach_basis);
-    if (await dailySendCount(client) >= DAILY_LIMIT) throw new Error('DISTRIBUTION_DAILY_SEND_LIMIT_REACHED');
-    const already = await client.query(`SELECT 1 FROM distribution_messages WHERE contact_id=$1 AND kind='initial' AND status='sent' LIMIT 1`, [contactId]);
-    if (already.rows?.length) throw new Error('DISTRIBUTION_INITIAL_ALREADY_SENT');
-    const evidence = contact.evidence && typeof contact.evidence === 'object' ? contact.evidence : {};
-    const attribution = await resolveQLegionAttribution(client, typeof contact.source_url === 'string' ? contact.source_url : null);
-    const copy = makeCopy(String(contact.company ?? ''), evidence, false, attribution.strategyId);
-    const brand = SPR_DEFAULT_BRAND;
-    const rendered = renderBrandedEmail(brand, { heading: copy.subject, intro: copy.intro, cta: copy.cta, outro: [`You can opt out at any time: ${unsubscribeUrl(contact.email)}`] });
-    const providerId = await sendBrandedEmail(contact.email, copy.subject, brand, { heading: copy.subject, intro: copy.intro, cta: copy.cta, outro: [`You can opt out at any time: ${unsubscribeUrl(contact.email)}`] }, outreachSender());
-    const hash = crypto.createHash('sha256').update(rendered.text).digest('hex');
-    const messageId = `dm_${crypto.randomUUID().replace(/-/g, '')}`;
-    await client.query(
-      `INSERT INTO distribution_messages
-       (id,tenant_id,contact_id,kind,subject,provider_message_id,status,body_hash,sent_at,q_legion_mission_id,q_legion_strategy_id,q_legion_strategy_probability)
-       VALUES ($1,$2,$3,'initial',$4,$5,'sent',$6,CURRENT_TIMESTAMP,$7,$8,$9)`,
-      [messageId,DISTRIBUTION_TENANT_ID,contactId,copy.subject,providerId,hash,attribution.missionId,attribution.strategyId,attribution.probability],
-    );
-    await client.query(
-      `UPDATE distribution_contacts
-       SET pipeline_stage=CASE WHEN pipeline_stage IN ('new','qualified') THEN 'contacted' ELSE pipeline_stage END,
-           last_contacted_at=CURRENT_TIMESTAMP,
-           next_followup_at=CURRENT_TIMESTAMP + ($2 * INTERVAL '1 day'),
-           updated_at=CURRENT_TIMESTAMP
-       WHERE id=$1`,
-      [contactId,FOLLOWUP_DAYS],
-    );
-    if (attribution.missionId) {
-      await client.query(`UPDATE q_legion_missions SET mode='ACTIVE',updated_at=CURRENT_TIMESTAMP WHERE id=$1 AND tenant_id=$2`, [attribution.missionId,DISTRIBUTION_TENANT_ID]);
-    }
-    return {
-      messageId,
-      providerId,
-      email: contact.email,
-      qLegion: {
-        missionId: attribution.missionId,
-        strategyId: attribution.strategyId,
-        strategyLabel: strategyLabel(attribution.strategyId),
-        probability: attribution.probability,
-      },
-    };
+async function sendContact(contactId: string, kind: 'initial' | 'followup') {
+  return withReservedOutreach(appPool, DISTRIBUTION_TENANT_ID, contactId, kind, {
+    environmentLimit: DAILY_LIMIT,
+    intervalMs: SEND_INTERVAL_MS,
+    gate: sendGate,
+    async send(client, contact, reservation, markProviderAttempt) {
+      const evidence = contact.evidence && typeof contact.evidence === 'object' ? contact.evidence : {};
+      let attribution: QLegionAttribution;
+      if (kind === 'initial') {
+        attribution = await resolveQLegionAttribution(client, typeof contact.source_url === 'string' ? contact.source_url : null);
+      } else {
+        const initial = await client.query(`SELECT q_legion_mission_id,q_legion_strategy_id,q_legion_strategy_probability
+          FROM distribution_messages WHERE tenant_id=$1 AND contact_id=$2 AND kind='initial' AND status='sent'
+          ORDER BY sent_at ASC LIMIT 1`, [DISTRIBUTION_TENANT_ID,contactId]);
+        const row = initial.rows[0];
+        attribution = {
+          missionId: row?.q_legion_mission_id ?? null,
+          strategyId: ['proof_first','revenue_first','compliance_first'].includes(String(row?.q_legion_strategy_id)) ? row.q_legion_strategy_id : 'baseline',
+          probability: row?.q_legion_strategy_probability ?? null,
+        };
+      }
+      const copy = makeCopy(String(contact.company ?? ''), evidence, kind === 'followup', attribution.strategyId);
+      const brand = SPR_DEFAULT_BRAND;
+      const content = { heading: copy.subject, intro: copy.intro, cta: copy.cta, outro: [`You can opt out at any time: ${unsubscribeUrl(contact.email)}`] };
+      const rendered = renderBrandedEmail(brand, content);
+      markProviderAttempt();
+      const providerId = await sendBrandedEmail(contact.email, copy.subject, brand, content, { ...outreachSender(), idempotencyKey: reservation.id });
+      const hash = crypto.createHash('sha256').update(rendered.text).digest('hex');
+      const messageId = reservation.id;
+      await client.query(`INSERT INTO distribution_messages
+        (id,tenant_id,contact_id,kind,subject,provider_message_id,status,body_hash,sent_at,q_legion_mission_id,q_legion_strategy_id,q_legion_strategy_probability)
+        VALUES ($1,$2,$3,$4,$5,$6,'sent',$7,CURRENT_TIMESTAMP AT TIME ZONE 'UTC',$8,$9,$10)`,
+        [messageId,DISTRIBUTION_TENANT_ID,contactId,kind,copy.subject,providerId,hash,attribution.missionId,attribution.strategyId,attribution.probability]);
+      if (kind === 'initial') {
+        await client.query(`UPDATE distribution_contacts
+          SET pipeline_stage=CASE WHEN pipeline_stage IN ('new','qualified') THEN 'contacted' ELSE pipeline_stage END,
+            last_contacted_at=CURRENT_TIMESTAMP, next_followup_at=CURRENT_TIMESTAMP+($2*INTERVAL '1 day'),updated_at=CURRENT_TIMESTAMP
+          WHERE id=$1 AND tenant_id=$3`, [contactId,reservation.followupDelayDays,DISTRIBUTION_TENANT_ID]);
+        if (attribution.missionId) await client.query(`UPDATE q_legion_missions SET mode='ACTIVE',updated_at=CURRENT_TIMESTAMP WHERE id=$1 AND tenant_id=$2`, [attribution.missionId,DISTRIBUTION_TENANT_ID]);
+      } else {
+        const nextDays = reservation.followupDelayDays * reservation.sequence;
+        await client.query(`UPDATE distribution_contacts SET followup_count=followup_count+1,last_contacted_at=CURRENT_TIMESTAMP,
+          next_followup_at=CASE WHEN followup_count+1 >= $2 THEN NULL ELSE CURRENT_TIMESTAMP+($3*INTERVAL '1 day') END,updated_at=CURRENT_TIMESTAMP
+          WHERE id=$1 AND tenant_id=$4`, [contactId,reservation.maxFollowups,nextDays,DISTRIBUTION_TENANT_ID]);
+      }
+      return { messageId,providerId,email:contact.email,qLegion:{ ...attribution,strategyLabel:strategyLabel(attribution.strategyId) } };
+    },
   });
+}
+
+export async function sendInitial(contactId: string) {
+  return sendContact(contactId, 'initial');
 }
 
 export async function sendDueFollowups() {
   if (!autonomousOutreachEnabled()) return 0;
+  const due = await withTenant(async (client) => client.query(`SELECT c.id FROM distribution_contacts c
+    JOIN distribution_campaign_settings s ON s.tenant_id=c.tenant_id
+    WHERE c.tenant_id=$1 AND c.status='active' AND s.outreach_enabled=true
+      AND c.next_followup_at <= CURRENT_TIMESTAMP AND c.followup_count < s.max_followups
+      AND c.pipeline_stage NOT IN ('replied','demo','checkout','pilot','customer','lost')
+    ORDER BY c.next_followup_at ASC LIMIT 25`, [DISTRIBUTION_TENANT_ID]));
   let sent = 0;
-  const due = await db.execute(sql`SELECT c.id FROM distribution_contacts c WHERE c.tenant_id=${DISTRIBUTION_TENANT_ID} AND c.status='active' AND c.next_followup_at <= CURRENT_TIMESTAMP AND c.followup_count < ${MAX_FOLLOWUPS} ORDER BY c.next_followup_at ASC LIMIT 25`);
-  for (const row of ((due as any).rows ?? [])) {
-    try {
-      await withTenant(async (client) => {
-        const result = await client.query(`SELECT id,email,company,evidence,followup_count,outreach_basis FROM distribution_contacts WHERE id=$1 AND tenant_id=$2 AND status='active' LIMIT 1`, [row.id,DISTRIBUTION_TENANT_ID]);
-        const contact = result.rows?.[0]; if (!contact) return;
-        outreachAllowed(contact.outreach_basis);
-        if (await dailySendCount(client) >= DAILY_LIMIT) throw new Error('DISTRIBUTION_DAILY_SEND_LIMIT_REACHED');
-        const initial = await client.query(
-          `SELECT q_legion_mission_id,q_legion_strategy_id,q_legion_strategy_probability
-           FROM distribution_messages
-           WHERE tenant_id=$1 AND contact_id=$2 AND kind='initial' AND status='sent'
-           ORDER BY sent_at ASC LIMIT 1`,
-          [DISTRIBUTION_TENANT_ID,contact.id],
-        );
-        const initialAttribution = initial.rows?.[0];
-        const strategyId = ['proof_first','revenue_first','compliance_first'].includes(String(initialAttribution?.q_legion_strategy_id))
-          ? String(initialAttribution.q_legion_strategy_id) as QLegionOutreachStrategy
-          : 'baseline';
-        const copy = makeCopy(String(contact.company ?? ''), contact.evidence ?? {}, true, strategyId);
-        const brand = SPR_DEFAULT_BRAND;
-        const providerId = await sendBrandedEmail(contact.email, copy.subject, brand, { heading: copy.subject, intro: copy.intro, cta: copy.cta, outro: [`You can opt out at any time: ${unsubscribeUrl(contact.email)}`] }, outreachSender());
-        const messageId = `dm_${crypto.randomUUID().replace(/-/g, '')}`;
-        await client.query(
-          `INSERT INTO distribution_messages
-           (id,tenant_id,contact_id,kind,subject,provider_message_id,status,sent_at,q_legion_mission_id,q_legion_strategy_id,q_legion_strategy_probability)
-           VALUES ($1,$2,$3,'followup',$4,$5,'sent',CURRENT_TIMESTAMP,$6,$7,$8)`,
-          [messageId,DISTRIBUTION_TENANT_ID,contact.id,copy.subject,providerId,initialAttribution?.q_legion_mission_id ?? null,strategyId,initialAttribution?.q_legion_strategy_probability ?? null],
-        );
-        const nextDays = FOLLOWUP_DAYS * (Number(contact.followup_count) + 1);
-        await client.query(`UPDATE distribution_contacts SET followup_count=followup_count+1,last_contacted_at=CURRENT_TIMESTAMP,next_followup_at=CASE WHEN followup_count+1 >= $2 THEN NULL ELSE CURRENT_TIMESTAMP + ($3 * INTERVAL '1 day') END,updated_at=CURRENT_TIMESTAMP WHERE id=$1`, [contact.id,MAX_FOLLOWUPS,nextDays]);
-        sent += 1;
-      });
-    } catch (error) { console.error('[Distribution] follow-up failed:', error instanceof Error ? error.message : String(error)); }
+  for (const row of due.rows) {
+    try { await sendContact(String(row.id),'followup'); sent += 1; }
+    catch (error) {
+      if (error instanceof DistributionDeferredError) throw error;
+      console.error('[Distribution] follow-up failed:', error instanceof Error ? error.message : String(error));
+    }
   }
   return sent;
 }
 
 export async function unsubscribeContact(email: string, token: string) {
   const expected = outreachToken(email);
-  if (!crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(token))) throw new Error('DISTRIBUTION_UNSUBSCRIBE_TOKEN_INVALID');
+  if (token.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(token))) throw new Error('DISTRIBUTION_UNSUBSCRIBE_TOKEN_INVALID');
   return withTenant(async (client) => {
     const result = await client.query(`UPDATE distribution_contacts SET status='unsubscribed',next_followup_at=NULL,updated_at=CURRENT_TIMESTAMP WHERE tenant_id=$1 AND lower(email)=lower($2) RETURNING id`, [DISTRIBUTION_TENANT_ID,email.trim()]);
     return result.rowCount > 0;

@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { consumeAuthNotice } from '../lib/authNotice';
 import { describeAuthRedirectError, parseAuthRedirectError } from '../lib/authRedirectError';
 import { passwordRecoveryPending, setPasswordRecoveryPending } from '../lib/authRecovery';
+import { trackGrowthEvent } from '../analytics';
 
 interface LoginViewProps {
   onLoginSuccess: (user: { uid: string; email: string | null; displayName: string; token: string; emailVerified: boolean; onboarded: 0 }) => void;
@@ -12,7 +13,16 @@ interface LoginViewProps {
 
 const PRODUCTION_AUTH_REDIRECT = 'https://www.softwarepassportregistry.com/login';
 function getAuthRedirect() {
-  return typeof window === 'undefined' ? PRODUCTION_AUTH_REDIRECT : `${window.location.origin}/login`;
+  if (typeof window === 'undefined') return PRODUCTION_AUTH_REDIRECT;
+  const redirect = new URL('/login', window.location.origin);
+  // Keep the in-app destination that brought this prospect to auth. App.tsx
+  // validates ?next= before navigating, so the confirmation link stays
+  // same-origin while preserving pricing/free-review intent through email.
+  const currentParams = new URLSearchParams(window.location.search);
+  const next = currentParams.get('next');
+  if (next) redirect.searchParams.set('next', next);
+  if (currentParams.get('mode') === 'signup') redirect.searchParams.set('signup', '1');
+  return redirect.toString();
 }
 
 function preserveRecoveryIntent() {
@@ -23,7 +33,9 @@ function preserveRecoveryIntent() {
 
 export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
   const recoveryRequested = useRef(passwordRecoveryPending());
-  const [mode, setMode] = useState<'login' | 'signup' | 'reset' | 'recovery'>(() => recoveryRequested.current ? 'recovery' : 'login');
+  const signupRequested = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mode') === 'signup';
+  const [mode, setMode] = useState<'login' | 'signup' | 'reset' | 'recovery'>(() => recoveryRequested.current ? 'recovery' : signupRequested ? 'signup' : 'login');
+  const signupTracked = useRef(false);
   const [recoveryReady, setRecoveryReady] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState('');
   const [email, setEmail] = useState('');
@@ -38,6 +50,12 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
   const [mfaBusy, setMfaBusy] = useState(false);
   const productName = brand?.productName || 'Software Passport Registry';
   const brandedSignInTitle = brand ? `Sign in to ${brand.productName}` : 'Sign in';
+  useEffect(() => {
+    if (mode !== 'signup' || signupTracked.current) return;
+    signupTracked.current = true;
+    trackGrowthEvent('signup_started');
+  }, [mode]);
+
   const finishSession = async (session: { access_token: string; user: any }) => {
     if (recoveryRequested.current) return;
     const user = session.user;
@@ -66,6 +84,13 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
 
     setMfaFactorId(null);
     setMfaCode('');
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('signup') === '1') {
+      trackGrowthEvent('signup_completed');
+      params.delete('signup');
+      const query = params.toString();
+      window.history.replaceState(null, '', window.location.pathname + (query ? `?${query}` : '') + window.location.hash);
+    }
     onLoginSuccess({ uid: user.id, email: user.email ?? null, displayName: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User', token, emailVerified, onboarded: 0 });
   };
   const clearStaleLocalSession = async (cause: unknown) => {
@@ -128,15 +153,17 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
         if (password !== confirmPassword) throw new Error('Passwords do not match.');
         const { data, error } = await supabase.auth.updateUser({ password });
         if (error) throw error;
-        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError || !sessionData.session || !data.user) throw sessionError || new Error('Password updated. Sign in with your new password.');
+        if (!data.user) throw new Error('Password update did not return a user.');
+        const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' });
+        if (signOutError) throw signOutError;
         recoveryRequested.current = false;
         setPasswordRecoveryPending(false);
+        setRecoveryReady(false);
         const cleanUrl = new URL(window.location.href);
         cleanUrl.searchParams.delete('recovery');
         window.history.replaceState(null, '', cleanUrl.pathname + cleanUrl.search);
         setPassword(''); setConfirmPassword(''); setMode('login');
-        await finishSession({ ...sessionData.session, user: data.user });
+        setNotice('Password updated. Sign in with your new password.');
         return;
       }
       if (mode === 'reset') {
@@ -153,7 +180,11 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
           setError('An account with this email already exists. Sign in, or use "Forgot password?" to reset it.');
           return;
         }
-        if (data.session) { await finishSession(data.session); return; }
+        if (data.session) {
+          trackGrowthEvent('signup_completed');
+          await finishSession(data.session);
+          return;
+        }
         const address = email.trim().toLowerCase();
         setUnconfirmedEmail(address);
         setNotice(`Account created. Supabase has sent a confirmation link to ${address}. Open it to activate the account. The link is only valid for a limited time; if it has expired by the time you use it, request a new one below.`);
@@ -244,7 +275,7 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
           {mode !== 'reset' && <label className="block text-sm font-medium">{mode === 'recovery' ? 'New password' : 'Password'}<div className="relative mt-1"><input value={password} onChange={e => setPassword(e.target.value)} type="password" required minLength={8} autoComplete={mode === 'signup' || mode === 'recovery' ? 'new-password' : 'current-password'} className="w-full rounded-lg border border-border bg-background px-3 py-3 pr-11 outline-none focus:ring-2 focus:ring-primary" /><EyeOff size={18} className="absolute right-3 top-3 text-muted-foreground" /></div></label>}
           {mode === 'recovery' && <label className="block text-sm font-medium">Confirm new password<input value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} type="password" required minLength={8} autoComplete="new-password" className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-3 outline-none focus:ring-2 focus:ring-primary" /></label>}
           <button disabled={busy || (mode === 'recovery' && !recoveryReady)} className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 font-semibold text-primary-foreground disabled:opacity-50">{busy ? <Loader className="animate-spin" size={18} /> : <ArrowRight size={18} />}{mode === 'login' ? 'Sign in' : mode === 'signup' ? 'Create account' : mode === 'recovery' ? 'Update password' : 'Send reset email'}</button></form>
-        <div className="mt-5 flex justify-center gap-4 text-sm text-muted-foreground">{mode === 'recovery' ? <button onClick={() => { setMode('reset'); setPassword(''); setConfirmPassword(''); setError(''); }}>Request a new reset link</button> : mode === 'login' ? <><button onClick={() => setMode('signup')}>Create account</button><button onClick={() => setMode('reset')}>Forgot password?</button></> : <button onClick={() => { recoveryRequested.current = false; setPasswordRecoveryPending(false); const cleanUrl = new URL(window.location.href); cleanUrl.searchParams.delete('recovery'); window.history.replaceState(null, '', cleanUrl.pathname + cleanUrl.search); setMode('login'); setError(''); setNotice(''); setUnconfirmedEmail(''); }}>Back to sign in</button>}</div>
+        <div className="mt-5 flex justify-center gap-4 text-sm text-muted-foreground">{mode === 'recovery' ? <button onClick={() => { setMode('reset'); setPassword(''); setConfirmPassword(''); setError(''); }}>Request a new reset link</button> : mode === 'login' ? <><button onClick={() => setMode('signup')}>Create account</button><button onClick={() => setMode('reset')}>Forgot password?</button></> : <button onClick={async () => { if (recoveryRequested.current) { const { error } = await supabase.auth.signOut({ scope: 'local' }); if (error) { setError(error.message); return; } } recoveryRequested.current = false; setRecoveryReady(false); setPasswordRecoveryPending(false); const cleanUrl = new URL(window.location.href); cleanUrl.searchParams.delete('recovery'); window.history.replaceState(null, '', cleanUrl.pathname + cleanUrl.search); setMode('login'); setError(''); setNotice(''); setUnconfirmedEmail(''); }}>Back to sign in</button>}</div>
       </>
     )}
     <footer className="mt-7 flex justify-center gap-4 text-xs text-muted-foreground"><a href="/terms">Terms of Service</a><a href="/privacy">Privacy Policy</a></footer>

@@ -32,4 +32,22 @@ describe('growth platform contracts', () => {
     expect(ui).toContain('Referral visits');
     expect(ui).toContain('Registry claims');
   });
+
+  it('emits the core conversion funnel from real product surfaces', () => {
+    expect(read('src/components/MspPricingView.tsx')).toContain("trackGrowthEvent('pricing_view')");
+    const review=read('src/components/FreeReviewView.tsx');
+    expect(review).toContain("trackGrowthEvent('free_review_started')");
+    expect(review).toContain("trackGrowthEvent('free_review_completed')");
+    expect(read('src/components/FreeReviewPdfGate.tsx')).toContain("trackGrowthEvent('lead_captured')");
+    const login=read('src/components/LoginView.tsx');
+    expect(login).toContain("trackGrowthEvent('signup_started')");
+    expect(login).toContain("trackGrowthEvent('signup_completed')");
+  });
+
+  it('persists first-touch attribution across the multi-page signup funnel', () => {
+    const analytics=read('src/analytics.ts');
+    expect(analytics).toContain('spr-growth-attribution-v1');
+    expect(analytics).toContain('ATTRIBUTION_TTL_MS');
+    expect(analytics).toContain('window.localStorage.setItem(ATTRIBUTION_KEY');
+  });
 });

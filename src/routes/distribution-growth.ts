@@ -41,10 +41,10 @@ const contentOpportunitySchema = z.object({
   sourceEvidence: z.array(z.string().trim().min(1).max(512)).max(50).default([]),
   status: z.enum(['backlog','planned','published','monitoring','retired']).default('backlog'),
 }).strict();
-const settingsSchema = z.object({
+export const settingsSchema = z.object({
   discoveryEnabled: z.boolean().optional(),
   outreachEnabled: z.boolean().optional(),
-  dailySendCap: z.number().int().min(1).max(500).optional(),
+  dailySendCap: z.number().int().min(1).max(1000).optional(),
   followupDelayDays: z.number().int().min(1).max(30).optional(),
   maxFollowups: z.number().int().min(0).max(3).optional(),
   demoUrl: z.string().trim().url().max(2048).nullable().optional(),

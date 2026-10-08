@@ -33,7 +33,7 @@ describe('Q-LEGION outreach attribution and learning', () => {
   it('preserves the original attributed strategy for follow-ups', () => {
     const outreach = readFileSync(resolve(process.cwd(), 'src/lib/distribution-outreach.ts'), 'utf8');
     expect(outreach).toContain("WHERE tenant_id=$1 AND contact_id=$2 AND kind='initial' AND status='sent'");
-    expect(outreach).toContain('initialAttribution?.q_legion_mission_id');
-    expect(outreach).toContain('initialAttribution?.q_legion_strategy_probability');
+    expect(outreach).toContain('missionId: row?.q_legion_mission_id');
+    expect(outreach).toContain('probability: row?.q_legion_strategy_probability');
   });
 });

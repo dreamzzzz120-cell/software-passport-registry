@@ -16,6 +16,14 @@ type AddonId = 'continuousVerification' | 'trustBadge' | 'publicPassport' | 'api
 type PlanMeta = { id: PlanId; label: string; priceLabel: string | null; clientLimit: number | null; description: string | null; checkoutAvailable: boolean };
 type ProductMeta = { id: OneTimeProductId; label: string; priceLabel: string | null; description: string | null; checkoutAvailable: boolean };
 type AddonMeta = { id: AddonId; label: string; priceLabel: string | null; description: string | null; checkoutAvailable: boolean };
+const PLAN_IDS: PlanId[] = ['pilot', 'starter', 'professional', 'growth', 'enterprise'];
+
+function requestedPlanFromLocation(): PlanId | null {
+  if (typeof window === 'undefined') return null;
+  const plan = new URLSearchParams(window.location.search).get('plan');
+  return plan && PLAN_IDS.includes(plan as PlanId) ? plan as PlanId : null;
+}
+
 type BillingStatus = {
   billingConfigured: boolean;
   plans: PlanMeta[];
@@ -39,6 +47,11 @@ function returnBanner(): { tone: 'ok' | 'muted' | 'warning'; text: string } | nu
   if (q.get('purchase') === 'success') return { tone: 'ok', text: `Stripe reported your order as complete${q.get('product') ? ` (${q.get('product')})` : ''}. An order-received email with your reference is on its way; the item appears under Your purchases once confirmed.` };
   if (q.get('addon') === 'success') return { tone: 'ok', text: 'Stripe reported your add-on checkout as complete. It becomes active once SPR receives Stripe\'s confirmation (usually within a minute).' };
   if (q.get('checkout') === 'cancelled' || q.get('purchase') === 'cancelled' || q.get('addon') === 'cancelled') return { tone: 'muted', text: 'Checkout was cancelled. Nothing was charged.' };
+
+  const requestedPlan = q.get('plan');
+  if (requestedPlan && PLAN_IDS.includes(requestedPlan as PlanId)) {
+    return { tone: 'ok', text: 'Your selected plan is highlighted below. Continue with checkout when you are ready.' };
+  }
 
   const reason = q.get('reason');
   if (reason === 'capability') {
@@ -93,6 +106,7 @@ export default function BillingView() {
   const [busyAddon, setBusyAddon] = useState<AddonId | null>(null);
   const [openingPortal, setOpeningPortal] = useState(false);
   const [banner] = useState(returnBanner);
+  const [requestedPlan] = useState<PlanId | null>(requestedPlanFromLocation);
 
   const loadStatus = () => {
     setLoading(true);
@@ -294,14 +308,15 @@ export default function BillingView() {
               {status.plans.map((plan) => {
                 const isCurrent = plan.id === currentPlan;
                 const recommended = plan.id === 'professional';
+                const requested = plan.id === requestedPlan;
                 const salesLed = !plan.checkoutAvailable && (plan.id === 'enterprise' || plan.id === 'pilot');
                 return (
                   <div
                     key={plan.id}
-                    className={`relative flex flex-col rounded-md border p-5 ${isCurrent ? 'border-[var(--spr-green)]/60 bg-[var(--spr-surface)]' : recommended ? 'border-[var(--spr-highlight)] bg-[var(--spr-surface)]' : 'border-[var(--spr-border)] bg-[var(--spr-surface)]'}`}
+                    className={`relative flex flex-col rounded-md border p-5 ${isCurrent ? 'border-[var(--spr-green)]/60 bg-[var(--spr-surface)]' : (requested || recommended) ? 'border-[var(--spr-highlight)] bg-[var(--spr-surface)]' : 'border-[var(--spr-border)] bg-[var(--spr-surface)]'}`}
                   >
-                    {recommended && !isCurrent && (
-                      <span className="absolute -top-2.5 left-4 rounded-full bg-[var(--spr-highlight)] px-2 py-0.5 text-[11px] font-semibold text-white">Recommended</span>
+                    {(requested || recommended) && !isCurrent && (
+                      <span className="absolute -top-2.5 left-4 rounded-full bg-[var(--spr-highlight)] px-2 py-0.5 text-[11px] font-semibold text-white">{requested ? 'Selected' : 'Recommended'}</span>
                     )}
                     <h3 className="text-sm font-semibold text-[var(--spr-text)]">{plan.label}</h3>
                     <div className="mt-3 flex items-baseline gap-1">
@@ -329,7 +344,7 @@ export default function BillingView() {
                         <button
                           onClick={() => handleSubscribe(plan.id)}
                           disabled={!plan.checkoutAvailable || anyBusy}
-                          className={`${recommended ? BTN_PRIMARY : BTN_OUTLINE} w-full`}
+                          className={`${(requested || recommended) ? BTN_PRIMARY : BTN_OUTLINE} w-full`}
                         >
                           {busyPlan === plan.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
                           {plan.checkoutAvailable ? (currentPlan ? 'Switch plan' : 'Get started') : 'Unavailable'}

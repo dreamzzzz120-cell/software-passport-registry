@@ -7,6 +7,7 @@ import React, { useEffect, useState } from 'react';
 import { Check, ShieldCheck, Loader2, AlertTriangle } from 'lucide-react';
 import LegalFooterLinks from './legal/LegalFooterLinks';
 import { apiFetch } from '../utils/apiClient';
+import { trackGrowthEvent } from '../analytics';
 
 interface Props {
   isAuthenticated: boolean;
@@ -118,6 +119,7 @@ export default function MspPricingView({ isAuthenticated, onPrimaryAction }: Pro
   const [catalogError, setCatalogError] = useState(false);
 
   useEffect(() => {
+    trackGrowthEvent('pricing_view');
     let active = true;
     apiFetch('/api/billing/catalog')
       .then((res) => { if (!res.ok) throw new Error('catalog unavailable'); return res.json(); })
@@ -196,7 +198,10 @@ export default function MspPricingView({ isAuthenticated, onPrimaryAction }: Pro
               </ul>
               <button onClick={() => {
                 if (isAuthenticated) return onPrimaryAction();
-                if (plan.checkoutAvailable) return window.location.assign('/login?next=%2Fbilling');
+                if (plan.checkoutAvailable) {
+                  const next = encodeURIComponent(`/billing?plan=${plan.id}`);
+                  return window.location.assign(`/login?mode=signup&next=${next}`);
+                }
                 window.location.assign('/contact/');
               }} className="spr-btn spr-btn-primary mt-6 w-full">
                 {isAuthenticated ? 'Open billing' : plan.checkoutAvailable ? 'Get started' : 'Contact sales'}

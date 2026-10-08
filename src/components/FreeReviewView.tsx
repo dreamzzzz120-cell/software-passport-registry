@@ -10,6 +10,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
+import { trackGrowthEvent } from '../analytics';
 import FreeReviewPdfGate from './FreeReviewPdfGate';
 
 type CategoryId =
@@ -210,6 +211,7 @@ export default function FreeReviewView({
   );
   const [result, setResult] = useState<FreeReviewStatus | null>(null);
   const pollAttempt = useRef(0);
+  const completionTracked = useRef(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -302,6 +304,12 @@ export default function FreeReviewView({
     };
   }, [statusUrl, result?.scanStatus]);
 
+  useEffect(() => {
+    if (completionTracked.current || result?.scanStatus !== 'complete') return;
+    completionTracked.current = true;
+    trackGrowthEvent('free_review_completed');
+  }, [result?.scanStatus]);
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (submitting) return;
@@ -338,6 +346,8 @@ export default function FreeReviewView({
       }
 
       setStatusUrl(data.statusUrl);
+      completionTracked.current = false;
+      trackGrowthEvent('free_review_started');
 
       if (typeof data?.passportId === 'string') {
         const token = String(data.statusUrl).split('/status/')[1];
