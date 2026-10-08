@@ -69,17 +69,22 @@ function attribution() {
 function sendEvent(eventName: string, path: string) {
   if (!path || path.length > 500) return;
   const payload = JSON.stringify({ sessionId: sessionId(), path, referrer: document.referrer || null, deviceType: deviceType(), eventName, ...attribution() });
-  const body = new Blob([payload], { type: 'application/json' });
-  if (navigator.sendBeacon) {
-    const queued = navigator.sendBeacon('/api/traffic/event', body);
-    if (queued) return;
-  }
+  // Use fetch so HTTP failures are observable. sendBeacon returning true only
+  // means the browser queued the request; it does not mean the API stored it.
+  // keepalive lets the request continue during navigation without a blind retry
+  // that might double-count events accepted before a network error.
   void fetch('/api/traffic/event', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: payload,
     keepalive: true,
-  }).catch(() => undefined);
+  }).then((response) => {
+    if (!response.ok) {
+      console.warn('[SPR traffic] Event not accepted by API', response.status);
+    }
+  }).catch(() => {
+    console.warn('[SPR traffic] Event delivery could not be confirmed');
+  });
 }
 
 export function trackPageView(path = `${window.location.pathname}${window.location.search}`) {
