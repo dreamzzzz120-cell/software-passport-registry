@@ -52,7 +52,7 @@ function buildPdf(result: any, repositoryLabel: string): jsPDF {
 
   const y = (doc as any).lastAutoTable.finalY + 20;
   doc.setFontSize(8); doc.setTextColor(90);
-  doc.text(doc.splitTextToSize('Every value above was observed by SPR\'s own scan of the public repository. Full finding records, affected components, evidence records and remediation guidance are part of the complete Passport and are not included in this free summary. Absence of a finding is not proof of safety.', 515), 40, y);
+  doc.text(doc.splitTextToSize('Observed values above come from SPR's available scan results; entries marked Not measured were not established by this review. Full finding records, affected components, evidence records and remediation guidance are part of the complete Passport and are not included in this free summary. Absence of a finding is not proof of safety.', 515), 40, y);
   return doc;
 }
 
