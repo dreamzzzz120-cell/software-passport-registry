@@ -78,6 +78,15 @@ describe('5-8. malformed, missing and mismatched tokens', () => {
     expect(freeReviewImpl).toContain("router.post('/free-review/scan/:passportId/status', handleStatus)");
   });
 
+  it('polls by POST with a header rather than sending the credential in the request URL', () => {
+    const view = stripComments(read('src/components/FreeReviewView.tsx'));
+    expect(view).toContain("method: 'POST'");
+    expect(view).toContain("'x-spr-review-status-token': statusCredential");
+    expect(view).toContain('fetch(statusEndpoint, {');
+    expect(view).not.toContain('fetch(resolvedStatusUrl, {');
+    expect(view).toContain("referrerPolicy: 'no-referrer'");
+  });
+
   it('an expired or tampered token fails at the API with a non-probing 401', () => {
     const route = freeReviewImpl;
     expect(route).toContain("if (!payload) return res.status(401).json({ error: 'Invalid or expired Free Review status link' })");
