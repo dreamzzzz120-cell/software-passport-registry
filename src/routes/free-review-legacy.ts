@@ -5,6 +5,7 @@
 
 import crypto from 'node:crypto';
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { sql } from 'drizzle-orm';
 import { config } from '../config.ts';
@@ -48,6 +49,12 @@ function hashIp(req: { ip?: string; socket: { remoteAddress?: string } }) {
 
 export function createLegacyFreeReviewRouter() {
   const router = Router();
+  const statusLimiter = rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: 'draft-7', legacyHeaders: false, validate: { trustProxy: false } });
+  router.use('/free-review/scan', (_req, res, next) => {
+    res.setHeader('cache-control', 'private, max-age=0, no-store');
+    res.setHeader('referrer-policy', 'no-referrer');
+    next();
+  });
   router.post('/free-review/scan', async (req, res, next) => {
     try {
       const parsed = submitSchema.safeParse(req.body);
@@ -71,7 +78,7 @@ export function createLegacyFreeReviewRouter() {
   const handleStatus = async (req: any, res: any, next: any) => {
     try {
       const passportId = req.params.passportId;
-      const payload = verifyFreeReviewStatusToken(req.get('x-spr-review-status-token') || req.params.token, passportId);
+      const payload = verifyFreeReviewStatusToken(req.get('x-spr-review-status-token') || req.params.token || '', passportId);
       if (!payload) return res.status(401).json({ error: 'Invalid or expired Free Review status link' });
       const scopedDb = await attachTenantScope(FREE_REVIEW_TENANT_ID, res);
       const jobs = (await scopedDb.execute(sql`SELECT id, job_type, status, progress, error, created_at AS "createdAt", updated_at AS "updatedAt" FROM agent_jobs WHERE tenant_id=${FREE_REVIEW_TENANT_ID} AND passport_id=${passportId}`) as any).rows || [];
@@ -304,7 +311,7 @@ export function createLegacyFreeReviewRouter() {
       });
     } catch (error) { return next(error); }
   };
-  router.post('/free-review/scan/:passportId/status', handleStatus);
-  router.get('/free-review/scan/:passportId/status/:token', handleStatus);
+  router.post('/free-review/scan/:passportId/status', statusLimiter, handleStatus);
+  router.get('/free-review/scan/:passportId/status/:token', statusLimiter, handleStatus);
   return router;
 }
