@@ -14,7 +14,8 @@ describe('Free Review contracts', () => {
     expect(publicConnect).toContain('function verifyFreeReviewStatusToken');
     expect(publicConnect).toContain("payload.kind !== 'free_review_status'");
     const freeReview = read('src/routes/free-review-legacy.ts');
-    expect(freeReview).toContain('verifyFreeReviewStatusToken(req.params.token, passportId)');
+    expect(freeReview).toContain("verifyFreeReviewStatusToken(req.get('x-spr-review-status-token') || req.params.token, passportId)");
+    expect(freeReview).toContain("router.post('/free-review/scan/:passportId/status', handleStatus)");
   });
 
   it('is mounted without requireAuth in front of it, unlike the authenticated routers', () => {
