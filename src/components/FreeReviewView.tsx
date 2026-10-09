@@ -241,6 +241,10 @@ export default function FreeReviewView({
           method: 'GET',
           headers: { Accept: 'application/json' },
           credentials: 'same-origin',
+          // Prevent signed poll URLs from becoming the Referer of follow-on requests.
+          // Note: the API proxy still observes the signed URL; migrate the token out
+          // of the URL before treating access-log exposure as closed.
+          referrerPolicy: 'no-referrer',
           cache: 'no-store',
         });
 
