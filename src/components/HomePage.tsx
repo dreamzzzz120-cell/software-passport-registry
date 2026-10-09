@@ -64,16 +64,16 @@ export default function HomePage({ onCreatePassport, onExploreTrustNetwork }: Pr
           <span className="text-[11px] font-bold uppercase tracking-[.22em] text-[var(--spr-highlight)]">For Managed Service Providers</span>
           <span className="rounded-full border border-[var(--spr-amber)]/40 bg-[var(--spr-amber)]/10 px-2.5 py-1 text-[12px] font-bold uppercase tracking-[.14em] text-[var(--spr-amber)]">Limited early access</span>
         </div>
-        <h1 className="text-4xl font-semibold leading-[1.08] tracking-[-.02em] md:text-5xl">Show your clients what’s inside their software.</h1>
+        <h1 className="text-4xl font-semibold leading-[1.08] tracking-[-.02em] md:text-5xl">Make more money from your MSP services. Spend less time on reporting.</h1>
         <p className="mx-auto mt-6 max-w-2xl text-base leading-7 text-[var(--spr-text-muted)]">
-          SPR is the evidence and accountability layer around software scanners: a client-ready record of what was observed, what was resolved, what remains UNKNOWN, and what evidence supports every claim.
-          Use the free review to inspect a repository, then turn that evidence into a repeatable MSP service with monitoring, history, reporting, and white-label delivery.
+          Turn software reviews you already do into a service you can charge for. SPR helps you produce client-ready evidence reports, show customers what needs attention, and spend less time assembling findings by hand.
+          Start with a free repository review, then build a repeatable client reporting service. Your revenue and time savings depend on how you use it.
         </p>
         <div className="mt-9 flex flex-col items-center gap-3">
           <PrimaryCta onClick={onExploreTrustNetwork} className="px-8 py-3.5 text-base" />
           <p className="text-xs text-[var(--spr-text-muted)]">Free. Paste a public GitHub repo and see the evidence summary with no account. PDF download is optional and contact-gated.</p>
           <div className="mt-5 w-full max-w-xl rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] px-5 py-4 text-center">
-            <p className="text-sm font-semibold">Want the full MSP workspace? Try Starter free for 7 days.</p>
+            <p className="text-sm font-semibold">Give it 7 days. See what your MSP could sell.</p>
             <p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">Up to five clients, no credit card and no automatic charge. Trial PDF reports are watermarked. Sign in or register, then activate the trial in Billing.</p>
             <button type="button" onClick={onCreatePassport} className="spr-btn spr-btn-secondary mt-3">Get started with a free trial</button>
           </div>
