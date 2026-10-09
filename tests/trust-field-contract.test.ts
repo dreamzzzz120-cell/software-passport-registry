@@ -80,7 +80,7 @@ describe('HomePage is evidence-first and does not render TrustField demo data', 
 
   it('CTAs route to real, existing paths only', () => {
     const s = read('src/App.tsx');
-    expect(s).toContain("onCreatePassport={() => navigate('/login')}");
+    expect(s).toContain("onCreatePassport={() => navigate('/login?mode=signup&next=%2Fbilling')}");
     expect(s).toContain("onExploreTrustNetwork={() => navigate('/free-review')}");
   });
 });

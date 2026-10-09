@@ -571,7 +571,7 @@ export default function App() {
   // On a tenant's own hostname the root is that tenant's portal, not SPR's
   // marketing site: signed-out visitors get the branded sign-in page.
   if (path === '/' && hostBrand && !user) return <LoginView onLoginSuccess={() => navigate(returnPathFromLocation())} brand={hostBrand} />;
-  if (path === '/') return <HomePage onCreatePassport={() => navigate('/login')} onExploreTrustNetwork={() => navigate('/free-review')} onViewSamplePassport={() => navigate('/passport/demo')} />;
+  if (path === '/') return <HomePage onCreatePassport={() => navigate('/login?mode=signup&next=%2Fbilling')} onExploreTrustNetwork={() => navigate('/free-review')} onViewSamplePassport={() => navigate('/passport/demo')} />;
   if (path === '/login') return <LoginView onLoginSuccess={() => navigate(returnPathFromLocation())} brand={hostBrand} />;
   // Public legal documents -- always reachable regardless of auth state,
   // since /terms has no existing authenticated route to preserve. /privacy

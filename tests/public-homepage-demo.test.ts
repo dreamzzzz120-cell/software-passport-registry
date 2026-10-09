@@ -99,6 +99,13 @@ describe('the public sample Passport no longer contains fabricated data', () => 
   });
 });
 
+describe('homepage trial signup entry', () => {
+  it('routes the trial CTA to registration with Billing as a safe local return path', () => {
+    expect(home).toContain('Start Your 7-Day Free Trial');
+    expect(app).toContain("onCreatePassport={() => navigate('/login?mode=signup&next=%2Fbilling')}");
+  });
+});
+
 describe('routing keeps the public boundary explicit', () => {
   it('keeps the legacy sample path exact rather than widening the public boundary', () => {
     expect(app).toContain("'/passport/demo'");
