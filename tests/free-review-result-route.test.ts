@@ -74,7 +74,8 @@ describe('5-8. malformed, missing and mismatched tokens', () => {
     expect(view).not.toMatch(/exps*[<>=]/);
     // The server-side verifier remains the single gate.
     expect(read('src/routes/public-connect.ts')).toContain('export function verifyFreeReviewStatusToken');
-    expect(freeReviewImpl).toContain('verifyFreeReviewStatusToken(req.params.token, passportId)');
+    expect(freeReviewImpl).toContain("verifyFreeReviewStatusToken(req.get('x-spr-review-status-token') || req.params.token, passportId)");
+    expect(freeReviewImpl).toContain("router.post('/free-review/scan/:passportId/status', handleStatus)");
   });
 
   it('an expired or tampered token fails at the API with a non-probing 401', () => {
@@ -96,7 +97,7 @@ describe('9-12. no privilege, tenant or secret exposure', () => {
     // The status route only ever queries the Free Review system tenant, so a
     // real customer passport id cannot resolve through it.
     const route = freeReviewImpl;
-    const handler = route.slice(route.indexOf("router.get('/free-review/scan/:passportId/status/:token'"));
+    const handler = route.slice(route.indexOf("const handleStatus ="), route.indexOf("router.post('/free-review/scan/:passportId/status'"));
     expect(handler).not.toContain('req.user');
     expect(handler).toContain('FREE_REVIEW_TENANT_ID');
   });
