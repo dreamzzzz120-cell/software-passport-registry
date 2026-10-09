@@ -100,7 +100,7 @@ export function trackPageView(path = `${window.location.pathname}${window.locati
   sendEvent('page_view', path);
 }
 
-export function trackGrowthEvent(eventName: 'free_review_started'|'free_review_completed'|'report_viewed'|'lead_captured'|'pricing_view'|'signup_started'|'signup_completed'|'pilot_started'|'customer_created'|'registry_claim_clicked'|'registry_share_clicked'|'referral_visit', path = `${window.location.pathname}${window.location.search}`) {
+export function trackGrowthEvent(eventName: 'free_review_started'|'free_review_completed'|'report_viewed'|'checkout_started'|'lead_captured'|'pricing_view'|'signup_started'|'signup_completed'|'pilot_started'|'customer_created'|'registry_claim_clicked'|'registry_share_clicked'|'referral_visit', path = `${window.location.pathname}${window.location.search}`) {
   sendEvent(eventName, path);
 }
 
