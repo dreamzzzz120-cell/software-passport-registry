@@ -168,7 +168,18 @@ export function contactPageCandidates(home: URL, html: string): URL[] {
 export async function researchUrl(url: string) {
   const parsed = new URL(url);
   if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('DISTRIBUTION_URL_SCHEME_NOT_ALLOWED');
-  const home = await fetchResearchPage(parsed);
+  // An oversized public homepage is a permanent research limitation, not a
+  // transient delivery error. Keep the observation explicit and never extract
+  // emails from partial HTML or repeatedly retry the same oversized page.
+  let home: Awaited<ReturnType<typeof fetchResearchPage>>;
+  try {
+    home = await fetchResearchPage(parsed);
+  } catch (error) {
+    if (!(error instanceof Error) || error.message !== 'DISTRIBUTION_RESPONSE_TOO_LARGE') throw error;
+    return { url: parsed.toString(), httpObserved: false, status: null, score: null,
+      signals: null, publicRoleEmails: [] as string[], limitation: 'DISTRIBUTION_RESPONSE_TOO_LARGE',
+      observedAt: new Date().toISOString(), researchVersion: RESEARCH_VERSION };
+  }
   if (home.html === null) return { url: parsed.toString(), httpObserved: true, status: home.status, redirected: true, score: null, signals: null, observedAt: new Date().toISOString(), researchVersion: RESEARCH_VERSION };
   // `url` stays the URL that was queued: contacts are saved under it and the
   // send step looks them up by it. Recording the post-redirect URL there left
