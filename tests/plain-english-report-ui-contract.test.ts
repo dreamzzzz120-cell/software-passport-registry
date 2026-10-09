@@ -10,7 +10,7 @@ describe('PlainEnglishReport is wired into ReportsView from the same loaded pass
   it('ReportsView renders it only once a report has actually been loaded, using the same passport and report type', () => {
     const s = read('src/components/ReportsView.tsx');
     expect(s).toContain('{report && selectedPassport && (');
-    expect(s).toContain('<PlainEnglishReport key={report.reportHash ?? report.generatedAt} snapshot={report} />');
+    expect(s).toContain('<PlainEnglishReport key={report.reportHash ?? report.generatedAt} snapshot={report} freeTrial={freeTrialWatermark} />');
   });
 
   it('translates the loaded snapshot without fetching a second report', () => {
