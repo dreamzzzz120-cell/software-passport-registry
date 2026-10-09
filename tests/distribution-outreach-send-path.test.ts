@@ -22,7 +22,7 @@ beforeEach(async()=>{
   Object.assign(process.env,{DISTRIBUTION_AUTONOMOUS_OUTREACH:'true',RESEND_API_KEY:'test',EMAIL_FROM:'transactional@example.test',DISTRIBUTION_OUTREACH_FROM:'SPR <sales@example.test>',DISTRIBUTION_OUTREACH_VERIFY_TO:'founder@example.test',DISTRIBUTION_LI_ATTESTED:'true',SPR_PUBLIC_PASSPORT_SECRET:'test-secret'});
   await state.pg.exec(`TRUNCATE distribution_send_attempts,distribution_messages,distribution_contacts,distribution_sender_verifications;
     UPDATE distribution_campaign_settings SET outreach_enabled=true,daily_send_cap=1000,last_send_reserved_at=NULL;`);
-  await state.pg.query(`INSERT INTO distribution_contacts (id,tenant_id,email,company,outreach_basis) VALUES ('c1',$1,'info@msp.example.test','MSP','legitimate_interest')`,[tenant]);
+  await state.pg.query(`INSERT INTO distribution_contacts (id,tenant_id,email,company,outreach_basis,evidence) VALUES ('c1',$1,'info@msp.example.test','MSP','legitimate_interest',$2::jsonb)`,[tenant,JSON.stringify({verifiedCountryCode:'CA',verifiedCountryEvidenceUrl:'https://example.org/contact/company-address'})]);
 });
 afterEach(()=>{for(const k of Object.keys(process.env)) if(!(k in env)) delete process.env[k];Object.assign(process.env,env);});
 async function verify(from='SPR <sales@example.test>',status='sent',id='verified') {
