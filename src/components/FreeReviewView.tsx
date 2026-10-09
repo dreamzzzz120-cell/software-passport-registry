@@ -237,9 +237,14 @@ export default function FreeReviewView({
           throw new Error('Invalid Free Review status URL');
         }
 
-        const response = await fetch(resolvedStatusUrl, {
-          method: 'GET',
-          headers: { Accept: 'application/json' },
+        const tokenMarker = '/status/';
+        const tokenOffset = resolvedStatusUrl.pathname.lastIndexOf(tokenMarker);
+        if (tokenOffset === -1) throw new Error('Missing review status path');
+        const statusEndpoint = resolvedStatusUrl.pathname.slice(0, tokenOffset) + '/status';
+        const statusCredential = decodeURIComponent(resolvedStatusUrl.pathname.slice(tokenOffset + tokenMarker.length));
+        const response = await fetch(statusEndpoint, {
+          method: 'POST',
+          headers: { Accept: 'application/json', 'x-spr-review-status-token': statusCredential },
           credentials: 'same-origin',
           // Prevent signed poll URLs from becoming the Referer of follow-on requests.
           // Note: the API proxy still observes the signed URL; migrate the token out
