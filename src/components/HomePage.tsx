@@ -64,14 +64,36 @@ export default function HomePage({ onCreatePassport, onExploreTrustNetwork }: Pr
           <span className="text-[11px] font-bold uppercase tracking-[.22em] text-[var(--spr-highlight)]">For Managed Service Providers</span>
           <span className="rounded-full border border-[var(--spr-amber)]/40 bg-[var(--spr-amber)]/10 px-2.5 py-1 text-[12px] font-bold uppercase tracking-[.14em] text-[var(--spr-amber)]">Limited early access</span>
         </div>
-        <h1 className="text-4xl font-semibold leading-[1.08] tracking-[-.02em] md:text-5xl">Show your clients what’s inside their software.</h1>
-        <p className="mx-auto mt-6 max-w-2xl text-base leading-7 text-[var(--spr-text-muted)]">
-          SPR is the evidence and accountability layer around software scanners: a client-ready record of what was observed, what was resolved, what remains UNKNOWN, and what evidence supports every claim.
-          Use the free review to inspect a repository, then turn that evidence into a repeatable MSP service with monitoring, history, reporting, and white-label delivery.
+        <h1 className="text-4xl font-semibold leading-[1.08] tracking-[-.02em] md:text-5xl">Make More Money as an MSP. Spend Less Time Doing the Work.</h1>
+        <p className="mx-auto mt-6 max-w-3xl text-base leading-7 text-[var(--spr-text-muted)]">
+          <strong>Software Passport Registry (SPR) is a software evidence, risk assessment, and client reporting platform built for Managed Service Providers.</strong>
         </p>
-        <div className="mt-9 flex flex-col items-center gap-3">
-          <PrimaryCta onClick={onExploreTrustNetwork} className="px-8 py-3.5 text-base" />
-          <p className="text-xs text-[var(--spr-text-muted)]">Free. Paste a public GitHub repo and see the evidence summary with no account. PDF download is optional and contact-gated.</p>
+        <p className="mx-auto mt-4 max-w-3xl text-sm leading-7 text-[var(--spr-text-muted)]">
+          SPR helps MSPs turn software security reviews, vulnerability findings, software inventories, and compliance evidence into professional reports and recurring services they can charge clients for.
+        </p>
+        <p className="mx-auto mt-3 max-w-3xl text-sm leading-7 text-[var(--spr-text-muted)]">
+          Instead of manually gathering findings from different tools, organizing evidence, writing reports, and explaining risks to customers, SPR brings that work into one platform.
+        </p>
+        <div className="mx-auto mt-7 max-w-3xl rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-5 text-left">
+          <h2 className="text-lg font-semibold">What SPR helps your MSP do:</h2>
+          <ul className="mt-4 space-y-3 text-sm leading-6 text-[var(--spr-text-muted)]">
+            <li><strong>Generate new revenue:</strong> Sell software risk assessments, evidence reports, and ongoing software reviews as additional client services.</li>
+            <li><strong>Save hours of manual work:</strong> Reduce the time spent collecting findings, preparing reports, and explaining results.</li>
+            <li><strong>Create client-ready reports:</strong> Deliver professional, branded reports that show what was found, what it means, and what needs attention.</li>
+            <li><strong>Find vulnerabilities and software risks:</strong> Inspect supported repositories, dependencies, software components, and available security evidence.</li>
+            <li><strong>Show what other tools can't prove:</strong> Clearly distinguish verified evidence, observations, and UNKNOWN information instead of inventing reassuring answers.</li>
+            <li><strong>Build recurring revenue opportunities:</strong> Offer periodic reviews, evidence updates, and supported monitoring services to existing customers.</li>
+          </ul>
+        </div>
+        <h2 className="mt-8 text-2xl font-semibold">Your MSP already does the work. SPR helps you turn more of it into billable services.</h2>
+        <div className="mt-7 flex flex-col items-center gap-3">
+          <button type="button" onClick={onCreatePassport} className="spr-btn spr-btn-primary px-8 py-3.5 text-base">Start Your 7-Day Free Trial</button>
+          <p className="max-w-xl text-xs leading-5 text-[var(--spr-text-muted)]">Use the Starter workspace with up to five clients. No credit card required. No automatic charges. Free-trial PDF reports are watermarked. Sign in or register, then activate the trial in Billing.</p>
+          <p className="mt-3 text-base font-semibold">Stop giving away valuable reporting work. Start showing clients what your expertise is worth.</p>
+          <div className="mt-3">
+            <PrimaryCta onClick={onExploreTrustNetwork} />
+          </div>
+          <p className="text-xs text-[var(--spr-text-muted)]">Free Review: paste a public GitHub repository and see the evidence summary without an account. Optional PDF download may require contact details.</p>
         </div>
       </section>
 

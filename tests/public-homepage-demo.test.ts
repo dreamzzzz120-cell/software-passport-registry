@@ -13,9 +13,10 @@ const stripComments = (s: string) => s.split(String.fromCharCode(10))
   .join(String.fromCharCode(10));
 
 describe('homepage presents the product without evaluating anything', () => {
-  it('leads with the value proposition and the Free Review as primary CTA', () => {
-    expect(home).toContain('Show your clients what’s inside their software.');
+  it('leads with MSP revenue and trial CTA while retaining Free Review', () => {
+    expect(home).toContain('Make More Money as an MSP. Spend Less Time Doing the Work.');
     expect(home).toContain('For Managed Service Providers');
+    expect(home).toContain('Start Your 7-Day Free Trial');
     expect(home).toContain('Run a Free Review');
     expect(home).not.toContain('View Sample Passport');
   });
@@ -36,8 +37,8 @@ describe('homepage presents the product without evaluating anything', () => {
   });
 
   it('describes the no-account result, optional PDF gate, and investigation trail truthfully', () => {
-    expect(home).toContain('see the evidence summary with no account');
-    expect(home).toContain('PDF download is optional and contact-gated');
+    expect(home).toContain('see the evidence summary without an account');
+    expect(home).toContain('Optional PDF download may require contact details');
     expect(home).toContain('where the signal came from, how it was observed, when it was observed');
     expect(home).toContain('Unsupported detail stays UNKNOWN');
     expect(home).not.toContain('get a PDF report. No account needed');
