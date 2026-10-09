@@ -318,7 +318,7 @@ export default function FounderControlPlane() {
         <Bot className="h-5 w-5 text-[var(--spr-highlight)]" /><div className="mt-3 font-semibold text-[var(--spr-text)]">Agents & automation</div><div className="mt-1 text-xs text-[var(--spr-text-muted)]">Inspect runtime state and automation evidence</div>
       </a>
       <a href="#founder-billing-control" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4 hover:border-[var(--spr-highlight)]">
-        <CreditCard className="h-5 w-5 text-[var(--spr-highlight)]" /><div className="mt-3 font-semibold text-[var(--spr-text)]">Billing & revenue</div><div className="mt-1 text-xs text-[var(--spr-text-muted)]">{money(metrics.mrrCents)} observed MRR</div>
+        <CreditCard className="h-5 w-5 text-[var(--spr-highlight)]" /><div className="mt-3 font-semibold text-[var(--spr-text)]">Billing & revenue</div><div className="mt-1 text-xs text-[var(--spr-text-muted)]">{money(metrics.mrrCents)} subscription MRR (not collected cash)</div>
       </a>
     </div>
 
@@ -327,12 +327,12 @@ export default function FounderControlPlane() {
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <div className="flex items-center gap-2"><CreditCard className="h-4 w-4 text-[var(--spr-highlight)]" /><h3 className="font-semibold text-[var(--spr-text)]">Billing & revenue control</h3></div>
-          <p className="mt-1 text-xs text-[var(--spr-text-muted)]">Observed Stripe/business truth plus this workspace's plan state. Purchases and plan changes remain explicit customer-approved actions.</p>
+          <p className="mt-1 text-xs text-[var(--spr-text-muted)]">Stripe subscription estimates are distinct from cash collected. A 100% discount may leave an active subscription with $0 paid. Purchases and plan changes remain explicit customer-approved actions.</p>
         </div>
         <a href="/billing" className="spr-btn spr-btn-secondary text-xs">Open full billing</a>
       </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3"><div className="text-[10px] uppercase tracking-wide text-[var(--spr-text-muted)]">MRR</div><div className="mt-1 text-lg font-semibold text-[var(--spr-text)]">{money(metrics.mrrCents)}</div></div>
+        <div className="rounded border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3"><div className="text-[10px] uppercase tracking-wide text-[var(--spr-text-muted)]">Subscription MRR (not collected revenue)</div><div className="mt-1 text-lg font-semibold text-[var(--spr-text)]">{money(metrics.mrrCents)}</div></div>
         <div className="rounded border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3"><div className="text-[10px] uppercase tracking-wide text-[var(--spr-text-muted)]">Active subscriptions</div><div className="mt-1 text-lg font-semibold text-[var(--spr-text)]">{metrics.activeSubscriptionCount ?? 'Not verified'}</div></div>
         <div className="rounded border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3"><div className="text-[10px] uppercase tracking-wide text-[var(--spr-text-muted)]">30d successful payments</div><div className="mt-1 text-lg font-semibold text-[var(--spr-text)]">{metrics.successfulPaymentCount30d ?? 'Not verified'}</div><div className="text-xs text-[var(--spr-text-muted)]">{money(metrics.successfulPaymentAmount30dCents)}</div></div>
         <div className="rounded border border-[var(--spr-border)] bg-[var(--spr-surface)] p-3"><div className="text-[10px] uppercase tracking-wide text-[var(--spr-text-muted)]">Stripe connection</div><div className={`mt-1 text-sm font-semibold ${stripeConnection?.status === 'ok' ? 'text-[var(--spr-green)]' : stripeConnection?.status === 'error' ? 'text-[var(--spr-red)]' : 'text-[var(--spr-amber)]'}`}>{stripeConnection?.status ?? 'Not verified'}</div><div className="mt-1 text-xs text-[var(--spr-text-muted)]">{stripeConnection?.detail || 'No connection detail observed.'}</div></div>
