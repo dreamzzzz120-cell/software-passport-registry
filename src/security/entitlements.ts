@@ -61,15 +61,14 @@ interface SubscriptionRow { plan?: string | null; status?: string | null; curren
  * routes are exempted earlier in requireAuth so the customer can still sign in,
  * choose a plan, complete Checkout, and manage billing.
  */
-export function resolveSubscriptionGate(subscription: { plan: string | null; status: string }): SubscriptionGate {
+export function resolveSubscriptionGate(subscription: { plan: string | null; status: string; currentPeriodEnd?: string | null; stripeSubscriptionId?: string | null }): SubscriptionGate {
   // Launch policy: no confirmed paid plan means no paid workspace capability.
   // Billing and identity routes remain exempt at the authenticated boundary so
   // an MSP can sign in, choose a plan, complete Checkout, and recover billing.
   if (!subscription.plan) return 'unpaid';
   if ((PRE_PAYMENT_STATUSES as readonly string[]).includes(subscription.status)) return 'unpaid';
-  if (subscription.status === 'trialing' && 'currentPeriodEnd' in subscription && 'stripeSubscriptionId' in subscription) {
-    const state = subscription as SubscriptionState;
-    return !state.stripeSubscriptionId && state.currentPeriodEnd && Date.parse(state.currentPeriodEnd) > Date.now() ? 'trial' : 'lapsed';
+  if (subscription.status === 'trialing') {
+    return !subscription.stripeSubscriptionId && subscription.currentPeriodEnd && Date.parse(subscription.currentPeriodEnd) > Date.now() ? 'trial' : 'lapsed';
   }
   if ((PLAN_ENTITLING_STATUSES as readonly string[]).includes(subscription.status)) return 'enforce-plan';
   return 'lapsed';
