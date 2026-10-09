@@ -212,6 +212,7 @@ export default function FreeReviewView({
   const [result, setResult] = useState<FreeReviewStatus | null>(null);
   const pollAttempt = useRef(0);
   const completionTracked = useRef(false);
+  const reportViewTracked = useRef(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -305,6 +306,12 @@ export default function FreeReviewView({
   }, [statusUrl, result?.scanStatus]);
 
   useEffect(() => {
+    if (reportViewTracked.current || !result || !['complete', 'partial'].includes(result.scanStatus)) return;
+    reportViewTracked.current = true;
+    trackGrowthEvent('report_viewed');
+  }, [result?.scanStatus]);
+
+  useEffect(() => {
     if (completionTracked.current || result?.scanStatus !== 'complete') return;
     completionTracked.current = true;
     trackGrowthEvent('free_review_completed');
@@ -317,6 +324,8 @@ export default function FreeReviewView({
     setSubmitting(true);
     setError('');
     setResult(null);
+    reportViewTracked.current = false;
+    completionTracked.current = false;
     setStatusUrl('');
     pollAttempt.current = 0;
 
