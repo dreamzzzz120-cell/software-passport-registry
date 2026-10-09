@@ -4,24 +4,18 @@ import type { Alert, Client, Scan, SoftwarePassport } from '../types';
 import { apiFetch } from '../utils/apiClient';
 import { generateCoBrandedTrustReport, generatePassportEvidenceReport } from '../utils/pdfGenerator';
 import PlainEnglishReport from './PlainEnglishReport';
+import type { CanonicalReport } from '../trust/plain-english-report';
 import VendorEvidenceRequestPanel from './VendorEvidenceRequestPanel';
 
-type ReportPayload = {
+type ReportPayload = CanonicalReport & {
+  limitations?: Array<{ evidenceId?: string; limitation?: string }>;
+  repositoryScan?: CanonicalReport['repositoryScan'] & { openFindingCount?: number };
   schemaVersion?: string;
   reportType?: string;
-  generatedAt?: string;
-  passport?: { id?: string; name?: string };
-  risk?: { overall?: number | null; security?: number | null; compliance?: number | null; verificationStatus?: 'unverified' | 'partial' | 'verified' };
-  evidenceQuality?: { completenessBasisPoints?: number | null; unknownDimensions?: number; latestObservationAt?: string | null };
-  findings?: unknown[];
-  evidence?: unknown[];
   observations?: unknown[];
   remediation?: unknown[];
   verification?: unknown[];
-  repositoryScan?: { sbomComponentCount?: number; sbomComponents?: unknown[]; findings?: unknown[]; evidence?: unknown[]; openFindingCount?: number };
   traceability?: string;
-  limitations?: Array<{ evidenceId?: string; limitation?: string }>;
-  reportHash?: string;
   sbom?: Array<{ name?: string; version?: string; license?: string; vulnerabilityCount?: number; criticalOrHighCount?: number }>;
   controls?: Array<{ controlId?: string; findingCount?: number; openCount?: number; worstSeverity?: string }>;
 };
@@ -379,7 +373,7 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
               <div className="flex items-center gap-2"><FileText size={16} className="text-[var(--spr-text-muted)]" /><h3 className="text-sm font-semibold text-[var(--spr-text)]">Plain-English summary</h3></div>
               <p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">The same evidence and score as the technical report above, explained in plain language. Both come from the exact same underlying data.</p>
               <div className="mt-4">
-                <PlainEnglishReport passportId={selectedPassport.id} reportType={reportType} />
+                <PlainEnglishReport key={report.reportHash ?? report.generatedAt} snapshot={report} />
               </div>
             </div>
           )}

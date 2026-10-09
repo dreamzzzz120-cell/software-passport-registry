@@ -15,3 +15,7 @@ Run typecheck, build, the full test suite and focused evidence-gap/report tests.
 ## Production acceptance
 
 Generate an authenticated report containing a real unknown check. Confirm questions and exports reproduce that report's source records and hash. Generate a report with resolved findings but remaining limitations and confirm it does not say nothing needs attention. Check another tenant/client cannot access it through the existing report authorization. Validate a long report on mobile and browser print. Production deployment, visual acceptance and measured time savings remain UNKNOWN until observed. No new migrations or environment variables are required.
+
+## Snapshot consistency
+
+ReportsView passes the loaded canonical snapshot directly to the plain-English presentation. No second report is generated or fetched for the summary. Historical snapshots and reloaded reports therefore retain their own findings, questions, timestamps and hashes. The plan displays the snapshot timestamp and report hash; absent hashes remain explicitly unavailable.

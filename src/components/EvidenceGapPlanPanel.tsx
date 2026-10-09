@@ -19,6 +19,7 @@ export default function EvidenceGapPlanPanel({ plan }: { plan: EvidenceGapPlan }
   return (
     <section className="spr-panel p-5" aria-label="Evidence gaps and review plan">
       <h3 className="text-lg font-semibold text-[var(--spr-text)]">Turn evidence gaps into next steps</h3>
+      <p className="mt-2 break-all text-xs text-[var(--spr-text-faint)]">Snapshot: {plan.generatedAt} · Report hash: {plan.reportHash ?? 'Not supplied'}</p>
       <p className="mt-2 text-sm leading-6 text-[var(--spr-text-muted)]">{plan.limitation}</p>
       <p className="mt-2 text-xs text-[var(--spr-text-faint)]">{plan.actions.length} proposed review item{plan.actions.length === 1 ? '' : 's'}. Items may overlap; this is not a count of distinct risks. Owners are unassigned.</p>
       <div className="mt-3 flex flex-wrap gap-3 print:hidden">
