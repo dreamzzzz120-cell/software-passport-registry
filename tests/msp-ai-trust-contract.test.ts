@@ -52,10 +52,11 @@ describe('SPR MSP technician assignment and AI Trust Center contracts', () => {
     expect(msp).not.toContain('requireAuth');
   });
 
-  it('tells the user in the UI that the AI registry is self-reported, not auto-discovered', () => {
+  it('keeps declared AI inventory distinct from bounded repository-observed agent evidence', () => {
     const view = read('src/components/AITrustCenterView.tsx');
-    expect(view).toContain('self-reported registry');
-    expect(view).toContain('no mechanism to auto-discover AI agents');
+    expect(view).toContain('registry remains self-reported');
+    expect(view).toContain('Repository scans can now independently observe supported agent/MCP configuration evidence');
+    expect(view).toContain('does not claim host-level discovery');
     expect(view).toContain('Capability boundary');
   });
 

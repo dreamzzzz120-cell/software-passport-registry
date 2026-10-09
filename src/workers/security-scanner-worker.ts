@@ -14,6 +14,8 @@ import { credentialsFrom, onScanCompleted } from '../integrations/connectwise/sc
 import { applySecurityEngineOutcomes, buildRepositoryInventory, makeArchiveLister, type RepositoryInventory } from '../scanners/repository-inventory.ts';
 import { markScanRunRunning, persistInventory, pinScanCommit, recomputeCoverage, settleScanRun, type LedgerContext } from '../scanners/scan-ledger.ts';
 import { tryStoreArtifact } from '../integrations/artifact-store.ts';
+import { discoverAgentConfigEvidence } from '../scanners/agent-config-discovery.ts';
+import { persistAgentConfigDiscovery } from '../scanners/agent-security-store.ts';
 
 const WORKER_ID = `${os.hostname()}:${process.pid}:security`;
 const MAX_ARCHIVE_BYTES = 50 * 1024 * 1024;
@@ -128,11 +130,49 @@ async function processSecurityJob(pool: Pool, job: any) {
     if (!scanRoot.startsWith(path.resolve(repositoryRoot) + path.sep) && scanRoot !== path.resolve(repositoryRoot)) throw new Error('REPOSITORY_PATH_INVALID');
     // Every listed entry is accounted for before any engine runs, so a failure
     // further down still leaves a complete inventory of what was acquired.
+    // The same immutable acquired tree also feeds agent/MCP config discovery:
+    // no second crawler, no different commit, and no inferred runtime state.
+    inventory = await buildRepositoryInventory({ listing: listedEntries, repositoryRoot, subdirectory: source.repository_subdirectory || '', archiveLister: makeArchiveLister(runBounded) });
     if (ledger) {
-      inventory = await buildRepositoryInventory({ listing: listedEntries, repositoryRoot, subdirectory: source.repository_subdirectory || '', archiveLister: makeArchiveLister(runBounded) });
       await persistInventory(pool, ledger, inventory.entries);
       await recomputeCoverage(pool, ledger, { inventoryComplete: !inventory.truncated, limitations: inventory.limitations });
       console.info(JSON.stringify({ event: 'scan_inventory_persisted', workerId: WORKER_ID, jobId: job.id, tenantId: job.tenant_id, scanId: ledger.scanId, files: inventory.entries.length, truncated: inventory.truncated }));
+    }
+
+    try {
+      const agentDiscovery = await discoverAgentConfigEvidence(inventory.entries, {
+        repository: `${canonicalOwner}/${canonicalName}`,
+        commitSha,
+      });
+      const persistedAgentEvidence = await persistAgentConfigDiscovery(pool, {
+        tenantId: job.tenant_id,
+        passportId: job.passport_id ?? null,
+        repository: `${canonicalOwner}/${canonicalName}`,
+        commitSha,
+      }, agentDiscovery);
+      console.info(JSON.stringify({
+        event: 'agent_config_evidence_persisted',
+        workerId: WORKER_ID,
+        jobId: job.id,
+        tenantId: job.tenant_id,
+        scanId: ledger?.scanId ?? null,
+        assets: persistedAgentEvidence.assets,
+        relationships: persistedAgentEvidence.relationships,
+        driftEvents: persistedAgentEvidence.driftEvents,
+        limitations: agentDiscovery.limitations,
+      }));
+    } catch (agentDiscoveryError) {
+      // Agent evidence is an additive scan capability. A collector/storage
+      // failure is observable but does not erase or invalidate the repository
+      // security scan that produced the underlying immutable file inventory.
+      console.warn(JSON.stringify({
+        event: 'agent_config_evidence_failed',
+        workerId: WORKER_ID,
+        jobId: job.id,
+        tenantId: job.tenant_id,
+        scanId: ledger?.scanId ?? null,
+        error: rootErrorMessage(agentDiscoveryError).slice(0, 300),
+      }));
     }
 
     await pool.query(`INSERT INTO agent_logs (job_id,agent_id,message,level) VALUES ($1,$2,$3,'Info')`, [job.id, 'security-scanner', `Acquired GitHub commit ${commitSha}`]);

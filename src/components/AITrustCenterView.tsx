@@ -11,6 +11,8 @@ type AiSystem = {
   tool_access: string[]; permissions: string[]; owner_display: string; created_by: string; created_at: string; updated_at: string;
 };
 type Observation = { id: string; observation_type: string; summary: string; detail: string; observed_by: string; created_at: string };
+type AgentSecuritySummary = { total: number; agents: number; mcpServers: number; unverifiedMcp: number; agentConfigs: number; writeCapableAssets: number; executeCapableAssets: number; relationships: number; configDrift30d: number; dangerousChains30d: number; openHighRiskSignals: number; authoritativeScope: string };
+type RuntimeSequence = { startedAt: string; endedAt: string; eventIds: string[]; capabilities: string[]; targets: string[]; classification: 'DANGEROUS_TOOL_CHAIN' | 'OBSERVED_SEQUENCE'; executionOutcome: 'SUCCEEDED_OBSERVED' | 'NO_SUCCESS_OBSERVED'; evidenceBacked: boolean };
 
 const STATUS_STYLES: Record<AiSystem['status'], string> = {
   active: 'border-[var(--spr-green)]/30 bg-[var(--spr-green)]/10 text-[var(--spr-green)]',
@@ -41,6 +43,8 @@ export default function AITrustCenterView({ role, passports = [] }: { role: stri
   const [creating, setCreating] = useState(false);
   const [obsForm, setObsForm] = useState({ observationType: 'security', summary: '', detail: '' });
   const [loggingObservation, setLoggingObservation] = useState(false);
+  const [agentSecurity, setAgentSecurity] = useState<AgentSecuritySummary | null>(null);
+  const [runtimeSequences, setRuntimeSequences] = useState<RuntimeSequence[]>([]);
 
   const canManage = role === 'Owner' || role === 'Admin' || role === 'Operator';
   const canDelete = role === 'Owner' || role === 'Admin';
@@ -50,6 +54,20 @@ export default function AITrustCenterView({ role, passports = [] }: { role: stri
     apiFetch('/api/ai-trust/systems').then(async (r) => { const data = await r.json().catch(() => null); if (r.ok && Array.isArray(data?.systems)) setSystems(data.systems); else setError(responseError(data, 'Unable to load AI systems.')); }).finally(() => setLoading(false));
   };
   useEffect(() => { loadSystems(); }, []);
+  useEffect(() => {
+    apiFetch('/api/agent-security/summary').then(async (r) => {
+      if (!r.ok) return;
+      const data = await r.json().catch(() => null);
+      if (data && typeof data.total === 'number') setAgentSecurity(data);
+    }).catch(() => {});
+  }, []);
+  useEffect(() => {
+    apiFetch('/api/agent-security/sequences').then(async (r) => {
+      if (!r.ok) return;
+      const data = await r.json().catch(() => null);
+      if (Array.isArray(data?.sequences)) setRuntimeSequences(data.sequences.slice(0, 5));
+    }).catch(() => {});
+  }, []);
 
   const selected = systems.find((s) => s.id === selectedId) || null;
   useEffect(() => {
@@ -115,7 +133,7 @@ export default function AITrustCenterView({ role, passports = [] }: { role: stri
           <div>
             <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--spr-highlight)]"><Bot className="h-4 w-4" /> AI Trust Center</div>
             <h1 id="ai-trust-title" className="mt-2 text-3xl font-semibold tracking-tight">Your AI systems, declared and tracked</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--spr-text-muted)]">This is a self-reported registry. SPR has no mechanism to auto-discover AI agents or model usage — every field here is what your team declared, not an independently observed fact.</p>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--spr-text-muted)]">This registry remains self-reported for named AI systems and model usage. Repository scans can now independently observe supported agent/MCP configuration evidence; SPR keeps those observations separate from what your team declares.</p>
           </div>
           {canManage && <button onClick={() => setShowForm((open) => !open)} className="inline-flex items-center gap-2 spr-btn spr-btn-primary"><Plus size={16} /> Register AI system</button>}
         </div>
@@ -126,6 +144,46 @@ export default function AITrustCenterView({ role, passports = [] }: { role: stri
           <Metric label="Under review" value={summary.underReview} />
         </div>
       </header>
+
+      <section className="spr-panel p-5" aria-label="Observed agent security">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--spr-highlight)]">Observed agent security</div>
+            <h2 className="mt-1 text-lg font-semibold text-[var(--spr-text)]">Agent, MCP, tool and config evidence</h2>
+            <p className="mt-1 max-w-3xl text-xs leading-5 text-[var(--spr-text-muted)]">Observed evidence is kept separate from declared AI inventory. Suspicious content, capabilities and configuration changes remain observations until SPR has evidence of execution or verification.</p>
+          </div>
+          <span className="rounded-full border border-[var(--spr-border)] px-2.5 py-1 text-[11px] font-semibold text-[var(--spr-text-muted)]">{agentSecurity ? 'Evidence layer active' : 'No observed agent evidence yet'}</span>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Metric label="Observed agent assets" value={agentSecurity?.total ?? 0} />
+          <Metric label="MCP servers" value={agentSecurity?.mcpServers ?? 0} />
+          <Metric label="Unverified MCP" value={agentSecurity?.unverifiedMcp ?? 0} />
+          <Metric label="Risk chains · 30d" value={agentSecurity?.dangerousChains30d ?? 0} />
+        </div>
+        {agentSecurity && <div className="mt-3 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] px-3 py-2 text-xs text-[var(--spr-text-muted)]"><span className="font-semibold text-[var(--spr-text)]">Blast radius:</span> {agentSecurity.writeCapableAssets} write/admin-capable asset{agentSecurity.writeCapableAssets === 1 ? '' : 's'} · {agentSecurity.executeCapableAssets} execute-capable asset{agentSecurity.executeCapableAssets === 1 ? '' : 's'} · {agentSecurity.relationships} observed relationship{agentSecurity.relationships === 1 ? '' : 's'}.</div>}
+        {agentSecurity && (agentSecurity.configDrift30d > 0 || agentSecurity.openHighRiskSignals > 0) && <div className="mt-3 rounded-md border border-[var(--spr-amber)]/30 bg-[var(--spr-amber)]/10 px-3 py-2 text-xs text-[var(--spr-amber)]">Attention: {agentSecurity.configDrift30d} agent configuration drift event{agentSecurity.configDrift30d === 1 ? '' : 's'} and {agentSecurity.openHighRiskSignals} unresolved high-risk signal{agentSecurity.openHighRiskSignals === 1 ? '' : 's'} observed.</div>}
+      </section>
+
+      {runtimeSequences.length > 0 && <section className="spr-panel p-5" aria-label="Observed runtime sequences">
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--spr-highlight)]">Runtime evidence</div>
+            <h2 className="mt-1 text-lg font-semibold text-[var(--spr-text)]">Observed tool sequences</h2>
+            <p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">Derived only from stored execution receipts. Capability alone never counts as execution.</p>
+          </div>
+          <span className="text-[11px] text-[var(--spr-text-faint)]">Latest {runtimeSequences.length}</span>
+        </div>
+        <div className="mt-4 space-y-2">
+          {runtimeSequences.map((sequence) => <div key={sequence.eventIds.join(':')} className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-deep)] p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${sequence.classification === 'DANGEROUS_TOOL_CHAIN' ? 'border-[var(--spr-red)]/30 bg-[var(--spr-red)]/10 text-[var(--spr-red)]' : 'border-[var(--spr-border)] text-[var(--spr-text-muted)]'}`}>{sequence.classification === 'DANGEROUS_TOOL_CHAIN' ? 'Dangerous chain' : 'Observed sequence'}</span>
+              <span className={`text-[11px] font-semibold ${sequence.executionOutcome === 'SUCCEEDED_OBSERVED' ? 'text-[var(--spr-green)]' : 'text-[var(--spr-text-muted)]'}`}>{sequence.executionOutcome === 'SUCCEEDED_OBSERVED' ? 'Execution observed' : 'No successful execution observed'}</span>
+            </div>
+            <div className="mt-2 text-xs text-[var(--spr-text)]">{sequence.capabilities.filter(Boolean).join(' → ') || 'No named capabilities recorded'}</div>
+            <div className="mt-1 truncate text-[11px] text-[var(--spr-text-faint)]">{sequence.targets.filter(Boolean).join(' → ') || 'No target references recorded'}</div>
+          </div>)}
+        </div>
+      </section>}
 
       {error && <p role="alert" className="rounded-md border border-[var(--spr-red)]/30 bg-[var(--spr-red)]/10 px-4 py-3 text-sm text-[var(--spr-red)]">{error}</p>}
 
@@ -239,7 +297,7 @@ export default function AITrustCenterView({ role, passports = [] }: { role: stri
 
       <div className="rounded-md border border-[var(--spr-amber)]/25 bg-[var(--spr-amber)]/10 p-4 text-xs leading-5 text-[var(--spr-amber)]/75 flex gap-2">
         <AlertCircle className="h-4 w-4 shrink-0" />
-        Capability boundary: registration and observations are manually entered by your team, not detected. There is no vendor risk-scoring feed, model-version-change monitoring, or automated tool-access audit behind this yet.
+        Capability boundary: named AI systems and model usage remain manually declared. Supported repository agent/MCP configuration files are independently observed during repository scans, but SPR does not claim host-level discovery, runtime behavior, vendor risk scores, or model-version monitoring unless separate evidence exists.
       </div>
     </section>
   );
