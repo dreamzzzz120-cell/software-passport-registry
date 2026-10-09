@@ -251,8 +251,15 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
       const { error } = await supabase.auth.resend({ type: 'signup', email: address, options: { emailRedirectTo: getAuthRedirect() } });
       if (error) throw error;
       setUnconfirmedEmail(address);
-      setNotice(`Request accepted. If an unconfirmed account exists for ${address}, Supabase will email it a new confirmation link; open that link as soon as it arrives.`);
-    } catch (e) { setError(e instanceof Error ? e.message : 'Could not request a new confirmation link.'); } finally { setResending(false); }
+      setNotice(`Confirmation request accepted by Supabase for ${address}. This does not guarantee email delivery. Check your inbox and spam folder; if nothing arrives, contact support.`);
+    } catch (e) {
+      const authError = e as { status?: number; code?: string; message?: string };
+      if (authError?.status === 429 || authError?.code === 'over_email_send_rate_limit') {
+        setError('Supabase temporarily blocked this confirmation request (rate limit). No new email was sent by this attempt. Please wait before trying again. If earlier emails never arrived, contact support so we can check email delivery.');
+      } else {
+        setError(e instanceof Error ? e.message : 'Could not request a new confirmation link.');
+      }
+    } finally { setResending(false); }
   };
   const title = mode === 'login' ? brandedSignInTitle : mode === 'signup' ? 'Create your SPR account' : mode === 'recovery' ? 'Set your new password' : 'Reset your password';
   return <main className="min-h-screen flex items-center justify-center px-6 py-12 bg-background text-foreground"><section className="w-full max-w-md rounded-2xl border border-border bg-card p-7 shadow-xl">
