@@ -214,6 +214,13 @@ export default function FreeReviewView({
   const completionTracked = useRef(false);
   const [copied, setCopied] = useState(false);
 
+  // Record the user's intent before leaving the public review for signup.
+  // This measures CTA clicks, not completed accounts or paid customers.
+  const startSignupFromReview = () => {
+    trackGrowthEvent('signup_started');
+    onSignUp();
+  };
+
   useEffect(() => {
     if (
       !statusUrl ||
@@ -829,7 +836,7 @@ export default function FreeReviewView({
                       <ActionButton
                         label="Claim full Launch Ticket"
                         icon={<ExternalLink className="inline h-4 w-4" />}
-                        onClick={onSignUp}
+                        onClick={startSignupFromReview}
                         primary
                       />
                       <ActionButton
@@ -881,7 +888,7 @@ export default function FreeReviewView({
                         <div className="mt-4 flex flex-wrap gap-3">
                           <button
                             type="button"
-                            onClick={onSignUp}
+                            onClick={startSignupFromReview}
                             className="rounded-xl bg-[var(--spr-accent)] px-4 py-3 text-sm font-bold text-white"
                           >
                             Claim this Passport
