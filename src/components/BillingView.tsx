@@ -235,7 +235,7 @@ export default function BillingView() {
         </p>
       </div>
 
-      {!loading && status?.billingConfigured && !status.subscription && (
+      {!loading && status && !status.subscription && (
         <section className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] px-5 py-4">
           <h2 className="text-base font-semibold text-[var(--spr-text)]">Try SPR free for 7 days</h2>
           <p className="mt-1 text-sm text-[var(--spr-text-muted)]">Explore the Starter workspace with up to five clients. No credit card, no automatic charge. Your access ends after seven days unless you choose a paid plan.</p>
@@ -310,7 +310,7 @@ export default function BillingView() {
                   </div>
                   <p className="mt-1 text-sm text-[var(--spr-text-muted)]">
                     {status.clientCount} client{status.clientCount === 1 ? '' : 's'} used{status.subscription!.clientLimit != null ? ` of ${status.subscription!.clientLimit}` : ' (unlimited)'}
-                    {status.subscription!.currentPeriodEnd && ` · \${trialActive ? 'trial ends' : 'renews'} \${new Date(status.subscription!.currentPeriodEnd).toLocaleDateString()}`}
+                    {status.subscription!.currentPeriodEnd && ` · ${trialActive ? 'trial ends' : 'renews'} ${new Date(status.subscription!.currentPeriodEnd).toLocaleDateString()}`}
                   </p>
                 </>
               ) : subscriptionNeedsAttention ? (
