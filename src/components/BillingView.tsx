@@ -103,6 +103,7 @@ export default function BillingView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyPlan, setBusyPlan] = useState<PlanId | null>(null);
+  const [startingTrial, setStartingTrial] = useState(false);
   const [busyProduct, setBusyProduct] = useState<OneTimeProductId | null>(null);
   const [busyAddon, setBusyAddon] = useState<AddonId | null>(null);
   const [openingPortal, setOpeningPortal] = useState(false);
@@ -120,6 +121,21 @@ export default function BillingView() {
   };
 
   useEffect(() => { loadStatus(); }, []);
+
+  const startTrial = async () => {
+    setStartingTrial(true);
+    setError(null);
+    try {
+      const response = await apiFetch('/api/billing/trial/start', { method: 'POST' });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.message || 'Could not start your trial.');
+      loadStatus();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not start your trial.');
+    } finally {
+      setStartingTrial(false);
+    }
+  };
 
   const handleSubscribe = async (plan: PlanId) => {
     setBusyPlan(plan);
@@ -219,6 +235,13 @@ export default function BillingView() {
         </p>
       </div>
 
+      {!loading && status && !status.subscription && (
+        <section className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] px-5 py-4">
+          <h2 className="text-base font-semibold text-[var(--spr-text)]">Try SPR free for 7 days</h2>
+          <p className="mt-1 text-sm text-[var(--spr-text-muted)]">Explore the Starter workspace with up to five clients. No credit card, no automatic charge. Your access ends after seven days unless you choose a paid plan.</p>
+          <button type="button" className="spr-btn spr-btn-primary mt-3" onClick={() => void startTrial()} disabled={startingTrial}>{startingTrial ? 'Starting…' : 'Start 7-day free trial'}</button>
+        </section>
+      )}
       {error && (
         <div role="alert" className="flex items-center gap-2 rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 px-4 py-3 text-sm text-[var(--spr-red)]">
           <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
