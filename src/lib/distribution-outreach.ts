@@ -1,3 +1,4 @@
+import { hasVerifiedNorthAmericanCountry } from './distribution-geo.ts';
 import crypto from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { db, appPool } from '../db/index.ts';
@@ -193,6 +194,10 @@ async function withTenant<T>(fn: (client: any) => Promise<T>) {
 
 async function sendGate(client: any, contact: any) {
   outreachAllowed(contact.outreach_basis);
+  // Fail closed for initial and follow-up sends: unverified geography is held.
+  if (!hasVerifiedNorthAmericanCountry(contact.evidence)) {
+    throw new DistributionDeferredError('DISTRIBUTION_COUNTRY_VERIFICATION_REQUIRED', 86_400_000);
+  }
   if (contact.outreach_basis === 'consent' && !contact.consent_evidence_url?.trim()) throw new Error('DISTRIBUTION_CONSENT_EVIDENCE_REQUIRED');
   const { from } = outreachSender();
   const to = process.env.DISTRIBUTION_OUTREACH_VERIFY_TO?.trim().toLowerCase();
