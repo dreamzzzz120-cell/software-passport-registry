@@ -66,10 +66,12 @@ export function createLegacyFreeReviewRouter() {
       return res.status(202).json({ passportId, statusUrl: `/api/free-review/scan/${encodeURIComponent(passportId)}/status/${encodeURIComponent(token)}`, expiresAt: new Date(expiresAt * 1000).toISOString() });
     } catch (error) { return next(error); }
   });
-  router.get('/free-review/scan/:passportId/status/:token', async (req, res, next) => {
+  // Header transport prevents bearer tokens appearing in HTTP request URLs.
+  // Legacy GET remains temporarily for previously issued links.
+  const handleStatus = async (req: any, res: any, next: any) => {
     try {
       const passportId = req.params.passportId;
-      const payload = verifyFreeReviewStatusToken(req.params.token, passportId);
+      const payload = verifyFreeReviewStatusToken(req.get('x-spr-review-status-token') || req.params.token, passportId);
       if (!payload) return res.status(401).json({ error: 'Invalid or expired Free Review status link' });
       const scopedDb = await attachTenantScope(FREE_REVIEW_TENANT_ID, res);
       const jobs = (await scopedDb.execute(sql`SELECT id, job_type, status, progress, error, created_at AS "createdAt", updated_at AS "updatedAt" FROM agent_jobs WHERE tenant_id=${FREE_REVIEW_TENANT_ID} AND passport_id=${passportId}`) as any).rows || [];
@@ -301,6 +303,8 @@ export function createLegacyFreeReviewRouter() {
         policy: { rule: 'SPR reports observed evidence only. A scan still in progress reports scanStatus "scanning", never a placeholder result. A scan where every engine failed reports "failed", and its zero counts mean nothing was scanned -- not that nothing was found. This free preview returns aggregates only: finding descriptions, affected components, evidence records and remediation are withheld server-side, not hidden in the browser.' },
       });
     } catch (error) { return next(error); }
-  });
+  };
+  router.post('/free-review/scan/:passportId/status', handleStatus);
+  router.get('/free-review/scan/:passportId/status/:token', handleStatus);
   return router;
 }
