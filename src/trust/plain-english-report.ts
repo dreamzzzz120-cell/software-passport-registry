@@ -6,12 +6,16 @@
 // engine and scoring engine remain the sole source of truth; this is a
 // view, not a second opinion.
 
+import { buildEvidenceGapPlan, type EvidenceGapPlan } from './evidence-gap-plan';
+
 export type CanonicalReport = {
+  reportHash?: string;
+  limitations?: Array<{ evidenceId?: string | null; limitation?: string }>;
   passport: { id: string; name: string };
   risk: { overall: number | null; security: number | null; compliance: number | null; verificationStatus: string };
   evidenceQuality: { completenessBasisPoints: number; unknownDimensions: number; latestObservationAt: string | null };
-  findings: Array<{ id: string; control_id: string; title: string; severity: string; status: string; description: string; remediation: string; updated_at: string; resolved_at: string | null }>;
-  evidence: Array<{ id: string; provider: string; control_id: string; observed_at: string; verification_method: string; status: string; limitation?: string | null }>;
+  findings: Array<{ id: string; control_id: string; title: string; severity: string; status: string; description: string; remediation: string; updated_at: string; resolved_at: string | null; evidence_ids?: string[] | string }>;
+  evidence: Array<{ id: string; provider: string; control_id: string; observed_at: string; verification_method: string; status: string; limitation?: string | null; source_url?: string | null; evidence_hash?: string | null }>;
   repositoryScan?: {
     sbomComponentCount: number;
     evidence: Array<{ id: string }>;
@@ -62,19 +66,22 @@ export function explainFinding(finding: CanonicalReport['findings'][number]): Ex
     whatWeFound: finding.title,
     whyItMatters: finding.status === 'OPEN'
       ? 'The available evidence shows this has not been resolved, which may leave a real gap depending on how this system is used.'
-      : finding.status === 'UNKNOWN'
+      : status === 'Unknown'
         ? 'SPR does not currently have enough reliable evidence to say whether this is a problem.'
         : 'The available evidence supports that this specific item is resolved.',
-    howSerious: { level: finding.severity, explanation: severityPlainLanguage(finding.severity) },
+    howSerious: { level: finding.severity, explanation: status === 'Unknown'
+      ? 'This is the recorded severity of the check. Its actual condition and impact remain unknown; missing evidence does not establish a failure.'
+      : severityPlainLanguage(finding.severity) },
     whatWeKnow: finding.description,
-    whatWeDontKnow: finding.status === 'UNKNOWN' ? 'SPR could not obtain reliable evidence for this check -- this does not mean there is a problem, only that SPR cannot confirm either way.' : null,
-    whatToDoNext: finding.status === 'OPEN' ? (finding.remediation || 'Review this finding and decide on next steps.') : finding.status === 'UNKNOWN' ? 'Connect or authorize the data source needed to check this, if one is available.' : 'No action needed for this item.',
+    whatWeDontKnow: status === 'Unknown' ? 'SPR could not obtain reliable evidence for this check -- this does not mean there is a problem, only that SPR cannot confirm either way.' : null,
+    whatToDoNext: finding.status === 'OPEN' ? (finding.remediation || 'Review this finding and decide on next steps.') : status === 'Unknown' ? 'Request dated, attributable evidence for this check and review its scope. Recollect and evaluate the source before changing the status.' : 'No action needed for this item.',
     status,
     technical: { controlId: finding.control_id, title: finding.title, severity: finding.severity, rawStatus: finding.status, updatedAt: finding.updated_at },
   };
 }
 
 export type PlainEnglishReport = {
+  reviewPlan: EvidenceGapPlan;
   headline: string;
   situation: string;
   whatIsGood: string[];
@@ -127,18 +134,22 @@ export function toPlainEnglish(report: CanonicalReport): PlainEnglishReport {
   }));
   const findings = [...report.findings, ...scanFindings];
   const open = findings.filter((f) => f.status === 'OPEN');
-  const unknown = findings.filter((f) => f.status === 'UNKNOWN');
+  const unknown = findings.filter((f) => !['OPEN', 'RESOLVED'].includes(f.status));
   const resolved = findings.filter((f) => f.status === 'RESOLVED');
   const needsAttentionCount = open.length + unknown.length;
+  const reviewPlan = buildEvidenceGapPlan({ ...report, findings });
+  const hasCoverageGaps = reviewPlan.actions.some(action => action.basis !== 'finding');
   const hasEvidence = report.evidence.length > 0 || (scan?.evidence.length ?? 0) > 0 || (scan?.sbomComponentCount ?? 0) > 0;
   const repositoryContext = scan && (scan.evidence.length || scan.sbomComponentCount || scan.findings.length)
     ? ` Repository analysis recorded ${scan.sbomComponentCount} SBOM components, ${scan.evidence.length} evidence records and ${scan.findings.length} findings. Repository coverage does not establish deployment safety or compliance.` : '';
 
   const headline = needsAttentionCount === 0
-    ? (findings.length === 0 ? (hasEvidence ? 'Evidence collected; coverage still needs review' : 'No checks have produced evidence yet') : 'Nothing currently needs attention')
+    ? (findings.length === 0 ? (hasEvidence ? 'Evidence collected; coverage still needs review' : 'No checks have produced evidence yet') : hasCoverageGaps ? 'Resolved findings; evidence gaps still need review' : 'Nothing currently needs attention')
     : `${needsAttentionCount} item${needsAttentionCount === 1 ? '' : 's'} need${needsAttentionCount === 1 ? 's' : ''} attention`;
 
-  const situation = (findings.length === 0
+  const situation = (hasCoverageGaps && findings.length > 0 && needsAttentionCount === 0
+    ? `SPR recorded ${resolved.length} resolved findings, but coverage limitations or unknown dimensions remain. Review the evidence requests below before relying on this report. Nothing in this report should be read as a guarantee of security.`
+    : findings.length === 0
     ? (hasEvidence ? 'SPR has collected evidence without recorded findings. This is not an all-clear; review the observed scope and remaining gaps.' : 'SPR has not yet collected enough evidence about this software to report a status. This is not the same as being unsafe -- it means nothing has been checked yet.')
     : needsAttentionCount === 0
       ? `SPR recorded ${findings.length} resolved findings for this software. Nothing in this report should be read as a guarantee that the environment is completely secure -- SPR reports only what it can actually verify from the evidence available.`
@@ -159,10 +170,11 @@ export function toPlainEnglish(report: CanonicalReport): PlainEnglishReport {
   };
 
   return {
+    reviewPlan,
     headline,
     situation,
     whatIsGood: resolved.map((f) => `${f.title}: resolved`),
-    whatNeedsAttention: [...open, ...unknown].map((f) => `${f.title}${f.status === 'UNKNOWN' ? ' (not enough evidence to confirm either way)' : ''}`),
+    whatNeedsAttention: [...open, ...unknown].map((f) => `${f.title}${f.status !== 'OPEN' ? ' (not enough evidence to confirm either way)' : ''}`),
     scoreExplanation,
     findings: findings.map(explainFinding),
     glossary: GLOSSARY,

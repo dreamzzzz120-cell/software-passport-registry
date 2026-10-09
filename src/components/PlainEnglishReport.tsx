@@ -1,17 +1,7 @@
-import { useEffect, useState, type ReactElement } from 'react';
-import { AlertCircle, BookOpen, CheckCircle2, HelpCircle, Loader2, ShieldAlert, ShieldCheck } from 'lucide-react';
-import { apiFetch } from '../utils/apiClient';
-
-type ExplainedFinding = {
-  id: string; whatWeFound: string; whyItMatters: string; howSerious: { level: string; explanation: string };
-  whatWeKnow: string; whatWeDontKnow: string | null; whatToDoNext: string;
-  status: 'Verified' | 'Needs Review' | 'Unknown' | 'Resolved';
-};
-type PlainEnglish = {
-  headline: string; situation: string; whatIsGood: string[]; whatNeedsAttention: string[];
-  scoreExplanation: { value: number | null; explanation: string; disclaimer: string };
-  findings: ExplainedFinding[]; glossary: Record<string, string>; generatedAt: string;
-};
+import { useState, type ReactElement } from 'react';
+import { AlertCircle, BookOpen, CheckCircle2, HelpCircle, ShieldCheck } from 'lucide-react';
+import { toPlainEnglish, type CanonicalReport } from '../trust/plain-english-report';
+import EvidenceGapPlanPanel from './EvidenceGapPlanPanel';
 
 const STATUS_ICON: Record<string, ReactElement> = {
   Verified: <ShieldCheck className="h-4 w-4 text-[var(--spr-green)]" />, Resolved: <CheckCircle2 className="h-4 w-4 text-[var(--spr-green)]" />,
@@ -21,30 +11,9 @@ const STATUS_BORDER: Record<string, string> = {
   Verified: 'border-[var(--spr-green)]/40', Resolved: 'border-[var(--spr-green)]/40', 'Needs Review': 'border-[var(--spr-amber)]/40', Unknown: 'border-[var(--spr-border)]',
 };
 
-export default function PlainEnglishReport({ passportId, reportType }: { passportId: string; reportType: string }) {
-  const [data, setData] = useState<PlainEnglish | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+export default function PlainEnglishReport({ snapshot }: { snapshot: CanonicalReport }) {
+  const data = toPlainEnglish(snapshot);
   const [showGlossary, setShowGlossary] = useState(false);
-
-  useEffect(() => {
-    if (!passportId) return;
-    let cancelled = false;
-    setLoading(true); setError('');
-    apiFetch(`/api/trust-loop/reports/${encodeURIComponent(passportId)}/plain-english?type=${encodeURIComponent(reportType)}`)
-      .then(async (response) => {
-        if (!response.ok) throw new Error('SPR could not generate a plain-English report for this passport.');
-        return response.json();
-      })
-      .then((body) => { if (!cancelled) setData(body); })
-      .catch((e) => { if (!cancelled) setError(e?.message || 'Unable to load this report.'); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [passportId, reportType]);
-
-  if (loading) return <div className="flex items-center gap-2 py-10 text-sm text-[var(--spr-text-muted)]"><Loader2 className="h-4 w-4 animate-spin" /> Generating a plain-English summary…</div>;
-  if (error) return <div role="alert" className="rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 px-4 py-3 text-sm text-[var(--spr-red)]">{error}</div>;
-  if (!data) return null;
 
   return (
     <div className="space-y-5">
@@ -71,6 +40,8 @@ export default function PlainEnglishReport({ passportId, reportType }: { passpor
           </div>
         )}
       </div>
+
+      {data.reviewPlan && <EvidenceGapPlanPanel key={snapshot.reportHash ?? data.generatedAt} plan={data.reviewPlan} />}
 
       {data.findings.length > 0 && (
         <div className="space-y-3">
