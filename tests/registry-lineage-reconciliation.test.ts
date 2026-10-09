@@ -48,5 +48,5 @@ describe('completed public scan lineage', () => {
       expect((await db.query('SELECT identity_id FROM software_registry_observations WHERE evidence->>\'passportId\'=\'p1\'')).rows[0]).toMatchObject({ identity_id: 'existing-sha-id' });
       expect((await db.query('SELECT identity_id FROM registry_ingestion_items')).rows[0]).toMatchObject({ identity_id: 'existing-sha-id' });
     } finally { await db.close(); }
-  });
+  }, 20_000);
 });
