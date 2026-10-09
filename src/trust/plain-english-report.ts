@@ -6,12 +6,16 @@
 // engine and scoring engine remain the sole source of truth; this is a
 // view, not a second opinion.
 
+import { buildEvidenceGapPlan, type EvidenceGapPlan } from './evidence-gap-plan';
+
 export type CanonicalReport = {
+  reportHash?: string;
+  limitations?: Array<{ evidenceId?: string | null; limitation?: string }>;
   passport: { id: string; name: string };
   risk: { overall: number | null; security: number | null; compliance: number | null; verificationStatus: string };
   evidenceQuality: { completenessBasisPoints: number; unknownDimensions: number; latestObservationAt: string | null };
-  findings: Array<{ id: string; control_id: string; title: string; severity: string; status: string; description: string; remediation: string; updated_at: string; resolved_at: string | null }>;
-  evidence: Array<{ id: string; provider: string; control_id: string; observed_at: string; verification_method: string; status: string; limitation?: string | null }>;
+  findings: Array<{ id: string; control_id: string; title: string; severity: string; status: string; description: string; remediation: string; updated_at: string; resolved_at: string | null; evidence_ids?: string[] | string }>;
+  evidence: Array<{ id: string; provider: string; control_id: string; observed_at: string; verification_method: string; status: string; limitation?: string | null; source_url?: string | null; evidence_hash?: string | null }>;
   repositoryScan?: {
     sbomComponentCount: number;
     evidence: Array<{ id: string }>;
@@ -24,7 +28,15 @@ export const GLOSSARY: Record<string, string> = {
   'SBOM (Software Bill of Materials)': 'A list of the software components contained in a piece of software. Think of it like an ingredient list for software.',
   'Vulnerability': 'A known weakness in software or a system that could potentially be used to cause harm.',
   'CVE': 'A standardized identification number used to refer to a publicly documented software security weakness.',
-  'Evidence': 'Information SPR received from a connected system or other trusted source that supports a conclusion.',
+  'Evidence': 'A recorded source or observation used to support a finding. Its presence alone does not prove that the source is correct or the software is safe.',
+  'Launch Ticket': 'The software record that organizes its identity, recorded evidence, findings, and history.',
+  'MFA (Multi-factor authentication)': 'Signing in with an extra check beyond a password, such as a code from an authenticator app.',
+  'Control': 'A specific safeguard or requirement being checked, such as requiring an extra sign-in check.',
+  'Severity': 'The recorded seriousness of a finding. Actual business impact depends on where and how the software is used.',
+  'Unknown': 'There is not enough evidence to decide. This is neither a pass nor a confirmed failure.',
+  'Verification': 'Checking a specific claim using a recorded method. It does not certify the entire product.',
+  'Hash': 'A digital fingerprint that helps detect changes to data. It does not prove the data is true.',
+  'License': 'The terms under which software may be used, changed, or distributed. A recorded license needs review for your intended use.',
   'Trust Observation': 'A recorded fact SPR observed at a particular time and used when evaluating the software or environment.',
   'Finding': "A specific, evidence-backed statement about one thing SPR checked -- what it found, and whether it's resolved.",
   'Confidence': "How fresh and reliable the evidence behind a conclusion is, expressed as a percentage.",
@@ -38,7 +50,8 @@ function severityPlainLanguage(severity: string): string {
     case 'high': return 'This deserves prompt attention because it could create a meaningful security or operational risk if it applies to the affected system.';
     case 'medium': return 'This is worth reviewing and addressing in normal course, but is not urgent on its own.';
     case 'low': return 'This is a minor item, useful to track but unlikely to cause real harm on its own.';
-    default: return 'This is informational -- it does not represent a problem.';
+    case 'informational': case 'info': return 'This is recorded as information for review; it is not a security assurance.';
+    default: return 'The seriousness has not been classified. Ask the reviewer to assess it before deciding on urgency.';
   }
 }
 
@@ -62,19 +75,26 @@ export function explainFinding(finding: CanonicalReport['findings'][number]): Ex
     whatWeFound: finding.title,
     whyItMatters: finding.status === 'OPEN'
       ? 'The available evidence shows this has not been resolved, which may leave a real gap depending on how this system is used.'
-      : finding.status === 'UNKNOWN'
+      : status === 'Unknown'
         ? 'SPR does not currently have enough reliable evidence to say whether this is a problem.'
         : 'The available evidence supports that this specific item is resolved.',
-    howSerious: { level: finding.severity, explanation: severityPlainLanguage(finding.severity) },
+    howSerious: { level: finding.severity, explanation: !['critical', 'high', 'medium', 'low'].includes(finding.severity.toLowerCase()) ? severityPlainLanguage(finding.severity) : status === 'Unknown'
+      ? 'This is the recorded severity of the check. Its actual condition and impact remain unknown; missing evidence does not establish a failure.'
+      : severityPlainLanguage(finding.severity) },
     whatWeKnow: finding.description,
-    whatWeDontKnow: finding.status === 'UNKNOWN' ? 'SPR could not obtain reliable evidence for this check -- this does not mean there is a problem, only that SPR cannot confirm either way.' : null,
-    whatToDoNext: finding.status === 'OPEN' ? (finding.remediation || 'Review this finding and decide on next steps.') : finding.status === 'UNKNOWN' ? 'Connect or authorize the data source needed to check this, if one is available.' : 'No action needed for this item.',
+    whatWeDontKnow: status === 'Unknown' ? 'SPR cannot confirm the outcome of this check. This does not mean there is a problem; obtain supporting evidence and confirm the recorded status.' : 'This finding alone does not establish deployment exposure, business impact, or the security of the whole product.',
+    whatToDoNext: finding.status === 'OPEN' ? (finding.remediation || 'Review this finding and decide on next steps.') : status === 'Unknown' ? 'Request dated, attributable evidence for this check and review its scope. Recollect and evaluate the source before changing the status.' : 'No action needed for this item.',
     status,
     technical: { controlId: finding.control_id, title: finding.title, severity: finding.severity, rawStatus: finding.status, updatedAt: finding.updated_at },
   };
 }
 
 export type PlainEnglishReport = {
+  reviewPlan: EvidenceGapPlan;
+  readerGuide: { purpose: string; softwareName: string; steps: string[]; boundaries: string[] };
+  coverage: { evidenceRecords: number; repositoryEvidenceRecords: number | null; components: number | null; unknownDimensions: number; latestObservationAt: string | null; verificationStatus: string };
+  actionPlan: Array<{ findingId: string; title: string; priority: string; nextStep: string; completionEvidence: string }>;
+  sources: CanonicalReport['evidence'];
   headline: string;
   situation: string;
   whatIsGood: string[];
@@ -127,18 +147,22 @@ export function toPlainEnglish(report: CanonicalReport): PlainEnglishReport {
   }));
   const findings = [...report.findings, ...scanFindings];
   const open = findings.filter((f) => f.status === 'OPEN');
-  const unknown = findings.filter((f) => f.status === 'UNKNOWN');
+  const unknown = findings.filter((f) => !['OPEN', 'RESOLVED'].includes(f.status));
   const resolved = findings.filter((f) => f.status === 'RESOLVED');
   const needsAttentionCount = open.length + unknown.length;
+  const reviewPlan = buildEvidenceGapPlan({ ...report, findings });
+  const hasCoverageGaps = reviewPlan.actions.some(action => action.basis !== 'finding');
   const hasEvidence = report.evidence.length > 0 || (scan?.evidence.length ?? 0) > 0 || (scan?.sbomComponentCount ?? 0) > 0;
   const repositoryContext = scan && (scan.evidence.length || scan.sbomComponentCount || scan.findings.length)
     ? ` Repository analysis recorded ${scan.sbomComponentCount} SBOM components, ${scan.evidence.length} evidence records and ${scan.findings.length} findings. Repository coverage does not establish deployment safety or compliance.` : '';
 
   const headline = needsAttentionCount === 0
-    ? (findings.length === 0 ? (hasEvidence ? 'Evidence collected; coverage still needs review' : 'No checks have produced evidence yet') : 'Nothing currently needs attention')
+    ? (findings.length === 0 ? (hasEvidence ? 'Evidence collected; coverage still needs review' : 'No checks have produced evidence yet') : hasCoverageGaps ? 'Resolved findings; evidence gaps still need review' : 'Nothing currently needs attention')
     : `${needsAttentionCount} item${needsAttentionCount === 1 ? '' : 's'} need${needsAttentionCount === 1 ? 's' : ''} attention`;
 
-  const situation = (findings.length === 0
+  const situation = (hasCoverageGaps && findings.length > 0 && needsAttentionCount === 0
+    ? `SPR recorded ${resolved.length} resolved findings, but coverage limitations or unknown dimensions remain. Review the evidence requests below before relying on this report. Nothing in this report should be read as a guarantee of security.`
+    : findings.length === 0
     ? (hasEvidence ? 'SPR has collected evidence without recorded findings. This is not an all-clear; review the observed scope and remaining gaps.' : 'SPR has not yet collected enough evidence about this software to report a status. This is not the same as being unsafe -- it means nothing has been checked yet.')
     : needsAttentionCount === 0
       ? `SPR recorded ${findings.length} resolved findings for this software. Nothing in this report should be read as a guarantee that the environment is completely secure -- SPR reports only what it can actually verify from the evidence available.`
@@ -159,10 +183,23 @@ export function toPlainEnglish(report: CanonicalReport): PlainEnglishReport {
   };
 
   return {
+    reviewPlan,
+    readerGuide: {
+      softwareName: report.passport.name,
+      purpose: 'This report organizes recorded checks about this software so you can understand the evidence and decide what needs review. It is a point-in-time record, not permission to deploy.',
+      steps: ['Read the summary for the main observations.', 'Check coverage and missing information before interpreting the score.', 'Work through the action plan with your IT provider.', 'Use the findings and source records to verify each statement.'],
+      boundaries: ['A repository scan examines recorded source material; it does not establish what is running in your business.', 'No recorded findings does not mean no vulnerabilities exist.', 'This report does not certify legal compliance, establish a breach, or guarantee future security.', 'Business impact, owners, deadlines, and savings require your own context and confirmation.'],
+    },
+    coverage: { evidenceRecords: report.evidence.length, repositoryEvidenceRecords: scan?.evidence.length ?? null, components: scan?.sbomComponentCount ?? null, unknownDimensions: report.evidenceQuality.unknownDimensions, latestObservationAt: report.evidenceQuality.latestObservationAt, verificationStatus: report.risk.verificationStatus },
+    actionPlan: [...open, ...unknown].sort((a, b) => {
+      const order: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+      return (order[a.severity.toLowerCase()] ?? 4) - (order[b.severity.toLowerCase()] ?? 4);
+    }).map((f) => ({ findingId: f.id, title: f.title, priority: f.status === 'OPEN' ? `Recorded severity: ${f.severity}` : 'Evidence needed; outcome unknown', nextStep: explainFinding(f).whatToDoNext, completionEvidence: 'Record the supporting source, the change or review performed, and a fresh check confirming the outcome. A completed task alone does not prove the finding is resolved.' })),
+    sources: report.evidence.map((e) => ({ ...e })),
     headline,
     situation,
     whatIsGood: resolved.map((f) => `${f.title}: resolved`),
-    whatNeedsAttention: [...open, ...unknown].map((f) => `${f.title}${f.status === 'UNKNOWN' ? ' (not enough evidence to confirm either way)' : ''}`),
+    whatNeedsAttention: [...open, ...unknown].map((f) => `${f.title}${f.status !== 'OPEN' ? ' (not enough evidence to confirm either way)' : ''}`),
     scoreExplanation,
     findings: findings.map(explainFinding),
     glossary: GLOSSARY,

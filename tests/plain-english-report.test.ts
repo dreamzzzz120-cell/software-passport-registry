@@ -14,6 +14,13 @@ const report = (overrides: Partial<CanonicalReport> = {}): CanonicalReport => ({
 });
 
 describe('explainFinding never claims more than the underlying data supports', () => {
+  it('never describes an unfamiliar status or severity as resolved or harmless', () => {
+    const result = explainFinding(finding({ status: 'PENDING_REVIEW', severity: 'unclassified' }));
+    expect(result.status).toBe('Unknown');
+    expect(result.whyItMatters).not.toContain('is resolved');
+    expect(result.whatToDoNext).not.toContain('No action needed');
+    expect(result.howSerious.explanation).toContain('not been classified');
+  });
   it('maps OPEN to Needs Review, never to a clean pass', () => {
     const explained = explainFinding(finding({ status: 'OPEN' }));
     expect(explained.status).toBe('Needs Review');
@@ -41,6 +48,19 @@ describe('explainFinding never claims more than the underlying data supports', (
 });
 
 describe('toPlainEnglish never fabricates a conclusion the score/findings do not support', () => {
+  it('prioritizes recorded severity and retains gaps and source limitations without inventing owners', () => {
+    const result = toPlainEnglish(report({
+      findings: [finding({ id: 'low', severity: 'low' }), finding({ id: 'critical', severity: 'critical' }), finding({ id: 'pending', status: 'PENDING' })],
+      evidenceQuality: { completenessBasisPoints: 0, unknownDimensions: 4, latestObservationAt: null },
+      evidence: [{ id: 'e1', provider: 'provider', control_id: 'mfa', observed_at: '2026-10-08', verification_method: 'API', status: 'UNKNOWN', limitation: 'Partial scope' }],
+    }));
+    expect(result.actionPlan[0].findingId).toBe('critical');
+    expect(result.actionPlan.length).toBe(3);
+    expect(result.coverage.unknownDimensions).toBe(4);
+    expect(result.sources[0].limitation).toBe('Partial scope');
+    expect(result.whatNeedsAttention.length).toBe(3);
+    expect(result.readerGuide.boundaries.join(' ')).toContain('does not certify');
+  });
   it('includes repository findings and evidence when provider tables are empty', () => {
     const result = toPlainEnglish(report({
       risk: { overall: 91, security: 91, compliance: null, verificationStatus: 'partial' },
@@ -66,7 +86,7 @@ describe('toPlainEnglish never fabricates a conclusion the score/findings do not
   });
 
   it('never claims a guarantee of security, even when nothing needs attention', () => {
-    const result = toPlainEnglish(report({ findings: [finding({ status: 'RESOLVED' })] }));
+    const result = toPlainEnglish(report({ findings: [finding({ status: 'RESOLVED' })], evidence: [{ id: 'e1', provider: 'test', control_id: 'mfa', observed_at: '2026-10-09T00:00:00Z', verification_method: 'provider-api', status: 'PASS' }] }));
     expect(result.headline).toBe('Nothing currently needs attention');
     expect(result.situation).toContain('should be read as a guarantee');
   });
@@ -106,3 +126,13 @@ describe('explainChange reuses the real before/after values from compareCanonica
     expect(result.whyItChanged).toBe('New evidence changed this value.');
   });
 });
+
+
+ it('keeps absent repository coverage unknown while retaining measured zero', () => {
+   const report: CanonicalReport = { passport: {id:'coverage', name:'Coverage'}, risk:{overall:null,security:null,compliance:null,verificationStatus:'unverified'}, evidenceQuality:{completenessBasisPoints:0,unknownDimensions:0,latestObservationAt:null}, findings:[],evidence:[],generatedAt:'2026-10-09' };
+   expect(toPlainEnglish(report).coverage.components).toBeNull();
+   expect(toPlainEnglish(report).coverage.repositoryEvidenceRecords).toBeNull();
+   report.repositoryScan = {sbomComponentCount:0,evidence:[],findings:[]};
+   expect(toPlainEnglish(report).coverage.components).toBe(0);
+   expect(toPlainEnglish(report).coverage.repositoryEvidenceRecords).toBe(0);
+ });
