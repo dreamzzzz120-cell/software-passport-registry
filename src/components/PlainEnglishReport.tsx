@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactElement } from 'react';
 import { AlertCircle, BookOpen, CheckCircle2, HelpCircle, Loader2, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { formatEvidenceRequests, type EvidenceRequest } from '../trust/plain-english-report';
 import { apiFetch } from '../utils/apiClient';
 
 type ExplainedFinding = {
@@ -8,6 +9,7 @@ type ExplainedFinding = {
   status: 'Verified' | 'Needs Review' | 'Unknown' | 'Resolved';
 };
 type PlainEnglish = {
+  evidenceRequests?: EvidenceRequest[];
   headline: string; situation: string; whatIsGood: string[]; whatNeedsAttention: string[];
   scoreExplanation: { value: number | null; explanation: string; disclaimer: string };
   findings: ExplainedFinding[]; glossary: Record<string, string>; generatedAt: string;
@@ -25,9 +27,11 @@ export default function PlainEnglishReport({ passportId, reportType }: { passpor
   const [data, setData] = useState<PlainEnglish | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [copyStatus, setCopyStatus] = useState('');
   const [showGlossary, setShowGlossary] = useState(false);
 
   useEffect(() => {
+    setData(null); setCopyStatus('');
     if (!passportId) return;
     let cancelled = false;
     setLoading(true); setError('');
@@ -71,6 +75,29 @@ export default function PlainEnglishReport({ passportId, reportType }: { passpor
           </div>
         )}
       </div>
+
+      {data.evidenceRequests && data.evidenceRequests.length > 0 && (
+        <section className="spr-panel p-5" aria-label="Missing evidence follow-up">
+          <h3 className="font-bold">Missing evidence: questions to send your IT provider</h3>
+          <p className="mt-2 text-sm">Confirm the right contact, assign an owner, and agree a deadline for each question. These requests do not change the recorded assessment.</p>
+          <button type="button" className="spr-btn mt-3" onClick={async () => {
+            try { await navigator.clipboard.writeText(formatEvidenceRequests(data.evidenceRequests ?? [])); setCopyStatus('Evidence requests copied.'); }
+            catch { setCopyStatus('Copy unavailable. Select and copy the requests below.'); }
+          }}>Copy evidence requests</button>
+          <p role="status" className="mt-2 text-sm">{copyStatus}</p>
+          <ol className="mt-3 list-decimal space-y-4 pl-5">
+            {data.evidenceRequests.map(request => <li key={request.reference} className="text-sm">
+              <p className="font-semibold">{request.question}</p>
+              <p className="mt-1">{request.whyItMatters}</p>
+              <p className="mt-1"><strong>Suggested contact:</strong> {request.suggestedContact}</p>
+              <p><strong>Owner:</strong> Unassigned · <strong>Deadline:</strong> Unassigned</p>
+              <p className="mt-1"><strong>Evidence needed:</strong> {request.evidenceNeeded}</p>
+              <p className="mt-1"><strong>To close:</strong> {request.closureRule}</p>
+              <p className="mt-1"><strong>Record reference:</strong> {request.reference}</p>
+            </li>)}
+          </ol>
+        </section>
+      )}
 
       {data.findings.length > 0 && (
         <div className="space-y-3">
