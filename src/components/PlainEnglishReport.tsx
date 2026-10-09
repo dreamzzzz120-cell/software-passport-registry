@@ -1,17 +1,14 @@
 import { useEffect, useState, type ReactElement } from 'react';
 import { AlertCircle, BookOpen, CheckCircle2, HelpCircle, Loader2, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
+import type { PlainEnglishReport as ReportData } from '../trust/plain-english-report';
 
 type ExplainedFinding = {
   id: string; whatWeFound: string; whyItMatters: string; howSerious: { level: string; explanation: string };
   whatWeKnow: string; whatWeDontKnow: string | null; whatToDoNext: string;
   status: 'Verified' | 'Needs Review' | 'Unknown' | 'Resolved';
 };
-type PlainEnglish = {
-  headline: string; situation: string; whatIsGood: string[]; whatNeedsAttention: string[];
-  scoreExplanation: { value: number | null; explanation: string; disclaimer: string };
-  findings: ExplainedFinding[]; glossary: Record<string, string>; generatedAt: string;
-};
+type PlainEnglish = ReportData;
 
 const STATUS_ICON: Record<string, ReactElement> = {
   Verified: <ShieldCheck className="h-4 w-4 text-[var(--spr-green)]" />, Resolved: <CheckCircle2 className="h-4 w-4 text-[var(--spr-green)]" />,
@@ -25,12 +22,26 @@ export default function PlainEnglishReport({ passportId, reportType }: { passpor
   const [data, setData] = useState<PlainEnglish | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [showGlossary, setShowGlossary] = useState(false);
+  const [showGlossary, setShowGlossary] = useState(true);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
+
+  async function downloadExplainedReport() {
+    if (!data || exporting) return;
+    setExporting(true);
+    setExportError('');
+    try {
+      const { buildPlainEnglishPdf } = await import('../utils/plainEnglishPdf');
+      buildPlainEnglishPdf(data).save(`spr-explained-report-${passportId.replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`);
+    } catch {
+      setExportError('Unable to export this report. Try downloading again.');
+    } finally { setExporting(false); }
+  }
 
   useEffect(() => {
     if (!passportId) return;
     let cancelled = false;
-    setLoading(true); setError('');
+    setLoading(true); setError(''); setExportError(''); setData(null);
     apiFetch(`/api/trust-loop/reports/${encodeURIComponent(passportId)}/plain-english?type=${encodeURIComponent(reportType)}`)
       .then(async (response) => {
         if (!response.ok) throw new Error('SPR could not generate a plain-English report for this passport.');
@@ -48,6 +59,15 @@ export default function PlainEnglishReport({ passportId, reportType }: { passpor
 
   return (
     <div className="space-y-5">
+      <button onClick={() => void downloadExplainedReport()} disabled={exporting} className="spr-btn spr-btn-primary disabled:opacity-40">{exporting ? 'Preparing report…' : 'Download explained report PDF'}</button>
+      {exportError && <p role="alert" className="text-sm text-[var(--spr-red)]">{exportError}</p>}
+      {data.readerGuide && <section className="spr-panel p-5" aria-label="How to read this report">
+        <h2 className="text-xl font-bold">Software evidence report: {data.readerGuide.softwareName}</h2>
+        <p className="mt-2 text-sm leading-6">{data.readerGuide.purpose}</p>
+        <p className="mt-2 text-xs">Report generated: {data.generatedAt}. Dates in source records identify when observations were made.</p>
+        <h3 className="mt-4 font-semibold">Start here — no technical background needed</h3>
+        <ol className="mt-2 list-decimal space-y-2 pl-5 text-sm">{data.readerGuide.steps.map(step => <li key={step}>{step}</li>)}</ol>
+      </section>}
       <div className="spr-panel p-5">
         <div className="text-xs font-bold uppercase tracking-[.18em] text-[var(--spr-highlight)]">At a glance</div>
         <h2 className="mt-2 text-xl font-bold text-[var(--spr-text)]">{data.headline}</h2>
@@ -72,11 +92,36 @@ export default function PlainEnglishReport({ passportId, reportType }: { passpor
         )}
       </div>
 
+      {data.coverage && <section className="spr-panel p-5" aria-label="Coverage and limitations">
+        <h3 className="font-bold">What this report covers — and what remains unknown</h3>
+        <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+          <div><dt>Connected-source evidence records</dt><dd>{data.coverage.evidenceRecords}</dd></div>
+          <div><dt>Repository evidence records</dt><dd>{data.coverage.repositoryEvidenceRecords}</dd></div>
+          <div><dt>Software ingredients recorded (SBOM components)</dt><dd>{data.coverage.components}</dd></div>
+          <div><dt>Checks without enough information (unknown dimensions)</dt><dd>{data.coverage.unknownDimensions}</dd></div>
+          <div><dt>Latest connected-source observation</dt><dd>{data.coverage.latestObservationAt ?? 'Not recorded; freshness cannot be established here'}</dd></div>
+          <div><dt>Recorded verification status</dt><dd>{data.coverage.verificationStatus}</dd></div>
+        </dl>
+        <p className="mt-3 text-sm">Counts describe recorded material, not the percentage of your environment checked. Unknown dimensions are separate from individual findings.</p>
+        <ul className="mt-3 list-disc space-y-2 pl-5 text-sm">{data.readerGuide?.boundaries.map(item => <li key={item}>{item}</li>)}</ul>
+      </section>}
+
+      {data.actionPlan && <section className="spr-panel p-5" aria-label="Action plan">
+        <h3 className="font-bold">Your next steps, in review order</h3>
+        <p className="mt-2 text-sm">Ask your IT provider to confirm applicability, assign an owner, and agree a deadline. Neither has been assigned by this report.</p>
+        {data.actionPlan.length === 0 ? <p className="mt-3 text-sm">No actions can be derived from the recorded findings. Review coverage before making a decision.</p> :
+          <ol className="mt-3 list-decimal space-y-4 pl-5">{data.actionPlan.map(action => <li key={action.findingId} className="text-sm">
+            <a className="font-semibold underline" href={`#finding-${action.findingId}`}>{action.title}</a>
+            <p>{action.priority}</p><p className="mt-1">{action.nextStep}</p>
+            <p className="mt-2"><strong>How to confirm completion:</strong> {action.completionEvidence}</p>
+          </li>)}</ol>}
+      </section>}
+
       {data.findings.length > 0 && (
         <div className="space-y-3">
           <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--spr-text)]">Findings, explained</h3>
           {data.findings.map((finding) => (
-            <div key={finding.id} className={`spr-panel border p-4 ${STATUS_BORDER[finding.status]}`}>
+            <div id={`finding-${finding.id}`} key={finding.id} className={`spr-panel border p-4 ${STATUS_BORDER[finding.status]}`}>
               <div className="flex items-start justify-between gap-3">
                 <p className="text-sm font-semibold text-[var(--spr-text)]">{finding.whatWeFound}</p>
                 <span className="flex shrink-0 items-center gap-1.5 text-xs font-bold text-[var(--spr-text)]">{STATUS_ICON[finding.status]} {finding.status}</span>
@@ -88,13 +133,16 @@ export default function PlainEnglishReport({ passportId, reportType }: { passpor
                 {finding.whatWeDontKnow && <div><dt className="font-bold uppercase tracking-wider text-[var(--spr-text-faint)]">What SPR doesn't know</dt><dd className="mt-0.5 text-[var(--spr-text-muted)]">{finding.whatWeDontKnow}</dd></div>}
                 <div><dt className="font-bold uppercase tracking-wider text-[var(--spr-text-faint)]">What to do next</dt><dd className="mt-0.5 text-[var(--spr-text-muted)]">{finding.whatToDoNext}</dd></div>
               </dl>
+              <details className="mt-3 text-sm"><summary className="cursor-pointer font-semibold">Original technical record</summary>
+                <dl className="mt-2 space-y-1"><div><dt>Finding ID</dt><dd>{finding.id}</dd></div><div><dt>Check identifier (control)</dt><dd>{finding.technical.controlId}</dd></div><div><dt>Recorded status</dt><dd>{finding.technical.rawStatus}</dd></div><div><dt>Last recorded update</dt><dd>{finding.technical.updatedAt}</dd></div></dl>
+              </details>
             </div>
           ))}
         </div>
       )}
 
       <div className="spr-panel p-4">
-        <button onClick={() => setShowGlossary((v) => !v)} className="flex w-full items-center justify-between text-sm font-semibold text-[var(--spr-text)]">
+        <button aria-expanded={showGlossary} onClick={() => setShowGlossary((v) => !v)} className="flex w-full items-center justify-between text-sm font-semibold text-[var(--spr-text)]">
           <span className="flex items-center gap-1.5"><BookOpen className="h-4 w-4 text-[var(--spr-text-muted)]" /> Glossary</span>
           <span className="text-xs text-[var(--spr-text-faint)]">{showGlossary ? 'Hide' : 'Show'}</span>
         </button>
@@ -106,6 +154,15 @@ export default function PlainEnglishReport({ passportId, reportType }: { passpor
           </dl>
         )}
       </div>
+      {data.sources && <section className="spr-panel p-5" aria-label="Evidence sources">
+        <h3 className="font-bold">Where the information came from</h3>
+        <p className="mt-2 text-sm">These are connected-source records. A shared check identifier is context, not proof that a record supports every finding. Repository evidence details remain in the technical report.</p>
+        {data.sources.length === 0 ? <p className="mt-3 text-sm">No connected-source evidence records are included. Review repository coverage and the technical report separately.</p> :
+          <ul className="mt-3 space-y-3 text-sm">{data.sources.map(source => <li key={source.id} className="rounded border border-[var(--spr-border)] p-3">
+            <p><strong>{source.provider}</strong> · {source.id}</p><p>Check: {source.control_id}</p><p>Observed: {source.observed_at}</p><p>Method: {source.verification_method} · Recorded status: {source.status}</p><p>Limitations: {source.limitation || 'No limitation recorded for this source; this does not mean there are none.'}</p>
+          </li>)}</ul>}
+      </section>}
     </div>
   );
 }
+
