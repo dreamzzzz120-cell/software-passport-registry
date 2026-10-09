@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { Copy, Download, FileJson, FileText, History, Package, Printer, RefreshCw, Share2, ShieldCheck, Upload, Users } from 'lucide-react';
 import type { Alert, Client, Scan, SoftwarePassport } from '../types';
 import { apiFetch } from '../utils/apiClient';
@@ -81,6 +81,8 @@ function clientName(passport: SoftwarePassport, clients: Client[]) {
 export default function ReportsView({ clients = [], passports = [], scans = [], alerts = [], findings = [], role = 'Viewer' }: ReportsViewProps) {
   const [selectedPassportId, setSelectedPassportId] = useState(passports[0]?.id || '');
   const [reportType, setReportType] = useState('executive');
+  const reportRequest = useRef(0);
+  const reportContext = useRef(0);
   const [report, setReport] = useState<ReportPayload | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
@@ -134,6 +136,9 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
   }, []);
 
   useEffect(() => {
+    reportRequest.current += 1;
+    reportContext.current += 1;
+    setLoading(false);
     setReport(null);
     setHistory([]);
     setShareInfo(null);
@@ -141,6 +146,7 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
     setMessage('');
     setChanges(null);
     if (selectedPassportId) { void loadHistory(selectedPassportId); void loadChanges(selectedPassportId); }
+    return () => { reportRequest.current += 1; reportContext.current += 1; };
   }, [selectedPassportId, reportType]);
 
   const selectedPassport = passports.find((passport) => passport.id === selectedPassportId);
@@ -149,61 +155,73 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
   const findingCount = findings.length;
 
   const loadHistory = async (passportId: string) => {
+    const context = reportContext.current;
     setHistoryLoading(true);
     try {
       const response = await apiFetch(`/api/trust-loop/reports/${encodeURIComponent(passportId)}/history?type=${encodeURIComponent(reportType)}`);
       const payload = await response.json().catch(() => null);
+      if (context !== reportContext.current) return;
       if (response.ok) setHistory(Array.isArray(payload?.snapshots) ? payload.snapshots : []);
     } finally {
-      setHistoryLoading(false);
+      if (context === reportContext.current) setHistoryLoading(false);
     }
   };
 
   const loadChanges = async (passportId: string) => {
+    const context = reportContext.current;
     setChangesLoading(true);
     try {
       const response = await apiFetch(`/api/trust-loop/reports/${encodeURIComponent(passportId)}/changes?type=${encodeURIComponent(reportType)}`);
       const payload = await response.json().catch(() => null);
+      if (context !== reportContext.current) return;
       if (response.ok) setChanges(payload as ChangesSinceLastReport);
     } finally {
-      setChangesLoading(false);
+      if (context === reportContext.current) setChangesLoading(false);
     }
   };
 
   const loadReport = async () => {
     if (!selectedPassport) return;
+    const request = ++reportRequest.current;
+    setReport(null);
     setLoading(true);
     setMessage('');
     try {
       const response = await apiFetch(`/api/trust-loop/reports/${encodeURIComponent(selectedPassport.id)}?type=${encodeURIComponent(reportType)}`);
       const payload = await response.json().catch(() => null);
+      if (request !== reportRequest.current) return;
       if (!response.ok) throw new Error(String(payload?.error || `Report request failed (${response.status})`));
       setReport(payload as ReportPayload);
       setMessage('Authoritative report loaded from the tenant-scoped trust report endpoint.');
       void loadHistory(selectedPassport.id);
       void loadChanges(selectedPassport.id);
     } catch (error) {
+      if (request !== reportRequest.current) return;
       setReport(null);
       setMessage(error instanceof Error ? error.message : 'Unable to load the report.');
     } finally {
-      setLoading(false);
+      if (request === reportRequest.current) setLoading(false);
     }
   };
 
   const loadSnapshot = async (snapshotId: string) => {
     if (!selectedPassport) return;
+    const request = ++reportRequest.current;
+    setReport(null);
     setLoading(true);
     setMessage('');
     try {
       const response = await apiFetch(`/api/trust-loop/reports/${encodeURIComponent(selectedPassport.id)}/history/${encodeURIComponent(snapshotId)}`);
       const payload = await response.json().catch(() => null);
+      if (request !== reportRequest.current) return;
       if (!response.ok) throw new Error(String(payload?.error || `Snapshot request failed (${response.status})`));
       setReport(payload as ReportPayload);
       setMessage('Loaded a historical snapshot of this report. Re-run "Load report" for the current state.');
     } catch (error) {
+      if (request !== reportRequest.current) return;
       setMessage(error instanceof Error ? error.message : 'Unable to load that snapshot.');
     } finally {
-      setLoading(false);
+      if (request === reportRequest.current) setLoading(false);
     }
   };
 
