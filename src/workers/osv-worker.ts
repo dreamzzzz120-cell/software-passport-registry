@@ -22,6 +22,7 @@ import { normalizeCycloneDxComponentNames } from '../security/component-path-nor
 // is what the job queue needs and what BYPASSRLS used to provide.
 import { createWorkerPool } from './worker-db.ts';
 import { applyRepositoryEngineOutcomes, buildRepositoryInventory, makeArchiveLister, type RepositoryInventory } from '../scanners/repository-inventory.ts';
+import { discoverAndPersistAgentTrust } from '../scanners/agent-trust-discovery.ts';
 import { markScanRunRunning, persistInventory, pinScanCommit, recomputeCoverage, recordPassportAssociation, settleScanRun, type LedgerContext } from '../scanners/scan-ledger.ts';
 
 type ClaimedJob = {
@@ -826,6 +827,14 @@ async function processRepositoryJob(pool: Pool, job: ClaimedJob) {
       await recomputeCoverage(pool, ledger, { inventoryComplete: !inventory.truncated, limitations: inventory.limitations });
       mark('inventory_persisted', { files: inventory.entries.length, truncated: inventory.truncated });
     }
+    const agentTrust = await discoverAndPersistAgentTrust(pool, {
+      tenantId: job.tenant_id,
+      passportId: job.passport_id,
+      scanId: ledger?.scanId ?? null,
+      root: scanRoot,
+      sourceRef: commitSha,
+    });
+    mark('agent_trust_discovered', agentTrust);
     const manifests = await inspectTree(scanRoot); mark('manifest_inspected', { manifestCount: manifests.length });
     const syftPath = await locateSyft(); mark('syft_located');
     const generated = await generateRepositorySbom(scanRoot,syftPath); const scannerEndedAt = new Date();

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Bot, ChevronRight, Plus, Shield, Trash2 } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
 import TrustCouncilPanel from './TrustCouncilPanel';
+import AgentEvidencePanel from './AgentEvidencePanel';
 import type { SoftwarePassport } from '../types';
 
 type AiSystem = {
@@ -128,6 +129,8 @@ export default function AITrustCenterView({ role, passports = [] }: { role: stri
       </header>
 
       {error && <p role="alert" className="rounded-md border border-[var(--spr-red)]/30 bg-[var(--spr-red)]/10 px-4 py-3 text-sm text-[var(--spr-red)]">{error}</p>}
+
+      <AgentEvidencePanel passports={passports} />
 
       <TrustCouncilPanel passports={passports.map((p) => ({ id: p.id, name: p.name, version: p.version }))} />
 
