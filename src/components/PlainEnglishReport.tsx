@@ -1,6 +1,8 @@
 import { useEffect, useState, type ReactElement } from 'react';
 import { AlertCircle, BookOpen, CheckCircle2, HelpCircle, Loader2, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
+import type { EvidenceGapPlan } from '../trust/evidence-gap-plan';
+import EvidenceGapPlanPanel from './EvidenceGapPlanPanel';
 
 type ExplainedFinding = {
   id: string; whatWeFound: string; whyItMatters: string; howSerious: { level: string; explanation: string };
@@ -8,6 +10,7 @@ type ExplainedFinding = {
   status: 'Verified' | 'Needs Review' | 'Unknown' | 'Resolved';
 };
 type PlainEnglish = {
+  reviewPlan?: EvidenceGapPlan;
   headline: string; situation: string; whatIsGood: string[]; whatNeedsAttention: string[];
   scoreExplanation: { value: number | null; explanation: string; disclaimer: string };
   findings: ExplainedFinding[]; glossary: Record<string, string>; generatedAt: string;
@@ -28,12 +31,13 @@ export default function PlainEnglishReport({ passportId, reportType }: { passpor
   const [showGlossary, setShowGlossary] = useState(false);
 
   useEffect(() => {
+    setData(null);
     if (!passportId) return;
     let cancelled = false;
-    setLoading(true); setError('');
+    setLoading(true); setError(''); setShowGlossary(false);
     apiFetch(`/api/trust-loop/reports/${encodeURIComponent(passportId)}/plain-english?type=${encodeURIComponent(reportType)}`)
       .then(async (response) => {
-        if (!response.ok) throw new Error('SPR could not generate a plain-English report for this passport.');
+        if (!response.ok) throw new Error('SPR could not generate a plain-English report for this Launch Ticket.');
         return response.json();
       })
       .then((body) => { if (!cancelled) setData(body); })
@@ -71,6 +75,8 @@ export default function PlainEnglishReport({ passportId, reportType }: { passpor
           </div>
         )}
       </div>
+
+      {data.reviewPlan && <EvidenceGapPlanPanel key={`${passportId}:${reportType}:${data.generatedAt}`} plan={data.reviewPlan} />}
 
       {data.findings.length > 0 && (
         <div className="space-y-3">

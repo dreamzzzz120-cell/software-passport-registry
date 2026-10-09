@@ -66,7 +66,7 @@ describe('toPlainEnglish never fabricates a conclusion the score/findings do not
   });
 
   it('never claims a guarantee of security, even when nothing needs attention', () => {
-    const result = toPlainEnglish(report({ findings: [finding({ status: 'RESOLVED' })] }));
+    const result = toPlainEnglish(report({ findings: [finding({ status: 'RESOLVED' })], evidence: [{ id: 'e1', provider: 'test', control_id: 'mfa', observed_at: '2026-10-09T00:00:00Z', verification_method: 'provider-api', status: 'PASS' }] }));
     expect(result.headline).toBe('Nothing currently needs attention');
     expect(result.situation).toContain('should be read as a guarantee');
   });
