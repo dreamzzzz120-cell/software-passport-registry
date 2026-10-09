@@ -103,6 +103,7 @@ export default function BillingView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyPlan, setBusyPlan] = useState<PlanId | null>(null);
+  const [startingTrial, setStartingTrial] = useState(false);
   const [busyProduct, setBusyProduct] = useState<OneTimeProductId | null>(null);
   const [busyAddon, setBusyAddon] = useState<AddonId | null>(null);
   const [openingPortal, setOpeningPortal] = useState(false);
@@ -120,6 +121,21 @@ export default function BillingView() {
   };
 
   useEffect(() => { loadStatus(); }, []);
+
+  const startTrial = async () => {
+    setStartingTrial(true);
+    setError(null);
+    try {
+      const response = await apiFetch('/api/billing/trial/start', { method: 'POST' });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.message || 'Could not start your trial.');
+      loadStatus();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not start your trial.');
+    } finally {
+      setStartingTrial(false);
+    }
+  };
 
   const handleSubscribe = async (plan: PlanId) => {
     setBusyPlan(plan);
@@ -202,7 +218,9 @@ export default function BillingView() {
 
   const anyBusy = busyPlan !== null || busyProduct !== null || busyAddon !== null;
   const subscriptionStatus = status?.subscription?.status ?? 'none';
-  const entitlementActive = subscriptionStatus === 'active' && Boolean(status?.subscription?.plan);
+  const trialExpiresAt = status?.subscription?.currentPeriodEnd ? new Date(status.subscription.currentPeriodEnd).getTime() : NaN;
+  const trialActive = subscriptionStatus === 'trialing' && status?.subscription?.plan === 'starter' && Number.isFinite(trialExpiresAt) && trialExpiresAt > Date.now();
+  const entitlementActive = (subscriptionStatus === 'active' || trialActive) && Boolean(status?.subscription?.plan);
   const currentPlan = entitlementActive ? status!.subscription!.plan : null;
   const recordedPlan = status?.subscription?.plan ?? null;
   const currentPlanLabel = recordedPlan ? status?.plans.find((p) => p.id === recordedPlan)?.label ?? recordedPlan : null;
@@ -217,6 +235,13 @@ export default function BillingView() {
         </p>
       </div>
 
+      {!loading && status?.billingConfigured && !status.subscription && (
+        <section className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] px-5 py-4">
+          <h2 className="text-base font-semibold text-[var(--spr-text)]">Try SPR free for 7 days</h2>
+          <p className="mt-1 text-sm text-[var(--spr-text-muted)]">Explore the Starter workspace with up to five clients. No credit card, no automatic charge. Your access ends after seven days unless you choose a paid plan.</p>
+          <button type="button" className="spr-btn spr-btn-primary mt-3" onClick={() => void startTrial()} disabled={startingTrial}>{startingTrial ? 'Starting…' : 'Start 7-day free trial'}</button>
+        </section>
+      )}
       {error && (
         <div role="alert" className="flex items-center gap-2 rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 px-4 py-3 text-sm text-[var(--spr-red)]">
           <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
@@ -281,11 +306,11 @@ export default function BillingView() {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-sm text-[var(--spr-text-muted)]">Active plan</span>
                     <span className="text-base font-semibold text-[var(--spr-text)]">{currentPlanLabel}</span>
-                    <span className="rounded-full border border-[var(--spr-green)]/40 px-2 py-0.5 text-[12px] font-medium text-[var(--spr-green)]">active</span>
+                    <span className="rounded-full border border-[var(--spr-green)]/40 px-2 py-0.5 text-[12px] font-medium text-[var(--spr-green)]">{trialActive ? "free trial" : "active"}</span>
                   </div>
                   <p className="mt-1 text-sm text-[var(--spr-text-muted)]">
                     {status.clientCount} client{status.clientCount === 1 ? '' : 's'} used{status.subscription!.clientLimit != null ? ` of ${status.subscription!.clientLimit}` : ' (unlimited)'}
-                    {status.subscription!.currentPeriodEnd && ` · renews ${new Date(status.subscription!.currentPeriodEnd).toLocaleDateString()}`}
+                    {status.subscription!.currentPeriodEnd && ` · \${trialActive ? 'trial ends' : 'renews'} \${new Date(status.subscription!.currentPeriodEnd).toLocaleDateString()}`}
                   </p>
                 </>
               ) : subscriptionNeedsAttention ? (
