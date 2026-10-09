@@ -114,7 +114,7 @@ export function createFounderCommandCenterRouter() {
   // and reads the existing traffic_events ledger directly.
   router.get('/founder/traffic', founderReadLimiter, requireAuth, requireRole('Owner'), requireFounder, rateLimiter, async (_req: AuthenticatedRequest, res, next) => {
     try {
-      const [summary, topPages, recent] = await Promise.all([
+      const [summary, topPages, recent, classification] = await Promise.all([
         db.execute(sql`
           SELECT
             COUNT(*) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '30 minutes')::int AS "activeEvents",
@@ -132,12 +132,39 @@ export function createFounderCommandCenterRouter() {
           GROUP BY path ORDER BY views DESC LIMIT 20
         `),
         db.execute(sql`
-          SELECT occurred_at AS "occurredAt", path, device_type AS "deviceType", country
+          SELECT occurred_at AS "occurredAt", path, device_type AS "deviceType", country,
+            CASE
+              WHEN source = 'founder-test' THEN 'founder_test'
+              WHEN COALESCE(user_agent, '') ~* '(bot|crawler|spider|slurp|headless|lighthouse|uptimerobot|pingdom|curl/|wget/)' THEN 'automated'
+              ELSE 'unknown'
+            END AS "visitorType"
           FROM traffic_events
           ORDER BY occurred_at DESC LIMIT 100
         `),
+        db.execute(sql`
+          SELECT
+            CASE
+              WHEN source = 'founder-test' THEN 'founder_test'
+              WHEN COALESCE(user_agent, '') ~* '(bot|crawler|spider|slurp|headless|lighthouse|uptimerobot|pingdom|curl/|wget/)' THEN 'automated'
+              ELSE 'unknown'
+            END AS "visitorType",
+            COUNT(*)::int AS events,
+            COUNT(DISTINCT session_id)::int AS sessions
+          FROM traffic_events
+          WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'
+          GROUP BY 1
+          ORDER BY events DESC
+        `),
       ]);
-      return res.json({ summary: (summary as any).rows?.[0] ?? null, topPages: (topPages as any).rows ?? [], recent: (recent as any).rows ?? [], generatedAt: new Date().toISOString() });
+      // Legacy users24h/users7d fields represent session IDs, not known people.
+      // Preserve them for old clients but publish explicitly named session totals.
+      const row = (summary as any).rows?.[0] ?? null;
+      const labelledSummary = row ? { ...row, sessions24h: row.users24h, sessions7d: row.users7d,
+        visitorMeasurement: 'anonymous_session_ids_not_unique_humans' } : null;
+      return res.json({ summary: labelledSummary, topPages: (topPages as any).rows ?? [],
+        recent: (recent as any).rows ?? [], classification: (classification as any).rows ?? [],
+        classificationMethod: 'founder_source_or_user_agent_only; unproven_visitors_unknown',
+        generatedAt: new Date().toISOString() });
     } catch (error) {
       return next(error);
     }
