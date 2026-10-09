@@ -38,7 +38,8 @@ function severityPlainLanguage(severity: string): string {
     case 'high': return 'This deserves prompt attention because it could create a meaningful security or operational risk if it applies to the affected system.';
     case 'medium': return 'This is worth reviewing and addressing in normal course, but is not urgent on its own.';
     case 'low': return 'This is a minor item, useful to track but unlikely to cause real harm on its own.';
-    default: return 'This is informational -- it does not represent a problem.';
+    case 'info': case 'informational': return 'This is recorded as information for review; it is not a security assurance.';
+    default: return 'The seriousness has not been classified. A reviewer must assess urgency.';
   }
 }
 
@@ -62,19 +63,20 @@ export function explainFinding(finding: CanonicalReport['findings'][number]): Ex
     whatWeFound: finding.title,
     whyItMatters: finding.status === 'OPEN'
       ? 'The available evidence shows this has not been resolved, which may leave a real gap depending on how this system is used.'
-      : finding.status === 'UNKNOWN'
+      : status === 'Unknown'
         ? 'SPR does not currently have enough reliable evidence to say whether this is a problem.'
         : 'The available evidence supports that this specific item is resolved.',
     howSerious: { level: finding.severity, explanation: severityPlainLanguage(finding.severity) },
     whatWeKnow: finding.description,
-    whatWeDontKnow: finding.status === 'UNKNOWN' ? 'SPR could not obtain reliable evidence for this check -- this does not mean there is a problem, only that SPR cannot confirm either way.' : null,
-    whatToDoNext: finding.status === 'OPEN' ? (finding.remediation || 'Review this finding and decide on next steps.') : finding.status === 'UNKNOWN' ? 'Connect or authorize the data source needed to check this, if one is available.' : 'No action needed for this item.',
+    whatWeDontKnow: status === 'Unknown' ? 'SPR could not obtain reliable evidence for this check -- this does not mean there is a problem, only that SPR cannot confirm either way.' : null,
+    whatToDoNext: finding.status === 'OPEN' ? (finding.remediation || 'Review this finding and decide on next steps.') : status === 'Unknown' ? 'Connect or authorize the data source needed to check this, if one is available.' : 'No action needed for this item.',
     status,
     technical: { controlId: finding.control_id, title: finding.title, severity: finding.severity, rawStatus: finding.status, updatedAt: finding.updated_at },
   };
 }
 
 export type PlainEnglishReport = {
+  evidenceRequests?: EvidenceRequest[];
   headline: string;
   situation: string;
   whatIsGood: string[];
@@ -127,7 +129,7 @@ export function toPlainEnglish(report: CanonicalReport): PlainEnglishReport {
   }));
   const findings = [...report.findings, ...scanFindings];
   const open = findings.filter((f) => f.status === 'OPEN');
-  const unknown = findings.filter((f) => f.status === 'UNKNOWN');
+  const unknown = findings.filter((f) => !['OPEN', 'RESOLVED'].includes(f.status));
   const resolved = findings.filter((f) => f.status === 'RESOLVED');
   const needsAttentionCount = open.length + unknown.length;
   const hasEvidence = report.evidence.length > 0 || (scan?.evidence.length ?? 0) > 0 || (scan?.sbomComponentCount ?? 0) > 0;
@@ -159,13 +161,60 @@ export function toPlainEnglish(report: CanonicalReport): PlainEnglishReport {
   };
 
   return {
+    evidenceRequests: buildEvidenceRequests(findings, report.evidenceQuality.unknownDimensions),
     headline,
     situation,
     whatIsGood: resolved.map((f) => `${f.title}: resolved`),
-    whatNeedsAttention: [...open, ...unknown].map((f) => `${f.title}${f.status === 'UNKNOWN' ? ' (not enough evidence to confirm either way)' : ''}`),
+    whatNeedsAttention: [...open, ...unknown].map((f) => `${f.title}${!['OPEN', 'RESOLVED'].includes(f.status) ? ' (not enough evidence to confirm either way)' : ''}`),
     scoreExplanation,
     findings: findings.map(explainFinding),
     glossary: GLOSSARY,
     generatedAt: report.generatedAt,
   };
+}
+
+export type EvidenceRequest = {
+  reference: string;
+  question: string;
+  whyItMatters: string;
+  suggestedContact: string;
+  owner: null;
+  dueAt: null;
+  evidenceNeeded: string;
+  closureRule: string;
+};
+
+export function buildEvidenceRequests(findings: CanonicalReport['findings'], unknownDimensions: number): EvidenceRequest[] {
+  const requests: EvidenceRequest[] = findings.filter(f => !['OPEN', 'RESOLVED'].includes(f.status)).map(f => ({
+    reference: f.id,
+    question: `Can you provide evidence establishing the outcome of "${f.title}" (check: ${f.control_id})?`,
+    whyItMatters: 'This missing answer can affect a review decision. UNKNOWN is neither a pass nor a confirmed failure.',
+    suggestedContact: 'IT provider or person responsible for this check; confirm the appropriate contact',
+    owner: null,
+    dueAt: null,
+    evidenceNeeded: 'Provide the source record or authorized read-only export, observation date, affected system and version, scope, checking method, and limitations. Do not include credentials.',
+    closureRule: 'A reviewer must check applicability and supporting evidence, then record the outcome through the existing assessment workflow. Receiving a document alone does not resolve this item.',
+  }));
+  if (Number.isFinite(unknownDimensions) && unknownDimensions > 0) requests.push({
+    reference: 'coverage-unknown-dimensions',
+    question: `Which checks account for the ${unknownDimensions} recorded unknown dimensions, and what source or access is missing for each?`,
+    whyItMatters: 'This is an aggregate coverage gap, separate from individual findings. It does not identify additional vulnerabilities.',
+    suggestedContact: 'Assessment reviewer or IT provider; confirm the appropriate contact',
+    owner: null,
+    dueAt: null,
+    evidenceNeeded: 'Obtain the underlying coverage breakdown first. For each identified check, record the required source, scope, observation date, method, and limitations.',
+    closureRule: 'Reassess coverage using the identified checks and supporting evidence. This count alone cannot establish which checks are missing or resolved.',
+  });
+  return requests;
+}
+
+export function formatEvidenceRequests(requests: EvidenceRequest[]): string {
+  return ['Evidence requests for review', 'Owners and deadlines are unassigned. Confirm them with your IT provider.',
+    ...requests.map((r, index) => [
+      `${index + 1}. ${r.question}`, `Reference: ${r.reference}`,
+      `Why it matters: ${r.whyItMatters}`, `Suggested contact: ${r.suggestedContact}`,
+      'Owner: Unassigned', 'Deadline: Unassigned',
+      `Evidence needed: ${r.evidenceNeeded}`, `To close: ${r.closureRule}`,
+    ].join('\n')),
+  ].join('\n\n');
 }
