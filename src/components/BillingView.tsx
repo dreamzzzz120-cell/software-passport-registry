@@ -6,6 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { CreditCard, ShieldCheck, ExternalLink, Loader2, AlertTriangle, CheckCircle2, Receipt } from 'lucide-react';
 import { apiFetch } from '../utils/apiClient';
+import { trackGrowthEvent } from '../analytics';
 
 type PlanId = 'pilot' | 'starter' | 'professional' | 'growth' | 'enterprise';
 type OneTimeProductId = 'softwarePassport' | 'evidenceReport' | 'securityAssessment' | 'verifiedSystemReport' | 'dueDiligenceReport' | 'vendorRiskAssessment' | 'sbomAnalysis' | 'portfolioAssessment' | 'auditEvidencePackage' | 'customAssessment';
@@ -129,7 +130,10 @@ export default function BillingView() {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.message || data?.error || 'Unable to start checkout.');
-      if (data?.url) window.location.href = data.url;
+      if (data?.url) {
+        trackGrowthEvent('checkout_started', '/billing');
+        window.location.href = data.url;
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to start checkout.');
     } finally {
@@ -146,7 +150,10 @@ export default function BillingView() {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.message || data?.error || 'Unable to start checkout.');
-      if (data?.url) window.location.href = data.url;
+      if (data?.url) {
+        trackGrowthEvent('checkout_started', '/billing');
+        window.location.href = data.url;
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to start checkout.');
     } finally {
@@ -163,7 +170,10 @@ export default function BillingView() {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.message || data?.error || 'Unable to start checkout.');
-      if (data?.url) window.location.href = data.url;
+      if (data?.url) {
+        trackGrowthEvent('checkout_started', '/billing');
+        window.location.href = data.url;
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to start checkout.');
     } finally {
@@ -178,7 +188,10 @@ export default function BillingView() {
       const res = await apiFetch('/api/billing/portal', { method: 'POST' });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error === 'NO_SUBSCRIPTION' ? 'No active subscription to manage yet.' : (data?.error || 'Unable to open billing portal.'));
-      if (data?.url) window.location.href = data.url;
+      if (data?.url) {
+        trackGrowthEvent('checkout_started', '/billing');
+        window.location.href = data.url;
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to open billing portal.');
     } finally {
