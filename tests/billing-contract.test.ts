@@ -349,7 +349,7 @@ describe('checkout state integrity', () => {
 
   it('only presents Stripe ACTIVE as an unlocked current plan', () => {
     const s = read('src/components/BillingView.tsx');
-    expect(s).toContain("const entitlementActive = subscriptionStatus === 'active'");
+    expect(s).toContain("const entitlementActive = (subscriptionStatus === 'active' || trialActive)");
     expect(s).toContain('const currentPlan = entitlementActive ? status!.subscription!.plan : null;');
     expect(s).toContain('Workspace access is locked until Stripe reports this subscription as active.');
     expect(s).not.toContain("new Set(['active', 'trialing', 'past_due'])");
