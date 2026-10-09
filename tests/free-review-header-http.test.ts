@@ -41,4 +41,13 @@ describe('Free Review header transport over HTTP', () => {
     expect(await response.json()).toEqual({ error: 'Free Review submission not found' });
     expect(mocks.scope.mock.calls[0][0]).toBe(FREE_REVIEW_TENANT_ID);
   });
+  it('rate-limits repeated status authorization attempts before database access', async () => {
+    mocks.scope.mockClear();
+    let response: Response | undefined;
+    for (let i = 0; i < 121; i++) response = await fetch(`${origin}/api/free-review/scan/${id}/status`, { method: 'POST' });
+    expect(response!.status).toBe(429);
+    expect(response!.headers.get('retry-after')).not.toBeNull();
+    expect(mocks.scope).not.toHaveBeenCalled();
+  });
+
 });

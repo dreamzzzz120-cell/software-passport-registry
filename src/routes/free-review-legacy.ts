@@ -5,6 +5,7 @@
 
 import crypto from 'node:crypto';
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { sql } from 'drizzle-orm';
 import { config } from '../config.ts';
@@ -48,6 +49,7 @@ function hashIp(req: { ip?: string; socket: { remoteAddress?: string } }) {
 
 export function createLegacyFreeReviewRouter() {
   const router = Router();
+  const statusLimiter = rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: 'draft-7', legacyHeaders: false, validate: { trustProxy: false } });
   router.use('/free-review/scan', (_req, res, next) => {
     res.setHeader('cache-control', 'private, max-age=0, no-store');
     res.setHeader('referrer-policy', 'no-referrer');
@@ -309,7 +311,7 @@ export function createLegacyFreeReviewRouter() {
       });
     } catch (error) { return next(error); }
   };
-  router.post('/free-review/scan/:passportId/status', handleStatus);
-  router.get('/free-review/scan/:passportId/status/:token', handleStatus);
+  router.post('/free-review/scan/:passportId/status', statusLimiter, handleStatus);
+  router.get('/free-review/scan/:passportId/status/:token', statusLimiter, handleStatus);
   return router;
 }
