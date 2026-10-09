@@ -217,6 +217,13 @@ export default function BillingView() {
         </p>
       </div>
 
+      <section aria-label="Free Review before subscription" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] px-5 py-4">
+        <h2 className="text-base font-semibold text-[var(--spr-text)]">Try a Free Review before subscribing</h2>
+        <p className="mt-1 max-w-2xl text-sm text-[var(--spr-text-muted)]">
+          Review the observed evidence and unknowns for a public repository before choosing a paid MSP plan.
+        </p>
+        <a href="/free-review" className="spr-btn spr-btn-secondary mt-3 inline-flex items-center text-sm">Start Free Review</a>
+      </section>
       {error && (
         <div role="alert" className="flex items-center gap-2 rounded-md border border-[var(--spr-red)]/40 bg-[var(--spr-red)]/10 px-4 py-3 text-sm text-[var(--spr-red)]">
           <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
