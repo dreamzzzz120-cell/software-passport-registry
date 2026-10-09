@@ -47,7 +47,15 @@ export function createTrafficRouter() {
       await db.execute(sql`INSERT INTO traffic_events (id, session_id, path, referrer, user_agent, country, device_type, event_name, source, medium, campaign, referral_code)
         VALUES (${randomUUID()}, ${sessionId}, ${path}, ${referrer ?? null}, ${userAgent}, ${countryFromRequest(req)}, ${deviceType}, ${eventName}, ${source ?? null}, ${medium ?? null}, ${campaign ?? null}, ${referralCode ?? null})`);
       if (referralCode && eventName === 'referral_visit') {
-        await db.execute(sql`UPDATE growth_referral_links SET visits = visits + 1, updated_at=CURRENT_TIMESTAMP WHERE code=${referralCode} AND active=true`);
+        // Attribution is best-effort: a referral counter failure must never
+        // misreport an already-persisted traffic event as a failed write.
+        try {
+          await db.execute(sql`UPDATE growth_referral_links SET visits = visits + 1, updated_at=CURRENT_TIMESTAMP WHERE code=${referralCode} AND active=true`);
+        } catch (error) {
+          console.error('[SPR] referral attribution failed after traffic event persisted', {
+            causeCode: (error as { cause?: { code?: string } })?.cause?.code ?? null,
+          });
+        }
       }
       if (eventName === 'registry_claim_clicked') {
         try {
