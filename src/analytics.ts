@@ -66,9 +66,18 @@ function attribution() {
   }
 }
 
+// Free Review result URLs contain short-lived bearer tokens. Never transmit them in telemetry.
+export function safeAnalyticsPath(path: string): string {
+  if (/^\/free-review\/result\/[^/]+\/[^/?#]+/.test(path)) return '/free-review/result';
+  return path;
+}
+
 function sendEvent(eventName: string, path: string) {
-  if (!path || path.length > 500) return;
-  const payload = JSON.stringify({ sessionId: sessionId(), path, referrer: document.referrer || null, deviceType: deviceType(), eventName, ...attribution() });
+  const safePath = safeAnalyticsPath(path);
+  if (!safePath || safePath.length > 500) return;
+  const referrer = document.referrer && document.referrer.startsWith(window.location.origin + '/free-review/result/')
+    ? `${window.location.origin}/free-review/result` : document.referrer || null;
+  const payload = JSON.stringify({ sessionId: sessionId(), path: safePath, referrer, deviceType: deviceType(), eventName, ...attribution() });
   // Use fetch so HTTP failures are observable. sendBeacon returning true only
   // means the browser queued the request; it does not mean the API stored it.
   // keepalive lets the request continue during navigation without a blind retry
@@ -91,7 +100,7 @@ export function trackPageView(path = `${window.location.pathname}${window.locati
   sendEvent('page_view', path);
 }
 
-export function trackGrowthEvent(eventName: 'free_review_started'|'free_review_completed'|'lead_captured'|'pricing_view'|'signup_started'|'signup_completed'|'pilot_started'|'customer_created'|'registry_claim_clicked'|'registry_share_clicked'|'referral_visit', path = `${window.location.pathname}${window.location.search}`) {
+export function trackGrowthEvent(eventName: 'free_review_started'|'free_review_completed'|'report_viewed'|'lead_captured'|'pricing_view'|'signup_started'|'signup_completed'|'pilot_started'|'customer_created'|'registry_claim_clicked'|'registry_share_clicked'|'referral_visit', path = `${window.location.pathname}${window.location.search}`) {
   sendEvent(eventName, path);
 }
 
