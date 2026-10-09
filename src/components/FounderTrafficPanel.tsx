@@ -68,6 +68,8 @@ export default function FounderTrafficPanel() {
   const n = (v: number | null | undefined) => (typeof v === 'number' ? v.toLocaleString() : 'Not verified');
   const summary = data?.summary;
   const latestEventMs = summary?.latestEventAt ? new Date(summary.latestEventAt).getTime() : NaN;
+  const snapshotMs = data?.generatedAt ? new Date(data.generatedAt).getTime() : NaN;
+  const staleSnapshot = Boolean(data) && (!Number.isFinite(snapshotMs) || Date.now() - snapshotMs > 2 * REFRESH_MS || snapshotMs > Date.now() + REFRESH_MS);
   const staleTelemetry = state === 'ready' && (!Number.isFinite(latestEventMs) || Date.now() - latestEventMs > 24 * 60 * 60 * 1000);
   const tiles: [string, number | null | undefined][] = [
     ['Active events, 30 min', summary?.activeEvents],
@@ -88,7 +90,7 @@ export default function FounderTrafficPanel() {
         </div>
         <div className="flex items-center gap-3">
           <span className="text-[11px] text-[var(--spr-text-muted)]">
-            {data?.generatedAt ? `Updated ${new Date(data.generatedAt).toLocaleTimeString()}` : 'Not verified'}
+            {data?.generatedAt ? `Server snapshot ${new Date(data.generatedAt).toLocaleString()}` : 'Not verified'}
           </span>
           <button onClick={() => void load()} className="spr-btn spr-btn-secondary inline-flex items-center gap-2 text-xs" disabled={state === 'loading'}>
             <RefreshCw className={`w-3.5 h-3.5 ${state === 'loading' ? 'animate-spin' : ''}`} />
@@ -99,7 +101,9 @@ export default function FounderTrafficPanel() {
 
       {state === 'loading' && !data && <p className="text-xs text-[var(--spr-text-muted)]">Loading traffic telemetry…</p>}
       {state === 'error' && !data && <p role="alert" className="text-xs text-[var(--spr-red)]">Traffic could not be verified.</p>}
-      {state === 'error' && data && <p className="text-xs text-[var(--spr-amber)]">Refresh failed; showing the last verified traffic snapshot.</p>}
+      {state === 'error' && data && <p role="alert" className="text-xs text-[var(--spr-amber)]">Live refresh failed — values below are the last successful snapshot, not current counts.</p>}
+      {staleSnapshot && <p role="status" className="text-xs text-[var(--spr-amber)]">Snapshot timestamp is missing, older than one minute, or in the future. Treat these figures as STALE until refreshed.</p>}
+      <p className="text-xs text-[var(--spr-text-muted)]">These are tracked events and anonymous browser sessions, not verified unique people. Static hosting requests and untracked visits are not included.</p>
 
       {staleTelemetry && <p role="status" className="text-xs text-[var(--spr-amber)]">Traffic freshness warning: no events recorded in the last 24 hours, or latest event time is unavailable. This does not prove zero visitors.</p>}
 
