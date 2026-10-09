@@ -72,6 +72,11 @@ export default function HomePage({ onCreatePassport, onExploreTrustNetwork }: Pr
         <div className="mt-9 flex flex-col items-center gap-3">
           <PrimaryCta onClick={onExploreTrustNetwork} className="px-8 py-3.5 text-base" />
           <p className="text-xs text-[var(--spr-text-muted)]">Free. Paste a public GitHub repo and see the evidence summary with no account. PDF download is optional and contact-gated.</p>
+          <div className="mt-5 w-full max-w-xl rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] px-5 py-4 text-center">
+            <p className="text-sm font-semibold">Want the full MSP workspace? Try Starter free for 7 days.</p>
+            <p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">Up to five clients, no credit card and no automatic charge. Trial PDF reports are watermarked. Sign in or register, then activate the trial in Billing.</p>
+            <button type="button" onClick={onCreatePassport} className="spr-btn spr-btn-secondary mt-3">Get started with a free trial</button>
+          </div>
         </div>
       </section>
 
