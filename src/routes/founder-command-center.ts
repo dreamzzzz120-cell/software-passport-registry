@@ -120,10 +120,11 @@ export function createFounderCommandCenterRouter() {
             COUNT(*) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '30 minutes')::int AS "activeEvents",
             COUNT(DISTINCT session_id) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '30 minutes')::int AS "activeSessions",
             COUNT(DISTINCT session_id) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours')::int AS "users24h",
-            COUNT(*) FILTER (WHERE event_name = 'page_view' AND occurred_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours')::int AS "pageviews24h",
+            COUNT(*) FILTER (WHERE event_name = 'page_view' AND source IS DISTINCT FROM 'founder-test' AND occurred_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours')::int AS "pageviews24h",
             COUNT(DISTINCT session_id) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '7 days')::int AS "users7d",
             COUNT(*) FILTER (WHERE event_name = 'page_view' AND occurred_at >= CURRENT_TIMESTAMP - INTERVAL '7 days')::int AS "pageviews7d",\n            MAX(occurred_at) AS "latestEventAt"
           FROM traffic_events
+          WHERE source IS DISTINCT FROM 'founder-test'
         `),
         db.execute(sql`
           SELECT path, COUNT(*)::int AS views
@@ -134,6 +135,7 @@ export function createFounderCommandCenterRouter() {
         db.execute(sql`
           SELECT occurred_at AS "occurredAt", path, device_type AS "deviceType", country
           FROM traffic_events
+          WHERE source IS DISTINCT FROM 'founder-test'
           ORDER BY occurred_at DESC LIMIT 100
         `),
       ]);
