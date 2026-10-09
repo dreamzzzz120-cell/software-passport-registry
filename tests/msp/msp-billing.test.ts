@@ -16,7 +16,7 @@ describe('billing denial is capability-scoped and unpaid workspaces fail closed'
 
   it('treats no confirmed plan as unpaid instead of unrestricted access', () => {
     const entitlements = read('src/security/entitlements.ts');
-    expect(entitlements).toContain("export type SubscriptionGate = 'unpaid' | 'enforce-plan' | 'lapsed'");
+    expect(entitlements).toContain("export type SubscriptionGate = 'unpaid' | 'enforce-plan' | 'trial' | 'lapsed'");
     expect(entitlements).toContain("if (!subscription.plan) return 'unpaid';");
     expect(entitlements).toContain("if (gate === 'unpaid') return { allowed: false, gate, state };");
     expect(entitlements).toContain("message: 'Choose an SPR plan to unlock the MSP workspace.'");

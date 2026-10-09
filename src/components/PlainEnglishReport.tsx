@@ -11,7 +11,7 @@ const STATUS_BORDER: Record<string, string> = {
   Verified: 'border-[var(--spr-green)]/40', Resolved: 'border-[var(--spr-green)]/40', 'Needs Review': 'border-[var(--spr-amber)]/40', Unknown: 'border-[var(--spr-border)]',
 };
 
-export default function PlainEnglishReport({ snapshot }: { snapshot: CanonicalReport }) {
+export default function PlainEnglishReport({ snapshot, freeTrial = false }: { snapshot: CanonicalReport; freeTrial?: boolean }) {
   const data = toPlainEnglish(snapshot);
   const [showGlossary, setShowGlossary] = useState(true);
 
@@ -24,7 +24,7 @@ export default function PlainEnglishReport({ snapshot }: { snapshot: CanonicalRe
     setExportError('');
     try {
       const { buildPlainEnglishPdf } = await import('../utils/plainEnglishPdf');
-      buildPlainEnglishPdf(data).save(`spr-explained-report-${snapshot.passport.id.replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`);
+      buildPlainEnglishPdf(data, freeTrial).save(`spr-explained-report-${snapshot.passport.id.replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`);
     } catch {
       setExportError('Unable to export this report. Try downloading again.');
     } finally { setExporting(false); }

@@ -5,6 +5,20 @@
 
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+
+function applyTrialWatermark(doc: jsPDF) {
+  for (let page = 1; page <= doc.getNumberOfPages(); page++) {
+    doc.setPage(page);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.setTextColor(170, 180, 195);
+    doc.text('SPR FREE TRIAL - SAMPLE REPORT', 105, 150, { align: 'center', angle: 35 });
+    doc.setFontSize(8);
+    doc.text('Free trial copy - verify evidence before relying on findings', 105, 291, { align: 'center' });
+  }
+}
+
+
 import { Client, SoftwarePassport, EvidenceItem, Vulnerability } from '../types';
 
 /**
@@ -378,7 +392,8 @@ export function generateCoBrandedTrustReport(
   // White-label footer: the tenant's saved footer text and whether the SPR
   // attribution line is shown. Both come from /api/organization/branding.
   footerText: string = '',
-  showSprAttribution: boolean = true
+  showSprAttribution: boolean = true,
+  freeTrial = false
 ) {
   const doc = new jsPDF('p', 'mm', 'a4');
   const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
@@ -679,6 +694,7 @@ export function generateCoBrandedTrustReport(
   }
 
   const clientSlug = client.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  if (freeTrial) applyTrialWatermark(doc);
   doc.save(`software-trust-report-${clientSlug}.pdf`);
 }
 
@@ -688,7 +704,8 @@ export function generatePassportEvidenceReport(
   passport: SoftwarePassport,
   mspName: string,
   brandColorHex: string,
-  logoBase64?: string
+  logoBase64?: string,
+  freeTrial = false
 ) {
   const doc = new jsPDF('p', 'mm', 'a4');
   const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
@@ -843,5 +860,6 @@ export function generatePassportEvidenceReport(
   }
 
   const slug = passport.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  if (freeTrial) applyTrialWatermark(doc);
   doc.save(`passport-evidence-report-${slug}.pdf`);
 }

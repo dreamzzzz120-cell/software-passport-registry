@@ -80,6 +80,17 @@ function clientName(passport: SoftwarePassport, clients: Client[]) {
 
 export default function ReportsView({ clients = [], passports = [], scans = [], alerts = [], findings = [], role = 'Viewer' }: ReportsViewProps) {
   const [selectedPassportId, setSelectedPassportId] = useState(passports[0]?.id || '');
+  // Conservative until the authenticated billing endpoint confirms an active paid plan.
+  const [freeTrialWatermark, setFreeTrialWatermark] = useState(true);
+  useEffect(() => {
+    let mounted = true;
+    void apiFetch('/api/billing').then(async (response) => {
+      if (!response.ok) return;
+      const billing = await response.json();
+      if (mounted) setFreeTrialWatermark(billing?.subscription?.status !== 'active');
+    }).catch(() => { /* unknown billing state stays watermarked */ });
+    return () => { mounted = false; };
+  }, []);
   const [reportType, setReportType] = useState('executive');
   const reportRequest = useRef(0);
   const reportContext = useRef(0);
@@ -258,7 +269,7 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
 
   const downloadPdf = () => {
     if (!selectedPassport) return;
-    generatePassportEvidenceReport(selectedPassport, 'SPR Reports Center', 'var(--spr-highlight)');
+    generatePassportEvidenceReport(selectedPassport, 'SPR Reports Center', 'var(--spr-highlight)', undefined, freeTrialWatermark);
   };
 
   const exportReportJson = () => {
@@ -306,7 +317,7 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
     // zero patches regardless of the client's actual remediation history.
     const clientPassports = passports.filter((passport) => String((passport as any).clientId || '') === client.id);
     const patchedCvesCount = clientPassports.reduce((total, passport) => total + (passport.vulnerabilities || []).filter((v: any) => v.status === 'Resolved' || v.status === 'Mitigated').length, 0);
-    generateCoBrandedTrustReport(client, mspName.trim(), brandColor, reportTitle, patchedCvesCount, executiveSummary, logoBase64, sections.summary, sections.metrics, sections.inventory, sections.compliance, sections.signatures, [], brandFooterText, showSprAttribution);
+    generateCoBrandedTrustReport(client, mspName.trim(), brandColor, reportTitle, patchedCvesCount, executiveSummary, logoBase64, sections.summary, sections.metrics, sections.inventory, sections.compliance, sections.signatures, [], brandFooterText, showSprAttribution, freeTrialWatermark);
   };
 
   const reportText = useMemo(() => {
@@ -391,7 +402,7 @@ export default function ReportsView({ clients = [], passports = [], scans = [], 
               <div className="flex items-center gap-2"><FileText size={16} className="text-[var(--spr-text-muted)]" /><h3 className="text-sm font-semibold text-[var(--spr-text)]">Plain-English summary</h3></div>
               <p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">The same evidence and score as the technical report above, explained in plain language. Both come from the exact same underlying data.</p>
               <div className="mt-4">
-                <PlainEnglishReport key={report.reportHash ?? report.generatedAt} snapshot={report} />
+                <PlainEnglishReport key={report.reportHash ?? report.generatedAt} snapshot={report} freeTrial={freeTrialWatermark} />
               </div>
             </div>
           )}

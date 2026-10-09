@@ -126,7 +126,7 @@ describe('white-label surfaces', () => {
     expect(pdf).not.toContain('HYBRID ATTESTATION REGISTRY');
     expect(pdf).not.toContain('Software Trust Ledger');
     const reports = read('src/components/ReportsView.tsx');
-    expect(reports).toContain('brandFooterText, showSprAttribution);');
+    expect(reports).toContain('brandFooterText, showSprAttribution, freeTrialWatermark);');
   });
 
   it('the public passport response carries the tenant identity but never the logo bytes', () => {

@@ -2,7 +2,7 @@ import { jsPDF } from 'jspdf';
 import type { PlainEnglishReport } from '../trust/plain-english-report';
 
 /** Export the exact loaded explanation; never fetch another assessment. */
-export function buildPlainEnglishPdf(report: PlainEnglishReport): jsPDF {
+export function buildPlainEnglishPdf(report: PlainEnglishReport, freeTrial = false): jsPDF {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const left = 18;
   const width = 174;
@@ -143,6 +143,17 @@ export function buildPlainEnglishPdf(report: PlainEnglishReport): jsPDF {
     }
     doc.text('Point-in-time evidence; not a security or compliance guarantee.', left, 283);
     doc.text(`Page ${page} of ${count}`, left + width, 289, { align: 'right' });
+  }
+  if (freeTrial) {
+    for (let page = 1; page <= doc.getNumberOfPages(); page++) {
+      doc.setPage(page);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(18);
+      doc.setTextColor(170, 180, 195);
+      doc.text('SPR FREE TRIAL - SAMPLE REPORT', 105, 150, { align: 'center', angle: 35 });
+      doc.setFontSize(8);
+      doc.text('Free trial copy - evidence limitations still apply', 105, 291, { align: 'center' });
+    }
   }
   return doc;
 }

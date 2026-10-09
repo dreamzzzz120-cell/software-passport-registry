@@ -47,13 +47,13 @@ export const BASELINE_CAPABILITY: Capability = 'workspace';
 
 const ENTITLING_STATUSES_SQL = sql.join(PLAN_ENTITLING_STATUSES.map(status => sql`${status}`), sql`, `);
 
-export type SubscriptionGate = 'unpaid' | 'enforce-plan' | 'lapsed';
+export type SubscriptionGate = 'unpaid' | 'enforce-plan' | 'trial' | 'lapsed';
 
-export interface SubscriptionState { plan: string | null; status: string; currentPeriodEnd: string | null; }
+export interface SubscriptionState { plan: string | null; status: string; currentPeriodEnd: string | null; stripeSubscriptionId?: string | null; }
 
 export interface CapabilityDecision { allowed: boolean; gate: SubscriptionGate; state: SubscriptionState; }
 
-interface SubscriptionRow { plan?: string | null; status?: string | null; currentPeriodEnd?: string | null }
+interface SubscriptionRow { plan?: string | null; status?: string | null; currentPeriodEnd?: string | null; stripeSubscriptionId?: string | null }
 
 /**
  * Launch policy: access follows confirmed billing evidence. A tenant with no
@@ -61,12 +61,15 @@ interface SubscriptionRow { plan?: string | null; status?: string | null; curren
  * routes are exempted earlier in requireAuth so the customer can still sign in,
  * choose a plan, complete Checkout, and manage billing.
  */
-export function resolveSubscriptionGate(subscription: { plan: string | null; status: string }): SubscriptionGate {
+export function resolveSubscriptionGate(subscription: { plan: string | null; status: string; currentPeriodEnd?: string | null; stripeSubscriptionId?: string | null }): SubscriptionGate {
   // Launch policy: no confirmed paid plan means no paid workspace capability.
   // Billing and identity routes remain exempt at the authenticated boundary so
   // an MSP can sign in, choose a plan, complete Checkout, and recover billing.
   if (!subscription.plan) return 'unpaid';
   if ((PRE_PAYMENT_STATUSES as readonly string[]).includes(subscription.status)) return 'unpaid';
+  if (subscription.status === 'trialing') {
+    return !subscription.stripeSubscriptionId && subscription.currentPeriodEnd && Date.parse(subscription.currentPeriodEnd) > Date.now() ? 'trial' : 'lapsed';
+  }
   if ((PLAN_ENTITLING_STATUSES as readonly string[]).includes(subscription.status)) return 'enforce-plan';
   return 'lapsed';
 }
@@ -78,9 +81,9 @@ export function lapsedPlanAllows(_capability: Capability): boolean {
 }
 
 export async function readSubscriptionState(db: ScopedDb, tenantId: string): Promise<SubscriptionState> {
-  const result = await db.execute(sql`SELECT plan, status, current_period_end AS "currentPeriodEnd" FROM tenant_subscriptions WHERE tenant_id = ${tenantId} LIMIT 1`);
+  const result = await db.execute(sql`SELECT plan, status, current_period_end AS "currentPeriodEnd", stripe_subscription_id AS "stripeSubscriptionId" FROM tenant_subscriptions WHERE tenant_id = ${tenantId} LIMIT 1`);
   const row = (result as unknown as { rows?: SubscriptionRow[] }).rows?.[0];
-  return { plan: row?.plan ?? null, status: row?.status ?? 'none', currentPeriodEnd: row?.currentPeriodEnd ?? null };
+  return { plan: row?.plan ?? null, status: row?.status ?? 'none', currentPeriodEnd: row?.currentPeriodEnd ?? null, stripeSubscriptionId: row?.stripeSubscriptionId ?? null };
 }
 
 export async function tenantHasCapability(db: ScopedDb, tenantId: string, capability: Capability): Promise<boolean> {
@@ -91,7 +94,7 @@ export async function tenantHasCapability(db: ScopedDb, tenantId: string, capabi
       WHERE ts.tenant_id = ${tenantId}
         AND pc.capability = ${capability}
         AND pc.enabled = true
-        AND ts.status IN (${ENTITLING_STATUSES_SQL})
+        AND (ts.status IN (${ENTITLING_STATUSES_SQL}) OR (ts.status = 'trialing' AND ts.stripe_subscription_id IS NULL AND ts.current_period_end > CURRENT_TIMESTAMP))
     ) AS allowed
   `);
   return Boolean((result as unknown as { rows?: Array<{ allowed?: boolean }> }).rows?.[0]?.allowed);
@@ -126,6 +129,7 @@ export async function evaluateCapability(db: ScopedDb, tenantId: string, capabil
   const gate = resolveSubscriptionGate(state);
   if (gate === 'unpaid') return { allowed: false, gate, state };
   if (gate === 'lapsed') return { allowed: lapsedPlanAllows(capability), gate, state };
+  if (gate === 'trial') return { allowed: state.plan === 'starter' && PLAN_CAPABILITY_MATRIX.starter.includes(capability), gate, state };
   // A paid add-on grants its capability regardless of the plan tier.
   if (await tenantHasCapability(db, tenantId, capability)) return { allowed: true, gate, state };
   return { allowed: await tenantHasAddonCapability(db, tenantId, capability), gate, state };

@@ -9,7 +9,7 @@ const source = () => fs.readFileSync(path.join(root, 'src/components/BillingView
 describe('Billing active-entitlement UI contract', () => {
   it('treats only Stripe active status as an unlocked workspace plan', () => {
     const s = source();
-    expect(s).toContain("const entitlementActive = subscriptionStatus === 'active'");
+    expect(s).toContain("const entitlementActive = (subscriptionStatus === 'active' || trialActive)");
     expect(s).not.toContain("new Set(['active', 'trialing', 'past_due'])");
     expect(s).toContain('Workspace access is locked until Stripe reports this subscription as active.');
   });
