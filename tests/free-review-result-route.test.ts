@@ -74,7 +74,7 @@ describe('5-8. malformed, missing and mismatched tokens', () => {
     expect(view).not.toMatch(/exps*[<>=]/);
     // The server-side verifier remains the single gate.
     expect(read('src/routes/public-connect.ts')).toContain('export function verifyFreeReviewStatusToken');
-    expect(freeReviewImpl).toContain("verifyFreeReviewStatusToken(req.get('x-spr-review-status-token') || req.params.token, passportId)");
+    expect(freeReviewImpl).toContain("verifyFreeReviewStatusToken(req.get('x-spr-review-status-token') || req.params.token || '', passportId)");
     expect(freeReviewImpl).toContain("router.post('/free-review/scan/:passportId/status', handleStatus)");
   });
 

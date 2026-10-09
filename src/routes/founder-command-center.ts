@@ -120,15 +120,15 @@ export function createFounderCommandCenterRouter() {
             COUNT(*) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '30 minutes')::int AS "activeEvents",
             COUNT(DISTINCT session_id) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '30 minutes')::int AS "activeSessions",
             COUNT(DISTINCT session_id) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours')::int AS "users24h",
-            COUNT(*) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours')::int AS "pageviews24h",
+            COUNT(*) FILTER (WHERE event_name = 'page_view' AND occurred_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours')::int AS "pageviews24h",
             COUNT(DISTINCT session_id) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '7 days')::int AS "users7d",
-            COUNT(*) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '7 days')::int AS "pageviews7d"
+            COUNT(*) FILTER (WHERE event_name = 'page_view' AND occurred_at >= CURRENT_TIMESTAMP - INTERVAL '7 days')::int AS "pageviews7d",\n            MAX(occurred_at) AS "latestEventAt"
           FROM traffic_events
         `),
         db.execute(sql`
           SELECT path, COUNT(*)::int AS views
           FROM traffic_events
-          WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours'
+          WHERE event_name = 'page_view' AND occurred_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours'
           GROUP BY path ORDER BY views DESC LIMIT 20
         `),
         db.execute(sql`

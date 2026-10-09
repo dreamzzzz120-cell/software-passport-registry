@@ -7,7 +7,7 @@ import SoftwareWorkspaceView from './components/SoftwareWorkspaceView';
 import './index.css';
 import './styles/spr-shell.css';
 import './styles/command-center.css';
-import { installPageViewTracking } from './analytics';
+import { installPageViewTracking, safeAnalyticsPath } from './analytics';
 
 const root = document.getElementById('root');
 
@@ -17,7 +17,11 @@ installPageViewTracking();
 
 function SprApplication() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/';
-  return (<>{path === '/software/workspace' ? <SoftwareWorkspaceView /> : <><App /><ExperienceAgent /></>}<Analytics /></>);
+  return (<>{path === '/software/workspace' ? <SoftwareWorkspaceView /> : <><App /><ExperienceAgent /></>}<Analytics beforeSend={(event) => {
+    const url = new URL(event.url, window.location.origin);
+    if (safeAnalyticsPath(url.pathname) !== url.pathname) return null;
+    return event;
+  }} /></>);
 }
 
 ReactDOM.createRoot(root).render(<React.StrictMode><SprApplication /></React.StrictMode>);
