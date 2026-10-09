@@ -193,6 +193,14 @@ async function withTenant<T>(fn: (client: any) => Promise<T>) {
 
 async function sendGate(client: any, contact: any) {
   outreachAllowed(contact.outreach_basis);
+  // Fail closed: neither an email TLD nor a search query proves operating country.
+  // A reviewed, explicit country code and its evidence URL are required for all sends.
+  const geo = contact.evidence && typeof contact.evidence === 'object' ? contact.evidence : {};
+  const countryCode = typeof geo.verifiedCountryCode === 'string' ? geo.verifiedCountryCode.trim().toUpperCase() : '';
+  const countryProof = typeof geo.verifiedCountryEvidenceUrl === 'string' ? geo.verifiedCountryEvidenceUrl.trim() : '';
+  if (!['CA', 'US'].includes(countryCode) || !/^https:\/\/[^\s/]+\//i.test(countryProof + (countryProof.endsWith('/') ? '' : '/'))) {
+    throw new DistributionDeferredError('DISTRIBUTION_COUNTRY_VERIFICATION_REQUIRED', 86_400_000);
+  }
   if (contact.outreach_basis === 'consent' && !contact.consent_evidence_url?.trim()) throw new Error('DISTRIBUTION_CONSENT_EVIDENCE_REQUIRED');
   const { from } = outreachSender();
   const to = process.env.DISTRIBUTION_OUTREACH_VERIFY_TO?.trim().toLowerCase();
