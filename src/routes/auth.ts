@@ -24,6 +24,7 @@ import { countTenantRows, deleteWorkspaceRows, WorkspaceDeletionBlocked, type Wo
 import { describeUserAgent, sessionFingerprint } from '../security/session-tracking.ts';
 import { offboardTenantData } from '../db/sync.ts';
 import { canCreateClient, PLAN_CONFIG } from './billing.ts';
+import { enforceCapability } from '../security/entitlements.ts';
 import { normalizeClientRecord, normalizeClientRecords, normalizePassportRecords } from '../lib/clientJsonColumns.ts';
 import { clientInventoryQuery } from '../lib/clientInventoryQuery.ts';
 import { adaptEvidenceForEvaluation } from '../lib/verification/evidenceAdapter.ts';
@@ -70,7 +71,7 @@ const slsaProvenanceSchema = z.object({
 // reasonable dimensions) while keeping a single UPDATE well under any
 // practical row-size or request-body concern.
 const hexColor = z.string().trim().regex(/^#[0-9a-fA-F]{6}$/, 'colours must be #rrggbb hex');
-const imageDataUrl = (max: number) => z.string().trim().max(max).regex(/^data:image\/(png|jpeg|jpg|svg\+xml|webp);base64,/, 'must be a base64 image data URL');
+const imageDataUrl = (max: number) => z.string().trim().max(max).regex(/^data:image\/(png|jpeg|jpg|webp);base64,/, 'must be a PNG, JPEG, JPG, or WebP base64 image data URL');
 const paletteSchema = z.object(Object.fromEntries(THEME_COLOR_KEYS.map((key) => [key, hexColor.nullable().optional()])) as Record<ThemeColorKey, z.ZodOptional<z.ZodNullable<typeof hexColor>>>).strict();
 // The whole-workspace theme edited on the White-label page. Every field is
 // optional so a tenant can override one token and inherit the rest; the
@@ -278,7 +279,7 @@ export function createAuthRouter() {
   // packaging only -- it never touches scoring, evidence, or which report
   // data is included; ReportsView's white-label export already only uses a
   // client's real, already-loaded software inventory and scores.
-  router.get('/organization/branding', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  router.get('/organization/branding', requireAuth, rateLimiter, async (req: AuthenticatedRequest, res, next) => {
     try {
       const db = req.db!;
       const result = await db.execute(sql`
@@ -286,14 +287,16 @@ export function createAuthRouter() {
         FROM tenant_branding WHERE tenant_id = ${req.user!.tenantId} LIMIT 1
       `);
       const row = (result as any).rows?.[0];
+      res.setHeader('Cache-Control', 'private, no-store');
       return res.json(row ?? { companyName: null, brandColor: null, logoDataUrl: null, theme: {}, updatedAt: null });
     } catch (error) {
       return next(error);
     }
   });
 
-  router.put('/organization/branding', requireAuth, requireRole(['Owner', 'Admin']), async (req: AuthenticatedRequest, res, next) => {
+  router.put('/organization/branding', requireAuth, requireRole(['Owner', 'Admin']), rateLimiter, async (req: AuthenticatedRequest, res, next) => {
     try {
+      if (!(await enforceCapability(req, res, 'white_label'))) return;
       const db = req.db!;
       const parsed = brandingSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
@@ -310,7 +313,8 @@ export function createAuthRouter() {
           updated_by = EXCLUDED.updated_by
         RETURNING company_name AS "companyName", brand_color AS "brandColor", logo_data_url AS "logoDataUrl", theme, updated_at AS "updatedAt"
       `);
-      await appendAuditEntry(db, { tenantId, action: 'branding.updated', actor: req.user!.email, payload: {} });
+      await appendAuditEntry(db, { tenantId, action: 'branding.updated', actor: req.user!.email, payload: { fields: Object.keys(parsed.data) } });
+      res.setHeader('Cache-Control', 'private, no-store');
       return res.json((result as any).rows?.[0]);
     } catch (error) {
       return next(error);

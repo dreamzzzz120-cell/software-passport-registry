@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { sql } from 'drizzle-orm';
 import crypto from 'node:crypto';
 import { z } from 'zod';
-import { AuthenticatedRequest, requireRole } from '../middleware/security.ts';
+import { AuthenticatedRequest, rateLimiter, requireRole } from '../middleware/security.ts';
 import { appendAuditEntry, verifyAuditChain } from '../security/audit-log.ts';
 
 const assignSchema = z.object({
@@ -15,6 +15,16 @@ function id(prefix: string) { return `${prefix}_${crypto.randomUUID().replaceAll
 
 export function createMspRouter() {
   const router = Router();
+
+  // MSP operational surfaces are tenant-private and must never be cached by a browser, proxy, or shared CDN.
+  router.use(rateLimiter);
+
+  router.use((req, res, next) => {
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    return next();
+  });
 
   router.get('/assignments', async (req: AuthenticatedRequest, res, next) => {
     try {
@@ -34,8 +44,16 @@ export function createMspRouter() {
     try {
       const db = req.db!;
       const tenantId = req.user!.tenantId;
-      const client = (await db.execute(sql`SELECT id FROM clients WHERE id=${parsed.data.clientId} AND tenant_id=${tenantId} LIMIT 1`) as any).rows?.[0];
+      const client = (await db.execute(sql`SELECT id FROM clients WHERE id=\${parsed.data.clientId} AND tenant_id=\${tenantId} LIMIT 1`) as any).rows?.[0];
       if (!client) return res.status(404).json({ error: 'CLIENT_NOT_FOUND' });
+      // Never trust a caller-supplied technician id as display metadata.
+      // Resolve it inside the tenant-scoped transaction and require an
+      // MSP-capable role, preventing cross-tenant assignment and assignment
+      // of Client/Viewer accounts as technicians.
+      if (parsed.data.technicianUserId !== undefined) {
+        const technician = (await db.execute(sql`SELECT id FROM users WHERE id=\${parsed.data.technicianUserId} AND tenant_id=\${tenantId} AND role IN ('Owner','Admin','Operator','Technician') LIMIT 1`) as any).rows?.[0];
+        if (!technician) return res.status(400).json({ error: 'INVALID_TECHNICIAN' });
+      }
       const now = new Date().toISOString();
       const row = (await db.execute(sql`
         INSERT INTO client_assignments (id, tenant_id, client_id, technician_user_id, technician_display, assigned_by, created_at, updated_at)
@@ -116,7 +134,8 @@ export function createMspRouter() {
           'Only tenant-scoped tables represented by the current production schema are exported; unsupported external evidence is not invented.',
         ],
       };
-      const exportHash = crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+      // Bind the export hash to the tenant and actor so a copied JSON artifact cannot be mistaken for another workspace's export.
+      const exportHash = crypto.createHash('sha256').update(JSON.stringify({ tenantId, actor: req.user!.uid, payload })).digest('hex');
       await appendAuditEntry(db, { tenantId, action: 'msp.audit_export.generated', actor: req.user!.email, payload: { exportHash, format: 'json+pdf-source', counts: payload.counts } });
       res.setHeader('X-SPR-Audit-Export-Hash', exportHash);
       return res.json({ ...payload, exportHash });
