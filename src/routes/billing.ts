@@ -366,10 +366,23 @@ export function createBillingRouter() {
   // session. Serving it from the billing router keeps one catalogue behind
   // both surfaces: the price a visitor is quoted and the price the Subscribe
   // button charges can no longer be maintained separately and disagree.
-  // New promotional trials are discontinued. Preserve historical subscription
-  // records, but never issue a new trial through this endpoint.
-  router.post('/trial/start', requireAuth, (_req, res) => {
-    return res.status(410).json({ code: 'TRIAL_UNAVAILABLE', message: 'Free workspace trials are no longer offered. Select a plan to continue.', billingPath: '/billing' });
+  // A one-time, card-free starter trial for each tenant. The primary-key conflict
+  // is deliberate: expired trials cannot be restarted and paid plans are never
+  // downgraded. A Stripe subscription is NOT created or billed.
+  router.post('/trial/start', requireAuth, requireRole(['Owner', 'Admin']), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const tenantId = req.user!.tenantId;
+      const result = await req.db!.execute(sql`
+        INSERT INTO tenant_subscriptions (tenant_id, plan, status, client_limit, current_period_end, updated_at)
+        VALUES (${tenantId}, 'starter', 'trialing', 5, CURRENT_TIMESTAMP + INTERVAL '7 days', CURRENT_TIMESTAMP)
+        ON CONFLICT (tenant_id) DO NOTHING
+        RETURNING current_period_end AS "endsAt"
+      `);
+      const trial = (result as any).rows?.[0];
+      if (!trial) return res.status(409).json({ code: 'TRIAL_ALREADY_USED_OR_PLAN_EXISTS', message: 'This workspace has already started a trial or has a billing record.' });
+      await appendAuditEntry(req.db!, { tenantId, action: 'billing.trial.started', actor: req.user!.uid, payload: { plan: 'starter', durationDays: 7, noCharge: true } });
+      return res.status(201).json({ plan: 'starter', status: 'trialing', endsAt: trial.endsAt, paymentMethodRequired: false });
+    } catch (error) { return next(error); }
   });
 
   router.get('/catalog', async (_req, res, next) => {
