@@ -48,6 +48,7 @@ import { createGovernanceRouter } from './src/routes/governance.ts';
 import { createPrivacyRouter } from './src/routes/privacy.ts';
 import { createCommercialRouter } from './src/routes/commercial.ts';
 import { createDistributionRouter } from './src/routes/distribution.ts';
+import { createResendInboundRouter } from './src/routes/resend-inbound.ts';
 import { createDistributionGrowthRouter } from './src/routes/distribution-growth.ts';
 import { createQLegionRouter } from './src/routes/q-legion.ts';
 import { createReportSchedulesRouter } from './src/routes/report-schedules.ts';
@@ -82,6 +83,8 @@ app.use('/roi', rateLimiter, createRoiRouter());
 app.use(cors({ origin: corsOrigin, credentials: true, methods: ['GET','HEAD','POST','PUT','PATCH','DELETE','OPTIONS'], allowedHeaders: ['Authorization','Content-Type','X-Request-ID','X-API-Key'] }));
 app.use((req, res, next) => { if (req.method === 'TRACE' || req.method === 'CONNECT') return res.status(405).json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'HTTP method is not allowed.' } }); if (req.headers['content-length'] && !/^\d+$/.test(String(req.headers['content-length']))) return res.status(400).json({ error: { code: 'INVALID_CONTENT_LENGTH', message: 'Invalid Content-Length header.' } }); return next(); });
 app.post('/api/billing/webhook', express.raw({ type: 'application/json', limit: requestBodyLimit }), stripeWebhookHandler);
+// Signature verification requires raw bytes before global JSON parsing.
+app.use(express.raw({ type: 'application/json', limit: '64kb' }), createResendInboundRouter());
 app.use('/api/psa/webhooks', express.raw({ type: 'application/json', limit: requestBodyLimit }), createPsaWebhookRouter());
 app.use(express.json({ limit: requestBodyLimit, strict: true, type: ['application/json','application/*+json'] }));
 app.use(express.urlencoded({ extended: false, limit: requestBodyLimit }));
