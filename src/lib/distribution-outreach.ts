@@ -96,6 +96,7 @@ async function resolveQLegionAttribution(client: any, sourceUrl: string | null):
     console.warn('[Distribution] optional Q-Legion advisory tables absent; using baseline outreach copy');
     return { missionId: null, strategyId: 'baseline', probability: null };
   }
+  try {
   const enabled = await client.query(
     `SELECT strategy_execution_enabled AS enabled FROM q_legion_settings WHERE tenant_id=$1 LIMIT 1`,
     [DISTRIBUTION_TENANT_ID],
@@ -129,6 +130,15 @@ async function resolveQLegionAttribution(client: any, sourceUrl: string | null):
     ? Math.max(0, Math.min(1, strategy.probability))
     : null;
   return { missionId: String(row.id), strategyId, probability };
+  } catch (error) {
+    // An older/misaligned production schema may resolve an advisory table
+    // differently from to_regclass. Only SQLSTATE 42P01 may fall back to
+    // baseline. All permission, connection and other SQL failures still fail.
+    const candidate = error as { code?: string; cause?: { code?: string }; message?: string };
+    if (candidate?.code !== '42P01' && candidate?.cause?.code !== '42P01') throw error;
+    console.warn('[Distribution] optional Q-Legion relation absent at query time; using baseline copy');
+    return { missionId: null, strategyId: 'baseline', probability: null };
+  }
 }
 
 export function makeCopy(
