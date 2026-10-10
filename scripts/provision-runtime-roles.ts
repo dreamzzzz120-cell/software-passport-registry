@@ -5,7 +5,7 @@
  * Provisions the least-privileged runtime roles without creating a password
  * drift between PostgreSQL and the connection URLs used by the services.
  *
- * Required env vars: DATABASE_URL and the runtime URL for this process role.
+ * Required env vars: SUPABASE_MIGRATION_DATABASE_URL (preferred) or DATABASE_URL, plus the runtime URL for this process role.
  * The app release provisions spr_app_runtime from APP_DATABASE_URL; the worker
  * release provisions spr_worker_runtime from WORKER_DATABASE_URL. Each service
  * owns its own credential, so an app deploy cannot rotate the worker's role
@@ -39,8 +39,8 @@ async function setRolePassword(pool: Pool, role: 'spr_app_runtime' | 'spr_worker
 }
 
 async function main() {
-  const databaseUrl = process.env.DATABASE_URL?.trim();
-  if (!databaseUrl) throw new Error('DATABASE_URL is required (must be the owner/migrator connection).');
+  const databaseUrl = process.env.SUPABASE_MIGRATION_DATABASE_URL?.trim() || process.env.DATABASE_URL?.trim();
+  if (!databaseUrl) throw new Error('SUPABASE_MIGRATION_DATABASE_URL or DATABASE_URL is required (must be the owner/migrator connection).');
 
   const isWorker = process.env.PROCESS_ROLE?.trim() === 'worker';
   const runtimeRole = isWorker ? 'spr_worker_runtime' : 'spr_app_runtime';
