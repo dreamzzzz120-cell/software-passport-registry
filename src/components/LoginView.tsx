@@ -35,7 +35,6 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
   const recoveryRequested = useRef(passwordRecoveryPending());
   const signupRequested = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mode') === 'signup';
   const [mode, setMode] = useState<'login' | 'signup' | 'reset' | 'recovery'>(() => recoveryRequested.current ? 'recovery' : signupRequested ? 'signup' : 'login');
-  const signupTracked = useRef(false);
   const [recoveryReady, setRecoveryReady] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState('');
   const [email, setEmail] = useState('');
@@ -50,11 +49,6 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
   const [mfaBusy, setMfaBusy] = useState(false);
   const productName = brand?.productName || 'Software Passport Registry';
   const brandedSignInTitle = brand ? `Sign in to ${brand.productName}` : 'Sign in';
-  useEffect(() => {
-    if (mode !== 'signup' || signupTracked.current) return;
-    signupTracked.current = true;
-    trackGrowthEvent('signup_started');
-  }, [mode]);
 
   const finishSession = async (session: { access_token: string; user: any }) => {
     if (recoveryRequested.current) return;
@@ -173,6 +167,9 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
       }
       if (mode === 'signup') {
         if (password.length < 8) throw new Error('Password must be at least 8 characters.');
+        // Count signup intent only when the prospect actually submits the form.
+        // Merely opening signup mode is not a conversion attempt.
+        trackGrowthEvent('signup_started');
         const address = email.trim().toLowerCase();
         const signupResponse = await fetch('/api/auth/signup', {
           method: 'POST',
