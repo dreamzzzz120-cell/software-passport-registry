@@ -81,8 +81,10 @@ export default function EvidenceExplorerView({ passports = EMPTY_PASSPORTS, sele
     if (selectedPassportId && selectedPassportId !== passportId && availablePassports.some((p) => p.id === selectedPassportId)) setPassportId(selectedPassportId);
   }, [selectedPassportId, availablePassports]);
   useEffect(() => {
-    if (!availablePassports.some((p) => p.id === passportId)) setPassportId(availablePassports[0]?.id || '');
-  }, [availablePassports, passportId]);
+    // Validate the latest selection when the update is applied. A list load
+    // can queue a default selection just before the user chooses a passport.
+    setPassportId((current) => availablePassports.some((p) => p.id === current) ? current : availablePassports[0]?.id || '');
+  }, [availablePassports]);
 
   useEffect(() => {
     let cancelled = false;
