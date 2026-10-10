@@ -115,9 +115,9 @@ export async function founderPulse(): Promise<FounderPulse> {
     apiUptimeSeconds: Math.round(process.uptime()),
     worker: { lastSeenAt, lastSeenSource },
     scanQueue: {
-      pending: await count(sql`SELECT COUNT(*)::int AS count FROM agent_jobs WHERE status='Pending'`),
-      running: await count(sql`SELECT COUNT(*)::int AS count FROM agent_jobs WHERE status='Running'`),
-      failed24h: await count(sql`SELECT COUNT(*)::int AS count FROM agent_jobs WHERE status='Failed' AND updated_at > NOW() - INTERVAL '24 hours'`),
+      pending: await count(sql`SELECT COUNT(*)::int AS count FROM agent_jobs WHERE job_type='repository_scan' AND status='Pending'`),
+      running: await count(sql`SELECT COUNT(*)::int AS count FROM agent_jobs WHERE job_type='repository_scan' AND status='Running'`),
+      failed24h: await count(sql`SELECT COUNT(*)::int AS count FROM agent_jobs WHERE job_type='repository_scan' AND status='Failed' AND updated_at > NOW() - INTERVAL '24 hours'`),
     },
     distributionQueue: {
       queued: await count(sql`SELECT COUNT(*)::int AS count FROM distribution_jobs WHERE tenant_id=${DISTRIBUTION_TENANT_ID} AND status='queued'`),
