@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
-import { createWorkerPool } from './worker-db.ts';
 import { DISTRIBUTION_TENANT_ID } from '../lib/distribution-engine.ts';
 
 // Bounded, read-only public community discovery. Use existing SEO backlog kind,
@@ -14,7 +13,6 @@ const QUERIES = [
   'vendor risk assessment',
   'software supply chain security',
 ];
-const INTERVAL_MS = 60 * 60 * 1000;
 const WINDOW_SECONDS = 7 * 24 * 60 * 60;
 const SIGNAL = /\b(?:managed service providers?|managed it|msp|sbom|software bill of materials|vendor risk|supply chain security|software supply chain|audit evidence)\b/i;
 
@@ -112,25 +110,18 @@ export async function persistDiscussions(pool: Pool, discussions: PublicDiscussi
   }
 }
 
-export async function runSocialScoutWorkerLoop() {
-  const pool = createWorkerPool();
-  try {
-    while (true) {
-      let found = 0;
-      let persisted = 0;
-      for (const query of QUERIES) {
-        try {
-          const rows = await fetchHnDiscussions(query);
-          found += rows.length;
-          persisted += await persistDiscussions(pool, rows);
-        } catch (error) {
-          console.error('[SocialScout] source query failed:', query, error instanceof Error ? error.message : String(error));
-        }
-      }
-      console.info('[SocialScout] sweep', JSON.stringify({ source: 'hacker-news', found, persisted, mode: 'read-only-review' }));
-      await new Promise((resolve) => setTimeout(resolve, INTERVAL_MS));
+export async function runSocialScoutSweep(pool: Pool): Promise<{ found: number; persisted: number }> {
+  let found = 0;
+  let persisted = 0;
+  for (const query of QUERIES) {
+    try {
+      const rows = await fetchHnDiscussions(query);
+      found += rows.length;
+      persisted += await persistDiscussions(pool, rows);
+    } catch (error) {
+      console.error('[SocialScout] source query failed:', query, error instanceof Error ? error.message : String(error));
     }
-  } finally {
-    await pool.end();
   }
+  console.info('[SocialScout] sweep', JSON.stringify({ source: 'hacker-news', found, persisted, mode: 'read-only-review' }));
+  return { found, persisted };
 }
