@@ -27,6 +27,9 @@ it('rejects malformed lists and retries without refetching on selection', async 
   api.mockImplementation((url: string) => Promise.resolve(url === '/api/user/passports' ? new Response(JSON.stringify(passports)) : ledger(url)));
   fireEvent.click(screen.getByRole('button', { name: /retry/i }));
   await waitFor(() => expect((screen.getByLabelText('Passport') as HTMLSelectElement).value).toBe('a'));
+  // Finish the first ledger request before switching; this test specifically checks
+  // that selecting another passport doesn't re-fetch the passport list.
+  await screen.findByText('/api/trust-loop/ledger/a');
   fireEvent.change(screen.getByLabelText('Passport'), { target: { value: 'b' } });
   await screen.findByText('/api/trust-loop/ledger/b');
   expect(api.mock.calls.filter(([url]) => url === '/api/user/passports')).toHaveLength(2);
