@@ -851,10 +851,15 @@ export default function FreeReviewView({
                     </div>
                     <div className="mt-4 flex flex-wrap gap-3">
                       <ActionButton
+                        label="Get client-ready PDF"
+                        icon={<ExternalLink className="inline h-4 w-4" />}
+                        onClick={() => document.getElementById('free-review-pdf-gate')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                        primary
+                      />
+                      <ActionButton
                         label="Claim full Launch Ticket"
                         icon={<ExternalLink className="inline h-4 w-4" />}
                         onClick={startSignupFromReview}
-                        primary
                       />
                       <ActionButton
                         label="See plans & start with SPR"
