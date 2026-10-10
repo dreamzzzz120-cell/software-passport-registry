@@ -120,6 +120,10 @@ export function createLegacyFreeReviewRouter() {
       // into "partial" is what let the UI show a green "Review complete" with 0
       // findings and 0 evidence for a repository SPR never managed to read --
       // exactly the fabricated assurance this product exists to prevent.
+      if (jobs.length > 0 && jobs.every((j: any) => j.status === 'Completed')) {
+        await scopedDb.execute(sql`UPDATE free_review_submissions SET status='Completed'
+          WHERE tenant_id=${FREE_REVIEW_TENANT_ID} AND passport_id=${passportId} AND status='Pending'`);
+      }
       const scanStatus = pending
         ? 'scanning'
         : succeeded.length === 0
