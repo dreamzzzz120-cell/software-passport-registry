@@ -408,7 +408,25 @@ export class MigrationRunner {
 function buildPool(): Pool {
   const databaseUrl = process.env.DATABASE_URL?.trim();
   const common = { max: Number(process.env.SQL_POOL_MAX || 10), connectionTimeoutMillis: Number(process.env.SQL_CONNECTION_TIMEOUT_MS || 10000), idleTimeoutMillis: Number(process.env.SQL_IDLE_TIMEOUT_MS || 30000), query_timeout: Number(process.env.SQL_QUERY_TIMEOUT_MS || 30000) };
-  if (databaseUrl) return new Pool({ connectionString: databaseUrl, ...common });
+  if (databaseUrl) {
+    // pg-connection-string turns sslmode=require into its own TLS settings,
+    // overriding SQL_SSL_CA and causing SELF_SIGNED_CERT_IN_CHAIN.
+    // Keep TLS certificate verification enabled and use the configured CA.
+    const url = new URL(databaseUrl);
+    url.searchParams.delete('sslmode');
+    url.searchParams.delete('sslrootcert');
+    url.searchParams.delete('sslcert');
+    url.searchParams.delete('sslkey');
+    const mode = (process.env.SQL_SSL || 'verify-full').trim().toLowerCase();
+    if (mode === 'false' || mode === '0' || mode === 'require' || mode === 'true' || mode === '1') {
+      throw new Error('Release database connection requires SQL_SSL=verify-full or verify.');
+    }
+    return new Pool({
+      connectionString: url.toString(),
+      ssl: { rejectUnauthorized: true, ...(process.env.SQL_SSL_CA ? { ca: process.env.SQL_SSL_CA } : {}) },
+      ...common,
+    });
+  }
   const host = process.env.SQL_HOST;
   const user = process.env.SQL_USER;
   const password = process.env.SQL_PASSWORD;

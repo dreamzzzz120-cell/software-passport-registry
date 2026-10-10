@@ -47,7 +47,18 @@ async function main() {
   const runtimeUrlName = isWorker ? 'WORKER_DATABASE_URL' : 'APP_DATABASE_URL';
   const runtimePassword = passwordFromUrl(process.env[runtimeUrlName], runtimeUrlName);
 
-  const pool = new Pool({ connectionString: databaseUrl });
+  // Match the verified TLS policy used by the migration and application pools.
+  // URL sslmode options override the explicit pg TLS object and break CA trust.
+  const url = new URL(databaseUrl);
+  for (const parameter of ['sslmode', 'sslrootcert', 'sslcert', 'sslkey']) url.searchParams.delete(parameter);
+  const mode = (process.env.SQL_SSL || 'verify-full').trim().toLowerCase();
+  if (!['verify-full', 'verify'].includes(mode)) {
+    throw new Error('Role provisioning requires SQL_SSL=verify-full or verify.');
+  }
+  const pool = new Pool({
+    connectionString: url.toString(),
+    ssl: { rejectUnauthorized: true, ...(process.env.SQL_SSL_CA ? { ca: process.env.SQL_SSL_CA } : {}) },
+  });
   try {
     const roles = await pool.query(
       `SELECT rolname FROM pg_roles WHERE rolname IN ('spr_app_runtime', 'spr_worker_runtime')`,
