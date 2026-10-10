@@ -88,6 +88,14 @@ function strategyLabel(strategyId: QLegionOutreachStrategy) {
 
 async function resolveQLegionAttribution(client: any, sourceUrl: string | null): Promise<QLegionAttribution> {
   if (!sourceUrl) return { missionId: null, strategyId: 'baseline', probability: null };
+  // Q-Legion advice is optional. In environments that have not provisioned its
+  // tables, use the existing baseline copy instead of aborting a fully gated
+  // outreach send. Do not swallow SQL permission or other runtime failures.
+  const optionalTables = await client.query("SELECT to_regclass('public.q_legion_settings') AS settings, to_regclass('public.q_legion_missions') AS missions");
+  if (!optionalTables.rows?.[0]?.settings || !optionalTables.rows?.[0]?.missions) {
+    console.warn('[Distribution] optional Q-Legion advisory tables absent; using baseline outreach copy');
+    return { missionId: null, strategyId: 'baseline', probability: null };
+  }
   const enabled = await client.query(
     `SELECT strategy_execution_enabled AS enabled FROM q_legion_settings WHERE tenant_id=$1 LIMIT 1`,
     [DISTRIBUTION_TENANT_ID],
