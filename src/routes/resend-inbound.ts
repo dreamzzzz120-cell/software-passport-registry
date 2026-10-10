@@ -51,8 +51,8 @@ export function createResendInboundRouter() {
     let event: any;
     try { event = JSON.parse(req.body.toString('utf8')); }
     catch { return res.status(400).json({ error: 'INVALID_EVENT' }); }
-    if (event?.type !== 'email.received') return res.status(200).json({ accepted: true, ignored: true });
-    const from = inboundReplySender(event.data);
+    if (event?.type !== 'email.received' && event?.type !== 'inbox.email.received') return res.status(200).json({ accepted: true, ignored: true });
+    const from = inboundReplySender(event.data?.email ?? event.data);
     if (!from) return res.status(200).json({ accepted: true, ignored: true });
     const client = await appPool.connect().catch(() => null);
     if (!client) return res.status(503).json({ error: 'DB_UNAVAILABLE' });
