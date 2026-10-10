@@ -34,7 +34,8 @@ export function inboundReplySender(data: unknown): string | null {
   const from = typeof row.from === 'string' ? row.from.trim().toLowerCase() : '';
   const to = Array.isArray(row.to) ? row.to : typeof row.to === 'string' ? [row.to] : [];
   if (!/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(from)) return null;
-  if (!to.some((item) => typeof item === 'string' && item.trim().toLowerCase() === 'outreach@softwarepassportregistry.com')) return null;
+  const receivingAddress = (process.env.DISTRIBUTION_INBOUND_ADDRESS || 'replies@replies.softwarepassportregistry.com').trim().toLowerCase();
+  if (!to.some((item) => typeof item === 'string' && item.trim().toLowerCase() === receivingAddress)) return null;
   return from;
 }
 
