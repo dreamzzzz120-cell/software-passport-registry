@@ -27,6 +27,15 @@ export const databaseConfigurationSummary = {
   queryTimeoutMillis: getNumericEnv(config.database.queryTimeoutMs?.toString(), 5000),
 };
 
+// Strip only conflicting URL TLS parameters when an independently verified TLS
+// configuration is available. pg otherwise replaces the explicitly trusted CA.
+const normalizedDbUrl = (raw: string): string => {
+  if (!config.database.sslVerify || !config.database.sslCa) return raw;
+  const url = new URL(raw);
+  for (const key of ['sslmode', 'sslrootcert', 'sslcert', 'sslkey']) url.searchParams.delete(key);
+  return url.toString();
+};
+
 export const createPool = () => {
   if (!isDatabaseConfigured) {
     console.warn('[Database] SQL configuration is incomplete. DB readiness will report DB_MISCONFIGURED until DATABASE_URL or SQL_HOST, SQL_USER, SQL_PASSWORD and SQL_DB_NAME are configured.');
@@ -52,7 +61,7 @@ export const createPool = () => {
   if (config.database.connectionString) {
     // Pass an explicit SSL object so pg cannot inherit a weaker/ambiguous URL
     // setting. Certificate verification is controlled only by SQL_SSL/SQL_SSL_CA.
-    return new Pool({ connectionString: config.database.connectionString, ssl: sslConfig, ...poolConfig });
+    return new Pool({ connectionString: normalizedDbUrl(config.database.connectionString), ssl: sslConfig, ...poolConfig });
   }
 
   return new Pool({
@@ -103,7 +112,7 @@ const sslConfigFor = (connectionString: string | undefined) => config.database.s
   : undefined;
 export const appPool = config.database.appConnectionString
   ? new Pool({
-      connectionString: config.database.appConnectionString,
+      connectionString: normalizedDbUrl(config.database.appConnectionString),
       ssl: sslConfigFor(config.database.appConnectionString),
       connectionTimeoutMillis: databaseConfigurationSummary.connectionTimeoutMillis,
       max: databaseConfigurationSummary.poolMax,
