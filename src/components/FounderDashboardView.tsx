@@ -97,7 +97,7 @@ function FounderDashboardContent({ userRole }: FounderDashboardViewProps) {
       <nav aria-label="Founder dashboard sections" className="flex gap-2 overflow-x-auto pb-1">
         {sections.map(([key, label]) => <button key={key} type="button" aria-pressed={area === key} onClick={() => setArea(key)} className={`spr-btn shrink-0 whitespace-nowrap ${area === key ? 'spr-btn-primary' : 'spr-btn-secondary'}`}>{label}</button>)}
       </nav>
-      <div hidden={area !== 'overview'} className="space-y-6">
+      {area === 'overview' && <div className="space-y-6">
         <section className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-4 sm:p-5">
           <h2 className="text-lg font-semibold">Daily review · {reviewDate}</h2>
           <p className="mt-2 text-sm text-[var(--spr-text-muted)]">{reviewed.length} of {dailyChecks.length} reviewed this session. Checkmarks record your review; system health is shown separately below.</p>
@@ -118,14 +118,14 @@ function FounderDashboardContent({ userRole }: FounderDashboardViewProps) {
         <FounderOverview />
         <FounderMissionControl />
         <FounderQLegionPanel />
-      </div>
-      <div hidden={area !== 'operations'} className="space-y-6">
+      </div>}
+      {area === 'operations' && <div className="space-y-6">
       <FounderControlPlane />
 
     <FounderAgentsPanel />
     <FounderCommandCenterPanel />
-    </div>
-    <div hidden={area !== 'growth'} className="space-y-4">
+    </div>}
+    {area === 'growth' && <div className="space-y-4">
     <FounderSection defaultOpen title="Leads" hint="Free Review visitors who left an email">
       <FounderLeadsPanel />
     </FounderSection>
@@ -138,24 +138,24 @@ function FounderDashboardContent({ userRole }: FounderDashboardViewProps) {
     <FounderSection title="Inquiries" hint="contact-form and feedback submissions">
       <FounderInquiriesPanel />
     </FounderSection>
-    </div>
-    <div hidden={area !== 'traffic'}>
+    </div>}
+    {area === 'traffic' && <div>
     <FounderSection defaultOpen title="Traffic" hint="observed page events">
       <FounderTrafficPanel />
     </FounderSection>
-    </div>
-    <div hidden={area !== 'operations'} className="space-y-4">
+    </div>}
+    {area === 'operations' && <div className="space-y-4">
     <FounderSection title="Monitoring" hint="trust monitoring runs">
       <FounderMonitoringPanel />
     </FounderSection>
     <FounderSection title="Registry crawler runs" hint="raw crawl history (also summarised under Agents)">
       <FounderRegistryCrawlerPanel />
     </FounderSection>
-    </div>
-    <div hidden={area !== 'reports'} className="space-y-6">
+    </div>}
+    {area === 'reports' && <div className="space-y-6">
       <FounderFeatureControlMatrix />
       <div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-6"><div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4"><div><div className="inline-flex items-center gap-2 rounded-full bg-[var(--spr-accent-soft)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--spr-highlight)]"><Sparkles className="w-4 h-4" /> Evidence-backed self passport</div><h2 className="mt-4 text-xl font-semibold text-[var(--spr-text)]">SPR Self Passport</h2><p className="mt-2 text-sm text-[var(--spr-text-muted)]">The newest completed scan of SPR's own repository in this workspace, read from the same tables every other passport uses. Nothing here is seeded or defaulted.</p></div><button onClick={fetchSelfPassport} disabled={loadingPassport} className="spr-btn spr-btn-secondary inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"><RefreshCw className="w-4 h-4" />Refresh Passport</button></div><div className="mt-6 grid gap-4 sm:grid-cols-2"><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">Passport Name</span><p className="mt-2 text-lg font-semibold text-[var(--spr-text)]">{passport?.name ?? 'Not verified'}</p></div><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">Commit</span><p className="mt-2 text-lg font-semibold text-[var(--spr-text)] font-mono break-all">{passport?.version ? passport.version.slice(0, 12) : 'Not verified'}</p></div><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">Health</span><p className="mt-2 text-lg font-semibold text-[var(--spr-text)]">{passport?.healthStatus ?? 'Not verified'}</p></div><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">Acquired</span><p className="mt-2 text-lg font-semibold text-[var(--spr-text)]">{passport?.releaseDate ?? 'Not verified'}</p></div></div>{passport?.publisher && <div className="mt-6 rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">Publisher</span><p className="mt-2 text-base font-semibold text-[var(--spr-text)]">{passport.publisher}</p></div>}{passport && <div className="mt-6 grid gap-4 sm:grid-cols-4"><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">SBOM Components</span><p className="mt-2 text-lg font-semibold text-[var(--spr-text)]">{typeof passport.sbomComponentCount === 'number' ? passport.sbomComponentCount : 'Not verified'}</p><p className="mt-1 text-[11px] text-[var(--spr-text-muted)]">Syft, from the scanned commit.</p></div><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">Evidence Items</span><p className="mt-2 text-lg font-semibold text-[var(--spr-text)]">{typeof passport.evidenceCount === 'number' ? passport.evidenceCount : 'Not verified'}</p><p className="mt-1 text-[11px] text-[var(--spr-text-muted)]">Persisted scanner responses.</p></div><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">Open Findings</span><p className="mt-2 text-lg font-semibold text-[var(--spr-text)]">{typeof passport.openFindings === 'number' ? passport.openFindings : 'Not verified'}</p><p className="mt-1 text-[11px] text-[var(--spr-text-muted)]">Not resolved, closed or verified.</p></div><div className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-4"><span className="text-[12px] uppercase tracking-[0.24em] text-[var(--spr-text-muted)]">Critical / High</span><p className="mt-2 text-lg font-semibold text-[var(--spr-text)]">{typeof passport.criticalOrHigh === 'number' ? passport.criticalOrHigh : 'Not verified'}</p><p className="mt-1 text-[11px] text-[var(--spr-text-muted)]">Of the open findings.</p></div></div>}{passport?.scannedAt && <p className="mt-4 text-[12px] text-[var(--spr-text-muted)]">Scanned {new Date(passport.scannedAt).toLocaleString()} · record <span className="font-mono">{passport.id}</span></p>}{!loadingPassport && !passport && !error && <p className="mt-6 text-sm text-[var(--spr-text-muted)]">No completed scan of the SPR repository exists in this workspace yet. Run a repository scan of dreamzzzz120-cell/software-passport-registry from the Scans page; this card fills in from that scan and from nothing else.</p>}</div>
-    </div>
+    </div>}
   </div>
   </>;
 }
