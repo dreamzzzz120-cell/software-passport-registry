@@ -2,9 +2,16 @@ import { hasVerifiedNorthAmericanCountry } from './distribution-geo.ts';
 import crypto from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { db, appPool } from '../db/index.ts';
+import { createWorkerPool } from '../workers/worker-db.ts';
 import { renderBrandedEmail, SPR_DEFAULT_BRAND, sendBrandedEmail } from './branded-email.ts';
 import { DISTRIBUTION_TENANT_ID } from './distribution-engine.ts';
 import { DistributionDeferredError, withReservedOutreach } from './distribution-send-reservation.ts';
+
+// Distribution runs in both the API and the dedicated worker. Worker-originated
+// outreach must use WORKER_DATABASE_URL, not the HTTP app pool's credential.
+// Otherwise the reservation transaction can fail on distribution_send_attempts
+// even while ordinary discovery jobs succeed through createWorkerPool().
+const outreachDbPool = process.env.PROCESS_ROLE?.trim() === 'worker' ? createWorkerPool() : appPool;
 
 const PUBLIC_ORIGIN = 'https://www.softwarepassportregistry.com';
 const DAILY_LIMIT = Math.max(1, Math.min(1000, Number.parseInt(process.env.DISTRIBUTION_DAILY_SEND_LIMIT ?? '50', 10) || 50));
@@ -179,7 +186,7 @@ export function makeCopy(
 
 
 async function withTenant<T>(fn: (client: any) => Promise<T>) {
-  const client = await appPool.connect();
+  const client = await outreachDbPool.connect();
   try {
     await client.query('BEGIN');
     await client.query(`SELECT set_config('app.tenant_id', $1, true)`, [DISTRIBUTION_TENANT_ID]);
@@ -265,7 +272,7 @@ export async function ingestResearchResult(result: Record<string, unknown>, defa
 }
 
 async function sendContact(contactId: string, kind: 'initial' | 'followup') {
-  return withReservedOutreach(appPool, DISTRIBUTION_TENANT_ID, contactId, kind, {
+  return withReservedOutreach(outreachDbPool, DISTRIBUTION_TENANT_ID, contactId, kind, {
     environmentLimit: DAILY_LIMIT,
     intervalMs: SEND_INTERVAL_MS,
     gate: sendGate,
