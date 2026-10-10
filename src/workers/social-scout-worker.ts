@@ -3,7 +3,9 @@ import type { Pool } from 'pg';
 import { createWorkerPool } from './worker-db.ts';
 import { DISTRIBUTION_TENANT_ID } from '../lib/distribution-engine.ts';
 
-// Bounded, read-only public community discovery. No social posting, DMs,
+// Bounded, read-only public community discovery. Use existing SEO backlog kind,
+// with explicit HN evidence source; the content-opportunity schema does not
+// accept an arbitrary 'public_discussion' kind. No social posting, DMs,
 // profile harvesting, personal email collection, or automatic outreach.
 const API = 'https://hn.algolia.com/api/v1/search_by_date';
 const QUERIES = [
@@ -95,7 +97,7 @@ export async function persistDiscussions(pool: Pool, discussions: PublicDiscussi
         limitations: 'Relevance is heuristic. No buying intent, consent or individual identity is inferred.',
       }]);
       const result = await client.query(
-        "INSERT INTO growth_content_opportunities (id,tenant_id,kind,topic,source_evidence,status) VALUES ($1,$2,'public_discussion',$3,$4,'backlog') ON CONFLICT (id) DO NOTHING",
+        "INSERT INTO growth_content_opportunities (id,tenant_id,kind,topic,source_evidence,status) VALUES ($1,$2,'seo',$3,$4,'backlog') ON CONFLICT (id) DO NOTHING",
         [item.id, DISTRIBUTION_TENANT_ID, item.title, evidence]
       );
       inserted += result.rowCount ?? 0;
