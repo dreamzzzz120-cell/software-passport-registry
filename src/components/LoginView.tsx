@@ -173,21 +173,21 @@ export default function LoginView({ onLoginSuccess, brand }: LoginViewProps) {
       }
       if (mode === 'signup') {
         if (password.length < 8) throw new Error('Password must be at least 8 characters.');
-        const { data, error } = await supabase.auth.signUp({ email: email.trim().toLowerCase(), password, options: { data: { full_name: email.trim().split('@')[0] }, emailRedirectTo: getAuthRedirect() } });
-        if (error && (error as { code?: string }).code === 'over_email_send_rate_limit') throw new Error(`Supabase refused to send a confirmation email right now (${error.message}). The account was not created; wait a while and try again.`);
-        if (error) throw error;
-        if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
-          setError('An account with this email already exists. Sign in, or use "Forgot password?" to reset it.');
-          return;
-        }
-        if (data.session) {
-          trackGrowthEvent('signup_completed');
-          await finishSession(data.session);
-          return;
-        }
         const address = email.trim().toLowerCase();
-        setUnconfirmedEmail(address);
-        setNotice(`Account created. Supabase has sent a confirmation link to ${address}. Open it to activate the account. The link is only valid for a limited time; if it has expired by the time you use it, request a new one below.`);
+        const signupResponse = await fetch('/api/auth/signup', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ email: address, password }),
+        });
+        if (!signupResponse.ok) {
+          const payload = await signupResponse.json().catch(() => ({}));
+          throw new Error(typeof payload?.error === 'string' ? payload.error : 'Account creation failed.');
+        }
+        const { data, error } = await supabase.auth.signInWithPassword({ email: address, password });
+        if (error) throw error;
+        if (!data.session) throw new Error('Account was created but no session was returned.');
+        trackGrowthEvent('signup_completed');
+        await finishSession(data.session);
         return;
       }
       // A stale refresh/session record must not poison a fresh password login.

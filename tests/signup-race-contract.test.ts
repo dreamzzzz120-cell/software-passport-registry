@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readCode as read } from './helpers/source-contract.ts';
 
 describe('Supabase authentication contract', () => {
-  it('uses Supabase Auth for password sign-in and signup', () => { const login = read('src/components/LoginView.tsx'); expect(login).toContain('supabase.auth.signInWithPassword'); expect(login).toContain('supabase.auth.signUp'); expect(login).not.toContain('firebase/auth'); });
+  it('uses Supabase Auth for password sign-in and server-confirmed signup', () => { const login = read('src/components/LoginView.tsx'); const auth = read('src/routes/auth.ts'); expect(login).toContain('supabase.auth.signInWithPassword'); expect(login).toContain("fetch('/api/auth/signup'"); expect(auth).toContain('adminAuth.createUser'); expect(auth).toContain('emailVerified: true'); expect(login).not.toContain('firebase/auth'); });
   it('requires confirmed email before workspace access', () => { const login = read('src/components/LoginView.tsx'); expect(login).not.toContain('Check your email and confirm your account before signing in.'); expect(login).toContain('email_confirmed_at'); expect(login).toContain('if (!emailVerified)'); });
   it('uses the Supabase access token for server authorization', () => { const client = read('src/utils/apiClient.ts'); expect(client).toContain('Authorization'); expect(client).toContain('getIdToken'); });
   it('keeps provisioning centralized in the authenticated application shell', () => { const app = read('src/App.tsx'); expect(app).toContain('/api/user/me'); expect(app).toContain('applyUser'); const login = read('src/components/LoginView.tsx'); expect(login).not.toContain('/api/auth/workspace'); });

@@ -56,6 +56,8 @@ const profileUpdateSchema = z.object({
 }).strict();
 const revokeSessionSchema = z.object({ sessionId: z.string().trim().min(1).max(200) }).strict();
 const mfaStateSchema = z.object({ enabled: z.boolean() }).strict();
+const selfSignupSchema = z.object({ email: z.string().trim().email().max(255), password: z.string().min(8).max(128) }).strict();
+const selfSignupLimiter = rateLimit({ windowMs: 60_000, limit: 5, standardHeaders: 'draft-7', legacyHeaders: false, validate: { trustProxy: false } });
 // The raw in-toto/SLSA statement text and the digest the submitter claims for
 // it. hash is independently recomputed and compared server-side
 // (verifySlsaProvenance) -- it is never trusted on its own, matching the
@@ -99,6 +101,32 @@ const brandingSchema = z.object({
 
 export function createAuthRouter() {
   const router = Router();
+
+  // New customer signup is completed server-side with the Supabase admin key.
+  // This intentionally marks the email confirmed at creation time so signup
+  // cannot dead-end on transactional-email delivery. Password reset and MFA
+  // remain separate verification/recovery controls.
+  router.post('/auth/signup', selfSignupLimiter, async (req, res) => {
+    const parsed = selfSignupSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Enter a valid email address and a password of at least 8 characters.' });
+    const email = parsed.data.email.toLowerCase();
+    try {
+      await adminAuth.createUser({
+        email,
+        password: parsed.data.password,
+        emailVerified: true,
+        displayName: email.split('@')[0],
+      });
+      return res.status(201).json({ created: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message.toLowerCase() : String(error ?? '').toLowerCase();
+      if (message.includes('already') || message.includes('registered') || message.includes('exists')) {
+        return res.status(409).json({ error: 'An account with this email already exists. Sign in or reset the password.' });
+      }
+      console.error('[AuthSignup] administrative signup failed:', error instanceof Error ? error.message : String(error));
+      return res.status(503).json({ error: 'Account creation is temporarily unavailable. Try again shortly.' });
+    }
+  });
 
   // Self-service workspace creation. A Firebase account with a verified email
   // and no SPR membership gets its own new, empty workspace and becomes its
