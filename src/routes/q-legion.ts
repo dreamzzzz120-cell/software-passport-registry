@@ -161,6 +161,10 @@ export function createQLegionRouter() {
         generatedAt: new Date().toISOString(),
       });
     } catch (error) {
+      const candidate = error as { code?: string; cause?: { code?: string } };
+      if (candidate?.code === '42P01' || candidate?.cause?.code === '42P01') {
+        return res.status(503).json({ error: 'Q-LEGION storage is not configured. Apply the Q-LEGION database migrations before using this panel.', code: 'Q_LEGION_STORAGE_NOT_CONFIGURED' });
+      }
       return next(error);
     }
   });
