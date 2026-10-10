@@ -131,8 +131,30 @@ export async function founderFunnel(windowDays = 7): Promise<FounderFunnel> {
   const since = sql`NOW() - (${windowDays} * INTERVAL '1 day')`;
   return {
     windowDays,
-    pageViews: await count(sql`SELECT COUNT(*)::int AS count FROM traffic_events WHERE occurred_at > ${since}`),
-    visitors: await count(sql`SELECT COUNT(DISTINCT session_id)::int AS count FROM traffic_events WHERE occurred_at > ${since}`),
+    pageViews: await count(sql`
+      SELECT COUNT(*)::int AS count
+      FROM traffic_events t
+      WHERE t.occurred_at > ${since}
+        AND t.source IS DISTINCT FROM 'founder-test'
+        AND NOT EXISTS (
+          SELECT 1 FROM traffic_events f
+          WHERE f.session_id = t.session_id
+            AND f.occurred_at > ${since}
+            AND f.path = '/founder'
+        )
+    `),
+    visitors: await count(sql`
+      SELECT COUNT(DISTINCT t.session_id)::int AS count
+      FROM traffic_events t
+      WHERE t.occurred_at > ${since}
+        AND t.source IS DISTINCT FROM 'founder-test'
+        AND NOT EXISTS (
+          SELECT 1 FROM traffic_events f
+          WHERE f.session_id = t.session_id
+            AND f.occurred_at > ${since}
+            AND f.path = '/founder'
+        )
+    `),
     freeReviewsCompleted: await count(sql`SELECT COUNT(*)::int AS count FROM agent_jobs WHERE tenant_id=${FREE_REVIEW_TENANT_ID} AND job_type='repository_scan' AND status='Completed' AND completed_at > ${since}`),
     freeReviewsFailed: await count(sql`SELECT COUNT(*)::int AS count FROM agent_jobs WHERE tenant_id=${FREE_REVIEW_TENANT_ID} AND job_type='repository_scan' AND status='Failed' AND updated_at > ${since}`),
     leads: await count(sql`SELECT COUNT(*)::int AS count FROM free_review_leads WHERE tenant_id=${FREE_REVIEW_TENANT_ID} AND created_at > ${since}`),
@@ -155,12 +177,26 @@ export async function founderOverview(): Promise<FounderOverview> {
         COUNT(*) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours')::int AS pageviews_24h,
         COUNT(DISTINCT session_id) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '7 days')::int AS visitors_7d,
         COUNT(*) FILTER (WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '7 days')::int AS pageviews_7d
-      FROM traffic_events
+      FROM traffic_events t
+      WHERE t.source IS DISTINCT FROM 'founder-test'
+        AND NOT EXISTS (
+          SELECT 1 FROM traffic_events f
+          WHERE f.session_id = t.session_id
+            AND f.occurred_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'
+            AND f.path = '/founder'
+        )
     `).catch((err) => { console.error('[FounderOverview] traffic summary failed:', err instanceof Error ? err.message : String(err)); return null; }),
     db.execute(sql`
-      SELECT path, COUNT(*)::int AS views FROM traffic_events
-      WHERE occurred_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours'
-      GROUP BY path ORDER BY views DESC LIMIT 20
+      SELECT t.path, COUNT(*)::int AS views FROM traffic_events t
+      WHERE t.occurred_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours'
+        AND t.source IS DISTINCT FROM 'founder-test'
+        AND NOT EXISTS (
+          SELECT 1 FROM traffic_events f
+          WHERE f.session_id = t.session_id
+            AND f.occurred_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'
+            AND f.path = '/founder'
+        )
+      GROUP BY t.path ORDER BY views DESC LIMIT 20
     `).catch((err) => { console.error('[FounderOverview] traffic pages failed:', err instanceof Error ? err.message : String(err)); return null; }),
     db.execute(sql`
       SELECT * FROM (
