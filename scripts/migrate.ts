@@ -54,7 +54,11 @@ export class MigrationRunner {
   }
 
   async initializeMigrationTable(client: PoolClient): Promise<void> {
-    await client.query(`CREATE TABLE IF NOT EXISTS schema_migrations (version text PRIMARY KEY, description text NOT NULL, executed_at timestamp DEFAULT CURRENT_TIMESTAMP, execution_duration_ms integer);`);
+    const existing = await client.query<{ relation: string | null }>(
+      "SELECT to_regclass('public.schema_migrations')::text AS relation"
+    );
+    if (existing.rows[0]?.relation) return;
+    await client.query(`CREATE TABLE schema_migrations (version text PRIMARY KEY, description text NOT NULL, executed_at timestamp DEFAULT CURRENT_TIMESTAMP, execution_duration_ms integer);`);
   }
 
   async loadMigrations(): Promise<MigrationFile[]> {
