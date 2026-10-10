@@ -15,6 +15,12 @@ describe('distribution unsent sweep fail-closed retry guard', () => {
     expect(source).not.toContain("status='succeeded',result=$2::jsonb,last_error=NULL,locked_at=NULL,locked_by=NULL");
   });
 
+  it('deduplicates the research-to-send handoff against failed send jobs too', () => {
+    const handoff = source.match(/async function getContactIdsForSource[\\s\\S]*?async function processJob/)?.[0] ?? '';
+    expect(handoff).toContain("j.kind='send_outreach'");
+    expect(handoff).toContain("j.status IN ('queued','running','dead_letter')");
+  });
+
   it('still blocks contacts with a sent email or a reserved provider attempt', () => {
     expect(sql).toContain("m.status='sent'");
     expect(sql).toContain("a.status IN ('reserved','unknown','blocked','sent')");
