@@ -31,7 +31,8 @@ export function inboundReplySender(data: unknown): string | null {
   const row = data as Record<string, unknown>;
   // No free-text email content is trusted. Only exact email address format
   // is accepted; name-formatted From addresses require separate review.
-  const from = typeof row.from === 'string' ? row.from.trim().toLowerCase() : '';
+  const rawFrom = typeof row.from === 'string' ? row.from.trim().toLowerCase() : '';
+  const from = rawFrom.includes('<') && rawFrom.endsWith('>') ? rawFrom.slice(rawFrom.lastIndexOf('<') + 1, -1) : rawFrom;
   const to = Array.isArray(row.to) ? row.to : typeof row.to === 'string' ? [row.to] : [];
   if (!/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(from)) return null;
   const receivingAddress = (process.env.DISTRIBUTION_INBOUND_ADDRESS || 'replies@replies.softwarepassportregistry.com').trim().toLowerCase();
