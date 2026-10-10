@@ -96,7 +96,10 @@ export async function founderPulse(): Promise<FounderPulse> {
     if (heartbeat[0]?.seen) {
       lastSeenAt = iso(heartbeat[0].seen);
       lastSeenSource = 'reality_observations';
-    } else {
+    }
+  } catch (err) { console.error('[FounderOverview] worker heartbeat unavailable:', err instanceof Error ? err.message : String(err)); }
+  if (!lastSeenAt) {
+    try {
       const seen = rows(await db.execute(sql`
         SELECT source, seen FROM (
           SELECT 'agent_jobs' AS source, MAX(updated_at) AS seen FROM agent_jobs WHERE status IN ('Running','Completed','Failed')
@@ -104,8 +107,8 @@ export async function founderPulse(): Promise<FounderPulse> {
           UNION ALL SELECT 'registry_crawl_runs', MAX(COALESCE(finished_at, started_at)) FROM registry_crawl_runs
         ) s WHERE seen IS NOT NULL ORDER BY seen DESC LIMIT 1`));
       if (seen[0]) { lastSeenAt = iso(seen[0].seen); lastSeenSource = String(seen[0].source); }
-    }
-  } catch (err) { console.error('[FounderOverview] worker last-seen failed:', err instanceof Error ? err.message : String(err)); }
+    } catch (err) { console.error('[FounderOverview] worker last-seen failed:', err instanceof Error ? err.message : String(err)); }
+  }
   return {
     database: { ok: database.ok, latencyMs: database.ok ? database.latencyMs : null },
     tenantRls, runtimeRole, leastPrivilege: runtimeRole === null ? null : runtimeRole === 'spr_app_runtime',
