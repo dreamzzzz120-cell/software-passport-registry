@@ -10,6 +10,13 @@ describe('distribution unsent sweep fail-closed retry guard', () => {
     expect(sql).toContain("j.status IN ('queued','running','dead_letter')");
   });
 
+  it('immediately holds nonretryable legal-basis and country blocks', () => {
+    const failures = source.slice(source.indexOf('async function failJob'), source.indexOf('async function getContactIdsForSource'));
+    expect(failures).toContain("message==='DISTRIBUTION_OUTREACH_BASIS_REQUIRED'");
+    expect(failures).toContain("message==='DISTRIBUTION_COUNTRY_VERIFICATION_REQUIRED'");
+    expect(failures).toContain("const dead=complianceBlocked||job.attempts>=job.max_attempts");
+  });
+
   it('retains actual worker evidence on succeeded jobs while releasing the lease', () => {
     expect(source).toContain("status='succeeded',result=$2::jsonb,last_error=NULL,locked_at=NULL,updated_at=CURRENT_TIMESTAMP");
     expect(source).not.toContain("status='succeeded',result=$2::jsonb,last_error=NULL,locked_at=NULL,locked_by=NULL");
