@@ -22,5 +22,7 @@ describe('growth funnel truth contracts', () => {
     expect(source).toContain("job_type='repository_scan' AND status='Failed'");
     expect(source).toContain("job_type='repository_scan' AND status='Running'");
     expect(source).toContain("job_type='repository_scan' AND status='Pending'");
+    expect(source).toContain("lower(s.repository_owner)='octokit'");
+    expect(source).toContain("lower(s.repository_name)='action.js'");
   });
 });
