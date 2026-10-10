@@ -38,6 +38,9 @@ RUN npm prune --omit=dev --no-audit --no-fund
 
 FROM node:22-slim AS runtime
 WORKDIR /app
+# Trust the Supabase CA while retaining PostgreSQL TLS certificate verification.
+COPY certs/supabase-root-2021.crt /etc/ssl/certs/supabase-root-2021.crt
+ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/supabase-root-2021.crt
 ENV NODE_ENV=production
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 
