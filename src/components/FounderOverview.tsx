@@ -59,7 +59,7 @@ export default function FounderOverview() {
       <section id="founder-attention" className="rounded-md border border-[var(--spr-border)] bg-[var(--spr-surface)] p-5">
         <p className="text-[11px] uppercase tracking-[0.24em] font-semibold text-[var(--spr-text-muted)]">Needs attention ({attention.length})</p>
         {!overview && !commandCenter && !agents ? <p className="mt-2 text-xs text-[var(--spr-text-muted)]">{loading ? 'Loading…' : 'No data loaded.'}</p>
-          : attention.length === 0 ? <p className="mt-2 text-sm text-[var(--spr-green)]">Nothing flagged: all checks passed, every connection is up, no agent is disabled or failing.</p>
+          : attention.length === 0 ? <p className="mt-2 text-sm text-[var(--spr-green)]">Nothing flagged in the available data. Missing checks and unavailable sources remain unverified.</p>
           : (
             <ul className="mt-2 space-y-1.5">
               {attention.map((item, i) => { const Icon = SEVERITY_ICON[item.severity]; return (
