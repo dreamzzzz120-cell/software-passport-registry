@@ -356,6 +356,26 @@ async function probeSelf(pool: Pool): Promise<ProbeResult> {
   }
 }
 
+// Reconcile anonymous review tracking from the authoritative worker jobs.
+// Never mark a submission complete if any job is missing, unfinished or failed.
+export async function reconcileCompletedFreeReviews(pool: Pick<Pool, 'query'>): Promise<number> {
+  const result = await pool.query(`
+    UPDATE free_review_submissions s SET status='Completed'
+    WHERE s.status='Pending'
+      AND s.tenant_id='tenant-free-review-system'
+      AND EXISTS (
+        SELECT 1 FROM agent_jobs j
+        WHERE j.tenant_id=s.tenant_id AND j.passport_id=s.passport_id
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM agent_jobs j
+        WHERE j.tenant_id=s.tenant_id AND j.passport_id=s.passport_id
+          AND j.status IS DISTINCT FROM 'Completed'
+      )
+  `);
+  return result.rowCount ?? 0;
+}
+
 export async function runRealityReconciliationCycle(pool: Pool) {
   const probes: Array<[string, (pool: Pool) => Promise<ProbeResult>]> = [
     ['database_reachable', probeDatabase],
@@ -363,6 +383,13 @@ export async function runRealityReconciliationCycle(pool: Pool) {
     ['scan_terminality', probeScans],
     ['registry_freshness', probeRegistry],
   ];
+  // Best-effort reconciliation must not interrupt the health watchdog.
+  try {
+    const reconciled = await reconcileCompletedFreeReviews(pool);
+    if (reconciled > 0) console.log('[FreeReview] reconciled completed submissions', { reconciled });
+  } catch (error) {
+    console.error('[FreeReview] completion reconciliation unavailable', error instanceof Error ? error.message : String(error));
+  }
   const cycleId = id('cycle');
   const startedAt = Date.now();
   const results: ObservationResult[] = [];
