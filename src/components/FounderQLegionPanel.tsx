@@ -83,6 +83,7 @@ export default function FounderQLegionPanel() {
   const load = async () => {
     setLoading(true);
     setError(null);
+    setData(null);
     try {
       const res = await apiFetch('/api/founder/q-legion');
       const body = await res.json().catch(() => null);
@@ -111,7 +112,7 @@ export default function FounderQLegionPanel() {
 
   useEffect(() => { void load(); }, []);
 
-  const totals = data?.totals ?? { sent: 0, replied: 0, demos: 0, checkouts: 0, customers: 0, lost: 0 };
+  const totals = data?.totals;
   const ranked = [...(data?.strategyPerformance ?? [])].sort((a, b) => {
     const aScore = a.customerRate ?? a.checkoutRate ?? a.demoRate ?? a.replyRate ?? -1;
     const bScore = b.customerRate ?? b.checkoutRate ?? b.demoRate ?? b.replyRate ?? -1;
@@ -130,7 +131,7 @@ export default function FounderQLegionPanel() {
       <div className="flex flex-wrap gap-2">
         <span className="rounded-full border border-[var(--spr-border)] px-3 py-2 text-xs font-semibold">{data?.mode ?? 'UNKNOWN'}</span>
         <button type="button" className="spr-btn spr-btn-secondary" disabled={loading} onClick={() => void load()}><RefreshCw className={`mr-2 inline h-4 w-4 ${loading ? 'animate-spin' : ''}`} />Refresh</button>
-        <button type="button" className="spr-btn spr-btn-primary" disabled={loading} onClick={() => void backfill()}>Rebuild observed missions</button>
+        <button type="button" className="spr-btn spr-btn-primary" disabled={loading || !data} onClick={() => void backfill()}>Rebuild observed missions</button>
       </div>
     </div>
 
@@ -140,12 +141,12 @@ export default function FounderQLegionPanel() {
       {[
         ['Missions', data?.missionCount ?? 'UNKNOWN'],
         ['Receipts', data?.receiptCount ?? 'UNKNOWN'],
-        ['Sent', totals.sent],
-        ['Replies', totals.replied],
-        ['Demos', totals.demos],
-        ['Checkouts', totals.checkouts],
-        ['Customers', totals.customers],
-        ['Lost', totals.lost],
+        ['Sent', totals?.sent ?? 'UNKNOWN'],
+        ['Replies', totals?.replied ?? 'UNKNOWN'],
+        ['Demos', totals?.demos ?? 'UNKNOWN'],
+        ['Checkouts', totals?.checkouts ?? 'UNKNOWN'],
+        ['Customers', totals?.customers ?? 'UNKNOWN'],
+        ['Lost', totals?.lost ?? 'UNKNOWN'],
       ].map(([label, value]) => <div key={String(label)} className="rounded-md border border-[var(--spr-border)] p-3">
         <span className="text-xs text-[var(--spr-text-muted)]">{label}</span>
         <strong className="mt-1 block text-lg">{value}</strong>
@@ -177,7 +178,7 @@ export default function FounderQLegionPanel() {
               <td className="py-2 pr-3">{item.customers} · {percent(item.customerRate)}</td>
               <td className="py-2 pr-3">{item.lost}</td><td className="py-2">{percent(item.avgProbability)}</td>
             </tr>)}
-            {ranked.length === 0 && <tr><td colSpan={9} className="py-4 text-[var(--spr-text-muted)]">No attributed outreach has been observed yet.</td></tr>}
+            {ranked.length === 0 && <tr><td colSpan={9} className="py-4 text-[var(--spr-text-muted)]">{data ? 'No attributed outreach has been observed yet.' : 'Strategy outcomes are unavailable until Q-LEGION data loads.'}</td></tr>}
           </tbody>
         </table>
       </div>
