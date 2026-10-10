@@ -16,7 +16,7 @@ describe('distribution unsent sweep fail-closed retry guard', () => {
   });
 
   it('deduplicates the research-to-send handoff against failed send jobs too', () => {
-    const handoff = source.match(/async function getContactIdsForSource[\\s\\S]*?async function processJob/)?.[0] ?? '';
+    const handoff = source.slice(source.indexOf('async function getContactIdsForSource'), source.indexOf('async function processJob'));
     expect(handoff).toContain("j.kind='send_outreach'");
     expect(handoff).toContain("j.status IN ('queued','running','dead_letter')");
   });
