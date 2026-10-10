@@ -33,14 +33,14 @@ export function inboundReplySender(data: unknown): string | null {
   // is accepted; name-formatted From addresses require separate review.
   const from = typeof row.from === 'string' ? row.from.trim().toLowerCase() : '';
   const to = Array.isArray(row.to) ? row.to : typeof row.to === 'string' ? [row.to] : [];
-  if (!/^[a-z0-9.!#$%&'*+/=?^_\`{|}~-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(from)) return null;
+  if (!/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(from)) return null;
   if (!to.some((item) => typeof item === 'string' && item.trim().toLowerCase() === 'outreach@softwarepassportregistry.com')) return null;
   return from;
 }
 
 export function createResendInboundRouter() {
   const router = Router();
-  router.post('/api/webhooks/resend-inbound', async (req: Request, res) => {
+  router.post('/', async (req: Request, res) => {
     const secret = process.env.RESEND_INBOUND_WEBHOOK_SECRET?.trim();
     if (!secret) return res.status(503).json({ error: 'INBOUND_WEBHOOK_UNCONFIGURED' });
     if (!Buffer.isBuffer(req.body) || !verifyResendInbound(req.body, req.headers, secret)) {
@@ -57,7 +57,7 @@ export function createResendInboundRouter() {
     try {
       await client.query('BEGIN');
       await client.query("SELECT set_config('app.tenant_id',$1,true)", [DISTRIBUTION_TENANT_ID]);
-      const outcome = await client.query(\`
+      const outcome = await client.query(`
         UPDATE distribution_contacts c
            SET pipeline_stage='replied', replied_at=CURRENT_TIMESTAMP,
                next_followup_at=NULL, updated_at=CURRENT_TIMESTAMP
@@ -69,7 +69,7 @@ export function createResendInboundRouter() {
              WHERE m.tenant_id=c.tenant_id AND m.contact_id=c.id
                AND m.kind='initial' AND m.status='sent'
            )
-         RETURNING c.id\`, [DISTRIBUTION_TENANT_ID, from]);
+         RETURNING c.id`, [DISTRIBUTION_TENANT_ID, from]);
       await client.query('COMMIT');
       // Never disclose which addresses are in the CRM.
       console.info('[DistributionInbound] authenticated inbound signal', { matched: outcome.rowCount ?? 0 });
