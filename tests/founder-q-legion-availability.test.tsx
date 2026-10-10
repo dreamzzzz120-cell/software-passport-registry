@@ -19,7 +19,7 @@ it('clears old outcomes when a subsequent refresh fails', async () => {
   render(<FounderQLegionPanel />);
   await screen.findByText('9');
   apiFetch.mockImplementation(async () => new Response('{}', {status:503}));
-  fireEvent.click(screen.getByRole('button', { name: 'Refresh', exact:true }));
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
   await screen.findByRole('alert');
   await waitFor(() => expect(screen.queryByText('9')).toBeNull());
 });
