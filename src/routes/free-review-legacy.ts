@@ -121,8 +121,14 @@ export function createLegacyFreeReviewRouter() {
       // findings and 0 evidence for a repository SPR never managed to read --
       // exactly the fabricated assurance this product exists to prevent.
       if (jobs.length > 0 && jobs.every((j: any) => j.status === 'Completed')) {
-        await scopedDb.execute(sql`UPDATE free_review_submissions SET status='Completed'
-          WHERE tenant_id=${FREE_REVIEW_TENANT_ID} AND passport_id=${passportId} AND status='Pending'`);
+        // Submission tracking is best-effort: a reporting-table failure must
+        // never hide the already-persisted scan evidence from the visitor.
+        try {
+          await scopedDb.execute(sql`UPDATE free_review_submissions SET status='Completed'
+            WHERE tenant_id=${FREE_REVIEW_TENANT_ID} AND passport_id=${passportId} AND status='Pending'`);
+        } catch (reconciliationError) {
+          console.error('[FreeReview] completion tracking reconciliation failed', reconciliationError);
+        }
       }
       const scanStatus = pending
         ? 'scanning'
