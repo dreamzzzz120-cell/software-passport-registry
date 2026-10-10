@@ -10,6 +10,11 @@ describe('distribution unsent sweep fail-closed retry guard', () => {
     expect(sql).toContain("j.status IN ('queued','running','dead_letter')");
   });
 
+  it('retains actual worker evidence on succeeded jobs while releasing the lease', () => {
+    expect(source).toContain("status='succeeded',result=$2::jsonb,last_error=NULL,locked_at=NULL,updated_at=CURRENT_TIMESTAMP");
+    expect(source).not.toContain("status='succeeded',result=$2::jsonb,last_error=NULL,locked_at=NULL,locked_by=NULL");
+  });
+
   it('still blocks contacts with a sent email or a reserved provider attempt', () => {
     expect(sql).toContain("m.status='sent'");
     expect(sql).toContain("a.status IN ('reserved','unknown','blocked','sent')");
