@@ -47,7 +47,7 @@ export async function persistInventory(db: Queryable, ctx: LedgerContext, entrie
       const placeholders = row.map((value, index) => { values.push(value); const n = values.length; return ['tools', 'notes', 'related_components', 'related_finding_ids', 'related_evidence_ids'].includes(columns[index]) ? `$${n}::jsonb` : `$${n}`; });
       return `(${placeholders.join(',')})`;
     });
-    const result = await db.query(`
+    const statement = `
       INSERT INTO scan_file_inventory (${columns.join(',')}) VALUES ${tuples.join(',')}
       ON CONFLICT (scan_id, sequence) DO UPDATE SET
         size = COALESCE(EXCLUDED.size, scan_file_inventory.size),
@@ -73,7 +73,20 @@ export async function persistInventory(db: Queryable, ctx: LedgerContext, entrie
         reason_detail = CASE WHEN array_position(${sqlArray(DISPOSITION_ORDER)}, EXCLUDED.disposition) > array_position(${sqlArray(DISPOSITION_ORDER)}, scan_file_inventory.disposition) THEN EXCLUDED.reason_detail ELSE scan_file_inventory.reason_detail END,
         updated_at = CURRENT_TIMESTAMP
       WHERE scan_file_inventory.path = EXCLUDED.path AND scan_file_inventory.tenant_id = EXCLUDED.tenant_id
-    `, values);
+    `;
+    // Concurrent engines can race on the deterministic primary key while
+    // PostgreSQL arbitrates the separate (scan_id, sequence) unique index.
+    // Retry only that known conflict; unrelated integrity errors must surface.
+    let result;
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        result = await db.query(statement, values);
+        break;
+      } catch (error) {
+        const failure = error as { code?: string; constraint?: string };
+        if (attempt >= 2 || failure.code !== '23505' || failure.constraint !== 'scan_file_inventory_pkey') throw error;
+      }
+    }
     written += result.rowCount ?? batch.length;
   }
   return written;

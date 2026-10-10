@@ -52,6 +52,34 @@ function fixtureEntries(): InventoryEntry[] {
 }
 
 describe('inventory persistence merges engine contributions idempotently', () => {
+  it('retries a primary-key race and then executes the real idempotent upsert', async () => {
+    let calls = 0;
+    const racingDb: Queryable = { query: async (text, values) => {
+      if (++calls === 1) throw Object.assign(new Error('concurrent primary key'), { code: '23505', constraint: 'scan_file_inventory_pkey' });
+      return db.query(text, values);
+    } };
+    const entries = fixtureEntries();
+    expect(await persistInventory(racingDb, { tenantId: TENANT, scanId: 'scan_1', passportId: 'pass_1', clientId: null }, entries)).toBe(5);
+    expect(calls).toBe(2);
+    expect((await db.query("SELECT count(*)::int AS count FROM scan_file_inventory WHERE scan_id='scan_1'")).rows[0].count).toBe(5);
+  });
+
+  it('bounds repeated primary-key failures instead of looping forever', async () => {
+    let calls = 0;
+    const error = Object.assign(new Error('primary key conflict'), { code: '23505', constraint: 'scan_file_inventory_pkey' });
+    const failingDb: Queryable = { query: async () => { calls++; throw error; } };
+    await expect(persistInventory(failingDb, { tenantId: TENANT, scanId: 'scan_1', passportId: 'pass_1', clientId: null }, fixtureEntries())).rejects.toBe(error);
+    expect(calls).toBe(3);
+  });
+
+  it('does not retry an unrelated integrity failure', async () => {
+    let calls = 0;
+    const error = Object.assign(new Error('different constraint'), { code: '23505', constraint: 'another_constraint' });
+    const failingDb: Queryable = { query: async () => { calls++; throw error; } };
+    await expect(persistInventory(failingDb, { tenantId: TENANT, scanId: 'scan_1', passportId: 'pass_1', clientId: null }, fixtureEntries())).rejects.toBe(error);
+    expect(calls).toBe(1);
+  });
+
   it('first job: manifests inventoried, catalogued file analyzed, png unsupported; retrying the same write changes nothing', async () => {
     const ctx = { tenantId: TENANT, scanId: 'scan_1', passportId: 'pass_1', clientId: null };
     const entries = fixtureEntries();
