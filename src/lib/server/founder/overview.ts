@@ -155,8 +155,30 @@ export async function founderFunnel(windowDays = 7): Promise<FounderFunnel> {
             AND f.path = '/founder'
         )
     `),
-    freeReviewsCompleted: await count(sql`SELECT COUNT(*)::int AS count FROM agent_jobs WHERE tenant_id=${FREE_REVIEW_TENANT_ID} AND job_type='repository_scan' AND status='Completed' AND completed_at > ${since}`),
-    freeReviewsFailed: await count(sql`SELECT COUNT(*)::int AS count FROM agent_jobs WHERE tenant_id=${FREE_REVIEW_TENANT_ID} AND job_type='repository_scan' AND status='Failed' AND updated_at > ${since}`),
+    freeReviewsCompleted: await count(sql`
+      SELECT COUNT(DISTINCT s.id)::int AS count
+      FROM free_review_submissions s
+      JOIN agent_jobs j
+        ON j.tenant_id=s.tenant_id
+       AND j.passport_id=s.passport_id
+       AND j.job_type='repository_scan'
+      WHERE s.tenant_id=${FREE_REVIEW_TENANT_ID}
+        AND j.status='Completed'
+        AND j.completed_at > ${since}
+        AND NOT (lower(s.repository_owner)='octokit' AND lower(s.repository_name)='action.js')
+    `),
+    freeReviewsFailed: await count(sql`
+      SELECT COUNT(DISTINCT s.id)::int AS count
+      FROM free_review_submissions s
+      JOIN agent_jobs j
+        ON j.tenant_id=s.tenant_id
+       AND j.passport_id=s.passport_id
+       AND j.job_type='repository_scan'
+      WHERE s.tenant_id=${FREE_REVIEW_TENANT_ID}
+        AND j.status='Failed'
+        AND j.updated_at > ${since}
+        AND NOT (lower(s.repository_owner)='octokit' AND lower(s.repository_name)='action.js')
+    `),
     leads: await count(sql`SELECT COUNT(*)::int AS count FROM free_review_leads WHERE tenant_id=${FREE_REVIEW_TENANT_ID} AND created_at > ${since}`),
     leadsQualified: await count(sql`SELECT COUNT(*)::int AS count FROM distribution_jobs WHERE tenant_id=${DISTRIBUTION_TENANT_ID} AND kind='qualify_lead' AND status='succeeded' AND updated_at > ${since}`),
     contacts: await count(sql`SELECT COUNT(*)::int AS count FROM distribution_contacts WHERE tenant_id=${DISTRIBUTION_TENANT_ID} AND created_at > ${since}`),
