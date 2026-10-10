@@ -11,9 +11,12 @@ describe('growth funnel truth contracts', () => {
 
   it('offers a client-ready Free Review conversion and trial handoff', () => {
     const source = readFileSync('src/components/FreeReviewPdfGate.tsx', 'utf8');
+    const resultView = readFileSync('src/components/FreeReviewView.tsx', 'utf8');
     expect(source).toContain('Take this evidence into a client conversation');
     expect(source).toContain('Get my client-ready PDF');
     expect(source).toContain("window.location.assign('/login?mode=signup&next=%2Fbilling')");
+    expect(resultView).toContain('Get client-ready PDF');
+    expect(resultView).toContain("document.getElementById('free-review-pdf-gate')");
   });
 
   it('keeps founder sessions and internal sub-engine failures out of acquisition headline metrics', () => {
