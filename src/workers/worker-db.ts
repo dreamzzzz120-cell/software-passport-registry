@@ -26,10 +26,11 @@ export function normalizeWorkerConnectionString(connectionString: string | undef
 
   const sslmode = url.searchParams.get('sslmode')?.trim().toLowerCase();
   if (sslmode) {
-    // Railway/Postgres URLs commonly append sslmode=require. It is safe to
-    // remove only when the independently enforced SQL_SSL mode is also
-    // "require". Stronger or conflicting URL modes still fail closed.
-    if (sslmode !== 'require' || sqlSslMode !== 'require') {
+    // Drop a URL-level sslmode=require only when the independent SQL_SSL
+    // setting enforces equal or stronger TLS. The explicit TLS object and
+    // SQL_SSL_CA then control certificate verification without pg URL override.
+    // Reject different URL modes and disabled TLS (fail closed).
+    if (sslmode !== 'require' || !['require', 'verify', 'verify-full'].includes(sqlSslMode)) {
       throw new Error(`WORKER_DB_URL_TLS_PARAMS: ${variable} carries ?sslmode=${sslmode}; remove it and configure TLS with SQL_SSL / SQL_SSL_CA instead`);
     }
     url.searchParams.delete('sslmode');

@@ -53,13 +53,18 @@ describe('worker database URL must not carry TLS query parameters', () => {
     }
   });
 
-  it('normalizes Railway sslmode=require only when SQL_SSL=require is independently enforced', () => {
+  it('normalizes Railway sslmode=require when independent SQL_SSL enforces equal or stronger TLS', () => {
     const normalized = normalizeWorkerConnectionString(`${base}?sslmode=require&application_name=spr`, 'require');
     expect(normalized).toBeDefined();
     const parsed = new URL(normalized!);
     expect(parsed.searchParams.has('sslmode')).toBe(false);
     expect(parsed.searchParams.get('application_name')).toBe('spr');
-    expect(() => normalizeWorkerConnectionString(`${base}?sslmode=require`, 'verify-full')).toThrow(/WORKER_DB_URL_TLS_PARAMS/);
+    for (const mode of ['verify', 'verify-full']) {
+      const secured = normalizeWorkerConnectionString(`${base}?sslmode=require&application_name=spr`, mode);
+      expect(new URL(secured!).searchParams.has('sslmode')).toBe(false);
+      expect(new URL(secured!).searchParams.get('application_name')).toBe('spr');
+    }
+    expect(() => normalizeWorkerConnectionString(`${base}?sslmode=require`, 'false')).toThrow(/WORKER_DB_URL_TLS_PARAMS/);
     expect(() => normalizeWorkerConnectionString(`${base}?sslmode=disable`, 'require')).toThrow(/WORKER_DB_URL_TLS_PARAMS/);
     expect(() => normalizeWorkerConnectionString(`${base}?ssl=require`, 'require')).toThrow(/WORKER_DB_URL_TLS_PARAMS/);
   });
