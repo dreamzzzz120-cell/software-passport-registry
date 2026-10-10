@@ -191,7 +191,11 @@ export class MigrationRunner {
 
     const actual = new Set<string>();
     const result = await client.query(
-      `SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema()`
+      `SELECT c.relname AS table_name
+       FROM pg_catalog.pg_class c
+       JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+       WHERE n.nspname = current_schema()
+         AND c.relkind IN ('r', 'p')`
     );
     for (const row of result.rows as Array<{ table_name: string }>) {
       actual.add(String(row.table_name).toLowerCase());
