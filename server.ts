@@ -84,7 +84,7 @@ app.use(cors({ origin: corsOrigin, credentials: true, methods: ['GET','HEAD','PO
 app.use((req, res, next) => { if (req.method === 'TRACE' || req.method === 'CONNECT') return res.status(405).json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'HTTP method is not allowed.' } }); if (req.headers['content-length'] && !/^\d+$/.test(String(req.headers['content-length']))) return res.status(400).json({ error: { code: 'INVALID_CONTENT_LENGTH', message: 'Invalid Content-Length header.' } }); return next(); });
 app.post('/api/billing/webhook', express.raw({ type: 'application/json', limit: requestBodyLimit }), stripeWebhookHandler);
 // Signature verification requires raw bytes before global JSON parsing.
-app.use(express.raw({ type: 'application/json', limit: '64kb' }), createResendInboundRouter());
+app.use('/api/webhooks/resend-inbound', express.raw({ type: 'application/json', limit: '64kb' }), createResendInboundRouter());
 app.use('/api/psa/webhooks', express.raw({ type: 'application/json', limit: requestBodyLimit }), createPsaWebhookRouter());
 app.use(express.json({ limit: requestBodyLimit, strict: true, type: ['application/json','application/*+json'] }));
 app.use(express.urlencoded({ extended: false, limit: requestBodyLimit }));
