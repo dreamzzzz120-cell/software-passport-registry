@@ -406,7 +406,7 @@ export class MigrationRunner {
 }
 
 function buildPool(): Pool {
-  const databaseUrl = process.env.DATABASE_URL?.trim();
+  const databaseUrl = process.env.SUPABASE_MIGRATION_DATABASE_URL?.trim() || process.env.DATABASE_URL?.trim();
   const common = { max: Number(process.env.SQL_POOL_MAX || 10), connectionTimeoutMillis: Number(process.env.SQL_CONNECTION_TIMEOUT_MS || 10000), idleTimeoutMillis: Number(process.env.SQL_IDLE_TIMEOUT_MS || 30000), query_timeout: Number(process.env.SQL_QUERY_TIMEOUT_MS || 30000) };
   if (databaseUrl) {
     // pg-connection-string turns sslmode=require into its own TLS settings,
@@ -431,7 +431,7 @@ function buildPool(): Pool {
   const user = process.env.SQL_USER;
   const password = process.env.SQL_PASSWORD;
   const database = process.env.SQL_DB_NAME;
-  if (!host || !user || !password || !database) throw new Error('Database configuration missing. Provide DATABASE_URL or SQL_HOST, SQL_USER, SQL_PASSWORD and SQL_DB_NAME.');
+  if (!host || !user || !password || !database) throw new Error('Database configuration missing. Provide SUPABASE_MIGRATION_DATABASE_URL, DATABASE_URL, or SQL_HOST/SQL_USER/SQL_PASSWORD/SQL_DB_NAME.');
   const ssl = ['true', '1', 'require'].includes((process.env.SQL_SSL || '').trim().toLowerCase()) ? { rejectUnauthorized: true } : undefined;
   return new Pool({ host, user, password, database, ssl, ...common });
 }
