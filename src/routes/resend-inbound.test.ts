@@ -18,6 +18,6 @@ describe('Resend inbound verification', () => {
   it('only accepts a direct reply routed to the outreach inbox', () => {
     expect(inboundReplySender({ from: 'hello@example.org', to: ['replies@replies.softwarepassportregistry.com'] })).toBe('hello@example.org');
     expect(inboundReplySender({ from: 'hello@example.org', to: ['other@example.org'] })).toBeNull();
-    expect(inboundReplySender({ from: 'Hello <hello@example.org>', to: ['replies@replies.softwarepassportregistry.com'] })).toBeNull();
+    expect(inboundReplySender({ from: 'Hello <hello@example.org>', to: ['replies@replies.softwarepassportregistry.com'] })).toBe('hello@example.org');
   });
 });
