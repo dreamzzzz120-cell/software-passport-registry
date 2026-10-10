@@ -79,7 +79,7 @@ export function useFounderData(): FounderData & { refresh: () => Promise<void> }
   useEffect(() => {
     listeners.add(setData);
     startAutoRefresh();
-    if (!current.loadedAt && !inflight) void loadFounderData();
+    void loadFounderData();
     return () => { listeners.delete(setData); if (listeners.size === 0) stopAutoRefresh(); };
   }, []);
   return { ...data, refresh: () => loadFounderData(true) };
