@@ -45,6 +45,7 @@ export default function MSPOperationsCommandCenter(props: Props) {
   const [revenueLoading, setRevenueLoading] = useState(false);
   const [opportunityAction, setOpportunityAction] = useState<string | null>(null);
   const [opportunityMessage, setOpportunityMessage] = useState<string | null>(null);
+  const [proposalDraft, setProposalDraft] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -66,6 +67,32 @@ export default function MSPOperationsCommandCenter(props: Props) {
     const key = String(opportunity.passport?.id || 'passport') + ':' + String(findingId); setOpportunityAction(key); setOpportunityMessage(null);
     try { const response = await apiFetch('/api/remediation-tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ alertId: findingId }) }); const body = await response.json().catch(() => ({})); if (!response.ok) throw new Error(body?.error || 'SPR could not create the remediation task.'); setOpportunityMessage(response.status === 201 ? 'Remediation task created. Work the task, then queue re-verification.' : 'An active remediation task already exists; SPR did not create a duplicate.'); onNavigate('/monitoring'); }
     catch (cause: any) { setOpportunityMessage(cause?.message || 'SPR could not create the remediation task.'); } finally { setOpportunityAction(null); }
+  };
+
+  const prepareServiceProposal = (opportunity: any) => {
+    // This UI uses the same persisted opportunity returned by the authenticated API.
+    // The proposal is an unsent, unapproved draft; never a sale or invoice.
+    const proof = Array.isArray(opportunity.evidenceIds) ? opportunity.evidenceIds : [];
+    const findings = Array.isArray(opportunity.findingIds) ? opportunity.findingIds : [];
+    const unknowns = Array.isArray(opportunity.unknowns) ? opportunity.unknowns : [];
+    const amount = typeof opportunity.value === 'number' && Number.isFinite(opportunity.value) && opportunity.value >= 0
+      ? String(opportunity.value) : 'NOT CONFIGURED';
+    setProposalDraft([
+      'DRAFT — CLIENT APPROVAL REQUIRED',
+      'MSP SERVICE PROPOSAL',
+      'Passport: ' + (opportunity.passport?.name || 'UNKNOWN'),
+      'Service: ' + opportunity.service,
+      'Observed basis: ' + opportunity.basis,
+      'Reason: ' + opportunity.trigger,
+      'Proposed service price (currency must be confirmed): ' + amount,
+      'Scope: Confirm authorization and covered assets; ' + opportunity.nextAction,
+      'Deliverables: Evidence-linked assessment, plain-English client report, prioritized actions and verification limitations.',
+      'Supporting evidence IDs: ' + (proof.join(', ') || 'NONE'),
+      'Finding IDs: ' + (findings.join(', ') || 'NONE'),
+      'Unresolved UNKNOWNs: ' + (unknowns.join('; ') || 'None explicitly listed'),
+      'Not an invoice, payment request, accepted contract, verified remediation, or earned revenue.',
+      'Approval and exact price/currency must be confirmed before delivery.',
+    ].join('\\n'));
   };
 
   const portfolio = useMemo(() => {
@@ -197,12 +224,17 @@ export default function MSPOperationsCommandCenter(props: Props) {
         <div className="mt-4 space-y-2">
           {opportunityMessage && <div role="status" className="rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface)] px-4 py-3 text-xs text-[var(--spr-text-muted)]">{opportunityMessage}</div>}
           {revenueLoading && <div className="h-24 animate-pulse rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface)]" />}
+          {proposalDraft && <div className="rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface)] p-4">
+            <div className="mb-2 flex items-center justify-between gap-3"><strong className="text-xs">Service proposal — unsent draft</strong><button className="text-xs font-semibold text-[var(--spr-highlight)]" onClick={() => setProposalDraft(null)}>Close</button></div>
+            <textarea aria-label="Editable draft service proposal" value={proposalDraft} onChange={event => setProposalDraft(event.target.value)} rows={12} className="w-full rounded-lg border border-[var(--spr-border)] bg-[var(--spr-surface-alt)] p-3 text-xs text-[var(--spr-text)]" />
+            <button className="mt-2 rounded-lg bg-[var(--spr-accent)] px-3 py-2 text-xs font-semibold text-white" onClick={() => navigator.clipboard.writeText(proposalDraft).then(() => setOpportunityMessage('Draft copied. Nothing has been sent or charged.')).catch(() => setOpportunityMessage('Copy failed. Select and copy the draft text manually.'))}>Copy draft</button>
+          </div>}
           {!revenueLoading && evidenceBackedOpportunities.length === 0 && <Empty icon={<CheckCircle2 />} title="No evidence-backed opportunities found" detail="SPR will not manufacture client work when persisted trust state does not support it." />}
           {!revenueLoading && evidenceBackedOpportunities.slice(0, 12).map((opportunity: any, index: number) => (
             <div key={`${opportunity.passport?.id || 'passport'}-${opportunity.service}-${index}`} className="flex w-full flex-col gap-3 rounded-2xl border border-[var(--spr-border)] bg-[var(--spr-surface)] p-4 text-left md:flex-row md:items-center">
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--spr-accent-soft)] text-[var(--spr-highlight)]"><BriefcaseBusiness className="h-4 w-4" /></span>
               <span className="min-w-0 flex-1"><span className="flex flex-wrap items-center gap-2"><span className="text-sm font-semibold text-[var(--spr-text)]">{opportunity.service}</span><span className="rounded-full border border-[var(--spr-border)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--spr-text-faint)]">{opportunity.basis}</span><span className="rounded-full border border-[var(--spr-border)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--spr-text-faint)]">{opportunity.urgency}</span></span><span className="mt-1 block text-xs text-[var(--spr-text-muted)]">{opportunity.passport?.name}: {opportunity.trigger}</span><span className="mt-1 block text-[11px] text-[var(--spr-text-faint)]">{opportunity.evidenceIds?.length || 0} evidence · {opportunity.findingIds?.length || 0} findings · {opportunity.unknowns?.length || 0} unknowns</span></span>
-              <span className="shrink-0 text-right"><span className="block text-sm font-bold text-[var(--spr-text)]">{opportunity.value == null ? 'Price not configured' : `${Number(opportunity.value).toLocaleString()}`}</span><span className="mt-2 flex gap-2"><button onClick={() => { if (opportunity.passport?.id) onSelectPassport?.(opportunity.passport.id); onNavigate('/passports'); }} className="text-[11px] font-semibold text-[var(--spr-highlight)]">Open proof <ChevronRight className="inline h-3 w-3" /></button><button disabled={opportunityAction === String(opportunity.passport?.id || 'passport') + ':' + String(opportunity.findingIds?.[0])} onClick={() => startOpportunityWork(opportunity)} className="rounded-lg bg-[var(--spr-accent)] px-2.5 py-1.5 text-[11px] font-bold text-white disabled:opacity-50">{opportunity.findingIds?.length ? 'Start remediation' : 'Resolve evidence gap'}</button></span></span>
+              <span className="shrink-0 text-right"><span className="block text-sm font-bold text-[var(--spr-text)]">{opportunity.value == null ? 'Price not configured' : `${Number(opportunity.value).toLocaleString()}`}</span><span className="mt-2 flex gap-2"><button onClick={() => prepareServiceProposal(opportunity)} className="rounded-lg border border-[var(--spr-border)] px-2.5 py-1.5 text-[11px] font-bold text-[var(--spr-text)]">Draft proposal</button><button onClick={() => { if (opportunity.passport?.id) onSelectPassport?.(opportunity.passport.id); onNavigate('/passports'); }} className="text-[11px] font-semibold text-[var(--spr-highlight)]">Open proof <ChevronRight className="inline h-3 w-3" /></button><button disabled={opportunityAction === String(opportunity.passport?.id || 'passport') + ':' + String(opportunity.findingIds?.[0])} onClick={() => startOpportunityWork(opportunity)} className="rounded-lg bg-[var(--spr-accent)] px-2.5 py-1.5 text-[11px] font-bold text-white disabled:opacity-50">{opportunity.findingIds?.length ? 'Start remediation' : 'Resolve evidence gap'}</button></span></span>
             </div>
           ))}
         </div>
