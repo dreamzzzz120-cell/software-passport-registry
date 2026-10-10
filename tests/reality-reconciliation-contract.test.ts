@@ -69,3 +69,13 @@ describe('autonomous reality reconciliation contract', () => {
     expect(founder).toContain('requireFounder');
   });
 });
+
+
+describe('Free Review parent scan reconciliation', () => {
+  it('treats repository_scan as authoritative even when optional sub-jobs fail', () => {
+    const source = readFileSync('src/workers/reality-reconciliation-worker.ts', 'utf8');
+    expect(source).toContain("j.job_type='repository_scan'");
+    expect(source).toContain("j.status='Completed'");
+    expect(source).not.toContain("j.status IS DISTINCT FROM 'Completed'\n      )\n  `);");
+  });
+});

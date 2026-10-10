@@ -365,11 +365,16 @@ export async function reconcileCompletedFreeReviews(pool: Pick<Pool, 'query'>): 
       AND s.tenant_id='tenant-free-review-system'
       AND EXISTS (
         SELECT 1 FROM agent_jobs j
-        WHERE j.tenant_id=s.tenant_id AND j.passport_id=s.passport_id
+        WHERE j.tenant_id=s.tenant_id
+          AND j.passport_id=s.passport_id
+          AND j.job_type='repository_scan'
+          AND j.status='Completed'
       )
       AND NOT EXISTS (
         SELECT 1 FROM agent_jobs j
-        WHERE j.tenant_id=s.tenant_id AND j.passport_id=s.passport_id
+        WHERE j.tenant_id=s.tenant_id
+          AND j.passport_id=s.passport_id
+          AND j.job_type='repository_scan'
           AND j.status IS DISTINCT FROM 'Completed'
       )
   `);

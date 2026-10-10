@@ -158,12 +158,19 @@ export default function FreeReviewPdfGate({ passportId, statusUrl, result, repos
       )}
 
       <div className="mt-4 rounded-xl border border-[var(--spr-border)] bg-[var(--spr-surface)] p-5" id="free-review-pdf-gate">
-        <div className="flex items-center gap-2 text-sm font-bold text-[var(--spr-text)]"><FileDown className="h-4 w-4" />Download this result as a PDF</div>
-        <p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">The free review above requires no account. This optional one-page PDF is lead-gated: enter your contact details and consent to follow-up email to download it.</p>
+        <div className="flex items-center gap-2 text-sm font-bold text-[var(--spr-text)]"><FileDown className="h-4 w-4" />Take this evidence into a client conversation</div>
+        <p className="mt-1 text-xs leading-5 text-[var(--spr-text-muted)]">Get a client-ready PDF summary of this exact review. Use it as the starting point for a billable software review or risk conversation. No account is required; enter your contact details and consent to follow-up email to download it.</p>
         {unlocked ? (
           <div className="mt-3 flex flex-wrap items-center gap-3">
-            <p className="text-xs text-[var(--spr-green)]">Thanks — your download has started.</p>
+            <p className="text-xs text-[var(--spr-green)]">Your client-ready PDF is downloading.</p>
             <button onClick={() => buildPdf(result, repositoryLabel).save(`spr-free-review-${repositoryLabel.replace(/[^A-Za-z0-9._-]+/g, '-')}.pdf`)} className="rounded-lg border border-[var(--spr-border)] px-3 py-1.5 text-xs font-semibold text-[var(--spr-text)]">Download again</button>
+            <button
+              type="button"
+              onClick={() => window.location.assign('/login?mode=signup&next=%2Fbilling')}
+              className="rounded-lg bg-[var(--spr-accent)] px-3 py-1.5 text-xs font-semibold text-white"
+            >
+              Start 7-day free trial
+            </button>
           </div>
         ) : (
           <form onSubmit={submit} className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -176,7 +183,7 @@ export default function FreeReviewPdfGate({ passportId, statusUrl, result, repos
             </label>
             {error && <p role="alert" className="text-xs text-[var(--spr-red)] sm:col-span-2">{error}</p>}
             <button type="submit" disabled={busy || !consent || !name.trim() || !email.trim()} className="rounded-xl bg-[var(--spr-accent)] px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50 sm:col-span-2">
-              <Lock className="mr-2 inline h-3.5 w-3.5" />{busy ? 'Recording…' : 'Get the PDF'}
+              <Lock className="mr-2 inline h-3.5 w-3.5" />{busy ? 'Preparing…' : 'Get my client-ready PDF'}
             </button>
           </form>
         )}
