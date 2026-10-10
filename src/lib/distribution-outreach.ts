@@ -24,7 +24,10 @@ const SEND_INTERVAL_MS = Math.max(1000, Number.parseInt(process.env.DISTRIBUTION
 // EMAIL_FROM when unset.
 export function outreachSender(): { from: string | undefined; replyTo: string | undefined } {
   const from = process.env.DISTRIBUTION_OUTREACH_FROM?.trim() || undefined;
-  const replyTo = from ? (from.match(/<([^>]+)>/)?.[1] ?? from) : undefined;
+  const configuredReplyTo = process.env.DISTRIBUTION_OUTREACH_REPLY_TO?.trim();
+  const replyTo = configuredReplyTo && /^[^\s<>@]+@[^\s<>@]+\.[a-zA-Z]{2,}$/.test(configuredReplyTo)
+    ? configuredReplyTo
+    : from ? (from.match(/<([^>]+)>/)?.[1] ?? from) : undefined;
   return { from, replyTo };
 }
 
